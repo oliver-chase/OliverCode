@@ -8,10 +8,13 @@ sync. (Consolidates the former current-state, README-writing, and feature-doc st
 
 ## Requirement
 
-Any behavior or contract change in scripts, contracts, skills, personas, or shared
-templates must update current-state documentation in the same change set:
+Any behavior or contract change in `scripts/`, `skills/`, `core/personas/`, `shared/`, or
+`core/contracts/` must update current-state documentation in the same change set:
 - update `docs/FEATURE_MAP.md`
 - update the human entrypoint docs affected
+
+This is the one home for the doc-sync rule — `CONTRIBUTING.md`, `CLAUDE.md`, and
+`docs/FEATURE_MAP.md` point here rather than restate it.
 
 ## Canonical Locations
 

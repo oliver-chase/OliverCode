@@ -40,43 +40,42 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   symlink, cross-references in repo-audit-with-execution-batches). Verified live: both
   skills now appear as distinct entries in the harness's own skill list.
 
-### OC-2. Token-efficiency pass over the contract/doc layer — MEDIUM — OPEN
+### OC-2. Token-efficiency pass over the contract/doc layer — MEDIUM — FIXED 2026-07-08
 
-**Why:** authority docs load into agent context; every duplicated rule is paid for twice
-per session and drifts independently. Target: one home per rule, pointers elsewhere.
+All 4 known duplications collapsed to one home each, verified by re-grep (exactly one file
+states the full rule, all others point):
 
-**Preconditions:** read `docs/DOCUMENTATION_STANDARD.md` ("one capability, one authority
-doc") and CONTRIBUTING.md's "Enforcement Reality" section first. Run
-`wc -w core/contracts/*.md docs/*.md CONTRIBUTING.md CLAUDE.md` and record the total as
-the before-number.
+1. Doc-sync trigger-paths rule (was in `CONTRIBUTING.md` x2 + `docs/DOCUMENTATION_STANDARD.md`
+   + `CLAUDE.md`) -> home is `docs/DOCUMENTATION_STANDARD.md` "Requirement" (folded in the
+   precise trigger-path list `scripts/`, `skills/`, `core/personas/`, `shared/`,
+   `core/contracts/` that only `CONTRIBUTING.md` used to carry).
+2. History/roadmap-not-authority rule (was in `CONTRIBUTING.md` + `FRAMEWORK_BASELINE.md` +
+   `docs/governance.md`) -> home is `FRAMEWORK_BASELINE.md` "Removal Rules".
+3. run/verify/ship/support file-justification rule (was in `CONTRIBUTING.md` +
+   `FRAMEWORK_BASELINE.md`, near-verbatim) -> home is `FRAMEWORK_BASELINE.md` "Purpose".
+4. Source-of-truth doc lists (was in `CONTRIBUTING.md` x2 sections + `FRAMEWORK_BASELINE.md`
+   "Support") -> home is `FRAMEWORK_BASELINE.md`'s "Support"/"Ship" lists; `CONTRIBUTING.md`'s
+   redundant "Baseline Contract" section deleted outright (not a required header per
+   `docs/DOCUMENTATION_STANDARD.md`'s "Required Document Structures").
 
-**Known duplications to collapse (verified by read, not guessed):**
-1. Doc-sync-in-same-change-set rule stated 4x: CONTRIBUTING.md (Mandatory Rule 3 + Rule 5
-   + "Documentation Sync Requirement" section), docs/DOCUMENTATION_STANDARD.md
-   ("Requirement" section), docs/FEATURE_MAP.md ("Non-Drift Rule"), CLAUDE.md
-   (Development Practice bullet). Home: DOCUMENTATION_STANDARD. Others become one-line
-   pointers.
-2. History/roadmap-docs-are-not-authority rule stated 3x: CONTRIBUTING.md Rule 7,
-   core/contracts/FRAMEWORK_BASELINE.md ("Removal Rules"), docs/governance.md ("Locked
-   Baseline Rules"). Home: FRAMEWORK_BASELINE.
-3. run/verify/ship/support file-justification rule stated 2x verbatim: CONTRIBUTING.md
-   ("Locked Framework Rule") and FRAMEWORK_BASELINE.md ("Purpose"). Home: FRAMEWORK_BASELINE.
-4. Source-of-truth doc lists stated 3x with drift risk: CONTRIBUTING.md
-   ("Source-of-Truth Documents" + "Baseline Contract"), FRAMEWORK_BASELINE.md ("Support"),
-   README.md ("Key Docs"). Home: FRAMEWORK_BASELINE's Support list; others point.
+**Found 2 more duplications while executing (not in the original 4, same pattern):**
+`docs/governance.md`'s "Locked Baseline Rules" also restated "project-specific automation
+belongs in the owning repo" (duplicate of `CONTRIBUTING.md` Rule 2) and "new docs
+merge/replace old authority" (duplicate of Rule 5) — both collapsed to pointers at
+`CONTRIBUTING.md`.
 
-**Procedure (per duplication):** pick the home listed above; replace every other
-occurrence with `See <home-file> "<section>"`; never delete a rule without confirming the
-home copy states it at least as strictly.
+**Also fixed while reading these files (real bugs, not duplication):** `docs/governance.md`
+claimed "OliverCode itself runs no CI workflows" — false as of this same session
+(`.github/workflows/framework-ci.yml`, confirmed running green). Corrected.
 
-**Acceptance criteria:** (a) `bash scripts/validate.sh` green; (b) `bash
-scripts/link-check.sh` green; (c) re-run the `wc -w` total — must be lower; (d) for each
-of the 4 duplications, `git grep` the rule's key phrase returns exactly ONE file with the
-full rule text (pointers don't count); (e) no rule weakened — diff review confirms
-deletions are restatements only.
+`README.md`'s "Key Docs" table deliberately kept un-collapsed — different audience
+(external/newcomer readers who won't dig into contract files), matches
+`docs-reality-audit`'s own "don't merge docs serving different audiences" rule.
 
-**Guardrails:** do NOT touch `.githooks/pre-commit` or any script. Doc/contract text only.
-One commit per duplication collapsed, gates run before each commit.
+Verified: `wc -w` total went 11966 -> 11936 words (net lower, as required — OC-11's
+legitimate new content in the same file set partially offset the cut); `bash
+scripts/validate.sh` and `bash scripts/link-check.sh` both green throughout, one commit
+per collapsed duplication group.
 
 ### OC-3. Prompt Library value audit — LOW — PARTIALLY FIXED 2026-07-08
 - Retired the 4 prompts `full-qa-pass.sh`'s own header named as its LLM equivalents
