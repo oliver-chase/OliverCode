@@ -41,16 +41,63 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   skills now appear as distinct entries in the harness's own skill list.
 
 ### OC-2. Token-efficiency pass over the contract/doc layer — MEDIUM — OPEN
-- `core/contracts/` + `docs/` load into agent context on demand; several contracts restate
-  each other's rules at length (FRAMEWORK_BASELINE vs CONTRIBUTING vs DOCUMENTATION_STANDARD
-  overlap on doc-sync rules). One home per rule, pointers elsewhere — measured target:
-  reduce total tracked authority-doc token count without losing a single enforceable rule.
+
+**Why:** authority docs load into agent context; every duplicated rule is paid for twice
+per session and drifts independently. Target: one home per rule, pointers elsewhere.
+
+**Preconditions:** read `docs/DOCUMENTATION_STANDARD.md` ("one capability, one authority
+doc") and CONTRIBUTING.md's "Enforcement Reality" section first. Run
+`wc -w core/contracts/*.md docs/*.md CONTRIBUTING.md CLAUDE.md` and record the total as
+the before-number.
+
+**Known duplications to collapse (verified by read, not guessed):**
+1. Doc-sync-in-same-change-set rule stated 4x: CONTRIBUTING.md (Mandatory Rule 3 + Rule 5
+   + "Documentation Sync Requirement" section), docs/DOCUMENTATION_STANDARD.md
+   ("Requirement" section), docs/FEATURE_MAP.md ("Non-Drift Rule"), CLAUDE.md
+   (Development Practice bullet). Home: DOCUMENTATION_STANDARD. Others become one-line
+   pointers.
+2. History/roadmap-docs-are-not-authority rule stated 3x: CONTRIBUTING.md Rule 7,
+   core/contracts/FRAMEWORK_BASELINE.md ("Removal Rules"), docs/governance.md ("Locked
+   Baseline Rules"). Home: FRAMEWORK_BASELINE.
+3. run/verify/ship/support file-justification rule stated 2x verbatim: CONTRIBUTING.md
+   ("Locked Framework Rule") and FRAMEWORK_BASELINE.md ("Purpose"). Home: FRAMEWORK_BASELINE.
+4. Source-of-truth doc lists stated 3x with drift risk: CONTRIBUTING.md
+   ("Source-of-Truth Documents" + "Baseline Contract"), FRAMEWORK_BASELINE.md ("Support"),
+   README.md ("Key Docs"). Home: FRAMEWORK_BASELINE's Support list; others point.
+
+**Procedure (per duplication):** pick the home listed above; replace every other
+occurrence with `See <home-file> "<section>"`; never delete a rule without confirming the
+home copy states it at least as strictly.
+
+**Acceptance criteria:** (a) `bash scripts/validate.sh` green; (b) `bash
+scripts/link-check.sh` green; (c) re-run the `wc -w` total — must be lower; (d) for each
+of the 4 duplications, `git grep` the rule's key phrase returns exactly ONE file with the
+full rule text (pointers don't count); (e) no rule weakened — diff review confirms
+deletions are restatements only.
+
+**Guardrails:** do NOT touch `.githooks/pre-commit` or any script. Doc/contract text only.
+One commit per duplication collapsed, gates run before each commit.
 
 ### OC-3. Prompt Library value audit — LOW — PARTIALLY FIXED 2026-07-08
 - Retired the 4 prompts `full-qa-pass.sh`'s own header named as its LLM equivalents
   (QA-15/16/17/ALL) plus their orchestration guide; updated REF-01 and the QA scripts'
   pointers to the script paths. Remaining ~19 prompts (story-lifecycle QA series, WF, RM)
   have no script equivalent — kept pending a content-level value audit.
+
+**Remainder spec (the content-level audit):**
+- **Scope:** every file in `prompts/` except README.md (~19 files: QA-01..QA-14, REF-01,
+  RM-01, WF-01, WF-02).
+- **Per-file procedure:** (1) read the prompt fully; (2) check overlap against
+  `core/workflows/*.md` (story-lifecycle-sop, backlog-workflow, qa-process, full-qa-audit
+  cover the same territory) and `skills/INDEX.md`; (3) classify: KEEP (unique procedure
+  not in any workflow/skill/script), MERGE (fold unique content into the overlapping
+  workflow doc, delete prompt), or RETIRE (fully covered elsewhere).
+- **Known suspects:** QA-01..QA-14 parallel `core/workflows/story-lifecycle-sop.md` +
+  `qa-process.md` step-by-step; WF-01/WF-02 parallel `core/workflows/backlog-workflow.md`.
+  Verify by reading, don't assume.
+- **Acceptance criteria:** every prompt has a recorded verdict here with one-line evidence;
+  `prompts/README.md` table matches the surviving set exactly; link-check green.
+- **Guardrails:** never delete a prompt whose procedure exists nowhere else — MERGE first.
 
 ### OC-4. `olivercode health` fleet checks assume the vault layout — LOW — FIXED 2026-07-08 (`OLIVERCODE_VAULT_ROOT` env override added; convention walk-up kept as fallback)
 - The hook-drift section resolves the vault root by walking up from OC_ROOT
@@ -65,11 +112,30 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   `CLAUDE.md` (loads in every session via the `~/.claude/CLAUDE.md` symlink), pointing at
   the `diagnosing-bugs` skill, `/simplify`, `/code-review`, and the structure contracts.
 
-### OC-6. Stranger-fork CI — LOW — OPEN
-- G4's stranger-clone rehearsal is manual. A minimal GitHub Actions workflow running
-  `scripts/olivercode health` + `bash scripts/validate.sh` + `scripts/link-check.sh` on
-  push would catch fresh-clone regressions automatically. (This repo currently ships no CI
-  by design — revisit whether that ruling still holds now that the repo is public-facing.)
+### OC-6. Stranger-fork CI — LOW — OPEN (blocked on owner action)
+
+**Why:** the stranger-clone rehearsal (fresh clone must pass health/gates/links) is manual;
+a regression ships silently until someone re-runs it.
+
+**Blocker (do this first, owner-only):** origin is an HTTPS remote; pre-commit Gate 5
+correctly blocks staged `.github/workflows/` files over HTTPS (GitHub rejects workflow
+pushes without workflow-scope credentials). Run:
+`git remote set-url origin git@github.com:<owner>/OliverCode.git` and verify SSH auth
+(`ssh -T git@github.com`) before starting.
+
+**Procedure:** create `.github/workflows/framework-ci.yml`: trigger `on: [push,
+pull_request]`; single ubuntu-latest job; steps: checkout, `python3 scripts/olivercode
+health` (expect exit 0 — the not-installed-checkout WARN path must hold), `bash
+scripts/validate.sh`, `bash scripts/link-check.sh`, `bash scripts/qa/full-qa-pass.sh`.
+No secrets, no external actions beyond actions/checkout.
+
+**Acceptance criteria:** (a) workflow green on a push to main; (b) green on a fork with no
+`local/` overlay (that IS the stranger test); (c) `bash .githooks/pre-commit` passes when
+committing the workflow (proves Gate 5 sees SSH remote); (d) README gains one line noting
+CI exists.
+
+**Guardrails:** if health exits nonzero in CI, fix the WARN-vs-FAIL classification in
+`scripts/olivercode` (a fresh CI checkout is a valid state) — do not delete the check.
 
 ### OC-7. Two template homes — structural drift by design — MEDIUM — FIXED 2026-07-08
 - Executed: keepalive assets moved into `core/templates/project/{scripts,supabase}/`, the
@@ -97,3 +163,64 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   content into `CLAUDE.md`/a contract, or document why the layer must exist for downstream
   reuse (template stamping does not currently use it).
 
+
+### OC-10. Framework smoke tests — MEDIUM — OPEN
+
+**Why:** zero automated tests exist. The two loaders (`scripts/lib/repo-profiles.mjs`,
+`scripts/lib/repo_profiles.py`, `scripts/lib/token_policy.py`) and the launcher's
+frontmatter parser have real logic (overlay-vs-example fallback, suites lookup, folded
+YAML scalars) that has silently broken before (bots:health `.env.local/.env.local` bug
+class). Every regression so far was caught by hand.
+
+**Procedure:** create `tests/` with: (1) `test_repo_profiles.py` — loads the tracked
+example placeholder, asserts profile count >= 1, asserts `findSuiteRepo`-equivalent
+returns null when no profile declares a suite (mirror test in a `.mjs` file run via
+`node --test`); (2) `test_frontmatter_parser.py` — imports `_parse_skill_frontmatter`
+from `scripts/olivercode` (use `importlib` on the file path; it has no `.py` suffix),
+feeds it a plain `description:`, a `>`-folded description, and a missing-frontmatter file,
+asserts each; (3) wire into `scripts/validate.sh` as an optional step that runs when
+`tests/` exists and python3 is present, WARN-skip otherwise. Use stdlib `unittest` +
+`node --test` only — no new dependencies (requirements.txt promises stdlib-only).
+
+**Acceptance criteria:** `python3 -m unittest discover tests` green; `node --test tests/`
+green; deliberately breaking the example JSON (scratch copy) makes a test fail;
+`validate.sh` runs them and stays green; stranger clone still HEALTHY (tests must not
+require `local/`).
+
+**Guardrails:** tests read the tracked example files only — never `local/` (gitignored,
+absent on forks).
+
+### OC-11. Docs-reality audit of the remaining docs/ surface — MEDIUM — OPEN
+
+**Why:** this pass verified README, ARCHITECTURE, governance, FEATURE_MAP, BACKLOG. Not
+re-verified since heavy restructuring: `docs/TOKEN_POLICY.md`,
+`docs/write-mode-enforcement-protocol.md`, `docs/KEEPALIVE_STANDARD.md`,
+`docs/bots-gateway.md`, `docs/troubleshooting.md`, `docs/OLIVERCODE_LAUNCHER.md`,
+`docs/FEATURE_MAP.md` (row-level), `docs/DOCUMENTATION_STANDARD.md`,
+`docs/skills-placement.md`, plus `core/workflows/*.md` (7 files) and
+`core/contracts/*.md` not touched today.
+
+**Procedure:** run the `docs-reality-audit` skill against this repo, scoped to the list
+above. For every factual claim (a path, a command, a count, a gate number), verify against
+the live file/script per the skill's Phase 3 table. Fix stale claims in place; log
+contradictions between two docs as findings here before choosing the home.
+
+**Acceptance criteria:** every doc in scope carries zero claims that fail verification;
+gates + link-check green; findings and fixes appended to this item with file:claim pairs.
+
+**Guardrails:** current-state wording rules apply (no "previously/no longer" phrasing —
+see DOCUMENTATION_STANDARD "Current-State Wording"). Don't rewrite style, only truth.
+
+### OC-12. `core/workflows/` vs `prompts/` overlap consolidation — LOW — OPEN (depends on OC-3 remainder)
+
+**Why:** two parallel procedure libraries cover the story/QA/backlog lifecycle. Suspected
+near-duplicates: `qa-process.md`+`full-qa-audit.md` vs prompts QA-01..QA-14;
+`backlog-workflow.md` vs WF-01/WF-02. Same one-home rule as OC-2.
+
+**Procedure:** execute OC-3's remainder first (its verdicts are this item's input). Then
+for each MERGE verdict, fold the prompt's unique content into the owning workflow doc and
+delete the prompt; for workflow docs left with no unique content, point them at the
+surviving home.
+
+**Acceptance criteria:** no procedure step exists in both a workflow doc and a prompt;
+`prompts/README.md` and `core/workflows/README.md` both accurate; gates + link-check green.
