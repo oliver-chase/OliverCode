@@ -34,6 +34,34 @@ run_token_policy_check() {
   fi
 }
 
+run_smoke_tests() {
+  # OC-10: optional -- WARN-skip if tests/ doesn't exist or a runtime is missing.
+  # Tests read only the tracked shared/repo-profiles.example.json, never local/
+  # (gitignored, absent on forks), so they must pass identically everywhere.
+  local tests_dir="${REPO_ROOT}/tests"
+  if [[ ! -d "$tests_dir" ]]; then
+    return 0
+  fi
+  echo "=== validate: running smoke tests ==="
+  if command -v python3 &>/dev/null; then
+    if ! python3 -m unittest discover "$tests_dir"; then
+      echo "=== validate: python smoke tests FAILED ==="
+      exit 1
+    fi
+  else
+    echo "  [WARN] python3 not found — skipping Python smoke tests"
+  fi
+  if command -v node &>/dev/null; then
+    if ! node --test "$tests_dir"/*.mjs; then
+      echo "=== validate: node smoke tests FAILED ==="
+      exit 1
+    fi
+  else
+    echo "  [WARN] node not found — skipping Node smoke tests"
+  fi
+  echo "=== validate: smoke tests passed ==="
+}
+
 run_gatekeeper() {
   local evidence_file="$1"
   local repo_name="${2:-}"
@@ -115,7 +143,7 @@ main() {
       echo "Usage: bash scripts/validate.sh [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  (no args)              Run pre-commit gates (includes token policy, Gate 8)"
+      echo "  (no args)              Run pre-commit gates (Gate 8 incl.) + smoke tests (tests/, if present)"
       echo "  --evidence <file>      Run pre-commit + gatekeeper"
       echo "  --gatekeeper-only <file>  Run gatekeeper only"
       echo "  --target-repo <repo-root> [args...]"
@@ -127,6 +155,7 @@ main() {
       ;;
     *)
       run_precommit
+      run_smoke_tests
       ;;
   esac
 }
