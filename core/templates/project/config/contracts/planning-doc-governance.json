@@ -1,0 +1,24 @@
+{
+  "version": "2026-05-21",
+  "owner": "<project-repo>",
+  "canonical_planning_authority": ".github/user-stories/_index.md",
+  "current_state_solution_docs": [],
+  "active_docs": [],
+  "supplemental_docs": [],
+  "planning_doc_matchers": [
+    "docs/*PLAN*.md",
+    "docs/*ROADMAP*.md",
+    "docs/*BACKLOG*.md",
+    "docs/GO_LIVE_*.md"
+  ],
+  "planning_doc_exclude_prefixes": [
+    "docs/archive/",
+    "docs/reference/"
+  ],
+  "required_contains": {},
+  "required_marker_by_class": {
+    "active": "",
+    "supplemental": "## Supersession Boundary"
+  },
+  "banned_strings_in_active_docs": []
+}

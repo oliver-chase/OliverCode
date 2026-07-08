@@ -1,0 +1,33 @@
+name: OliverCode Governance
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  governance:
+    name: governance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout OliverCode gate stack
+        uses: actions/checkout@v4
+        with:
+          repository: your-org/your-orchestration
+          ref: main
+          path: .olivercode
+
+      - name: Run OliverCode governance gates
+        run: |
+          bash .olivercode/scripts/run-governance-target.sh \
+            --target-repo "$GITHUB_WORKSPACE" \
+            --repo-name "${{ github.event.repository.name }}"

@@ -1,0 +1,464 @@
+#!/usr/bin/env python3
+"""OliverCode terminal launcher.
+
+The Python CLI behind `olivercode <command>` (see docs/OLIVERCODE_LAUNCHER.md).
+Self-locating from __file__: every path derives from this file's location, so there
+are no hardcoded vault/home/container paths and it runs identically from cron, a
+container, or any working directory. OliverCode does not depend on Hermes — this
+launcher invokes no Hermes/docker infrastructure.
+"""
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from repo_profiles import load_repo_profiles  # noqa: E402
+
+# This file lives at <OliverCode>/scripts/olivercode, so the repo root is two up.
+# Nothing else is hardcoded.
+OC_ROOT = Path(__file__).resolve().parent.parent
+
+COMMANDS = [
+    ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
+    ("olivercode update", "Pull the latest OliverCode updates from GitHub, then sync fleet hooks"),
+    ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
+    ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
+]
+
+
+def print_usage() -> None:
+    print("OliverCode Terminal Launcher\n")
+    print("Commands:")
+    for cmd, desc in COMMANDS:
+        print(f"  {cmd:<32} {desc}")
+
+
+def _parse_skill_frontmatter(skill_md: Path) -> tuple[str, str]:
+    """Extract (name, description) from a SKILL.md's YAML frontmatter.
+
+    Hand-rolled rather than a PyYAML dependency: this repo's frontmatter is a
+    narrow subset (flat `key: value` pairs, optional `>`/`>-` folded block
+    scalars for `description`) and stays that way by convention, so a small
+    parser here is less than the cost of a new dependency.
+    """
+    name = skill_md.parent.name
+    description = ""
+    try:
+        lines = skill_md.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return name, description
+    if not lines or lines[0].strip() != "---":
+        return name, description
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        return name, description
+    frontmatter = lines[1:end]
+
+    i = 0
+    while i < len(frontmatter):
+        line = frontmatter[i]
+        if line.startswith("name:"):
+            name = line.split(":", 1)[1].strip().strip("\"'") or name
+            i += 1
+            continue
+        if line.startswith("description:"):
+            rest = line.split(":", 1)[1].strip()
+            if rest in (">", ">-", "|", "|-"):
+                folded: list[str] = []
+                i += 1
+                while i < len(frontmatter) and (frontmatter[i].startswith(" ") or not frontmatter[i].strip()):
+                    folded.append(frontmatter[i].strip())
+                    i += 1
+                description = " ".join(part for part in folded if part)
+                continue
+            description = rest.strip("\"'")
+            i += 1
+            continue
+        i += 1
+    return name, description
+
+
+def _load_skills(oc_root: Path) -> list[tuple[str, str]]:
+    """Every skill in skills/: (name, description), sorted by name.
+
+    Reads SKILL.md frontmatter directly rather than skills/INDEX.md's prose
+    tables — INDEX.md is for humans browsing by category; this is the
+    always-accurate source since it can't drift from the skills it describes.
+    """
+    skills_dir = oc_root / "skills"
+    entries: list[tuple[str, str]] = []
+    if not skills_dir.is_dir():
+        return entries
+    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+        entries.append(_parse_skill_frontmatter(skill_md))
+    return sorted(entries, key=lambda pair: pair[0])
+
+
+def command_skills(argv: list[str]) -> int:
+    """List every skill under skills/, optionally filtered by --grep TERM."""
+    term = None
+    if "--grep" in argv:
+        idx = argv.index("--grep")
+        if idx + 1 >= len(argv):
+            print("Error: --grep requires a search term.")
+            return 1
+        term = argv[idx + 1].lower()
+
+    skills = _load_skills(OC_ROOT)
+    if not skills:
+        print("No skills found under skills/.")
+        return 1
+
+    if term:
+        skills = [(n, d) for n, d in skills if term in n.lower() or term in d.lower()]
+        if not skills:
+            print(f"No skills match '{term}'.")
+            return 0
+
+    width = max((len(n) for n, _ in skills), default=0)
+    for name, description in skills:
+        summary = description if len(description) <= 100 else description[:97] + "..."
+        print(f"{name:<{width}}  {summary}")
+    print(f"\n{len(skills)} skill(s).")
+    return 0
+
+
+def command_health() -> int:
+    """Run health checks: optional audit, dependency doc, core entrypoints."""
+    print("OliverCode Health Check")
+    print("=" * 40)
+    passed = 0
+    failed = 0
+
+    # 1. Audit scopes (optional helper; WARN-skip if the repo ships no audit script)
+    print("\nAudit scopes:")
+    audit_script = OC_ROOT / "scripts" / "audit_scopes.py"
+    if audit_script.exists():
+        try:
+            result = subprocess.run(
+                [sys.executable, str(audit_script)],
+                capture_output=True, text=True, timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            print("  [FAIL] Audit scopes timed out after 30s")
+            failed += 1
+        else:
+            if result.returncode == 0:
+                print("  [OK] Audit scopes passed")
+                passed += 1
+            else:
+                print("  [FAIL] Audit scopes")
+                if result.stdout:
+                    print("    " + result.stdout.strip())
+                failed += 1
+    else:
+        print("  [WARN] audit_scopes.py not present — skipping")
+        passed += 1
+
+    # 2. Dependency doc + the OliverCode-relative paths it declares.
+    # OLIVERCODE_DEPENDENCY.md lists paths as backtick-quoted, repo-relative entries
+    # (e.g. `shared/repo-map.json`, `core/contracts/`). Parse them in-process and resolve
+    # the OliverCode-relative ones under OC_ROOT — skip vault paths like `Oliver/`.
+    print("\nDependency paths:")
+    dep_file = OC_ROOT / "runtime" / "control-plane" / "OLIVERCODE_DEPENDENCY.md"
+    if not dep_file.exists():
+        # The control plane is gitignored local state — a standalone clone ships without
+        # it and must still report HEALTHY (see docs/FRAMEWORK_BOUNDARY.md).
+        print("  [WARN] control plane not installed — skipping dependency-path check")
+        passed += 1
+    else:
+        oc_dirs = ("shared/", "core/", "docs/", "scripts/", "tooling/", "runtime/", ".githooks/")
+        text = dep_file.read_text(encoding="utf-8", errors="ignore")
+        declared = [m for m in re.findall(r"`([^`]+)`", text) if m.startswith(oc_dirs)]
+        missing = [rel for rel in declared if not (OC_ROOT / rel).exists()]
+        for rel in missing:
+            print(f"  [FAIL] {rel} — not found")
+        if not declared:
+            print("  [WARN] no OliverCode-relative dependency paths declared")
+            passed += 1
+        elif not missing:
+            print(f"  [OK] all {len(declared)} declared dependency paths resolve")
+            passed += 1
+        else:
+            failed += len(missing)
+
+    # 3. Core entrypoints
+    print("\nCore entrypoints:")
+    checks = [
+        ("scripts/olivercode (CLI)", OC_ROOT / "scripts" / "olivercode"),
+        ("docs/FRAMEWORK_BOUNDARY.md", OC_ROOT / "docs" / "FRAMEWORK_BOUNDARY.md"),
+    ]
+    for name, fpath in checks:
+        if fpath.exists():
+            print(f"  [OK] {name}")
+            passed += 1
+        else:
+            print(f"  [FAIL] {name} — missing")
+            failed += 1
+
+    # The control-plane launcher is gitignored local state — required only when
+    # the control plane is installed at all (standalone clones must stay HEALTHY,
+    # same rule as the dependency-doc check above).
+    cp_launcher = OC_ROOT / "runtime" / "control-plane" / "olivercode"
+    if (OC_ROOT / "runtime" / "control-plane").exists():
+        if cp_launcher.exists():
+            print("  [OK] runtime/control-plane/olivercode (launcher)")
+            passed += 1
+        else:
+            print("  [FAIL] runtime/control-plane/olivercode — control plane present but launcher missing")
+            failed += 1
+    else:
+        print("  [WARN] control plane not installed — skipping launcher check")
+        passed += 1
+
+    # 4. Placement drift (SYS-2, spec: docs/skills-placement.md "Drift check").
+    # Everything here reads OUTSIDE OC_ROOT (the vault, sibling fleet repos), so it
+    # must degrade to WARN, never FAIL, when that context isn't present — a standalone
+    # clone with no surrounding vault is still a valid, healthy checkout.
+    drift_passed, drift_failed = _check_placement_drift(OC_ROOT)
+    passed += drift_passed
+    failed += drift_failed
+
+    # Summary
+    total = passed + failed
+    print(f"\n{'=' * 40}")
+    if failed == 0:
+        print(f"HEALTHY — {passed}/{total} checks passed")
+    else:
+        print(f"DEGRADED — {passed}/{total} passed, {failed} failed")
+    return 1 if failed else 0
+
+
+def _hooks_dir_diverges(hooks_dir: Path, templates_dir: Path) -> list[str]:
+    """Return live hook filenames that match neither canonical template's content.
+
+    A repo running the private (2-gate) variant still deploys it under the
+    filename `pre-commit` — git only auto-invokes that exact name — so a live
+    `pre-commit` file must be checked against BOTH template contents, not just
+    the public one of the same filename.
+    """
+    canonical_contents = []
+    for template in ("pre-commit", "pre-commit-private"):
+        canonical = templates_dir / template
+        if canonical.exists():
+            canonical_contents.append(canonical.read_bytes())
+
+    diverged = []
+    for filename in ("pre-commit", "pre-commit-private"):
+        live = hooks_dir / filename
+        if not live.exists():
+            continue
+        if live.read_bytes() not in canonical_contents:
+            diverged.append(filename)
+    return diverged
+
+
+def _check_placement_drift(oc_root: Path) -> tuple[int, int]:
+    print("\nPlacement drift (skills-placement.md):")
+    passed = 0
+    failed = 0
+    templates_dir = oc_root / "core" / "templates" / "project"
+
+    # Vault root convention: <vault>/Oliver/Project Repos/OliverCode == oc_root.
+    vault_root = oc_root.parent.parent.parent
+
+    # (a)/(b) Every OliverCode skill must have a live, correctly-targeted symlink at
+    # ~/.claude/skills/<name> -- that's the mechanism making it invocable from any repo.
+    # ~/.claude/skills/ is a real directory (not one whole-directory symlink) holding a
+    # mix of individual symlinks (orchestration + personal) and real, untracked product/
+    # GTM and vendor content -- only the symlinked half is checkable from here.
+    claude_skills_dir = Path.home() / ".claude" / "skills"
+    if not claude_skills_dir.is_dir():
+        print("  [WARN] ~/.claude/skills/ not present — skipping")
+        passed += 1
+    else:
+        skills_dir = oc_root / "skills"
+        oc_skill_names = sorted(
+            p.name for p in skills_dir.iterdir() if p.is_dir() and (p / "SKILL.md").exists()
+        ) if skills_dir.is_dir() else []
+        installed, missing, wrong_target = [], [], []
+        for name in oc_skill_names:
+            link = claude_skills_dir / name
+            expected = skills_dir / name
+            if not link.is_symlink():
+                missing.append(name)
+            elif link.resolve() != expected.resolve():
+                wrong_target.append(name)
+            else:
+                installed.append(name)
+        if oc_skill_names and not installed:
+            # Zero symlinks resolve into THIS checkout: it isn't the machine's installed
+            # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
+            # drift -- G4 requires a stranger clone to report HEALTHY.
+            print(f"  [WARN] this checkout is not the machine's installed OliverCode "
+                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/skills-placement.md")
+            passed += 1
+        elif missing:
+            print(f"  [FAIL] not symlinked at ~/.claude/skills/: {', '.join(missing)}")
+            failed += 1
+        elif wrong_target:
+            print(f"  [FAIL] symlinked but pointing elsewhere: {', '.join(wrong_target)}")
+            failed += 1
+        else:
+            print(f"  [OK] all {len(oc_skill_names)} OliverCode skills correctly symlinked at ~/.claude/skills/")
+            passed += 1
+
+        broken = sorted(
+            p.name for p in claude_skills_dir.iterdir() if p.is_symlink() and not p.exists()
+        )
+        if broken:
+            print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
+            failed += 1
+        else:
+            passed += 1
+
+    # (c) Fleet repos: unset core.hooksPath, or a hook file diverging from the template.
+    profiles, _ = load_repo_profiles(oc_root)
+    fleet_names = [name for name in profiles if name != "olivercode"]
+    if not fleet_names:
+        print("  [WARN] no fleet registered in local/repo-profiles.json — skipping hook-drift check")
+        passed += 1
+    else:
+        for name in fleet_names:
+            repo_path = oc_root.parent / name
+            if not (repo_path / ".git").exists():
+                print(f"  [WARN] {name}: not present on this machine — skipping")
+                passed += 1
+                continue
+            result = subprocess.run(
+                ["git", "-C", str(repo_path), "config", "--get", "core.hooksPath"],
+                capture_output=True, text=True,
+            )
+            hooks_path = result.stdout.strip()
+            if result.returncode != 0 or not hooks_path:
+                print(f"  [FAIL] {name}: core.hooksPath unset")
+                failed += 1
+                continue
+            hooks_dir = repo_path / hooks_path
+            diverged = _hooks_dir_diverges(hooks_dir, templates_dir)
+            if diverged:
+                print(f"  [FAIL] {name}: hook(s) diverge from template: {', '.join(diverged)}")
+                failed += 1
+            else:
+                print(f"  [OK] {name}: hooksPath set, hooks match template")
+                passed += 1
+
+    # The vault itself is a managed hook target too (SYS-3), same private-variant check.
+    if not (vault_root / ".git").exists():
+        print("  [WARN] no vault .git found — skipping vault hook check")
+        passed += 1
+    else:
+        result = subprocess.run(
+            ["git", "-C", str(vault_root), "config", "--get", "core.hooksPath"],
+            capture_output=True, text=True,
+        )
+        hooks_path = result.stdout.strip()
+        if result.returncode != 0 or not hooks_path:
+            print("  [FAIL] vault: core.hooksPath unset")
+            failed += 1
+        else:
+            diverged = _hooks_dir_diverges(vault_root / hooks_path, templates_dir)
+            if diverged:
+                print(f"  [FAIL] vault: hook(s) diverge from template: {', '.join(diverged)}")
+                failed += 1
+            else:
+                print("  [OK] vault: hooksPath set, hooks match template")
+                passed += 1
+
+    return passed, failed
+
+
+def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
+    """Idempotently deploy the hook template(s) + hooksPath config to one repo.
+
+    Public repos get the 7-gate public template as the live `pre-commit` file
+    (plus the private variant alongside as a reference copy, matching the
+    existing manifest convention). The vault (private_repo=True) gets the
+    private 2-gate template's content deployed AS `pre-commit` — git only
+    auto-invokes that exact filename, there's no such thing as a repo
+    literally running a file named `pre-commit-private`.
+    """
+    hooks_dir = repo_path / ".githooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    live_source = templates_dir / ("pre-commit-private" if private_repo else "pre-commit")
+    live_target = hooks_dir / "pre-commit"
+    live_target.write_bytes(live_source.read_bytes())
+    live_target.chmod(0o755)
+
+    if not private_repo:
+        reference_source = templates_dir / "pre-commit-private"
+        reference_target = hooks_dir / "pre-commit-private"
+        reference_target.write_bytes(reference_source.read_bytes())
+        reference_target.chmod(0o755)
+
+    subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
+
+
+def command_sync_hooks(oc_root: Path) -> int:
+    """SYS-3: converge hooks + core.hooksPath across every fleet repo and the vault."""
+    templates_dir = oc_root / "core" / "templates" / "project"
+    vault_root = oc_root.parent.parent.parent
+    updated = 0
+    skipped = 0
+
+    profiles, _ = load_repo_profiles(oc_root)
+    for name in profiles:
+        if name == "olivercode":
+            continue
+        repo_path = oc_root.parent / name
+        if not (repo_path / ".git").exists():
+            print(f"  [SKIP] {name}: not present on this machine")
+            skipped += 1
+            continue
+        _install_hook_pair(repo_path, templates_dir, private_repo=False)
+        print(f"  [OK] {name}: hooks synced, hooksPath set")
+        updated += 1
+
+    if (vault_root / ".git").exists():
+        _install_hook_pair(vault_root, templates_dir, private_repo=True)
+        print("  [OK] vault: private-variant hook synced, hooksPath set")
+        updated += 1
+    else:
+        print("  [SKIP] vault: no .git found at the expected location")
+        skipped += 1
+
+    print(f"\n{updated} target(s) synced, {skipped} skipped.")
+    return 0
+
+
+def command_update() -> int:
+    """Pull the latest OliverCode updates from GitHub, then converge fleet hooks."""
+    pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
+    if pull_code != 0:
+        return pull_code
+    print("\nSyncing hooks across the fleet + vault (SYS-3):")
+    return command_sync_hooks(OC_ROOT)
+
+
+def main() -> int:
+    if len(sys.argv) < 2 or sys.argv[1] in {"--help", "-h", "help"}:
+        print_usage()
+        return 0
+
+    cmd = sys.argv[1]
+    if cmd == "health":
+        return command_health()
+    if cmd == "update":
+        return command_update()
+    if cmd == "sync-hooks":
+        return command_sync_hooks(OC_ROOT)
+    if cmd == "skills":
+        return command_skills(sys.argv[2:])
+
+    print(f"Error: '{cmd}' is not a valid command.")
+    print_usage()
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
