@@ -1,0 +1,21 @@
+name: OliverCode Framework CI
+
+on: [push, pull_request]
+
+jobs:
+  framework-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Health check
+        run: python3 scripts/olivercode health
+
+      - name: Validate gates
+        run: bash scripts/validate.sh
+
+      - name: Link check
+        run: bash scripts/link-check.sh
+
+      - name: Full QA pass
+        run: bash scripts/qa/full-qa-pass.sh
