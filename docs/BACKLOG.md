@@ -112,57 +112,26 @@ One commit per duplication collapsed, gates run before each commit.
   `CLAUDE.md` (loads in every session via the `~/.claude/CLAUDE.md` symlink), pointing at
   the `diagnosing-bugs` skill, `/simplify`, `/code-review`, and the structure contracts.
 
-### OC-6. Stranger-fork CI — LOW — OPEN (blocked on owner action)
+### OC-6. Stranger-fork CI — LOW — FIXED 2026-07-08
 
-**Why:** the stranger-clone rehearsal (fresh clone must pass health/gates/links) is manual;
-a regression ships silently until someone re-runs it.
+**Original blocker was wrong, and revealed a real Gate 5 bug.** The spec assumed the
+owner had SSH configured; they didn't (`~/.ssh/` has no keypair). Verified instead: `gh
+auth status` showed the active HTTPS credential already carries `workflow` scope
+(`gh auth login`, not legacy git credential caching) -- Gate 5 blocked based on remote URL
+scheme alone, which is the wrong signal. There is no SSH switch needed; there never was.
 
-**Blocker (do this first, owner-only):** origin is an HTTPS remote; pre-commit Gate 5
-correctly blocks staged `.github/workflows/` files over HTTPS (GitHub rejects workflow
-pushes without workflow-scope credentials). Run:
-`git remote set-url origin git@github.com:<owner>/OliverCode.git` and verify SSH auth
-(`ssh -T git@github.com`) before starting.
+**Fixed Gate 5** (`.githooks/pre-commit` and `core/templates/project/pre-commit`, kept
+identical): checks the actual credential's scopes via `gh api user -i` /
+`X-OAuth-Scopes` header instead of the remote URL. Blocks only when no workflow-scoped
+credential is actually present; message now says `gh auth login --scopes workflow`.
+Verified live: staged `.github/workflows/framework-ci.yml`, Gate 5 passed with
+`[OK] gh credential has workflow scope`.
 
-**Procedure:** create `.github/workflows/framework-ci.yml`: trigger `on: [push,
-pull_request]`; single ubuntu-latest job; steps: checkout, `python3 scripts/olivercode
-health` (expect exit 0 — the not-installed-checkout WARN path must hold), `bash
-scripts/validate.sh`, `bash scripts/link-check.sh`, `bash scripts/qa/full-qa-pass.sh`.
-No secrets, no external actions beyond actions/checkout.
-
-**Acceptance criteria:** (a) workflow green on a push to main; (b) green on a fork with no
-`local/` overlay (that IS the stranger test); (c) `bash .githooks/pre-commit` passes when
-committing the workflow (proves Gate 5 sees SSH remote); (d) README gains one line noting
-CI exists.
-
-**Guardrails:** if health exits nonzero in CI, fix the WARN-vs-FAIL classification in
-`scripts/olivercode` (a fresh CI checkout is a valid state) — do not delete the check.
-
-### OC-7. Two template homes — structural drift by design — MEDIUM — FIXED 2026-07-08
-- Executed: keepalive assets moved into `core/templates/project/{scripts,supabase}/`, the
-  duplicate hook copies deleted, `shared/templates/` removed entirely, all 15 referencing
-  files updated (manifest sources, post-commit check, contracts, workflow docs,
-  KEEPALIVE_STANDARD, dependency doc), fleet hooks re-synced and re-verified 14/14.
-- Original finding: `core/templates/project/` (master, full template incl. `.github/` CI + CODEOWNERS) and
-  `shared/templates/project/` (4-file "synced subset": 2 pre-commit hooks duplicated from
-  the master + 2 keepalive scripts) violate one-home-per-thing. The duplicated hooks have
-  drifted before (AUD-F1 class). Collapse: keep `core/templates/project/` as the only
-  template home, move the 2 keepalive scripts there, retire `shared/templates/` entirely.
-  Touch points to update: `shared/project-bootstrap-manifest.json` source paths,
-  `OLIVERCODE_DEPENDENCY.md`, `FRAMEWORK_BASELINE.md`'s template-architecture section,
-  both QUALITY_BASELINE copies, hook-sync logic in `scripts/olivercode`.
-
-### OC-8. `Prompt Library/` naming + placement — LOW — FIXED 2026-07-08 (renamed to `prompts/`, index file now `prompts/README.md`; QA-script exclusion paths updated)
-- 24 files under a root directory with a space in its name — breaks unquoted shell
-  one-liners for every fork, and root placement contradicts the one-authority-layout
-  (prompts are agent-workflow material, closer to `skills/`). If OC-3's value audit keeps
-  any prompts, rename to `prompts/` and move; if not, retire the directory.
-
-### OC-9. `core/personas/` is a layer holding exactly one persona — LOW — WONT-FIX 2026-07-08 (19 lines, 7 consumers, FRAMEWORK_BASELINE documents it as the intentional extension point — fold cost exceeds carry cost)
-- After the growth-team removal, `personas/` contains only `oliver/persona_soul.md`. A
-  whole top-level layer for one file is structure without payoff. Either fold the persona
-  content into `CLAUDE.md`/a contract, or document why the layer must exist for downstream
-  reuse (template stamping does not currently use it).
-
+**Added `.github/workflows/framework-ci.yml`**: checkout, `python3 scripts/olivercode
+health`, `bash scripts/validate.sh`, `bash scripts/link-check.sh`, `bash
+scripts/qa/full-qa-pass.sh`. Rehearsed in a fresh `local/`-free checkout with a real `.git`
+(matching what `actions/checkout` produces) before committing -- all 4 steps green,
+health reports the correct not-installed-checkout WARN path (not FAIL).
 
 ### OC-10. Framework smoke tests — MEDIUM — OPEN
 
