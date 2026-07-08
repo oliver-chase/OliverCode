@@ -50,7 +50,7 @@ Testing applies to all code work. Follow `core/workflows/testing-rules.md`.
 
 ## Cross-Repo Quality Baseline
 
-- Canonical managed quality files live in `shared/templates/project`.
-- Sync all mapped repos: sync templates from `shared/templates/project/` via the project bootstrap manifest.
+- Canonical managed quality files live in `core/templates/project`.
+- Sync all mapped repos: sync templates from `core/templates/project/` via the project bootstrap manifest.
 - Audit strict-file drift: pre-commit gates check for file structure violations in staged files.
 - Policy: a managed-file change in one repo is invalid unless the canonical template is updated and re-synced to all repos.

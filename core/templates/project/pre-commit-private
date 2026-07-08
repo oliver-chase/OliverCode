@@ -3,7 +3,6 @@
 # Applies to private/internal repositories. 2 gates only.
 # Private repos contain personal data by design — no PII gate.
 # Master source: <vault-root>/Oliver/Project Repos/OliverCode/core/templates/project/pre-commit-private
-# (shared/templates/project/pre-commit-private is the synced copy distributed via the bootstrap manifest)
 set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"

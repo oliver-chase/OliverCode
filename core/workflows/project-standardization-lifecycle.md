@@ -4,7 +4,7 @@
 Define one standard lifecycle for project bootstrap, governance sync, drift audit, and promotion across all Oliver repos.
 
 ## Source of Truth
-1. `core/templates/project/**` for the master scaffold templates (`shared/templates/project/` is a small synced subset, not the source).
+1. `core/templates/project/**` for the master scaffold templates (the single template home).
 2. `shared/project-bootstrap-manifest.json` for managed files and strictness modes.
 3. `shared/repo-map.json` for managed repo inventory.
 4. `shared/project-structure-rules.json` for structure and backlog-location enforcement.
@@ -13,7 +13,7 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 ## Lifecycle
 1. Bootstrap new project:
 - No single bootstrap script ships in this repo. Copy the managed files listed in
-  `shared/project-bootstrap-manifest.json` from `shared/templates/project/` into the
+  `shared/project-bootstrap-manifest.json` from `core/templates/project/` into the
   target repo, then run `core/templates/project/scripts/install-enforcement.sh` and
   `core/templates/project/scripts/install-planning-governance-hook.sh` from the target repo.
 - Add the project to `shared/repo-map.json`.

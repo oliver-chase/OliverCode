@@ -263,8 +263,12 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int]:
     failed = 0
     templates_dir = oc_root / "core" / "templates" / "project"
 
-    # Vault root convention: <vault>/Oliver/Project Repos/OliverCode == oc_root.
-    vault_root = oc_root.parent.parent.parent
+    # Vault root: OLIVERCODE_VAULT_ROOT env var wins; otherwise the layout
+    # convention <vault>/<...>/<...>/OliverCode == oc_root (three levels up).
+    # Forks living elsewhere set the env var or just get WARN-skips (safe).
+    import os as _os
+    _env_vault = _os.environ.get("OLIVERCODE_VAULT_ROOT")
+    vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
 
     # (a)/(b) Every OliverCode skill must have a live, correctly-targeted symlink at
     # ~/.claude/skills/<name> -- that's the mechanism making it invocable from any repo.

@@ -16,7 +16,7 @@
 | `repo-discovery` | Read-only repo exploration | Entering an unfamiliar repo |
 | `repo-audit-with-execution-batches` | Structured repo audit — surface scan, marker hunt, report | Quick scan-and-report audit of a repo |
 | `functionality-audit` | Full product functionality audit — crash-safe incremental, quick wins inline, context-free specs, RLS/tooltips/revert/complete-but-isn't | Full audit of a live product ("audit everything", "what's broken/missing/fake-done") |
-| `security-review` | Vulnerability-class review — injection, auth bypass, IDOR, SSRF, path traversal, XSS, insecure deserialization | Security review, or touching auth/input-parsing/file-paths/external-requests/serialization |
+| `code-security-review` | Vulnerability-class review — injection, auth bypass, IDOR, SSRF, path traversal, XSS, insecure deserialization | Security review, or touching auth/input-parsing/file-paths/external-requests/serialization |
 | `repo-structural-cleanup` | File moves, renames, deletes | Restructuring a repo |
 | `structured-code-removal` | Safe feature/module removal | Removing a feature safely |
 | `behavior-preserving-module-extraction` | Refactoring patterns | Extracting a module from a monolith |

@@ -91,12 +91,7 @@ echo ""
 echo "Files:"
 ls -la "$QA_DIR/"
 echo ""
-echo "Next: Review the issue files above, then run the relevant"
-echo "LLM prompt for qualitative fixes where needed."
-echo "  - QA-15 for code quality fixes"
-echo "  - QA-16 for documentation fixes"
-echo "  - QA-17 for workflow status fixes"
-echo "  - QA-ALL for combined pass"
+echo "Next: Review the issue files above and fix where needed."
 
 if [ "$FAILED" -eq 1 ]; then
   exit 1

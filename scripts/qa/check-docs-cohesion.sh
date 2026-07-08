@@ -64,8 +64,8 @@ if [ -d "docs" ] || [ -f "README.md" ]; then
   # runtime/ is gitignored per-machine state (Obsidian vault templates whose
   # wiki-links resolve in the vault, not this repo) and .claude/ is vendored —
   # neither is framework documentation, so neither belongs in this check.
-  done < <(find . -name '*.md' -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path './runtime/*' -not -path './.claude/*' -not -path './Prompt Library/*' -not -path './.claude-optimization/*' 2>/dev/null)
-  # (Prompt Library notes are vault-authored Obsidian content; their wiki-links
+  done < <(find . -name '*.md' -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path './runtime/*' -not -path './.claude/*' -not -path './prompts/*' -not -path './.claude-optimization/*' 2>/dev/null)
+  # (prompts/ files are session-prompt templates; their wiki-links
   # resolve against the vault, not this repo.)
   TOTAL_ISSUES=$((TOTAL_ISSUES + BROKEN))
   if [ "$BROKEN" -eq 0 ]; then

@@ -1,7 +1,7 @@
 {
   "version": 2,
   "status": "PROVISIONED",
-  "status_note": "All template sources exist. Master templates live under core/templates/project/ (see core/contracts/FRAMEWORK_BASELINE.md); shared/templates/project/ holds only the two pre-commit hooks as the actively-synced subset, kept byte-identical to their core masters.",
+  "status_note": "All template sources exist. core/templates/project/ is the single template home (see core/contracts/FRAMEWORK_BASELINE.md).",
   "githubActionsPolicy": {
     "mode": "manual_only",
     "reason": "GitHub Actions billing is currently blocked; managed repos must not auto-trigger workflows until billing is restored."
@@ -95,12 +95,12 @@
       "mode": "presence"
     },
     {
-      "source": "shared/templates/project/pre-commit",
+      "source": "core/templates/project/pre-commit",
       "target": ".githooks/pre-commit",
       "mode": "strict"
     },
     {
-      "source": "shared/templates/project/pre-commit-private",
+      "source": "core/templates/project/pre-commit-private",
       "target": ".githooks/pre-commit-private",
       "mode": "strict"
     },

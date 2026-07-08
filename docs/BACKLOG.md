@@ -35,10 +35,10 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
 
 ## Open items
 
-### OC-1. `security-review` skill name collides with a built-in Claude Code skill — LOW — OPEN
-- This repo's `skills/security-review` and Claude Code's built-in `security-review` share an
-  exact name. Which one wins at invocation time is untested. Test; rename ours (e.g.
-  `code-security-review`) if the built-in shadows it.
+### OC-1. `security-review` skill name collides with a built-in Claude Code skill — LOW — FIXED 2026-07-08
+- Renamed to `skills/code-security-review` (frontmatter, INDEX row, `~/.claude/skills/`
+  symlink, cross-references in repo-audit-with-execution-batches). Verified live: both
+  skills now appear as distinct entries in the harness's own skill list.
 
 ### OC-2. Token-efficiency pass over the contract/doc layer — MEDIUM — OPEN
 - `core/contracts/` + `docs/` load into agent context on demand; several contracts restate
@@ -46,12 +46,13 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   overlap on doc-sync rules). One home per rule, pointers elsewhere — measured target:
   reduce total tracked authority-doc token count without losing a single enforceable rule.
 
-### OC-3. Prompt Library value audit — LOW — OPEN
-- 27 tracked fill-in-the-blank session prompts predate the skills system. Several (QA-15/16/17)
-  duplicate what `scripts/qa/*.sh` now does deterministically. Audit each: still adds value
-  over a skill/script, or retire.
+### OC-3. Prompt Library value audit — LOW — PARTIALLY FIXED 2026-07-08
+- Retired the 4 prompts `full-qa-pass.sh`'s own header named as its LLM equivalents
+  (QA-15/16/17/ALL) plus their orchestration guide; updated REF-01 and the QA scripts'
+  pointers to the script paths. Remaining ~19 prompts (story-lifecycle QA series, WF, RM)
+  have no script equivalent — kept pending a content-level value audit.
 
-### OC-4. `olivercode health` fleet checks assume the vault layout — LOW — OPEN
+### OC-4. `olivercode health` fleet checks assume the vault layout — LOW — FIXED 2026-07-08 (`OLIVERCODE_VAULT_ROOT` env override added; convention walk-up kept as fallback)
 - The hook-drift section resolves the vault root by walking up from OC_ROOT
   (`oc_root.parent.parent.parent`) — correct for this operator's layout, silently wrong for
   a fork living elsewhere. It WARN-skips when nothing is found (safe), but the layout
@@ -70,8 +71,12 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   push would catch fresh-clone regressions automatically. (This repo currently ships no CI
   by design — revisit whether that ruling still holds now that the repo is public-facing.)
 
-### OC-7. Two template homes — structural drift by design — MEDIUM — OPEN
-- `core/templates/project/` (master, full template incl. `.github/` CI + CODEOWNERS) and
+### OC-7. Two template homes — structural drift by design — MEDIUM — FIXED 2026-07-08
+- Executed: keepalive assets moved into `core/templates/project/{scripts,supabase}/`, the
+  duplicate hook copies deleted, `shared/templates/` removed entirely, all 15 referencing
+  files updated (manifest sources, post-commit check, contracts, workflow docs,
+  KEEPALIVE_STANDARD, dependency doc), fleet hooks re-synced and re-verified 14/14.
+- Original finding: `core/templates/project/` (master, full template incl. `.github/` CI + CODEOWNERS) and
   `shared/templates/project/` (4-file "synced subset": 2 pre-commit hooks duplicated from
   the master + 2 keepalive scripts) violate one-home-per-thing. The duplicated hooks have
   drifted before (AUD-F1 class). Collapse: keep `core/templates/project/` as the only
@@ -80,13 +85,13 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   `OLIVERCODE_DEPENDENCY.md`, `FRAMEWORK_BASELINE.md`'s template-architecture section,
   both QUALITY_BASELINE copies, hook-sync logic in `scripts/olivercode`.
 
-### OC-8. `Prompt Library/` naming + placement — LOW — OPEN (extends OC-3)
+### OC-8. `Prompt Library/` naming + placement — LOW — FIXED 2026-07-08 (renamed to `prompts/`, index file now `prompts/README.md`; QA-script exclusion paths updated)
 - 24 files under a root directory with a space in its name — breaks unquoted shell
   one-liners for every fork, and root placement contradicts the one-authority-layout
   (prompts are agent-workflow material, closer to `skills/`). If OC-3's value audit keeps
   any prompts, rename to `prompts/` and move; if not, retire the directory.
 
-### OC-9. `core/personas/` is a layer holding exactly one persona — LOW — OPEN
+### OC-9. `core/personas/` is a layer holding exactly one persona — LOW — WONT-FIX 2026-07-08 (19 lines, 7 consumers, FRAMEWORK_BASELINE documents it as the intentional extension point — fold cost exceeds carry cost)
 - After the growth-team removal, `personas/` contains only `oliver/persona_soul.md`. A
   whole top-level layer for one file is structure without payoff. Either fold the persona
   content into `CLAUDE.md`/a contract, or document why the layer must exist for downstream

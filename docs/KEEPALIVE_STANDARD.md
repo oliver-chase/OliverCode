@@ -15,7 +15,7 @@ uses Supabase or deploys to Cloudflare.
 This generates a real database write, resetting any compute-hibernation timer.
 
 **Prerequisites** (one-time per Supabase project):
-- Run `shared/templates/supabase/keepalive.sql` in the Supabase SQL editor
+- Run `core/templates/project/supabase/keepalive.sql` in the Supabase SQL editor
   (creates `_keepalive_log` table and index)
 
 **How to wire per repo:**
@@ -24,7 +24,7 @@ This generates a real database write, resetting any compute-hibernation timer.
 |---|---|---|---|
 | Cloudflare Pages | CF Pages Function | `functions/api/admin/keepalive.js` | Cloudflare Dashboard → Cron Triggers → `*/15 * * * *` |
 | Next.js (self-hosted) | Next.js API route | `app/api/admin/keepalive/route.ts` | External cron service |
-| Scripted cron | Standalone bash script | `shared/templates/scripts/oc-supabase-keepalive.sh` | crontab / external scheduler `0 */6 * * *` |
+| Scripted cron | Standalone bash script | `core/templates/project/scripts/oc-supabase-keepalive.sh` | crontab / external scheduler `0 */6 * * *` |
 
 **Cloudflare Pages setup:**
 1. Add the keepalive endpoint file (`functions/api/admin/keepalive.js`)
@@ -34,12 +34,12 @@ This generates a real database write, resetting any compute-hibernation timer.
 **Scripted cron setup** (for repos not deployed to Cloudflare):
 ```bash
 # Make the wrapper script executable
-chmod 755 shared/templates/scripts/oc-supabase-keepalive.sh
+chmod 755 core/templates/project/scripts/oc-supabase-keepalive.sh
 
 # Register a crontab entry (every 6 hours). Provide the env vars inline or via the
 # crontab environment; the script writes one _keepalive_log row per run.
 0 */6 * * * SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
-  /abs/path/to/shared/templates/scripts/oc-supabase-keepalive.sh >> /abs/path/to/keepalive.log 2>&1
+  /abs/path/to/core/templates/project/scripts/oc-supabase-keepalive.sh >> /abs/path/to/keepalive.log 2>&1
 ```
 
 **Env vars required:**

@@ -45,7 +45,7 @@ Against `PROJECT_STRUCTURE_STANDARD.md` (from OliverCode contracts):
 Presence check only — hardcoded secrets (API keys, tokens, passwords), `.gitignore`
 coverage, public exposure risk. For the real vulnerability-class walkthrough (injection,
 auth bypass, IDOR, SSRF, path traversal, XSS, insecure deserialization), that's a distinct
-pass — use `security-review`, don't improvise it inline here.
+pass — use `code-security-review`, don't improvise it inline here.
 
 ### Batch 7 — Summary + Priority
 
@@ -56,7 +56,7 @@ Produce a ranked list by impact × fix difficulty. Each finding: file:line, cate
 This audit finds and categorizes issues; it doesn't fix them in depth. When a batch turns up something that has its own dedicated skill, hand off to it rather than doing a lighter version here:
 
 - Batch 2 (markers) surfaces an actual bug → `/code-review`
-- Batch 6 (security) surfaces something worth a real vulnerability-class walkthrough → `security-review`
+- Batch 6 (security) surfaces something worth a real vulnerability-class walkthrough → `code-security-review`
 - Batch 2 or Batch 4 surfaces real duplication/dead code (not just a marker comment) → `/simplify`
 - Any batch surfaces something actually broken, not just messy → `diagnosing-bugs` for root cause, before proposing a fix
 - The repo has a UI and the audit is part of a broader project review → `/ux-ui` as a separate pass
