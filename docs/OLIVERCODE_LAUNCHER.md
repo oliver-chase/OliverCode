@@ -18,4 +18,6 @@ python3 scripts/olivercode health
 python3 scripts/olivercode bogus || true
 ```
 
-The launcher is intentionally small. Runtime commands are available from the runtime launcher.
+The launcher is intentionally small -- these 4 commands are the entire surface. The copy at
+`runtime/control-plane/olivercode` (present only when the local control plane is installed)
+is a thin shim that delegates to this same CLI; it carries no additional commands.

@@ -151,26 +151,53 @@ suite-injection test throw (confirmed real signal, not a no-op), restored byte-i
 after; full stranger-clone rehearsal (fresh `git init`, no `local/`) -- health 9/9,
 `validate.sh` runs and passes both suites identically to the real checkout.
 
-### OC-11. Docs-reality audit of the remaining docs/ surface — MEDIUM — OPEN
+### OC-11. Docs-reality audit of the remaining docs/ surface — MEDIUM — FIXED 2026-07-08
 
-**Why:** this pass verified README, ARCHITECTURE, governance, FEATURE_MAP, BACKLOG. Not
-re-verified since heavy restructuring: `docs/TOKEN_POLICY.md`,
-`docs/write-mode-enforcement-protocol.md`, `docs/KEEPALIVE_STANDARD.md`,
-`docs/bots-gateway.md`, `docs/troubleshooting.md`, `docs/OLIVERCODE_LAUNCHER.md`,
-`docs/FEATURE_MAP.md` (row-level), `docs/DOCUMENTATION_STANDARD.md`,
-`docs/skills-placement.md`, plus `core/workflows/*.md` (7 files) and
-`core/contracts/*.md` not touched today.
+Ran the `docs-reality-audit` skill against the full scoped list (9 `docs/` files, all 7
+`core/workflows/*.md`, all 11 `core/contracts/*`). 25 files read in full; every path,
+command, gate count, and referenced-skill/script claim verified against live code before
+trusting it (never against a doc's own claim about itself).
 
-**Procedure:** run the `docs-reality-audit` skill against this repo, scoped to the list
-above. For every factual claim (a path, a command, a count, a gate number), verify against
-the live file/script per the skill's Phase 3 table. Fix stale claims in place; log
-contradictions between two docs as findings here before choosing the home.
+**Findings (file, claim, verified fact, fix):**
 
-**Acceptance criteria:** every doc in scope carries zero claims that fail verification;
-gates + link-check green; findings and fixes appended to this item with file:claim pairs.
+| File | Stale/wrong claim | Verified fact | Fix |
+|---|---|---|---|
+| `docs/KEEPALIVE_STANDARD.md` | "this doc previously carried a duplicate markdown table" | Current-State Wording bans "previously" phrasing | Reworded to state the current rule, dropped the history reference |
+| `docs/bots-gateway.md` | `bash scripts/validate-all.sh --sdr-only` listed as a bare command | `validate-all.sh` does not exist in OliverCode -- it's the repo declaring the `sdr` suite's own script | Rewrote to `node scripts/bots-gateway.mjs test:sdr` + a comment explaining the delegation |
+| `docs/troubleshooting.md` | "full governance suite expects `jq` and `rg`" | Zero uses of `jq`/`rg` anywhere in the gates/QA scripts (grepped) | Removed the section |
+| `docs/troubleshooting.md` | `scripts/olivercode providers` documented as a real command | Zero hits in `scripts/olivercode`'s `COMMANDS` list -- fabricated, remnant of the retired multi-provider vision | Removed the section; added 3 real current-state sections (Gate 5 credential fix, hook-drift resync, validate.sh-needs-real-git) |
+| `docs/OLIVERCODE_LAUNCHER.md` | "Runtime commands are available from the runtime launcher" | Verified `runtime/control-plane/olivercode`'s actual content: a 17-line shim that `exec`s the same 4-command Python CLI, zero extra commands | Corrected to state the shim carries no additional commands |
+| `docs/FEATURE_MAP.md` | Enforcement table omitted Gate 8, `tests/`, and CI entirely | Gate 8 added 2026-07-08 (this session); `tests/` and `.github/workflows/framework-ci.yml` added same session | Added rows for both; reworded "Historical Note" (banned "Previous versions... listed" phrasing) to a forward-looking rule |
+| `docs/DOCUMENTATION_STANDARD.md` | Required `README.md` header list (`Start Here`/`Core Commands`/etc.) | The real, actively-maintained README (rewritten this session per owner's own explicit ask) uses different section names entirely -- `What It Keeps`, `Quick Start`, `Where Things Live`, etc. | Rewrote the requirement as required CONTENTS (scope statement, Quick Start, Where Things Live table, Key Docs index) rather than exact header text -- the doc was stale, not the README |
+| `docs/DOCUMENTATION_STANDARD.md` | "`CHANGELOG.md` is the only file for version history" | `CHANGELOG.md` does not exist anywhere in the repo | Corrected to state git log is the version history, no separate file required |
+| `docs/DOCUMENTATION_STANDARD.md` | Gate list omitted token policy | 8 gates exist, not 7 | Added "token policy" to the list |
+| `core/workflows/story-lifecycle-sop.md` | Cited `story-lifecycle-gate` as a "supporting gate skill" | Zero matches anywhere in `skills/` or `~/.claude/skills/` -- confirmed non-existent (matches AUD-F6's earlier finding in the pre-squash history) | Removed the reference |
+| `core/workflows/project-standardization-lifecycle.md` | `.githooks/pre-commit` described as syncing strict/presence template files, with an `OVERWRITE_NON_STRICT=1` env-var toggle | Grepped the entire pre-commit hook: zero knowledge of strict/presence files, the bootstrap manifest, or any sync behavior -- it is purely the 8-gate scanner. `OVERWRITE_NON_STRICT` has zero implementation anywhere. | Rewrote "Sync existing projects" and "Audit drift" steps honestly: no automated sync script ships; `scripts/olivercode sync-hooks` is the one part that IS automated (hooks only) |
+| `core/contracts/PROJECT_STRUCTURE_STANDARD.md` | "Agent Read Order" step 2 = `AGENTS.md` | Same document's own line 23 states "CLAUDE.md — the only agent-rules file... no separate AGENTS.md" -- direct internal self-contradiction | Removed `AGENTS.md` from the read order, renumbered |
+| `core/contracts/PROJECT_STRUCTURE_STANDARD.md` | "Required Base Paths" numbered 1,2,3,4,5,7 (skips 6) | Numbering defect, not a content error | Renumbered |
+| `core/contracts/PROJECT_HYGIENE_STANDARD.md` | "Contract source: `contracts/PROJECT_STRUCTURE_STANDARD.md`" | Bare path -- real location is `core/contracts/PROJECT_STRUCTURE_STANDARD.md` (same stale-path bug class the pre-squash SK-3 sweep fixed elsewhere, missed here) | Added the `core/` prefix |
+| `core/contracts/NO_ICONS_STANDARD.md` | "CI gates — GitHub Actions governance-secrets-gate includes emoji scanning" | Read `governance-secrets-gate.yml` in full: secret-filename gating and nested-agent-folder blocking only, zero emoji logic | Corrected; noted OliverCode's own `framework-ci.yml` covers emoji via Gate 2 |
+| `core/contracts/FILE_LOCATION_STANDARD.md` | "OliverCode/skills/ ... the one tracked home for non-personal skills" | Contradicts `docs/skills-placement.md`: OliverCode/skills/ is engineering-method/framework-tooling ONLY; personal/business skills live in the vault's user-skills/, everything else (product/GTM/vendor) is untracked directly under `~/.claude/skills/` | Corrected to the real 3-way split |
+| `core/contracts/SHARED_ORCHESTRATION.md` | Pointed to the runtime environment's `ORCHESTRATION_SOURCE_OF_TRUTH.md` | Confirmed deleted in the 2026-07-08 control-plane audit (176-file prune) | Removed the dangling reference |
+| `core/contracts/FRAMEWORK_BASELINE.md` | "There is no CI pipeline" | `.github/workflows/framework-ci.yml` added this same session, confirmed running green on GitHub (2 runs, both success) | Corrected -- direct same-day contradiction with this session's own work |
+| `core/contracts/FRAMEWORK_BASELINE.md` | "`runtime/manifests/` contains 77 tracked files (796KB)" | `runtime/manifests/` does not exist as a path at all; 0 tracked files (`git ls-files` empty) | Corrected to state the path doesn't exist, `.gitignore` reserves it preemptively |
+| `core/contracts/code-size-policy.json` | (implicit: tracked = active) | Zero consumers anywhere (`grep -rl` across every script), zero doc references it as active | **Deleted** -- confirmed dead, not just stale text |
+| `core/contracts/EXECUTION_CONTRACT.md` | Gate table listed 6 fictional gate categories (".env files", "Legacy language", "Credentials" as separate filename-match gates) | None of these exist in `.githooks/pre-commit` -- grepped for `.env`/`auth.json`/`credentials.json`/"legacy language" patterns, zero hits beyond an `.env.example` skip-pattern | Replaced with the real 8-gate table |
 
-**Guardrails:** current-state wording rules apply (no "previously/no longer" phrasing —
-see DOCUMENTATION_STANDARD "Current-State Wording"). Don't rewrite style, only truth.
+**Needs owner review (Phase 7 — business judgment, not resolved silently):**
+- `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` requires "each repo" (scope explicitly
+  includes OliverCode itself) to provide `docs/SETUP_MODES.md`, `docs/MANUAL_SETUP.md`,
+  `scripts/bootstrap-profile.sh`, `scripts/run-profile-checks.sh`. OliverCode's own root has
+  none of these (only template copies under `core/templates/project/`, stamped into
+  downstream repos) -- `docs/SETUP_MODES.md`/`MANUAL_SETUP.md` were deliberately deleted
+  from OliverCode's own `docs/` in an earlier pass this session as duplicative of
+  `INSTALL.md`. Two ways to resolve, need a decision: (a) narrow this contract's scope to
+  exclude the framework repo itself (it's the template source, not a downstream consumer),
+  or (b) restore the 4 files to OliverCode's own root for self-consistency. Not resolved
+  either way -- flagged here, not guessed.
+
+Verified after all fixes: `bash scripts/validate.sh` (8 gates + smoke tests), `bash
+scripts/link-check.sh`, `scripts/olivercode health` (14/14) -- all green.
 
 ### OC-12. `core/workflows/` vs `prompts/` overlap consolidation — LOW — OPEN (depends on OC-3 remainder)
 

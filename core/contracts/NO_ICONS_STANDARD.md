@@ -42,7 +42,10 @@ shapes, and the like. The authoritative, exact range list is the emoji scanner i
 
 ## Enforcement
 
-1. **Pre-commit hooks** — Both public and private repo hooks block commits containing any emoji characters.
-2. **CI gates** — GitHub Actions governance-secrets-gate includes emoji scanning.
-3. **Review policy** — PR reviews flag and reject emoji-containing contributions.
-4. **No exceptions** — This standard has no override mechanism. If text needs emphasis, use structure: headings, lists, bold, or italics — never icons.
+1. **Pre-commit hooks** — Both public and private repo hooks block commits containing any emoji characters (Gate 2).
+2. **Review policy** — PR reviews flag and reject emoji-containing contributions.
+3. **No exceptions** — This standard has no override mechanism. If text needs emphasis, use structure: headings, lists, bold, or italics — never icons.
+
+Note: `governance-secrets-gate.yml` (the CI template for downstream repos) does secret-filename
+gating only -- it does not scan for emoji. Emoji enforcement is Gate 2 of the pre-commit hook,
+which OliverCode's own `.github/workflows/framework-ci.yml` runs via `scripts/validate.sh`.

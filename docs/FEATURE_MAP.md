@@ -7,10 +7,13 @@ Purpose: canonical index for the reduced OliverCode framework baseline and its s
 
 | Surface | Source of Truth | Enforcement |
 |---|---|---|
-| Contribution workflow | `CONTRIBUTING.md` | `.githooks/pre-commit` |
-| Framework baseline lock | `core/contracts/FRAMEWORK_BASELINE.md` | `.githooks/pre-commit` (contract integrity gate) |
+| Contribution workflow | `CONTRIBUTING.md` | `.githooks/pre-commit` (8 gates) |
+| Framework baseline lock | `core/contracts/FRAMEWORK_BASELINE.md` | `.githooks/pre-commit` Gate 6 (contract integrity) |
 | Governance policy | `docs/governance.md` | `.githooks/pre-commit` |
+| Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
 | Documentation standard | `docs/DOCUMENTATION_STANDARD.md` | Manual (no active validator) |
+| Framework smoke tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
+| Public CI | `.github/workflows/framework-ci.yml` | Runs health + validate.sh + link-check.sh + full-qa-pass.sh on push/PR |
 
 ## Runtime and Verification Baseline
 
@@ -41,6 +44,9 @@ Claude Code is this framework's sole runtime and Anthropic its sole model provid
 
 A capability change is incomplete until this map and `docs/DOCUMENTATION_STANDARD.md` are updated in the same change set.
 
-## Historical Note
+## Enforcement Surfaces Rule
 
-Previous versions of this map listed phantom validators (validate-framework-baseline.sh, validate-feature-coverage.sh, validate-doc-governance.sh, validate-provider-readiness-contract.sh, check_agent_file_parity.py) in the enforcement and verification columns. These scripts were never implemented. The active enforcement is the pre-commit hook. All other surfaces are manually verified or refer to the runtime launcher.
+Only list a script/gate here if it exists and runs (verify with `ls`/`grep` before adding a
+row). The active enforcement surfaces are `.githooks/pre-commit` (8 gates) and, for
+downstream repos, whatever `scripts/validate-repo.sh` they declare. Everything else is
+manually verified.

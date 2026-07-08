@@ -38,4 +38,3 @@ Use this before and after implementation work unless the user explicitly asks fo
 ## Canonical references
 
 - Primary backlog workflow: `core/workflows/backlog-workflow.md`
-- Supporting gate skill (runtime-agnostic): `story-lifecycle-gate`

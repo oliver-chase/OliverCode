@@ -34,15 +34,18 @@ templates must update current-state documentation in the same change set:
 Docs describe the system as it IS now — no history, no removal notes.
 - Never use: "was previously", "was vendored", "has been removed", "used to be", "no longer", "prior to", "originally".
 - If something was removed, it simply doesn't appear. If externally installed, say "Install:" — not "It was previously here."
-- `CHANGELOG.md` is the only file for version history.
+- Git commit history (`git log`) is version history; no separate CHANGELOG file is required or maintained.
 
 ## Required Document Structures
 
 ### Root `README.md`
-`## Start Here` · `## Core Commands` · `## Documentation Non-Drift Rule` · `## Source of Truth` · `## Scope` · `## Shared System` · `## Governance Gates`
+Must include, in any order: a scope/purpose statement, a Quick Start with runnable
+commands, a Where Things Live table (directory -> what lives here -> what never goes here
+-> benefit), and a Key Docs index. Section header wording may evolve; the four contents
+above may not be dropped.
 
 ### `CONTRIBUTING.md`
-`## Mandatory Rules` · `## Required Workflow` · `## Documentation Sync Requirement` · `## Source-of-Truth Documents` · `## Review Standard`
+`## Mandatory Rules` · `## Enforcement Reality` · `## Required Workflow` · `## Documentation Sync Requirement` · `## Source-of-Truth Documents` · `## Review Standard`
 
 ## Tone Contract (all authority docs)
 
@@ -57,5 +60,5 @@ Docs describe the system as it IS now — no history, no removal notes.
 .githooks/pre-commit
 ```
 
-Fail-closed: secrets, icons/emoji, PII, deleted-repo refs, workflow push-auth, contract
-integrity, planning-doc governance.
+Fail-closed, 8 gates: secrets, icons/emoji, PII, deleted-repo refs, workflow push-auth,
+contract integrity, planning-doc governance, token policy.
