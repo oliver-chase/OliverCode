@@ -77,26 +77,40 @@ legitimate new content in the same file set partially offset the cut); `bash
 scripts/validate.sh` and `bash scripts/link-check.sh` both green throughout, one commit
 per collapsed duplication group.
 
-### OC-3. Prompt Library value audit — LOW — PARTIALLY FIXED 2026-07-08
-- Retired the 4 prompts `full-qa-pass.sh`'s own header named as its LLM equivalents
-  (QA-15/16/17/ALL) plus their orchestration guide; updated REF-01 and the QA scripts'
-  pointers to the script paths. Remaining ~19 prompts (story-lifecycle QA series, WF, RM)
-  have no script equivalent — kept pending a content-level value audit.
+### OC-3. Prompt Library value audit — LOW — FIXED 2026-07-08
 
-**Remainder spec (the content-level audit):**
-- **Scope:** every file in `prompts/` except README.md (~19 files: QA-01..QA-14, REF-01,
-  RM-01, WF-01, WF-02).
-- **Per-file procedure:** (1) read the prompt fully; (2) check overlap against
-  `core/workflows/*.md` (story-lifecycle-sop, backlog-workflow, qa-process, full-qa-audit
-  cover the same territory) and `skills/INDEX.md`; (3) classify: KEEP (unique procedure
-  not in any workflow/skill/script), MERGE (fold unique content into the overlapping
-  workflow doc, delete prompt), or RETIRE (fully covered elsewhere).
-- **Known suspects:** QA-01..QA-14 parallel `core/workflows/story-lifecycle-sop.md` +
-  `qa-process.md` step-by-step; WF-01/WF-02 parallel `core/workflows/backlog-workflow.md`.
-  Verify by reading, don't assume.
-- **Acceptance criteria:** every prompt has a recorded verdict here with one-line evidence;
-  `prompts/README.md` table matches the surviving set exactly; link-check green.
-- **Guardrails:** never delete a prompt whose procedure exists nowhere else — MERGE first.
+**Remainder executed.** Read all 18 content files in `prompts/` in full (14 QA + REF-01 +
+RM-01 + WF-01 + WF-02), checked each against `core/workflows/*.md` and `skills/INDEX.md`
+for overlap.
+
+**Verdict: 18 KEEP, 0 MERGE, 0 RETIRE.** Every QA-01..QA-14 prompt carries executable
+mechanical specificity (exact file paths, exact commit messages, exact ID formats, exact
+status values) that the corresponding `core/workflows/*.md` bullets don't have at that
+granularity — the workflow docs are principles, these are the executable scripts-in-English
+that implement them. REF-01/WF-01/WF-02/RM-01 serve a genuinely distinct purpose: portable
+copy-paste bootstrap material for pasting into a DIFFERENT repo's `CLAUDE.md` (repos that
+don't have OliverCode cloned alongside them can't reference `core/workflows/*.md` directly).
+
+**Real bugs found and fixed while reading (not just classification):**
+- All 18 files' parent links still pointed at the pre-rename `Oliver/Prompt Library/_Prompt
+  Library` path (dangling since OC-8's `Prompt Library/` -> `prompts/` rename, missed then).
+  Fixed to `prompts/README`.
+- All 18 files listed `AI: Codex (Claude Code)` — contradicts `CONTRIBUTING.md` Rule 1
+  (Claude Code sole runtime). Fixed to `Claude Code`.
+- `REF-01`: two dangling references — `_Post-Implementation QA Orchestration.md` (deleted
+  earlier this session when QA-15/16/17/ALL were retired) and a stale "Prompt Library"
+  location reference. Both fixed.
+- **`RM-01`'s "Fill In Before Running" example values were not generic placeholders — they
+  were tesknota's actual product spec**: a real commit hash, a real per-folder LOC
+  breakdown (`components/ui-design-system: 7,545`, etc.), and a real feature list
+  ("Fragrance library", "Compliment tracking", "Perfume identity block: perfume name, house
+  underneath, small concentration pill"). This is exactly the personal/product-identifying
+  content the owner's "NO personal info" directive targets, and well beyond the framework's
+  own two-examples allowance — genericized every value to `<placeholder>` form.
+
+Verified: `prompts/README.md`'s index table matches all 18 files exactly (no drift);
+`scripts/validate.sh` and `scripts/link-check.sh` both green.
+
 
 ### OC-4. `olivercode health` fleet checks assume the vault layout — LOW — FIXED 2026-07-08 (`OLIVERCODE_VAULT_ROOT` env override added; convention walk-up kept as fallback)
 - The hook-drift section resolves the vault root by walking up from OC_ROOT
@@ -198,16 +212,10 @@ trusting it (never against a doc's own claim about itself).
 Verified after all fixes: `bash scripts/validate.sh` (8 gates + smoke tests), `bash
 scripts/link-check.sh`, `scripts/olivercode health` (14/14) -- all green.
 
-### OC-12. `core/workflows/` vs `prompts/` overlap consolidation — LOW — OPEN (depends on OC-3 remainder)
+### OC-12. `core/workflows/` vs `prompts/` overlap consolidation — LOW — FIXED 2026-07-08 (no action needed)
 
-**Why:** two parallel procedure libraries cover the story/QA/backlog lifecycle. Suspected
-near-duplicates: `qa-process.md`+`full-qa-audit.md` vs prompts QA-01..QA-14;
-`backlog-workflow.md` vs WF-01/WF-02. Same one-home rule as OC-2.
-
-**Procedure:** execute OC-3's remainder first (its verdicts are this item's input). Then
-for each MERGE verdict, fold the prompt's unique content into the owning workflow doc and
-delete the prompt; for workflow docs left with no unique content, point them at the
-surviving home.
-
-**Acceptance criteria:** no procedure step exists in both a workflow doc and a prompt;
-`prompts/README.md` and `core/workflows/README.md` both accurate; gates + link-check green.
+OC-3's remainder verdicts are this item's input: all 18 prompts came back KEEP, zero
+MERGE/RETIRE candidates. There is no procedure duplicated in both a workflow doc and a
+prompt — the two libraries operate at different altitudes by design (workflow docs =
+principles, prompts = executable session scripts), confirmed by direct read rather than
+assumed from the original suspicion. No consolidation needed.
