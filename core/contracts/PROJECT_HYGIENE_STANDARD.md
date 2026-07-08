@@ -34,7 +34,7 @@ Scope: All repositories, modules, and workstreams
 4. Public tracked docs use placeholders for service URLs, account emails, local usernames, device paths, and deployment identifiers unless the value is intentionally public product information.
 
 ## Canonical story layout contract
-1. Contract source: `contracts/PROJECT_STRUCTURE_STANDARD.md`.
+1. Contract source: `core/contracts/PROJECT_STRUCTURE_STANDARD.md`.
 2. Every repo must keep `docs/repo-structure-contract.md` aligned with that contract.
 3. `_index.md` is the canonical index filename for story folders.
 4. `backlog.md` is retired as an active planning filename.

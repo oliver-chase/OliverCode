@@ -29,8 +29,7 @@ User says "yes" / approves change
     |   Run repo's canonical validation command (from repo-profiles.json)
     |
     v
-5.  GATE -- pre-commit enforcement runs automatically
-    |   Secrets scan, .env check, legacy language, privacy, credentials
+5.  GATE -- pre-commit enforcement runs automatically (8 gates, see below)
     |   BLOCKED = must fix before commit
     |
     v
@@ -43,14 +42,21 @@ User says "yes" / approves change
 
 ## Gates (Non-Negotiable)
 
-| Gate | What it blocks | How |
-|------|---------------|-----|
-| Secrets | API keys, tokens, private keys in code | `pre-commit` (pattern match) |
-| .env files | Any `.env` except `.env.example` | filename match |
-| Legacy language | Past-tense removal phrasing in docs | grep pattern match |
-| Privacy | `/Users/*`, `/home/*` host paths in docs | grep pattern match |
-| Credentials | `auth.json`, `credentials.json` files | filename match |
-| Validation | WRITE MODE completion without required evidence | `orchestration-gatekeeper.py` |
+`.githooks/pre-commit`'s 8 gates, in run order (see `docs/governance.md` for detail):
+
+| Gate | What it blocks |
+|------|---------------|
+| 1. Secrets | API keys, tokens, JWTs, private keys in staged files |
+| 2. Icons/Emoji | Unicode emoji and icon characters |
+| 3. PII | Host paths (`/Users/*`, `/home/*`), email addresses |
+| 4. Deleted repo refs | References to removed repos |
+| 5. Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential |
+| 6. Contract integrity | `_Management/`/`/workspace/` path refs; declared-dependency paths that don't exist |
+| 7. Planning doc governance | Contract violations in staged planning docs (when the checker is present) |
+| 8. Token policy | Invalid token-policy declarations in repo profiles |
+
+Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
+--evidence-file <path>` blocks a WRITE MODE completion claim without required evidence.
 
 ## Completion Gate
 

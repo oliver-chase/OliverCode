@@ -16,7 +16,7 @@ Define exactly where every file type belongs across ALL Oliver projects. This el
 | System / architecture doc | `<repo>/docs/<TOPIC>.md` | Descriptive filename in ALL_CAPS or kebab-case. |
 | Credential / secret | `.env.local` (gitignored, never committed) | Local only. `.env.example` shows variable names + placeholders only. |
 | Personal file / voice content | `private-runtime/voice/` | Gitignored. Contains persona data, tone samples, personal notes. |
-| Agent skill reference | `OliverCode/skills/` | The one tracked home for non-personal skills — see `docs/skills-placement.md`. |
+| Agent skill reference | `OliverCode/skills/` | Engineering-method and framework-tooling skills ONLY — see `docs/skills-placement.md`. Personal/business skills go to the vault's `.olivercode/user-skills/`; everything else (product/GTM, vendor) is a real untracked directory directly under `~/.claude/skills/`. |
 | Runtime artifact / output | `_Automation/latest/` | Generated files from automation runs. Not hand-edited. |
 | Outreach / SDR output | `<repo>/sdr/outreach/latest/` | If repo has SDR subdirectory. |
 | Content production output | `_Automation/latest/content-production/` | Draft content waiting for approval. |
@@ -30,7 +30,7 @@ Define exactly where every file type belongs across ALL Oliver projects. This el
 | Credentials committed | `.env` in git | Leaks secrets to version control. | `.env.local` (gitignored) |
 | Personal files in repo root | `voice-notes.md` at repo root | Pollutes project structure with personal data. | `private-runtime/voice/` |
 | Runtime artifacts in docs | `docs/output/report.json` | Runtime output is not documentation. | `_Automation/latest/report.json` |
-| Agent skills duplicated | Copying skill files into each repo | Skills go stale; single source of truth is OliverCode. | `.<agent-os>/skills/` with pointer to OliverCode |
+| Agent skills duplicated | Copying skill files into each repo | Skills go stale; one home per skill (see `docs/skills-placement.md`). | Symlink from `~/.claude/skills/<name>` to the skill's one real home |
 | Plans undated in root | `docs/plan.md` | Cannot track plan history or sequence. | `docs/plans/YYYY-MM-DD-<slug>.md` |
 
 ## Discovery Process for New File Types

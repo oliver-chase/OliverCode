@@ -24,7 +24,7 @@ Define one locked folder/file contract for backlog, epics, user stories, and lif
 3. `docs/repo-structure-contract.md`
 4. `.github/user-stories/README.md`
 5. `.github/user-stories/_index.md`
-7. `.github/user-stories/<project>/`
+6. `.github/user-stories/<project>/`
 
 ## Story Artifact Rules
 
@@ -75,14 +75,13 @@ hardcode per-repo paths here — the per-repo contract is the source of truth.
 ## Agent Read Order
 
 1. `README.md`
-2. `AGENTS.md`
-3. `CLAUDE.md`
-4. `docs/repo-structure-contract.md`
-5. active backlog file declared by the contract
-6. `.github/user-stories/README.md`
-7. `.github/user-stories/_index.md`
-8. project story folder index and story files
-9. acceptance test matrix file declared by the contract
+2. `CLAUDE.md`
+3. `docs/repo-structure-contract.md`
+4. active backlog file declared by the contract
+5. `.github/user-stories/README.md`
+6. `.github/user-stories/_index.md`
+7. project story folder index and story files
+8. acceptance test matrix file declared by the contract
 
 ## Story Path Flow
 

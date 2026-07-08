@@ -20,16 +20,22 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 - Add structure rules entry in `shared/project-structure-rules.json`.
 
 2. Sync existing projects:
-- Run `.githooks/pre-commit`.
-- Default behavior: strict files are overwritten; presence files are not overwritten if already present.
-- To force overwrite presence files: `OVERWRITE_NON_STRICT=1 .githooks/pre-commit`.
-- Workflow fail-safe is policy-driven: `shared/project-bootstrap-manifest.json` controls whether managed repos are in normal mode or `manual_only` suspension.
+- No automated sync script ships in this repo. Manually re-copy the managed files
+  listed in `shared/project-bootstrap-manifest.json` from `core/templates/project/` into
+  the target repo: `strict` files get overwritten unconditionally; `presence` files are
+  only copied in if missing (never overwrite existing repo-specific content).
+- Hooks specifically: use `scripts/olivercode sync-hooks` (run from OliverCode) --
+  this one IS automated, and is the only part of "sync" that currently is.
+- Workflow fail-safe is policy-driven: `shared/project-bootstrap-manifest.json`'s
+  `githubActionsPolicy.mode` field controls whether managed repos are in `normal` mode or
+  `manual_only` suspension.
 
 3. Audit drift:
-- Run `.githooks/pre-commit`.
 - No automated structure-drift checker ships in this repo (`scripts/check-project-structure.sh`
   does not exist). Audit manually against `shared/project-structure-rules.json` and the
-  managed-file list in `shared/project-bootstrap-manifest.json` until one is implemented.
+  managed-file list in `shared/project-bootstrap-manifest.json`.
+- `scripts/olivercode health` catches hook drift specifically (compares each fleet repo's
+  live hook against the template) -- it does not check other managed files.
 - Drift is blocking for strict files and required paths.
 
 4. Promotion and alignment:

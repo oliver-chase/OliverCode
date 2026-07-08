@@ -82,10 +82,8 @@ For repos that are intentionally inactive:
 Each repo's actual keepalive configuration lives in its `keepalive` block in
 `local/repo-profiles.json` (gitignored — see `docs/BACKLOG.md` G1) or, for a fresh
 clone with no local fleet configured, `shared/repo-profiles.example.json`. That JSON
-is the source of truth; this doc previously carried a duplicate markdown table
-listing real repos by name — removed rather than kept in sync, since two copies of
-the same fact will drift (the JSON is already machine-readable, no separate table
-is needed).
+is the sole source of truth — no markdown table duplicates it here, since two copies
+of the same fact drift independently and the JSON is already machine-readable.
 
 ## Adding a New Repo
 
