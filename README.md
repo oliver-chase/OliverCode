@@ -78,7 +78,7 @@ Not shipped here (third-party, install separately), but this framework's token-o
 | [claude-code-ui-agents](https://github.com/mustafakendiguzel/claude-code-ui-agents) | Frontend prompt library (plain markdown, fetch per task). | reference only |
 | [Ant Design](https://github.com/ant-design/ant-design) | Component-API and design-token sanity reference — not a dependency. | reference only |
 
-The `frontend-ui-references` skill in this repo documents when to reach for each of the design entries.
+The `frontend-ui-references` skill documents when to reach for each of the design entries above -- it lives in the vault's `.olivercode/user-skills/`, not in this repo, since design/UI routing is outside OliverCode's own scope.
 
 ## Local State (gitignored)
 
