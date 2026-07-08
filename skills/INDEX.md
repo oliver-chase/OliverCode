@@ -26,8 +26,11 @@
 | `vault-content-parsing` | Vault conventions | Parsing vault content, building vault tooling |
 | `olivercode-cli` | OliverCode CLI launcher | Modifying CLI, command routing, docker guards |
 | `plan` | Markdown planning | Planning a task before executing |
-| `frontend-ui-references` | External component/prompt/taste reference sources (Ant Design, claude-code-ui-agents, taste-skill) | Any frontend/UI/UX task in any repo |
 | `model-routing` | Model tier selection strategy (cheap vs capable) | Choosing which model tier handles a task |
+
+`frontend-ui-references` moved to the vault's `.olivercode/user-skills/` -- design/UI reference
+routing doesn't fit OliverCode's scope (security, token optimization, dev practices, folder
+structure).
 
 ## Personas (not skills, kept in `core/personas/`)
 
