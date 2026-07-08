@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "description": "Schema for WRITE MODE task result evidence. A task is complete only when all requiredEvidence fields for its task-type are populated and valid.",
+  "resultSchema": {
+    "write_code": {
+      "files_changed_on_disk": {
+        "type": "array",
+        "items": { "type": "string", "description": "Absolute file path" },
+        "description": "List of files that were created or modified",
+        "minItems": 1
+      },
+      "validation_command_executed": {
+        "type": "string",
+        "description": "The exact command string that was run as the canonical validation",
+    "enum": [
+      "npm run validate:merge",
+      "npm run build",
+      ".githooks/pre-commit",
+      "make check",
+      "npm test",
+      "python3 -m pytest tests/ -q && python3 -m py_compile apps/api/*.py workers/*.py scripts/*.py"
+    ]
+      },
+      "validation_result_captured": {
+        "type": "object",
+        "properties": {
+          "exitCode": { "type": "integer", "description": "The exit code of the validation command" },
+          "stdout": { "type": "string", "description": "First 500 chars of validation stdout" },
+          "pass": { "type": "boolean", "description": "true if exitCode === 0" },
+          "failStage": { "type": "string", "description": "If pass=false, the exact failing sub-stage (e.g. 'TypeScript check', 'next build')" },
+          "failMessage": { "type": "string", "description": "If pass=false, the error message or reason" }
+        },
+        "required": ["exitCode", "pass"]
+      },
+      "commit_hash_on_success": {
+        "type": "string",
+        "description": "Git commit SHA of the successful commit",
+        "pattern": "^[a-f0-9]{7,40}$"
+      },
+      "failure_object_on_non_pass": {
+        "type": "object",
+        "description": "Present ONLY when validation did not pass",
+        "properties": {
+          "failStage": { "type": "string" },
+          "failMessage": { "type": "string" },
+          "stopAction": { "type": "string", "enum": ["FIX_AND_RETRY", "ESCALATE"] }
+        },
+        "required": ["failStage", "failMessage", "stopAction"]
+      }
+    },
+    "refactor": {
+      "allOf": { "$ref": "#/resultSchema/write_code" },
+      "additionalProperties": {
+        "no_regression_confirmed": {
+          "type": "object",
+          "properties": {
+            "method": { "type": "string", "description": "How regression was proven absent (e.g. 'test pass', 'compile pass', 'manual diff verification')" },
+            "detail": { "type": "string", "description": "Evidence detail" }
+          },
+          "required": ["method", "detail"]
+        }
+      }
+    },
+    "write_doc": {
+      "files_changed_on_disk": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 1
+      },
+      "commit_hash_on_success": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{7,40}$"
+      }
+    }
+  }
+}

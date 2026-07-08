@@ -1,0 +1,20 @@
+{
+  "_note": "Placeholder. Real fleet data lives in local/project-structure-rules.json (gitignored) — see docs/BACKLOG.md G1.",
+  "version": 2,
+  "repos": [
+    {
+      "name": "example-app",
+      "path": "<vault-root>/Oliver/Project Repos/example-app",
+      "required_paths": [
+        "README.md",
+        "CLAUDE.md"
+      ],
+      "forbidden_backlog_globs": [
+        "docs/*backlog*.md"
+      ],
+      "allowed_backlog_roots": [
+        "docs"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# Workflow Procedures
+
+Canonical workflow procedure index.
+
+- `backlog` -> `backlog-workflow.md`
+- `story lifecycle` -> `story-lifecycle-sop.md`
+- `testing` -> `testing-rules.md`
+- `qa` -> `qa-process.md`
+- `full qa` -> `full-qa-audit.md`
+- `OliverCode sync` -> `olivercode-sync.md`
+- `project standardization` -> `project-standardization-lifecycle.md`
+
+System-level references:
+- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/SHARED_ORCHESTRATION.md`
+- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/AGENT_SYSTEM_MANIFEST.json`
+- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_HYGIENE_STANDARD.md`
+- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+
+Hygiene policy updates that affect project templates are tracked by:
+- `<vault-root>/Oliver/Project Repos/OliverCode/shared/workflow-standards.md`

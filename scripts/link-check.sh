@@ -1,0 +1,86 @@
+#!/bin/bash
+# scripts/link-check.sh — Internal link integrity checker
+#
+# Scans all markdown files in docs/ for internal links (links to other .md
+# files within the repo) and verifies the target file exists at the resolved
+# path. Exits nonzero if any broken internal links are found.
+#
+# Usage:
+#   bash scripts/link-check.sh          # full check
+#   bash scripts/link-check.sh --quiet  # summary only
+#
+# Exit codes:
+#   0 = all internal links valid
+#   1 = one or more broken links found
+
+set -euo pipefail
+
+# Script lives at <repo>/scripts/link-check.sh, so the repo root is one level up.
+# (Was ../.. — correct only when this lived at scripts/doc-enforcement/; after the move
+# it pointed a level too high, so docs/ was never found and the check was a silent no-op.)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+QUIET=false
+for arg in "$@"; do
+  [ "$arg" = "--quiet" ] && QUIET=true
+done
+
+broken=0
+checked=0
+
+$QUIET || echo "=== Internal Link Integrity Check ==="
+$QUIET || echo ""
+
+# Scan docs/ plus the other tracked homes of plain [text](path.md) links. Measured
+# 2026-07-02: docs/ held 1 such link while README/core/shared held 10 — scanning only
+# docs/ made the checker a near no-op. (Exclude docs/archive/ — archived links may break.)
+SCAN_ROOTS=("$REPO_ROOT/docs" "$REPO_ROOT/core" "$REPO_ROOT/shared" "$REPO_ROOT/README.md" "$REPO_ROOT/ARCHITECTURE.md")
+while IFS= read -r -d '' file; do
+  rel_path="${file#$REPO_ROOT/}"
+  dir="$(dirname "$file")"
+  
+  # Extract markdown links: [text](path/to/file.md)
+  # Only match links ending in .md (internal refs), excluding external URLs
+  while IFS= read -r link; do
+    # Skip external URLs
+    [[ "$link" =~ ^https?:// ]] && continue
+    [[ "$link" =~ ^# ]] && continue  # anchor-only links are fine
+    
+    # Resolve + normalize relative to the source file's dir. python normpath works even
+    # when an intermediate dir is missing — the old `cd`-based normalize silently emptied
+    # `target` for those, hiding genuinely broken links as "valid".
+    target="$(python3 -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$dir/$link")"
+
+    # runtime/control-plane/ is gitignored, local-only state (FRAMEWORK_BOUNDARY.md) —
+    # links into it (e.g. README.md -> runtime/control-plane/README.md) are valid
+    # documentation of an optional local layer, not broken references. A fresh/
+    # standalone clone genuinely won't have this directory (G4 stranger-clone test).
+    case "$target" in
+      "$REPO_ROOT/runtime/control-plane/"*) checked=$((checked + 1)); continue ;;
+    esac
+
+    if [ ! -f "$target" ]; then
+      echo "  [BROKEN] $rel_path → $link (resolved to $target, not found)"
+      broken=$((broken + 1))
+    fi
+    checked=$((checked + 1))
+  # Extract [text](path.md) links portably (BSD grep has no -P; the old grep -oP was a
+  # silent no-op on stock macOS grep, so the checker always "passed").
+  done < <(grep -oE '\]\([^)]*\.md\)' "$file" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//' || true)
+done < <(find "${SCAN_ROOTS[@]}" -name "*.md" -not -path "*/archive/*" -print0)
+
+$QUIET || echo ""
+$QUIET || echo "--- Summary ---"
+$QUIET || echo "  Internal links checked: $checked"
+$QUIET || echo "  Broken: $broken"
+
+if [ "$broken" -gt 0 ]; then
+  echo ""
+  echo "FAIL: $broken broken internal link(s) found"
+  exit 1
+fi
+
+$QUIET || echo ""
+$QUIET || echo "OK: all internal links valid"
+exit 0

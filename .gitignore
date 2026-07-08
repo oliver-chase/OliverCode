@@ -1,0 +1,106 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+# lib/ and lib64/ deliberately omitted: a bare `lib/` pattern matches ANY
+# directory named lib anywhere in the repo (e.g. scripts/lib/), not just a
+# virtualenv's internal lib/ — which venv/, env/, ENV/ above already cover.
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.local.example
+settings.json
+settings.local.json
+
+# IDE
+.idea/
+.vscode/
+ide/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Auth & Credentials
+history.jsonl
+auth.json
+credentials.json
+*.credentials.json
+*.key
+*.pem
+
+# Staging (active work - never commit to main). Root-anchored on purpose:
+# a bare `plans/` also matched docs/plans/, contradicting FILE_LOCATION_STANDARD
+# which says committed plans live at <repo>/docs/plans/YYYY-MM-DD-<slug>.md.
+/staging/
+/plans/
+
+# Local databases
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs
+*.log
+logs/
+
+# Testing
+.coverage
+.htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Node (for console)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js (for console)
+.next/
+out/
+
+# OliverCode public/private runtime boundary
+.env.local
+.secrets/*
+!.secrets/README.md
+
+# Real fleet/registry data (repo names, paths, profiles). Tracked
+# counterparts under shared/*.example.json and core/contracts/*.example.json
+# ship placeholder-only data; this is where the real values for this
+# machine's fleet live. See docs/BACKLOG.md G1.
+/local/
+
+# Runtime control plane (local-only agent orchestration state)
+runtime/control-plane/
+runtime/control-plane/**
+
+# Generated runtime manifests (inventory reports, generated status, observability artifacts)
+runtime/manifests/
+
+# Local Claude OS: personal memory/state/profile stay local; the reusable
+# agent skills under .claude-optimization/skills/ and the generic README
+# (the documented load-order entrypoint) are tracked. The framework
+# does not depend on any of it (one-directional, per FRAMEWORK_BOUNDARY.md).
+.claude-optimization/memory/
+.claude-optimization/state/
