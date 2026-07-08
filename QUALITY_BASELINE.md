@@ -6,11 +6,11 @@ This repository is the **canonical framework repo** -- it defines the quality st
 
 All managed quality files originate here and are synced to consuming projects:
 
-- `shared/templates/project/.github/workflows/qa-hygiene.yml`
-- `shared/templates/project/.github/workflows/governance-secrets-gate.yml`
-- `shared/templates/project/.github/workflows/dependency-review.yml`
-- `shared/templates/project/.github/CODEOWNERS`
-- `shared/templates/project/.github/pull_request_template.md`
+- `core/templates/project/.github/workflows/qa-hygiene.yml`
+- `core/templates/project/.github/workflows/governance-secrets-gate.yml`
+- `core/templates/project/.github/workflows/dependency-review.yml`
+- `core/templates/project/.github/CODEOWNERS`
+- `core/templates/project/.github/pull_request_template.md`
 - `core/templates/project/QUALITY_BASELINE.md`
 - `.githooks/pre-commit` -- Pre-commit gate runner
 - `shared/templates/project/scripts/` -- Template governance scripts
