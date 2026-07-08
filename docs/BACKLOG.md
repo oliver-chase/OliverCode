@@ -69,3 +69,26 @@ contract JSON `_note` fields, and several docs. They are settled decisions, not 
   `scripts/olivercode health` + `bash scripts/validate.sh` + `scripts/link-check.sh` on
   push would catch fresh-clone regressions automatically. (This repo currently ships no CI
   by design — revisit whether that ruling still holds now that the repo is public-facing.)
+
+### OC-7. Two template homes — structural drift by design — MEDIUM — OPEN
+- `core/templates/project/` (master, full template incl. `.github/` CI + CODEOWNERS) and
+  `shared/templates/project/` (4-file "synced subset": 2 pre-commit hooks duplicated from
+  the master + 2 keepalive scripts) violate one-home-per-thing. The duplicated hooks have
+  drifted before (AUD-F1 class). Collapse: keep `core/templates/project/` as the only
+  template home, move the 2 keepalive scripts there, retire `shared/templates/` entirely.
+  Touch points to update: `shared/project-bootstrap-manifest.json` source paths,
+  `OLIVERCODE_DEPENDENCY.md`, `FRAMEWORK_BASELINE.md`'s template-architecture section,
+  both QUALITY_BASELINE copies, hook-sync logic in `scripts/olivercode`.
+
+### OC-8. `Prompt Library/` naming + placement — LOW — OPEN (extends OC-3)
+- 24 files under a root directory with a space in its name — breaks unquoted shell
+  one-liners for every fork, and root placement contradicts the one-authority-layout
+  (prompts are agent-workflow material, closer to `skills/`). If OC-3's value audit keeps
+  any prompts, rename to `prompts/` and move; if not, retire the directory.
+
+### OC-9. `core/personas/` is a layer holding exactly one persona — LOW — OPEN
+- After the growth-team removal, `personas/` contains only `oliver/persona_soul.md`. A
+  whole top-level layer for one file is structure without payoff. Either fold the persona
+  content into `CLAUDE.md`/a contract, or document why the layer must exist for downstream
+  reuse (template stamping does not currently use it).
+

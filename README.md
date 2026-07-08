@@ -35,15 +35,23 @@ for s in skills/*/; do ln -s "$(pwd)/$s" ~/.claude/skills/"$(basename "$s")"; do
 
 See `docs/skills-placement.md` for the full placement contract.
 
-## What's In The Box
+## Where Things Live (and why)
 
-| Area | What you'll find |
-|---|---|
-| **Scripts** | `scripts/olivercode` — thin launcher: `health`, `update`, `sync-hooks`, `skills`. (No external runtime dependency.) |
-| **Skills** | 19 engineering-method and framework-tooling skills in `skills/` — debugging, repo audits, docs-reality checks, structural cleanup, security review, TDD, model-tier routing. Catalog: `skills/INDEX.md`. |
-| **Contracts** | Framework baseline, shared orchestration rules, project structure standards (`core/contracts/`) |
-| **Hooks** | `.githooks/pre-commit` — 8 fail-closed gates, distributed to every fleet repo via `olivercode sync-hooks` |
-| **Docs** | Architecture overview, governance policy, feature map, troubleshooting |
+One home per thing — the structure IS the documentation. If you're unsure where something
+goes, this table is the answer; if it's not answered here, `docs/skills-placement.md` and
+`core/contracts/PROJECT_STRUCTURE_STANDARD.md` are the tie-breakers.
+
+| Directory | What lives here | What never goes here | Benefit |
+|---|---|---|---|
+| `skills/` | Engineering-method + framework-tooling skills, flat, one dir per skill | Product/GTM/vendor content | Symlink the whole set once — every skill invocable from any repo |
+| `core/contracts/` | Structural standards every repo follows | Repo-specific rules | Change a standard once, whole fleet inherits it |
+| `core/templates/project/` | The project template stamped into new repos (hooks, CI, docs) | Anything machine-specific | New repo starts compliant on day one |
+| `shared/` | Bootstrap manifest, task policies, placeholder registries | Real fleet data | Tracked files stay generic; clone works for anyone |
+| `local/` (gitignored) | YOUR real fleet registries | Anything you'd push | Personal data physically can't leak into git |
+| `scripts/` | Launcher (`olivercode`: `health`, `update`, `sync-hooks`, `skills`) + validation gates | Product logic | One command surface, self-verifying |
+| `.githooks/` | The 8 fail-closed pre-commit gates | Optional/soft checks | Enforcement that runs even when nobody reads the docs |
+| `docs/` | Current-state authority docs only | History, roadmaps, session logs | Every doc describes what IS — no stale authority |
+| `runtime/control-plane/` (gitignored) | Minimal private machine state | Anything a fork needs | Clone works standalone without it |
 
 ## How Projects Use This
 
@@ -62,6 +70,7 @@ Not shipped here (third-party, install separately), but this framework's token-o
 
 | Tool | What it does | Install |
 |---|---|---|
+| [fablize](https://github.com/fivetaku/fablize) | Claude Code plugin: enforces completion-with-evidence, verification grounding, and systematic investigation as procedure — the enforcement-side complement to this repo's instruction-side practice rules. | `/plugin marketplace add fivetaku/fablize` then `/plugin install fablize` |
 | [caveman](https://github.com/JuliusBrussee/caveman) | Claude Code plugin: compresses agent chat output ~65% with full technical accuracy. Pair with a `## Voice` section in your `CLAUDE.md` (see this repo's own for the pattern). | Claude Code plugin marketplace |
 | [codeburn](https://github.com/getagentseal/codeburn) | Local token-usage/cost/health dashboard across AI coding tools. No proxy, no API keys — reads session data from disk. | per repo README |
 | [taste-skill](https://github.com/Leonxlnx/taste-skill) | Anti-slop frontend design skills (13, install selectively). `design-taste-frontend` + `full-output-enforcement` are the load-bearing two. | `npx skills add https://github.com/Leonxlnx/taste-skill` |
