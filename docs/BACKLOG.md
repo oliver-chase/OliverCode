@@ -133,31 +133,23 @@ scripts/qa/full-qa-pass.sh`. Rehearsed in a fresh `local/`-free checkout with a 
 (matching what `actions/checkout` produces) before committing -- all 4 steps green,
 health reports the correct not-installed-checkout WARN path (not FAIL).
 
-### OC-10. Framework smoke tests — MEDIUM — OPEN
+### OC-10. Framework smoke tests — MEDIUM — FIXED 2026-07-08
 
-**Why:** zero automated tests exist. The two loaders (`scripts/lib/repo-profiles.mjs`,
-`scripts/lib/repo_profiles.py`, `scripts/lib/token_policy.py`) and the launcher's
-frontmatter parser have real logic (overlay-vs-example fallback, suites lookup, folded
-YAML scalars) that has silently broken before (bots:health `.env.local/.env.local` bug
-class). Every regression so far was caught by hand.
+`tests/repo-profiles.test.mjs` (node:test) + `tests/test_frontmatter_parser.py`
+(unittest) added. Both read only the tracked `shared/repo-profiles.example.json` via a
+scratch tempdir copy -- never `local/`. Wired into `scripts/validate.sh`'s default mode
+as `run_smoke_tests()`, WARN-skips when `tests/` is absent or a runtime is missing.
 
-**Procedure:** create `tests/` with: (1) `test_repo_profiles.py` — loads the tracked
-example placeholder, asserts profile count >= 1, asserts `findSuiteRepo`-equivalent
-returns null when no profile declares a suite (mirror test in a `.mjs` file run via
-`node --test`); (2) `test_frontmatter_parser.py` — imports `_parse_skill_frontmatter`
-from `scripts/olivercode` (use `importlib` on the file path; it has no `.py` suffix),
-feeds it a plain `description:`, a `>`-folded description, and a missing-frontmatter file,
-asserts each; (3) wire into `scripts/validate.sh` as an optional step that runs when
-`tests/` exists and python3 is present, WARN-skip otherwise. Use stdlib `unittest` +
-`node --test` only — no new dependencies (requirements.txt promises stdlib-only).
+Node quirk found while verifying: this Node install (v26.0.0) doesn't discover bare
+`node --test tests/` or `node --test ./tests` -- both throw `MODULE_NOT_FOUND` on the
+directory itself. Explicit glob (`node --test tests/*.mjs`) works reliably; used that
+form in validate.sh and here rather than the bare-directory form the original spec named.
 
-**Acceptance criteria:** `python3 -m unittest discover tests` green; `node --test tests/`
-green; deliberately breaking the example JSON (scratch copy) makes a test fail;
-`validate.sh` runs them and stays green; stranger clone still HEALTHY (tests must not
-require `local/`).
-
-**Guardrails:** tests read the tracked example files only — never `local/` (gitignored,
-absent on forks).
+Verified: `python3 -m unittest discover tests` 3/3 pass; `node --test tests/*.mjs` 3/3
+pass; deliberately zeroing out `shared/repo-profiles.example.json`'s profiles made the
+suite-injection test throw (confirmed real signal, not a no-op), restored byte-identical
+after; full stranger-clone rehearsal (fresh `git init`, no `local/`) -- health 9/9,
+`validate.sh` runs and passes both suites identically to the real checkout.
 
 ### OC-11. Docs-reality audit of the remaining docs/ surface — MEDIUM — OPEN
 
