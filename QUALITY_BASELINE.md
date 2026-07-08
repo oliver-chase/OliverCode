@@ -13,7 +13,7 @@ All managed quality files originate here and are synced to consuming projects:
 - `core/templates/project/.github/pull_request_template.md`
 - `core/templates/project/QUALITY_BASELINE.md`
 - `.githooks/pre-commit` -- Pre-commit gate runner
-- `shared/templates/project/scripts/` -- Template governance scripts
+- `core/templates/project/scripts/` -- Template governance scripts
 
 ## Rule
 
@@ -30,10 +30,10 @@ Before committing:
 
 ## Template Driven Design
 
-All project repos derive their quality baseline from this repo's `shared/templates/project/` directory. To update a quality standard across all projects:
+All project repos derive their quality baseline from this repo's `core/templates/project/` directory. To update a quality standard across all projects:
 
 1. Edit the canonical file here
-2. Sync to downstream repos via `shared/templates/project/` and their repo-specific bootstrap process
+2. Sync to downstream repos via the bootstrap manifest and their repo-specific bootstrap process
 
 ## Historical Note
 

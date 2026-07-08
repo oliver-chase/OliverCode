@@ -52,7 +52,7 @@ and must re-include:
 - `!.secrets/README.md`
 
 ## Standardization source
-Canonical template files live in `OliverCode/shared/templates/project/`.
+Canonical template files live in `OliverCode/core/templates/project/`.
 No sync implementation script ships in this repo today (`scripts/sync-public-private-standard.py`
 does not exist) — apply the templates manually until one is written.
 

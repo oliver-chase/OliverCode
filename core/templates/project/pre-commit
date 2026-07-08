@@ -2,7 +2,6 @@
 # OliverCode — Universal Pre-Commit Hook (Public Repos)
 # Applies to ALL public repositories. Block = no commit.
 # Master source: <vault-root>/Oliver/Project Repos/OliverCode/core/templates/project/pre-commit
-# (shared/templates/project/pre-commit is the synced copy distributed via the bootstrap manifest)
 set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"

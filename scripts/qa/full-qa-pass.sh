@@ -10,11 +10,6 @@
 # their exit codes. It does not reimplement their checks; a divergent inline
 # copy here would just drift from the canonical logic again.
 #
-# This is the automated alternative to running QA-15 → QA-16 → QA-17
-# as LLM prompts. It is faster and cheaper but produces less nuanced
-# output. Use the prompts when you need qualitative analysis; use this
-# script for quick quantitative checks.
-#
 # Exit codes:
 #   0 - All checks pass
 #   1 - Issues found (non-critical)

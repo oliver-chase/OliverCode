@@ -83,17 +83,15 @@ Previous versions of this document listed 9 validator scripts (validate-framewor
 Only one persona (`oliver`) is defined and no team template. This is intentional -- the framework ships one authoritative orchestration persona. Additional personas and teams can be added by downstream projects or by extending `core/personas/`. The CLAUDE.md and ARCHITECTURE.md describe the composable system that the framework enables, not the current inventory count.
 
 ### Template Directory Architecture
-Two template directories exist:
-- `core/templates/project/` -- master source (28 files). This is the canonical template repository. All project templates are authored here first.
-- `shared/templates/project/` -- synced subset (4 files): the two pre-commit hook variants (`pre-commit`, `pre-commit-private`) actively synced to downstream repos via the bootstrap manifest, plus two keepalive scripts (`cf-worker-keepalive.js`, `supabase-keepalive.js`) that ship the same way but aren't hooks.
-- Rule: edit the master source in `core/templates/`, then sync the needed subset to `shared/templates/`. The shared directory is not an independent authority.
+- `core/templates/project/` -- the canonical template repository. All project templates are authored here.
+- Rule: `core/templates/project/` is the single template home -- hooks, CI workflows, keepalive scripts, docs, and governance scripts all ship to downstream repos from here via the bootstrap manifest. No second template directory exists; a synced-subset copy was retired 2026-07-08 after its hook copies drifted from the masters once.
 
 ### Runtime Manifests
 `runtime/manifests/` contains 77 tracked files (796KB) of generated observability reports, inventory scans, and status snapshots. These are historical artifacts from runtime inspection sessions. They are gitignored going forward (`.gitignore` entry added). No active validator consumes them -- they serve as a record of past runtime state. New manifest generation should write to an untracked directory.
 
 ### Validation Surface
 Run `bash scripts/validate.sh` from repo root for unified validation. It wraps:
-- `.githooks/pre-commit` (primary gate — 6 checks: secrets, emoji, PII, deleted repo refs, bootstrap structure, contract integrity)
+- `.githooks/pre-commit` (primary gate — 8 checks: secrets, emoji, PII, deleted repo refs, workflow push-auth, contract integrity, planning-doc governance, token policy)
 - `scripts/orchestration-gatekeeper.py` (optional, with `--evidence <file>`)
 
 There is no CI pipeline, no type checker, and no schema validator. This is acceptable for a 291-file framework repo where the primary change risk is secrets/PII leaks, not runtime correctness. Downstream project repos have their own validation commands declared in `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder).
