@@ -197,17 +197,15 @@ trusting it (never against a doc's own claim about itself).
 | `core/contracts/code-size-policy.json` | (implicit: tracked = active) | Zero consumers anywhere (`grep -rl` across every script), zero doc references it as active | **Deleted** -- confirmed dead, not just stale text |
 | `core/contracts/EXECUTION_CONTRACT.md` | Gate table listed 6 fictional gate categories (".env files", "Legacy language", "Credentials" as separate filename-match gates) | None of these exist in `.githooks/pre-commit` -- grepped for `.env`/`auth.json`/`credentials.json`/"legacy language" patterns, zero hits beyond an `.env.example` skip-pattern | Replaced with the real 8-gate table |
 
-**Needs owner review (Phase 7 — business judgment, not resolved silently):**
-- `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` requires "each repo" (scope explicitly
-  includes OliverCode itself) to provide `docs/SETUP_MODES.md`, `docs/MANUAL_SETUP.md`,
-  `scripts/bootstrap-profile.sh`, `scripts/run-profile-checks.sh`. OliverCode's own root has
-  none of these (only template copies under `core/templates/project/`, stamped into
-  downstream repos) -- `docs/SETUP_MODES.md`/`MANUAL_SETUP.md` were deliberately deleted
-  from OliverCode's own `docs/` in an earlier pass this session as duplicative of
-  `INSTALL.md`. Two ways to resolve, need a decision: (a) narrow this contract's scope to
-  exclude the framework repo itself (it's the template source, not a downstream consumer),
-  or (b) restore the 4 files to OliverCode's own root for self-consistency. Not resolved
-  either way -- flagged here, not guessed.
+**Resolved 2026-07-08** (owner delegated the call): narrowed
+`core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md`'s scope to exclude OliverCode itself,
+rather than restoring the 4 files to its root. Deciding evidence: the template's own text
+(`docs/SETUP_MODES.md`) reads "This repo uses the OliverCode public/private boundary
+standard" -- circular if applied to OliverCode's own root, since OliverCode is the
+standard-setter, not a consumer of its own downstream template. OliverCode's real
+equivalent surfaces (`INSTALL.md`, README Quick Start, `local/` + `runtime/control-plane/`)
+already serve the same purpose without the duplication restoring the files would
+reintroduce -- consistent with OC-2's whole thrust this same session.
 
 Verified after all fixes: `bash scripts/validate.sh` (8 gates + smoke tests), `bash
 scripts/link-check.sh`, `scripts/olivercode health` (14/14) -- all green.
