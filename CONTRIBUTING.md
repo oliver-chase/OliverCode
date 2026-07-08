@@ -4,26 +4,19 @@ This file is the contribution entry point for OliverCode framework changes.
 
 ## Locked Framework Rule
 
-OliverCode is the baseline framework for all downstream project repos.
-Every change must keep the framework small, current, and reusable.
-
-Each tracked file must justify itself as one of:
-- run
-- verify
-- ship
-- support
-
-If it does none of those, delete it, merge it, or move it out of core.
+OliverCode is the baseline framework for all downstream project repos. Every change must
+keep the framework small, current, and reusable — every tracked file must justify itself
+as run/verify/ship/support, per `core/contracts/FRAMEWORK_BASELINE.md` "Purpose". If it
+doesn't, delete it, merge it, or move it out of core.
 
 ## Mandatory Rules
 
 1. Claude Code is OliverCode's sole runtime and Anthropic its sole model provider — do not reintroduce multi-runtime or multi-provider framing without a real implementation behind it.
 2. Keep project-specific runtime logic in the owning project repo.
-3. Keep documentation synchronized with code/config changes in the same change set.
+3. Documentation sync is required in the same change set — see `docs/DOCUMENTATION_STANDARD.md` "Requirement" for what triggers it and what to update.
 4. Run `bash scripts/validate.sh` before every commit.
-5. Behavior/config changes must update `docs/FEATURE_MAP.md` and `docs/DOCUMENTATION_STANDARD.md`.
-6. New docs should replace or merge older docs instead of creating parallel authority.
-7. No roadmap, migration, or status markdown is active authority unless explicitly promoted into current-state docs.
+5. New docs should replace or merge older docs instead of creating parallel authority.
+6. No roadmap, migration, or status markdown is active authority unless explicitly promoted into current-state docs — see `core/contracts/FRAMEWORK_BASELINE.md` "Removal Rules".
 
 ## Enforcement Reality
 
@@ -52,24 +45,13 @@ whether it's a hook or a sentence.
 
 ## Documentation Sync Requirement
 
-When these paths change, documentation updates are required in the same change set:
-- `scripts/`
-- `skills/`
-- `core/personas/`
-- `shared/`
-- `core/contracts/`
-
-Enforced by manual review (no active automated validator).
+See `docs/DOCUMENTATION_STANDARD.md` "Requirement" — one home for the trigger paths and
+what to update. Enforced by manual review (no active automated validator).
 
 ## Source-of-Truth Documents
 
-Canonical current-state authority lives in:
-- `core/contracts/FRAMEWORK_BASELINE.md`
-- `README.md`
-- `docs/governance.md`
-- `docs/FEATURE_MAP.md`
-- `docs/DOCUMENTATION_STANDARD.md`
-- `docs/OLIVERCODE_LAUNCHER.md`
+Canonical current-state authority: `core/contracts/FRAMEWORK_BASELINE.md` "Support" (the
+full list) and "Ship" (reusable contract/template surfaces). One home; not restated here.
 
 ## Review Standard
 
@@ -86,14 +68,6 @@ Required review evidence before commit:
 bash scripts/validate.sh
 scripts/olivercode --help
 ```
-
-## Baseline Contract
-
-Authoritative baseline for all future framework/project standardization:
-- `core/contracts/FRAMEWORK_BASELINE.md`
-- `docs/governance.md`
-- `docs/FEATURE_MAP.md`
-- `core/templates/project/QUALITY_BASELINE.md`
 
 ## Safe Push Rules
 

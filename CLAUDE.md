@@ -16,7 +16,7 @@ Always-on while working, not on request:
 - Something broken/failing/slow? Run the `diagnosing-bugs` skill loop — never patch on a guess.
 - Simplify as you go: after any nontrivial change, ask what the diff makes redundant (`/simplify`, `/code-review` before commit).
 - Folder structure in project repos stays clean and minimal — no new top-level dirs without a contract reason (`core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Documentation robust but manageable: one concept one home, pointers elsewhere; update docs in the same change set as behavior (never a separate "doc pass later").
+- Documentation robust but manageable: one concept one home, pointers elsewhere (sync trigger/scope: `docs/DOCUMENTATION_STANDARD.md` "Requirement").
 - Token efficiency is a design constraint: prefer deterministic scripts over LLM calls, short pointers over restated rules.
 
 ## Pre-Commit
