@@ -30,12 +30,15 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
       case "$file" in
         *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore) continue ;;
       esac
-      # Per-line allowlist: a JWT-shaped value on a line that declares a
-      # Supabase ANON key is public by design (that is what "anon" means --
-      # it ships in client HTML; the service_role key is the secret one).
-      # Filter those lines out before matching; everything else still blocks.
-      if grep -nE -e "$pattern" "$file" 2>/dev/null | grep -v "supabase-anon-key" | grep -qE .; then
-        grep -nE -e "$pattern" "$file" 2>/dev/null | grep -v "supabase-anon-key" | head -3
+      # Per-line allowlist: ONLY the exact anon-key meta-tag shape is
+      # exempt (the anon key is public by design -- it ships in client
+      # HTML; service_role is the secret one). Narrow on purpose: a bare
+      # "supabase-anon-key" mention elsewhere on a line must NOT bypass
+      # the scan (review finding 2026-07-09 -- the loose filter exempted
+      # any line containing the literal from every pattern).
+      ANON_META='<meta name="supabase-anon-key" content="eyJ'
+      if grep -nE -e "$pattern" "$file" 2>/dev/null | grep -vF "$ANON_META" | grep -qE .; then
+        grep -nE -e "$pattern" "$file" 2>/dev/null | grep -vF "$ANON_META" | head -3
         echo "  BLOCKED: $file matches secret pattern: $pattern"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi
