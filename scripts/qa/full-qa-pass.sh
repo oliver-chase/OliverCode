@@ -6,7 +6,7 @@
 # Usage: bash scripts/qa/full-qa-pass.sh [--verbose] [--target <dir>]
 #
 # This delegates entirely to check-code-quality.sh, check-docs-cohesion.sh,
-# and check-workflow-status.sh — the three canonical checkers — and sums
+# check-workflow-status.sh, and check-bloat.sh — the four canonical checkers — and sums
 # their exit codes. It does not reimplement their checks; a divergent inline
 # copy here would just drift from the canonical logic again.
 #
@@ -71,6 +71,7 @@ else
 fi
 run_phase "Phase 2: Documentation Cohesion" "check-docs-cohesion.sh"
 run_phase "Phase 3: Workflow Status" "check-workflow-status.sh"
+run_phase "Phase 4: Bloat & Legacy" "check-bloat.sh"
 
 # ─── Summary ─────────────────────────────────────────────────────────────
 END_TIME=$(date +%s)
@@ -80,7 +81,7 @@ echo "╔═══════════════════════�
 echo "║         SUMMARY                                         ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo "Duration: ${DURATION}s"
-echo "Phases with issues: $TOTAL_ISSUES / 3 (critical: $CRITICAL_ISSUES)"
+echo "Phases with issues: $TOTAL_ISSUES / 4 (critical: $CRITICAL_ISSUES)"
 echo ""
 
 if [ "$CRITICAL_ISSUES" -gt 0 ]; then
