@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "description": "EXAMPLE repo profiles \u2014 placeholder only. Copy this to local/repo-profiles.json (gitignored) and replace with your real fleet. Machine-readable repo profiles for enforcement routing, token policy, keepalive, and bot-fleet configuration. v4 adds per-repo bots[] (bots-gateway.mjs / stats-gateway.mjs read this instead of hardcoded tables) \u2014 omit the bots key entirely for repos that aren't bots.",
+  "description": "EXAMPLE repo profiles \u2014 placeholder only. Copy this to local/repo-profiles.json (gitignored) and replace with your real fleet. Machine-readable repo profiles for enforcement routing, token policy, and keepalive configuration.",
   "profiles": {
     "example-app": {
       "name": "example-app",
@@ -15,36 +15,6 @@
           "enabled": false
         }
       },
-      "bots": [
-        {
-          "key": "example-app",
-          "label": "Example App Bot",
-          "tokenEnvKey": "TELEGRAM_BOT_TOKEN",
-          "cronSecretEnvKey": "CRON_SECRET",
-          "budget": {
-            "source": "env",
-            "envKey": "BOT_DAILY_BUDGET_CENTS",
-            "unit": "cents"
-          },
-          "healthChecks": [
-            "TELEGRAM_BOT_TOKEN",
-            "CRON_SECRET",
-            "NEXT_PUBLIC_SUPABASE_URL"
-          ],
-          "usage": {
-            "source": "supabase_rest",
-            "table": "bot_usage_log",
-            "userField": "telegram_id",
-            "actionField": "action",
-            "urlEnvKey": "NEXT_PUBLIC_SUPABASE_URL",
-            "keyEnvKeys": [
-              "SUPABASE_SERVICE_ROLE_KEY",
-              "NEXT_PUBLIC_SUPABASE_ANON_KEY"
-            ]
-          },
-          "testDoc": "docs/bot-tests.md"
-        }
-      ],
       "supplementaryValidators": [],
       "preCommitGatesHook": ".githooks/pre-commit",
       "buildScript": "npm run build",
