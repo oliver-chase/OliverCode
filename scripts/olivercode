@@ -161,7 +161,7 @@ def command_health() -> int:
         else:
             failed += len(missing)
 
-    # 3. Core entrypoints
+    # 2. Core entrypoints
     print("\nCore entrypoints:")
     checks = [
         ("scripts/olivercode (CLI)", OC_ROOT / "scripts" / "olivercode"),
@@ -190,7 +190,7 @@ def command_health() -> int:
         print("  [WARN] control plane not installed — skipping launcher check")
         passed += 1
 
-    # 4. Placement drift (SYS-2, spec: docs/skills-placement.md "Drift check").
+    # 3. Placement drift (SYS-2, spec: docs/skills-placement.md "Drift check").
     # Everything here reads OUTSIDE OC_ROOT (the vault, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no surrounding vault is still a valid, healthy checkout.
