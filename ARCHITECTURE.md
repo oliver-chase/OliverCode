@@ -8,14 +8,14 @@ Working across many repos without a shared layer fails in consistent ways: the s
 
 ## The Three Layers
 
-**1. OliverCode (this repo — public, on GitHub).** Contracts, skills, templates, launcher, governance hooks. Clone-and-use standalone.
+**1. OliverCode (this repo).** Contracts, skills, templates, launcher, governance hooks. Clone-and-use standalone. Kept clean of personal data so it can be shared without rework.
 
 **2. Local machine state (gitignored, optional).** `runtime/control-plane/` holds private per-machine state and is never pushed. `local/` holds your real fleet registries (`repo-map.json`, `repo-profiles.json`); tracked `shared/*.example.json` files ship placeholders. OliverCode works without either present.
 
 **3. Product repos (yours).** Sibling repos that inherit hooks, templates, and standards from OliverCode. Declared in `local/repo-map.json`. OliverCode is never a runtime dependency of a product repo — it defines standards, not implementations.
 
 ```
-OliverCode (public)
+OliverCode
 ├── CLAUDE.md          agent entry — symlinked to ~/.claude/CLAUDE.md, loads in every session
 ├── core/
 │   ├── contracts/     structural standards all repos follow
@@ -25,7 +25,10 @@ OliverCode (public)
 ├── skills/            engineering-method + framework tooling skills (symlinked into ~/.claude/skills/)
 ├── shared/            bootstrap manifest, task policies, placeholder registries
 ├── scripts/           launcher (olivercode) + validation gates
+├── docs/              current-state authority docs (one concept, one home)
+├── tests/             smoke tests for the launcher
 ├── .githooks/         pre-commit governance (secrets, emoji, PII, contracts)
+├── .claude-optimization/  standalone Claude OS memory/state (local layer)
 ├── local/             (gitignored) your real fleet config
 └── runtime/control-plane/  (gitignored) private machine state
 ```
