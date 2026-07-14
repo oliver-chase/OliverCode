@@ -12,16 +12,13 @@ misleading), LOW (polish, drift).
 
 ## Design decisions (stable rationale — referenced from code and docs by ID)
 
-These IDs are cited from `.gitignore`, `scripts/validate.sh`, `scripts/bot-system-reality-check.js`,
-contract JSON `_note` fields, and several docs. They are settled decisions, not open items.
+These IDs are cited from `.gitignore`, `scripts/validate.sh`, contract JSON `_note` fields,
+and several docs. They are settled decisions, not open items.
 
 - **G1 — Example-config + local-overlay pattern.** Tracked files ship placeholder-only
   registries (`shared/*.example.json`, placeholder `shared/repo-map.json` etc.); the real
   fleet lives in gitignored `local/` copies. Loaders try the local overlay first and fall
   back to the tracked example with a WARN. Personal data never enters tracked files.
-- **D1 — No bot-specific guard logic in the framework.** Product guards live in the owning
-  product repo under `scripts/guards/`; `bot-system-reality-check.js` discovers them by
-  convention from the fleet registry, never from a hardcoded table.
 - **D2 — No repo-specific enforcement in the framework.** `validate.sh --target-repo <root>`
   execs the target's own `scripts/validate-repo.sh` if present, else skips cleanly.
   Delegated suites (e.g. SDR) resolve via a profile flag (`"suites": ["sdr"]`), never a
