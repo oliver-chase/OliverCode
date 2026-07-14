@@ -134,32 +134,7 @@ def command_health() -> int:
     passed = 0
     failed = 0
 
-    # 1. Audit scopes (optional helper; WARN-skip if the repo ships no audit script)
-    print("\nAudit scopes:")
-    audit_script = OC_ROOT / "scripts" / "audit_scopes.py"
-    if audit_script.exists():
-        try:
-            result = subprocess.run(
-                [sys.executable, str(audit_script)],
-                capture_output=True, text=True, timeout=30,
-            )
-        except subprocess.TimeoutExpired:
-            print("  [FAIL] Audit scopes timed out after 30s")
-            failed += 1
-        else:
-            if result.returncode == 0:
-                print("  [OK] Audit scopes passed")
-                passed += 1
-            else:
-                print("  [FAIL] Audit scopes")
-                if result.stdout:
-                    print("    " + result.stdout.strip())
-                failed += 1
-    else:
-        print("  [WARN] audit_scopes.py not present — skipping")
-        passed += 1
-
-    # 2. Dependency doc + the OliverCode-relative paths it declares.
+    # 1. Dependency doc + the OliverCode-relative paths it declares.
     # OLIVERCODE_DEPENDENCY.md lists paths as backtick-quoted, repo-relative entries
     # (e.g. `shared/repo-map.json`, `core/contracts/`). Parse them in-process and resolve
     # the OliverCode-relative ones under OC_ROOT — skip vault paths like `Oliver/`.

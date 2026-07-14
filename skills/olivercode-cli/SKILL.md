@@ -17,7 +17,7 @@ Two thin, delegating launchers, both self-locating from `__file__`/script path �
 Both run identically from cron, a container, or any working directory — nothing is hardcoded.
 
 Four commands:
-- `olivercode health` — runs `scripts/audit_scopes.py` if present, checks `runtime/control-plane/OLIVERCODE_DEPENDENCY.md`'s declared paths resolve, checks core entrypoints exist, checks placement drift (SYS-2). Prints HEALTHY/DEGRADED with a pass/fail count.
+- `olivercode health` — checks `runtime/control-plane/OLIVERCODE_DEPENDENCY.md`'s declared paths resolve, checks core entrypoints exist, checks placement drift (SYS-2). Prints HEALTHY/DEGRADED with a pass/fail count.
 - `olivercode update` — `git -C <OC_ROOT> pull`, then runs `sync-hooks` (below) so a pull always converges hooks too.
 - `olivercode sync-hooks` — converges the pre-commit hook + `core.hooksPath` across every fleet repo and the vault (SYS-3). Also runs automatically at the end of `update`.
 - `olivercode skills [--grep TERM]` — lists OliverCode's own orchestration skills under `skills/`, reading name/description directly from each `SKILL.md`'s frontmatter (never from `skills/INDEX.md`'s prose tables, which are for human browsing and can drift). `--grep` filters case-insensitively on name or description. Scoped to this repo only.

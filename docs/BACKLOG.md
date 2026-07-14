@@ -100,13 +100,11 @@ don't have OliverCode cloned alongside them can't reference `core/workflows/*.md
 - `REF-01`: two dangling references — `_Post-Implementation QA Orchestration.md` (deleted
   earlier this session when QA-15/16/17/ALL were retired) and a stale "Prompt Library"
   location reference. Both fixed.
-- **`RM-01`'s "Fill In Before Running" example values were not generic placeholders — they
-  were tesknota's actual product spec**: a real commit hash, a real per-folder LOC
-  breakdown (`components/ui-design-system: 7,545`, etc.), and a real feature list
-  ("Fragrance library", "Compliment tracking", "Perfume identity block: perfume name, house
-  underneath, small concentration pill"). This is exactly the personal/product-identifying
-  content the owner's "NO personal info" directive targets, and well beyond the framework's
-  own two-examples allowance — genericized every value to `<placeholder>` form.
+- **`RM-01`'s "Fill In Before Running" example values were a real product repo's actual
+  spec** (real commit hash, per-folder LOC breakdown, feature list) rather than generic
+  placeholders — exactly the personal/product-identifying content the "NO personal info"
+  directive targets. Genericized every value to `<placeholder>` form. (`RM-01` and the whole
+  `prompts/` directory were later removed entirely.)
 
 Verified: `prompts/README.md`'s index table matches all 18 files exactly (no drift);
 `scripts/validate.sh` and `scripts/link-check.sh` both green.
