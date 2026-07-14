@@ -43,4 +43,4 @@ No team template.
 Anything that isn't an engineering-method skill or the framework's own tooling doesn't
 belong in this index — no exceptions carved out here for any other kind of content.
 
-> Last updated: 2026-07-08 | 19 skills, all tracked in this repo
+> Last updated: 2026-07-14 | 18 skills, all tracked in this repo
