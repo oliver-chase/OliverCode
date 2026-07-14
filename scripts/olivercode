@@ -127,12 +127,37 @@ def command_skills(argv: list[str]) -> int:
     return 0
 
 
+class _HealthTally:
+    """Accumulates health-check results. WARN counts as passed on purpose:
+    a standalone clone missing local-only context (control plane, vault) must
+    still report HEALTHY (see docs/FRAMEWORK_BOUNDARY.md)."""
+
+    def __init__(self) -> None:
+        self.passed = 0
+        self.failed = 0
+
+    def ok(self, msg: str) -> None:
+        print(f"  [OK] {msg}")
+        self.passed += 1
+
+    def warn(self, msg: str) -> None:
+        print(f"  [WARN] {msg}")
+        self.passed += 1
+
+    def fail(self, msg: str) -> None:
+        print(f"  [FAIL] {msg}")
+        self.failed += 1
+
+    def add(self, passed: int, failed: int) -> None:
+        self.passed += passed
+        self.failed += failed
+
+
 def command_health() -> int:
-    """Run health checks: optional audit, dependency doc, core entrypoints."""
+    """Run health checks: dependency doc, core entrypoints, placement drift."""
     print("OliverCode Health Check")
     print("=" * 40)
-    passed = 0
-    failed = 0
+    t = _HealthTally()
 
     # 1. Dependency doc + the OliverCode-relative paths it declares.
     # OLIVERCODE_DEPENDENCY.md lists paths as backtick-quoted, repo-relative entries
@@ -141,25 +166,19 @@ def command_health() -> int:
     print("\nDependency paths:")
     dep_file = OC_ROOT / "runtime" / "control-plane" / "OLIVERCODE_DEPENDENCY.md"
     if not dep_file.exists():
-        # The control plane is gitignored local state — a standalone clone ships without
-        # it and must still report HEALTHY (see docs/FRAMEWORK_BOUNDARY.md).
-        print("  [WARN] control plane not installed — skipping dependency-path check")
-        passed += 1
+        t.warn("control plane not installed — skipping dependency-path check")
     else:
         oc_dirs = ("shared/", "core/", "docs/", "scripts/", "tooling/", "runtime/", ".githooks/")
         text = dep_file.read_text(encoding="utf-8", errors="ignore")
         declared = [m for m in re.findall(r"`([^`]+)`", text) if m.startswith(oc_dirs)]
         missing = [rel for rel in declared if not (OC_ROOT / rel).exists()]
-        for rel in missing:
-            print(f"  [FAIL] {rel} — not found")
         if not declared:
-            print("  [WARN] no OliverCode-relative dependency paths declared")
-            passed += 1
+            t.warn("no OliverCode-relative dependency paths declared")
         elif not missing:
-            print(f"  [OK] all {len(declared)} declared dependency paths resolve")
-            passed += 1
+            t.ok(f"all {len(declared)} declared dependency paths resolve")
         else:
-            failed += len(missing)
+            for rel in missing:
+                t.fail(f"{rel} — not found")
 
     # 2. Core entrypoints
     print("\nCore entrypoints:")
@@ -168,44 +187,33 @@ def command_health() -> int:
         ("docs/FRAMEWORK_BOUNDARY.md", OC_ROOT / "docs" / "FRAMEWORK_BOUNDARY.md"),
     ]
     for name, fpath in checks:
-        if fpath.exists():
-            print(f"  [OK] {name}")
-            passed += 1
-        else:
-            print(f"  [FAIL] {name} — missing")
-            failed += 1
+        t.ok(name) if fpath.exists() else t.fail(f"{name} — missing")
 
     # The control-plane launcher is gitignored local state — required only when
     # the control plane is installed at all (standalone clones must stay HEALTHY,
     # same rule as the dependency-doc check above).
-    cp_launcher = OC_ROOT / "runtime" / "control-plane" / "olivercode"
     if (OC_ROOT / "runtime" / "control-plane").exists():
-        if cp_launcher.exists():
-            print("  [OK] runtime/control-plane/olivercode (launcher)")
-            passed += 1
+        if (OC_ROOT / "runtime" / "control-plane" / "olivercode").exists():
+            t.ok("runtime/control-plane/olivercode (launcher)")
         else:
-            print("  [FAIL] runtime/control-plane/olivercode — control plane present but launcher missing")
-            failed += 1
+            t.fail("runtime/control-plane/olivercode — control plane present but launcher missing")
     else:
-        print("  [WARN] control plane not installed — skipping launcher check")
-        passed += 1
+        t.warn("control plane not installed — skipping launcher check")
 
     # 3. Placement drift (SYS-2, spec: docs/skills-placement.md "Drift check").
     # Everything here reads OUTSIDE OC_ROOT (the vault, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no surrounding vault is still a valid, healthy checkout.
-    drift_passed, drift_failed = _check_placement_drift(OC_ROOT)
-    passed += drift_passed
-    failed += drift_failed
+    t.add(*_check_placement_drift(OC_ROOT))
 
     # Summary
-    total = passed + failed
+    total = t.passed + t.failed
     print(f"\n{'=' * 40}")
-    if failed == 0:
-        print(f"HEALTHY — {passed}/{total} checks passed")
+    if t.failed == 0:
+        print(f"HEALTHY — {t.passed}/{total} checks passed")
     else:
-        print(f"DEGRADED — {passed}/{total} passed, {failed} failed")
-    return 1 if failed else 0
+        print(f"DEGRADED — {t.passed}/{total} passed, {t.failed} failed")
+    return 1 if t.failed else 0
 
 
 def _hooks_dir_diverges(hooks_dir: Path, templates_dir: Path) -> list[str]:
