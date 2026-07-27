@@ -56,6 +56,27 @@ sys.exit(1 if failures else 0)
   echo "=== validate: consistency passed ==="
 }
 
+run_hook_state() {
+  # B1: hook enforcement fails OPEN -- an unset or broken core.hooksPath means git
+  # runs no hooks and prints nothing. `olivercode health` detects it, but health ran
+  # only from a weekly cron into a log nobody read, so a repo could sit ungoverned
+  # for a week. Surfacing it here puts the signal where agents already look: CLAUDE.md
+  # tells them to run validate.sh before every commit.
+  #
+  # Advisory, never fatal. A fork, a fresh clone, or a checkout with no fleet
+  # registered has nothing to check and must still pass -- that property is what
+  # check-fork-usable.sh guards.
+  echo "=== validate: checking fleet hook state ==="
+  local out
+  if out="$(python3 "${SCRIPT_DIR}/olivercode" health 2>&1)"; then
+    echo "  [OK] every registered repo has working hooks"
+  else
+    printf '%s\n' "$out" | grep -E '^\s+\[FAIL\]' || true
+    echo "  [WARN] a repo above is not fully governed — 'olivercode sync-hooks' repairs it."
+    echo "         Enforcement fails open: git runs no hooks and says nothing."
+  fi
+}
+
 run_reference_check() {
   # Internal reference integrity (markdown links + backtick repo paths).
   echo "=== validate: checking internal references ==="
@@ -195,6 +216,7 @@ main() {
       run_consistency
       run_reference_check
       run_smoke_tests
+      run_hook_state
       ;;
   esac
 }

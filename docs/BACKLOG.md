@@ -116,33 +116,30 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 
 ### Open items
 
-**B1 — health detection never reaches a human (MEDIUM, operator wiring).**
-Hook enforcement fails open, and `scripts/olivercode health` is the only detector. It runs
-weekly from cron and appends to a log file nobody reads, so a repo could sit ungoverned for a
-week or more and still not be noticed. `health` already exits nonzero on DEGRADED, so the
-missing piece is only the alert path. This is deliberately NOT framework code: host scheduler
-wiring is private-overlay territory per `docs/FRAMEWORK_BOUNDARY.md`. Wire the nonzero exit to
-whatever channel the operator actually reads, and raise the frequency above weekly.
-
-**B3 — the hook model has no room for a legitimate per-repo variant (MEDIUM, design).**
-`health` treats ANY difference between a repo's live hook and the template as drift and FAILs;
-`sync-hooks` then "fixes" it by overwriting. Observed for real: a fleet repo carries a
-deliberate variant (repo-specific governance-config path, plus a gate whose checker does not
-exist there), and the framework can only call that broken. Running `sync-hooks` would have
-silently destroyed a considered customization.
-
-Both behaviours are individually right — byte-identity is what makes a fleet predictable — but
-together they mean a repo with a real reason to differ has nowhere to say so. Options: a
-`hookVariant` field in the repo profile that `health` honours and `sync-hooks` respects; or
-template composition (a base plus declared per-repo gates) instead of a single flat file. Until
-one exists, do not run `sync-hooks` against a repo whose divergence has not been read first.
-
 **B2 — re-enable CI when GitHub Actions billing is restored (LOW, trigger).**
 `.github/workflows/framework-ci.yml` is `disabled_manually` while billing is blocked (see
-`githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). It ships ready to run and
-gates health, validate.sh, strict bloat, and fork usability. When billing returns:
-`gh workflow enable "OliverCode Framework CI"`. Until then the local commands are the only
-enforcement, which is why those checks also run from `full-qa-pass.sh`.
+`githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). It ships ready and gates
+health, validate.sh, strict bloat, and fork usability. When billing returns:
+`gh workflow enable "OliverCode Framework CI"`. This stays a recorded trigger rather than
+becoming machinery — detecting "is billing restored" would need network calls from a health
+check that must work offline, which costs more than it saves. Until then the local commands
+are the enforcement, which is why those checks also run from `full-qa-pass.sh`.
+
+**B1 — RESOLVED 2026-07-27.** Hook state is now reported by `bash scripts/validate.sh` on
+every run, advisory and never fatal. CLAUDE.md already tells agents to run that before every
+commit, so the signal lands where they look instead of in a weekly log nobody read. The cron
+job stays as the unattended backstop. Deliberately not wired to a notification channel: host
+scheduler and alerting are private-overlay territory per `docs/FRAMEWORK_BOUNDARY.md`, and the
+framework should not own the operator's alert path.
+
+**B3 — RESOLVED 2026-07-27.** A repo profile may declare `hookVariant: "<reason>"`. `health`
+then reports its hook divergence as WARN instead of FAIL, and `sync-hooks` SKIPS the repo
+instead of overwriting a considered customization. Undeclared divergence still FAILs, and a
+declaration never excuses a missing, unexecutable, or unconfigured hook — those are the
+fail-open cases and remain fatal. Verified against the real divergent fleet repo
+(`oliver-strategic-growth`, which carries a repo-specific governance path): declaring it
+returns the fleet to HEALTHY, `sync-hooks` leaves it untouched, and breaking its `hooksPath`
+still fails. Documented in `shared/repo-profiles.example.json`.
 
 ### Deliberately kept / decided (do not redo)
 
