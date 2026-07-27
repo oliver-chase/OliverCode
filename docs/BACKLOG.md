@@ -139,6 +139,14 @@ repo-specific governance path. Any future template gate change needs the same tr
 **B4 — RESOLVED 2026-07-27.** `sync-hooks` run with the fleet's hook files clean; five targets
 synced, the declared variant skipped, `health` 12/12 HEALTHY. The perl guard reached all five
 public repos plus the vault's private variant.
+**B6 — the hook-variant tax is now recurring (LOW, watch).**
+Two repos declare `hookVariant` (oliver-strategic-growth, oliver-studios), so every template
+gate change needs a hand-merge into both — done twice today already (the perl guard, then
+Gate 4). That is B3's designed trade-off working correctly, but the cost compounds. If a
+third variant appears, switch to the template-composition option recorded under B3 (a base
+hook plus declared per-repo gates) rather than accumulating manual merges; hand-merging is
+how a security fix reaches five repos and misses two.
+
 **B2 — re-enable CI when GitHub Actions billing is restored (LOW, trigger).**
 `.github/workflows/framework-ci.yml` is `disabled_manually` while billing is blocked (see
 `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). It ships ready and gates

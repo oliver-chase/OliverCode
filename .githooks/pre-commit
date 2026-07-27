@@ -126,18 +126,24 @@ DELETED_REPO_PATTERNS=(
   # 'old-project-name'
 )
 
-if [ -n "$STAGED_FILES" ]; then
-  while IFS= read -r file; do
-    for bad_path in "${DELETED_REPO_PATTERNS[@]+"${DELETED_REPO_PATTERNS[@]}"}"; do
-      if grep -n "$bad_path" "$file" 2>/dev/null; then
-        echo "  BLOCKED: $file references deleted path: $bad_path"
-        exit 1
-      fi
-    done
-  done <<< "$STAGED_FILES"
+if [ ${#DELETED_REPO_PATTERNS[@]} -eq 0 ]; then
+  # Say what actually happened. Announcing "passed" for a gate with an empty pattern
+  # list implies stale repo references were checked for and none found, when nothing
+  # was scanned at all -- a false assurance in the enforcement layer.
+  echo "  Gate 4 skipped: no deleted-repo patterns configured (see DELETED_REPO_PATTERNS above)."
+else
+  if [ -n "$STAGED_FILES" ]; then
+    while IFS= read -r file; do
+      for bad_path in "${DELETED_REPO_PATTERNS[@]}"; do
+        if grep -n "$bad_path" "$file" 2>/dev/null; then
+          echo "  BLOCKED: $file references deleted path: $bad_path"
+          exit 1
+        fi
+      done
+    done <<< "$STAGED_FILES"
+  fi
+  echo "  Gate 4 passed."
 fi
-
-echo "  Gate 4 passed."
 
 # ─── Gate 5: Workflow push auth safety ───────────────────────────────────────
 # HTTPS alone isn't the risk -- a `gh auth login` credential can carry `workflow`

@@ -134,18 +134,21 @@ DELETED_REPO_PATTERNS=(
   # 'old-project-name'
 )
 
-if [ ${#DELETED_REPO_PATTERNS[@]} -gt 0 ]; then
-  for file in $STAGED_FILES; do
+if [ ${#DELETED_REPO_PATTERNS[@]} -eq 0 ]; then
+  # Say what actually happened -- see the note in OliverCode's own copy of this hook.
+  echo "  Gate 4 skipped: no deleted-repo patterns configured (see DELETED_REPO_PATTERNS above)."
+else
+  # `while read` not `for` -- unquoted $STAGED_FILES word-splits on filenames with spaces.
+  while IFS= read -r file; do
     for bad_path in "${DELETED_REPO_PATTERNS[@]}"; do
       if grep -n "$bad_path" "$file" 2>/dev/null; then
         echo "  BLOCKED: $file references deleted path: $bad_path"
         exit 1
       fi
     done
-  done
+  done <<< "$STAGED_FILES"
+  echo "  Gate 4 passed."
 fi
-
-echo "  Gate 4 passed."
 
 # ─── Gate 5: Workflow push auth safety ───────────────────────────────────────
 # HTTPS alone isn't the risk -- a `gh auth login` credential can carry `workflow`
