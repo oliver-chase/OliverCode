@@ -47,5 +47,7 @@ No team template.
 
 ## Validation
 
-Manual: every row above must have a matching `skills/<name>/SKILL.md`, and vice versa. There
-is no generator/validator script for this — see `docs/BACKLOG.md` A2.
+Mechanical: `bash scripts/validate.sh` fails if a row here has no matching
+`skills/<name>/SKILL.md`, if a skill directory has no row, or if a `SKILL.md`'s frontmatter
+`name:` disagrees with its directory name (the launcher lists by frontmatter, humans read
+this table). See `scripts/lib/consistency_check.py`.

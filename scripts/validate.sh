@@ -34,6 +34,38 @@ run_token_policy_check() {
   fi
 }
 
+run_consistency() {
+  # Doc-vs-code drift: skills INDEX/directory parity and gate-count claims.
+  # Fail-closed -- both classes have silently drifted before.
+  echo "=== validate: checking doc/code consistency ==="
+  local out
+  if ! out="$(python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '${SCRIPT_DIR}')
+from lib.consistency_check import check_all
+failures = check_all(Path('${REPO_ROOT}'))
+for f in failures:
+    print(f)
+sys.exit(1 if failures else 0)
+")"; then
+    printf '%s\n' "$out"
+    echo "=== validate: consistency check FAILED ==="
+    exit 1
+  fi
+  echo "=== validate: consistency passed ==="
+}
+
+run_reference_check() {
+  # Internal reference integrity (markdown links + backtick repo paths).
+  echo "=== validate: checking internal references ==="
+  if ! bash "${SCRIPT_DIR}/link-check.sh" --quiet; then
+    echo "=== validate: reference check FAILED ==="
+    exit 1
+  fi
+  echo "=== validate: references passed ==="
+}
+
 run_smoke_tests() {
   # OC-10: optional -- WARN-skip if tests/ doesn't exist or a runtime is missing.
   # Tests read only the tracked shared/repo-profiles.example.json, never local/
@@ -143,18 +175,25 @@ main() {
       echo "Usage: bash scripts/validate.sh [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  (no args)              Run pre-commit gates (Gate 8 incl.) + smoke tests (tests/, if present)"
+      echo "  (no args)              Run pre-commit gates (Gate 8 incl.), doc/code consistency,"
+      echo "                         reference integrity, and smoke tests (tests/, if present)"
       echo "  --evidence <file>      Run pre-commit + gatekeeper"
       echo "  --gatekeeper-only <file>  Run gatekeeper only"
       echo "  --target-repo <repo-root> [args...]"
       echo "                         Run <repo-root>/scripts/validate-repo.sh if it exists"
       echo "                         (repo-local validation hook convention), else skip"
+      echo "  --check-consistency    Run doc/code consistency checks only"
       echo "  --check-token-policy   Run token policy check only"
       echo "  --check-paths <repo>   Test token-policy path filtering for a repo (pipe paths via stdin)"
       echo "  --help                 Show this help"
       ;;
+    --check-consistency)
+      run_consistency
+      ;;
     *)
       run_precommit
+      run_consistency
+      run_reference_check
       run_smoke_tests
       ;;
   esac

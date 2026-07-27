@@ -165,11 +165,13 @@ echo "  Gate 5 passed."
 # - No /workspace/ hardcoded paths in staged code
 echo "[pre-commit] Gate 6/8: Contract integrity..."
 
-# Check for _Management/ paths in staged code files (not comments or .md)
+# Check for _Management/ paths in staged code files (not comments or .md).
+# tests/* is skipped for the same reason Gates 1 and 3 skip it: a test that proves
+# this gate blocks a forbidden path must contain that path as a fixture.
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
     case "$file" in
-      *.md|*.txt|docs/*|.githooks/pre-commit|scripts/check-planning-doc-governance.py) continue ;;
+      *.md|*.txt|docs/*|tests/*|*/tests/*|*.test.*|*_test.*|.githooks/pre-commit|scripts/check-planning-doc-governance.py) continue ;;
     esac
     if grep -q '_Management/' "$file" 2>/dev/null; then
       echo "  BLOCKED: $file contains _Management/ path reference"

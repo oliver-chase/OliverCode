@@ -32,57 +32,38 @@ and several docs. They are settled decisions, not open items.
 
 ## Open items
 
-Specs are written context-free: a future agent with no session memory should be able to
-execute each one from what is written here.
+None open. The A-series below is the record of what was built and why; new specs go here,
+written context-free so a future agent with no session memory can execute them.
 
-### A1 — Reference-integrity gate for backtick paths (HIGH)
+### A1-A5 — resolved 2026-07-27 (built, verified, wired in)
 
-`scripts/link-check.sh` only matches inline markdown links whose target ends in `.md`. On
-this repo that is 9 links; the repo's actual cross-references are backtick-quoted repo paths,
-of which there are hundreds. Every stale path found in the full-file audit survived through
-this hole.
+Kept here as the record of what the gates are and why, since each one exists to stop a
+failure class this repo actually hit. All five are live in `bash scripts/validate.sh`.
 
-Build: extend `link-check.sh` (or add a sibling checker wired into it) to extract
-backtick-quoted tokens starting with a tracked top-level dir (`scripts/`, `core/`, `docs/`,
-`shared/`, `skills/`, `tests/`, `.githooks/`, `.github/`, `.claude-optimization/`) and assert
-each resolves on disk. Required exclusions, all verified as legitimate today:
-- files under `core/templates/` — their paths are relative to the DOWNSTREAM repo, not here
-- `docs/repo-structure-contract.md`, `.github/user-stories/*`, `scripts/validate-repo.sh` —
-  same reason, they describe target repos
-- tokens containing `<`, `>`, `*`, `|`, `$` (placeholders)
-- the deliberate anti-pattern examples in `core/contracts/FILE_LOCATION_STANDARD.md`
+- **A1 — reference integrity.** `scripts/link-check.sh` saw 9 markdown links while the real
+  cross-references were hundreds of backtick repo paths; every stale path the audit found
+  lived in that blind spot. Now a second pass (`scripts/lib/reference_check.py`) resolves
+  backtick-quoted paths whose first segment is a tracked top-level directory: 303 refs
+  checked. Exemptions are explicit and commented -- downstream-relative contract paths,
+  gitignored local layers, placeholder tokens, template files, and the anti-pattern examples
+  in `FILE_LOCATION_STANDARD.md` (whose paths must NOT resolve).
+- **A2 — skills index parity.** INDEX rows vs `skills/*/SKILL.md` directories, both
+  directions, plus frontmatter `name:` vs directory name (the launcher lists by frontmatter,
+  humans read the table; they drifted apart silently before).
+- **A3 — gate-count claims.** The hook is the source of truth; any tracked doc claiming a
+  different "N gates" fails. `QUALITY_BASELINE.md` had drifted to 6 against a hook with 8.
+- **A4 — CI gating.** `check-bloat.sh --strict` now fails the build; full-qa-pass stays
+  advisory (its other phases are heuristic and would false-positive as a gate).
+- **A5 — enforcement-surface tests.** 46 tests: 28 over `validate_evidence()` (one block and
+  one pass case per required-evidence field, in both the missing and malformed shape) and 18
+  over the pre-commit gates, each building a throwaway git repo and running the real hook
+  against a staged fixture. Mutation-checked: neutering Gate 2 turns the suite red, so the
+  cases are not vacuous. Gates 5 and 7 are environment- and presence-dependent, so they are
+  asserted only at the level that is deterministic offline.
 
-Wire into `scripts/validate.sh` and `.github/workflows/framework-ci.yml`. Fail closed.
-
-### A2 — INDEX/directory parity check for skills (MEDIUM)
-
-`skills/INDEX.md`'s table and the `skills/*/SKILL.md` directories can drift in both
-directions, and the check is documented as manual in INDEX.md's own Validation section.
-Build a check that asserts set equality between the table's skill names and the directory
-listing, and wire it into `validate.sh`. Frontmatter `name:` must also match its directory
-name — `scripts/olivercode skills` reads frontmatter while humans read the table.
-
-### A3 — Gate-count consistency check (MEDIUM)
-
-The pre-commit gate count is restated in several docs and has drifted before
-(`QUALITY_BASELINE.md` said 6 while the hook had 8). Build a check that derives the real
-count from `.githooks/pre-commit` (`grep -c 'Gate [0-9]/'`) and greps tracked docs for a
-contradicting "N gates" claim. Prefer this over hand-auditing on each hook change.
-
-### A4 — Make CI fail on QA findings (MEDIUM)
-
-`framework-ci.yml` runs `full-qa-pass.sh`, but every phase is advisory, so a finding cannot
-fail the build. Decide the strict set (`check-bloat.sh --strict` at minimum) and make CI
-honor it. Confirm the current baseline is clean first so the switch does not land red.
-
-### A5 — Tests for the enforcement surfaces (HIGH)
-
-`tests/` covers a frontmatter parser and a profiles loader. Neither is a gate. There are zero
-tests for the 8 pre-commit gates and zero for `validate_evidence()` in
-`scripts/orchestration-gatekeeper.py` — the one function whose silent failure means a false
-completion claim passes. Add fixture-driven tests: for each gate, one staged input that must
-block and one that must pass; for `validate_evidence()`, one case per required-evidence field
-covering both the missing and the malformed shape.
+A2 and A3 are collapsed into one checker (`scripts/lib/consistency_check.py`) rather than
+two scripts, per `FRAMEWORK_BASELINE.md`'s rule that a validator duplicating another's
+failure class gets merged. Both are the same class: a doc asserting what the code contradicts.
 
 ### A7 — model-routing remains a declared scope exception (LOW)
 
@@ -109,11 +90,15 @@ symlink.
 - Every file under `core/templates/project/` is now declared in the bootstrap manifest —
   `templatedFiles` for the unconditional ones, `conditionalFiles` for the keepalive set,
   which syncs only where a repo's `keepalive` profile block enables it.
-- Open work is A1-A5 above: all five are new gates/tests, deliberately specced not built.
+- A1-A5 built and wired into `validate.sh`: reference integrity now checks 303 backtick repo
+  paths on top of 9 markdown links, doc/code consistency is mechanical, and the enforcement
+  surfaces have 46 tests where they had none. Nothing is open.
+- The framework now fails closed on the two classes that produced this audit's findings:
+  a reference naming a path that isn't there, and a doc asserting what the code contradicts.
 
 ### Coverage
 
-Reviewed through: `9c87a91` (2026-07-27, full-file audit)
+Reviewed through: `16a1849` (2026-07-27, full-file audit)
 
 ### Deliberately kept (validated decisions — do not redo)
 
@@ -140,3 +125,5 @@ Reviewed through: `9c87a91` (2026-07-27, full-file audit)
   `conditionalFiles`; `vault-content-parsing` moved to the vault's `.olivercode/user-skills/`
   with its symlink repointed and the ledger updated; `model-routing` kept as a declared
   exception. A6 and A8 resolved, A7 reduced to a keep-note.
+- 2026-07-27 [audit] A1-A5 built: reference-integrity pass, doc/code consistency checker,
+  46 enforcement-surface tests, CI gating on strict bloat. Backlog now empty.
