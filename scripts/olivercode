@@ -465,7 +465,23 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 continue
             hooks_dir = repo_path / hooks_path
             problems = _hook_problems(hooks_dir, templates_dir)
-            if problems:
+            variant = profiles[name].get("hookVariant")
+            if problems and variant:
+                # A repo may legitimately need a hook the template cannot express (a
+                # repo-specific governance path, a gate whose checker only exists there).
+                # Declaring `hookVariant` in the profile says "this divergence is
+                # considered" -- it is reported, not failed, and sync-hooks leaves it
+                # alone. Divergence WITHOUT a declaration is still a failure, so this
+                # cannot be used to quietly opt out of enforcement.
+                fatal = [p for p in problems if "diverges" not in p]
+                if fatal:
+                    print(f"  [FAIL] {name}: {'; '.join(fatal)}")
+                    failed += 1
+                else:
+                    print(f"  [WARN] {name}: declared hook variant ({variant}) — "
+                          f"{'; '.join(problems)}")
+                    passed += 1
+            elif problems:
                 print(f"  [FAIL] {name}: {'; '.join(problems)}")
                 failed += 1
             else:
@@ -544,6 +560,14 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
         repo_path = fleet_root / name
         if not (repo_path / ".git").exists():
             print(f"  [SKIP] {name}: not present on this machine")
+            skipped += 1
+            continue
+        variant = profiles[name].get("hookVariant")
+        if variant:
+            # Declared variant: overwriting would destroy a considered customization.
+            # `health` reports it as WARN rather than drift. Remove the profile field
+            # to bring the repo back under the template.
+            print(f"  [SKIP] {name}: declared hook variant ({variant}) — left untouched")
             skipped += 1
             continue
         _install_hook_pair(repo_path, templates_dir, private_repo=False)

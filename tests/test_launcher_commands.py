@@ -9,7 +9,9 @@ Argument handling gets tests because ignoring an unknown flag silently produced 
 fleet, and printed "6 target(s) synced".
 """
 
+import contextlib
 import importlib.util
+import io
 import json
 import shutil
 import subprocess
@@ -68,7 +70,11 @@ class TestInit(unittest.TestCase):
 
     def test_reports_failure_when_an_example_is_missing(self):
         (self.tmp / "shared" / "repo-map.json").unlink()
-        self.assertEqual(launcher.command_init(self.tmp), 1)
+        # Capture stdout: this path prints a [FAIL] line by design, and letting it
+        # through makes a passing `validate.sh` run look like something broke.
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = launcher.command_init(self.tmp)
+        self.assertEqual(rc, 1)
 
 
 class TestInstall(unittest.TestCase):
