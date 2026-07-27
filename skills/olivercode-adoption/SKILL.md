@@ -74,13 +74,15 @@ classification for decision 1.
 ### 2. Back up, then activate
 
 ```bash
-cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.pre-olivercode 2>/dev/null || true
 scripts/olivercode install
 ```
 
-`install` is non-destructive: a real `~/.claude/CLAUDE.md` is moved to `.pre-olivercode` and
-the path printed; foreign symlinks and real directories are left alone and reported. Do NOT
-run it before the user has seen decision 1 — that file is often their entire ruleset.
+That is the whole step. `install` does the backup itself: a real `~/.claude/CLAUDE.md` is
+moved to `.pre-olivercode` and the path printed, foreign symlinks and real directories are
+left alone and reported. Do not `cp` a backup first — you get two backups with confusing
+names (`.pre-olivercode` and `.pre-olivercode.bak`) and no extra safety.
+
+Do NOT run it before the user has seen decision 1 — that file is often their entire ruleset.
 
 ### 3. Merge the global rules in
 

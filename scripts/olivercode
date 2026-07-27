@@ -265,6 +265,14 @@ def command_install(oc_root: Path) -> int:
     print("OliverCode install — activating this checkout in ~/.claude")
     print("=" * 40)
 
+    # A plain file sitting where a directory belongs is rare but real, and an unhandled
+    # FileExistsError traceback is a poor first impression from the first command a fork
+    # runs. Say what is wrong and what to do about it.
+    for needed in (claude_dir, skills_dir):
+        if needed.exists() and not needed.is_dir():
+            print(f"  [FAIL] {needed} exists but is not a directory.")
+            print("         Move or remove it, then re-run `olivercode install`.")
+            return 1
     skills_dir.mkdir(parents=True, exist_ok=True)
     backups: list[str] = []
 

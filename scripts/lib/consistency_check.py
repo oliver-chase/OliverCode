@@ -21,7 +21,22 @@ INDEX_ROW = re.compile(r"^\|\s*`([a-z0-9-]+)`\s*\|", re.MULTILINE)
 FRONTMATTER_NAME = re.compile(r"^name:\s*(.+?)\s*$", re.MULTILINE)
 GATE_DECL = re.compile(r"Gate (\d+)/(\d+)")
 # "8 gates", "the 8 gates of", "-- 6 gates:" etc. Bare "N gates" is the claim shape.
-GATE_CLAIM = re.compile(r"(\d+)\s+gates\b")
+# Word forms are matched too: prose drifts to "the six gates" and a digits-only pattern
+# would pass it silently, which is the exact class this checker exists to stop.
+_NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+GATE_CLAIM = re.compile(
+    r"\b(\d+|" + "|".join(_NUMBER_WORDS) + r")\s+gates\b", re.IGNORECASE
+)
+
+
+def _claimed_count(token: str) -> int | None:
+    """Normalize a digit or number-word to an int; None if neither."""
+    if token.isdigit():
+        return int(token)
+    return _NUMBER_WORDS.get(token.lower())
 
 
 def _tracked(repo_root: Path, *args: str) -> list[str]:
@@ -93,10 +108,11 @@ def check_gate_count(repo_root: Path) -> list[str]:
         if rel.startswith("core/templates/"):
             continue  # the template hook has its own, smaller gate count
         for line in (repo_root / rel).read_text(encoding="utf-8").splitlines():
-            for claimed in GATE_CLAIM.findall(line):
-                if int(claimed) != actual:
+            for token in GATE_CLAIM.findall(line):
+                claimed = _claimed_count(token)
+                if claimed is not None and claimed != actual:
                     failures.append(
-                        f"  [GATES] {rel} claims {claimed} gates; "
+                        f"  [GATES] {rel} claims {token} gates; "
                         f".githooks/pre-commit has {actual}"
                     )
     return failures
