@@ -169,5 +169,37 @@ class TestCleanCommitPasses(GateHarness):
         self.assertIn("All gates passed", result.stdout)
 
 
+
+
+class TestGateIntegrity(unittest.TestCase):
+    """Replaces the post-commit hook's only unique check ("Gate 6 still present"),
+    which could not block and whose sibling check was broken unnoticed for months."""
+
+    def _check(self, root):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "cc", REPO_ROOT / "scripts" / "lib" / "consistency_check.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.check_gate_integrity(Path(root))
+
+    def test_real_hook_is_consistent(self):
+        self.assertEqual(self._check(REPO_ROOT), [])
+
+    def test_a_removed_gate_is_caught(self):
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-gateint-"))
+        try:
+            (tmp / ".githooks").mkdir()
+            text = HOOK.read_text(encoding="utf-8")
+            start = text.index("# ─── Gate 6: Contract integrity")
+            end = text.index("PLANNING_CHECKER=")
+            (tmp / ".githooks" / "pre-commit").write_text(text[:start] + text[end:])
+            failures = self._check(tmp)
+            self.assertTrue(failures, "removing a gate must be caught")
+            self.assertIn("only 7 are present", failures[0])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 if __name__ == "__main__":
     unittest.main()

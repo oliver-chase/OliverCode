@@ -118,5 +118,44 @@ def check_gate_count(repo_root: Path) -> list[str]:
     return failures
 
 
+def check_gate_integrity(repo_root: Path) -> list[str]:
+    """The hook must actually contain as many gates as its banners claim.
+
+    Replaces the only unique check the post-commit hook performed (grep for "Gate 6
+    still present"). That hook could not block, always exited 0, and its skill-count
+    check globbed a path that had not existed for months without anyone noticing --
+    so it was not being read. This runs in validate.sh and fails closed.
+
+    Counts DISTINCT gate numbers, not echo sites: gates 7 and 8 each print from two
+    branches (ran / skipped), so a naive line count reports more gates than exist.
+    """
+    hook = repo_root / ".githooks" / "pre-commit"
+    if not hook.is_file():
+        return ["  [GATES] .githooks/pre-commit is missing"]
+
+    declared = GATE_DECL.findall(hook.read_text(encoding="utf-8"))
+    if not declared:
+        return ["  [GATES] .githooks/pre-commit declares no 'Gate N/M' banners"]
+
+    totals = {int(total) for _, total in declared}
+    if len(totals) > 1:
+        return [f"  [GATES] hook banners disagree on the total: {sorted(totals)}"]
+    claimed = totals.pop()
+    present = {int(num) for num, _ in declared}
+
+    failures = []
+    if len(present) != claimed:
+        missing = sorted(set(range(1, claimed + 1)) - present)
+        failures.append(
+            f"  [GATES] hook claims {claimed} gates but only {len(present)} are present"
+            + (f"; missing gate number(s): {missing}" if missing else "")
+        )
+    return failures
+
+
 def check_all(repo_root: Path) -> list[str]:
-    return check_skill_index(repo_root) + check_gate_count(repo_root)
+    return (
+        check_skill_index(repo_root)
+        + check_gate_count(repo_root)
+        + check_gate_integrity(repo_root)
+    )
