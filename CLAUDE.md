@@ -1,9 +1,13 @@
 # OliverCode Agent Rules
 
-> Before making structural changes, read `docs/FRAMEWORK_BOUNDARY.md`. Pre-commit: `.githooks/pre-commit` validates secrets, emoji, PII, deleted refs, bootstrap, contracts.
-> Before installing/creating/moving ANY skill or agent file (here, `~/.claude/`, or any repo): `docs/skills-placement.md` — one home per layer, ledger write in the same session.
+This file loads in every session on this machine, from any directory, via the
+`~/.claude/CLAUDE.md` symlink. **Your working directory is usually NOT OliverCode**, so every
+path below is written to resolve from wherever you are:
 
-Orchestration framework for AI agent teams: core/ (contracts, features, personas, workflows), skills/ (all tracked skills, one flat directory — see docs/skills-placement.md), shared/ (templates, policies), scripts/ (validation gates), docs/.
+- `$OC/...` means a path inside the OliverCode repo. Resolve `$OC` once, when you first need
+  it: `dirname "$(readlink ~/.claude/CLAUDE.md)"`. No hardcoded vault or home paths.
+- Bare paths (`scripts/validate.sh`, `docs/`) mean the repo you are currently working in.
+  Each fleet repo ships its own; they are not OliverCode's.
 
 ## Voice
 Compressed, high-signal. No filler. Caveman mode (`caveman` plugin, full intensity) active by
@@ -11,28 +15,46 @@ default from the first response, every session — not trigger-based, don't wait
 tokens" or "be brief" to turn it on. Off only on explicit "stop caveman." Code/commits/PRs/
 security warnings written normal, per the plugin's own rules.
 
+## Before you change structure or move a skill
+- Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
+- Installing, creating, or moving ANY skill or agent file (in OliverCode, `~/.claude/`, or any
+  repo): read `$OC/docs/skills-placement.md` first — one home per layer, ledger write in the
+  same session.
+
 ## Development Practice
 Always-on while working, not on request:
 - Something broken/failing/slow? Run the `diagnosing-bugs` skill loop — never patch on a guess.
 - Multi-commit build session ending? Run the `deep-review` skill (single review agent,
   simplify, remove-don't-archive cleanup, live re-verify, tracker update) before closing.
-  Coverage cadence: `python3 scripts/audit-staleness.py` flags repos past 30 unreviewed
-  commits; `scripts/qa/check-bloat.sh` (full-qa-pass Phase 3) keeps legacy from re-growing.
-- Simplify as you go: after any nontrivial change, ask what the diff makes redundant (`/simplify`, `/code-review` before commit).
-- Folder structure in project repos stays clean and minimal — no new top-level dirs without a contract reason (`core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Documentation robust but manageable: one concept one home, pointers elsewhere (sync trigger/scope: `docs/DOCUMENTATION_STANDARD.md` "Requirement").
-- Token efficiency is a design constraint: prefer deterministic scripts over LLM calls, short pointers over restated rules.
+- Simplify as you go: after any nontrivial change, ask what the diff makes redundant
+  (`/simplify`, `/code-review` before commit).
+- Folder structure stays clean and minimal — no new top-level dirs without a contract reason
+  (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
+- Documentation robust but manageable: one concept one home, pointers elsewhere (sync
+  trigger/scope: `$OC/docs/DOCUMENTATION_STANDARD.md` "Requirement").
+- Token efficiency is a design constraint: prefer deterministic scripts over LLM calls, short
+  pointers over restated rules.
 
 ## Pre-Commit
-`bash scripts/validate.sh` before commit. Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
-
-## QA
-- Full: `scripts/qa/full-qa-pass.sh --target <repo>`
-- Auto: `scripts/qa/run-on-repo.sh`
+Run the current repo's own `scripts/validate.sh` before committing — every fleet repo has one,
+and it is that repo's canonical validation, not OliverCode's.
+Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement
-See `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder), `shared/task-policies/`, `scripts/orchestration-gatekeeper.py`.
-Hard vs soft rules: `.githooks/pre-commit` (8 gates, incl. token policy) is the only
-mechanically-enforced layer. Everything else in this file and `CONTRIBUTING.md` is
-instruction text — see CONTRIBUTING.md's "Enforcement Reality" section before assuming
-a written rule is unbreakable.
+`.githooks/pre-commit` (8 gates, incl. token policy) is the only mechanically-enforced layer.
+It is installed per repo via `core.hooksPath`; if that config is unset or points at a missing
+directory, **git runs no hooks at all and says nothing** — the gates fail open. `$OC/scripts/olivercode health`
+is what detects that; `$OC/scripts/olivercode sync-hooks` repairs it.
+
+Everything else in this file and in `CONTRIBUTING.md` is instruction text — see CONTRIBUTING.md's
+"Enforcement Reality" section before assuming a written rule is unbreakable.
+
+## OliverCode's own surface (only when working IN OliverCode)
+- `bash scripts/validate.sh` — gates, doc/code consistency, reference integrity, tests
+- `python3 scripts/audit-staleness.py` — flags fleet repos past 30 unreviewed commits
+- `scripts/qa/full-qa-pass.sh --target <repo>` / `scripts/qa/run-on-repo.sh` — QA sweep
+- Layout: `core/` (contracts, personas, templates, workflows), `skills/` (flat, one dir per
+  skill), `shared/` (manifest, policies), `scripts/` (launcher + gates), `docs/`
+- Enforcement config: `local/repo-profiles.json` (gitignored, real fleet) or
+  `shared/repo-profiles.example.json` (tracked placeholder), `shared/task-policies/`,
+  `scripts/orchestration-gatekeeper.py`
