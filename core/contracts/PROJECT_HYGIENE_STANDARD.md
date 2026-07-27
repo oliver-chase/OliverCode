@@ -34,12 +34,11 @@ Scope: All repositories, modules, and workstreams
 4. Public tracked docs use placeholders for service URLs, account emails, local usernames, device paths, and deployment identifiers unless the value is intentionally public product information.
 
 ## Canonical story layout contract
-1. Contract source: `core/contracts/PROJECT_STRUCTURE_STANDARD.md`.
+1. Contract source: `core/contracts/PROJECT_STRUCTURE_STANDARD.md` — index filenames, retired
+   filenames, and folder shape are defined there, not restated here.
 2. Every repo must keep `docs/repo-structure-contract.md` aligned with that contract.
-3. `_index.md` is the canonical index filename for story folders.
-4. `backlog.md` is retired as an active planning filename.
-5. The same story ID filename must not exist in more than one artifact root.
-6. Story checkers must fail when:
+3. The same story ID filename must not exist in more than one artifact root.
+4. Story checkers must fail when:
 - artifact roots validate zero stories where stories are expected
 - planning roots contain executable story artifact files
 - required index/contract files are missing
@@ -56,11 +55,10 @@ Scope: All repositories, modules, and workstreams
 3. Define a single orchestration command named `qa:hygiene` in each repo package scripts that runs all required story/epic/test hygiene gates for that repo.
 
 ## Required shared quality baseline hygiene
-1. Shared CI/QA policy files are canonicalized in `<vault-root>/Oliver/Project Repos/OliverCode/core/templates/project`.
-2. Managed files must stay byte-identical across all repos where they are marked strict in `shared/project-bootstrap-manifest.json`.
-3. Any change to one managed file requires changing the canonical template first, then syncing every mapped repo.
-4. Cross-repo sync: sync templates from `core/templates/project/` via the project bootstrap manifest.
-5. Cross-repo drift audit: pre-commit gates check for location violations in staged files.
+1. Managed files must stay byte-identical across all repos where they are marked strict in
+   `shared/project-bootstrap-manifest.json`.
+2. What the managed files are, and the change-canonical-first rule: `QUALITY_BASELINE.md`.
+   How sync and drift audit run: `core/workflows/project-standardization-lifecycle.md`.
 
 ## Enforcement checklist (pre-push)
 1. Story linked and AC/evidence/test-plan complete.

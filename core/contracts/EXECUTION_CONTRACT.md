@@ -42,18 +42,9 @@ User says "yes" / approves change
 
 ## Gates (Non-Negotiable)
 
-`.githooks/pre-commit`'s 8 gates, in run order (see `docs/governance.md` for detail):
-
-| Gate | What it blocks |
-|------|---------------|
-| 1. Secrets | API keys, tokens, JWTs, private keys in staged files |
-| 2. Icons/Emoji | Unicode emoji and icon characters |
-| 3. PII | Host paths (`/Users/*`, `/home/*`), email addresses |
-| 4. Deleted repo refs | References to removed repos |
-| 5. Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential |
-| 6. Contract integrity | `_Management/`/`/workspace/` path refs; declared-dependency paths that don't exist |
-| 7. Planning doc governance | Contract violations in staged planning docs (when the checker is present) |
-| 8. Token policy | Invalid token-policy declarations in repo profiles |
+`.githooks/pre-commit` runs the gates automatically on every commit. BLOCKED means fix
+before commit; there is no bypass mode. The gate list and what each one blocks lives in
+`docs/governance.md` — one home, so a hook change updates exactly one table.
 
 Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
 --evidence-file <path>` blocks a WRITE MODE completion claim without required evidence.
