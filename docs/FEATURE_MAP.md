@@ -16,7 +16,8 @@ each. If a capability exists and is not listed here, this map is wrong.
 | Documentation standard | `docs/DOCUMENTATION_STANDARD.md` | Manual (no active validator) |
 | Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
 | Skill placement | `docs/skills-placement.md` | `scripts/olivercode health` (symlink + drift check) |
-| Doc/code consistency (skills index parity, gate-count claims) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
+| Doc/code consistency (skills index parity, gate-count claims, hook gate integrity) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
+| Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
 | Public CI | `.github/workflows/framework-ci.yml` | Ships health + validate.sh + `check-bloat.sh --strict` + fork-usability as gating steps. **Deliberately paused on the origin repo** while GitHub Actions billing is blocked — see `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`, the canonical record. Enable it in your own fork. |
@@ -37,6 +38,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/validate.sh` | Unified validation entrypoint: pre-commit gates, doc/code consistency, reference integrity, tests, gatekeeper modes |
 | `scripts/lib/consistency_check.py` | Skills INDEX-vs-directory parity, frontmatter name match, gate-count claims across docs, and hook gate-integrity (a removed gate is caught) |
 | `scripts/lib/reference_check.py` | Backtick repo-path resolution (the half a markdown link checker cannot see) |
+| `scripts/lib/falsifiability_check.py` | Detects checks that CANNOT fail — dead counters, scripts reporting failure with no nonzero exit. Built after ten defects here shared that one shape |
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation; `--check-token-policy` is Gate 8 |
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
