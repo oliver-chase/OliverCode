@@ -8,6 +8,7 @@ container, or any working directory.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -22,6 +23,7 @@ from lib.repo_profiles import load_repo_profiles  # noqa: E402
 OC_ROOT = Path(__file__).resolve().parent.parent
 
 COMMANDS = [
+    ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md + skills into ~/.claude (backs up anything it replaces)"),
     ("olivercode init", "Create local/ fleet config from the tracked examples (never overwrites)"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
@@ -126,6 +128,53 @@ def command_skills(argv: list[str]) -> int:
         summary = description if len(description) <= 100 else description[:97] + "..."
         print(f"{name:<{width}}  {summary}")
     print(f"\n{len(skills)} skill(s).")
+    return 0
+
+
+def command_discover(oc_root: Path, roots: list[Path]) -> int:
+    """Find git repos under the given roots and report what governance they already have.
+
+    Adoption docs assume you know where your repos are. Someone folding this into an
+    existing, un-tidy setup often does not: repos spread over several directories,
+    agent-rules files under three different names, hooks installed in some places and
+    not others. This is the inventory step made mechanical -- read-only, and it emits
+    a profile skeleton with explicit `path` values so a scattered layout is registrable
+    without hand-writing JSON.
+    """
+    print("OliverCode discover — read-only scan")
+    print("=" * 40)
+    found: list[tuple[str, Path, str, str]] = []
+    for root in roots:
+        for git_dir in sorted(root.rglob(".git")):
+            repo = git_dir.parent
+            # Don't descend into vendored or nested-checkout noise.
+            if any(part in {"node_modules", ".next", "vendor", "worktrees"} for part in repo.parts):
+                continue
+            rules = next((n for n in ("CLAUDE.md", "AGENTS.md", ".cursorrules") if (repo / n).is_file()), "none")
+            hooks = subprocess.run(
+                ["git", "-C", str(repo), "config", "--get", "core.hooksPath"],
+                capture_output=True, text=True,
+            ).stdout.strip() or "unset"
+            found.append((repo.name, repo, rules, hooks))
+
+    if not found:
+        print("  No git repositories found under: " + ", ".join(str(r) for r in roots))
+        return 1
+
+    width = max(len(n) for n, _, _, _ in found)
+    for name, repo, rules, hooks in found:
+        flag = "" if hooks != "unset" else "   <- ungoverned: git runs no hooks here"
+        print(f"  {name:<{width}}  rules={rules:<12} hooksPath={hooks}{flag}")
+
+    print(f"\n{len(found)} repo(s). Rules files named anything other than CLAUDE.md do not")
+    print("auto-load in Claude Code — merge them into CLAUDE.md (docs/ADOPTING.md Step 4).")
+    print("\nProfile skeleton — paste into local/repo-profiles.json under \"profiles\",")
+    print("then add each repo's token_policy (see docs/TOKEN_POLICY.md):\n")
+    skeleton = {
+        name: {"name": name, "path": str(repo), "canonicalValidationCommand": "<command>"}
+        for name, repo, _, _ in found
+    }
+    print(json.dumps(skeleton, indent=2))
     return 0
 
 
@@ -335,6 +384,23 @@ def command_health(fleet_root: Path | None = None) -> int:
     return 1 if t.failed else 0
 
 
+def _resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
+    """Where a fleet repo actually lives.
+
+    Default is the sibling convention `<fleet_root>/<name>`, which assumes every repo
+    sits under one parent. That assumption breaks the moment someone adopts this into
+    an existing setup whose repos are spread across several directories -- and before
+    this existed, such a repo could not be registered at all, because the name WAS the
+    path. An optional `path` in the profile takes precedence: absolute, `~`-relative,
+    or relative to fleet_root.
+    """
+    declared = profile.get("path")
+    if not declared:
+        return fleet_root / name
+    p = Path(declared).expanduser()
+    return p if p.is_absolute() else (fleet_root / p)
+
+
 def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
     """Return human-readable problems with a repo's live hook directory.
 
@@ -449,7 +515,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
         passed += 1
     else:
         for name in fleet_names:
-            repo_path = (fleet_root or oc_root.parent) / name
+            repo_path = _resolve_repo_path(name, profiles[name], fleet_root or oc_root.parent)
             if not (repo_path / ".git").exists():
                 print(f"  [WARN] {name}: not present on this machine — skipping")
                 passed += 1
@@ -557,7 +623,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
     for name in profiles:
         if name == "olivercode":
             continue
-        repo_path = fleet_root / name
+        repo_path = _resolve_repo_path(name, profiles[name], fleet_root)
         if not (repo_path / ".git").exists():
             print(f"  [SKIP] {name}: not present on this machine")
             skipped += 1
@@ -631,6 +697,17 @@ def main() -> int:
     cmd = sys.argv[1]
     argv = sys.argv[2:]
 
+    if cmd == "discover":
+        roots: list[Path] = []
+        rest = argv
+        while "--root" in rest:
+            root, rest = _take_root_flag(rest)
+            roots.append(root)
+        _reject_extra(cmd, rest)
+        if not roots:
+            print("Error: discover requires at least one --root DIR.")
+            return 1
+        return command_discover(OC_ROOT, roots)
     if cmd == "install":
         _reject_extra(cmd, argv)
         return command_install(OC_ROOT)
