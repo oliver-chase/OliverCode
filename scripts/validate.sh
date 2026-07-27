@@ -88,9 +88,15 @@ run_reference_check() {
 }
 
 run_smoke_tests() {
-  # OC-10: optional -- WARN-skip if tests/ doesn't exist or a runtime is missing.
-  # Tests read only the tracked shared/repo-profiles.example.json, never local/
-  # (gitignored, absent on forks), so they must pass identically everywhere.
+  # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read only the
+  # tracked shared/repo-profiles.example.json, never local/ (gitignored, absent on
+  # forks), so they pass identically everywhere.
+  #
+  # Python-only by design. A `node --test <dir>/*.mjs` block used to run here; with no
+  # .mjs test present the unmatched glob makes node exit 0, so it reported success on
+  # zero tests -- a false green. The one .mjs this repo ships
+  # (core/templates/project/scripts/check-structure-contract.mjs) is a template that runs
+  # in downstream repos, not here. Re-add a runner deliberately if JS tests ever land.
   local tests_dir="${REPO_ROOT}/tests"
   if [[ ! -d "$tests_dir" ]]; then
     return 0
@@ -103,14 +109,6 @@ run_smoke_tests() {
     fi
   else
     echo "  [WARN] python3 not found — skipping Python smoke tests"
-  fi
-  if command -v node &>/dev/null; then
-    if ! node --test "$tests_dir"/*.mjs; then
-      echo "=== validate: node smoke tests FAILED ==="
-      exit 1
-    fi
-  else
-    echo "  [WARN] node not found — skipping Node smoke tests"
   fi
   echo "=== validate: smoke tests passed ==="
 }

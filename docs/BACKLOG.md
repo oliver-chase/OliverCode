@@ -21,8 +21,12 @@ and several docs. They are settled decisions, not open items.
   back to the tracked example with a WARN. Personal data never enters tracked files.
 - **D2 — No repo-specific enforcement in the framework.** `validate.sh --target-repo <root>`
   execs the target's own `scripts/validate-repo.sh` if present, else skips cleanly.
-  Delegated suites (e.g. SDR) resolve via a profile flag (`"suites": ["sdr"]`), never a
-  hardcoded repo name.
+  Delegated suites are a CONVENTION with no implementation: a profile may carry
+  `"suites": ["sdr"]` and one repo does, but nothing reads it. The JS resolver that did
+  (`findSuiteRepo` in a `repo-profiles.mjs` mirror) existed only for the bots-gateway
+  subsystem removed in `94dbec7`; it survived orphaned, tested only by itself, and was
+  deleted 2026-07-27. If delegated suites are ever built, resolve via the flag rather than a
+  hardcoded repo name — that part of the decision stands.
 - **ACT-3 — Skill precedence gap (known, unmitigatable at mechanism level).** A generic
   skill and a repo-specific approval-gated skill can both match the same task, and nothing
   biases selection toward the gated one before a repo file is touched. Mitigation: a named,
