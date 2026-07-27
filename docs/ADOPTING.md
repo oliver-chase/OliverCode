@@ -147,15 +147,14 @@ thing that detects this. Run it on a schedule, not just at setup.
 ## Step 6 — Register your fleet (the local layer)
 
 ```bash
-mkdir -p local
-cp shared/repo-profiles.example.json local/repo-profiles.json
-cp shared/repo-map.json             local/repo-map.json
+scripts/olivercode init
 ```
 
-Edit the copies with your real repo names, validation commands, and token policy. `local/` is
-gitignored, so real names and paths never reach the tracked fork. Every loader tries `local/`
-first and falls back to the tracked example with a WARN — which is why a stranger's clone
-still works.
+That seeds `local/` from the tracked examples and **never overwrites an existing file**, so
+it is safe to re-run. Then edit the copies with your real repo names, validation commands,
+and token policy. `local/` is gitignored, so real names and paths never reach the tracked
+fork. Every loader tries `local/` first and falls back to the tracked example with a WARN —
+which is why a stranger's clone still works.
 
 Each profile needs a `token_policy` block with `ignore_globs` and `generated_artifact_dirs`,
 or Gate 8 fails the commit. `docs/TOKEN_POLICY.md` has the shape.
@@ -210,10 +209,19 @@ Recommended:
 └── product-repo-c/
 ```
 
-If your repos are not siblings, either pass `--root` where the scripts accept it, or set
-`OLIVERCODE_VAULT_ROOT` so the placement-drift check knows where to look. A layout the
-scripts cannot resolve degrades to WARN and skips — it never fails wrongly, but it also
-never checks anything, so do not mistake the WARN for coverage.
+If your repos are not siblings of the OliverCode checkout, pass `--root`:
+
+```bash
+scripts/olivercode sync-hooks --root /path/to/where/your/repos/live
+scripts/olivercode health     --root /path/to/where/your/repos/live
+```
+
+Set `OLIVERCODE_VAULT_ROOT` as well if the vault-hook check should look somewhere other
+than three levels above the checkout.
+
+A layout the scripts cannot resolve degrades to WARN and skips. It never fails wrongly, but
+it also never checks anything — **do not mistake the WARN for coverage.** If `sync-hooks`
+reports every repo as skipped, your `--root` is wrong, not your fleet.
 
 Inside each product repo, the structure contract is
 `core/contracts/PROJECT_STRUCTURE_STANDARD.md`. The short version:
