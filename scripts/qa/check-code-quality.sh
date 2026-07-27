@@ -68,7 +68,7 @@ echo ""
 # ─── 2. Check file sizes (functions too long) ────────────────────────────
 echo "--- 2. File Size Check (> 400 lines) ---"
 LARGE_FILES=$(find "$TARGET_DIR" -name '*.ts' -o -name '*.tsx' 2>/dev/null |\
-  grep -v node_modules | grep -v '\.next' | grep -v '\.test\.' |\
+  grep -v node_modules | grep -v '\.next' | grep -v '\.test\.' | grep -v '/\.claude/' |\
   while read -r f; do
     lines=$(wc -l < "$f" 2>/dev/null || echo 0)
     if [ "$lines" -gt 400 ]; then
