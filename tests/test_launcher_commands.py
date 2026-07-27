@@ -71,6 +71,58 @@ class TestInit(unittest.TestCase):
         self.assertEqual(launcher.command_init(self.tmp), 1)
 
 
+class TestInstall(unittest.TestCase):
+    """`install` activates a checkout. Its one hard property: never destroy rules
+    the operator already had -- that file is often their whole accumulated ruleset."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-install-"))
+        self._home = Path.home
+        Path.home = staticmethod(lambda: self.tmp)  # type: ignore[assignment]
+
+    def tearDown(self):
+        Path.home = self._home  # type: ignore[assignment]
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_virgin_home_gets_symlinks(self):
+        self.assertEqual(launcher.command_install(REPO_ROOT), 0)
+        claude_md = self.tmp / ".claude" / "CLAUDE.md"
+        self.assertTrue(claude_md.is_symlink())
+        self.assertEqual(claude_md.resolve(), (REPO_ROOT / "CLAUDE.md").resolve())
+        linked = [p for p in (self.tmp / ".claude" / "skills").iterdir() if p.is_symlink()]
+        self.assertGreater(len(linked), 0, "no skills were linked")
+
+    def test_existing_real_claude_md_is_backed_up_not_destroyed(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "CLAUDE.md").write_text("my existing rules\n", encoding="utf-8")
+
+        launcher.command_install(REPO_ROOT)
+
+        backup = claude_dir / "CLAUDE.md.pre-olivercode"
+        self.assertTrue(backup.is_file(), "existing rules were not backed up")
+        self.assertIn("my existing rules", backup.read_text())
+        self.assertTrue((claude_dir / "CLAUDE.md").is_symlink())
+
+    def test_is_idempotent(self):
+        self.assertEqual(launcher.command_install(REPO_ROOT), 0)
+        self.assertEqual(launcher.command_install(REPO_ROOT), 0)
+        self.assertTrue((self.tmp / ".claude" / "CLAUDE.md").is_symlink())
+
+    def test_replaces_a_symlink_pointing_elsewhere(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        decoy = self.tmp / "decoy.md"
+        decoy.write_text("other", encoding="utf-8")
+        (claude_dir / "CLAUDE.md").symlink_to(decoy)
+
+        launcher.command_install(REPO_ROOT)
+
+        self.assertEqual(
+            (claude_dir / "CLAUDE.md").resolve(), (REPO_ROOT / "CLAUDE.md").resolve()
+        )
+
+
 class TestRootFlag(unittest.TestCase):
     def test_extracts_root_and_leaves_remaining_args(self):
         root, rest = launcher._take_root_flag(["--root", "/tmp", "extra"])

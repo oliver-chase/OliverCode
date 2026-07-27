@@ -19,32 +19,63 @@ Everything in this repo falls into one of four categories — if it doesn't fit,
 
 ## Quick Start
 
+Needs `python3`, `git`, and POSIX shell tools. Nothing else — no package install, no
+dependencies (`requirements.txt` does not exist because there is nothing to install).
+
 ```bash
+git clone <your-fork> OliverCode && cd OliverCode
 python3 scripts/olivercode --help         # see what the framework can do
-scripts/olivercode health                 # dependency, entrypoint, and drift checks
 bash scripts/validate.sh                  # gates, consistency, references, tests
-scripts/olivercode skills                 # list the reusable skills
+scripts/olivercode health                 # dependency, entrypoint, and drift checks
 ```
 
-A fresh clone passes all of the above with no setup — no `local/` config, no control
-plane, no surrounding vault. If any of them fails on a clean clone, that is a bug.
+A fresh clone passes all of that with no setup — no `local/` config, no control plane, no
+surrounding vault. If any of it fails on a clean clone, that is a bug in the fork, not your
+machine. `bash scripts/qa/check-fork-usable.sh` checks exactly that, in a sandbox.
 
-To make the skills and rules load automatically in every Claude Code session on your
-machine (any repo, any directory):
+Then activate it, so the rules and skills load in every Claude Code session on your machine,
+from any directory:
 
 ```bash
-mkdir -p ~/.claude/skills                                   # may not exist yet
-ln -sfn "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md              # back up any existing one first
-for s in skills/*/; do ln -sfn "$(pwd)/$s" ~/.claude/skills/"$(basename "$s")"; done
-scripts/olivercode health                                   # confirms every symlink resolves
+scripts/olivercode install     # symlinks CLAUDE.md + every skill into ~/.claude
+scripts/olivercode init        # seeds local/ (your fleet config) from the tracked examples
+scripts/olivercode health      # confirms every symlink and hook resolves
 ```
 
-If you already have a `~/.claude/CLAUDE.md`, do not overwrite it blindly — `docs/ADOPTING.md`
-walks through merging your existing rules in rather than losing them.
+`install` never destroys what you already had: an existing real `~/.claude/CLAUDE.md` is moved
+to `CLAUDE.md.pre-olivercode` and the path is printed, because that file is usually your whole
+accumulated ruleset. `init` never overwrites an existing `local/` file. Both are safe to re-run.
 
-**Adopting this across your own repos:** `docs/ADOPTING.md` is the onboarding guide, and the
-`olivercode-adoption` skill runs it as a guided, non-destructive audit. See
-`docs/skills-placement.md` for the full placement contract.
+**Adopting this across your own repos:** `docs/ADOPTING.md` is the full onboarding path —
+inventory, classify, merge your existing rules in, install enforcement, then prove the gates
+actually block. The `olivercode-adoption` skill runs it as a guided, non-destructive audit.
+
+## What You Get, and What Actually Enforces It
+
+The single most useful thing to understand before adopting this: **exactly one layer blocks
+you, and the rest is instruction text.**
+
+| You get | Enforced by | Blocks you? |
+|---|---|---|
+| 8 pre-commit gates — secrets, emoji/icons, PII, deleted-repo refs, workflow push-auth, contract integrity, planning-doc governance, token policy | `.githooks/pre-commit`, installed per repo via `core.hooksPath` | **Yes.** Fires on every `git commit` |
+| Doc/code consistency, internal reference integrity, tests | `bash scripts/validate.sh` | **Yes, when run.** Nothing auto-runs it |
+| Fork usability + bloat/legacy limits | `scripts/qa/full-qa-pass.sh`, and CI where enabled | **Yes, when run** |
+| Contracts, templates, workflows, structure standards | `core/` — inherited via the bootstrap manifest | No. An agent follows them because they load |
+| Skills (engineering method + framework tooling) | `~/.claude/skills/` symlinks | No. The agent chooses to load one |
+
+Two properties worth knowing up front, because both are counterintuitive:
+
+- **Hook enforcement fails open.** If `core.hooksPath` is unset, points at a missing
+  directory, or the hook is not executable, git runs no hooks *and prints nothing* — a commit
+  carrying secrets simply succeeds. `scripts/olivercode health` is the only thing that
+  detects it. Run it on a schedule, not just at setup.
+- **A written rule is not an enforced rule.** `CONTRIBUTING.md`'s "Enforcement Reality"
+  section lists which is which. Don't assume "it's in CLAUDE.md" means "it's blocked".
+
+Why it is built this way: an agent that has to *discover* the rules will sometimes not. So
+anything that must always apply is a hook or a gate, and everything else is loaded
+automatically rather than referenced. `docs/governance.md` holds the gate list;
+`docs/FEATURE_MAP.md` indexes every capability and the one doc that owns it.
 
 ## Where Things Live (and why)
 
@@ -110,5 +141,4 @@ Two directories live inside the repo tree but never push to GitHub:
 | [Skills Placement](docs/skills-placement.md) | Where every skill/agent file lives, one home per layer |
 | [Troubleshooting](docs/troubleshooting.md) | Common setup and command issues |
 | [Adopting](docs/ADOPTING.md) | Forking this and onboarding your own repos, step by step |
-| [Install](INSTALL.md) | Minimal local requirements and first commands |
 | [Contributing](CONTRIBUTING.md) | How to make changes to the framework |

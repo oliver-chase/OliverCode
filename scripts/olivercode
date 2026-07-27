@@ -22,6 +22,7 @@ from lib.repo_profiles import load_repo_profiles  # noqa: E402
 OC_ROOT = Path(__file__).resolve().parent.parent
 
 COMMANDS = [
+    ("olivercode install", "Symlink CLAUDE.md + skills into ~/.claude (backs up anything it replaces)"),
     ("olivercode init", "Create local/ fleet config from the tracked examples (never overwrites)"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull the latest OliverCode updates from GitHub, then sync fleet hooks"),
@@ -126,6 +127,73 @@ def command_skills(argv: list[str]) -> int:
         print(f"{name:<{width}}  {summary}")
     print(f"\n{len(skills)} skill(s).")
     return 0
+
+
+def command_install(oc_root: Path) -> int:
+    """Activate this checkout: symlink CLAUDE.md and every skill into ~/.claude.
+
+    This is the step that makes the rules load in every session from any directory.
+    Doing it by hand is four commands and fails silently in two ways -- `ln` into a
+    missing ~/.claude/skills dies with a bare "No such file or directory", and
+    replacing an existing real CLAUDE.md destroys rules the operator may not have
+    copied anywhere yet.
+
+    Never destructive: a real file (not a symlink) at a target path is moved aside to
+    `<name>.pre-olivercode` and the path is reported, because that file is usually the
+    operator's entire accumulated ruleset and docs/ADOPTING.md Step 3 exists to merge
+    it back in deliberately.
+    """
+    claude_dir = Path.home() / ".claude"
+    skills_dir = claude_dir / "skills"
+    print("OliverCode install — activating this checkout in ~/.claude")
+    print("=" * 40)
+
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    backups: list[str] = []
+
+    def _link(target: Path, source: Path) -> str:
+        """Point target at source. Returns a one-word status."""
+        if target.is_symlink():
+            if target.resolve() == source.resolve():
+                return "already"
+            target.unlink()
+            return _link(target, source)
+        if target.exists():
+            backup = target.with_name(target.name + ".pre-olivercode")
+            if backup.exists():
+                backup = target.with_name(target.name + ".pre-olivercode.bak")
+            target.rename(backup)
+            backups.append(str(backup))
+            target.symlink_to(source)
+            return "backed-up"
+        target.symlink_to(source)
+        return "linked"
+
+    status = _link(claude_dir / "CLAUDE.md", oc_root / "CLAUDE.md")
+    print(f"  [{status.upper()}] ~/.claude/CLAUDE.md")
+
+    linked = already = 0
+    for skill in sorted(p for p in (oc_root / "skills").iterdir() if (p / "SKILL.md").is_file()):
+        result = _link(skills_dir / skill.name, skill)
+        if result == "already":
+            already += 1
+        else:
+            linked += 1
+    print(f"  [OK] skills: {linked} linked, {already} already correct")
+
+    broken = sorted(p.name for p in skills_dir.iterdir() if p.is_symlink() and not p.exists())
+    if broken:
+        print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
+
+    print()
+    if backups:
+        print("Backed up, NOT deleted — merge these in deliberately, they are usually")
+        print("the rules you already had (docs/ADOPTING.md Step 3):")
+        for b in backups:
+            print(f"  {b}")
+        print()
+    print("Next: `olivercode init` to seed local/, then `olivercode health` to verify.")
+    return 1 if broken else 0
 
 
 # local/ overlay files, each seeded from a tracked placeholder. Adding a pair here is
@@ -539,6 +607,9 @@ def main() -> int:
     cmd = sys.argv[1]
     argv = sys.argv[2:]
 
+    if cmd == "install":
+        _reject_extra(cmd, argv)
+        return command_install(OC_ROOT)
     if cmd == "init":
         _reject_extra(cmd, argv)
         return command_init(OC_ROOT)
