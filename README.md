@@ -2,20 +2,38 @@
 
 **Think of OliverCode as the shared engine room for all your projects.** Instead of each repo reinventing how it validates code, guards secrets, or structures its skills, OliverCode provides one set of reusable contracts, templates, and governance gates that every project inherits.
 
-If you're working in one of your product repos, you probably never interact with OliverCode directly — its value is that those projects share a common baseline for quality, security, and structure without duplicating effort. (Your fleet is declared in `local/repo-map.json`, gitignored; `shared/repo-map.json` ships a placeholder example.)
+If you're working in one of your product repos, you probably never interact with OliverCode directly — its value is that those projects share a common baseline for quality, security, and structure without duplicating effort.
 
 **Who this is for:** developers who work across multiple repos with AI agents (Claude Code), and anyone who wants a governance/skills baseline that loads automatically in every session instead of being re-explained per project.
 
 **Scope:** security, token optimization, development best practices/organization, and folder structure. Nothing else ships here — product logic stays in product repos, by contract (`docs/FRAMEWORK_BOUNDARY.md`).
 
-## What It Keeps
+## What You Get, and What Actually Enforces It
 
-Everything in this repo falls into one of four categories — if it doesn't fit, it doesn't belong here:
+The single most useful thing to understand before adopting this: **exactly one layer blocks
+you, and the rest is instruction text.**
 
-- **run** — launcher and orchestration entrypoints (`scripts/olivercode`)
-- **verify** — gates that prove the framework works (`scripts/validate.sh`)
-- **ship** — contracts and templates that downstream repos inherit
-- **support** — current-state docs that explain the active surface
+| You get | Enforced by | Blocks you? |
+|---|---|---|
+| 8 pre-commit gates — secrets, emoji/icons, PII, deleted-repo refs, workflow push-auth, contract integrity, planning-doc governance, token policy | `.githooks/pre-commit`, installed per repo via `core.hooksPath` | **Yes.** Fires on every `git commit` |
+| Doc/code consistency, internal reference integrity, tests | `bash scripts/validate.sh` | **Yes, when run.** Nothing auto-runs it |
+| Fork usability + bloat/legacy limits | `scripts/qa/full-qa-pass.sh`, and CI where enabled | **Yes, when run** |
+| Contracts, templates, workflows, structure standards | `core/` — inherited via the bootstrap manifest | No. An agent follows them because they load |
+| Skills (engineering method + framework tooling) | `~/.claude/skills/` symlinks | No. The agent chooses to load one |
+
+Two properties worth knowing up front, because both are counterintuitive:
+
+- **Hook enforcement fails open.** If `core.hooksPath` is unset, points at a missing
+  directory, or the hook is not executable, git runs no hooks *and prints nothing* — a commit
+  carrying secrets simply succeeds. `scripts/olivercode health` is the only thing that
+  detects it. Run it on a schedule, not just at setup.
+- **A written rule is not an enforced rule.** `CONTRIBUTING.md`'s "Enforcement Reality"
+  section lists which is which. Don't assume "it's in CLAUDE.md" means "it's blocked".
+
+Why it is built this way: an agent that has to *discover* the rules will sometimes not. So
+anything that must always apply is a hook or a gate, and everything else is loaded
+automatically rather than referenced. `docs/governance.md` holds the gate list;
+`docs/FEATURE_MAP.md` indexes every capability and the one doc that owns it.
 
 ## Quick Start
 
@@ -49,33 +67,6 @@ accumulated ruleset. `init` never overwrites an existing `local/` file. Both are
 **Adopting this across your own repos:** `docs/ADOPTING.md` is the full onboarding path —
 inventory, classify, merge your existing rules in, install enforcement, then prove the gates
 actually block. The `olivercode-adoption` skill runs it as a guided, non-destructive audit.
-
-## What You Get, and What Actually Enforces It
-
-The single most useful thing to understand before adopting this: **exactly one layer blocks
-you, and the rest is instruction text.**
-
-| You get | Enforced by | Blocks you? |
-|---|---|---|
-| 8 pre-commit gates — secrets, emoji/icons, PII, deleted-repo refs, workflow push-auth, contract integrity, planning-doc governance, token policy | `.githooks/pre-commit`, installed per repo via `core.hooksPath` | **Yes.** Fires on every `git commit` |
-| Doc/code consistency, internal reference integrity, tests | `bash scripts/validate.sh` | **Yes, when run.** Nothing auto-runs it |
-| Fork usability + bloat/legacy limits | `scripts/qa/full-qa-pass.sh`, and CI where enabled | **Yes, when run** |
-| Contracts, templates, workflows, structure standards | `core/` — inherited via the bootstrap manifest | No. An agent follows them because they load |
-| Skills (engineering method + framework tooling) | `~/.claude/skills/` symlinks | No. The agent chooses to load one |
-
-Two properties worth knowing up front, because both are counterintuitive:
-
-- **Hook enforcement fails open.** If `core.hooksPath` is unset, points at a missing
-  directory, or the hook is not executable, git runs no hooks *and prints nothing* — a commit
-  carrying secrets simply succeeds. `scripts/olivercode health` is the only thing that
-  detects it. Run it on a schedule, not just at setup.
-- **A written rule is not an enforced rule.** `CONTRIBUTING.md`'s "Enforcement Reality"
-  section lists which is which. Don't assume "it's in CLAUDE.md" means "it's blocked".
-
-Why it is built this way: an agent that has to *discover* the rules will sometimes not. So
-anything that must always apply is a hook or a gate, and everything else is loaded
-automatically rather than referenced. `docs/governance.md` holds the gate list;
-`docs/FEATURE_MAP.md` indexes every capability and the one doc that owns it.
 
 ## Where Things Live (and why)
 
