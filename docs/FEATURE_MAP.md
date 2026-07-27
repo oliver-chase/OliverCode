@@ -41,6 +41,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
+| `scripts/qa/check-fork-usable.sh` | Proves a stranger's clone works with no config, in a sandbox with a virgin HOME |
 | `scripts/qa/full-qa-pass.sh` | Runs the three QA checkers: code quality, docs cohesion, bloat |
 | `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |
 | `scripts/run-governance-target.sh` | CI entrypoint that points the QA stack at a downstream repo |

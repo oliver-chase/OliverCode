@@ -23,5 +23,11 @@ jobs:
       - name: Bloat and legacy check (strict)
         run: bash scripts/qa/check-bloat.sh --strict
 
+      # The property this repo exists to have: a stranger can clone it and it
+      # works with no configuration. It broke silently more than once, so it is
+      # a gating step, not a nicety.
+      - name: Fork usability (clean checkout, no config, virgin HOME)
+        run: bash scripts/qa/check-fork-usable.sh
+
       - name: Full QA pass (advisory)
         run: bash scripts/qa/full-qa-pass.sh || true

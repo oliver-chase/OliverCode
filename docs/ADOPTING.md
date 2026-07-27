@@ -37,6 +37,16 @@ All three must pass on a clean clone with no configuration. `health` will WARN a
 missing control plane and an unregistered fleet; that is correct and still reports HEALTHY.
 If `validate.sh` fails here, stop — the fork is broken, not your setup.
 
+One command checks all of this at once, in a sandbox with a throwaway HOME:
+
+```bash
+bash scripts/qa/check-fork-usable.sh
+```
+
+If that passes, the fork is sound and every failure below is a setup problem, not a repo
+problem. Run it after any change to the framework's own plumbing — the "works for a
+stranger" property has broken silently more than once.
+
 ## Step 1 — Inventory before you touch anything
 
 Write the inventory to a scratch file. You will need it to prove nothing was lost.
