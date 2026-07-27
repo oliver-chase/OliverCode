@@ -41,28 +41,9 @@ def get_token_policy_simple(profiles: dict, repo_name: str) -> dict:
     return token_policy_from_profile(profiles.get(repo_name, {}))
 
 
-def matches_any(pattern: str, path: str) -> bool:
-    """Check if path matches a single glob pattern using fnmatch."""
-    return fnmatch.fnmatch(path, pattern)
-
-
 def filter_paths(paths: list, ignore_globs: list) -> list:
     """Return only paths that do NOT match any ignore_glob."""
-    filtered = []
-    skipped = 0
-    for p in paths:
-        ignored = False
-        for glob in ignore_globs:
-            if matches_any(glob, p):
-                ignored = True
-                break
-            # Also check if path starts with the glob's directory prefix
-            # (fnmatch handles '**' patterns correctly for standard globs)
-        if ignored:
-            skipped += 1
-        else:
-            filtered.append(p)
-    return filtered
+    return [p for p in paths if not any(fnmatch.fnmatch(p, glob) for glob in ignore_globs)]
 
 
 def main():

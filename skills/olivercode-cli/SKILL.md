@@ -24,7 +24,7 @@ Four commands:
 
 `--help`, `-h`, `help`, and no-args all print the same usage block and exit 0. Any other command prints an error + usage and exits 1.
 
-There is no docker dependency, no container-mode branch, and no delegation to any external agent runtime — the launcher invokes nothing outside this repo. Treat any multi-environment routing as new design work, not a restoration.
+The launcher invokes nothing outside this repo. Treat multi-environment routing as new design work.
 
 ## Core Principles
 
@@ -54,8 +54,4 @@ There is no docker dependency, no container-mode branch, and no delegation to an
 4. `python3 scripts/olivercode health` — confirm HEALTHY on a clean checkout
 5. Confirm `runtime/control-plane/olivercode` shim still delegates correctly (bash shim → same Python CLI)
 6. Verify help aliases: bare, `--help`, `-h`, `help` all exit 0
-7. `python3 scripts/olivercode skills` — confirm the count matches `find skills -name SKILL.md | wc -l` (no symlinked skills live inside `skills/` anymore — everything under it is real, tracked content); `skills --grep <term>` — confirm it filters, `skills --grep` (no term) errors instead of matching everything
-
----
-
-> Commands: `health`, `update`, `sync-hooks` (SYS-3).
+7. `python3 scripts/olivercode skills` — confirm the count matches `find skills -name SKILL.md | wc -l` (everything under `skills/` is real, tracked content); `skills --grep <term>` — confirm it filters, `skills --grep` (no term) errors instead of matching everything

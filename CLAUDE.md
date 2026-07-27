@@ -17,7 +17,7 @@ Always-on while working, not on request:
 - Multi-commit build session ending? Run the `deep-review` skill (single review agent,
   simplify, remove-don't-archive cleanup, live re-verify, tracker update) before closing.
   Coverage cadence: `python3 scripts/audit-staleness.py` flags repos past 30 unreviewed
-  commits; `scripts/qa/check-bloat.sh` (full-qa-pass Phase 4) keeps legacy from re-growing.
+  commits; `scripts/qa/check-bloat.sh` (full-qa-pass Phase 3) keeps legacy from re-growing.
 - Simplify as you go: after any nontrivial change, ask what the diff makes redundant (`/simplify`, `/code-review` before commit).
 - Folder structure in project repos stays clean and minimal — no new top-level dirs without a contract reason (`core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
 - Documentation robust but manageable: one concept one home, pointers elsewhere (sync trigger/scope: `docs/DOCUMENTATION_STANDARD.md` "Requirement").
