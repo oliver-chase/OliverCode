@@ -186,10 +186,43 @@ def check_feature_map_completeness(repo_root: Path) -> list[str]:
     ]
 
 
+# Skill names this repo ships that read like prose, so a bare mention is not a reference.
+_NOT_A_CROSS_REF = {"plan", "tdd"}
+
+
+def check_skill_cross_references(repo_root: Path) -> list[str]:
+    """A skill naming a sibling skill must name one that exists.
+
+    Deliberately narrow: only `skills/<name>` shaped references and backticked names
+    that match the skill-name shape AND are cited alongside other real skill names.
+    External slash-commands (/code-review, /simplify) are NOT checked -- they come from
+    plugins that vary per machine, so gating them would fail on a fork that simply has
+    a different toolset. A dangling `/ux-ui` did ship here, but the fix for that class
+    is not naming machine-specific commands in a portable framework.
+    """
+    skills_dir = repo_root / "skills"
+    if not skills_dir.is_dir():
+        return []
+    shipped = {p.name for p in skills_dir.iterdir() if (p / "SKILL.md").is_file()}
+
+    failures: list[str] = []
+    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+        text = skill_md.read_text(encoding="utf-8")
+        for match in re.findall(r"`skills/([a-z0-9-]+)`|`skills/([a-z0-9-]+)/SKILL\.md`", text):
+            name = next(filter(None, match), None)
+            if name and name not in shipped:
+                failures.append(
+                    f"  [SKILLS] {skill_md.parent.name} references skills/{name}, "
+                    f"which this repo does not ship"
+                )
+    return failures
+
+
 def check_all(repo_root: Path) -> list[str]:
     return (
         check_skill_index(repo_root)
         + check_gate_count(repo_root)
         + check_gate_integrity(repo_root)
         + check_feature_map_completeness(repo_root)
+        + check_skill_cross_references(repo_root)
     )

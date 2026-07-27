@@ -116,7 +116,7 @@ This skill covers doc-vs-code truth and doc consolidation only. It deliberately 
 - **`/code-review`** — when the audit's code-verification steps (Phase 3) turn up an actual correctness bug in the code itself (not just a doc claiming something false about it), don't fix it ad hoc as a side effect of the doc audit. Run `/code-review` on it as its own pass.
 - **`/simplify`** — if Phase 3/4 surfaces real duplication or dead code in the codebase (not just in the docs), that's a `/simplify` job, not a docs-reality-audit job — they share the no-duplication principle but operate on different material.
 - **`diagnosing-bugs`** — if verifying a doc's claim requires figuring out *why* something is actually broken (not just confirming that it is), switch to that skill for the root-cause work, then come back to the doc fix once the real behavior is known.
-- **`/ux-ui`** — docs-reality-audit doesn't evaluate interface/interaction quality. If the project has a UI and the audit is part of a broader "review this project" ask, pair with `/ux-ui` for the visual/UX pass — run them as separate, parallel-purpose passes, not one folded into the other.
+- **A frontend/UX skill** — docs-reality-audit doesn't evaluate interface or interaction quality. If the project has a UI and the audit is part of a broader "review this project" ask, pair it with whichever design skill the machine has installed (see README's Recommended External Tooling; OliverCode ships none, by scope) and run them as separate, parallel-purpose passes rather than folding one into the other.
 
 ## Report Format
 
