@@ -30,10 +30,11 @@ and several docs. They are settled decisions, not open items.
 
 ---
 
-## Open items
+## Resolved — the A-series
 
-None open. The A-series below is the record of what was built and why; new specs go here,
-written context-free so a future agent with no session memory can execute them.
+What was built and why. Kept because each entry records the failure class the gate exists to
+stop; deleting it invites rebuilding the same thing. Currently-open work lives under the live
+tracker's "Open items" below.
 
 ### A1-A5 — resolved 2026-07-27 (built, verified, wired in)
 
@@ -81,60 +82,115 @@ symlink.
 
 ### Where things stand (2026-07-27)
 
-- Full read-every-file audit of all tracked files completed and executed: defect fixes,
-  legacy-reference strip, doc consolidation, and both owner decisions applied.
-- Removed: the conflicting `install-enforcement.sh`/`pre-commit-gate.sh` hook installer, a
-  no-op QA phase, orphaned docs/configs, four micro-workflows folded into canonical homes.
-- Doc duplication collapsed: trigger routing, testing baseline, backlog procedure, gate
-  table, branch lifecycle, quality baseline, and the skills catalog each have one home.
-- Every file under `core/templates/project/` is now declared in the bootstrap manifest —
-  `templatedFiles` for the unconditional ones, `conditionalFiles` for the keepalive set,
-  which syncs only where a repo's `keepalive` profile block enables it.
-- A1-A5 built and wired into `validate.sh`: reference integrity now checks 303 backtick repo
-  paths on top of 9 markdown links, doc/code consistency is mechanical, and the enforcement
-  surfaces have 46 tests where they had none. Nothing is open.
-- The framework now fails closed on the two classes that produced this audit's findings:
-  a reference naming a path that isn't there, and a doc asserting what the code contradicts.
+A full read-every-file audit ran over all tracked files, then three follow-on passes:
+activation (does this actually work outside OliverCode), fork usability (does a stranger get
+a working framework), and a necessity audit (is everything here earning its place).
 
-- Activation audit: the rules DO load everywhere (`~/.claude/CLAUDE.md` symlink, 26 skill
-  symlinks, hooks on all 5 repos + vault), but 8 of the global CLAUDE.md's path pointers
-  dangled outside OliverCode — including both blocking "read this first" directives. Fixed by
-  making that file path-independent: `$OC` resolves via `dirname "$(readlink ~/.claude/CLAUDE.md)"`,
-  bare paths explicitly mean the current repo.
-- Hook enforcement fails OPEN and the detector shared the bug: `health` reported `[OK]` for a
-  repo whose hooks directory did not exist. Now caught, with a live end-to-end test.
+- **Audit + cleanup.** Removed the conflicting `install-enforcement.sh`/`pre-commit-gate.sh`
+  hook installer, a no-op QA phase, orphaned docs/configs, and four micro-workflows folded
+  into canonical homes. Duplicated authority collapsed to one home each: trigger routing,
+  testing baseline, backlog procedure, gate table, branch lifecycle, quality baseline,
+  skills catalog, and the orchestration path map.
+- **The framework now fails closed** on the two classes that produced the audit's findings:
+  a reference naming a path that isn't there (`scripts/lib/reference_check.py`, 322 backtick
+  paths on top of 9 markdown links) and a doc asserting what the code contradicts
+  (`scripts/lib/consistency_check.py`).
+- **Activation was loading but not resolving.** The rules reached every session, but 8 of the
+  global `CLAUDE.md`'s pointers dangled outside OliverCode — including both blocking "read
+  this first" directives. That file is now path-independent: `$OC` resolves from the symlink
+  and is checked; a bare path explicitly means the current repo.
+- **Hook enforcement fails open, and the detector shared the bug.** `health` reported `[OK]`
+  for a repo whose hooks directory did not exist. Fixed, with regression tests per state.
+- **A fork works with no configuration**, and it is gated rather than hoped:
+  `scripts/qa/check-fork-usable.sh` (Phase 4 of `full-qa-pass.sh`) builds a pristine sandbox
+  with a throwaway HOME, then walks the documented adoption path against two throwaway repos
+  and asserts a staged secret is actually blocked.
+- **Onboarding is four commands** — `clone`, `install`, `init`, `sync-hooks` — with the
+  judgment steps driven by the `olivercode-adoption` skill. `docs/ADOPTING.md` is the path.
+
+Nothing is open that blocks a fork. The two items below are operator-side.
 
 ### Coverage
 
-Reviewed through: `16a1849` (2026-07-27, full-file audit)
+Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/necessity passes)
 
-### Deliberately kept (validated decisions — do not redo)
+### Open items
 
-- `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`:
-  the OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy); the
-  template carries the anon-key meta-tag allowlist. Both are correct; do not converge them.
-- `scripts/qa/check-code-quality.sh` is TypeScript-leaning and several of its sections are
-  low-yield on this repo. It earns its place on the Next.js fleet repos, which are its real
-  target. Not a cleanup candidate here.
+**B1 — health detection never reaches a human (MEDIUM, operator wiring).**
+Hook enforcement fails open, and `scripts/olivercode health` is the only detector. It runs
+weekly from cron and appends to a log file nobody reads, so a repo could sit ungoverned for a
+week or more and still not be noticed. `health` already exits nonzero on DEGRADED, so the
+missing piece is only the alert path. This is deliberately NOT framework code: host scheduler
+wiring is private-overlay territory per `docs/FRAMEWORK_BOUNDARY.md`. Wire the nonzero exit to
+whatever channel the operator actually reads, and raise the frequency above weekly.
+
+**B3 — the hook model has no room for a legitimate per-repo variant (MEDIUM, design).**
+`health` treats ANY difference between a repo's live hook and the template as drift and FAILs;
+`sync-hooks` then "fixes" it by overwriting. Observed for real: a fleet repo carries a
+deliberate variant (repo-specific governance-config path, plus a gate whose checker does not
+exist there), and the framework can only call that broken. Running `sync-hooks` would have
+silently destroyed a considered customization.
+
+Both behaviours are individually right — byte-identity is what makes a fleet predictable — but
+together they mean a repo with a real reason to differ has nowhere to say so. Options: a
+`hookVariant` field in the repo profile that `health` honours and `sync-hooks` respects; or
+template composition (a base plus declared per-repo gates) instead of a single flat file. Until
+one exists, do not run `sync-hooks` against a repo whose divergence has not been read first.
+
+**B2 — re-enable CI when GitHub Actions billing is restored (LOW, trigger).**
+`.github/workflows/framework-ci.yml` is `disabled_manually` while billing is blocked (see
+`githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). It ships ready to run and
+gates health, validate.sh, strict bloat, and fork usability. When billing returns:
+`gh workflow enable "OliverCode Framework CI"`. Until then the local commands are the only
+enforcement, which is why those checks also run from `full-qa-pass.sh`.
+
+### Deliberately kept / decided (do not redo)
+
+- `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the
+  OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy); the template
+  carries the anon-key meta-tag allowlist. Both correct; do not converge them.
 - `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
-  `AGENT_SHARED_STRUCTURE.md` but is the tracked half of the G1 example/overlay pair and has
-  a real `local/` counterpart. Keep both.
-- `skills/model-routing/` — see A7.
-- The keepalive surface — in scope by owner decision, not an orphan.
+  `AGENT_SHARED_STRUCTURE.md` but is the tracked half of the G1 example/overlay pair and has a
+  real `local/` counterpart. Keep both.
+- `skills/model-routing/` — see A7 above.
+- The keepalive surface — in scope by owner decision, synced via the manifest's
+  `conditionalFiles`, not an orphan.
+- **The WRITE MODE evidence gate is opt-in, not a completion requirement.** The machinery
+  works and is tested, but no evidence record has ever existed in this fleet and every commit
+  predates one. `EXECUTION_CONTRACT.md` now describes it accurately. Do not re-assert it as a
+  universal precondition — a contract every commit violates teaches that written rules are
+  optional.
+- **`olivercode add-repo` — WONT-FIX.** Registering a fleet still means hand-editing
+  `local/repo-profiles.json` once per repo. A command for that would be ~60 LOC plus tests
+  plus docs to save a one-time edit, and satisfies none of `FRAMEWORK_BASELINE.md`'s four
+  admission criteria. The real sharp edge was Gate 8 failing with an unactionable message;
+  that is fixed. Revisit only if fleet size makes the edit genuinely repetitive.
+- The governance CI pathway (`scripts/run-governance-target.sh` +
+  `core/templates/project/.github/workflows/olivercode-governance.yml`) is absent from every
+  fleet repo today. That is the billing pause, not dead code — it is a working path the moment
+  CI returns. Keep.
 
 ### Activity log (append here, newest last)
 
-- 2026-07-27 [audit] Defect fixes + orphan removal, commit `ed1e4d1`.
+- 2026-07-27 [audit] Defect fixes + orphan removal, `ed1e4d1`.
 - 2026-07-27 [audit] Legacy-reference strip, doc consolidation, specs written, `e773ff1`.
 - 2026-07-27 [audit] Path map / baseline rules to one home, `67bc6ff`.
 - 2026-07-27 [audit] FEATURE_MAP made a real index, `8e19b17`.
 - 2026-07-27 [audit] Product paths out of the location contract, lib imports unified, `9c87a91`.
-- 2026-07-27 [audit] Owner decisions applied: keepalive brought into scope via
-  `conditionalFiles`; `vault-content-parsing` moved to the vault's `.olivercode/user-skills/`
-  with its symlink repointed and the ledger updated; `model-routing` kept as a declared
-  exception. A6 and A8 resolved, A7 reduced to a keep-note.
-- 2026-07-27 [audit] A1-A5 built: reference-integrity pass, doc/code consistency checker,
-  46 enforcement-surface tests, CI gating on strict bloat. Backlog now empty.
-- 2026-07-27 [activation] Global CLAUDE.md made path-independent; fleet hooksPath converged
-  to relative; 5 repo CLAUDE.md pointer blocks repaired; hook-install fail-open closed in
-  `health` with 6 regression tests. 55 tests total.
+- 2026-07-27 [audit] Owner decisions: keepalive into scope, `vault-content-parsing` moved to
+  the vault, `model-routing` kept as a declared exception. A6/A8 resolved, `16a1849`.
+- 2026-07-27 [audit] A1-A5 built: reference integrity, consistency checker, enforcement tests,
+  CI gating, `8db0cf3`.
+- 2026-07-27 [activation] Global CLAUDE.md made path-independent; fleet hooksPath converged;
+  5 repo CLAUDE.md pointer blocks repaired; hook-install fail-open closed, `fc5aa7e`.
+- 2026-07-27 [fork] Stranger-clone blockers fixed; `docs/ADOPTING.md` + `olivercode-adoption`
+  skill added, `dc1c4bb`. Reference gate taught to scan untracked files, `0ccf2f6`.
+- 2026-07-27 [fork] `olivercode init`, real `--root`, unknown args rejected, `9e672f5`.
+- 2026-07-27 [fork] Fork-usability gate built and mutation-tested, `5220316`; extended to walk
+  the adoption path itself, `659eba8`.
+- 2026-07-27 [fork] CI-only gates moved onto the local path; Actions pause recorded as policy,
+  `386395c`.
+- 2026-07-27 [docs] `olivercode install` added; ARCHITECTURE rewritten; INSTALL.md folded into
+  README; "what you get and what enforces it" contract added, `63d5b3c`.
+- 2026-07-27 [necessity] Completion gate stopped asserting a rule nobody runs; QA worktree
+  double-count fixed (it was hiding real findings); Gate 8 message made actionable, `e267385`.
