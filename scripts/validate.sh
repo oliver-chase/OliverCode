@@ -35,16 +35,20 @@ run_token_policy_check() {
 }
 
 run_consistency() {
-  # Doc-vs-code drift: skills INDEX/directory parity and gate-count claims.
-  # Fail-closed -- both classes have silently drifted before.
+  # Two classes, both fail-closed, both learned from real defects here:
+  #  - doc-vs-code drift (skills index parity, gate-count claims, gate integrity)
+  #  - unfalsifiable checks: a gate or script that cannot fail. Ten defects in this
+  #    repo shared that shape, and none was visible from output, because the output
+  #    always said PASS. See scripts/lib/falsifiability_check.py.
   echo "=== validate: checking doc/code consistency ==="
   local out
   if ! out="$(python3 -c "
 import sys
 from pathlib import Path
 sys.path.insert(0, '${SCRIPT_DIR}')
-from lib.consistency_check import check_all
-failures = check_all(Path('${REPO_ROOT}'))
+from lib.consistency_check import check_all as consistency
+from lib.falsifiability_check import check_all as falsifiability
+failures = consistency(Path('${REPO_ROOT}')) + falsifiability(Path('${REPO_ROOT}'))
 for f in failures:
     print(f)
 sys.exit(1 if failures else 0)
