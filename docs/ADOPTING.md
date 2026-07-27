@@ -7,8 +7,10 @@ The governing rule for this whole process: **optimize, do not amputate.** You ar
 existing rules at a shared home, not deleting them. Anything you cannot map to an OliverCode
 concept stays exactly where it is. A rule you do not understand is a rule you keep.
 
-Run this with the `olivercode-adoption` skill, which walks the same steps and stops for
-approval at each gate.
+**You do not have to read this.** Open this repo in Claude Code and say *"set up OliverCode
+for my machine"* — the `olivercode-adoption` skill ships project-level, so it is available
+immediately on a fresh clone, and it drives every step below, surfacing only the decisions
+that genuinely need you. This document is the reference it works from.
 
 ---
 
