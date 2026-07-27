@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -462,12 +463,21 @@ def command_init(oc_root: Path) -> int:
 
 
 class _HealthTally:
-    """Accumulates health-check results. WARN counts as passed on purpose:
-    a standalone clone missing local-only context (control plane, vault) must
-    still report HEALTHY (see docs/FRAMEWORK_BOUNDARY.md)."""
+    """Accumulates health-check results.
+
+    WARN does not fail the run, on purpose: a standalone clone missing local-only
+    context (control plane, vault) must still exit 0 (see docs/FRAMEWORK_BOUNDARY.md).
+
+    It is counted SEPARATELY from OK all the same. Folding the two together printed
+    "HEALTHY — 8/8 checks passed" on a run where five of the eight had been skipped
+    for missing context and only three had actually verified anything. Nothing was
+    wrong, but the summary claimed evidence it did not have, which is the same shape
+    as every other defect this repo has had to dig out (scripts/lib/falsifiability_check.py).
+    """
 
     def __init__(self) -> None:
         self.passed = 0
+        self.skipped = 0
         self.failed = 0
 
     def ok(self, msg: str) -> None:
@@ -476,15 +486,26 @@ class _HealthTally:
 
     def warn(self, msg: str) -> None:
         print(f"  [WARN] {msg}")
-        self.passed += 1
+        self.skipped += 1
 
     def fail(self, msg: str) -> None:
         print(f"  [FAIL] {msg}")
         self.failed += 1
 
-    def add(self, passed: int, failed: int) -> None:
+    def add(self, passed: int, failed: int, skipped: int = 0) -> None:
         self.passed += passed
         self.failed += failed
+        self.skipped += skipped
+
+    def summary(self) -> str:
+        """One line that never overstates what was checked."""
+        if self.failed:
+            return (f"UNHEALTHY — {self.failed} failed, {self.passed} passed"
+                    + (f", {self.skipped} skipped" if self.skipped else ""))
+        if self.skipped:
+            return (f"HEALTHY — {self.passed} checks passed, {self.skipped} skipped for "
+                    f"missing context (see WARN above); nothing failed")
+        return f"HEALTHY — {self.passed} checks passed"
 
 
 def command_health(fleet_root: Path | None = None) -> int:
@@ -538,16 +559,92 @@ def command_health(fleet_root: Path | None = None) -> int:
     # Everything here reads OUTSIDE OC_ROOT (the vault, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no surrounding vault is still a valid, healthy checkout.
-    t.add(*_check_placement_drift(OC_ROOT, fleet_root))
+    passed, failed, skipped = _check_placement_drift(OC_ROOT, fleet_root)
+    t.add(passed, failed, skipped)
 
-    # Summary
-    total = t.passed + t.failed
+    # 4. Governance exceptions that have run out.
+    print("\nGovernance waivers:")
+    passed, failed, skipped = _check_waiver_expiry(OC_ROOT)
+    t.add(passed, failed, skipped)
+
     print(f"\n{'=' * 40}")
-    if t.failed == 0:
-        print(f"HEALTHY — {t.passed}/{total} checks passed")
-    else:
-        print(f"DEGRADED — {t.passed}/{total} passed, {t.failed} failed")
+    print(t.summary())
     return 1 if t.failed else 0
+
+
+def _local_or_shared(oc_root: Path, filename: str) -> Path | None:
+    """Resolve a registry the same way every other loader does: local/ overlay first,
+    tracked shared/ placeholder as the fallback, None if neither exists."""
+    for candidate in (oc_root / "local" / filename, oc_root / "shared" / filename):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
+    """Flag governance exceptions in repo-map.json whose `expiresAt` has passed.
+
+    repo-map.json records deliberate exceptions -- repos waived out of the governance
+    contract, complexity variances approved with a reason -- and every entry carries an
+    `expiresAt`. Nothing read the file. An expiry date that no code checks is not a
+    deadline, it is a comment: the waiver simply became permanent on the day it was
+    written, which is the opposite of what an expiring waiver is for.
+
+    Reported, never fatal. The point is to make the date mean something at the moment
+    someone looks at fleet health, not to block a commit in an unrelated repo.
+    """
+    path = _local_or_shared(oc_root, "repo-map.json")
+    if path is None:
+        print("  [WARN] no repo-map.json — skipping waiver expiry check")
+        return 0, 0, 1
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"  [FAIL] {path.name} is unreadable: {exc}")
+        return 0, 1, 0
+
+    now = datetime.now(timezone.utc)
+    entries: list[tuple[str, str]] = []
+    for waiver in data.get("unmanagedRepoWaivers", []):
+        entries.append((f"unmanaged-repo waiver for {waiver.get('name', '?')}",
+                        waiver.get("expiresAt", "")))
+    for repo in data.get("repos", []):
+        for variance in repo.get("approvedMaintainabilityVariances", []):
+            entries.append(
+                (f"{repo.get('name', '?')}: {variance.get('target', 'variance')} variance",
+                 variance.get("expiresAt", ""))
+            )
+
+    dated = [(label, raw) for label, raw in entries if raw]
+    if not dated:
+        print("  [OK] no dated governance waivers to expire")
+        return 1, 0, 0
+
+    expired = []
+    unparsable = []
+    for label, raw in dated:
+        try:
+            when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            unparsable.append(label)
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if when < now:
+            expired.append((label, when))
+
+    for label in unparsable:
+        print(f"  [FAIL] {label}: expiresAt is not an ISO-8601 date — it can never expire")
+    for label, when in expired:
+        days = (now - when).days
+        print(f"  [FAIL] {label}: EXPIRED {days}d ago ({when.date()}) — renew it with a new "
+              f"reason and date, or remove the waiver and fix the underlying issue")
+    if expired or unparsable:
+        return 0, len(expired) + len(unparsable), 0
+
+    soonest = min(datetime.fromisoformat(r.replace("Z", "+00:00")) for _, r in dated)
+    print(f"  [OK] {len(dated)} waiver(s) current; next expires {soonest.date()}")
+    return 1, 0, 0
 
 
 def _resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
@@ -625,10 +722,11 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
     return problems
 
 
-def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int]:
+def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int, int]:
     print("\nPlacement drift (skills-placement.md):")
     passed = 0
     failed = 0
+    skipped = 0
     templates_dir = oc_root / "core" / "templates" / "project"
 
     # Vault root: OLIVERCODE_VAULT_ROOT env var wins; otherwise the layout
@@ -646,7 +744,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     claude_skills_dir = Path.home() / ".claude" / "skills"
     if not claude_skills_dir.is_dir():
         print("  [WARN] ~/.claude/skills/ not present — skipping")
-        passed += 1
+        skipped += 1
     else:
         skills_dir = oc_root / "skills"
         oc_skill_names = sorted(
@@ -668,7 +766,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
             # drift -- G4 requires a stranger clone to report HEALTHY.
             print(f"  [WARN] this checkout is not the machine's installed OliverCode "
                   f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/skills-placement.md")
-            passed += 1
+            skipped += 1
         elif missing:
             print(f"  [FAIL] not symlinked at ~/.claude/skills/: {', '.join(missing)}")
             failed += 1
@@ -693,12 +791,12 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     fleet = list(_iter_fleet(profiles, fleet_root or oc_root.parent))
     if not fleet:
         print("  [WARN] no fleet registered in local/repo-profiles.json — skipping hook-drift check")
-        passed += 1
+        skipped += 1
     else:
         for name, profile, repo_path in fleet:
             if not (repo_path / ".git").exists():
                 print(f"  [WARN] {name}: not present on this machine — skipping")
-                passed += 1
+                skipped += 1
                 continue
             result = subprocess.run(
                 ["git", "-C", str(repo_path), "config", "--get", "core.hooksPath"],
@@ -726,7 +824,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 else:
                     print(f"  [WARN] {name}: declared hook variant ({variant}) — "
                           f"{'; '.join(problems)}")
-                    passed += 1
+                    skipped += 1
             elif problems:
                 print(f"  [FAIL] {name}: {'; '.join(problems)}")
                 failed += 1
@@ -737,7 +835,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     # The vault itself is a managed hook target too (SYS-3), same private-variant check.
     if not (vault_root / ".git").exists():
         print("  [WARN] no vault .git found — skipping vault hook check")
-        passed += 1
+        skipped += 1
     else:
         result = subprocess.run(
             ["git", "-C", str(vault_root), "config", "--get", "core.hooksPath"],
@@ -756,18 +854,21 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 print("  [OK] vault: hooksPath set, hooks match template")
                 passed += 1
 
-    return passed, failed
+    return passed, failed, skipped
 
 
 def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
     """Idempotently deploy the hook template(s) + hooksPath config to one repo.
 
-    Public repos get the 7-gate public template as the live `pre-commit` file
+Public repos get the 6-gate public template as the live `pre-commit` file
     (plus the private variant alongside as a reference copy, matching the
     existing manifest convention). The vault (private_repo=True) gets the
     private 2-gate template's content deployed AS `pre-commit` — git only
     auto-invokes that exact filename, there's no such thing as a repo
     literally running a file named `pre-commit-private`.
+
+    Counts are verified against the hook files themselves by
+    scripts/lib/consistency_check.py; see docs/governance.md for the table.
     """
     hooks_dir = repo_path / ".githooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)

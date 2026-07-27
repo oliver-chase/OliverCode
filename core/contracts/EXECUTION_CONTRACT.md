@@ -29,7 +29,8 @@ User says "yes" / approves change
     |   Run repo's canonical validation command (from repo-profiles.json)
     |
     v
-5.  GATE -- pre-commit enforcement runs automatically (8 gates, see below)
+5.  GATE -- pre-commit enforcement runs automatically (see below; how many gates
+    |   depends on the repo -- OliverCode/docs/governance.md has the table)
     |   BLOCKED = must fix before commit
     |
     v

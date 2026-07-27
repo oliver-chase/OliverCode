@@ -76,13 +76,23 @@ run_hook_state() {
   # registered has nothing to check and must still pass -- that property is what
   # check-fork-usable.sh guards.
   echo "=== validate: checking fleet hook state ==="
-  local out
-  if out="$(python3 "${SCRIPT_DIR}/olivercode" health 2>&1)"; then
-    echo "  [OK] every registered repo has working hooks"
+  local out registered
+  out="$(python3 "${SCRIPT_DIR}/olivercode" health 2>&1)" && local rc=0 || local rc=$?
+
+  # "every registered repo has working hooks" was printed even when the number of
+  # registered repos was ZERO -- a fork with no fleet got a green line asserting a
+  # fleet was verified. Say which case it is.
+  registered="$(printf '%s\n' "$out" | grep -cE '^\s+\[(OK|FAIL|WARN)\] [^ ]+: ' || true)"
+  if [[ "$rc" -eq 0 && "$registered" -eq 0 ]]; then
+    echo "  [SKIP] no fleet repos registered — nothing to check."
+    echo "         Register repos in local/repo-profiles.json (see docs/ADOPTING.md)."
+  elif [[ "$rc" -eq 0 ]]; then
+    echo "  [OK] all $registered registered repo(s) have working hooks"
   else
     printf '%s\n' "$out" | grep -E '^\s+\[FAIL\]' || true
     echo "  [WARN] a repo above is not fully governed — 'olivercode sync-hooks' repairs it."
     echo "         Enforcement fails open: git runs no hooks and says nothing."
+    echo "         Advisory here by design: a fork with no fleet must still pass."
   fi
 }
 
@@ -112,7 +122,10 @@ run_smoke_tests() {
   fi
   echo "=== validate: running smoke tests ==="
   if command -v python3 &>/dev/null; then
-    if ! python3 -m unittest discover "$tests_dir"; then
+    # -b buffers each test's stdout/stderr and replays it only for failures. Several
+    # tests exercise paths that print "[FAIL]" or "Error:" by design; unbuffered, a
+    # fully green run scrolled those past the operator and read like a broken build.
+    if ! python3 -m unittest discover -b -s "$tests_dir"; then
       echo "=== validate: python smoke tests FAILED ==="
       exit 1
     fi

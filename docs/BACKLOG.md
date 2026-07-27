@@ -120,6 +120,20 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 
 ### Open items
 
+**B6 — OPEN (LOW, fleet-side, not OliverCode's to run).** The public hook template's gate
+banners were corrected from `Gate N/5` (with a contradictory `Gate 6/6` at the end) to a
+consistent `Gate N/6`. Deployed fleet hooks now differ from the template by that banner text,
+so `health` reports `tesknota`, `oliver-app`, and `fallow` as diverging. **The difference is
+printed text only — no gate's behaviour changed**, verified by diffing the template against a
+deployed copy. Whoever owns the fleet clears it with one `scripts/olivercode sync-hooks`. Not
+done here: other agents are working in those repos and this session's scope is OliverCode.
+
+**B7 — OPEN (LOW).** `repo-map.json`'s `governanceProfile` and
+`approvedMaintainabilityVariances[].target` are still read by nothing. Waiver **expiry** is
+now enforced (`health`, `_check_waiver_expiry`), so a dated exception can no longer quietly
+become permanent, but the profile and variance targets themselves remain declarative. Either
+wire them to a check or drop the fields; do not leave a third registry that only documents.
+
 **B5 — RESOLVED 2026-07-27.** The perl guard was hand-merged into
 oliver-strategic-growth's variant hook (both `pre-commit` and `pre-commit-private`), leaving
 its repo-specific governance path intact. Verified against that exact hook: an emoji is still
@@ -213,6 +227,19 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   5 repo CLAUDE.md pointer blocks repaired; hook-install fail-open closed, `fc5aa7e`.
 - 2026-07-27 [fork] Stranger-clone blockers fixed; `docs/ADOPTING.md` + `olivercode-adoption`
   skill added, `dc1c4bb`. Reference gate taught to scan untracked files, `0ccf2f6`.
+- 2026-07-27 [fork] Fresh-agent adoption run on a sandboxed machine (throwaway HOME, three
+  non-sibling repos, pre-existing `~/.claude`). It succeeded end to end, and found that the
+  headline **8-gate claim was false for every adopted repo** (they get 6; contract integrity
+  and token policy are framework-only) in six documents. Coverage table added to
+  `docs/governance.md` as its one home; `consistency_check.py` extended to resolve each claim
+  to the hook it is about, check every hook variant's internal numbering, and verify that
+  table — the old checker skipped `core/templates/` on purpose, and its claim pattern required
+  the number to sit directly beside the noun, so the count in README's own headline (which had
+  "pre-commit" in between) was never even matched. It passed throughout. Also: template banner numbering fixed,
+  `check-fork-usable.sh` was using `cp` on a symlinked directory and had therefore never
+  tested the project-level adoption skill, ADOPTING's register/enforce steps were in the wrong
+  order (`sync-hooks` ran before the fleet file existed), health now counts skips separately
+  from passes, and waiver expiry in `repo-map.json` is enforced instead of decorative.
 - 2026-07-27 [fork] `olivercode init`, real `--root`, unknown args rejected, `9e672f5`.
 - 2026-07-27 [fork] Fork-usability gate built and mutation-tested, `5220316`; extended to walk
   the adoption path itself, `659eba8`.

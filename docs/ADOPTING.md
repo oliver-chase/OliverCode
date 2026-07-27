@@ -100,15 +100,20 @@ Most existing setups have all three tangled in one file. Separating them IS the 
 
 ## Step 2 — Back up, then install activation
 
+`install` backs up an existing `~/.claude/CLAUDE.md` to `CLAUDE.md.pre-olivercode` itself,
+so do not copy it by hand first — you would be writing the same backup path twice. It does
+**not** copy `~/.claude/skills/`, because it never deletes anything there; back that up
+yourself if you want a restore point:
+
 ```bash
-cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.pre-olivercode 2>/dev/null || true
 cp -R ~/.claude/skills ~/.claude/skills.pre-olivercode 2>/dev/null || true
 
-scripts/olivercode install     # does all of it, and backs up anything it replaces
+scripts/olivercode install     # symlinks CLAUDE.md + skills, backing up what it replaces
 scripts/olivercode health
 ```
 
-`health` now checks every symlink resolves into this checkout. Keep the backups until the
+`install` reports how many skills it linked and how many real directories it left untouched.
+`health` then checks every symlink resolves into this checkout. Keep the backups until the
 whole process is done and verified.
 
 ## Step 3 — Merge your global rules in, do not replace them
@@ -148,9 +153,10 @@ short block saying where the shared rules come from:
 # <Repo> — Agent Rules
 
 Read before working here:
-- `docs/BACKLOG.md` — live board, canonical open work
-- `docs/ARCHITECTURE.md` — technical map
-- <the docs that are actually authoritative for this repo>
+- <the docs that are actually authoritative for this repo — list the files that exist,
+  not the ones the template suggests. `docs/BACKLOG.md` and `docs/ARCHITECTURE.md` are
+  the convention in `core/contracts/PROJECT_STRUCTURE_STANDARD.md`, but pointing at a
+  file the repo does not have is worse than pointing at nothing>
 
 Run `bash scripts/validate.sh` before commit (this repo's canonical validation).
 ```
@@ -162,25 +168,22 @@ Rules for this rewrite:
   text. Verify each pointer with `ls` before you leave it in.
 - **Do not delete repo-specific content** to make the file shorter. Duplicated *framework*
   rules come out; repo truth stays.
-- If a repo has an `AGENTS.md` or similarly-named rules file, merge it INTO `CLAUDE.md`.
-  Claude Code only auto-loads `CLAUDE.md`; anything else is invisible in practice.
+- If a repo has an `AGENTS.md`, `.cursorrules`, or similarly-named rules file, merge it INTO
+  `CLAUDE.md`. Claude Code only auto-loads `CLAUDE.md`; anything else is invisible in
+  practice. **Then decide the original's fate explicitly, and say which you chose:**
+  - another tool still reads it (Cursor, Copilot, Codex) → keep it, and replace its body
+    with a one-line pointer to `CLAUDE.md` so the two cannot drift into disagreeing
+  - nothing reads it → delete it in the same commit as the merge. Git is the archive; a
+    stale second rules file is the thing that made the content invisible in the first place
 
-## Step 5 — Install enforcement
+  Never leave both files carrying live rules. That is the duplication this step exists to end.
 
-```bash
-scripts/olivercode sync-hooks     # writes .githooks/ + sets core.hooksPath in every fleet repo
-scripts/olivercode health         # confirms each repo's hooks are installed and current
-```
+## Step 5 — Register your fleet (the local layer)
 
-`sync-hooks` resolves your fleet from `local/repo-profiles.json` and expects those repos as
-siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below.
-
-Know what you just installed: **hook enforcement fails open.** If `core.hooksPath` is unset,
-points at a missing directory, or the hook is not executable, git runs no hooks and prints
-nothing — a commit carrying secrets simply succeeds. `scripts/olivercode health` is the only
-thing that detects this. Run it on a schedule, not just at setup.
-
-## Step 6 — Register your fleet (the local layer)
+Enforcement has to know which repos it governs before it can reach them, so registration
+comes first. (This guide had these two steps the other way round: `sync-hooks` reads the
+file `init` creates, so running it first found no fleet, skipped every repo, and still
+printed a success line.)
 
 ```bash
 scripts/olivercode init
@@ -192,8 +195,64 @@ and token policy. `local/` is gitignored, so real names and paths never reach th
 fork. Every loader tries `local/` first and falls back to the tracked example with a WARN —
 which is why a stranger's clone still works.
 
-Each profile needs a `token_policy` block with `ignore_globs` and `generated_artifact_dirs`,
-or Gate 8 fails the commit. `docs/TOKEN_POLICY.md` has the shape.
+`shared/repo-profiles.example.json` is the annotated schema: every field is documented in a
+`_<field>_note` key beside a worked example. `scripts/olivercode discover` emits a
+paste-ready profile per repo, including the `token_policy` block. Each profile needs that
+block, with `ignore_globs` and `generated_artifact_dirs`, or Gate 8 fails the commit —
+`docs/TOKEN_POLICY.md` has the shape.
+
+Confirm the fleet really registered before continuing:
+
+```bash
+scripts/olivercode health     # must list your repos by name, not "no fleet registered"
+```
+
+## Step 6 — Install enforcement
+
+```bash
+scripts/olivercode sync-hooks     # writes .githooks/ + sets core.hooksPath in every fleet repo
+scripts/olivercode health         # confirms each repo's hooks are installed and current
+```
+
+`sync-hooks` resolves your fleet from `local/repo-profiles.json` and expects those repos as
+siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below.
+Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern;
+read that list rather than the exit code.
+
+An adopted repo gets six gates, not the eight OliverCode runs on itself: contract integrity
+and token policy check framework-only things, so the template does not ship them. `docs/governance.md`
+has the coverage table.
+
+Know what you just installed: **hook enforcement fails open.** If `core.hooksPath` is unset,
+points at a missing directory, or the hook is not executable, git runs no hooks and prints
+nothing — a commit carrying secrets simply succeeds. `scripts/olivercode health` is the only
+thing that detects this. Run it on a schedule, not just at setup.
+
+## Step 6b — Stamp the project template into a repo (optional)
+
+Not part of the required path. `sync-hooks` already installs the gates, which is what
+governs a repo. `bootstrap` goes further and stamps the full project template — the
+quality baseline, structure contract, and supporting scripts declared in
+`shared/project-bootstrap-manifest.json` — so a repo matches the standard on day one.
+
+Use it for a **new** repo. For an existing one, look before you write:
+
+```bash
+scripts/olivercode bootstrap <repo> --dry-run    # prints NEW/OVERWRITE per file, writes nothing
+scripts/olivercode bootstrap <repo>
+```
+
+The manifest gives every file a mode, and the distinction is the whole safety story:
+
+- `presence` — created only if absent. Existing content is never touched, and the run
+  reports it as kept.
+- `strict` — **overwritten**, because its contract is byte-identity with the template.
+  The hooks and the shared baseline are strict. If you have hand-edited one of those in
+  the target repo, your version is replaced.
+
+`conditionalFiles` are listed, never copied: they depend on profile flags the repo may
+not set, so the decision stays yours. Always run `--dry-run` against an existing repo
+first and read the OVERWRITE lines — that list is exactly what you are agreeing to lose.
 
 ## Step 7 — Verify, with evidence
 
@@ -207,13 +266,19 @@ Then prove enforcement actually fires, rather than assuming it:
 
 ```bash
 cd <one of your repos>
-printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > /tmp/leak-probe.txt
-cp /tmp/leak-probe.txt ./leak-probe.txt && git add leak-probe.txt
+printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt
+git add leak-probe.txt
 git commit -m "probe"      # MUST be blocked by Gate 1
-git reset -q HEAD leak-probe.txt && rm -f leak-probe.txt
+
+# Clean up. `git rm --cached` also works in a repo with no commits yet, where
+# `git reset HEAD <path>` aborts with "fatal: Failed to resolve 'HEAD'".
+git rm -q --cached leak-probe.txt && rm -f leak-probe.txt
 ```
 
-If that commit succeeds, your hooks are not installed. Go back to Step 5.
+The probe file is written straight into the repo, not staged through `/tmp`: the gate scans
+what is staged, so the copy step proved nothing and only risked leaving a file behind.
+
+If that commit succeeds, your hooks are not installed. Go back to Step 6.
 
 ## Step 8 — Reconcile, do not amputate
 
