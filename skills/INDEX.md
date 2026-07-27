@@ -23,7 +23,6 @@
 | `behavior-preserving-module-extraction` | Refactoring patterns | Extracting a module from a monolith |
 | `validator-consolidation` | Merge validate scripts | Consolidating overlapping validators |
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
-| `vault-content-parsing` | Vault conventions | Parsing vault content, building vault tooling |
 | `olivercode-cli` | OliverCode CLI launcher | Modifying CLI, command routing, help surface |
 | `plan` | Markdown planning | Planning a task before executing |
 | `model-routing` | Model tier selection strategy (cheap vs capable) | Choosing which model tier handles a task |
