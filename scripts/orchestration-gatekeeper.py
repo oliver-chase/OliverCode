@@ -83,8 +83,7 @@ def get_task_policy(task_type: str, task_policies: dict) -> dict:
 def validate_evidence(evidence: dict, required_fields: list, repo_name: str, task_type: str) -> dict:
     """Returns {'pass': True} or {'pass': False, 'stage': ..., 'message': ...}.
 
-    Returns on the first failing field (same first-failure semantics as before — the old
-    version collected every failure into a list only to return failures[0])."""
+    Returns on the first failing field — the caller reports one exact failing stage."""
     def fail(stage, message):
         return {"pass": False, "stage": stage, "message": message}
 

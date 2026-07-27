@@ -21,7 +21,7 @@ Identify top-level structure: config files (package.json, Cargo.toml, setup.py),
 
 Look for:
 - `README.md` — project description
-- `AGENTS.md` or `CLAUDE.md` — agent instructions
+- `CLAUDE.md` — agent instructions (the only filename Claude Code auto-loads)
 - `ARCHITECTURE.md` — architecture doc
 - `CONTRIBUTING.md` — contribution rules
 - `package.json`, `Cargo.toml`, `go.mod`, `Gemfile` — language + dependencies
@@ -50,13 +50,13 @@ Produce a compact table:
 
 | Aspect | Finding |
 |--------|---------|
-| Language | Node.js v20 / Python 3.11 |
-| Entry | `scripts/bot.js` |
-| Tests | `tests/` — jest |
-| DB | Supabase (via REST) |
-| Config | `.env.local.example` |
-| Docs | `docs/bot-status.md`, `docs/bot-tests.md` |
-| Orchestration | `AGENTS.md` exists |
+| Language | `<runtime + version>` |
+| Entry | `<main entry point path>` |
+| Tests | `<test dir>` — `<runner>` |
+| Data | `<store + access method>` |
+| Config | `<env example path>` |
+| Docs | `<the docs that actually describe current state>` |
+| Agent rules | `CLAUDE.md` present / absent |
 
 ## Pitfalls
 
@@ -64,7 +64,3 @@ Produce a compact table:
 - **Don't modify anything** during discovery. Read-only pass.
 - **If `find` returns nothing**, adjust paths. Not all repos use `src/`.
 - **If no README**, check for any `.md` file at root.
-
----
-
-> Authored 2026-06-12.

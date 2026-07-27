@@ -67,9 +67,6 @@ Standalone mode provides:
 
 ## Runtime Mode
 
-When the full runtime environment is installed (`runtime/control-plane/`), it extends OliverCode by providing:
-- The full runtime launcher with gateway, skills, providers, and update commands
-- Validation and governance automation scripts
-- Runtime state, handoff, and telemetry management
+When the local control plane is installed (`runtime/control-plane/`, gitignored), it adds per-machine state on top of OliverCode: the dependency declaration `health` reads, session/handoff state, and a bash shim at `runtime/control-plane/olivercode` that delegates to `scripts/olivercode` and carries no additional commands (`docs/OLIVERCODE_LAUNCHER.md`).
 
-The runtime environment reads contracts, templates, personas, skills, and workflow definitions from OliverCode. It does not maintain its own copies of these framework artifacts.
+The control plane reads contracts, templates, personas, skills, and workflow definitions from OliverCode. It does not maintain its own copies of these framework artifacts, and OliverCode stays fully usable without it.

@@ -4,8 +4,7 @@
 The Python CLI behind `olivercode <command>` (see docs/OLIVERCODE_LAUNCHER.md).
 Self-locating from __file__: every path derives from this file's location, so there
 are no hardcoded vault/home/container paths and it runs identically from cron, a
-container, or any working directory. OliverCode does not depend on Hermes — this
-launcher invokes no Hermes/docker infrastructure.
+container, or any working directory.
 """
 from __future__ import annotations
 

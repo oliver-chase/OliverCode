@@ -35,6 +35,15 @@ Use this before and after implementation work unless the user explicitly asks fo
 - Verify: no active or duplicate scope remains in planning docs.
 - Verify: cross-project consistency maintained (project-specific docs and `/projects/*` policy docs are aligned).
 
-## Canonical references
+## Working the backlog
 
-- Primary backlog workflow: `core/workflows/backlog-workflow.md`
+Process items one at a time from the canonical backlog source declared in the repo's
+`docs/repo-structure-contract.md`. For each item:
+
+- Read it fully and restate the ask.
+- Check current code, tests, docs, and architecture against that ask.
+- If current state conflicts with the ask, pause and show the exact differences; wait for
+  approval before overwriting, updating, or skipping.
+- Rewrite the story if needed, with accurate acceptance criteria.
+- Add any prerequisite and follow-on stories the item implies.
+- Update the backlog and confirm the exact changes made.

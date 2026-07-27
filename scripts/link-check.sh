@@ -16,8 +16,6 @@
 set -euo pipefail
 
 # Script lives at <repo>/scripts/link-check.sh, so the repo root is one level up.
-# (Was ../.. — correct only when this lived at scripts/doc-enforcement/; after the move
-# it pointed a level too high, so docs/ was never found and the check was a silent no-op.)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -65,8 +63,8 @@ while IFS= read -r -d '' file; do
       broken=$((broken + 1))
     fi
     checked=$((checked + 1))
-  # Extract [text](path.md) links portably (BSD grep has no -P; the old grep -oP was a
-  # silent no-op on stock macOS grep, so the checker always "passed").
+  # Extract [text](path.md) links portably. BSD grep has no -P, and `grep -oP`
+  # fails silently on stock macOS grep — use -oE plus sed, never -P.
   done < <(grep -oE '\]\([^)]*\.md\)' "$file" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//' || true)
 done < <(find "${SCAN_ROOTS[@]}" -name "*.md" -not -path "*/archive/*" -print0)
 

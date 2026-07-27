@@ -11,15 +11,15 @@ Workflow routing and standards.
 
 ## Trigger Routing
 
-Use these trigger terms as workflow selectors:
+Use these trigger terms as workflow selectors. This list is the one home; `core/workflows/README.md` points here.
 
-- `backlog` -> `core/workflows/backlog-workflow.md`
-- `story lifecycle` -> `core/workflows/story-lifecycle-sop.md`
-- `testing` -> `core/workflows/testing-rules.md`
-- `qa` -> `core/workflows/qa-process.md`
-- `full qa` -> `core/workflows/full-qa-audit.md`
+- `backlog`, `story lifecycle` -> `core/workflows/story-lifecycle-sop.md`
 - `OliverCode sync` -> `core/workflows/olivercode-sync.md`
 - `project standardization` -> `core/workflows/project-standardization-lifecycle.md`
+- `qa`, `full qa` -> `scripts/qa/full-qa-pass.sh` (deterministic checkers), then the
+  `functionality-audit` skill for whether the product actually works end to end
+- `testing` -> the `tdd` skill
+- `review` -> the `deep-review` skill (before closing a multi-commit session)
 
 If a trigger term conflicts with active repo docs, surface the conflict before continuing.
 
@@ -29,7 +29,7 @@ All product repos live under `<vault-root>/Oliver/Project Repos/`.
 
 ## Orchestration Rules
 
-- Keep `.claude`, `.codex`, and `.agents` runtime state separate.
+- Claude Code runtime state (`~/.claude`) is operational data, not framework source.
 - Keep shared standards in one place (`<vault-root>/Oliver/Project Repos/OliverCode/shared/*`).
 - Keep shared skills in one place (`<vault-root>/Oliver/Project Repos/OliverCode/skills/*`).
 - Do not duplicate product workflow docs into runtime folders.
@@ -38,7 +38,16 @@ All product repos live under `<vault-root>/Oliver/Project Repos/`.
 
 ## Testing Baseline
 
-Testing applies to all code work. Follow `core/workflows/testing-rules.md`.
+Testing applies to all code work:
+
+- Add or update tests for every behavior change; treat a stale or missing impacted test
+  update as a failure, not a follow-up.
+- Check downstream and adjacent tests for impact and update all of them.
+- Strengthen weak coverage around changed paths, edge cases, and regressions.
+- Implementation is not complete without test alignment, and a test-suite-only change still
+  needs its own QA pass.
+
+Method for building features test-first: the `tdd` skill.
 
 ## Branch Lifecycle Standard (All Projects)
 

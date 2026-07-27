@@ -94,5 +94,5 @@ hardcode per-repo paths here — the per-repo contract is the source of truth.
 
 1. Run the repo's structure gate (`npm run check:structure` or `npm run check-stories`, depending on profile).
 2. `npm run qa:hygiene` in each repo.
-3. No automated cross-repo structure-drift checker ships in this repo (`scripts/check-project-structure.sh` does not exist). Audit manually against `shared/project-structure-rules.json` and the managed-file list in `shared/project-bootstrap-manifest.json` until one is implemented.
+3. Cross-repo structure drift is audited manually against `shared/project-structure-rules.json` and the managed-file list in `shared/project-bootstrap-manifest.json`.
 4. Contract drift in `docs/repo-structure-contract.md` is a blocker.

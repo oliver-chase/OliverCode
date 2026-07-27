@@ -124,7 +124,3 @@ This skill covers doc-vs-code truth and doc consolidation only. It deliberately 
 - A findings table: file, claim, verified fact, fix applied.
 - An explicit "needs owner review" section for anything ambiguous/business-judgment (see Phase 7) — never silently resolved.
 - If a complementary skill (above) was invoked as part of this audit, name it and summarize what it found separately from the doc findings.
-
----
-
-> Authored 2026-07-01 from a live doc-consolidation session on a production project.

@@ -66,7 +66,3 @@ Only after all runners are updated. Verify no `grep -rn "validate-email.js"` fin
 - **Don't change exit codes.** If validate-email exits 1 on invalid, the consolidated version must too.
 - **Don't consolidate test validators with production validators.** They serve different purposes.
 - **Update docs last.** After all code changes, update any docs that list individual validators.
-
----
-
-> Authored 2026-06-12.

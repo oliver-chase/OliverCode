@@ -61,12 +61,10 @@ if [ -d "docs" ] || [ -f "README.md" ]; then
     # Strip inline code spans first — e.g. wrangler.toml's `[[crons]]` is TOML
     # array-of-tables syntax, not a wiki link.
     done < <(sed 's/`[^`]*`//g' "$md_file" 2>/dev/null | grep -o '\[\[[^]]*\]\]' || true)
-  # runtime/ is gitignored per-machine state (Obsidian vault templates whose
-  # wiki-links resolve in the vault, not this repo) and .claude/ is vendored —
-  # neither is framework documentation, so neither belongs in this check.
-  done < <(find . -name '*.md' -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path './runtime/*' -not -path './.claude/*' -not -path './prompts/*' -not -path './.claude-optimization/*' 2>/dev/null)
-  # (prompts/ files are session-prompt templates; their wiki-links
-  # resolve against the vault, not this repo.)
+  # runtime/ and .claude-optimization/ hold gitignored per-machine state whose
+  # wiki-links resolve against the vault, not this repo — not framework docs,
+  # so they don't belong in this check.
+  done < <(find . -name '*.md' -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path './runtime/*' -not -path './.claude-optimization/*' 2>/dev/null)
   TOTAL_ISSUES=$((TOTAL_ISSUES + BROKEN))
   if [ "$BROKEN" -eq 0 ]; then
     echo "  No broken wiki-links found."

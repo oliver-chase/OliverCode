@@ -51,9 +51,6 @@ bash <vault-root>/Oliver/Project Repos/OliverCode/scripts/validate.sh
 bash <vault-root>/Oliver/Project Repos/OliverCode/scripts/link-check.sh
 ```
 
-(`scripts/check-doc-config-impact.sh` does not exist in this repo — use the
-gates above until an impact checker is implemented.)
-
 6. Commit only sync-scope files.
 - Do not stage unrelated runtime churn.
 - Use a docs/process commit message.

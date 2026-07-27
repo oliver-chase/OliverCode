@@ -65,7 +65,3 @@ grep -rn "old/path"  # any stale references left?
 - **Don't change the public API surface** during a structural move. Internal module paths change, but entry points (main script, CLI) should stay the same.
 - **Update the structural validator last**, after all moves are done and tests pass.
 - **Commit structural changes separately from functional changes.** A PR that moves 20 files AND adds a feature is impossible to review.
-
----
-
-> Authored 2026-06-12.

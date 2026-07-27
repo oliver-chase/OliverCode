@@ -1,20 +1,18 @@
 # Workflow Procedures
 
-Canonical workflow procedure index.
+Repeatable procedures that span repos. Trigger routing (which term selects which procedure,
+including the terms that route to a skill or a script instead of a file here) lives in
+`shared/workflow-standards.md` — one home, not restated per file.
 
-- `backlog` -> `backlog-workflow.md`
-- `story lifecycle` -> `story-lifecycle-sop.md`
-- `testing` -> `testing-rules.md`
-- `qa` -> `qa-process.md`
-- `full qa` -> `full-qa-audit.md`
-- `OliverCode sync` -> `olivercode-sync.md`
-- `project standardization` -> `project-standardization-lifecycle.md`
+Procedures in this directory:
+
+- `story-lifecycle-sop.md` — intake gate, execution/completion gate, pre-push readiness, and
+  how to work the backlog item by item
+- `olivercode-sync.md` — reconciling OliverCode's own metadata and docs against live state
+- `project-standardization-lifecycle.md` — bootstrap, sync, drift audit, and promotion for
+  managed repos
 
 System-level references:
-- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/SHARED_ORCHESTRATION.md`
-- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/AGENT_SYSTEM_MANIFEST.json`
-- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_HYGIENE_STANDARD.md`
-- `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
-
-Hygiene policy updates that affect project templates are tracked by:
-- `<vault-root>/Oliver/Project Repos/OliverCode/shared/workflow-standards.md`
+- `core/contracts/SHARED_ORCHESTRATION.md`
+- `core/contracts/PROJECT_HYGIENE_STANDARD.md`
+- `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
