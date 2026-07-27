@@ -13,6 +13,6 @@ Procedures in this directory:
   managed repos
 
 System-level references:
-- `core/contracts/SHARED_ORCHESTRATION.md`
+- `core/contracts/AGENT_SHARED_STRUCTURE.md`
 - `core/contracts/PROJECT_HYGIENE_STANDARD.md`
 - `core/contracts/PROJECT_STRUCTURE_STANDARD.md`

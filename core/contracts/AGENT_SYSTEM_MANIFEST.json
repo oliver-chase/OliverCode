@@ -2,7 +2,6 @@
   "version": 1,
   "shared_contract": {
     "structure": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/AGENT_SHARED_STRUCTURE.md",
-    "orchestration": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/SHARED_ORCHESTRATION.md",
     "project_hygiene": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_HYGIENE_STANDARD.md"
   },
   "runtime_entries": {
@@ -25,6 +24,6 @@
   "product_roots": [
     "$PROJECT_ROOT"
   ],
-  "_product_roots_note": "Placeholder. Real per-machine product roots live in local/AGENT_SYSTEM_MANIFEST.json (gitignored) — see docs/BACKLOG.md G1.",
+  "_product_roots_note": "Placeholder. Real per-machine product roots live in local/AGENT_SYSTEM_MANIFEST.json (gitignored) \u2014 see docs/BACKLOG.md G1.",
   "system_root": "<vault-root>/Oliver/Project Repos/OliverCode"
 }

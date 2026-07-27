@@ -4,8 +4,8 @@ Workflow routing and standards.
 
 ## Authoritative References
 
-- Shared orchestration core: `core/contracts/SHARED_ORCHESTRATION.md`
-- Shared manifest: `core/contracts/AGENT_SYSTEM_MANIFEST.json`
+- Shared structure contract and canonical path map: `core/contracts/AGENT_SHARED_STRUCTURE.md`
+- Shared manifest (machine-readable mirror): `core/contracts/AGENT_SYSTEM_MANIFEST.json`
 - Project hygiene baseline: `core/contracts/PROJECT_HYGIENE_STANDARD.md`
 - Project structure baseline: `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 
@@ -59,7 +59,6 @@ Method for building features test-first: the `tdd` skill.
 
 ## Cross-Repo Quality Baseline
 
-- Canonical managed quality files live in `core/templates/project`.
-- Sync all mapped repos: sync templates from `core/templates/project/` via the project bootstrap manifest.
-- Audit strict-file drift: pre-commit gates check for file structure violations in staged files.
-- Policy: a managed-file change in one repo is invalid unless the canonical template is updated and re-synced to all repos.
+One home: `QUALITY_BASELINE.md` (what the managed files are and the change-canonical-first
+rule) and `core/workflows/project-standardization-lifecycle.md` (how sync and drift audit
+actually run).
