@@ -1,17 +1,21 @@
 #!/bin/bash
-# scripts/link-check.sh — Internal link integrity checker
+# scripts/link-check.sh — Internal reference integrity checker
 #
-# Scans all markdown files in docs/ for internal links (links to other .md
-# files within the repo) and verifies the target file exists at the resolved
-# path. Exits nonzero if any broken internal links are found.
+# Two passes over the same failure class (a reference naming a path that isn't there):
+#   1. Inline markdown links — [text](path.md) — resolved relative to the source file.
+#   2. Backtick-quoted repo paths (a token whose first segment is a tracked top-level
+#      directory), resolved from the repo root. This is where the references actually
+#      are: pass 1 sees ~9 links,
+#      pass 2 sees hundreds. Exemptions (downstream-relative contract paths, gitignored
+#      local layers, placeholders, template files) live in scripts/lib/reference_check.py.
 #
 # Usage:
 #   bash scripts/link-check.sh          # full check
 #   bash scripts/link-check.sh --quiet  # summary only
 #
 # Exit codes:
-#   0 = all internal links valid
-#   1 = one or more broken links found
+#   0 = all internal references valid
+#   1 = one or more broken references found
 
 set -euo pipefail
 
@@ -68,17 +72,38 @@ while IFS= read -r -d '' file; do
   done < <(grep -oE '\]\([^)]*\.md\)' "$file" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//' || true)
 done < <(find "${SCAN_ROOTS[@]}" -name "*.md" -not -path "*/archive/*" -print0)
 
+# ─── Pass 2: backtick-quoted repo paths ──────────────────────────────────────
+ref_out="$(python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '$SCRIPT_DIR')
+from lib.reference_check import check_references
+checked, failures = check_references(Path('$REPO_ROOT'))
+print(checked)
+for f in failures:
+    print(f)
+")"
+ref_checked="$(printf '%s\n' "$ref_out" | head -1)"
+ref_failures="$(printf '%s\n' "$ref_out" | tail -n +2)"
+ref_broken=0
+if [ -n "$ref_failures" ]; then
+  printf '%s\n' "$ref_failures"
+  ref_broken=$(printf '%s\n' "$ref_failures" | grep -c 'BROKEN REF' || true)
+fi
+broken=$((broken + ref_broken))
+
 $QUIET || echo ""
 $QUIET || echo "--- Summary ---"
-$QUIET || echo "  Internal links checked: $checked"
+$QUIET || echo "  Markdown links checked:   $checked"
+$QUIET || echo "  Backtick refs checked:    $ref_checked"
 $QUIET || echo "  Broken: $broken"
 
 if [ "$broken" -gt 0 ]; then
   echo ""
-  echo "FAIL: $broken broken internal link(s) found"
+  echo "FAIL: $broken broken internal reference(s) found"
   exit 1
 fi
 
 $QUIET || echo ""
-$QUIET || echo "OK: all internal links valid"
+$QUIET || echo "OK: all internal references valid"
 exit 0
