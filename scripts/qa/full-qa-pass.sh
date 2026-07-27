@@ -69,8 +69,16 @@ if [ "$VERBOSE" = true ]; then
 else
   run_phase "Phase 1: Code Quality" "check-code-quality.sh"
 fi
+PHASES=3
 run_phase "Phase 2: Documentation Cohesion" "check-docs-cohesion.sh"
 run_phase "Phase 3: Bloat & Legacy" "check-bloat.sh"
+# Phase 4 only applies to OliverCode itself (it asserts THIS repo is forkable), and
+# it must never live inside validate.sh -- the check runs validate.sh in its sandbox,
+# so calling it from there would recurse without end.
+if [ -f "$REPO_ROOT/scripts/qa/check-fork-usable.sh" ] && [ "$TARGET_DIR" = "$REPO_ROOT" ]; then
+  run_phase "Phase 4: Fork Usability" "check-fork-usable.sh"
+  PHASES=4
+fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────
 END_TIME=$(date +%s)
@@ -80,7 +88,7 @@ echo "╔═══════════════════════�
 echo "║         SUMMARY                                         ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo "Duration: ${DURATION}s"
-echo "Phases with issues: $TOTAL_ISSUES / 3 (critical: $CRITICAL_ISSUES)"
+echo "Phases with issues: $TOTAL_ISSUES / $PHASES (critical: $CRITICAL_ISSUES)"
 echo ""
 
 if [ "$CRITICAL_ISSUES" -gt 0 ]; then

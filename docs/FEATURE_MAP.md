@@ -19,7 +19,7 @@ each. If a capability exists and is not listed here, this map is wrong.
 | Doc/code consistency (skills index parity, gate-count claims) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
-| Public CI | `.github/workflows/framework-ci.yml` | Runs health + validate.sh + `check-bloat.sh --strict` as gating steps, full-qa-pass advisory — **only where the workflow is enabled**. Enable it in your fork; it is currently disabled on the origin repo, so `bash scripts/validate.sh` locally is the real gate here |
+| Public CI | `.github/workflows/framework-ci.yml` | Ships health + validate.sh + `check-bloat.sh --strict` + fork-usability as gating steps. **Deliberately paused on the origin repo** while GitHub Actions billing is blocked — see `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`, the canonical record. Enable it in your own fork. |
 
 ## Runtime and Launcher
 
@@ -42,7 +42,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
 | `scripts/qa/check-fork-usable.sh` | Proves a stranger's clone works with no config, in a sandbox with a virgin HOME |
-| `scripts/qa/full-qa-pass.sh` | Runs the three QA checkers: code quality, docs cohesion, bloat |
+| `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
 | `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |
 | `scripts/run-governance-target.sh` | CI entrypoint that points the QA stack at a downstream repo |
 
