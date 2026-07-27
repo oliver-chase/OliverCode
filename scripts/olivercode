@@ -22,6 +22,7 @@ from lib.repo_profiles import load_repo_profiles  # noqa: E402
 OC_ROOT = Path(__file__).resolve().parent.parent
 
 COMMANDS = [
+    ("olivercode init", "Create local/ fleet config from the tracked examples (never overwrites)"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull the latest OliverCode updates from GitHub, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
@@ -127,6 +128,56 @@ def command_skills(argv: list[str]) -> int:
     return 0
 
 
+# local/ overlay files, each seeded from a tracked placeholder. Adding a pair here is
+# all it takes to make a new registry part of `init`.
+LOCAL_SEEDS = (
+    ("shared/repo-profiles.example.json", "local/repo-profiles.json"),
+    ("shared/repo-map.json", "local/repo-map.json"),
+    ("shared/project-structure-rules.json", "local/project-structure-rules.json"),
+)
+
+
+def command_init(oc_root: Path) -> int:
+    """Seed the gitignored local/ overlay from the tracked example registries.
+
+    Non-destructive and idempotent by contract: an existing local/ file is never
+    overwritten, because it holds the operator's real fleet and this command is the
+    one a confused user is most likely to re-run.
+    """
+    print("OliverCode init — seeding local/ from tracked examples")
+    print("=" * 40)
+    created, kept, missing = [], [], []
+
+    for src_rel, dst_rel in LOCAL_SEEDS:
+        src, dst = oc_root / src_rel, oc_root / dst_rel
+        if not src.exists():
+            missing.append(src_rel)
+            continue
+        if dst.exists():
+            kept.append(dst_rel)
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(src.read_bytes())
+        created.append(dst_rel)
+
+    for rel in created:
+        print(f"  [NEW]  {rel}")
+    for rel in kept:
+        print(f"  [KEPT] {rel} — already exists, left untouched")
+    for rel in missing:
+        print(f"  [FAIL] {rel} — example missing from this checkout")
+
+    print()
+    if created:
+        print("Next: edit the files above with your real repo names, validation commands,")
+        print("and token policy, then run `olivercode sync-hooks` to install enforcement.")
+        print("local/ is gitignored — real names never reach the tracked fork.")
+    elif not missing:
+        print("Nothing to do: local/ is already seeded.")
+    print("See docs/ADOPTING.md for the full onboarding path.")
+    return 1 if missing else 0
+
+
 class _HealthTally:
     """Accumulates health-check results. WARN counts as passed on purpose:
     a standalone clone missing local-only context (control plane, vault) must
@@ -153,7 +204,7 @@ class _HealthTally:
         self.failed += failed
 
 
-def command_health() -> int:
+def command_health(fleet_root: Path | None = None) -> int:
     """Run health checks: dependency doc, core entrypoints, placement drift."""
     print("OliverCode Health Check")
     print("=" * 40)
@@ -204,7 +255,7 @@ def command_health() -> int:
     # Everything here reads OUTSIDE OC_ROOT (the vault, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no surrounding vault is still a valid, healthy checkout.
-    t.add(*_check_placement_drift(OC_ROOT))
+    t.add(*_check_placement_drift(OC_ROOT, fleet_root))
 
     # Summary
     total = t.passed + t.failed
@@ -259,7 +310,7 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
     return problems
 
 
-def _check_placement_drift(oc_root: Path) -> tuple[int, int]:
+def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int]:
     print("\nPlacement drift (skills-placement.md):")
     passed = 0
     failed = 0
@@ -330,7 +381,7 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int]:
         passed += 1
     else:
         for name in fleet_names:
-            repo_path = oc_root.parent / name
+            repo_path = (fleet_root or oc_root.parent) / name
             if not (repo_path / ".git").exists():
                 print(f"  [WARN] {name}: not present on this machine — skipping")
                 passed += 1
@@ -405,9 +456,15 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
     subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
 
 
-def command_sync_hooks(oc_root: Path) -> int:
-    """SYS-3: converge hooks + core.hooksPath across every fleet repo and the vault."""
+def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
+    """SYS-3: converge hooks + core.hooksPath across every fleet repo and the vault.
+
+    fleet_root defaults to OliverCode's parent (the sibling-repos layout). A fork whose
+    repos live elsewhere passes --root; without that, every repo would silently SKIP as
+    "not present on this machine" and the command would still report success.
+    """
     templates_dir = oc_root / "core" / "templates" / "project"
+    fleet_root = fleet_root or oc_root.parent
     vault_root = oc_root.parent.parent.parent
     updated = 0
     skipped = 0
@@ -416,7 +473,7 @@ def command_sync_hooks(oc_root: Path) -> int:
     for name in profiles:
         if name == "olivercode":
             continue
-        repo_path = oc_root.parent / name
+        repo_path = fleet_root / name
         if not (repo_path / ".git").exists():
             print(f"  [SKIP] {name}: not present on this machine")
             skipped += 1
@@ -446,20 +503,58 @@ def command_update() -> int:
     return command_sync_hooks(OC_ROOT)
 
 
+def _take_root_flag(argv: list[str]) -> tuple[Path | None, list[str]]:
+    """Pull `--root <dir>` out of argv. Returns (root or None, remaining args)."""
+    if "--root" not in argv:
+        return None, argv
+    idx = argv.index("--root")
+    if idx + 1 >= len(argv):
+        print("Error: --root requires a directory.")
+        sys.exit(1)
+    root = Path(argv[idx + 1]).expanduser()
+    if not root.is_dir():
+        print(f"Error: --root {root} is not a directory.")
+        sys.exit(1)
+    return root, argv[:idx] + argv[idx + 2:]
+
+
+def _reject_extra(cmd: str, rest: list[str]) -> None:
+    """Unknown arguments must fail loudly.
+
+    Silently ignoring them is worse than rejecting them: `sync-hooks --root /somewhere`
+    used to ignore the flag, sync the DEFAULT fleet, and print "6 targets synced" -- so a
+    fork with a different layout got a success message for work done on the wrong repos.
+    """
+    if rest:
+        print(f"Error: unexpected argument(s) for '{cmd}': {' '.join(rest)}")
+        print_usage()
+        sys.exit(1)
+
+
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] in {"--help", "-h", "help"}:
         print_usage()
         return 0
 
     cmd = sys.argv[1]
+    argv = sys.argv[2:]
+
+    if cmd == "init":
+        _reject_extra(cmd, argv)
+        return command_init(OC_ROOT)
     if cmd == "health":
-        return command_health()
+        root, rest = _take_root_flag(argv)
+        _reject_extra(cmd, rest)
+        return command_health(root)
     if cmd == "update":
+        _reject_extra(cmd, argv)
         return command_update()
     if cmd == "sync-hooks":
-        return command_sync_hooks(OC_ROOT)
+        root, rest = _take_root_flag(argv)
+        _reject_extra(cmd, rest)
+        return command_sync_hooks(OC_ROOT, root)
     if cmd == "skills":
-        return command_skills(sys.argv[2:])
+        return command_skills(argv)
 
     print(f"Error: '{cmd}' is not a valid command.")
     print_usage()
