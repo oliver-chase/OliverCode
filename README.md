@@ -64,7 +64,13 @@ scripts/olivercode health      # confirms every symlink and hook resolves
 to `CLAUDE.md.pre-olivercode` and the path is printed, because that file is usually your whole
 accumulated ruleset. `init` never overwrites an existing `local/` file. Both are safe to re-run.
 
-**Adopting this across your own repos:** `docs/ADOPTING.md` is the full onboarding path —
+**Don't want to read the docs?** Open this repo in Claude Code and say *"set up OliverCode
+for my machine"*. The `olivercode-adoption` skill ships as a project-level skill, so it is
+available the moment you clone — before anything is installed — and it drives the whole
+process: it discovers what you already have, asks you the handful of decisions only you can
+make, and does the rest.
+
+**Or do it yourself:** `docs/ADOPTING.md` is the full onboarding path —
 inventory, classify, merge your existing rules in, install enforcement, then prove the gates
 actually block. The `olivercode-adoption` skill runs it as a guided, non-destructive audit.
 
