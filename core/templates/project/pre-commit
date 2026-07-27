@@ -144,14 +144,18 @@ if [ ${#DELETED_REPO_PATTERNS[@]} -eq 0 ]; then
   echo "  Gate 4 skipped: no deleted-repo patterns configured (see DELETED_REPO_PATTERNS above)."
 else
   # `while read` not `for` -- unquoted $STAGED_FILES word-splits on filenames with spaces.
-  while IFS= read -r file; do
-    for bad_path in "${DELETED_REPO_PATTERNS[@]}"; do
-      if grep -n "$bad_path" "$file" 2>/dev/null; then
-        echo "  BLOCKED: $file references deleted path: $bad_path"
-        exit 1
-      fi
-    done
-  done <<< "$STAGED_FILES"
+  # The emptiness guard matches Gates 1 and 3: a bare here-string on an empty list
+  # still runs one iteration with an empty filename.
+  if [ -n "$STAGED_FILES" ]; then
+    while IFS= read -r file; do
+      for bad_path in "${DELETED_REPO_PATTERNS[@]}"; do
+        if grep -n "$bad_path" "$file" 2>/dev/null; then
+          echo "  BLOCKED: $file references deleted path: $bad_path"
+          exit 1
+        fi
+      done
+    done <<< "$STAGED_FILES"
+  fi
   echo "  Gate 4 passed."
 fi
 

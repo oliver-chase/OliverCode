@@ -17,7 +17,9 @@ each. If a capability exists and is not listed here, this map is wrong.
 | Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
 | Skill placement | `docs/skills-placement.md` | `scripts/olivercode health` (symlink + drift check) |
 | Doc/code consistency (skills index parity, gate-count claims, hook gate integrity) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
-| Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
+| Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/hook_drift_check.py` | Compares gate bodies across the three hooks; an undeclared difference fails, a deliberate one is declared with a reason |
+| `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
+| Hook drift (the three pre-commit hooks implementing the same gate differently) | `scripts/lib/hook_drift_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
 | Public CI | `.github/workflows/framework-ci.yml` | Ships health + validate.sh + `check-bloat.sh --strict` + fork-usability as gating steps. **Deliberately paused on the origin repo** while GitHub Actions billing is blocked — see `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`, the canonical record. Enable it in your own fork. |
