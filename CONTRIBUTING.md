@@ -5,9 +5,16 @@ This file is the contribution entry point for OliverCode framework changes.
 ## Locked Framework Rule
 
 OliverCode is the baseline framework for all downstream project repos. Every change must
-keep the framework small, current, and reusable — every tracked file must justify itself
-as run/verify/ship/support, per `core/contracts/FRAMEWORK_BASELINE.md` "Purpose". If it
-doesn't, delete it, merge it, or move it out of core.
+keep the framework small, current, and reusable. Every tracked file must justify itself as
+exactly one of:
+
+- **run** — launcher and orchestration entrypoints (`scripts/olivercode`)
+- **verify** — gates that prove the framework works (`scripts/validate.sh`, `.githooks/`, `tests/`)
+- **ship** — contracts and templates downstream repos inherit (`core/`, `shared/`)
+- **support** — current-state docs explaining the active surface (`docs/`, root docs)
+
+If a file does none of those, delete it, merge it, or move it to the repo that owns it.
+`core/contracts/FRAMEWORK_BASELINE.md` "Purpose" is the contract; this is where you apply it.
 
 ## Mandatory Rules
 
