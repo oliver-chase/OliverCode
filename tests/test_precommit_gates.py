@@ -135,16 +135,20 @@ class TestGate3PII(GateHarness):
 
 
 class TestGate6ContractIntegrity(GateHarness):
-    def test_management_path_blocks(self):
-        self.stage("tool.sh", "cp x _Management/y\n")
-        self.assertBlocked("gate 6")
+    """Guards the container-path class. A `_Management/` pattern was removed after it
+    was found to have zero hits across all six repos and no trace in git history."""
 
     def test_workspace_path_blocks(self):
         self.stage("tool.sh", "cd /workspace/project\n")
         self.assertBlocked("gate 6")
 
     def test_markdown_is_exempt(self):
-        self.stage("doc.md", "Never reference _Management/ or /workspace/ in code.\n")
+        self.stage("doc.md", "Never hardcode /workspace/ in code.\n")
+        self.assertAllowed()
+
+    def test_tests_dir_is_exempt(self):
+        """A test proving the gate blocks a path must be able to contain that path."""
+        self.stage("tests/t.py", 'p = "/workspace/x"\n')
         self.assertAllowed()
 
 
