@@ -138,6 +138,43 @@
       "source": "core/templates/project/scripts/run-profile-checks.sh",
       "target": "scripts/run-profile-checks.sh",
       "mode": "presence"
+    },
+    {
+      "source": "core/templates/project/docs/BACKLOG-live-tracker.md",
+      "target": "docs/BACKLOG-live-tracker.md",
+      "mode": "presence"
+    },
+    {
+      "source": "core/templates/project/.github/workflows/olivercode-governance.yml",
+      "target": ".github/workflows/olivercode-governance.yml",
+      "mode": "presence"
+    }
+  ],
+  "_conditional_files_note": "Synced only into repos whose profile enables the matching keepalive block in repo-profiles (see docs/KEEPALIVE_STANDARD.md). Unconditional presence would force a Supabase keepalive script into repos with no database.",
+  "conditionalFiles": [
+    {
+      "source": "core/templates/project/supabase/keepalive.sql",
+      "target": "supabase/keepalive.sql",
+      "mode": "presence",
+      "condition": "keepalive.supabase.enabled"
+    },
+    {
+      "source": "core/templates/project/scripts/oc-supabase-keepalive.sh",
+      "target": "scripts/oc-supabase-keepalive.sh",
+      "mode": "presence",
+      "condition": "keepalive.supabase.enabled && no Cloudflare deployment"
+    },
+    {
+      "source": "core/templates/project/scripts/supabase-keepalive.js",
+      "target": "functions/api/admin/keepalive.js",
+      "mode": "presence",
+      "condition": "keepalive.supabase.enabled && Cloudflare Pages deployment"
+    },
+    {
+      "source": "core/templates/project/scripts/cf-worker-keepalive.js",
+      "target": "reference only -- paste the route into the worker's own fetch handler",
+      "mode": "presence",
+      "condition": "keepalive.cloudflare.enabled"
     }
   ]
 }

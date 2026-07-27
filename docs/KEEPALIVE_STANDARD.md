@@ -1,5 +1,17 @@
 # Supabase & Cloudflare Keepalive Standard
 
+Indexed in `docs/FEATURE_MAP.md`. The four template files this standard installs ship from
+`core/templates/project/` via the `conditionalFiles` block of
+`shared/project-bootstrap-manifest.json` — synced only into repos whose `keepalive` profile
+block enables them, since a repo with no database has no use for a Supabase keepalive script:
+
+| Template | Installed as | When |
+|---|---|---|
+| `core/templates/project/supabase/keepalive.sql` | `supabase/keepalive.sql` | `keepalive.supabase.enabled` |
+| `core/templates/project/scripts/supabase-keepalive.js` | `functions/api/admin/keepalive.js` | Supabase keepalive on Cloudflare Pages |
+| `core/templates/project/scripts/oc-supabase-keepalive.sh` | `scripts/oc-supabase-keepalive.sh` | Supabase keepalive with no Cloudflare deployment |
+| `core/templates/project/scripts/cf-worker-keepalive.js` | reference only — paste the route into the worker's own `fetch` handler | `keepalive.cloudflare.enabled` |
+
 ## Problem
 
 Serverless Postgres providers (Neon, Supabase) and free-tier Cloudflare resources

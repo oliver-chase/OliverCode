@@ -84,38 +84,15 @@ completion claim passes. Add fixture-driven tests: for each gate, one staged inp
 block and one that must pass; for `validate_evidence()`, one case per required-evidence field
 covering both the missing and the malformed shape.
 
-### A6 — Decide the fate of the keepalive surface (MEDIUM, needs owner call)
+### A7 — model-routing remains a declared scope exception (LOW)
 
-`docs/KEEPALIVE_STANDARD.md` plus four template files (`scripts/oc-supabase-keepalive.sh`,
-`scripts/supabase-keepalive.js`, `scripts/cf-worker-keepalive.js`, `supabase/keepalive.sql`)
-describe Supabase/Cloudflare hibernation ops. The doc has zero inbound references and none of
-the four files is listed in `shared/project-bootstrap-manifest.json`, so nothing syncs them.
-Against `README.md`'s declared scope (security, token optimization, development practice,
-folder structure) this is product infrastructure. But `repo-profiles` carries a live
-`keepalive` block per repo, so the capability is real and in use. Either bring it fully into
-scope (manifest the four files, reference the doc from `FEATURE_MAP.md`) or move the whole
-surface to the repos that actually deploy. Do not leave it half-tracked.
-
-### A7 — Decide the fate of two out-of-scope skills (MEDIUM, needs owner call)
-
-Both need a `~/.claude/skills/<name>` symlink teardown in the same session as any removal,
-or `olivercode health` reports broken links.
-- `skills/model-routing/` — built on `LLM_PROVIDER_ORDER` and cheapest-vs-capable provider
-  tiers. `CONTRIBUTING.md` mandatory rule 1 says Anthropic is the sole model provider and
-  forbids reintroducing multi-provider framing without an implementation behind it. There is
-  no implementation.
-- `skills/vault-content-parsing/` — Obsidian vault note parsing.
-  `docs/skills-placement.md` scopes `skills/` to engineering method and the framework's own
-  tooling, "nothing else"; the same rule already moved `frontend-ui-references` to the vault's
-  `.olivercode/user-skills/`.
-
-### A8 — Manifest or drop the unmanaged template files (LOW)
-
-Four files under `core/templates/project/` are not in `shared/project-bootstrap-manifest.json`
-and therefore never sync anywhere: `.github/workflows/olivercode-governance.yml`,
-`docs/BACKLOG-live-tracker.md`, and (pending A6) the keepalive scripts. A template home that
-ships unsynced files is the drift source `FRAMEWORK_BASELINE.md` warns about. Add manifest
-entries with the right strict/presence mode, or delete.
+`skills/model-routing/` is built on `LLM_PROVIDER_ORDER` and cheapest-vs-capable provider
+tiers, while `CONTRIBUTING.md` mandatory rule 1 names Anthropic the sole model provider and
+forbids multi-provider framing without an implementation behind it. Kept deliberately
+(owner decision, 2026-07-27) as a pattern contract rather than a claim about this
+framework's runtime. Do not re-raise as drift; if it is ever removed, tear down
+`~/.claude/skills/model-routing` in the same session or `olivercode health` reports a broken
+symlink.
 
 ---
 
@@ -123,18 +100,20 @@ entries with the right strict/presence mode, or delete.
 
 ### Where things stand (2026-07-27)
 
-- Full read-every-file audit of all 127 tracked files completed; findings executed in two
-  commits (defect fixes, then legacy strip + doc consolidation).
+- Full read-every-file audit of all tracked files completed and executed: defect fixes,
+  legacy-reference strip, doc consolidation, and both owner decisions applied.
 - Removed: the conflicting `install-enforcement.sh`/`pre-commit-gate.sh` hook installer, a
-  no-op QA phase, five orphaned docs/configs, four micro-workflows folded into their
-  canonical homes.
-- Doc duplication collapsed: trigger routing, testing baseline, backlog procedure, and the
-  skills catalog each have one home now.
-- Open work is A1-A8 above. A6 and A7 need an owner decision, not just execution.
+  no-op QA phase, orphaned docs/configs, four micro-workflows folded into canonical homes.
+- Doc duplication collapsed: trigger routing, testing baseline, backlog procedure, gate
+  table, branch lifecycle, quality baseline, and the skills catalog each have one home.
+- Every file under `core/templates/project/` is now declared in the bootstrap manifest —
+  `templatedFiles` for the unconditional ones, `conditionalFiles` for the keepalive set,
+  which syncs only where a repo's `keepalive` profile block enables it.
+- Open work is A1-A5 above: all five are new gates/tests, deliberately specced not built.
 
 ### Coverage
 
-Reviewed through: `ed1e4d1` (2026-07-27, full-file audit)
+Reviewed through: `9c87a91` (2026-07-27, full-file audit)
 
 ### Deliberately kept (validated decisions — do not redo)
 
@@ -144,8 +123,20 @@ Reviewed through: `ed1e4d1` (2026-07-27, full-file audit)
 - `scripts/qa/check-code-quality.sh` is TypeScript-leaning and several of its sections are
   low-yield on this repo. It earns its place on the Next.js fleet repos, which are its real
   target. Not a cleanup candidate here.
+- `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
+  `AGENT_SHARED_STRUCTURE.md` but is the tracked half of the G1 example/overlay pair and has
+  a real `local/` counterpart. Keep both.
+- `skills/model-routing/` — see A7.
+- The keepalive surface — in scope by owner decision, not an orphan.
 
 ### Activity log (append here, newest last)
 
 - 2026-07-27 [audit] Defect fixes + orphan removal, commit `ed1e4d1`.
-- 2026-07-27 [audit] Legacy-reference strip, doc consolidation, A1-A8 specs written.
+- 2026-07-27 [audit] Legacy-reference strip, doc consolidation, specs written, `e773ff1`.
+- 2026-07-27 [audit] Path map / baseline rules to one home, `67bc6ff`.
+- 2026-07-27 [audit] FEATURE_MAP made a real index, `8e19b17`.
+- 2026-07-27 [audit] Product paths out of the location contract, lib imports unified, `9c87a91`.
+- 2026-07-27 [audit] Owner decisions applied: keepalive brought into scope via
+  `conditionalFiles`; `vault-content-parsing` moved to the vault's `.olivercode/user-skills/`
+  with its symlink repointed and the ledger updated; `model-routing` kept as a declared
+  exception. A6 and A8 resolved, A7 reduced to a keep-note.

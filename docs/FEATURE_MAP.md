@@ -54,6 +54,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `shared/repo-map.json` | cross-project repo registry |
 | `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder) | per-repo validation commands and evidence requirements |
 | `shared/task-policies/` | task-type policies and result schema |
+| `docs/KEEPALIVE_STANDARD.md` | Supabase/Cloudflare keepalive contract; its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
 
 ## Non-Drift Rule
 
