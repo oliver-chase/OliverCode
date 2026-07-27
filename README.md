@@ -93,7 +93,7 @@ goes, this table is the answer; if it's not answered here, `docs/skills-placemen
 | `shared/` | Bootstrap manifest, task policies, placeholder registries | Real fleet data | Tracked files stay generic; clone works for anyone |
 | `local/` (gitignored) | YOUR real fleet registries | Anything you'd push | Personal data physically can't leak into git |
 | `scripts/` | Launcher (`olivercode`: `health`, `update`, `sync-hooks`, `skills`) + validation gates | Product logic | One command surface, self-verifying |
-| `.githooks/` | The 8 fail-closed pre-commit gates | Optional/soft checks | Enforcement that runs even when nobody reads the docs |
+| `.githooks/` | The 8 fail-closed pre-commit gates | Optional/soft checks, advisory post-commit output | Enforcement that runs even when nobody reads the docs |
 | `docs/` | Current-state authority docs only | History, roadmaps, session logs | Every doc describes what IS — no stale authority |
 | `runtime/control-plane/` (gitignored) | Minimal private machine state | Anything a fork needs | Clone works standalone without it |
 

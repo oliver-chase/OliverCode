@@ -35,7 +35,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | Script | What it does |
 |---|---|
 | `scripts/validate.sh` | Unified validation entrypoint: pre-commit gates, doc/code consistency, reference integrity, tests, gatekeeper modes |
-| `scripts/lib/consistency_check.py` | Skills INDEX-vs-directory parity, frontmatter name match, gate-count claims across docs |
+| `scripts/lib/consistency_check.py` | Skills INDEX-vs-directory parity, frontmatter name match, gate-count claims across docs, and hook gate-integrity (a removed gate is caught) |
 | `scripts/lib/reference_check.py` | Backtick repo-path resolution (the half a markdown link checker cannot see) |
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation; `--check-token-policy` is Gate 8 |
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
