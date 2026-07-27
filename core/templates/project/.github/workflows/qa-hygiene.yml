@@ -8,6 +8,12 @@ on:
       - staging
       - development
 
+# Least privilege: these jobs only read the repo and run checks. Without an explicit
+# grant GITHUB_TOKEN inherits the repository default, which on many repos is
+# read-write -- enough for a compromised step to push code.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
