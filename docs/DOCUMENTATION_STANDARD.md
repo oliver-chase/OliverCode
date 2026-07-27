@@ -63,5 +63,6 @@ above may not be dropped.
 .githooks/pre-commit
 ```
 
-Fail-closed, 8 gates: secrets, icons/emoji, PII, deleted-repo refs, workflow push-auth,
-contract integrity, planning-doc governance, token policy.
+Fail-closed. Eight gates in OliverCode: secrets, icons/emoji, PII, deleted-repo refs,
+workflow push-auth, contract integrity, planning-doc governance, token policy. A repo that
+adopts the framework gets six of them — `docs/governance.md` holds the coverage table.

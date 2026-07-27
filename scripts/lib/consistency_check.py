@@ -8,7 +8,11 @@ Checks:
   1. skills/INDEX.md's table matches the skills/*/SKILL.md directories, both ways,
      and each SKILL.md's frontmatter `name:` matches its directory name. The launcher
      reads frontmatter while humans read the table; they can drift apart silently.
-  2. No tracked doc claims a pre-commit gate count that contradicts the hook itself.
+  2. No tracked doc claims a pre-commit gate count that contradicts the hook it is
+     about. Coverage is per-repo-type -- 8 gates in OliverCode, 6 in an adopted repo,
+     2 in the private variant -- so a claim is resolved to its hook before comparing.
+  3. Every hook variant is internally consistent, and docs/governance.md's coverage
+     table (the single home for those counts) matches all three.
 """
 
 from __future__ import annotations
@@ -27,8 +31,13 @@ _NUMBER_WORDS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
 }
+# Up to three modifier words may sit between the number and "gates". Without this the
+# pattern missed README's own headline claim -- "8 pre-commit gates" -- because the
+# number was not adjacent to the noun. Modifiers must be alphabetic, so "6 of the 8
+# gates" still binds to the 8 rather than reading the 6 as a total.
 GATE_CLAIM = re.compile(
-    r"\b(\d+|" + "|".join(_NUMBER_WORDS) + r")\s+gates\b", re.IGNORECASE
+    r"\b(\d+|" + "|".join(_NUMBER_WORDS) + r")\s+(?:[a-z][a-z-]*\s+){0,3}gates\b",
+    re.IGNORECASE,
 )
 
 
@@ -87,69 +96,161 @@ def check_skill_index(repo_root: Path) -> list[str]:
     return failures
 
 
+# Every hook variant, and how a doc line signals which one it is talking about.
+# Gate coverage is NOT uniform: OliverCode runs 8 on itself, an adopted repo 6, the
+# vault's private variant 2. docs/governance.md holds the human table.
+HOOKS = {
+    "olivercode": Path(".githooks/pre-commit"),
+    "template": Path("core/templates/project/pre-commit"),
+    "template-private": Path("core/templates/project/pre-commit-private"),
+}
+# Checked most-specific first: "private" wins over a bare mention of "template".
+_HOOK_CUES = (
+    ("template-private", ("private variant", "pre-commit-private", "private template")),
+    ("template", ("template", "adopted repo", "fleet repo", "product repo",
+                  "downstream", "core/templates", "project repo")),
+)
+
+
+def _hook_totals(repo_root: Path) -> tuple[dict[str, int], list[str]]:
+    """Real gate total per hook variant, read from the hooks themselves."""
+    totals: dict[str, int] = {}
+    problems: list[str] = []
+    for name, rel in HOOKS.items():
+        path = repo_root / rel
+        if not path.is_file():
+            if name == "olivercode":
+                problems.append(f"  [GATES] {rel} is missing")
+            continue  # a fork need not ship every variant
+        declared = {int(t) for _, t in GATE_DECL.findall(path.read_text(encoding="utf-8"))}
+        if not declared:
+            problems.append(f"  [GATES] {rel} declares no 'Gate N/M' banners to count")
+        elif len(declared) > 1:
+            problems.append(
+                f"  [GATES] {rel} is internally inconsistent: banners claim totals "
+                f"{sorted(declared)}. Every banner in one hook must print the same total."
+            )
+        else:
+            totals[name] = declared.pop()
+    return totals, problems
+
+
+def _hook_for_line(rel: str, line: str) -> str:
+    """Which hook a gate-count claim refers to, from the doc path and the line's wording."""
+    haystack = f"{rel} {line}".lower()
+    for hook, cues in _HOOK_CUES:
+        if any(cue in haystack for cue in cues):
+            return hook
+    return "olivercode"
+
+
 def check_gate_count(repo_root: Path) -> list[str]:
-    """The hook is the source of truth for how many gates there are."""
-    hook = repo_root / ".githooks" / "pre-commit"
-    if not hook.is_file():
-        return ["  [GATES] .githooks/pre-commit is missing"]
+    """No tracked doc may claim a gate count the corresponding hook contradicts.
 
-    totals = {int(total) for _, total in GATE_DECL.findall(hook.read_text(encoding="utf-8"))}
+    Resolves each claim to the hook it is ABOUT, rather than comparing everything to
+    OliverCode's own hook. That earlier shortcut is why this check passed for months
+    while five documents told forkers their repos would get eight gates: the docs said
+    "8", OliverCode's hook had 8, and the template's 6 was never consulted -- the old
+    body skipped core/templates/ outright with the comment "the template hook has its
+    own, smaller gate count". The discrepancy was known to the checker and unchecked.
+    """
+    totals, failures = _hook_totals(repo_root)
     if not totals:
-        return ["  [GATES] .githooks/pre-commit declares no 'Gate N/M' banners to count"]
-    if len(totals) > 1:
-        return [
-            f"  [GATES] .githooks/pre-commit is internally inconsistent: "
-            f"banners claim totals {sorted(totals)}"
-        ]
-    actual = totals.pop()
+        return failures
 
-    failures: list[str] = []
     for rel in _tracked(repo_root, "*.md"):
-        if rel.startswith("core/templates/"):
-            continue  # the template hook has its own, smaller gate count
         for line in (repo_root / rel).read_text(encoding="utf-8").splitlines():
             for token in GATE_CLAIM.findall(line):
                 claimed = _claimed_count(token)
-                if claimed is not None and claimed != actual:
+                if claimed is None:
+                    continue
+                hook = _hook_for_line(rel, line)
+                actual = totals.get(hook)
+                if actual is not None and claimed != actual:
                     failures.append(
-                        f"  [GATES] {rel} claims {token} gates; "
-                        f".githooks/pre-commit has {actual}"
+                        f"  [GATES] {rel} claims {token} gates for the {hook} hook, which "
+                        f"has {actual}. If the claim is about a different hook, name it on "
+                        f"the same line (\"adopted repo\", \"private variant\"); the cue list "
+                        f"is _HOOK_CUES in scripts/lib/consistency_check.py."
                     )
     return failures
 
 
+def check_gate_coverage_table(repo_root: Path) -> list[str]:
+    """docs/governance.md's per-repo Total row must match the real hooks.
+
+    That table is the single home for gate coverage and every other doc points at it,
+    so a stale row propagates everywhere by design.
+    """
+    doc = repo_root / "docs" / "governance.md"
+    if not doc.is_file():
+        return ["  [GATES] docs/governance.md is missing — it holds the gate coverage table"]
+
+    row = next(
+        (l for l in doc.read_text(encoding="utf-8").splitlines()
+         if l.lstrip().startswith("| **Total**")),
+        None,
+    )
+    if row is None:
+        return [
+            "  [GATES] docs/governance.md has no '| **Total** |' row in its gate coverage "
+            "table — that row is what pins the per-repo counts to the hooks"
+        ]
+
+    stated = [int(n) for n in re.findall(r"\*\*(\d+)\*\*", row)]
+    totals, failures = _hook_totals(repo_root)
+    expected = [totals.get(h) for h in ("olivercode", "template", "template-private")]
+    expected = [e for e in expected if e is not None]
+    if stated != expected:
+        failures.append(
+            f"  [GATES] docs/governance.md's coverage table totals {stated} but the hooks "
+            f"have {expected} (OliverCode, adopted repo, private variant)"
+        )
+    return failures
+
+
 def check_gate_integrity(repo_root: Path) -> list[str]:
-    """The hook must actually contain as many gates as its banners claim.
+    """Every hook must actually contain as many gates as its banners claim.
 
     Replaces the only unique check the post-commit hook performed (grep for "Gate 6
     still present"). That hook could not block, always exited 0, and its skill-count
     check globbed a path that had not existed for months without anyone noticing --
     so it was not being read. This runs in validate.sh and fails closed.
 
-    Counts DISTINCT gate numbers, not echo sites: gates 7 and 8 each print from two
+    Runs over ALL hook variants, not just OliverCode's. Checking only OliverCode's was
+    a real blind spot: the public template printed "Gate 1/5" through "Gate 5/5" and
+    then "Gate 6/6", so it disagreed with itself about its own size and no check looked.
+
+    Counts DISTINCT gate numbers, not echo sites: a conditional gate prints from two
     branches (ran / skipped), so a naive line count reports more gates than exist.
     """
-    hook = repo_root / ".githooks" / "pre-commit"
-    if not hook.is_file():
-        return ["  [GATES] .githooks/pre-commit is missing"]
+    failures: list[str] = []
+    for name, rel in HOOKS.items():
+        path = repo_root / rel
+        if not path.is_file():
+            if name == "olivercode":
+                failures.append(f"  [GATES] {rel} is missing")
+            continue
 
-    declared = GATE_DECL.findall(hook.read_text(encoding="utf-8"))
-    if not declared:
-        return ["  [GATES] .githooks/pre-commit declares no 'Gate N/M' banners"]
+        declared = GATE_DECL.findall(path.read_text(encoding="utf-8"))
+        if not declared:
+            failures.append(f"  [GATES] {rel} declares no 'Gate N/M' banners")
+            continue
 
-    totals = {int(total) for _, total in declared}
-    if len(totals) > 1:
-        return [f"  [GATES] hook banners disagree on the total: {sorted(totals)}"]
-    claimed = totals.pop()
-    present = {int(num) for num, _ in declared}
-
-    failures = []
-    if len(present) != claimed:
-        missing = sorted(set(range(1, claimed + 1)) - present)
-        failures.append(
-            f"  [GATES] hook claims {claimed} gates but only {len(present)} are present"
-            + (f"; missing gate number(s): {missing}" if missing else "")
-        )
+        totals = {int(total) for _, total in declared}
+        if len(totals) > 1:
+            failures.append(
+                f"  [GATES] {rel} banners disagree on the total: {sorted(totals)}"
+            )
+            continue
+        claimed = totals.pop()
+        present = {int(num) for num, _ in declared}
+        if len(present) != claimed:
+            missing = sorted(set(range(1, claimed + 1)) - present)
+            failures.append(
+                f"  [GATES] {rel} claims {claimed} gates but only {len(present)} are present"
+                + (f"; missing gate number(s): {missing}" if missing else "")
+            )
     return failures
 
 
@@ -223,6 +324,7 @@ def check_all(repo_root: Path) -> list[str]:
         check_skill_index(repo_root)
         + check_gate_count(repo_root)
         + check_gate_integrity(repo_root)
+        + check_gate_coverage_table(repo_root)
         + check_feature_map_completeness(repo_root)
         + check_skill_cross_references(repo_root)
     )

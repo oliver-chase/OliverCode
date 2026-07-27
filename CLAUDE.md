@@ -47,7 +47,8 @@ and it is that repo's canonical validation, not OliverCode's.
 Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement
-`.githooks/pre-commit` (8 gates, incl. token policy) is the only mechanically-enforced layer.
+`.githooks/pre-commit` is the only mechanically-enforced layer (eight gates here, six in a
+repo that adopts the framework -- `$OC/docs/governance.md` has the per-repo table).
 It is installed per repo via `core.hooksPath`; if that config is unset or points at a missing
 directory, **git runs no hooks at all and says nothing** — the gates fail open. `$OC/scripts/olivercode health`
 is what detects that; `$OC/scripts/olivercode sync-hooks` repairs it.

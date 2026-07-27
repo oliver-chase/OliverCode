@@ -15,8 +15,9 @@ you, and the rest is instruction text.**
 
 | You get | Enforced by | Blocks you? |
 |---|---|---|
-| 8 pre-commit gates — secrets, emoji/icons, PII, deleted-repo refs, workflow push-auth, contract integrity, planning-doc governance, token policy | `.githooks/pre-commit`, installed per repo via `core.hooksPath` | **Yes.** Fires on every `git commit` |
+| Pre-commit gates — secrets, emoji/icons, PII, deleted-repo refs, workflow push-auth, planning-doc governance. **Six in a repo you adopt**; OliverCode runs two more on itself (contract integrity, token policy) that have nothing to check elsewhere. Full table: `docs/governance.md` | `.githooks/pre-commit`, installed per repo via `core.hooksPath` | **Yes.** Fires on every `git commit` |
 | Doc/code consistency, internal reference integrity, tests | `bash scripts/validate.sh` | **Yes, when run.** Nothing auto-runs it |
+| Fleet hook state — which of your repos are actually governed | the last stage of `validate.sh`, and `olivercode health` | **No.** It prints `[FAIL]` per repo and still exits 0, because a fork with no fleet must pass. `health` is the command that exits nonzero |
 | Fork usability + bloat/legacy limits | `scripts/qa/full-qa-pass.sh`, and CI where enabled | **Yes, when run** |
 | Contracts, templates, workflows, structure standards | `core/` — inherited via the bootstrap manifest | No. An agent follows them because they load |
 | Skills (engineering method + framework tooling) | `~/.claude/skills/` symlinks | No. The agent chooses to load one |
@@ -100,7 +101,7 @@ goes, this table is the answer; if it's not answered here, `docs/skills-placemen
 ## How Projects Use This
 
 Each product repo in your fleet inherits:
-1. **Pre-commit hooks** (`.githooks/pre-commit`) — 8 gates: secrets, emoji, PII, deleted-repo refs, workflow push-auth, contract integrity, planning-doc governance (when its checker is present), and token policy
+1. **Pre-commit hooks** (`.githooks/pre-commit`) — six gates: secrets, emoji, PII, deleted-repo refs, workflow push-auth, and planning-doc governance (when its checker is present). Contract integrity and token policy are OliverCode-only and are not part of what a product repo inherits — see the coverage table in `docs/governance.md`
 2. **Quality baseline** — shared template
 3. **Governance standards** — what code belongs where, how to validate
 

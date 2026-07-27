@@ -54,7 +54,7 @@ else
   mkdir -p "$CHECKOUT"
   (cd "$REPO_ROOT" && git ls-files -z | while IFS= read -r -d '' f; do
     mkdir -p "$CHECKOUT/$(dirname "$f")"
-    cp "$REPO_ROOT/$f" "$CHECKOUT/$f"
+    cp -R "$REPO_ROOT/$f" "$CHECKOUT/$f"   # -R: .claude/skills/* is a symlink to a directory
   done)
   # git ls-files does not preserve the executable bit on copy.
   chmod +x "$CHECKOUT/scripts/olivercode" "$CHECKOUT"/scripts/*.sh \
@@ -107,6 +107,25 @@ if grep -rqI "$(basename "$HOME")" "$CHECKOUT/local" 2>/dev/null; then
   FAILED=1
 else
   echo "  [OK]   no personal identifiers in the seeded local/"
+fi
+
+echo ""
+echo "--- The adoption skill must be usable on a fresh clone, before any setup ---"
+# README's central promise: open the clone in Claude Code, say "set up OliverCode", and
+# the olivercode-adoption skill drives it. That requires the skill to be PROJECT-level
+# (.claude/skills/), because a user-level skill would need the setup it is meant to run.
+#
+# This assertion exists because the copy loop above used plain `cp`, which cannot copy
+# the tracked symlink-to-directory and failed silently. The sandbox therefore never
+# contained the skill, and the check that exists to prove this property was not testing
+# it -- the same "reports success it has not earned" shape this repo keeps finding.
+ADOPT_SKILL="$CHECKOUT/.claude/skills/olivercode-adoption/SKILL.md"
+if [ -f "$ADOPT_SKILL" ] && grep -q "^name: olivercode-adoption" "$ADOPT_SKILL"; then
+  echo "  [OK]   .claude/skills/olivercode-adoption resolves in a fresh clone"
+else
+  echo "  [FAIL] the adoption skill is not usable from a fresh clone"
+  echo "         expected a readable SKILL.md at .claude/skills/olivercode-adoption/"
+  FAILED=1
 fi
 
 echo ""
