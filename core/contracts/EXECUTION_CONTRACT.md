@@ -102,5 +102,6 @@ scripts/olivercode sync-hooks
 ```
 
 It deploys `core/templates/project/pre-commit` (or the private variant for the vault) to
-each repo's `.githooks/` and sets `core.hooksPath`. Planning-doc governance is layered on
-afterwards with `core/templates/project/scripts/install-planning-governance-hook.sh`.
+each repo's `.githooks/` and sets `core.hooksPath`. Planning-doc governance needs no separate
+install step: the hook runs `scripts/check-planning-doc-governance.py` automatically whenever
+that file is present in the repo, and skips the gate when it is not.

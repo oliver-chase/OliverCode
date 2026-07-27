@@ -16,8 +16,8 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
   `core/templates/project/` per the manifest, honouring strict/presence modes.
   Add `--dry-run` first to see the plan.
 - Install hooks with `scripts/olivercode sync-hooks` (run from OliverCode) — it deploys the
-  hook template and sets `core.hooksPath`. Layer planning-doc governance on top by running
-  `core/templates/project/scripts/install-planning-governance-hook.sh` from the target repo.
+  hook template and sets `core.hooksPath`. Planning-doc governance activates itself: the hook
+  runs `scripts/check-planning-doc-governance.py` whenever that file is present.
 - Add the project to `shared/repo-map.json`.
 - Add structure rules entry in `shared/project-structure-rules.json`.
 
