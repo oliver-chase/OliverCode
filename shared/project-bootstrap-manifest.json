@@ -70,11 +70,6 @@
       "mode": "presence"
     },
     {
-      "source": "core/templates/project/scripts/install-planning-governance-hook.sh",
-      "target": "scripts/install-planning-governance-hook.sh",
-      "mode": "presence"
-    },
-    {
       "source": "core/templates/project/CLAUDE.md",
       "target": "CLAUDE.md",
       "mode": "presence"

@@ -116,7 +116,15 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 
 ### Open items
 
-**B5 — oliver-strategic-growth's hook variant misses template security fixes (MEDIUM).**
+**B5 — RESOLVED 2026-07-27.** The perl guard was hand-merged into
+oliver-strategic-growth's variant hook (both `pre-commit` and `pre-commit-private`), leaving
+its repo-specific governance path intact. Verified against that exact hook: an emoji is still
+blocked with perl present, and with perl off PATH the commit is now blocked instead of
+allowed. Committed there as a single two-file change; the other agent's work in that repo was
+untouched. The standing lesson is on the `hookVariant` field itself — a declared variant stops
+receiving template fixes, so re-check it by hand whenever the template's gates change.
+
+**B5-note — superseded:**
 It declares `hookVariant: sdr-planning-governance`, so `sync-hooks` correctly leaves it alone
 — and it therefore did NOT receive the perl guard that closed the emoji-gate fail-open. Its
 Gate 2 still passes silently on a machine without perl. This is the designed trade-off of B3,
