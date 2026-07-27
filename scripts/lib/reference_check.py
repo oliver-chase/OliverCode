@@ -62,8 +62,16 @@ ANTI_PATTERN_FILES = frozenset({"core/contracts/FILE_LOCATION_STANDARD.md"})
 # Everything under here describes the repo a template is stamped INTO.
 TEMPLATE_PREFIX = "core/templates/"
 
-# Gitignored local layers. Documenting them is correct; a fresh clone lacks them.
-OPTIONAL_PREFIXES = ("runtime/control-plane/", "runtime/manifests", "local/")
+# Gitignored local layers. Documenting them is correct, and a fresh clone lacks them --
+# these must stay exempt or `validate.sh` fails for everyone who forks this repo
+# (verified against a clean clone: memory/ and state/ are created per user, never tracked).
+OPTIONAL_PREFIXES = (
+    "runtime/control-plane/",
+    "runtime/manifests",
+    "local/",
+    ".claude-optimization/memory/",
+    ".claude-optimization/state/",
+)
 
 
 def _tracked_files(repo_root: Path) -> list[str]:

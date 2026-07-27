@@ -14,6 +14,7 @@ each. If a capability exists and is not listed here, this map is wrong.
 | Execution order (CODE -> ... -> PUSH) and the WRITE MODE completion gate | `core/contracts/EXECUTION_CONTRACT.md` | `scripts/orchestration-gatekeeper.py --evidence-file` (on demand) |
 | Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
 | Documentation standard | `docs/DOCUMENTATION_STANDARD.md` | Manual (no active validator) |
+| Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
 | Skill placement | `docs/skills-placement.md` | `scripts/olivercode health` (symlink + drift check) |
 | Doc/code consistency (skills index parity, gate-count claims) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |

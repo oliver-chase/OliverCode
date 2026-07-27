@@ -5,7 +5,13 @@ This file loads in every session on this machine, from any directory, via the
 path below is written to resolve from wherever you are:
 
 - `$OC/...` means a path inside the OliverCode repo. Resolve `$OC` once, when you first need
-  it: `dirname "$(readlink ~/.claude/CLAUDE.md)"`. No hardcoded vault or home paths.
+  it, and check it — an uninstalled or moved symlink resolves to `.`, which would silently
+  point at the wrong repo:
+  ```bash
+  OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
+  [ -f "$OC/core/contracts/FRAMEWORK_BASELINE.md" ] || echo "OliverCode not installed at ~/.claude/CLAUDE.md — see its docs/ADOPTING.md"
+  ```
+  No hardcoded vault or home paths.
 - Bare paths (`scripts/validate.sh`, `docs/`) mean the repo you are currently working in.
   Each fleet repo ships its own; they are not OliverCode's.
 

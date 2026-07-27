@@ -22,18 +22,29 @@ Everything in this repo falls into one of four categories — if it doesn't fit,
 ```bash
 python3 scripts/olivercode --help         # see what the framework can do
 scripts/olivercode health                 # dependency, entrypoint, and drift checks
-bash scripts/validate.sh                  # run all 8 governance gates
+bash scripts/validate.sh                  # gates, consistency, references, tests
 scripts/olivercode skills                 # list the reusable skills
 ```
 
-To make the skills and rules load automatically in every Claude Code session on your machine (any repo, any directory):
+A fresh clone passes all of the above with no setup — no `local/` config, no control
+plane, no surrounding vault. If any of them fails on a clean clone, that is a bug.
+
+To make the skills and rules load automatically in every Claude Code session on your
+machine (any repo, any directory):
 
 ```bash
-ln -s "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md
-for s in skills/*/; do ln -s "$(pwd)/$s" ~/.claude/skills/"$(basename "$s")"; done
+mkdir -p ~/.claude/skills                                   # may not exist yet
+ln -sfn "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md              # back up any existing one first
+for s in skills/*/; do ln -sfn "$(pwd)/$s" ~/.claude/skills/"$(basename "$s")"; done
+scripts/olivercode health                                   # confirms every symlink resolves
 ```
 
-See `docs/skills-placement.md` for the full placement contract.
+If you already have a `~/.claude/CLAUDE.md`, do not overwrite it blindly — `docs/ADOPTING.md`
+walks through merging your existing rules in rather than losing them.
+
+**Adopting this across your own repos:** `docs/ADOPTING.md` is the onboarding guide, and the
+`olivercode-adoption` skill runs it as a guided, non-destructive audit. See
+`docs/skills-placement.md` for the full placement contract.
 
 ## Where Things Live (and why)
 
@@ -98,5 +109,6 @@ Two directories live inside the repo tree but never push to GitHub:
 | [Framework Boundary](docs/FRAMEWORK_BOUNDARY.md) | What OliverCode is vs what it deliberately excludes |
 | [Skills Placement](docs/skills-placement.md) | Where every skill/agent file lives, one home per layer |
 | [Troubleshooting](docs/troubleshooting.md) | Common setup and command issues |
+| [Adopting](docs/ADOPTING.md) | Forking this and onboarding your own repos, step by step |
 | [Install](INSTALL.md) | Minimal local requirements and first commands |
 | [Contributing](CONTRIBUTING.md) | How to make changes to the framework |

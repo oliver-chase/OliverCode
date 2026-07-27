@@ -24,6 +24,7 @@
 | `validator-consolidation` | Merge validate scripts | Consolidating overlapping validators |
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
 | `olivercode-cli` | OliverCode CLI launcher | Modifying CLI, command routing, help surface |
+| `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
 | `model-routing` | Model tier selection strategy (cheap vs capable) | Choosing which model tier handles a task |
 
