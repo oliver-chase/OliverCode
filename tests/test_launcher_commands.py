@@ -205,5 +205,16 @@ class TestRepoPathResolution(unittest.TestCase):
         self.assertFalse(str(got).startswith("~"))
         self.assertTrue(str(got).endswith("work/alpha"))
 
+class TestSelfSkipIsCaseInsensitive(unittest.TestCase):
+    """`discover` emits profile names from directory names, so the framework repo
+    arrives as "OliverCode". A lowercase-only self-skip let that through and
+    sync-hooks would have installed FLEET hooks into the framework repo itself."""
+
+    def test_source_uses_case_insensitive_comparison(self):
+        src = LAUNCHER.read_text(encoding="utf-8")
+        self.assertIn('name.lower() == "olivercode"', src)
+        self.assertNotIn('if name == "olivercode"', src)
+
+
 if __name__ == "__main__":
     unittest.main()

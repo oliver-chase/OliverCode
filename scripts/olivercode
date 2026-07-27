@@ -131,6 +131,70 @@ def command_skills(argv: list[str]) -> int:
     return 0
 
 
+def _report_claude_dir(oc_root: Path) -> None:
+    """Inventory ~/.claude, classifying what is OliverCode's and what is not.
+
+    An existing setup accumulates a mix: symlinks into this checkout, symlinks into
+    somewhere else entirely, real directories holding untracked content, and broken
+    links pointing at things that moved. `install` only manages the first kind and
+    deliberately leaves the rest alone -- which is safe, but silent. Adoption needs the
+    full picture, because the foreign and real entries are exactly the ones a human has
+    to make a decision about.
+    """
+    claude_dir = Path.home() / ".claude"
+    print("\n~/.claude inventory")
+    print("-" * 40)
+    if not claude_dir.is_dir():
+        print("  not present — `olivercode install` creates it")
+        return
+
+    rules = claude_dir / "CLAUDE.md"
+    if rules.is_symlink():
+        target = rules.resolve()
+        owner = "OliverCode" if str(target).startswith(str(oc_root)) else f"elsewhere -> {target}"
+        print(f"  CLAUDE.md   symlink ({owner})")
+    elif rules.is_file():
+        print("  CLAUDE.md   REAL FILE — `install` will back it up, not overwrite it")
+    else:
+        print("  CLAUDE.md   absent")
+
+    skills_dir = claude_dir / "skills"
+    if not skills_dir.is_dir():
+        print("  skills/     absent")
+        return
+
+    ours, foreign, real, broken = [], [], [], []
+    for entry in sorted(skills_dir.iterdir()):
+        if entry.name.startswith("."):
+            continue
+        if entry.is_symlink():
+            if not entry.exists():
+                broken.append(entry.name)
+            elif str(entry.resolve()).startswith(str(oc_root)):
+                ours.append(entry.name)
+            else:
+                foreign.append((entry.name, entry.resolve()))
+        elif entry.is_dir():
+            real.append(entry.name)
+
+    print(f"  skills/     {len(ours)} linked to this checkout, {len(foreign)} linked elsewhere, "
+          f"{len(real)} real dirs, {len(broken)} broken")
+    if foreign:
+        print("\n  Symlinked outside this checkout — fine if deliberate (personal/business")
+        print("  skills belong in your own area per docs/skills-placement.md):")
+        for name, target in foreign:
+            print(f"    {name} -> {target}")
+    if real:
+        print("\n  Real directories, untracked by any repo. `install` does NOT touch these.")
+        print("  Vendor skills are the usual reason; anything else is content with no backup:")
+        for name in real:
+            print(f"    {name}")
+    if broken:
+        print("\n  BROKEN — the target moved or was deleted. `olivercode health` FAILs on these:")
+        for name in broken:
+            print(f"    {name}")
+
+
 def command_discover(oc_root: Path, roots: list[Path]) -> int:
     """Find git repos under the given roots and report what governance they already have.
 
@@ -150,6 +214,8 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
             # Don't descend into vendored or nested-checkout noise.
             if any(part in {"node_modules", ".next", "vendor", "worktrees"} for part in repo.parts):
                 continue
+            if repo.resolve() == oc_root.resolve():
+                continue  # the framework repo governs the fleet; it is not part of it
             rules = next((n for n in ("CLAUDE.md", "AGENTS.md", ".cursorrules") if (repo / n).is_file()), "none")
             hooks = subprocess.run(
                 ["git", "-C", str(repo), "config", "--get", "core.hooksPath"],
@@ -168,6 +234,8 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
 
     print(f"\n{len(found)} repo(s). Rules files named anything other than CLAUDE.md do not")
     print("auto-load in Claude Code — merge them into CLAUDE.md (docs/ADOPTING.md Step 4).")
+
+    _report_claude_dir(oc_root)
     print("\nProfile skeleton — paste into local/repo-profiles.json under \"profiles\",")
     print("then add each repo's token_policy (see docs/TOKEN_POLICY.md):\n")
     skeleton = {
@@ -233,6 +301,16 @@ def command_install(oc_root: Path) -> int:
     broken = sorted(p.name for p in skills_dir.iterdir() if p.is_symlink() and not p.exists())
     if broken:
         print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
+
+    untouched = sorted(
+        p.name for p in skills_dir.iterdir()
+        if p.name and not p.name.startswith(".")
+        and not (p.is_symlink() and p.exists() and str(p.resolve()).startswith(str(oc_root)))
+    )
+    if untouched:
+        print(f"  [KEPT] {len(untouched)} entr(y/ies) not managed by this checkout, left as-is: "
+              f"{', '.join(untouched)}")
+        print("         `olivercode discover --root <dir>` classifies them.")
 
     print()
     if backups:
@@ -621,7 +699,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
 
     profiles, _ = load_repo_profiles(oc_root)
     for name in profiles:
-        if name == "olivercode":
+        if name.lower() == "olivercode":
             continue
         repo_path = _resolve_repo_path(name, profiles[name], fleet_root)
         if not (repo_path / ".git").exists():

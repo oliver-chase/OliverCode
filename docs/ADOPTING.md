@@ -71,8 +71,10 @@ scripts/olivercode discover --root ~/dev --root ~/work
 ```
 
 `discover` reports, per repo: which agent-rules file it has (if any), whether hooks are
-installed, and which repos are ungoverned. It ends with a profile skeleton containing explicit
-`path` values, ready to paste into `local/repo-profiles.json`.
+installed, and which repos are ungoverned. It then inventories `~/.claude` — separating
+skills symlinked into this checkout from ones symlinked elsewhere, real untracked
+directories, and broken links — and ends with a profile skeleton containing explicit `path`
+values, ready to paste into `local/repo-profiles.json`.
 
 Two things it will likely surface in an existing setup:
 
@@ -80,6 +82,10 @@ Two things it will likely surface in an existing setup:
   not auto-load in Claude Code. They are invisible in practice, however good their content.
   Step 4 merges them in.
 - **Repos with `hooksPath=unset`** — no gates at all, silently.
+- **Real directories in `~/.claude/skills/`** — untracked content with no backup anywhere.
+  Usually vendor skills, which is fine. Anything else is a skill that exists in exactly one
+  place on one machine; decide where it belongs before it is lost. `install` never touches
+  these, and reports how many it left alone.
 
 Record, for each existing rules file: what it says, and which of these it is —
 
