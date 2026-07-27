@@ -85,9 +85,7 @@ Most existing setups have all three tangled in one file. Separating them IS the 
 cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.pre-olivercode 2>/dev/null || true
 cp -R ~/.claude/skills ~/.claude/skills.pre-olivercode 2>/dev/null || true
 
-mkdir -p ~/.claude/skills
-ln -sfn "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md
-for s in skills/*/; do ln -sfn "$(pwd)/$s" ~/.claude/skills/"$(basename "$s")"; done
+scripts/olivercode install     # does all of it, and backs up anything it replaces
 scripts/olivercode health
 ```
 
