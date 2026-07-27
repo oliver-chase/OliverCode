@@ -8,6 +8,7 @@ container, or any working directory.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -215,28 +216,47 @@ def command_health() -> int:
     return 1 if t.failed else 0
 
 
-def _hooks_dir_diverges(hooks_dir: Path, templates_dir: Path) -> list[str]:
-    """Return live hook filenames that match neither canonical template's content.
+def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
+    """Return human-readable problems with a repo's live hook directory.
 
-    A repo running the private (2-gate) variant still deploys it under the
-    filename `pre-commit` — git only auto-invokes that exact name — so a live
-    `pre-commit` file must be checked against BOTH template contents, not just
-    the public one of the same filename.
+    Checks, in the order they can silently disable enforcement:
+
+    1. The directory core.hooksPath points at does not exist. Git treats this as
+       "no hooks" and runs NOTHING, without warning — a commit with secrets in it
+       sails straight through. This is the failure this function exists to catch:
+       an earlier version returned "no divergence" for a missing directory, which
+       the caller reported as [OK].
+    2. No `pre-commit` file in it. Same silent no-op; git only auto-invokes that
+       exact filename.
+    3. Present but not executable. Git skips a non-executable hook silently too.
+    4. Present, executable, but content matches neither canonical template.
+
+    A repo running the private (2-gate) variant still deploys it under the filename
+    `pre-commit`, so a live `pre-commit` is checked against BOTH template contents.
     """
+    if not hooks_dir.is_dir():
+        return [f"core.hooksPath points at {hooks_dir}, which does not exist — git runs NO hooks"]
+
+    live = hooks_dir / "pre-commit"
+    if not live.is_file():
+        return [f"no pre-commit file in {hooks_dir} — git runs NO hooks"]
+    if not os.access(live, os.X_OK):
+        return [f"{live} is not executable — git skips it silently"]
+
     canonical_contents = []
     for template in ("pre-commit", "pre-commit-private"):
         canonical = templates_dir / template
         if canonical.exists():
             canonical_contents.append(canonical.read_bytes())
 
-    diverged = []
+    problems = []
     for filename in ("pre-commit", "pre-commit-private"):
-        live = hooks_dir / filename
-        if not live.exists():
+        candidate = hooks_dir / filename
+        if not candidate.exists():
             continue
-        if live.read_bytes() not in canonical_contents:
-            diverged.append(filename)
-    return diverged
+        if candidate.read_bytes() not in canonical_contents:
+            problems.append(f"{filename} diverges from the template")
+    return problems
 
 
 def _check_placement_drift(oc_root: Path) -> tuple[int, int]:
@@ -325,9 +345,9 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int]:
                 failed += 1
                 continue
             hooks_dir = repo_path / hooks_path
-            diverged = _hooks_dir_diverges(hooks_dir, templates_dir)
-            if diverged:
-                print(f"  [FAIL] {name}: hook(s) diverge from template: {', '.join(diverged)}")
+            problems = _hook_problems(hooks_dir, templates_dir)
+            if problems:
+                print(f"  [FAIL] {name}: {'; '.join(problems)}")
                 failed += 1
             else:
                 print(f"  [OK] {name}: hooksPath set, hooks match template")
@@ -347,9 +367,9 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int]:
             print("  [FAIL] vault: core.hooksPath unset")
             failed += 1
         else:
-            diverged = _hooks_dir_diverges(vault_root / hooks_path, templates_dir)
-            if diverged:
-                print(f"  [FAIL] vault: hook(s) diverge from template: {', '.join(diverged)}")
+            problems = _hook_problems(vault_root / hooks_path, templates_dir)
+            if problems:
+                print(f"  [FAIL] vault: {'; '.join(problems)}")
                 failed += 1
             else:
                 print("  [OK] vault: hooksPath set, hooks match template")

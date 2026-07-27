@@ -96,6 +96,14 @@ symlink.
 - The framework now fails closed on the two classes that produced this audit's findings:
   a reference naming a path that isn't there, and a doc asserting what the code contradicts.
 
+- Activation audit: the rules DO load everywhere (`~/.claude/CLAUDE.md` symlink, 26 skill
+  symlinks, hooks on all 5 repos + vault), but 8 of the global CLAUDE.md's path pointers
+  dangled outside OliverCode — including both blocking "read this first" directives. Fixed by
+  making that file path-independent: `$OC` resolves via `dirname "$(readlink ~/.claude/CLAUDE.md)"`,
+  bare paths explicitly mean the current repo.
+- Hook enforcement fails OPEN and the detector shared the bug: `health` reported `[OK]` for a
+  repo whose hooks directory did not exist. Now caught, with a live end-to-end test.
+
 ### Coverage
 
 Reviewed through: `16a1849` (2026-07-27, full-file audit)
@@ -127,3 +135,6 @@ Reviewed through: `16a1849` (2026-07-27, full-file audit)
   exception. A6 and A8 resolved, A7 reduced to a keep-note.
 - 2026-07-27 [audit] A1-A5 built: reference-integrity pass, doc/code consistency checker,
   46 enforcement-surface tests, CI gating on strict bloat. Backlog now empty.
+- 2026-07-27 [activation] Global CLAUDE.md made path-independent; fleet hooksPath converged
+  to relative; 5 repo CLAUDE.md pointer blocks repaired; hook-install fail-open closed in
+  `health` with 6 regression tests. 55 tests total.
