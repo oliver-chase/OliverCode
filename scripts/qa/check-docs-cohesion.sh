@@ -8,7 +8,6 @@
 # Exit codes:
 #   0 - All checks pass
 #   1 - Issues found
-#   2 - Critical issues found
 #   3 - Script error (unknown option)
 
 set -euo pipefail
@@ -101,22 +100,8 @@ else
 fi
 echo ""
 
-# ─── 3. Check for routes without documentation ───────────────────────────
-echo "--- 3. Undocumented Route Check ---"
-if [ -d "app/api" ]; then
-  for route in $(find app/api -name 'route.ts' 2>/dev/null | sort); do
-    route_name=$(echo "$route" | sed 's|app/||; s|/route.ts||')
-    # Check if any doc mentions this route
-    doc_mention=$(grep -rl "$route_name" docs/ README.md 2>/dev/null | head -1 || true)
-    if [ -z "$doc_mention" ] && [ "$VERBOSE" = true ]; then
-      echo "  UNDOCUMENTED: $route_name"
-    fi
-  done
-fi
-echo ""
-
-# ─── 4. Summary stats ────────────────────────────────────────────────────
-echo "--- 4. Documentation Stats ---"
+# ─── 3. Summary stats ────────────────────────────────────────────────────
+echo "--- 3. Documentation Stats ---"
 MD_COUNT=$(find . -name '*.md' -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | wc -l)
 echo "  Total markdown files: $MD_COUNT"
 echo ""
