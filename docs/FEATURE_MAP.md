@@ -25,7 +25,7 @@ each. If a capability exists and is not listed here, this map is wrong.
 
 | Surface | Source of Truth | Verification |
 |---|---|---|
-| Terminal launcher — `discover`, `install`, `init`, `health`, `update`, `sync-hooks`, `skills` | `docs/OLIVERCODE_LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
+| Terminal launcher — `bootstrap`, `discover`, `install`, `init`, `health`, `update`, `sync-hooks`, `skills` | `docs/OLIVERCODE_LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
 
 Claude Code is this framework's sole runtime and Anthropic its sole model provider — there is
 no multi-provider routing, multi-runtime adapter system, or launcher beyond `scripts/olivercode`.

@@ -23,6 +23,7 @@ from lib.repo_profiles import load_repo_profiles  # noqa: E402
 OC_ROOT = Path(__file__).resolve().parent.parent
 
 COMMANDS = [
+    ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md + skills into ~/.claude (backs up anything it replaces)"),
     ("olivercode init", "Create local/ fleet config from the tracked examples (never overwrites)"),
@@ -244,6 +245,85 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
     }
     print(json.dumps(skeleton, indent=2))
     return 0
+
+
+def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
+    """Stamp the project template into a repo, per shared/project-bootstrap-manifest.json.
+
+    The manifest declared 27 templated files and 5 required directories and NOTHING read
+    it -- `sync-hooks` covered the two hook files and every other file was a hand-copy.
+    README claimed a new repo "starts compliant on day one"; this is what makes that true.
+
+    Honours the manifest's modes: `strict` files are overwritten (their contract is
+    byte-identity with the template), `presence` files are only created when missing so
+    repo-specific content is never clobbered. `conditionalFiles` are reported, not copied
+    -- they depend on profile flags the target repo may not set.
+    """
+    manifest_path = oc_root / "shared" / "project-bootstrap-manifest.json"
+    if not manifest_path.is_file():
+        print(f"  [FAIL] manifest not found: {manifest_path}")
+        return 1
+    manifest = json.loads(manifest_path.read_text())
+
+    if not (target / ".git").exists():
+        print(f"  [FAIL] {target} is not a git repository.")
+        print("         Run `git init` there first — the hooks need a real .git.")
+        return 1
+
+    label = "DRY RUN — nothing written" if dry_run else f"stamping into {target}"
+    print(f"OliverCode bootstrap — {label}")
+    print("=" * 40)
+
+    made_dirs = []
+    for rel in manifest.get("requiredDirectories", []):
+        d = target / rel
+        if not d.is_dir():
+            made_dirs.append(rel)
+            if not dry_run:
+                d.mkdir(parents=True, exist_ok=True)
+    if made_dirs:
+        print(f"  directories: {', '.join(made_dirs)}")
+
+    new = overwritten = kept = 0
+    missing_src = []
+    for entry in manifest.get("templatedFiles", []):
+        src, dst_rel, mode = oc_root / entry["source"], entry["target"], entry.get("mode", "presence")
+        dst = target / dst_rel
+        if not src.is_file():
+            missing_src.append(entry["source"])
+            continue
+        exists = dst.exists()
+        if exists and mode == "presence":
+            kept += 1
+            continue
+        action = "OVERWRITE" if exists else "NEW"
+        if exists:
+            overwritten += 1
+        else:
+            new += 1
+        print(f"  [{action:<9}] {dst_rel}" + (f"   ({mode})" if exists else ""))
+        if not dry_run:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src.read_bytes())
+            if src.suffix == ".sh" or dst_rel.startswith(".githooks/"):
+                dst.chmod(0o755)
+
+    print(f"\n  {new} new, {overwritten} overwritten (strict), {kept} kept (presence, already present)")
+    for rel in missing_src:
+        print(f"  [FAIL] template source missing from this checkout: {rel}")
+
+    conditional = manifest.get("conditionalFiles", [])
+    if conditional:
+        print("\n  Not copied — these depend on profile flags (see docs/KEEPALIVE_STANDARD.md):")
+        for entry in conditional:
+            print(f"    {entry['source']}  when {entry.get('condition', '?')}")
+
+    if dry_run:
+        print("\nRe-run without --dry-run to apply.")
+    else:
+        print("\nNext: `olivercode sync-hooks` installs the hooks and sets core.hooksPath,")
+        print("then fill in the placeholders in docs/repo-structure-contract.md.")
+    return 1 if missing_src else 0
 
 
 def command_install(oc_root: Path) -> int:
@@ -800,6 +880,17 @@ def main() -> int:
             print("Error: discover requires at least one --root DIR.")
             return 1
         return command_discover(OC_ROOT, roots)
+    if cmd == "bootstrap":
+        dry = "--dry-run" in argv
+        rest = [a for a in argv if a != "--dry-run"]
+        if len(rest) != 1:
+            print("Usage: olivercode bootstrap <repo-path> [--dry-run]")
+            return 1
+        target = Path(rest[0]).expanduser()
+        if not target.is_dir():
+            print(f"Error: {target} is not a directory.")
+            return 1
+        return command_bootstrap(OC_ROOT, target, dry)
     if cmd == "install":
         _reject_extra(cmd, argv)
         return command_install(OC_ROOT)

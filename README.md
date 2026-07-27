@@ -89,7 +89,7 @@ goes, this table is the answer; if it's not answered here, `docs/skills-placemen
 |---|---|---|---|
 | `skills/` | Engineering-method + framework-tooling skills, flat, one dir per skill | Product/GTM/vendor content | Symlink the whole set once — every skill invocable from any repo |
 | `core/contracts/` | Structural standards every repo follows | Repo-specific rules | Change a standard once, whole fleet inherits it |
-| `core/templates/project/` | The project template stamped into new repos (hooks, CI, docs) | Anything machine-specific | New repo starts compliant on day one |
+| `core/templates/project/` | The project template stamped into new repos (hooks, CI, docs) by `olivercode bootstrap` | Anything machine-specific | New repo starts compliant on day one |
 | `shared/` | Bootstrap manifest, task policies, placeholder registries | Real fleet data | Tracked files stay generic; clone works for anyone |
 | `local/` (gitignored) | YOUR real fleet registries | Anything you'd push | Personal data physically can't leak into git |
 | `scripts/` | Launcher (`olivercode`: `health`, `update`, `sync-hooks`, `skills`) + validation gates | Product logic | One command surface, self-verifying |

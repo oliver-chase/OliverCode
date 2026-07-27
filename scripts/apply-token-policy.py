@@ -36,8 +36,21 @@ def load_profiles() -> dict:
 
 
 def get_token_policy_simple(profiles: dict, repo_name: str) -> dict:
-    """Lenient getter — missing repo profile returns empty-policy defaults
-    rather than exiting (unlike gatekeeper's strict get_repo_profile)."""
+    """Lenient getter — a missing repo profile returns empty-policy defaults rather
+    than exiting (unlike gatekeeper's strict get_repo_profile).
+
+    Lenient, but not silent: with no profile there are no ignore_globs, so every path
+    passes through and the caller believes a policy was applied when none was. A typo'd
+    repo name is the likely cause, so say so on stderr and leave stdout clean for the
+    filtered list.
+    """
+    if repo_name not in profiles:
+        known = ", ".join(sorted(profiles)) or "none"
+        print(
+            f"WARN: no profile for repo '{repo_name}' — nothing will be filtered. "
+            f"Known profiles: {known}",
+            file=sys.stderr,
+        )
     return token_policy_from_profile(profiles.get(repo_name, {}))
 
 

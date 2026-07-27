@@ -12,8 +12,9 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 
 ## Lifecycle
 1. Bootstrap new project:
-- Copy the managed files listed in `shared/project-bootstrap-manifest.json` from
-  `core/templates/project/` into the target repo.
+- `scripts/olivercode bootstrap <repo-path>` stamps every managed file from
+  `core/templates/project/` per the manifest, honouring strict/presence modes.
+  Add `--dry-run` first to see the plan.
 - Install hooks with `scripts/olivercode sync-hooks` (run from OliverCode) — it deploys the
   hook template and sets `core.hooksPath`. Layer planning-doc governance on top by running
   `core/templates/project/scripts/install-planning-governance-hook.sh` from the target repo.

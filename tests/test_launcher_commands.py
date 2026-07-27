@@ -11,6 +11,7 @@ fleet, and printed "6 target(s) synced".
 
 import contextlib
 import importlib.util
+import os
 import io
 import json
 import shutil
@@ -215,6 +216,57 @@ class TestSelfSkipIsCaseInsensitive(unittest.TestCase):
         self.assertIn('name.lower() == "olivercode"', src)
         self.assertNotIn('if name == "olivercode"', src)
 
+
+
+
+class TestBootstrap(unittest.TestCase):
+    """`bootstrap` executes the manifest that nothing previously read. Its modes are
+    the correctness property: strict overwrites, presence must never clobber."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-bootstrap-"))
+        subprocess.run(["git", "init", "-q", str(self.tmp)], check=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, dry=False):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = launcher.command_bootstrap(REPO_ROOT, self.tmp, dry)
+        return rc, out.getvalue()
+
+    def test_dry_run_writes_nothing(self):
+        rc, _ = self._run(dry=True)
+        self.assertEqual(rc, 0)
+        written = [p for p in self.tmp.rglob("*") if p.is_file() and ".git" not in p.parts]
+        self.assertEqual(written, [], "dry run must not write")
+
+    def test_stamps_the_manifest(self):
+        rc, _ = self._run()
+        self.assertEqual(rc, 0)
+        self.assertTrue((self.tmp / "QUALITY_BASELINE.md").is_file())
+        self.assertTrue((self.tmp / ".githooks" / "pre-commit").is_file())
+        self.assertTrue((self.tmp / "docs" / "repo-structure-contract.md").is_file())
+
+    def test_presence_files_are_never_clobbered(self):
+        self._run()
+        claude = self.tmp / "CLAUDE.md"          # presence mode in the manifest
+        claude.write_text("MY REPO RULES\n", encoding="utf-8")
+        self._run()
+        self.assertIn("MY REPO RULES", claude.read_text())
+
+    def test_hooks_are_executable(self):
+        self._run()
+        self.assertTrue(os.access(self.tmp / ".githooks" / "pre-commit", os.X_OK))
+
+    def test_refuses_a_non_git_directory(self):
+        plain = Path(tempfile.mkdtemp(prefix="olivercode-nongit-"))
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = launcher.command_bootstrap(REPO_ROOT, plain, False)
+            self.assertEqual(rc, 1, "must refuse a directory with no .git")
+        finally:
+            shutil.rmtree(plain, ignore_errors=True)
 
 if __name__ == "__main__":
     unittest.main()
