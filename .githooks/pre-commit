@@ -174,23 +174,22 @@ fi
 echo "  Gate 5 passed."
 
 # ─── Gate 6: Contract integrity ──────────────────────────────────────────────
-# Block commits that break framework contracts:
-# - No _Management/ paths in staged code
-# - No /workspace/ hardcoded paths in staged code
+# Two checks: no hardcoded container paths in staged code, and every path the
+# control plane declares as a dependency still exists. OliverCode-only -- the
+# downstream template ships neither.
 echo "[pre-commit] Gate 6/8: Contract integrity..."
 
-# Check for _Management/ paths in staged code files (not comments or .md).
-# tests/* is skipped for the same reason Gates 1 and 3 skip it: a test that proves
-# this gate blocks a forbidden path must contain that path as a fixture.
+# `/workspace/` is the container-path class this framework bans; every path must
+# derive from the script's own location. (A `_Management/` pattern sat here too,
+# guarding a vault directory that has left zero trace in any of the six repos or
+# in git history -- removed rather than kept scanning for something extinct.)
+# tests/* is skipped for the same reason Gates 1 and 3 skip it: a test proving this
+# gate blocks a forbidden path must contain that path as a fixture.
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
     case "$file" in
       *.md|*.txt|docs/*|tests/*|*/tests/*|*.test.*|*_test.*|.githooks/pre-commit|scripts/check-planning-doc-governance.py) continue ;;
     esac
-    if grep -q '_Management/' "$file" 2>/dev/null; then
-      echo "  BLOCKED: $file contains _Management/ path reference"
-      VIOLATIONS=$((VIOLATIONS + 1))
-    fi
     if grep -q '/workspace/' "$file" 2>/dev/null; then
       echo "  BLOCKED: $file contains hardcoded /workspace/ path reference"
       VIOLATIONS=$((VIOLATIONS + 1))

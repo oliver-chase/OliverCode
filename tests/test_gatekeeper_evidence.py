@@ -225,5 +225,30 @@ class TestFullWriteCodeEvidence(unittest.TestCase):
         self.assertTrue(validate(evidence, fields)["pass"])
 
 
+
+
+class TestFindingsDocumented(unittest.TestCase):
+    """`audit`'s only required field had no shape check, so an empty string passed --
+    an audit that documented nothing validated as though it had."""
+
+    FIELD = ["findings_documented"]
+
+    def test_empty_string_blocks(self):
+        self.assertFalse(validate({"findings_documented": ""}, self.FIELD)["pass"])
+
+    def test_whitespace_only_blocks(self):
+        self.assertFalse(validate({"findings_documented": "   "}, self.FIELD)["pass"])
+
+    def test_non_string_blocks(self):
+        self.assertFalse(validate({"findings_documented": True}, self.FIELD)["pass"])
+
+    def test_real_reference_passes(self):
+        self.assertTrue(
+            validate(
+                {"findings_documented": "docs/BACKLOG.md AUDIT-1..7, each with file:line"},
+                self.FIELD,
+            )["pass"]
+        )
+
 if __name__ == "__main__":
     unittest.main()

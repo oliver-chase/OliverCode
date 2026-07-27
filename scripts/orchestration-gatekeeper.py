@@ -140,6 +140,17 @@ def validate_evidence(evidence: dict, required_fields: list, repo_name: str, tas
                 if k not in value:
                     return fail("failure_object_on_non_pass", f"failure_object_on_non_pass missing required key '{k}'.")
 
+        elif field == "findings_documented":
+            # `audit` declares this as its only required evidence, and nothing validated
+            # its shape -- so an empty string satisfied the bare presence check above and
+            # an audit claiming zero findings passed as though it had reported some.
+            if not isinstance(value, str) or not value.strip():
+                return fail(
+                    "findings_documented",
+                    "findings_documented must be a non-empty string: where the findings "
+                    "were recorded, with file evidence.",
+                )
+
         elif field == "no_regression_confirmed":
             if not isinstance(value, dict) or "method" not in value or "detail" not in value:
                 return fail("no_regression_confirmed", "no_regression_confirmed must be an object with 'method' and 'detail' strings.")
