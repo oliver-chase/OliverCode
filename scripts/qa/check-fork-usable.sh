@@ -124,8 +124,70 @@ else
 fi
 
 echo ""
+echo "--- The documented adoption path must actually govern a fleet ---"
+# Walks the load-bearing claims of docs/ADOPTING.md against two throwaway repos.
+# The guide is the primary onboarding artifact; an untested guide rots exactly the
+# way the --root instruction did (it told forkers to pass a flag that was ignored).
+WS="$SANDBOX/ws"
+mkdir -p "$WS"
+cp -R "$CHECKOUT" "$WS/OliverCode"
+for r in probe-web probe-api; do
+  mkdir -p "$WS/$r/scripts"
+  ( cd "$WS/$r" && git init -q . \
+    && printf '#!/usr/bin/env bash\necho "%s ok"\n' "$r" > scripts/validate.sh \
+    && chmod +x scripts/validate.sh \
+    && git add -A >/dev/null 2>&1 \
+    && git -c user.email=forkcheck -c user.name=forkcheck commit -qm init --no-verify >/dev/null 2>&1 )
+done
+
+adopt() { (cd "$WS/OliverCode" && HOME="$FAKE_HOME" "$@" 2>&1); }
+
+adopt python3 scripts/olivercode init >/dev/null 2>&1
+HOME="$FAKE_HOME" python3 - "$WS/OliverCode/local/repo-profiles.json" <<'PY' >/dev/null 2>&1
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+tmpl = next(iter(d["profiles"].values()))
+d["profiles"] = {}
+for name in ("probe-web", "probe-api"):
+    entry = json.loads(json.dumps(tmpl))
+    entry["name"] = name
+    d["profiles"][name] = entry
+json.dump(d, open(p, "w"), indent=2)
+PY
+
+if adopt python3 scripts/olivercode sync-hooks | grep -q "probe-web"; then
+  echo "  [OK]   sync-hooks installs hooks into a registered fleet"
+else
+  echo "  [FAIL] sync-hooks did not reach the registered fleet"
+  FAILED=1
+fi
+
+# The claim the whole framework rests on: enforcement actually blocks.
+PROBE_BLOCKED=0
+( cd "$WS/probe-web" \
+  && printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt \
+  && git add leak-probe.txt \
+  && HOME="$FAKE_HOME" git -c user.email=forkcheck -c user.name=forkcheck \
+       commit -m probe >/dev/null 2>&1 ) || PROBE_BLOCKED=1
+if [ "$PROBE_BLOCKED" -eq 1 ]; then
+  echo "  [OK]   a staged secret is blocked in an adopted repo"
+else
+  echo "  [FAIL] a staged secret COMMITTED in an adopted repo -- enforcement is absent"
+  FAILED=1
+fi
+
+if adopt python3 scripts/olivercode health | grep -q "probe-web: hooksPath set"; then
+  echo "  [OK]   health confirms the adopted fleet's hooks"
+else
+  echo "  [FAIL] health does not see the adopted fleet"
+  FAILED=1
+fi
+
+echo ""
 if [ "$FAILED" -eq 0 ]; then
-  echo "PASS: a fork of this repo works with no configuration."
+  echo "PASS: a fork of this repo works with no configuration, and the documented"
+  echo "      adoption path produces a fleet whose gates actually block."
   exit 0
 fi
 echo "FAIL: a fork of this repo would NOT work as documented."

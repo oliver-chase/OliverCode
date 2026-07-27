@@ -43,8 +43,10 @@ One command checks all of this at once, in a sandbox with a throwaway HOME:
 bash scripts/qa/check-fork-usable.sh
 ```
 
-If that passes, the fork is sound and every failure below is a setup problem, not a repo
-problem. Run it after any change to the framework's own plumbing — the "works for a
+That check also walks this guide's own load-bearing steps against two throwaway repos --
+`init`, fleet registration, `sync-hooks`, the secret probe, and `health` -- so the
+instructions below are verified, not just written. If it passes, the fork is sound and every
+failure below is a setup problem, not a repo problem. Run it after any change to the framework's own plumbing — the "works for a
 stranger" property has broken silently more than once. It is also Phase 4 of
 `scripts/qa/full-qa-pass.sh`.
 
