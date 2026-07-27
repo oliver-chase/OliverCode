@@ -64,11 +64,22 @@ Write the inventory to a scratch file. You will need it to prove nothing was los
 ls ~/.claude/                                   # what already exists
 cat ~/.claude/CLAUDE.md 2>/dev/null             # existing global rules, if any
 ls -la ~/.claude/skills/ 2>/dev/null            # existing skills, real dirs vs symlinks
-find . -maxdepth 2 -name "CLAUDE.md" -o -maxdepth 2 -name "AGENTS.md" | sort
-for r in <your repos>; do
-  echo "$r: hooksPath=$(git -C $r config --get core.hooksPath)"
-done
+
+# Find your repos and what governance each already has. Read-only. Pass every
+# directory your code lives under -- they do not have to share a parent.
+scripts/olivercode discover --root ~/dev --root ~/work
 ```
+
+`discover` reports, per repo: which agent-rules file it has (if any), whether hooks are
+installed, and which repos are ungoverned. It ends with a profile skeleton containing explicit
+`path` values, ready to paste into `local/repo-profiles.json`.
+
+Two things it will likely surface in an existing setup:
+
+- **Rules files that are not named `CLAUDE.md`** — `AGENTS.md`, `.cursorrules`, and friends do
+  not auto-load in Claude Code. They are invisible in practice, however good their content.
+  Step 4 merges them in.
+- **Repos with `hooksPath=unset`** — no gates at all, silently.
 
 Record, for each existing rules file: what it says, and which of these it is —
 
@@ -226,7 +237,18 @@ Recommended:
 └── product-repo-c/
 ```
 
-If your repos are not siblings of the OliverCode checkout, pass `--root`:
+**If your repos do not share a parent at all** — the normal case when adopting into an
+existing setup — give each profile an explicit `path` in `local/repo-profiles.json`:
+
+```json
+"acme-api": { "name": "acme-api", "path": "~/work/clients/acme/api", ... }
+```
+
+`path` accepts absolute, `~`-relative, or fleet-root-relative values, and `discover` emits it
+for you. Without it a repo is only findable at `<fleet-root>/<name>`, which is what makes a
+tidy sibling layout the easy path rather than the required one.
+
+If your repos DO share a parent that simply is not OliverCode's, pass `--root` instead:
 
 ```bash
 scripts/olivercode sync-hooks --root /path/to/where/your/repos/live

@@ -182,5 +182,28 @@ class TestUnknownArgsRejected(unittest.TestCase):
             self.assertEqual(self._run(*args).returncode, 0, f"{args} should exit 0")
 
 
+
+
+class TestRepoPathResolution(unittest.TestCase):
+    """Adopting into an existing setup usually means repos are NOT siblings. Before
+    the `path` field they could not be registered at all -- the name WAS the path."""
+
+    def test_defaults_to_sibling_convention(self):
+        got = launcher._resolve_repo_path("alpha", {}, Path("/fleet"))
+        self.assertEqual(got, Path("/fleet/alpha"))
+
+    def test_absolute_path_wins(self):
+        got = launcher._resolve_repo_path("alpha", {"path": "/elsewhere/deep/alpha"}, Path("/fleet"))
+        self.assertEqual(got, Path("/elsewhere/deep/alpha"))
+
+    def test_relative_path_resolves_against_fleet_root(self):
+        got = launcher._resolve_repo_path("alpha", {"path": "sub/alpha"}, Path("/fleet"))
+        self.assertEqual(got, Path("/fleet/sub/alpha"))
+
+    def test_tilde_is_expanded(self):
+        got = launcher._resolve_repo_path("alpha", {"path": "~/work/alpha"}, Path("/fleet"))
+        self.assertFalse(str(got).startswith("~"))
+        self.assertTrue(str(got).endswith("work/alpha"))
+
 if __name__ == "__main__":
     unittest.main()
