@@ -227,6 +227,49 @@ Write the result as a short report: what moved where, what stayed, what is still
 
 ---
 
+## Staying current with upstream
+
+`olivercode update` pulls **this checkout's** tracking branch and re-syncs hooks. On a fork
+that is your own `origin` — it does not fetch the upstream framework. That is deliberate: a
+fork carries local edits to `CLAUDE.md`, contracts, and templates, and auto-merging upstream
+over them would be destructive.
+
+To take upstream changes, do it explicitly:
+
+```bash
+git remote add upstream <the repo you forked from>   # once
+git fetch upstream
+git log --oneline HEAD..upstream/main                # read what you are about to take
+git merge upstream/main                              # resolve conflicts deliberately
+bash scripts/qa/check-fork-usable.sh                 # prove the merge did not break the fork
+scripts/olivercode sync-hooks                        # templates may have changed
+```
+
+Expect conflicts in `CLAUDE.md` and anything under `core/` you customized. Those are the
+files you were supposed to change; keep your version and take upstream's structural fixes.
+
+## Backing out
+
+Adopting this should not be a one-way door. To remove it:
+
+```bash
+# 1. Restore whatever install replaced (it never deletes)
+mv ~/.claude/CLAUDE.md.pre-olivercode ~/.claude/CLAUDE.md    # if you had one
+
+# 2. Drop the symlinks this checkout owns. Real directories are NOT ours -- leave them.
+find ~/.claude/skills -maxdepth 1 -type l -lname '*/OliverCode/skills/*' -delete
+
+# 3. Stop the hooks in each governed repo
+git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can stay or go
+
+# 4. The checkout itself is just a directory -- delete it. `local/` dies with it,
+#    so copy that out first if you want to keep your fleet config.
+```
+
+Nothing outside those four places is touched: OliverCode writes no system config, no shell
+profile, no launchd/cron entry, and nothing under any product repo except `.githooks/` and
+that one git config key.
+
 ## Folder structure
 
 The framework assumes one layout, in exactly two places: `sync-hooks` and `health` look for

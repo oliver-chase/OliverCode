@@ -37,8 +37,13 @@ automatically rather than referenced. `docs/governance.md` holds the gate list;
 
 ## Quick Start
 
-Needs `python3`, `git`, and POSIX shell tools. Nothing else — no package install, no
-dependencies (`requirements.txt` does not exist because there is nothing to install).
+**Requirements.** `python3`, `git`, `bash`, POSIX shell tools, and `perl` (Gate 2's emoji
+scan is a perl one-liner — the hook now refuses to run without it rather than passing
+silently). `gh` is needed only if you commit files under `.github/workflows/`; Gate 5 blocks
+those without a workflow-scoped credential. No package install, no language dependencies.
+
+Developed and tested on macOS. The shell code is written for BSD userland (no `grep -P`,
+Bash 3.2 compatible), so Linux should work and is untested; Windows needs WSL.
 
 ```bash
 git clone <your-fork> OliverCode && cd OliverCode
@@ -138,4 +143,5 @@ Two directories live inside the repo tree but never push to GitHub:
 | [Skills Placement](docs/skills-placement.md) | Where every skill/agent file lives, one home per layer |
 | [Troubleshooting](docs/troubleshooting.md) | Common setup and command issues |
 | [Adopting](docs/ADOPTING.md) | Forking this and onboarding your own repos, step by step |
+| [License](LICENSE) | MIT — fork it, use it, no obligation back |
 | [Contributing](CONTRIBUTING.md) | How to make changes to the framework |
