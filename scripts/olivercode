@@ -27,7 +27,7 @@ COMMANDS = [
     ("olivercode install", "Symlink CLAUDE.md + skills into ~/.claude (backs up anything it replaces)"),
     ("olivercode init", "Create local/ fleet config from the tracked examples (never overwrites)"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
-    ("olivercode update", "Pull the latest OliverCode updates from GitHub, then sync fleet hooks"),
+    ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
@@ -739,7 +739,13 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
 
 
 def command_update() -> int:
-    """Pull the latest OliverCode updates from GitHub, then converge fleet hooks."""
+    """Pull this checkout's tracking branch, then converge fleet hooks.
+
+    On a fork `origin` is the FORK, so this does not fetch upstream framework changes.
+    Pulling those is a deliberate act with real merge consequences -- a fork carries local
+    edits to CLAUDE.md, contracts, and templates, which is the whole point of forking -- so
+    it is documented in docs/ADOPTING.md ("Staying current") rather than automated here.
+    """
     pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
     if pull_code != 0:
         return pull_code

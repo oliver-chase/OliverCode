@@ -116,6 +116,14 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 
 ### Open items
 
+**B4 — run `sync-hooks` when the fleet is quiet (MEDIUM, coordination).**
+The emoji gate's perl guard was added to `core/templates/project/pre-commit`, so all five
+fleet repos now legitimately diverge from the template and `health` reports it. The fix
+matters: without perl that gate silently passed every commit. Deliberately NOT synced in the
+same session — `sync-hooks` writes tracked hook files inside repos other agents were actively
+working in. Run `scripts/olivercode sync-hooks` when the fleet is idle; until then the
+reported drift is accurate, not noise.
+
 **B2 — re-enable CI when GitHub Actions billing is restored (LOW, trigger).**
 `.github/workflows/framework-ci.yml` is `disabled_manually` while billing is blocked (see
 `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). It ships ready and gates
