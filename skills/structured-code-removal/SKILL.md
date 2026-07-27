@@ -59,7 +59,3 @@ grep -rn "functionName\|moduleName" --include="*.js" --include="*.ts" --include=
 - **Don't remove a function used in a cron script or shell wrapper.** Those aren't caught by code search.
 - **Don't remove config entries that would break startup.** Some config is read unconditionally.
 - **Don't remove imports that are re-exported.** A file might `import X` and `export { X }` — removing the import breaks downstream.
-
----
-
-> Authored 2026-06-12.

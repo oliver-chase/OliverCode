@@ -75,7 +75,3 @@ Once the new module is stable, update all call sites to import directly from the
 - **Don't extract if the functions use module-level imports that would cause circular dependencies.**
 - **Don't change signatures during extraction.** Preserve the exact signature, including defaults.
 - **Don't extract during a bug fix.** Extraction changes file layout — bug fixes change behavior. Do one at a time.
-
----
-
-> Authored 2026-06-12.

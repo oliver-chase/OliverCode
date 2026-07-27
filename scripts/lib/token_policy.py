@@ -1,17 +1,20 @@
-"""Shared token-policy normalization.
+"""Shared token-policy accessor.
 
-Used by both orchestration-gatekeeper.py and apply-token-policy.py, which
-previously carried independent copies of this logic and could drift.
+One home for the profile -> token-policy field mapping, used by both
+orchestration-gatekeeper.py and apply-token-policy.py. Two copies drift.
 """
 
 
 def token_policy_from_profile(profile: dict) -> dict:
-    """Return normalized token-policy fields for a single repo profile dict.
-    Reads from the token_policy wrapper first, falls back to flat camelCase
-    fields for backward compat."""
+    """Return the token-policy fields for a single repo profile dict.
+
+    Shape is declared in docs/TOKEN_POLICY.md: a `token_policy` object holding
+    ignore_globs, doc_priority_hints, generated_artifact_dirs. Missing fields
+    come back as empty lists so callers can validate rather than KeyError.
+    """
     tp = profile.get("token_policy", {})
     return {
-        "ignore_globs": tp.get("ignore_globs") or profile.get("ignoreGlobs", []),
-        "doc_priority_hints": tp.get("doc_priority_hints") or profile.get("docPriorityHints", []),
-        "generated_artifact_dirs": tp.get("generated_artifact_dirs") or profile.get("generatedArtifactDirs", []),
+        "ignore_globs": tp.get("ignore_globs", []),
+        "doc_priority_hints": tp.get("doc_priority_hints", []),
+        "generated_artifact_dirs": tp.get("generated_artifact_dirs", []),
     }

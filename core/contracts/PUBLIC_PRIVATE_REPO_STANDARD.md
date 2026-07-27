@@ -57,9 +57,8 @@ and must re-include:
 - `!.secrets/README.md`
 
 ## Standardization source
-Canonical template files live in `OliverCode/core/templates/project/`.
-No sync implementation script ships in this repo today (`scripts/sync-public-private-standard.py`
-does not exist) — apply the templates manually until one is written.
+Canonical template files live in `OliverCode/core/templates/project/`. Apply them manually;
+hooks specifically are converged by `scripts/olivercode sync-hooks`.
 
 ## Public-repo redaction
 A public/shared repo describes the PATTERN, not your implementation. Never commit:

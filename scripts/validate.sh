@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate.sh — Unified OliverCode validation entry point.
-# Token-policy checking now lives inside .githooks/pre-commit itself (Gate 8),
-# so run_precommit() below covers it — no separate call needed.
+# Token-policy checking is Gate 8 of .githooks/pre-commit, so run_precommit()
+# below covers it — no separate call needed.
 # Usage:
 #   bash scripts/validate.sh                    — run pre-commit gates (incl. token policy)
 #   bash scripts/validate.sh --evidence <file>  — run pre-commit + gatekeeper
@@ -134,8 +134,8 @@ main() {
     --check-paths)
       shift  # consume --check-paths
       local repo="${1:-olivercode}"
+      # Guard the shift: a bare `shift 2` aborts under `set -e` with no repo arg.
       [ $# -gt 0 ] && shift  # consume repo if given; remaining args are paths
-      # (was `shift 2`, which aborted under `set -e` when no repo arg was passed)
       echo "=== validate: testing token-policy path filtering for $repo ==="
       python3 "$SCRIPT_DIR/apply-token-policy.py" "$repo" "$@" 2>&1 || echo "  (no paths provided — pipe paths via stdin)"
       ;;

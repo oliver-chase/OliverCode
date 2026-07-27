@@ -46,7 +46,3 @@ What we're trying to accomplish.
 2. User approves → execute step by step
 3. Mark steps done as completed
 4. If a step reveals new info, append a finding, don't rewrite the plan
-
----
-
-> Authored 2026-06-12.

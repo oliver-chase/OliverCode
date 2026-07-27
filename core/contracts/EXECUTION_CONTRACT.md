@@ -66,6 +66,15 @@ A WRITE MODE task is NOT complete unless:
 
 If validation fails, no commit. No completion claim. Record the exact failing stage.
 
+### Authority hierarchy
+
+The deploy platform must not be the first place a build or type error is discovered. Each
+repo profile declares its own `canonicalValidationCommand` and `finalAuthority` — run the
+canonical command locally before the commit, and treat the declared final authority (a full
+build, not a lint pass) as the thing that decides whether the change is sound. Pre-commit
+gates catch secrets, structure, and hygiene; they do not catch a block-scoped `const`
+referenced before declaration, which only a full type-checking build surfaces.
+
 ## Secrets vs Git Boundary
 
 ```

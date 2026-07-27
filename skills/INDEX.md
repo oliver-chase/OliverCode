@@ -24,13 +24,9 @@
 | `validator-consolidation` | Merge validate scripts | Consolidating overlapping validators |
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
 | `vault-content-parsing` | Vault conventions | Parsing vault content, building vault tooling |
-| `olivercode-cli` | OliverCode CLI launcher | Modifying CLI, command routing, docker guards |
+| `olivercode-cli` | OliverCode CLI launcher | Modifying CLI, command routing, help surface |
 | `plan` | Markdown planning | Planning a task before executing |
 | `model-routing` | Model tier selection strategy (cheap vs capable) | Choosing which model tier handles a task |
-
-`frontend-ui-references` moved to the vault's `.olivercode/user-skills/` -- design/UI reference
-routing doesn't fit OliverCode's scope (security, token optimization, dev practices, folder
-structure).
 
 ## Personas (not skills, kept in `core/personas/`)
 
@@ -38,9 +34,19 @@ structure).
 
 No team template.
 
-## Non-goals
+## Rules
 
-Anything that isn't an engineering-method skill or the framework's own tooling doesn't
-belong in this index — no exceptions carved out here for any other kind of content.
+- Keep only orchestration/security/optimization skills in `skills/<name>/SKILL.md`. Anything
+  that isn't an engineering-method skill or the framework's own tooling doesn't belong here —
+  no exceptions. A skill that only makes sense inside one product repo belongs in that repo's
+  own `.claude/skills/`; personal/business skills belong in the vault's `.olivercode/user-skills/`.
+- Update this table in the same change when a skill is added or removed. This index is the
+  only catalog — do not create a second copy of the skill list anywhere.
+- Remove references to retired skills instead of keeping dead aliases alive.
+- Adding one: `docs/skills-placement.md` has the full contract (real content, index row, and
+  the `~/.claude/skills/<name>` symlink — all three in the same session).
 
-> Last updated: 2026-07-14 | 18 skills, all tracked in this repo
+## Validation
+
+Manual: every row above must have a matching `skills/<name>/SKILL.md`, and vice versa. There
+is no generator/validator script for this — see `docs/BACKLOG.md` A2.

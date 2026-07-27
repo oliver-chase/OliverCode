@@ -5,13 +5,11 @@ description: "Post-build deep review loop — single sequential review agent ove
 
 # Deep Review (post-build review loop)
 
-Distilled from a real overnight build-and-review session (2026-07-08):
-~20 commits reviewed, 8 verified findings (3 HIGH invisible to the local
-test substrate), ~9k LOC of validated-expired legacy removed, all state
+Reviews a session's own output before it is considered done: findings
+verified against code, validated-expired legacy deleted, and all state
 written into a tracker another agent can resume from. Distinct from
 `functionality-audit` (does the PRODUCT work end to end) and
-`repo-audit-with-execution-batches` (surface scan of a repo at rest):
-this reviews a SESSION'S OWN OUTPUT before it's considered done.
+`repo-audit-with-execution-batches` (surface scan of a repo at rest).
 
 ## When to run
 
@@ -170,7 +168,3 @@ The repo's backlog carries a **live session tracker** section (template:
   deliberately KEPT and why.
 - Close the session with the tracker's "where things stand" rewritten
   to match reality.
-
----
-
-> Authored 2026-07-08 from a real build-review-cleanup session.

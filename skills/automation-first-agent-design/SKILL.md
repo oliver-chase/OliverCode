@@ -39,7 +39,3 @@ User Input
 - **Scripts exit 0 on success, non-zero on error.** Exit codes are the health signal.
 - **Lock files prevent concurrent runs.** Use `mkdir`-based atomic locks with stale thresholds.
 - **Each job has a single responsibility.** Don't have one cron script that both syncs AND drafts AND sends.
-
----
-
-> Authored 2026-06-12.

@@ -72,7 +72,3 @@ Depth: CHARACTER-LEVEL / SAMPLED
 |------|-------|----------|
 | path/to/file.js:42 | TODO left in production code | Medium |
 ```
-
----
-
-> Authored 2026-06-12.

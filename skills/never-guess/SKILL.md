@@ -25,7 +25,3 @@ description: "When you don't know something, never guess — ask or look at the 
 - **When searching:** if the first `Grep`/`Glob` finds nothing, try a different pattern — don't say "not found" after one attempt.
 - **When reading:** if `Read` says not found, try the relative path and the vault-relative path.
 - **No "around line X"** — use exact line numbers from the live file on disk. `Read` outputs line numbers.
-
----
-
-> Authored 2026-06-12.

@@ -73,10 +73,6 @@ Required lock points:
 
 Any variance must be explicit, temporary, and recorded in `shared/repo-map.json`.
 
-## Historical Note
-
-Previous versions of this document listed 9 validator scripts (validate-framework-baseline.sh, validate-doc-suite.sh, validate-feature-coverage.sh, etc.) as required verify surfaces. These scripts were never implemented. The active verification surfaces are the pre-commit hook and the orchestration gatekeeper. Cross-project sync/governance scripts (sync-project-hygiene.sh, install-governance-hook.sh, validate-governance-wiring.sh) were also never implemented — lock points are handled through the shared bootstrap manifest and template sync mechanisms.
-
 ## Design Decisions
 
 ### Personas and Teams
@@ -84,7 +80,7 @@ Only one persona (`oliver`) is defined and no team template. This is intentional
 
 ### Template Directory Architecture
 - `core/templates/project/` -- the canonical template repository. All project templates are authored here.
-- Rule: `core/templates/project/` is the single template home -- hooks, CI workflows, keepalive scripts, docs, and governance scripts all ship to downstream repos from here via the bootstrap manifest. No second template directory exists; a synced-subset copy was retired 2026-07-08 after its hook copies drifted from the masters once.
+- Rule: `core/templates/project/` is the single template home -- hooks, CI workflows, docs, and governance scripts all ship to downstream repos from here via the bootstrap manifest. There is exactly one template directory; a second one drifts from the masters.
 
 ### Runtime Manifests
 `runtime/manifests/` does not exist as a tracked path. `.gitignore` reserves the path

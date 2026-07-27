@@ -70,15 +70,11 @@ logs/
 .pytest_cache/
 .mypy_cache/
 
-# Node (for console)
+# Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Next.js (for console)
-.next/
-out/
 
 # OliverCode public/private runtime boundary
 .env.local

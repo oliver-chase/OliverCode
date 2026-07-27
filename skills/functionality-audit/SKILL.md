@@ -5,11 +5,9 @@ description: "Full functionality audit of a live product repo — crash-safe inc
 
 # Functionality Audit (crash-safe, write-as-you-go)
 
-Distilled from a real full-product audit (2026-07-08) including the
-owner's mid-audit corrections. Distinct from `repo-audit-with-execution-batches`
-(surface scan → report): this one verifies the product actually WORKS end to
-end, fixes quick wins inline, and assumes the session may be cut off at any
-moment.
+Distinct from `repo-audit-with-execution-batches` (surface scan → report):
+this one verifies the product actually WORKS end to end, fixes quick wins
+inline, and assumes the session may be cut off at any moment.
 
 ## Non-negotiables (owner-set, learned the hard way)
 
@@ -127,7 +125,3 @@ open/closed) are signal, not drift.
   geocode") so partial fixes are never mistaken for full coverage.
 - Commit messages carry the findings summary — the audit trail must survive
   in git history even if the backlog doc is later trimmed.
-
----
-
-> Authored 2026-07-08 from a live full-functionality audit session.
