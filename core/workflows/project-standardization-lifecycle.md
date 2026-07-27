@@ -12,9 +12,10 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 
 ## Lifecycle
 1. Bootstrap new project:
-- No single bootstrap script ships in this repo. Copy the managed files listed in
-  `shared/project-bootstrap-manifest.json` from `core/templates/project/` into the
-  target repo, then run `core/templates/project/scripts/install-enforcement.sh` and
+- Copy the managed files listed in `shared/project-bootstrap-manifest.json` from
+  `core/templates/project/` into the target repo.
+- Install hooks with `scripts/olivercode sync-hooks` (run from OliverCode) — it deploys the
+  hook template and sets `core.hooksPath`. Layer planning-doc governance on top by running
   `core/templates/project/scripts/install-planning-governance-hook.sh` from the target repo.
 - Add the project to `shared/repo-map.json`.
 - Add structure rules entry in `shared/project-structure-rules.json`.

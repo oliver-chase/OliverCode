@@ -80,6 +80,12 @@ project/
 
 ## Install in a new project
 
+Hooks are installed by the launcher, from OliverCode:
+
 ```bash
-bash Oliver/Project Repos/OliverCode/core/templates/project/scripts/install-enforcement.sh path/to/project
+scripts/olivercode sync-hooks
 ```
+
+It deploys `core/templates/project/pre-commit` (or the private variant for the vault) to
+each repo's `.githooks/` and sets `core.hooksPath`. Planning-doc governance is layered on
+afterwards with `core/templates/project/scripts/install-planning-governance-hook.sh`.

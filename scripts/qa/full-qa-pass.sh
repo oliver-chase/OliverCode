@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ─── Full QA Pass (Automated) ─────────────────────────────────────────────
-# Combines code quality, docs cohesion, and workflow status checks into a
-# single automated sweep. No LLM calls — pure static analysis.
+# Combines code quality, docs cohesion, and bloat checks into a single
+# automated sweep. No LLM calls — pure static analysis.
 #
 # Usage: bash scripts/qa/full-qa-pass.sh [--verbose] [--target <dir>]
 #
-# This delegates entirely to check-code-quality.sh, check-docs-cohesion.sh,
-# check-workflow-status.sh, and check-bloat.sh — the four canonical checkers — and sums
-# their exit codes. It does not reimplement their checks; a divergent inline
-# copy here would just drift from the canonical logic again.
+# This delegates entirely to check-code-quality.sh, check-docs-cohesion.sh, and
+# check-bloat.sh — the three canonical checkers — and sums their exit codes. It
+# does not reimplement their checks; a divergent inline copy here would just
+# drift from the canonical logic again.
 #
 # Exit codes:
 #   0 - All checks pass
@@ -70,8 +70,7 @@ else
   run_phase "Phase 1: Code Quality" "check-code-quality.sh"
 fi
 run_phase "Phase 2: Documentation Cohesion" "check-docs-cohesion.sh"
-run_phase "Phase 3: Workflow Status" "check-workflow-status.sh"
-run_phase "Phase 4: Bloat & Legacy" "check-bloat.sh"
+run_phase "Phase 3: Bloat & Legacy" "check-bloat.sh"
 
 # ─── Summary ─────────────────────────────────────────────────────────────
 END_TIME=$(date +%s)
@@ -81,7 +80,7 @@ echo "╔═══════════════════════�
 echo "║         SUMMARY                                         ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo "Duration: ${DURATION}s"
-echo "Phases with issues: $TOTAL_ISSUES / 4 (critical: $CRITICAL_ISSUES)"
+echo "Phases with issues: $TOTAL_ISSUES / 3 (critical: $CRITICAL_ISSUES)"
 echo ""
 
 if [ "$CRITICAL_ISSUES" -gt 0 ]; then

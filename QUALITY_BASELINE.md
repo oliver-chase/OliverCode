@@ -23,7 +23,7 @@ If a managed quality file changes in any project, the canonical file in **this r
 
 Before committing:
 
-1. `.githooks/pre-commit` -- 6 gates: secrets, emoji, PII, deleted repo refs, bootstrap structure, contract integrity
+1. `.githooks/pre-commit` -- the gate runner; `docs/governance.md` is the one home for the gate list
 2. Follow EXECUTION_CONTRACT: CODE -> DOCS -> AUDIT -> QA -> GATE -> COMMIT -> PUSH
 3. Doc standard: forward-only, current state -- never "previously/was removed/has been"
 4. PUBLIC_REPO_PRIVACY: no project names, host paths, or personal data in public content
@@ -34,7 +34,3 @@ All project repos derive their quality baseline from this repo's `core/templates
 
 1. Edit the canonical file here
 2. Sync to downstream repos via the bootstrap manifest and their repo-specific bootstrap process
-
-## Historical Note
-
-Previous versions of this document referenced `scripts/run-governance-gates.sh`, `scripts/sync-project-hygiene.sh`, and `scripts/audit-project-hygiene.sh`. These scripts were never implemented. The active enforcement is the pre-commit hook at `.githooks/pre-commit`. Cross-project sync is handled through the shared template directory and repo-specific bootstrap manifests in `shared/project-bootstrap-manifest.json`.
