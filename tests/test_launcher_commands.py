@@ -268,5 +268,26 @@ class TestBootstrap(unittest.TestCase):
         finally:
             shutil.rmtree(plain, ignore_errors=True)
 
+class TestFleetIteration(unittest.TestCase):
+    """health and sync-hooks each had their own copy of this filter and had drifted:
+    one compared the self-skip case-sensitively, the other did not."""
+
+    def test_framework_repo_is_excluded_regardless_of_casing(self):
+        profiles = {"OliverCode": {}, "olivercode": {}, "OLIVERCODE": {}, "fallow": {}}
+        names = [n for n, _, _ in launcher._iter_fleet(profiles, Path("/fleet"))]
+        self.assertEqual(names, ["fallow"])
+
+    def test_yields_the_resolved_path(self):
+        profiles = {"alpha": {"path": "/elsewhere/alpha"}, "beta": {}}
+        got = {n: p for n, _, p in launcher._iter_fleet(profiles, Path("/fleet"))}
+        self.assertEqual(got["alpha"], Path("/elsewhere/alpha"))
+        self.assertEqual(got["beta"], Path("/fleet/beta"))
+
+    def test_yields_the_profile_for_variant_lookups(self):
+        profiles = {"alpha": {"hookVariant": "custom"}}
+        _, profile, _ = next(iter(launcher._iter_fleet(profiles, Path("/fleet"))))
+        self.assertEqual(profile.get("hookVariant"), "custom")
+
+
 if __name__ == "__main__":
     unittest.main()

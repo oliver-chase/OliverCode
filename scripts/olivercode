@@ -567,6 +567,21 @@ def _resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
     return p if p.is_absolute() else (fleet_root / p)
 
 
+def _iter_fleet(profiles: dict, fleet_root: Path):
+    """Yield (name, profile, repo_path) for every fleet repo, framework repo excluded.
+
+    Single definition on purpose. health and sync-hooks previously each carried their
+    own copy of this filter and had already drifted apart: one compared the self-skip
+    case-sensitively and the other did not, so a profile named "OliverCode" -- the
+    casing `discover` emits from a directory name -- was skipped by sync-hooks and
+    treated as a governed repo by health.
+    """
+    for name, profile in profiles.items():
+        if name.lower() == "olivercode":
+            continue
+        yield name, profile, _resolve_repo_path(name, profile, fleet_root)
+
+
 def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
     """Return human-readable problems with a repo's live hook directory.
 
@@ -675,13 +690,12 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
 
     # (c) Fleet repos: unset core.hooksPath, or a hook file diverging from the template.
     profiles, _ = load_repo_profiles(oc_root)
-    fleet_names = [name for name in profiles if name != "olivercode"]
-    if not fleet_names:
+    fleet = list(_iter_fleet(profiles, fleet_root or oc_root.parent))
+    if not fleet:
         print("  [WARN] no fleet registered in local/repo-profiles.json — skipping hook-drift check")
         passed += 1
     else:
-        for name in fleet_names:
-            repo_path = _resolve_repo_path(name, profiles[name], fleet_root or oc_root.parent)
+        for name, profile, repo_path in fleet:
             if not (repo_path / ".git").exists():
                 print(f"  [WARN] {name}: not present on this machine — skipping")
                 passed += 1
@@ -697,7 +711,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 continue
             hooks_dir = repo_path / hooks_path
             problems = _hook_problems(hooks_dir, templates_dir)
-            variant = profiles[name].get("hookVariant")
+            variant = profile.get("hookVariant")
             if problems and variant:
                 # A repo may legitimately need a hook the template cannot express (a
                 # repo-specific governance path, a gate whose checker only exists there).
@@ -786,15 +800,12 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
     skipped = 0
 
     profiles, _ = load_repo_profiles(oc_root)
-    for name in profiles:
-        if name.lower() == "olivercode":
-            continue
-        repo_path = _resolve_repo_path(name, profiles[name], fleet_root)
+    for name, profile, repo_path in _iter_fleet(profiles, fleet_root):
         if not (repo_path / ".git").exists():
             print(f"  [SKIP] {name}: not present on this machine")
             skipped += 1
             continue
-        variant = profiles[name].get("hookVariant")
+        variant = profile.get("hookVariant")
         if variant:
             # Declared variant: overwriting would destroy a considered customization.
             # `health` reports it as WARN rather than drift. Remove the profile field
