@@ -41,6 +41,9 @@ DOWNSTREAM_RELATIVE = frozenset(
         "docs/repo-structure-contract.md",
         "docs/SETUP_MODES.md",
         "docs/MANUAL_SETUP.md",
+        # OliverCode keeps its own at the repo root; `docs/ARCHITECTURE.md` only ever
+        # names a downstream repo's copy (e.g. in docs/ADOPTING.md's rewrite template).
+        "docs/ARCHITECTURE.md",
         "scripts/validate-repo.sh",
         "scripts/bootstrap-profile.sh",
         "scripts/run-profile-checks.sh",
@@ -75,15 +78,23 @@ OPTIONAL_PREFIXES = (
 
 
 def _tracked_files(repo_root: Path) -> list[str]:
+    """Tracked files PLUS untracked-but-not-ignored ones.
+
+    `--others --exclude-standard` matters: a brand-new file is untracked until the
+    commit that adds it, so a tracked-only listing cannot see broken references in
+    the very change being made. Caught for real -- a new doc's dangling ref passed
+    validate.sh while the file was untracked and only failed after it was committed,
+    which is exactly backwards for a pre-commit gate.
+    """
     out = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-files"],
+        ["git", "-C", str(repo_root), "ls-files", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         text=True,
         check=False,
     )
     if out.returncode != 0:
         return []
-    return [line for line in out.stdout.splitlines() if line.strip()]
+    return sorted({line for line in out.stdout.splitlines() if line.strip()})
 
 
 def _is_exempt(token: str) -> bool:
