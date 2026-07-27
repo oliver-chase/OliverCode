@@ -25,7 +25,16 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODE="worktree"
-[ "${1:-}" = "--clone" ] && MODE="clone"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --clone) MODE="clone"; shift ;;
+    # full-qa-pass.sh passes --target to every checker. This one always tests the
+    # repo it ships in -- it asserts THIS repo is forkable -- so the value is
+    # accepted and ignored deliberately rather than silently swallowed.
+    --target) shift 2 || shift ;;
+    *) echo "check-fork-usable.sh: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
 
 SANDBOX="$(mktemp -d)"
 FAKE_HOME="$SANDBOX/home"
