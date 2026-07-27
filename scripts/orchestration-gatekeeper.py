@@ -56,19 +56,33 @@ def get_token_policy(repo_name: str, profiles: dict) -> dict:
 
 
 def validate_token_policy(profiles: dict) -> list:
-    """Check all repo profiles for valid token-policy fields. Returns list of error strings.
-    Reuses get_token_policy() for the token_policy -> flat-camelCase fallback."""
+    """Check every repo profile's token-policy fields. Returns a list of error strings.
+
+    This runs as Gate 8, so its output is what a forker sees when a commit is BLOCKED.
+    Each message therefore names the field, the repo, and what to put there -- the
+    caller adds the file path. A bare "missing token_policy.ignore_globs" sent people
+    hunting for which file it even meant.
+    """
     errors = []
     for name in profiles:
         tp = get_token_policy(name, profiles)
         ignore = tp["ignore_globs"]
         gen = tp["generated_artifact_dirs"]
         if not ignore:
-            errors.append(f"  {name}: missing token_policy.ignore_globs")
+            errors.append(
+                f"  {name}: token_policy.ignore_globs is missing or empty "
+                f"— add the glob patterns agents should skip (e.g. \"node_modules/**\", \"*.log\")"
+            )
         elif "**" in ignore:
-            errors.append(f"  {name}: token_policy.ignore_globs contains bare '**' — would exclude everything")
+            errors.append(
+                f"  {name}: token_policy.ignore_globs contains a bare '**' "
+                f"— that excludes every file; list specific patterns instead"
+            )
         if not gen:
-            errors.append(f"  {name}: missing token_policy.generated_artifact_dirs")
+            errors.append(
+                f"  {name}: token_policy.generated_artifact_dirs is missing or empty "
+                f"— add the build/output dirs (e.g. \"node_modules\", \".next\", \"coverage\")"
+            )
     return errors
 
 

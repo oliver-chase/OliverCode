@@ -49,13 +49,28 @@ before commit; there is no bypass mode. The gate list and what each one blocks l
 Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
 --evidence-file <path>` blocks a WRITE MODE completion claim without required evidence.
 
-## Completion Gate
+## Completion Gate (opt-in, on demand)
 
-A WRITE MODE task is NOT complete unless:
-- The evidence record (matching result-schema.json for its task type) is populated
-- `orchestration-gatekeeper.py --repo <name> --task-type <type> --evidence-file <path>` exits 0
+The gatekeeper can validate a completion claim against a machine-readable evidence record:
 
-If validation fails, no commit. No completion claim. Record the exact failing stage.
+```bash
+python3 scripts/orchestration-gatekeeper.py --repo <name> --task-type <type> --evidence-file <path>
+```
+
+It checks the fields `shared/task-policies/task-types.json` requires for that task type, in
+the shape `shared/task-policies/result-schema.json` declares, and exits nonzero naming the
+exact failing stage. Use it when a completion claim needs to be auditable by something other
+than trust — a long autonomous run, a handoff, a task where "I ran the tests" needs proof.
+
+**It is opt-in, not a precondition for every commit.** Stating it as a universal requirement
+would be false: nothing invokes it automatically, no evidence record exists anywhere in this
+fleet, and every commit in this repo's history was made without one. A contract that every
+commit violates teaches agents that written rules are optional, which costs more than the
+gate was worth. The mechanically-enforced completion requirement is the pre-commit hook plus
+the repo's own `scripts/validate.sh`.
+
+What IS required on every change: run the repo's canonical validation before committing, and
+stop on failure rather than claiming completion.
 
 ### Authority hierarchy
 
