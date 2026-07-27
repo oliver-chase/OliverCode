@@ -69,5 +69,32 @@ class TestLiveTree(unittest.TestCase):
         self.assertEqual(fc.check_all(REPO_ROOT), [])
 
 
+
+
+class TestFeatureMapCompleteness(unittest.TestCase):
+    """FEATURE_MAP.md asserts it indexes every capability. Five scripts were missing
+    when that claim was first tested, three of them QA checkers CI itself runs."""
+
+    def _mod(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "cc", REPO_ROOT / "scripts" / "lib" / "consistency_check.py"
+        )
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_live_map_is_complete(self):
+        self.assertEqual(self._mod().check_feature_map_completeness(REPO_ROOT), [])
+
+    def test_every_exemption_is_stated_in_the_doc_too(self):
+        """The code's exempt list and the doc's stated scope must agree, or the
+        exemption becomes a place to hide an undocumented capability."""
+        fm = (REPO_ROOT / "docs" / "FEATURE_MAP.md").read_text(encoding="utf-8")
+        for rel in self._mod().FEATURE_MAP_EXEMPT:
+            if rel.endswith("__init__.py"):
+                continue
+            self.assertIn(rel, fm, f"{rel} is exempt in code but not explained in the doc")
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,13 @@ Status: Active
 Purpose: canonical index of every capability this framework ships, and the one doc that owns
 each. If a capability exists and is not listed here, this map is wrong.
 
+Scope, so the claim above is checkable rather than aspirational: every user-invocable script
+under `scripts/` appears by name. Pure internal helpers (`scripts/lib/repo_profiles.py`,
+`scripts/lib/token_policy.py` — data loaders with no entry point) do not, and skills are
+catalogued once in `skills/INDEX.md` rather than duplicated here. `scripts/lib/`'s gate
+modules ARE listed, because each is a distinct enforcement capability.
+`bash scripts/validate.sh` fails if a user-invocable script is missing from this file.
+
 ## Governance and Quality
 
 | Surface | Source of Truth | Enforcement |
@@ -45,6 +52,9 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
+| `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax; TypeScript-leaning, aimed at the fleet repos |
+| `scripts/qa/check-docs-cohesion.sh` | Broken wiki-links and opt-in stale-domain references |
+| `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |
 | `scripts/qa/check-fork-usable.sh` | Proves a stranger's clone works with no config AND that the documented adoption path produces a fleet whose gates actually block, in a sandbox with a virgin HOME |
 | `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
 | `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |

@@ -153,9 +153,43 @@ def check_gate_integrity(repo_root: Path) -> list[str]:
     return failures
 
 
+# Data loaders with no entry point. FEATURE_MAP states this exclusion explicitly, so
+# the list here and the sentence there must agree -- that is the whole point of the check.
+FEATURE_MAP_EXEMPT = {
+    "scripts/lib/__init__.py",
+    "scripts/lib/repo_profiles.py",
+    "scripts/lib/token_policy.py",
+}
+
+
+def check_feature_map_completeness(repo_root: Path) -> list[str]:
+    """FEATURE_MAP.md claims to index every capability. Hold it to that.
+
+    The file says "If a capability exists and is not listed here, this map is wrong" --
+    a testable invariant that nothing tested. Five scripts were missing when this was
+    first run, three of them user-invocable QA checkers that CI itself calls.
+    """
+    fm_path = repo_root / "docs" / "FEATURE_MAP.md"
+    if not fm_path.is_file():
+        return ["  [FEATURE MAP] docs/FEATURE_MAP.md is missing"]
+    fm = fm_path.read_text(encoding="utf-8")
+
+    missing = [
+        rel for rel in _tracked(repo_root, "scripts/")
+        if rel not in FEATURE_MAP_EXEMPT and rel not in fm
+    ]
+    return [
+        f"  [FEATURE MAP] {rel} is not listed in docs/FEATURE_MAP.md, which claims to index "
+        f"every capability. Add a row, or add it to FEATURE_MAP_EXEMPT with the exclusion "
+        f"stated in the doc too."
+        for rel in sorted(missing)
+    ]
+
+
 def check_all(repo_root: Path) -> list[str]:
     return (
         check_skill_index(repo_root)
         + check_gate_count(repo_root)
         + check_gate_integrity(repo_root)
+        + check_feature_map_completeness(repo_root)
     )
