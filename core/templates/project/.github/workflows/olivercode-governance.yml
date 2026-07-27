@@ -15,12 +15,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout target repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Checkout OliverCode gate stack
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: your-org/your-orchestration
           ref: main

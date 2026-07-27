@@ -2,11 +2,17 @@ name: OliverCode Framework CI
 
 on: [push, pull_request]
 
+# Least privilege: these jobs only read the repo and run checks. Without an explicit
+# grant GITHUB_TOKEN inherits the repository default, which on many repos is
+# read-write -- enough for a compromised step to push code.
+permissions:
+  contents: read
+
 jobs:
   framework-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Health check
         run: python3 scripts/olivercode health
