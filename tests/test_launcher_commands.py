@@ -273,9 +273,9 @@ class TestFleetIteration(unittest.TestCase):
     one compared the self-skip case-sensitively, the other did not."""
 
     def test_framework_repo_is_excluded_regardless_of_casing(self):
-        profiles = {"OliverCode": {}, "olivercode": {}, "OLIVERCODE": {}, "fallow": {}}
+        profiles = {"OliverCode": {}, "olivercode": {}, "OLIVERCODE": {}, "product-repo": {}}
         names = [n for n, _, _ in launcher._iter_fleet(profiles, Path("/fleet"))]
-        self.assertEqual(names, ["fallow"])
+        self.assertEqual(names, ["product-repo"])
 
     def test_yields_the_resolved_path(self):
         profiles = {"alpha": {"path": "/elsewhere/alpha"}, "beta": {}}

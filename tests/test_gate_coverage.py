@@ -107,10 +107,28 @@ class TestMutations(unittest.TestCase):
             'echo "[pre-commit] PII scan..."'))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
-        # The exact false claim, in the exact shape the old pattern could not match.
+        """The original false claim, in the shape the old pattern could not match.
+
+        Exercises all three mechanisms at once: the modifier-tolerant claim pattern
+        ("8 pre-commit gates"), the cue sitting on the PRECEDING line, and comparison
+        against the template's count rather than OliverCode's.
+        """
         self.assertTrue(self._fails_after(
-            "README.md", "| Doc/code consistency",
-            "| 8 pre-commit gates in every adopted repo | x | y |\n| Doc/code consistency"))
+            "README.md", "## What You Get\n",
+            "## What You Get\n\n**On every commit, in every adopted repo**\n"
+            "8 pre-commit gates run.\n"))
+
+    def test_a_cue_in_an_earlier_paragraph_does_not_reattribute(self):
+        """Context stops at a blank line.
+
+        Widening it past the paragraph boundary made the checker MISS a planted wrong
+        claim: an unrelated "template" two paragraphs up re-attributed an OliverCode
+        claim to the template hook, where the wrong number happened to be right.
+        """
+        self.assertTrue(self._fails_after(
+            "docs/troubleshooting.md", "## Commits are passing gates",
+            "The template is unrelated to what follows.\n\n"
+            "All six gates run in this repo.\n\n## Commits are passing gates"))
 
     def test_catches_the_word_form_of_a_wrong_claim(self):
         self.assertTrue(self._fails_after(
