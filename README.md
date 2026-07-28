@@ -6,7 +6,7 @@ Two problems drive its design.
 
 **An agent only follows rules it can see.** Rules files not named exactly `CLAUDE.md` never load. Rules living in one repo are absent in the next. A convention explained in chat is gone next session.
 
-So everything here loads without being asked for — one symlink puts the same rules and skills into every session on the machine, and what must always hold is a git hook, not a hope.
+So everything here loads automatically: one symlink puts the same rules and skills into every session on the machine, and the rules that must always hold are enforced by git hooks.
 
 **Hook enforcement fails open.** If `core.hooksPath` is unset, points at a missing directory, or the hook is not executable:
 
@@ -14,7 +14,7 @@ So everything here loads without being asked for — one symlink puts the same r
 - git prints nothing
 - a commit carrying an API key simply succeeds
 
-Most of this framework's checking exists to make that silence loud.
+`scripts/olivercode health` detects that state, and the onboarding path ends with a staged fake secret that proves the gates block before you rely on them.
 
 ---
 
@@ -43,11 +43,11 @@ Nothing here destroys what you had:
 
 ## How a repo becomes governed
 
-Each step exists because the one before it is not enough on its own:
+In order:
 
 1. **Register the repo** in `local/repo-profiles.json` — `init` seeds it, `discover` emits a paste-ready profile per repo it finds. Repos need not share a parent; a profile's `path` reaches anywhere.
 2. **`scripts/olivercode sync-hooks`** writes the gates into every registered repo. Read its per-repo lines: a repo reported as skipped is a repo it did not govern.
-3. **Prove it blocks.** Stage a fake secret, watch the commit refuse. Installed and enforcing are different claims; `docs/ADOPTING.md` ends on this probe.
+3. **Prove it blocks.** Stage a fake secret and confirm the commit is refused. `sync-hooks` reporting success only means the files were written; this probe is what verifies enforcement, and `docs/ADOPTING.md` ends on it.
 4. **`scripts/olivercode health`, on a schedule.** Nothing else detects a hook that quietly stopped applying.
 
 An adopted repo gets six gates: secrets, emoji/icons, PII, deleted-repo references, workflow push-auth, planning-doc governance.
@@ -78,7 +78,7 @@ The framework never blurs the two. `CONTRIBUTING.md`'s "Enforcement Reality" sec
 
 ### Checks must be able to fail
 
-The recurring defect in governance tooling is the check that reports success it never earned: a counter compared but never incremented, a scan that silently skips when its tool is missing, a "PASS" printed over an empty set.
+The recurring defect in governance tooling is a check that reports success without having examined anything: a counter compared but never incremented, a scan that silently skips when its tool is missing, a "PASS" printed over an empty set.
 
 `scripts/lib/falsifiability_check.py` hunts that shape mechanically. The test suite proves each checker by mutation — break the thing, assert the checker notices. A green result here means something was actually examined.
 
@@ -100,7 +100,7 @@ bash scripts/qa/full-qa-pass.sh        # code quality, docs cohesion, bloat, for
 
 The scenario matrix walks every documented setup shape in an isolated sandbox with a throwaway HOME — fresh machine, existing `~/.claude`, scattered fleets, wrong `--root`s, the full backout.
 
-Every assertion maps to a sentence in the docs. When one fails, either the code or that sentence is lying.
+Every assertion maps to a sentence in the docs, so a failing assertion means the code or that sentence is wrong.
 
 ---
 
@@ -134,6 +134,6 @@ Every assertion maps to a sentence in the docs. When one fails, either the code 
 `python3 -m unittest discover tests` is the test count and its result — the suites include mutation tests that prove the checkers can fail.
 
 8 pre-commit gates on this repo;
-an adopted repo receives six of those. Both counts are machine-verified against the hook files by `validate.sh`, so they cannot silently rot here.
+an adopted repo receives six of those. Both counts are machine-verified against the hook files by `validate.sh`, so a change to either fails the build until this file is updated.
 
 `bash scripts/qa/check-scenarios.sh` is the setup matrix and prints its own tally. Pure `python3` + `bash` + `perl`, no package dependencies. macOS verified; CI ships ready and is enabled per fork.
