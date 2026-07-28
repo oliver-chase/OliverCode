@@ -147,6 +147,19 @@ class CommentBudgetGateTests(unittest.TestCase):
         self.write("r.py", 'TEMPLATE = """\ndef g():\n    """\n' + "x = 1\n" * 40)
         self.assertIn("OK:", self.run_gate("--quiet", "--top", "1").stdout)
 
+    # ── template literals ────────────────────────────────────────────────────
+
+    def test_a_block_opener_inside_a_template_literal_is_data(self):
+        # `/*` in a template literal opened a block that never closed, so every
+        # line to the end of the file counted as one comment.
+        self.write("t.js", "const t = `\n/* not a comment, just text\n`;\n" + "const x = 1;\n" * 40)
+        self.assertIn("OK:", self.run_gate("--quiet", "--top", "1").stdout)
+
+    def test_a_real_block_after_a_template_literal_is_still_caught(self):
+        # Ablates the fix above: template tracking must not swallow real comments.
+        self.write("u.js", "const t = `x`;\n" + "// narrative\n" * 25 + "const y = 1;\n")
+        self.assertEqual(self.run_gate("--quiet").returncode, 1)
+
     # ── block length, the original rule ──────────────────────────────────────
 
     def test_a_block_over_the_cap_fails(self):
