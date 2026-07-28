@@ -47,7 +47,10 @@ The locked outline:
    nothing may be unreachable.
 9. **Status.** Hard numbers only: test count, file count, runtime requirements, what is
    verified and how. No adjectives.
-10. **License.** One line.
+10. **License.** One line, and only where the repo actually ships a license and
+    licensing matters to a reader (a public or forkable repo). A private product
+    repo with no licensing story omits the section — an empty ritual section is
+    exactly the padding this outline exists to prevent.
 
 Sections are separated by `---` rules. Length follows surface area — a small tool gets a
 short README in the same order, never a padded one.
