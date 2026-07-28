@@ -279,12 +279,20 @@ def check_no_fleet_names_in_tracked_files(repo_root: Path) -> list[str]:
     if not names:
         return []
 
-    # `local/` is gitignored, so it is not in this list by construction.
-    tracked = _tracked(repo_root, "*.md", "*.py", "*.sh", "*.json", "*.mjs")
+    # `local/` is gitignored, so it is not in this list by construction. Scan every
+    # tracked text file rather than an extension list: the hooks have no extension,
+    # workflows are .yml, and a name in either ships to every fork just the same.
+    # Binary formats are skipped by content sniff, not by filename guess.
+    tracked = _tracked(repo_root)
     failures: list[str] = []
     for rel in tracked:
+        path = repo_root / rel
         try:
-            text = (repo_root / rel).read_text(encoding="utf-8", errors="ignore")
+            with open(path, "rb") as fh:
+                head = fh.read(1024)
+            if b"\x00" in head:  # binary
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
         for name in sorted(names):

@@ -126,6 +126,13 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     if expired or unparsable or unreasoned:
         return 0, len(expired) + len(unparsable) + len(unreasoned), 0
 
-    soonest = min(datetime.fromisoformat(r.replace("Z", "+00:00")) for _, r in dated)
+    # Normalize before comparing: min() over a mix of offset-naive and offset-aware
+    # datetimes raises TypeError, so one waiver written without a timezone crashed the
+    # whole health run. The expiry loop above already normalizes; this must match it.
+    def _aware(raw: str) -> datetime:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+    soonest = min(_aware(r) for _, r in dated)
     print(f"  [OK] {len(dated)} waiver(s) current; next expires {soonest.date()}")
     return 1, 0, 0

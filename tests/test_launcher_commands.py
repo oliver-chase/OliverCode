@@ -291,3 +291,26 @@ class TestFleetIteration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWaiverExpiryDateHandling(unittest.TestCase):
+    """One waiver written without a timezone must not crash the whole health run.
+
+    min() over mixed offset-naive and offset-aware datetimes raises TypeError;
+    reproduced live before the fix normalized both sides identically."""
+
+    def test_mixed_naive_and_aware_expiry_dates(self):
+        import contextlib, io, json
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
+        try:
+            (tmp / "local").mkdir()
+            (tmp / "local" / "repo-map.json").write_text(json.dumps({
+                "unmanagedRepoWaivers": [
+                    {"name": "a", "reason": "r", "expiresAt": "2099-06-01T00:00:00+00:00"},
+                    {"name": "b", "reason": "r", "expiresAt": "2099-07-01T00:00:00"},
+                ]}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                passed, failed, skipped = launcher._check_waiver_expiry(tmp)
+            self.assertEqual((passed, failed), (1, 0))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
