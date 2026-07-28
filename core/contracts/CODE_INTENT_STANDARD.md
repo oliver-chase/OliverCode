@@ -34,6 +34,11 @@ Write the comment so it answers the question a reader will actually have:
 in roughly three to six lines. Anything longer is a narrative, and narratives
 belong in the DECISIONS ledger with an ID the comment points at.
 
+**How it is written lives in `docs/DOCUMENTATION_STANDARD.md` (Voice,
+Readability), which governs comments as well as docs.** Length and prose are
+different failures: a comment can pass the gate below at 19 lines and still say
+in three sentences what one carries.
+
 The test: a reader scrolling to find the code should not have to scroll past
 the explanation of it. A 39-line file header is not documentation, it is an
 essay in the wrong file — and it rots faster than short comments because

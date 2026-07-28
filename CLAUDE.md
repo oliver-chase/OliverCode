@@ -47,9 +47,11 @@ apply constantly; that contract is the order they run in.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
 - Documentation robust but manageable: one concept one home, pointers elsewhere. ANY
-  README or doc you write, in any repo, follows `$OC/docs/DOCUMENTATION_STANDARD.md`
-  (locked outline, voice, naming, GitHub About) — the `writing-documentation` skill
-  applies it. Docs sync in the same commit as the change, always.
+  README, doc, or non-trivial COMMENT you write, in any repo, follows
+  `$OC/docs/DOCUMENTATION_STANDARD.md` (locked outline, voice, naming, GitHub About) — the
+  `writing-documentation` skill applies it. Its Voice rules cover comment prose too: say it
+  once, lead with the claim, cut the setup rather than the conclusion. Docs sync in the same
+  commit as the change, always.
 - Token efficiency is a design constraint: prefer deterministic scripts over LLM calls, short
   pointers over restated rules.
 
