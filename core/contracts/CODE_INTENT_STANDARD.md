@@ -34,10 +34,39 @@ Write the comment so it answers the question a reader will actually have:
 in roughly three to six lines. Anything longer is a narrative, and narratives
 belong in the DECISIONS ledger with an ID the comment points at.
 
-**How it is written lives in `docs/DOCUMENTATION_STANDARD.md` (Voice,
-Readability), which governs comments as well as docs.** Length and prose are
-different failures: a comment can pass the gate below at 19 lines and still say
-in three sentences what one carries.
+**The sentence form is non-negotiable: state the thing, attach its cause.**
+*This is what this is, because of this.* Nothing before the statement, nothing
+after the cause.
+
+```ts
+// BAD — builds up to it, then restates it
+// We need to be careful about how the cap is sized here. Cloudflare has a
+// per-invocation subrequest ceiling, and each promote costs several. So the
+// cap is deliberately conservative. In short, it is sized for subrequests.
+const MAX_PROMOTES = 1;
+
+// GOOD — statement, cause, stop
+// Sized for Cloudflare's per-invocation subrequest ceiling, not wall-clock: one
+// promote pays several subrequests, and exceeding the ceiling kills the run.
+const MAX_PROMOTES = 1;
+```
+
+Three things that are always cuts, never edits: an opening that announces what
+the comment is about, a closing that summarises what it just said, and a second
+copy of something a doc or the code below already owns.
+
+**Think before you write it — `docs/WRITING_PROCESS.md`.** The gate below is QA.
+Writing to a cap produces a block that passes at 19 lines and still says in three
+sentences what one carries. Voice and Readability in
+`docs/DOCUMENTATION_STANDARD.md` govern comment prose as well as docs.
+
+**Density is a guideline, not a gate: aim under 25% of non-blank source lines.**
+The gate reports it and never fails on it, because density cannot distinguish a
+file of two-line decision records — correct, and high — from one restating
+itself. It catches what block length cannot see: many MEDIUM comments, each
+closing with its own summary. Measured across this fleet, human-written working
+code sits near 12%, and every repo where an agent had been over-explaining sat at
+25% or above.
 
 The test: a reader scrolling to find the code should not have to scroll past
 the explanation of it. A 39-line file header is not documentation, it is an
