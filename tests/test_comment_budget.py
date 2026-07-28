@@ -173,6 +173,20 @@ class CommentBudgetGateTests(unittest.TestCase):
         self.write("u.js", "const t = `x`;\n" + "// narrative\n" * 25 + "const y = 1;\n")
         self.assertEqual(self.run_gate("--quiet").returncode, 1)
 
+    # ── fail-open holes the scanner opened ───────────────────────────────────
+
+    def test_a_hash_comment_mentioning_a_docstring_delimiter_hides_nothing(self):
+        # Scanning `#` lines for triple quotes opened a string region that
+        # swallowed the rest of the file; every comment below stopped counting.
+        self.write("s.py", '# Use """ to open a docstring.\n' + "# narrative\n" * 30 + "x = 1\n")
+        self.assert_flagged("s.py:1")
+
+    def test_a_backtick_inside_a_quoted_string_is_data(self):
+        # One backtick in an ordinary string opened a template region that never
+        # closed, and the gate passed a 30-line block by not seeing it.
+        self.write("t2.js", 'const s = "a ` b";\n' + "// narrative\n" * 30 + "const y = 2;\n")
+        self.assert_flagged("t2.js:2")
+
     # ── block length, the original rule ──────────────────────────────────────
 
     def test_a_block_over_the_cap_fails(self):
