@@ -12,10 +12,13 @@ contract instead of a generic house style.
 
 ## Procedure
 
-1. **Load the contract.** Read `docs/DOCUMENTATION_STANDARD.md` in the OliverCode checkout
-   (resolve `$OC` from the `~/.claude/CLAUDE.md` symlink when working outside it). That file
-   is the single home for the README outline, voice, formatting, file naming, backlog
-   policy, and freshness rules. Do not restate its rules from memory — read it, then write.
+1. **Read the process, then the contract — in that order.** `docs/WRITING_PROCESS.md` first
+   (resolve `$OC` from the `~/.claude/CLAUDE.md` symlink when working outside it): think,
+   then write plainly, and treat every rule as QA on a draft that already exists.
+   `docs/DOCUMENTATION_STANDARD.md` is that QA — the single home for the README outline,
+   voice, formatting, file naming, backlog policy and freshness rules. Reading the standard
+   first is what produces checklist-patched prose that passes every rule and still sounds
+   like nobody. Do not restate either from memory — read them.
 2. **Read what exists.** The repo's current README, its `docs/`, its tests and entry points.
    Every claim you write must be checkable against the code as it is now; numbers (test
    counts, gate counts, option lists) come from running or counting, never from prior docs.
