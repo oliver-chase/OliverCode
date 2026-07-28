@@ -39,6 +39,17 @@ the explanation of it. A 39-line file header is not documentation, it is an
 essay in the wrong file — and it rots faster than short comments because
 nobody re-reads it when the code changes underneath.
 
+**This is gated.** `core/templates/project/scripts/check-comment-budget.mjs`
+fails on any contiguous comment block over 20 lines — more than triple the
+ceiling above, so it catches essays and leaves judgment calls alone. Copy it
+into a repo's `scripts/` and add it to that repo's `check` target. Per-repo
+overrides and exemptions (each needing a stated `why`) go in a root
+`.comment-budget.json`.
+
+Density is reported by the same script and never fails. A repo can legitimately
+run high density in short comments sitting beside the code they govern; block
+length is the property that has no defence.
+
 ## 2. Every non-obvious decision gets an ID
 
 Format: `AREA-TOPIC-N` (`ROBOTS-4XX-1`, `CACHE-POLICY-1`). Assign one when the
@@ -137,6 +148,7 @@ full day of work on a crawler came from running it against real websites; its
 
 ## Enforcement reality
 
-Points 4 and 5 are mechanically enforceable and should be gated. Points 1, 2, 3,
-6 and 7 are instruction text — see this repo's CONTRIBUTING "Enforcement Reality"
-section before assuming a written rule is unbreakable.
+Point 1's length rule and points 4 and 5 are mechanically enforceable and should
+be gated; point 1 ships a gate. Points 2, 3, 6 and 7 are instruction text — see
+this repo's CONTRIBUTING "Enforcement Reality" section before assuming a written
+rule is unbreakable.

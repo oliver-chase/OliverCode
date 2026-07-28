@@ -10,7 +10,7 @@ block enables them, since a repo with no database has no use for a Supabase keep
 | `core/templates/project/supabase/keepalive.sql` | `supabase/keepalive.sql` | `keepalive.supabase.enabled` |
 | `core/templates/project/scripts/supabase-keepalive.js` | `functions/api/admin/keepalive.js` | Supabase keepalive on Cloudflare Pages |
 | `core/templates/project/scripts/oc-supabase-keepalive.sh` | `scripts/oc-supabase-keepalive.sh` | Supabase keepalive with no Cloudflare deployment |
-| `core/templates/project/scripts/cf-worker-keepalive.js` | reference only — paste the route into the worker's own `fetch` handler | `keepalive.cloudflare.enabled` |
+| (no file — the route below is the whole change) | paste into the worker's own `fetch` handler | `keepalive.cloudflare.enabled` |
 
 ## Problem
 
@@ -70,7 +70,7 @@ CF Cron Trigger that hits every 5 minutes. Also serves as a health check.
 1. Add the keepalive route at the top of the worker's `fetch` handler:
    ```js
    if (url.pathname === '/keepalive') {
-     return new Response(JSON.stringify({ ok: true, ts: new Date().toISOString(), worker: 'worker-name' }), {
+     return new Response(JSON.stringify({ ok: true, ts: new Date().toISOString(), worker: env.KEEPALIVE_SOURCE || 'unnamed' }), {
        headers: { 'Content-Type': 'application/json' },
      });
    }
