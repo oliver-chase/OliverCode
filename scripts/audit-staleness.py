@@ -1,27 +1,18 @@
 #!/usr/bin/env python3
-"""audit-staleness.py — flag fleet repos whose review/audit coverage is stale.
+"""Flag fleet repos whose review/audit coverage is stale.
 
-Deterministic (no LLM): reads the fleet from repo-profiles
-(local/repo-profiles.json, falling back to shared/repo-profiles.example.json),
-locates each repo as a sibling directory of OliverCode (override with
---root), finds its coverage marker, and counts commits landed since.
-
-The coverage marker is the line the live-session-tracker template
-(core/templates/project/docs/BACKLOG-live-tracker.md) standardizes:
-
-    Reviewed through: `<sha>`
-
-searched in the repo's BACKLOG/ledger docs. A repo past the threshold
-(default 30 commits since the marker, or no marker at all) is flagged —
-that's the signal to run the `deep-review` or `functionality-audit`
-skill on it. This script never runs an audit itself; it only makes
-staleness impossible to miss.
+Deterministic, no LLM: reads the fleet from repo-profiles, locates each repo as a
+sibling of OliverCode (override with --root), finds its `Reviewed through: <sha>`
+marker — the line core/templates/project/docs/BACKLOG-live-tracker.md standardizes —
+and counts commits landed since. Past the threshold, or with no marker at all, the
+repo is flagged, which is the signal to run `deep-review` or `functionality-audit`
+on it. Nothing is audited here; staleness is only made impossible to miss.
 
 Usage:
   python3 scripts/audit-staleness.py [--root <dir>] [--threshold N] [--quiet]
 
-Exit codes: 0 = all fresh, 1 = at least one repo stale/unmarked (so a
-cron/keepalive wrapper can alert on nonzero).
+Exit 0 = all fresh, 1 = at least one stale or unmarked, so a cron wrapper can alert
+on nonzero.
 """
 from __future__ import annotations
 

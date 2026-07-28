@@ -76,6 +76,7 @@ const TAG_LINE = /^[*#\s]*@\w+/;
 function scan(text, hashStyle) {
   const lines = text.split('\n');
   let inBlock = false;
+  let seenCode = false, prevCode = '';
   let run = 0, runStart = 0, maxRun = 0, maxStart = 0, commentLines = 0;
 
   const close = () => {
@@ -83,12 +84,53 @@ function scan(text, hashStyle) {
     run = 0;
   };
 
+  // A Python docstring is documentation, and while only `#` counted, every one
+  // of them was invisible — two 40-line narrative module docstrings passed the
+  // cap.
+  //
+  // Delimiters are PAIRED across the line rather than matched at its start,
+  // because lines are trimmed here: a closing `"""` alone on a line is
+  // identical to an opening one, and reading it as an opener swallowed the
+  // whole rest of the file. Only a region opening at a docstring position is
+  // prose, which leaves this fleet's triple-quoted SQL as the code it is.
+  let docQuote = null, docIsProse = false;
+  const pyLine = (line, atDocPosition) => {
+    let prose = docQuote !== null && docIsProse;
+    let pos = 0;
+    while (pos <= line.length) {
+      if (docQuote) {
+        const end = line.indexOf(docQuote, pos);
+        if (end === -1) return prose;
+        pos = end + 3;
+        docQuote = null;
+        docIsProse = false;
+        continue;
+      }
+      const s = line.indexOf("'''", pos), d = line.indexOf('"""', pos);
+      const open = s !== -1 && (d === -1 || s < d) ? s : d;
+      if (open === -1) return prose;
+      docQuote = line.slice(open, open + 3);
+      docIsProse = atDocPosition && /^[rRuUbBfF]{0,2}$/.test(line.slice(0, open));
+      if (docIsProse) prose = true;
+      pos = open + 3;
+    }
+    return prose;
+  };
+
   lines.forEach((raw, i) => {
     const line = raw.trim();
     let isComment = false;
 
     if (hashStyle) {
-      isComment = line.startsWith('#') && !line.startsWith('#!');
+      const wasOpen = docQuote !== null;
+      const prose = pyLine(line, !seenCode || /:\s*$/.test(prevCode));
+      if (prose && !wasOpen) close();
+      isComment = prose || (!wasOpen && line.startsWith('#') && !line.startsWith('#!'));
+      if (line && !isComment && docQuote === null && !wasOpen) prevCode = line;
+      // A shebang or coding line is not code, and counting it as code put the
+      // module docstring past its own position — the 44-line one below it went
+      // unseen.
+      if (line && !isComment && !line.startsWith('#')) seenCode = true;
     } else if (inBlock) {
       isComment = true;
       if (line.includes('*/')) inBlock = false;

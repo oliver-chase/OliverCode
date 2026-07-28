@@ -1,25 +1,12 @@
 """Detect checks that cannot fail.
 
-Ten defects in this repo turned out to be one shape: a check that reported success
-it had not earned. Not sloppiness -- each was scaffolding that stayed after real
-usage diverged, and none could be caught by reading the output, because the output
-always said PASS.
+Ten defects in this repo were one shape: a check that reported success it had not
+earned. Each was scaffolding left behind after real usage diverged, and reading the
+output could never catch any of them, because the output always said PASS.
+FALSIFIABILITY-1 in docs/DECISIONS.md lists all ten.
 
-  post-commit           printed "Verification: PASS", always exit 0
-  Gate 4                announced "passed" over an empty pattern list
-  Gate 2                silently passed everything when perl was absent
-  CRITICAL_ISSUES       compared but never incremented -> exit 2 unreachable
-  node --test *.mjs     exit 0 on zero matched files
-  QA sections 1 and 7   printed findings-shaped output, never incremented
-  apply-token-policy    filtered nothing for an unknown repo, said nothing
-  findings_documented   accepted "" as a completed audit
-
-The common property is unfalsifiability: no input could make them fail. This module
-looks for that property directly, so the class stops recurring instead of being
-rediscovered by hand.
-
-Two detectors, both chosen because they are precise rather than clever -- a noisy
-meta-check would be ignored, which is the very failure it exists to prevent.
+Two detectors, precise rather than clever -- a noisy meta-check gets ignored, which
+is the failure it exists to prevent.
 """
 
 from __future__ import annotations
