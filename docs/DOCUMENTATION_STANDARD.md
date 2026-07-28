@@ -19,12 +19,18 @@ first day: someone who knows the business context but none of the internals. Eve
 must pass the read-aloud test — a smart stranger reading it once, out loud, understands it
 with no follow-up question.
 
-That audience sets the vocabulary. A term of art (`symlink`, `commit`, `staged`, `fail
-open`) gets a plain-language explanation at first use or gets replaced by one — "checks
-that run every time work is saved" carries more to that reader than "pre-commit hooks",
-and the precise term can follow once the plain version has done its work. Never compress a
-concept into insider shorthand the reader has not been given ("a bug in the fork, not your
-machine" reads as a riddle to someone who does not know what a fork is).
+That audience sets how terms are introduced, never which terms are used. The precise
+term stays — `symlink`, `gitignored`, `pre-commit hook`, `fork` are the correct words and
+replacing them with a vague paraphrase ("protected project", "saves") loses the precision
+an expert reader relies on. Instead, the plain explanation attaches at first use: "a
+symlink — a pointer file, so every project reads one shared original", "gitignored, so git
+never uploads it". After the first use, the bare term is free to carry the rest of the
+document.
+
+Two failure modes, both banned: insider shorthand with no gloss ("a bug in the fork, not
+your machine" is a riddle to a reader who does not know what a fork is), and generic
+paraphrase that deletes the term ("checks that run when work is saved" in place of
+pre-commit hooks). The first loses the new reader; the second loses everyone else.
 
 It opens with what the thing is in one plain sentence, then tells the reader why it exists
 through the concrete problems that drove its design — not a feature list, the problems.
