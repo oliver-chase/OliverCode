@@ -120,90 +120,24 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 
 ### Open items
 
-**B6 — RESOLVED 2026-07-27.** `sync-hooks` run; three fleet repos took the corrected
-template (their own validation suites ran inside the hook and passed), the two declared
-variants were skipped as designed, and the hook change was committed and pushed in each repo.
-`health` reports HEALTHY with zero failures. Original entry:
+Resolved entries are deleted, not archived — `git log` holds them, and a tracker that keeps
+its own history stops being a list of what to do next.
 
-**B6 (was) — fleet-side.** The public hook template's gate
-banners were corrected from `Gate N/5` (with a contradictory `Gate 6/6` at the end) to a
-consistent `Gate N/6`. Deployed fleet hooks now differ from the template by that banner text,
-so `health` reports three of the registered fleet repos as diverging. **The difference is
-printed text only — no gate's behaviour changed**, verified by diffing the template against a
-deployed copy. Whoever owns the fleet clears it with one `scripts/olivercode sync-hooks`. Not
-done here: other agents are working in those repos and this session's scope is OliverCode.
-
-**B8 — RESOLVED 2026-07-27.** Real fleet repo names had leaked into tracked files through
-prose: BACKLOG entries naming the repos that needed a re-sync, and one real name used as a
-test fixture. The registries were generic from the start, so the three-layer design held
-where it was designed to and failed where nobody was looking. Neither the reference gate nor
-the PII gate could see it, because both match paths and email addresses and a bare repo name
-is neither. `check_no_fleet_names_in_tracked_files` now derives the names to search for from
-the operator's own gitignored profile, so there is no hardcoded list of what to hide, which
-would itself be the leak. Names that collide with the repo's own vocabulary, and placeholder
-names from the tracked example, are excluded — the first cut fired 86 times on a profile
-named `core` and would have been switched off.
-
-**B7 — RESOLVED 2026-07-27.** Every repo-map field now has a consumer. `governanceProfile:
-"incubating"` makes `audit-staleness.py` report a past-threshold repo as advisory instead of
-failing the run (an unknown value warns, so a typo cannot silently exempt a repo).
-`approvedStrictVariances` joined the expiry sweep alongside the maintainability variances,
-and every waiver or variance now REQUIRES a written reason — `health` fails on a reasonless
-entry, because an exception nobody can later judge can never be safely retired.
-`audit-staleness.py` also honors a profile's explicit `path`, so a scattered fleet is
-auditable. Schema documented in `shared/repo-map.json`'s `_note`.
-
-**B5 — RESOLVED 2026-07-27.** The perl guard was hand-merged into
-the variant hook of the repo that declares one (both `pre-commit` and `pre-commit-private`), leaving
-its repo-specific governance path intact. Verified against that exact hook: an emoji is still
-blocked with perl present, and with perl off PATH the commit is now blocked instead of
-allowed. Committed there as a single two-file change; the other agent's work in that repo was
-untouched. The standing lesson is on the `hookVariant` field itself — a declared variant stops
-receiving template fixes, so re-check it by hand whenever the template's gates change.
-
-**B5-note — superseded:**
-It declares `hookVariant: sdr-planning-governance`, so `sync-hooks` correctly leaves it alone
-— and it therefore did NOT receive the perl guard that closed the emoji-gate fail-open. Its
-Gate 2 still passes silently on a machine without perl. This is the designed trade-off of B3,
-not a bug in it, but it needs a hand-merge: port the perl guard into that repo's
-`.githooks/pre-commit` (and its private variant if present) without disturbing its
-repo-specific governance path. Any future template gate change needs the same treatment.
-
-**B4 — RESOLVED 2026-07-27.** `sync-hooks` run with the fleet's hook files clean; five targets
-synced, the declared variant skipped, `health` 12/12 HEALTHY. The perl guard reached all five
-public repos plus the vault's private variant.
-**B6 — the hook-variant tax is now recurring (LOW, watch).**
-Two repos in the reference fleet declare `hookVariant`, so every template
-gate change needs a hand-merge into both — done twice today already (the perl guard, then
-Gate 4). That is B3's designed trade-off working correctly, but the cost compounds. If a
-third variant appears, switch to the template-composition option recorded under B3 (a base
-hook plus declared per-repo gates) rather than accumulating manual merges; hand-merging is
-how a security fix reaches five repos and misses two.
-
-**B2 — re-enable CI when GitHub Actions billing is restored (LOW, trigger).**
+**B2 — re-enable CI when GitHub Actions billing is restored (LOW, external trigger).**
 `.github/workflows/framework-ci.yml` is `disabled_manually` while billing is blocked (see
 `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). It ships ready and gates
 health, validate.sh, strict bloat, and fork usability. When billing returns:
-`gh workflow enable "OliverCode Framework CI"`. This stays a recorded trigger rather than
-becoming machinery — detecting "is billing restored" would need network calls from a health
-check that must work offline, which costs more than it saves. Until then the local commands
-are the enforcement, which is why those checks also run from `full-qa-pass.sh`.
+`gh workflow enable "OliverCode Framework CI"`. Deliberately a recorded trigger rather than
+machinery: detecting "is billing restored" needs a network call from a health check that must
+work offline, which costs more than it saves. Until then the local commands are the
+enforcement, which is why those checks also run from `full-qa-pass.sh`.
 
-**B1 — RESOLVED 2026-07-27.** Hook state is now reported by `bash scripts/validate.sh` on
-every run, advisory and never fatal. CLAUDE.md already tells agents to run that before every
-commit, so the signal lands where they look instead of in a weekly log nobody read. The cron
-job stays as the unattended backstop. Deliberately not wired to a notification channel: host
-scheduler and alerting are private-overlay territory per `docs/FRAMEWORK_BOUNDARY.md`, and the
-framework should not own the operator's alert path.
-
-**B3 — RESOLVED 2026-07-27.** A repo profile may declare `hookVariant: "<reason>"`. `health`
-then reports its hook divergence as WARN instead of FAIL, and `sync-hooks` SKIPS the repo
-instead of overwriting a considered customization. Undeclared divergence still FAILs, and a
-declaration never excuses a missing, unexecutable, or unconfigured hook — those are the
-fail-open cases and remain fatal. Verified against the real divergent fleet repo
-(the one carrying a repo-specific governance path): declaring it
-returns the fleet to HEALTHY, `sync-hooks` leaves it untouched, and breaking its `hooksPath`
-still fails. Documented in `shared/repo-profiles.example.json`.
+**B9 — the hook-variant tax compounds (LOW, watch).**
+Two fleet repos declare `hookVariant`, so every template gate change needs a hand-merge into
+both. That is B3's designed trade-off working correctly, but hand-merging is how a security
+fix reaches five repos and misses two. If a third variant appears, switch to the
+template-composition option recorded under B3 — a base hook plus declared per-repo gates —
+rather than accumulating manual merges.
 
 ### Deliberately kept / decided (do not redo)
 

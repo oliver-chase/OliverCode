@@ -20,6 +20,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Governance policy and the gate list | `docs/GOVERNANCE.md` | `.githooks/pre-commit` |
 | Execution order (CODE -> ... -> PUSH) and the WRITE MODE completion gate | `core/contracts/EXECUTION_CONTRACT.md` | `scripts/orchestration-gatekeeper.py --evidence-file` (on demand) |
 | Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
+| Public / local / private-overlay split every adopted repo must keep | `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` | `.githooks/pre-commit` Gates 1 and 3 block the leak; the split itself is agent-applied at adoption |
 | Writing process (how to think before a doc or comment exists) | `docs/WRITING_PROCESS.md` | Read first by the `writing-documentation` skill; agent-applied, not gated — a gate is QA and this is what runs before one |
 | Documentation standard (locked README outline, voice, naming, About) | `docs/DOCUMENTATION_STANDARD.md` + the `writing-documentation` skill | `validate.sh` covers references/consistency/index; `olivercode health` checks the GitHub About; the writing rules are agent-applied |
 | Comment intent, sentence form, length cap and density guideline | `core/contracts/CODE_INTENT_STANDARD.md` | `check-comment-budget.mjs` fails on block length, reports density; wired into each repo's own check target |
