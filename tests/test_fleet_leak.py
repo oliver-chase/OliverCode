@@ -135,5 +135,18 @@ class TestFleetLeak(unittest.TestCase):
             self.assertIn("acme-crawl", found[0])
 
 
+    def test_a_leak_in_an_extensionless_or_yml_file_is_caught(self):
+        """The hooks have no extension and workflows are .yml; an extension-list scan
+        skipped both, so a name there shipped to every fork unexamined."""
+        with tempfile.TemporaryDirectory(prefix="olivercode-leak-") as tmp:
+            work = _sandbox(Path(tmp) / "oc", {"acme-api": {}})
+            hook = work / ".githooks" / "pre-commit"
+            hook.write_text(hook.read_text() + "\n# acme-api needs re-sync\n")
+            subprocess.run(["git", "add", "-A"], cwd=work, capture_output=True, check=True)
+            found = cc.check_no_fleet_names_in_tracked_files(work)
+            self.assertTrue(found, "leak in an extensionless tracked file was not caught")
+            self.assertIn(".githooks/pre-commit", found[0])
+
+
 if __name__ == "__main__":
     unittest.main()

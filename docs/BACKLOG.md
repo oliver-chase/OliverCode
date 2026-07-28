@@ -321,3 +321,12 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   story), one-sentence paragraphs encouraged for the sentence that matters. README
   rewritten to comply: same content and outline, short paragraphs, enumerations converted
   to annotated lists, the fail-open consequences pulled into a scannable list.
+- 2026-07-27 [review] Sequential code-review pass over the session's work (one pass, per
+  the standing no-fan-out rule). Two confirmed defects, both fixed and pinned by test:
+  a waiver written without a timezone crashed the whole health run (min() over mixed
+  offset-naive/aware datetimes raises TypeError — reproduced live, then normalized to
+  match the expiry loop), and the fleet-leak gate scanned an extension list that missed
+  the extensionless hooks and .yml workflows, so a repo name in either would ship to
+  every fork unexamined (now scans all tracked text files, binaries skipped by content
+  sniff). Open backlog after this pass: B2 (CI billing, external trigger) and the
+  hook-variant watch item only.
