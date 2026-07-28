@@ -331,7 +331,7 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   sniff). Open backlog after this pass: B2 (CI billing, external trigger) and the
   hook-variant watch item only.
 - 2026-07-27 [audit] Dot-file audit: junk `prompts/` dir removed (held one .DS_Store);
-  `.gitignore` comment claimed a `.claude-optimization/skills/` directory that does not
+  `.gitignore` comment claimed a skills subdirectory of the Claude OS layer that does not
   exist — corrected; `.env.example`, `.claude/`, `runtime/`, and the memory/state ignores
   verified correct. Comment-longevity rule added to the Code Intent Standard (§4b: past
   tense is stable, present tense drifts; the why stays, perishable specifics go) and
