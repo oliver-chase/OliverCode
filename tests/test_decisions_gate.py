@@ -85,9 +85,10 @@ class DecisionsGateTests(unittest.TestCase):
         self.assertIn("nowhere in the code", result.stdout)
 
     def test_a_test_inventing_an_id_is_reported_not_fatal(self):
-        # Across this fleet these are almost all test-CASE labels (BUG-9, BC-1),
-        # which share the id shape. Failing the whole class is how a gate gets
-        # switched off, so it reports.
+        # Across this fleet these are almost all test-CASE labels, which share the
+        # id shape. Failing the whole class is how a gate gets switched off, so it
+        # reports. Examples are deliberately not written out here: this file is
+        # scanned, and naming one would make it the very thing it describes.
         self.src("const a = 1;\n")
         self.ledger()
         (self.tmp / "tests" / "t.js").write_text("// GHOST-ID-4 invented\n", encoding="utf-8")
