@@ -84,17 +84,27 @@ class DecisionsGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("nowhere in the code", result.stdout)
 
-    def test_a_test_inventing_an_id_fails(self):
+    def test_a_test_inventing_an_id_is_reported_not_fatal(self):
+        # Across this fleet these are almost all test-CASE labels (BUG-9, BC-1),
+        # which share the id shape. Failing the whole class is how a gate gets
+        # switched off, so it reports.
         self.src("const a = 1;\n")
         self.ledger()
         (self.tmp / "tests" / "t.js").write_text("// GHOST-ID-4 invented\n", encoding="utf-8")
         result = self.run_gate()
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.returncode, 0)
         self.assertIn("GHOST-ID-4", result.stdout)
 
     def test_an_id_inside_a_quoted_string_is_not_a_reference(self):
         self.src('const note = "see CACHE-POLICY-1 in the docs";\n')
         self.ledger()
+        self.assertEqual(self.run_gate().returncode, 0)
+
+    def test_a_regex_character_class_is_not_an_id(self):
+        # `/F-[A-Z0-9]{6}/` in a real test matched as the id "A-Z0-9".
+        self.src("const a = 1;\n")
+        self.ledger()
+        (self.tmp / "tests" / "t.js").write_text("expect(x).toMatch(/F-[A-Z0-9]{6}/);\n", encoding="utf-8")
         self.assertEqual(self.run_gate().returncode, 0)
 
     def test_malformed_config_exits_nonzero(self):

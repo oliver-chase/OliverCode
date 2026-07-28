@@ -20,15 +20,24 @@
 // Config lives in .decisions.json at the repo root. See CODE_INTENT_STANDARD §4.
 
 import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, extname, relative, resolve } from 'node:path';
 
-const ID_PATTERN = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+-\d+[a-z]?\b/g;
+// This file names example ids in its own comments, and it usually lives in a
+// scanned directory, so without excluding itself it reports them as undocumented
+// decisions. The reachability checker in OliverCode hit the same trap the other
+// way round, satisfying its own rule.
+const SELF = relative(process.cwd(), resolve(process.argv[1] ?? ''));
+
+// The first segment needs two characters and inner segments two or more, so a
+// regex character class like [A-Z0-9] in a test does not read as an id.
+const ID_PATTERN = /\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]{2,})*-\d+[a-z]?\b/g;
 
 const DEFAULTS = {
   sourceDirs: ['src'],
   testDirs: ['tests'],
   extensions: ['.ts', '.tsx', '.js', '.mjs', '.py'],
   ledger: 'docs/DECISIONS.md',
+  docDirs: ['docs'],
   baseline: 'scripts/decisions-baseline.txt',
   // Charset names, RFC numbers and HTTP dates share the id shape. Treating them
   // as records produces noise that trains a reader to ignore the gate.
@@ -44,7 +53,7 @@ function loadConfig() {
     console.error(`.decisions.json is not valid JSON: ${err.message}`);
     process.exit(2);
   }
-  for (const key of ['sourceDirs', 'testDirs', 'extensions', 'notDecisions']) {
+  for (const key of ['sourceDirs', 'testDirs', 'docDirs', 'extensions', 'notDecisions']) {
     if (key in raw && !Array.isArray(raw[key])) {
       console.error(`.decisions.json: ${key} must be an array`);
       process.exit(2);
@@ -56,14 +65,14 @@ function loadConfig() {
 const cfg = loadConfig();
 const NOT_DECISIONS = new Set(cfg.notDecisions);
 
-function walk(dir) {
+function walk(dir, exts = cfg.extensions) {
   if (!existsSync(dir)) return [];
   const out = [];
   for (const entry of readdirSync(dir)) {
     if (entry === 'node_modules' || entry.startsWith('.')) continue;
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...walk(full));
-    else if (cfg.extensions.includes(extname(full))) out.push(full);
+    if (statSync(full).isDirectory()) out.push(...walk(full, exts));
+    else if (exts.includes(extname(full)) && full !== SELF) out.push(full);
   }
   return out;
 }
@@ -93,9 +102,11 @@ function idsIn(files) {
   return found;
 }
 
-const srcIds = idsIn(cfg.sourceDirs.flatMap(walk));
-const testIds = idsIn(cfg.testDirs.flatMap(walk));
+const srcIds = idsIn(cfg.sourceDirs.flatMap((d) => walk(d)));
+const testIds = idsIn(cfg.testDirs.flatMap((d) => walk(d)));
 const ledgerIds = existsSync(cfg.ledger) ? idsIn([cfg.ledger]) : new Map();
+// Docs are scanned for markdown only, and only to answer "does this id exist at all".
+const docIds = idsIn(cfg.docDirs.flatMap((d) => walk(d, ['.md'])));
 
 if (process.argv.includes('--list')) {
   const all = [...new Set([...srcIds.keys(), ...testIds.keys(), ...ledgerIds.keys()])].sort();
@@ -150,12 +161,16 @@ for (const id of ledgerIds.keys()) {
   }
 }
 
-// A test naming a record that never existed reads as authoritative and is fiction.
-for (const [id, files] of testIds) {
-  if (!srcIds.has(id) && !ledgerIds.has(id)) {
-    problems.push(`${id} appears in ${[...files][0]} but in neither the source nor ${cfg.ledger}`);
-  }
-}
+// A test naming a record that exists nowhere else reads as authoritative. Reported,
+// never fatal: across this fleet these are almost all test-CASE labels — BUG-9, BC-1,
+// PWQA-ICS-ALLDAY-1 — which share the id shape and are not decision records. No
+// reliable rule separates them from a genuine two-segment id like FG-4, and failing
+// on the whole class is how a gate gets switched off. Docs count as somewhere, since
+// a test may name an id a spec defines before any code implements it.
+const inventedIds = [...testIds]
+  .filter(([id]) => !srcIds.has(id) && !ledgerIds.has(id) && !docIds.has(id))
+  .map(([id, files]) => `${id} (${[...files][0]})`)
+  .sort();
 
 const stale = [...accepted].filter((id) => !srcIds.has(id) || ledgerIds.has(id)).sort();
 
@@ -163,6 +178,11 @@ console.log(
   `\nDECISION RECORDS — ${srcIds.size} in source, ${testIds.size} in tests, ${ledgerIds.size} in the ledger`,
 );
 if (accepted.size > 0) console.log(`  ${accepted.size} baselined as undocumented debt`);
+
+if (inventedIds.length > 0) {
+  console.log(`\n  ${inventedIds.length} id(s) named only by a test — a label, or a record nobody wrote:`);
+  for (const i of inventedIds) console.log(`    - ${i}`);
+}
 
 if (stale.length > 0) {
   // Reported, not fatal. A baseline line whose id is now documented or gone is
