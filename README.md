@@ -1,20 +1,20 @@
 # OliverCode
 
-A git-tracked governance framework for Claude Code: commit gates, contracts, and skills that load automatically in every repo you work in.
+OliverCode gives every code project you work on the same working rules and automatic safety checks — set up once, applied everywhere, without anyone having to remember them.
 
 Two problems drive its design.
 
-**An agent only follows rules it can see.** Rules files not named exactly `CLAUDE.md` never load. Rules living in one repo are absent in the next. A convention explained in chat is gone next session.
+**An AI assistant only follows rules it can see.** Claude Code reads its instructions from one specific file name, `CLAUDE.md`. Rules saved under any other name are never read. Rules written for one project do not exist in the next one. Anything explained in a chat is forgotten when the session ends.
 
-So everything here loads automatically: one symlink puts the same rules and skills into every session on the machine, and the rules that must always hold are enforced by git hooks.
+So everything here loads automatically. One install command links the same rules and skills into every session on your machine, and the rules that must never be broken are enforced by git itself — checks that run every time work is saved, whether or not anyone remembered them.
 
-**Hook enforcement fails open.** If `core.hooksPath` is unset, points at a missing directory, or the hook is not executable:
+**Those git checks can silently vanish.** Git only runs them when a small piece of configuration points at them. If that configuration is missing or broken:
 
-- git runs no hooks
-- git prints nothing
-- a commit carrying an API key simply succeeds
+- git runs no checks
+- git shows no warning
+- a save containing a real password goes straight through
 
-`scripts/olivercode health` detects that state, and the onboarding path ends with a staged fake secret that proves the gates block before you rely on them.
+`scripts/olivercode health` is the command that catches this. Setup ends with a rehearsal: you try to save a fake password and watch the system refuse it, so you know the protection is real before you rely on it.
 
 ---
 
@@ -22,85 +22,85 @@ So everything here loads automatically: one symlink puts the same rules and skil
 
 ```bash
 git clone <your-fork> OliverCode && cd OliverCode
-bash scripts/validate.sh              # must pass on a bare clone — no config, no local/
-scripts/olivercode install            # symlinks CLAUDE.md + skills into ~/.claude
-scripts/olivercode init               # seeds local/ fleet config from tracked examples
+bash scripts/validate.sh              # self-test: checks, docs, and tests all pass
+scripts/olivercode install            # links the rules + skills into every session
+scripts/olivercode init               # creates your private settings from templates
 ```
 
-A failure on a clean clone is a bug in the fork, not your machine.
+These three commands work on a brand-new download with zero setup. If one fails, the copy you downloaded is broken — nothing on your computer needs fixing.
 
-Requirements: `python3`, `git`, `bash`, `perl` — nothing to install, no language dependencies. macOS verified (BSD userland, Bash 3.2); Linux should work, untested; Windows needs WSL.
+You need `python3`, `git`, `bash`, and `perl`, which a Mac already has. Nothing gets installed, no accounts, no packages. Built and verified on macOS; Linux should work, untested; Windows needs WSL.
 
-**The faster path:** open the clone in Claude Code and say *"set up OliverCode for my machine"*. The `olivercode-adoption` skill ships project-level — available before anything is installed — and drives the whole onboarding, asking only the decisions that need you.
+**The easier path:** open the downloaded folder in Claude Code and say *"set up OliverCode for my machine"*. A built-in setup skill walks the whole process, asks only the decisions that need you, and does the rest.
 
 Nothing here destroys what you had:
 
-- `install` backs up an existing `~/.claude/CLAUDE.md` to `CLAUDE.md.pre-olivercode` and prints the path
-- `init` never overwrites an existing file
-- both are safe to re-run
+- if you already have a `~/.claude/CLAUDE.md` rules file, `install` saves a backup copy first and prints where it put it
+- `init` never overwrites a file that already exists
+- both commands are safe to run twice
 
 ---
 
-## How a repo becomes governed
+## How a project comes under protection
 
 In order:
 
-1. **Register the repo** in `local/repo-profiles.json` — `init` seeds it, `discover` emits a paste-ready profile per repo it finds. Repos need not share a parent; a profile's `path` reaches anywhere.
-2. **`scripts/olivercode sync-hooks`** writes the gates into every registered repo. Read its per-repo lines: a repo reported as skipped is a repo it did not govern.
-3. **Prove it blocks.** Stage a fake secret and confirm the commit is refused. `sync-hooks` reporting success only means the files were written; this probe is what verifies enforcement, and `docs/ADOPTING.md` ends on it.
-4. **`scripts/olivercode health`, on a schedule.** Nothing else detects a hook that quietly stopped applying.
+1. **Tell OliverCode about the project.** Add it to your private settings file, `local/repo-profiles.json` — `init` creates the file, and `scripts/olivercode discover` finds your projects and writes ready-to-paste entries. Projects can live anywhere on the machine.
+2. **Run `scripts/olivercode sync-hooks`.** This installs the checks into each listed project. Read what it prints: a project marked "skipped" did not get protected.
+3. **Rehearse a failure.** Put a fake password in a file and try to save it — the save must be refused. Step 2 saying "done" only means files were written; this step is what proves the protection works. The full setup guide ends on it.
+4. **Run `scripts/olivercode health` regularly.** It is the only thing that notices when a project's checks have quietly stopped applying.
 
-An adopted repo gets six gates: secrets, emoji/icons, PII, deleted-repo references, workflow push-auth, planning-doc governance.
+A protected project gets six checks on every save: real passwords and keys, emoji, personal information, references to deleted projects, unsafe automation files, and planning-document rules.
 
-OliverCode runs two more on itself — contract integrity and token policy — that validate framework-only files. `docs/GOVERNANCE.md` holds the coverage table and the `hookVariant` escape hatch for a repo that must diverge.
+OliverCode runs two extra checks on itself that only make sense here — they validate the framework's own configuration files. `docs/GOVERNANCE.md` has the full table, plus the documented way to let one project run different checks on purpose.
 
 ---
 
 ## What you get
 
-**On every commit, in every governed repo** — the gates. They fire whether or not anyone read the documentation, and cannot be skipped without `--no-verify`.
+**Every time work is saved, in every protected project** — the checks run and can refuse the save. They work even when nobody has read any documentation.
 
-**In every Claude Code session, from any directory** — your `CLAUDE.md` rules and the full skill set, via `~/.claude` symlinks.
+**In every Claude Code session, from any folder** — your rules and the full skill set are already loaded.
 
-**When you run `bash scripts/validate.sh`** — doc/code consistency, reference integrity, the test suite, the fleet hook report. Fails closed on the first three.
+**When you run `bash scripts/validate.sh`** — the framework tests itself: documentation still matches the code, every internal link still works, the test suite passes, and each of your projects is reported as protected or not.
 
-**When you stamp a new repo** — `scripts/olivercode bootstrap` writes the project template per `shared/project-bootstrap-manifest.json`. Run `--dry-run` first; it shows every file it would touch.
+**When you start a new project** — `scripts/olivercode bootstrap` copies the standard project files in. Run it with `--dry-run` first; that shows every file it would touch without touching anything.
 
 ---
 
 ## Three design decisions
 
-### Only the hook is trusted to enforce
+### Only the git checks are trusted to enforce
 
-Contracts, templates, and skills are instruction text. An agent follows them because they load — a weaker guarantee than a gate that blocks.
+Everything else — rules, templates, skills — is written guidance. The AI follows it because it is loaded, and that is weaker than a check that can refuse a save.
 
-The framework never blurs the two. `CONTRIBUTING.md`'s "Enforcement Reality" section lists which is which, and anything that must always hold is a hook, not a rule. When a finding class recurs, it becomes a check.
+The framework keeps that distinction explicit. `CONTRIBUTING.md` lists which rules actually block and which merely instruct. When the same mistake keeps happening, the written rule gets turned into a check.
 
-### Checks must be able to fail
+### Every check must be able to fail
 
-The recurring defect in governance tooling is a check that reports success without having examined anything: a counter compared but never incremented, a scan that silently skips when its tool is missing, a "PASS" printed over an empty set.
+The common defect in tooling like this is a check that says "PASS" without having examined anything — a scan that silently skips when a tool it needs is missing, a result printed over an empty list.
 
-`scripts/lib/falsifiability_check.py` hunts that shape mechanically. The test suite proves each checker by mutation — break the thing, assert the checker notices. A green result here means something was actually examined.
+This framework hunts that defect in its own code with a dedicated detector, and its test suite proves each check the direct way: deliberately break the thing a check watches, then confirm the check catches it.
 
-### Personal data never enters the tracked layer
+### Your private data never enters the shared code
 
-Real fleet names, paths, and machine state live in gitignored `local/` and `runtime/`. Tracked files carry placeholders.
+Your real project names, file paths, and machine details live in files git is told to ignore, so they are never uploaded. The shared, uploadable files carry only placeholder examples.
 
-That split is enforced, not asked for: a consistency check reads your real repo names from the gitignored config — and from the sibling repos on disk — and fails the build if one appears in a tracked file. `scripts/qa/check-fork-usable.sh` proves a stranger's clone works with nothing of yours present.
+A check enforces this: it reads your real project names from the private files and refuses any save that would put one of them into a shared file. A separate check proves the whole framework still works for a stranger who downloads it with none of your private files present.
 
 ---
 
-## Verifying the whole story
+## Checking the whole story yourself
 
 ```bash
-bash scripts/qa/check-fork-usable.sh   # fast gate: clone works, adoption governs, gates block
-bash scripts/qa/check-scenarios.sh     # exhaustive: 12 sandboxed setup scenarios
-bash scripts/qa/full-qa-pass.sh        # code quality, docs cohesion, bloat, fork usability
+bash scripts/qa/check-fork-usable.sh   # fast: a fresh download works and the protection blocks
+bash scripts/qa/check-scenarios.sh     # thorough: 12 complete setup walkthroughs
+bash scripts/qa/full-qa-pass.sh        # code quality, documentation health, size limits
 ```
 
-The scenario matrix walks every documented setup shape in an isolated sandbox with a throwaway HOME — fresh machine, existing `~/.claude`, scattered fleets, wrong `--root`s, the full backout.
+The 12 walkthroughs each run in a disposable sandbox that cannot touch your real files: a brand-new machine, a machine with existing rules, projects scattered across folders, wrong settings, and a full uninstall.
 
-Every assertion maps to a sentence in the docs, so a failing assertion means the code or that sentence is wrong.
+Every claim they test is a sentence somewhere in this documentation, so a failure means the code or that sentence is wrong.
 
 ---
 
@@ -108,32 +108,32 @@ Every assertion maps to a sentence in the docs, so a failing assertion means the
 
 | | |
 |---|---|
-| **[ADOPTING.md](docs/ADOPTING.md)** | Fork to governed fleet, step by step, ending in proof the gates block |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | The three layers, activation, dependency direction |
-| **[GOVERNANCE.md](docs/GOVERNANCE.md)** | Every gate, what it blocks, per-repo coverage table |
-| **[FEATURE_MAP.md](docs/FEATURE_MAP.md)** | Every capability mapped to its one owning doc — machine-checked |
-| **[OLIVERCODE_LAUNCHER.md](docs/OLIVERCODE_LAUNCHER.md)** | The `olivercode` command surface |
-| **[DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md)** | The locked structure, voice, and naming for all docs, here and downstream |
-| **[TOKEN_POLICY.md](docs/TOKEN_POLICY.md)** | What Gate 8 validates |
-| **[SKILLS-PLACEMENT.md](docs/SKILLS-PLACEMENT.md)** | Where any new skill or agent file goes |
-| **[FRAMEWORK_BOUNDARY.md](docs/FRAMEWORK_BOUNDARY.md)** | What this deliberately excludes |
-| **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** | Symptom-first fixes, starting with gates that should have blocked |
-| **[EXTERNAL-TOOLING.md](docs/EXTERNAL-TOOLING.md)** | Optional third-party plugins the posture assumes |
-| **[KEEPALIVE_STANDARD.md](docs/KEEPALIVE_STANDARD.md)** | Supabase/Cloudflare keepalive contract |
-| **[BACKLOG.md](docs/BACKLOG.md)** | Open work — read before assuming a capability exists |
-| **[CONTRIBUTING.md](CONTRIBUTING.md)** | Enforcement Reality: what blocks vs what merely loads |
-| **[QUALITY_BASELINE.md](QUALITY_BASELINE.md)** | The standard a governed repo is held to |
-| **[CLAUDE.md](CLAUDE.md)** | The agent rules that load in every session |
-| **[skills/INDEX.md](skills/INDEX.md)** | Catalog of every skill that ships |
-| **[Contracts](core/contracts/)** | Structure, execution, hygiene, intent, file-location standards |
-| **[Workflows](core/workflows/)** | Repeatable cross-repo procedures |
-| **[Claude OS](.claude-optimization/README.md)** | Standalone memory/state layer |
+| **[ADOPTING.md](docs/ADOPTING.md)** | The full setup guide, step by step, ending in proof the protection works |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the pieces fit: the three layers, what loads where, what depends on what |
+| **[GOVERNANCE.md](docs/GOVERNANCE.md)** | Every check, what it refuses, and which projects get which |
+| **[FEATURE_MAP.md](docs/FEATURE_MAP.md)** | Every capability, mapped to the one document that owns it |
+| **[OLIVERCODE_LAUNCHER.md](docs/OLIVERCODE_LAUNCHER.md)** | Every `olivercode` command |
+| **[DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md)** | The required structure and writing style for all documentation, here and in your projects |
+| **[TOKEN_POLICY.md](docs/TOKEN_POLICY.md)** | The cost-control settings and the check that validates them |
+| **[SKILLS-PLACEMENT.md](docs/SKILLS-PLACEMENT.md)** | Where any new skill file belongs |
+| **[FRAMEWORK_BOUNDARY.md](docs/FRAMEWORK_BOUNDARY.md)** | What OliverCode deliberately does not do |
+| **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** | Fixes by symptom, starting with saves that should have been refused |
+| **[EXTERNAL-TOOLING.md](docs/EXTERNAL-TOOLING.md)** | Optional third-party plugins that pair well; none are required |
+| **[KEEPALIVE_STANDARD.md](docs/KEEPALIVE_STANDARD.md)** | Keeping free-tier cloud services from going dormant |
+| **[BACKLOG.md](docs/BACKLOG.md)** | Open work — read it before assuming a feature exists |
+| **[CONTRIBUTING.md](CONTRIBUTING.md)** | Which rules block a save and which are guidance |
+| **[QUALITY_BASELINE.md](QUALITY_BASELINE.md)** | The quality bar a protected project is held to |
+| **[CLAUDE.md](CLAUDE.md)** | The rules the AI loads in every session |
+| **[skills/INDEX.md](skills/INDEX.md)** | Every skill that ships, in one list |
+| **[Contracts](core/contracts/)** | The standing standards: structure, execution, hygiene, intent, file locations |
+| **[Workflows](core/workflows/)** | Repeatable procedures that span projects |
+| **[Claude OS](.claude-optimization/README.md)** | The assistant's own memory and state files |
 
 ## Status
 
-`python3 -m unittest discover tests` is the test count and its result — the suites include mutation tests that prove the checkers can fail.
+`python3 -m unittest discover tests` runs the test suite and reports its own count; the suite includes tests that break each check on purpose to confirm it notices.
 
-8 pre-commit gates on this repo;
-an adopted repo receives six of those. Both counts are machine-verified against the hook files by `validate.sh`, so a change to either fails the build until this file is updated.
+8 checks run on saves to this repository;
+a protected project receives six of those. Both numbers are verified against the actual check files on every self-test, so a change to either fails until this file is corrected.
 
-`bash scripts/qa/check-scenarios.sh` is the setup matrix and prints its own tally. Pure `python3` + `bash` + `perl`, no package dependencies. macOS verified; CI ships ready and is enabled per fork.
+`bash scripts/qa/check-scenarios.sh` runs the setup walkthroughs and prints its own tally. Plain `python3`, `bash`, and `perl` throughout — no packages to install. Built on macOS; automated cloud testing ships ready and is switched on per copy.

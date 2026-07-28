@@ -14,10 +14,22 @@ consistency, the feature-map index). The writing rules below are what an agent a
 
 ## The shape of a README
 
-A README is problem-driven storytelling in a fixed order. It opens with what the thing is in
-one plain sentence, then tells the reader why it exists through the concrete problems that
-drove its design — not a feature list, the problems. Everything after that earns its place by
-answering a question a reader actually has, in the order they would ask.
+A README is problem-driven storytelling in a fixed order, written for a reader on their
+first day: someone who knows the business context but none of the internals. Every sentence
+must pass the read-aloud test — a smart stranger reading it once, out loud, understands it
+with no follow-up question.
+
+That audience sets the vocabulary. A term of art (`symlink`, `commit`, `staged`, `fail
+open`) gets a plain-language explanation at first use or gets replaced by one — "checks
+that run every time work is saved" carries more to that reader than "pre-commit hooks",
+and the precise term can follow once the plain version has done its work. Never compress a
+concept into insider shorthand the reader has not been given ("a bug in the fork, not your
+machine" reads as a riddle to someone who does not know what a fork is).
+
+It opens with what the thing is in one plain sentence, then tells the reader why it exists
+through the concrete problems that drove its design — not a feature list, the problems.
+Everything after that earns its place by answering a question a reader actually has, in the
+order they would ask.
 
 The locked outline:
 
