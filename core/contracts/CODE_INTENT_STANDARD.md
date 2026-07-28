@@ -30,6 +30,15 @@ if (/^data:/i.test(src)) return alt;
 Write the comment so it answers the question a reader will actually have:
 *"can I delete this?"*
 
+**Keep it short.** A comment states the decision and the failure it prevents,
+in roughly three to six lines. Anything longer is a narrative, and narratives
+belong in the DECISIONS ledger with an ID the comment points at.
+
+The test: a reader scrolling to find the code should not have to scroll past
+the explanation of it. A 39-line file header is not documentation, it is an
+essay in the wrong file — and it rots faster than short comments because
+nobody re-reads it when the code changes underneath.
+
 ## 2. Every non-obvious decision gets an ID
 
 Format: `AREA-TOPIC-N` (`ROBOTS-4XX-1`, `CACHE-POLICY-1`). Assign one when the
@@ -66,6 +75,21 @@ it fatal produces hollow tests, which is worse than the gap.
 A reference implementation is a short script in the consuming repo's own `scripts/`:
 grep the source tree for `[A-Z]+-[A-Z0-9]+-\d+` IDs, parse the ledger's rows, and
 diff the two sets in both directions. Under a hundred lines; write it once per repo.
+
+## 4b. Comments are written for longevity
+
+A comment that states current-state specifics — a count, a date, a list of which files
+do something — is wrong the moment the state changes, and nothing reminds anyone to
+update it. Two rules keep comments from drifting:
+
+- **Past tense is stable; present tense drifts.** "A loose filter exempted template
+  hooks from the scan" records an event and stays true forever. "The three hooks are
+  identical" is a claim about now, goes stale silently, and belongs in a check, not a
+  comment.
+- **The why stays; the perishable specifics go.** Keep the defect the code prevents.
+  Drop the session date, the file count at the time, the tally of occurrences — if a
+  number matters, it belongs in a test or a gate that fails when it changes, or in the
+  backlog's dated tracker where the date is part of the record.
 
 ## 5. Volatile numbers never live in prose
 
