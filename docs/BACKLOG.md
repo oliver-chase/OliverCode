@@ -314,3 +314,10 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   with its reason (fast CI gate vs exhaustive complement) instead of reading as
   accidental duplication. All five fleet READMEs converted to command-style Status per
   Code Intent §5 — the proving command is authoritative, no hand-maintained counts left.
+- 2026-07-27 [docs] Readability rules added to the documentation standard — the README had
+  drifted into 4-6 line prose walls the standard did not forbid. New section: three
+  sentences per paragraph max, never more than two consecutive prose paragraphs without a
+  code block or list, the squint test (headers + bold lead-ins + code must carry the whole
+  story), one-sentence paragraphs encouraged for the sentence that matters. README
+  rewritten to comply: same content and outline, short paragraphs, enumerations converted
+  to annotated lists, the fail-open consequences pulled into a scannable list.
