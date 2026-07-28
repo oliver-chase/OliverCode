@@ -1,0 +1,182 @@
+#!/usr/bin/env node
+// Decision-record integrity gate.
+//
+// A codebase records WHY in the code, naming the defect a decision prevents.
+// Three things rot quietly without a check: a decision deleted from the code
+// whose ledger row keeps describing it, an id invented in a test that no code
+// ever referenced, and a decision in the code that nobody wrote down — which the
+// next reader simply undoes.
+//
+// Adoption is the hard part, not detection. A repo turning this on with hundreds
+// of undocumented ids cannot fix them in one pass, and a gate that fails a
+// thousand times on day one gets switched off. So unrecorded ids present at
+// adoption are frozen into a baseline and pass; anything NEW fails. Debt only
+// shrinks. Delete a line from the baseline once its row is written; never add one.
+//
+//   node scripts/check-decisions.mjs
+//   node scripts/check-decisions.mjs --list        # every id and where it lives
+//   node scripts/check-decisions.mjs --write-baseline
+//
+// Config lives in .decisions.json at the repo root. See CODE_INTENT_STANDARD §4.
+
+import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { join, extname } from 'node:path';
+
+const ID_PATTERN = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+-\d+[a-z]?\b/g;
+
+const DEFAULTS = {
+  sourceDirs: ['src'],
+  testDirs: ['tests'],
+  extensions: ['.ts', '.tsx', '.js', '.mjs', '.py'],
+  ledger: 'docs/DECISIONS.md',
+  baseline: 'scripts/decisions-baseline.txt',
+  // Charset names, RFC numbers and HTTP dates share the id shape. Treating them
+  // as records produces noise that trains a reader to ignore the gate.
+  notDecisions: ['ISO-8859-1', 'ISO-8859-15', 'UTF-8', 'RFC-9309'],
+};
+
+function loadConfig() {
+  if (!existsSync('.decisions.json')) return { ...DEFAULTS };
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync('.decisions.json', 'utf8'));
+  } catch (err) {
+    console.error(`.decisions.json is not valid JSON: ${err.message}`);
+    process.exit(2);
+  }
+  for (const key of ['sourceDirs', 'testDirs', 'extensions', 'notDecisions']) {
+    if (key in raw && !Array.isArray(raw[key])) {
+      console.error(`.decisions.json: ${key} must be an array`);
+      process.exit(2);
+    }
+  }
+  return { ...DEFAULTS, ...raw };
+}
+
+const cfg = loadConfig();
+const NOT_DECISIONS = new Set(cfg.notDecisions);
+
+function walk(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === 'node_modules' || entry.startsWith('.')) continue;
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...walk(full));
+    else if (cfg.extensions.includes(extname(full))) out.push(full);
+  }
+  return out;
+}
+
+/** Ids on a line, ignoring any inside a quoted string. */
+function idsOnLine(line) {
+  const spans = [...line.matchAll(/'[^']*'|"[^"]*"/g)].map((m) => [m.index, m.index + m[0].length]);
+  const out = [];
+  for (const m of line.matchAll(ID_PATTERN)) {
+    if (NOT_DECISIONS.has(m[0])) continue;
+    if (spans.some(([a, b]) => a < m.index && m.index + m[0].length <= b)) continue;
+    out.push(m[0]);
+  }
+  return out;
+}
+
+function idsIn(files) {
+  const found = new Map();
+  for (const file of files) {
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      for (const id of idsOnLine(line)) {
+        if (!found.has(id)) found.set(id, new Set());
+        found.get(id).add(file);
+      }
+    }
+  }
+  return found;
+}
+
+const srcIds = idsIn(cfg.sourceDirs.flatMap(walk));
+const testIds = idsIn(cfg.testDirs.flatMap(walk));
+const ledgerIds = existsSync(cfg.ledger) ? idsIn([cfg.ledger]) : new Map();
+
+if (process.argv.includes('--list')) {
+  const all = [...new Set([...srcIds.keys(), ...testIds.keys(), ...ledgerIds.keys()])].sort();
+  for (const id of all) {
+    const where = [srcIds.has(id) && 'src', testIds.has(id) && 'test', ledgerIds.has(id) && 'ledger']
+      .filter(Boolean)
+      .join(',');
+    console.log(`${id.padEnd(28)} ${where}`);
+  }
+  process.exit(0);
+}
+
+const unrecorded = [...srcIds.keys()].filter((id) => !ledgerIds.has(id)).sort();
+
+if (process.argv.includes('--write-baseline')) {
+  const body =
+    '# Decision ids present in the code with no ledger row, frozen at adoption.\n' +
+    '# Delete a line once its row is written. Never add one: a new id needs a row.\n' +
+    unrecorded.map((id) => `${id}\n`).join('');
+  writeFileSync(cfg.baseline, body);
+  console.log(`wrote ${cfg.baseline} with ${unrecorded.length} accepted id(s)`);
+  process.exit(0);
+}
+
+const accepted = new Set(
+  existsSync(cfg.baseline)
+    ? readFileSync(cfg.baseline, 'utf8')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#'))
+    : [],
+);
+
+const problems = [];
+
+// A decision nobody can find is one the next reader will undo. Baselined ids are
+// the debt this repo adopted with; a NEW one has to be written down.
+for (const id of unrecorded) {
+  if (!accepted.has(id)) {
+    problems.push(`${id} is referenced in ${[...srcIds.get(id)][0]} but has no entry in ${cfg.ledger}`);
+  }
+}
+
+// A row describing deleted code is worse than no row, because it is confidently
+// wrong. Source specifically: accepting "source OR tests" lets a surviving test
+// launder a decision that was renamed or deleted out of the source.
+for (const id of ledgerIds.keys()) {
+  if (!srcIds.has(id)) {
+    problems.push(
+      `${id} is recorded in ${cfg.ledger} but appears ${testIds.has(id) ? 'only in tests' : 'nowhere in the code'}`,
+    );
+  }
+}
+
+// A test naming a record that never existed reads as authoritative and is fiction.
+for (const [id, files] of testIds) {
+  if (!srcIds.has(id) && !ledgerIds.has(id)) {
+    problems.push(`${id} appears in ${[...files][0]} but in neither the source nor ${cfg.ledger}`);
+  }
+}
+
+const stale = [...accepted].filter((id) => !srcIds.has(id) || ledgerIds.has(id)).sort();
+
+console.log(
+  `\nDECISION RECORDS — ${srcIds.size} in source, ${testIds.size} in tests, ${ledgerIds.size} in the ledger`,
+);
+if (accepted.size > 0) console.log(`  ${accepted.size} baselined as undocumented debt`);
+
+if (stale.length > 0) {
+  // Reported, not fatal. A baseline line whose id is now documented or gone is
+  // dead weight, but failing on it would block the very commit that fixed it.
+  console.log(`\n  ${stale.length} baseline line(s) no longer needed — delete them:`);
+  for (const id of stale) console.log(`    - ${id}`);
+}
+
+if (problems.length > 0) {
+  console.log(`\n  ${problems.length} integrity problem(s):\n`);
+  for (const p of problems) console.log(`    FAIL: ${p}`);
+  console.log('');
+  process.exit(1);
+}
+
+console.log('  Records are consistent: no new undocumented decision, no row describing');
+console.log('  code that is gone, and no test inventing an id.\n');
