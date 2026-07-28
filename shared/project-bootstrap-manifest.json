@@ -143,6 +143,11 @@
       "source": "core/templates/project/.github/workflows/olivercode-governance.yml",
       "target": ".github/workflows/olivercode-governance.yml",
       "mode": "presence"
+    },
+    {
+      "source": "core/templates/project/scripts/check-comment-budget.mjs",
+      "target": "scripts/check-comment-budget.mjs",
+      "mode": "strict"
     }
   ],
   "_conditional_files_note": "Synced only into repos whose profile enables the matching keepalive block in repo-profiles (see docs/KEEPALIVE_STANDARD.md). Unconditional presence would force a Supabase keepalive script into repos with no database.",
