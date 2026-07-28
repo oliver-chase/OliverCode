@@ -28,7 +28,10 @@ security warnings written normal, per the plugin's own rules.
   same session.
 
 ## Development Practice
-Always-on while working, not on request:
+Always-on while working, not on request. Full sequence — gap analysis, spec, priority,
+build/verify/commit loop, separate QA pass, simplify —
+`$OC/core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md`. The rules below are the ones you
+apply constantly; that contract is the order they run in.
 - Something broken/failing/slow? Run the `diagnosing-bugs` skill loop — never patch on a guess.
 - Multi-commit build session ending? Run the `deep-review` skill (single review agent,
   simplify, remove-don't-archive cleanup, live re-verify, tracker update) before closing.
