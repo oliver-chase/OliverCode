@@ -78,6 +78,10 @@ short README in the same order, never a padded one.
 
 ## Voice
 
+> This section is QA. `WRITING_PROCESS.md` is the thinking that comes first — read it before a
+> draft exists, not after. Reading these rules first produces checklist-patched prose that passes
+> every one of them and still sounds like nobody.
+
 **No clever, metaphor, or reveal constructions — anywhere, ever.** No aphorisms, no
 personification, no setup-then-reveal, no sentence whose only job is rhetoric. Every
 sentence states a checkable fact, gives an instruction, or attaches a reason to a named
