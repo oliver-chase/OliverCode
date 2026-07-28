@@ -34,6 +34,13 @@ Always-on while working, not on request:
   simplify, remove-don't-archive cleanup, live re-verify, tracker update) before closing.
 - Simplify as you go: after any nontrivial change, ask what the diff makes redundant
   (`/simplify`, `/code-review` before commit).
+- Comment the DECISION, not the mechanism: name the defect the code prevents, give it an
+  `AREA-TOPIC-N` id, index it in that repo's own DECISIONS ledger, and gate the index in
+  `check` (`$OC/core/contracts/CODE_INTENT_STANDARD.md`). Never hand-maintain a volatile
+  number (test counts, coverage, timings) in prose — state the command instead; dated
+  measurements go in the backlog tracker once, with their date.
+- Ablate before trusting a test: remove the guard, confirm it goes red, restore. A test that
+  stays green without the code it protects reports confidence it has not earned.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
 - Documentation robust but manageable: one concept one home, pointers elsewhere. ANY
