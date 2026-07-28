@@ -286,3 +286,8 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   scattered-fleet, --root, discover, bootstrap, hookVariant, backout, idempotency, update,
   no-commit-probe, and zero-config cases, all green. One matrix finding: a nonexistent
   `--root` hard-errors (fail-closed), which is stronger than the doc's skip-warning implied.
+- 2026-07-27 [audit] B2 tested live: workflow enabled, push triggered a run, GitHub refused
+  to start the job ("recent account payments have failed or your spending limit needs to be
+  increased") — zero minutes consumed. Workflow re-disabled to keep pushes green-quiet. B2
+  stays open on the same external condition; re-enable is one command
+  (`gh workflow enable "OliverCode Framework CI"`) once billing is restored.
