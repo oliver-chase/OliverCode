@@ -20,7 +20,7 @@ If a file does none of those, delete it, merge it, or move it to the repo that o
 
 1. Claude Code is OliverCode's sole runtime and Anthropic its sole model provider — do not reintroduce multi-runtime or multi-provider framing without a real implementation behind it.
 2. Keep project-specific runtime logic in the owning project repo.
-3. Documentation sync is required in the same change set — see `docs/DOCUMENTATION_STANDARD.md` "Requirement" for what triggers it and what to update.
+3. Documentation sync is required in the same change set — see `docs/DOCUMENTATION_STANDARD.md` "Always current — the sync rule" for what triggers it and what to update.
 4. Run `bash scripts/validate.sh` before every commit.
 5. New docs should replace or merge older docs instead of creating parallel authority.
 6. No roadmap, migration, or status markdown is active authority unless explicitly promoted into current-state docs — see `core/contracts/FRAMEWORK_BASELINE.md` "Removal Rules".
@@ -52,7 +52,7 @@ whether it's a hook or a sentence.
 
 ## Documentation Sync Requirement
 
-See `docs/DOCUMENTATION_STANDARD.md` "Requirement" — one home for the trigger paths and
+See `docs/DOCUMENTATION_STANDARD.md` "Always current — the sync rule" — one home for the trigger paths and
 what to update. Enforced by manual review (no active automated validator).
 
 ## Source-of-Truth Documents

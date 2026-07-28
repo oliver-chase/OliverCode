@@ -31,7 +31,7 @@ home for the canonical path map and the ownership rules that follow from it;
 
 ## Governance
 
-- Policy: `docs/governance.md`
+- Policy: `docs/GOVERNANCE.md`
 - Runner: `.githooks/pre-commit`
 
 ## Sync Contract

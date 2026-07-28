@@ -59,7 +59,7 @@ This audit finds and categorizes issues; it doesn't fix them in depth. When a ba
 - Batch 6 (security) surfaces something worth a real vulnerability-class walkthrough → `code-security-review`
 - Batch 2 or Batch 4 surfaces real duplication/dead code (not just a marker comment) → `/simplify`
 - Any batch surfaces something actually broken, not just messy → `diagnosing-bugs` for root cause, before proposing a fix
-- The repo has a UI and the audit is part of a broader project review → hand off to whichever frontend/design skill the machine has installed (OliverCode ships none — see `docs/external-tooling.md`), as a separate pass
+- The repo has a UI and the audit is part of a broader project review → hand off to whichever frontend/design skill the machine has installed (OliverCode ships none — see `docs/EXTERNAL-TOOLING.md`), as a separate pass
 - The ask is a FULL functionality audit of a live product (does everything actually work end to end, fix quick wins inline, crash-safe incremental findings) → `functionality-audit`, not this skill
 
 ## Output Format

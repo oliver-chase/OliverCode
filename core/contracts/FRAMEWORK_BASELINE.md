@@ -39,7 +39,7 @@ Required current-state authority docs:
 - `docs/ADOPTING.md`
 - `CONTRIBUTING.md`
 - `ARCHITECTURE.md`
-- `docs/governance.md`
+- `docs/GOVERNANCE.md`
 - `docs/OLIVERCODE_LAUNCHER.md`
 - `docs/FEATURE_MAP.md`
 - `docs/DOCUMENTATION_STANDARD.md`

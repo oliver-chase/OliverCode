@@ -21,7 +21,7 @@ Low-signal or generated paths that waste token budget when scanned.
 ### doc_priority_hints
 Short list of high-signal docs an agent reads first when working in that repo — the
 current-state authorities. For OliverCode itself: `README.md`, `ARCHITECTURE.md`,
-`docs/governance.md`, `core/contracts/FRAMEWORK_BASELINE.md`.
+`docs/GOVERNANCE.md`, `core/contracts/FRAMEWORK_BASELINE.md`.
 
 ### generated_artifact_dirs
 Directories holding build output, generated reports, or runtime state that produce no

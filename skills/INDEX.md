@@ -3,7 +3,7 @@
 > OliverCode ships orchestration/security/optimization skills only — engineering method and
 > the framework's own tooling. Load by name when you encounter the domain. This is the
 > source of truth — add or edit skills directly here, and update this table in the same
-> change. See `docs/skills-placement.md` for how to add a new one.
+> change. See `docs/SKILLS-PLACEMENT.md` for how to add a new one.
 
 ## Method and orchestration skills
 
@@ -27,6 +27,7 @@
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
 | `model-routing` | Model tier selection strategy (cheap vs capable) | Choosing which model tier handles a task |
+| `writing-documentation` | Write any README/doc to the locked documentation standard (outline, voice, naming, About) — docs/DOCUMENTATION_STANDARD.md is the one home |
 
 ## Personas (not skills, kept in `core/personas/`)
 
@@ -43,7 +44,7 @@ No team template.
 - Update this table in the same change when a skill is added or removed. This index is the
   only catalog — do not create a second copy of the skill list anywhere.
 - Remove references to retired skills instead of keeping dead aliases alive.
-- Adding one: `docs/skills-placement.md` has the full contract (real content, index row, and
+- Adding one: `docs/SKILLS-PLACEMENT.md` has the full contract (real content, index row, and
   the `~/.claude/skills/<name>` symlink — all three in the same session).
 
 ## Validation
