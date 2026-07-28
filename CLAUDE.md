@@ -46,12 +46,13 @@ apply constantly; that contract is the order they run in.
   stays green without the code it protects reports confidence it has not earned.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Documentation robust but manageable: one concept one home, pointers elsewhere. ANY
-  README, doc, or non-trivial COMMENT you write, in any repo, follows
-  `$OC/docs/DOCUMENTATION_STANDARD.md` (locked outline, voice, naming, GitHub About) — the
-  `writing-documentation` skill applies it. Its Voice rules cover comment prose too: say it
-  once, lead with the claim, cut the setup rather than the conclusion. Docs sync in the same
-  commit as the change, always.
+- Before you write ANY doc, README, or non-trivial comment: `$OC/docs/WRITING_PROCESS.md`.
+  Think, write plainly, then QA. A length gate is QA — writing to a cap produces prose that
+  passes and still says in three sentences what one carries.
+- Documentation robust but manageable: one concept one home, pointers elsewhere. The QA pass
+  is `$OC/docs/DOCUMENTATION_STANDARD.md` (locked outline, voice, naming, GitHub About),
+  applied by the `writing-documentation` skill, and its Voice rules govern comment prose too.
+  Docs sync in the same commit as the change, always.
 - Token efficiency is a design constraint: prefer deterministic scripts over LLM calls, short
   pointers over restated rules.
 
