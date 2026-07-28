@@ -165,14 +165,21 @@ The pass, in priority order:
    were substantive: one header contradicted itself about which search providers run,
    and one carried a hand-maintained list of its own six callers.
 
-   **The bloat is not evenly spread, and that changes how to size the rest.** Sampled
-   blocks in the crawler and the notes app were read and left alone — a live
-   domain-sale incident with its rejected alternative, an SSRF boundary, two guard
-   false positives and the regression that narrowing introduced. All earn their
-   length. The defect concentrates in agent-written script headers, where a filename
-   banner, a numbered restatement of the function below, and an env/output table
-   attach to almost every file. Audit those first; do not assume a long block in a
-   library is a long block worth cutting.
+   **The bloat is not evenly spread, and that changes how to size the rest.** Eleven
+   blocks across the crawler and the notes app were read and every one left alone — a
+   live domain-sale incident with its rejected alternative, an SSRF boundary, two
+   guard false positives and the regression that narrowing introduced, a parity
+   harness that says what it deliberately does not couple to, and a test that states
+   plainly which path it leaves unverified. All earn their length. The defect
+   concentrates in agent-written script headers, where a filename banner, a numbered
+   restatement of the function below, and an env/output table attach to almost every
+   file. Audit those first; do not assume a long block in a library is worth cutting.
+
+   That sample was drawn twice. The first pass ran while the scanner was hiding
+   comments, so it was re-run after the fail-open fix: the block rankings were
+   identical, which is what makes the conclusion safe to keep. Density figures
+   recorded before that fix are understated and should not be compared against
+   anything measured after it.
 
    The crawler's `// ─── Title ───` banner is its convention, on 46 of 48 src files,
    and names the CONCEPT rather than the filename. Left as is — stripping it from a
