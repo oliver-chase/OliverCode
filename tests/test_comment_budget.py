@@ -105,6 +105,48 @@ class CommentBudgetGateTests(unittest.TestCase):
         result = self.run_gate("--quiet")
         self.assertEqual(result.returncode, 2)
 
+    # ── Python docstrings ────────────────────────────────────────────────────
+
+    def assert_flagged(self, name: str) -> None:
+        # Asserted on the exit code and the block marker, never on the phrase
+        # "over 20 lines": the PASS line reads "no comment block over 20 lines",
+        # so matching that substring passes on success and tests nothing.
+        result = self.run_gate("--quiet")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("[BLOCK", result.stdout)
+        self.assertIn(name, result.stdout)
+
+    def test_a_module_docstring_counts_against_the_cap(self):
+        self.write("m.py", '"""\n' + "narrative\n" * 25 + '"""\nx = 1\n')
+        self.assert_flagged("m.py:1")
+
+    def test_a_shebang_does_not_hide_the_module_docstring(self):
+        # Counting the shebang as code put the docstring past its own position,
+        # and a real 44-line one went unseen.
+        self.write("n.py", '#!/usr/bin/env python3\n"""\n' + "narrative\n" * 25 + '"""\nx = 1\n')
+        self.assert_flagged("n.py:2")
+
+    def test_a_function_docstring_counts(self):
+        self.write("o.py", 'def f():\n    """\n' + "    narrative\n" * 25 + '    """\n    return 1\n')
+        self.assert_flagged("o.py:2")
+
+    def test_triple_quoted_sql_is_code_not_documentation(self):
+        self.write("p.py", 'cur.execute(\n    """\n' + "    SELECT 1,\n" * 25 + '    """,\n    (),\n)\n')
+        self.assertIn("OK:", self.run_gate("--quiet").stdout)
+
+    def test_a_closing_delimiter_does_not_open_a_new_region(self):
+        # Lines are trimmed, so a lone closing `"""` looks exactly like an
+        # opening one. Reading it as an opener made every later line comment.
+        self.write("q.py", 'SQL = """\nSELECT 1\n"""\n' + "x = 1\n" * 40)
+        self.assertIn("OK:", self.run_gate("--quiet", "--top", "1").stdout)
+
+    def test_a_docstring_position_inside_a_data_string_is_still_data(self):
+        # Only pairing settles this one. The `"""` on line 3 closes the template;
+        # read independently it sits right after `def g():`, which is a docstring
+        # position, so it would open a prose region and swallow the file.
+        self.write("r.py", 'TEMPLATE = """\ndef g():\n    """\n' + "x = 1\n" * 40)
+        self.assertIn("OK:", self.run_gate("--quiet", "--top", "1").stdout)
+
     # ── block length, the original rule ──────────────────────────────────────
 
     def test_a_block_over_the_cap_fails(self):

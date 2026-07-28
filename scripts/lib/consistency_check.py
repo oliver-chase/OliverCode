@@ -1,24 +1,12 @@
 """Doc-vs-code consistency checks.
 
 One failure class: a tracked doc asserts something the code contradicts. Collapsed
-into a single checker per FRAMEWORK_BASELINE.md's removal rule (a validator that
-duplicates another's failure class gets merged, not added alongside).
+into a single checker per FRAMEWORK_BASELINE.md's removal rule -- a validator that
+duplicates another's failure class gets merged, not added alongside.
 
-Checks:
-  1. skills/INDEX.md's table matches the skills/*/SKILL.md directories, both ways,
-     and each SKILL.md's frontmatter `name:` matches its directory name. The launcher
-     reads frontmatter while humans read the table; they can drift apart silently.
-  2. No tracked doc claims a pre-commit gate count that contradicts the hook it is
-     about. Coverage is per-repo-type -- 8 gates in OliverCode, 6 in an adopted repo,
-     2 in the private variant -- so a claim is resolved to its hook before comparing.
-  3. Every hook variant is internally consistent, and docs/GOVERNANCE.md's coverage
-     table (the single home for those counts) matches all three.
-  4. docs/FEATURE_MAP.md lists every user-invocable script, and skills cross-referenced
-     from docs resolve to a real skill.
-  5. No tracked file names a real repo from the operator's gitignored fleet config. The
-     registries were kept generic from the start; the leak came through prose.
-  6. Every core/contracts/*.md is referenced by some other tracked file. A contract
-     nothing points at drifts unread, then gets cited as if it were current.
+Each `check_*` below states what drifts and why nothing else catches it. Gate counts
+are per-repo-type, so a claim resolves to its own hook before being compared:
+GATE-COUNT-1 in docs/DECISIONS.md.
 """
 
 from __future__ import annotations
@@ -68,6 +56,12 @@ def _tracked(repo_root: Path, *args: str) -> list[str]:
 
 
 def check_skill_index(repo_root: Path) -> list[str]:
+    """skills/INDEX.md's table must match the skills/*/SKILL.md directories both ways,
+    and each SKILL.md's frontmatter `name:` must match its directory.
+
+    The launcher reads the frontmatter and humans read the table, so the two drift
+    apart with nothing reporting it.
+    """
     failures: list[str] = []
     skills_dir = repo_root / "skills"
     index_path = skills_dir / "INDEX.md"

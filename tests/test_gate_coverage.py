@@ -1,25 +1,13 @@
 """Tests for per-repo gate-coverage consistency.
 
-Gate coverage is not uniform: OliverCode runs 8 gates on itself, a repo that adopts
-the framework runs 6, the vault's private variant runs 2. Five tracked documents
-stated 8 as though it were universal, telling forkers their repos would get contract
-integrity and token policy -- two gates the template does not ship.
-
-The consistency checker was in place the whole time and passed, for two independent
-reasons, both fixed here and pinned by the tests below:
-
-  1. it compared every claim against OliverCode's own hook, skipping core/templates/
-     outright with the comment "the template hook has its own, smaller gate count" --
-     the discrepancy was known to the checker and deliberately unexamined
-  2. its claim pattern required the number adjacent to the noun, so README's headline
-     "8 pre-commit gates" was never even matched
-
-Meanwhile the template disagreed with itself: banners read "Gate 1/5" through
-"Gate 5/5" and then "Gate 6/6". Nothing checked a hook other than OliverCode's.
+Gate coverage is not uniform -- 8 gates in OliverCode, 6 in a repo that adopts the
+framework, 2 in the vault's private variant -- and five tracked documents stated 8
+as though it were universal, promising forkers two gates the template does not ship.
+GATE-COUNT-1 in docs/DECISIONS.md records why the checker passed through all of it.
 
 Each test is a mutation: it breaks one thing and asserts the checker fails. A
-consistency check that cannot fail is the defect class this repo keeps rediscovering
-(see scripts/lib/falsifiability_check.py), so these are written to prove it can.
+consistency check that cannot fail is the class this repo keeps rediscovering (see
+scripts/lib/falsifiability_check.py), so these are written to prove it can.
 """
 
 import importlib.util
