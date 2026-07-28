@@ -57,8 +57,11 @@ apply constantly; that contract is the order they run in.
   pointers over restated rules.
 
 ## Pre-Commit
-Run the current repo's own `scripts/validate.sh` before committing — every fleet repo has one,
-and it is that repo's canonical validation, not OliverCode's.
+Run the current repo's own canonical validation before committing, never OliverCode's.
+Usually `scripts/validate.sh`; where that file does not exist the repo runs validation
+through its own npm script instead (`validate`, or `check`). Confirm which from that repo's
+CLAUDE.md or package.json rather than assuming the filename — an agent that assumes, finds
+nothing, and moves on has skipped validation without noticing.
 Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement
