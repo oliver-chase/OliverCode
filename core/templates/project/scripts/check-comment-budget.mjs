@@ -42,8 +42,14 @@ const files = execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' }
   .split('\n')
   .filter((f) => f && SOURCE.test(f) && !f.includes('node_modules'));
 
-/** Longest run of consecutive comment lines. A blank line inside a block does
- *  not end it — splitting an essay with blank lines is not shortening it. */
+/** A JSDoc/docstring tag line. These are interface documentation — a function
+ *  with twelve parameters has twelve @param lines and no essay. Counting them
+ *  would push people to delete the useful part, so a tag line ends the prose run
+ *  rather than extending it. */
+const TAG_LINE = /^[*#\s]*@\w+/;
+
+/** Longest run of consecutive PROSE comment lines. A blank line inside a block
+ *  does not end it — splitting an essay with blank lines is not shortening it. */
 function scan(text, hashStyle) {
   const lines = text.split('\n');
   let inBlock = false;
@@ -72,8 +78,12 @@ function scan(text, hashStyle) {
 
     if (isComment) {
       commentLines++;
-      if (run === 0) runStart = i + 1;
-      run++;
+      if (TAG_LINE.test(line.replace(/^\/\*+|^\/\//, ''))) {
+        close();
+      } else {
+        if (run === 0) runStart = i + 1;
+        run++;
+      }
     } else if (line !== '') {
       close();
     }
