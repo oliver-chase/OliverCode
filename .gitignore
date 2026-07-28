@@ -94,9 +94,8 @@ runtime/control-plane/**
 # Generated runtime manifests (inventory reports, generated status, observability artifacts)
 runtime/manifests/
 
-# Local Claude OS: personal memory/state/profile stay local; the reusable
-# agent skills under .claude-optimization/skills/ and the generic README
-# (the documented load-order entrypoint) are tracked. The framework
+# Local Claude OS: personal memory/state stay local; the generic README
+# (the documented load-order entrypoint) is tracked. The framework
 # does not depend on any of it (one-directional, per FRAMEWORK_BOUNDARY.md).
 .claude-optimization/memory/
 .claude-optimization/state/
