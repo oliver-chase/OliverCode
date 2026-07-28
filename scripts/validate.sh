@@ -66,7 +66,7 @@ sys.exit(1 if failures else 0)
 }
 
 run_hook_state() {
-  # B1: hook enforcement fails OPEN -- an unset or broken core.hooksPath means git
+  # Hook enforcement fails OPEN -- an unset or broken core.hooksPath means git
   # runs no hooks and prints nothing. `olivercode health` detects it, but health ran
   # only from a weekly cron into a log nobody read, so a repo could sit ungoverned
   # for a week. Surfacing it here puts the signal where agents already look: CLAUDE.md
