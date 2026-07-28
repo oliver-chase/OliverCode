@@ -73,12 +73,13 @@ the explanation of it. A 39-line file header is not documentation, it is an
 essay in the wrong file — and it rots faster than short comments because
 nobody re-reads it when the code changes underneath.
 
-**This is gated.** `core/templates/project/scripts/check-comment-budget.mjs`
+**This is checked, not gated.** `core/templates/project/scripts/check-comment-budget.mjs`
 fails on any contiguous comment block over 20 lines — more than triple the
-ceiling above, so it catches essays and leaves judgment calls alone. Copy it
-into a repo's `scripts/` and add it to that repo's `check` target. Per-repo
-overrides and exemptions (each needing a stated `why`) go in a root
-`.comment-budget.json`.
+ceiling above, so it catches essays and leaves judgment calls alone. It runs
+from each repo's validation target and from **no pre-commit hook in any repo**,
+so a commit that skips validation skips this. Treat it as the check that finds
+the problem, not the thing that stops it landing. Per-repo overrides and
+exemptions (each needing a stated `why`) go in a root `.comment-budget.json`.
 
 Density is reported by the same script and never fails. A repo can legitimately
 run high density in short comments sitting beside the code they govern; block

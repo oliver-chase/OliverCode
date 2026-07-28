@@ -231,6 +231,21 @@ convention gets adopted where it is missing and repaired where it broke, or the 
 should report unmarked repos separately from stale ones so a real regression is
 visible. Deciding which is the work; the current state is that nobody can act on it.
 
+**B13 — the comment gate is in no pre-commit hook (MED, open).**
+The contract had said "this is gated". It is not: `check-comment-budget.mjs` runs from
+each repo's validation target and appears in no `.githooks/pre-commit` anywhere in the
+fleet. Every commit made this session shows it — the hook banners list the secret, icon,
+PII, deleted-repo, workflow-auth, contract, planning and token gates, and never the
+comment budget. Two hooks mention `validate.sh`, both only in a comment.
+
+So a commit that does not run validation lands over-cap comments silently, which is how
+the fifteen blocks the docstring fix exposed got in. The contract now states the real
+position. Making it mechanical means adding it to the hook template and both hook
+variants (see B9 — that tax is exactly what makes this more than a one-line change),
+and deciding whether it blocks on staged files only or scans the repo, since a
+whole-repo scan on every commit is slow enough that people will start passing
+`--no-verify`, which costs more than it buys.
+
 **B9 — the hook-variant tax compounds (LOW, watch).**
 Two fleet repos declare `hookVariant`, so every template gate change needs a hand-merge into
 both. That is B3's designed trade-off working correctly, but hand-merging is how a security
