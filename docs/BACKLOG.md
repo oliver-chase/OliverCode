@@ -196,6 +196,41 @@ a keyword list — the failure `How Great Writers Think` names directly — or a
 call per comment on every commit, which fails the token-efficiency rule. This stays
 agent work, tracked here until the read is done.
 
+**B11 — the decision ledger is unenforced in four of six repos (HIGH, open).**
+`CODE_INTENT_STANDARD` §3 requires a `docs/DECISIONS.md` in every consuming repo and
+§4 requires a gate that fails when an id has no row, a row names deleted code, or a
+row is referenced by nothing. Measured across the fleet, counting ids of the form
+`AREA-TOPIC-N` in tracked source:
+
+| repo | ids in code | ledger rows | gate |
+| --- | --- | --- | --- |
+| this repo | 2 | 2 | yes |
+| crawler | 77 | 80 | yes |
+| events app | 186 | 14 | **none** |
+| studio app | 74 | **no ledger** | none |
+| growth repo | 6 | **no ledger** | none |
+| notes app | 1 | **no ledger** | none |
+
+The events app is the sharp end: `SELF-HEALING-1`, `INGEST-ASYNC-1`, `QUEUE-ZERO-6`
+and `DESIGN-AUDIT-2` are each cited a dozen-plus times in code with nothing to resolve
+them against, and its ledger cannot drift-check because no gate reads it. The studio
+app cites 74 ids against no ledger at all.
+
+Not a sweep. Backfilling a row per id would manufacture 260 rows of restatement, which
+is the defect this framework exists to prevent. The order that works: install the gate
+first (copy `check_decision_ledger` from `scripts/lib/consistency_check.py`), let it
+report, then write a row only where a reader would otherwise undo the decision. Ids
+that turn out to be obvious lose the id instead of gaining a row.
+
+**B12 — the staleness audit flags every repo, so it informs nothing (MED, open).**
+`scripts/audit-staleness.py` reports all seven registered repos as stale. Five carry no
+`Reviewed through` marker at all, the studio app's marker names a sha the repo does not
+have (its history was rewritten), and the two that are marked are 63 and 31 commits
+past their review. A signal that is always on is not a signal. Either the marker
+convention gets adopted where it is missing and repaired where it broke, or the check
+should report unmarked repos separately from stale ones so a real regression is
+visible. Deciding which is the work; the current state is that nobody can act on it.
+
 **B9 — the hook-variant tax compounds (LOW, watch).**
 Two fleet repos declare `hookVariant`, so every template gate change needs a hand-merge into
 both. That is B3's designed trade-off working correctly, but hand-merging is how a security
