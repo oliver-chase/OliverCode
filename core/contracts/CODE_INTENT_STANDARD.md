@@ -120,6 +120,9 @@ it fatal produces hollow tests, which is worse than the gap.
 A reference implementation is a short script in the consuming repo's own `scripts/`:
 grep the source tree for `[A-Z]+-[A-Z0-9]+-\d+` IDs, parse the ledger's rows, and
 diff the two sets in both directions. Under a hundred lines; write it once per repo.
+`check_decision_ledger` in OliverCode's `scripts/lib/consistency_check.py` is one to
+copy from. Skip IDs that sit inside a quoted string — a fixture carrying one as
+payload data reads as a reference and is not one.
 
 ## 4b. Comments are written for longevity
 
