@@ -13,10 +13,15 @@ Checks:
      2 in the private variant -- so a claim is resolved to its hook before comparing.
   3. Every hook variant is internally consistent, and docs/governance.md's coverage
      table (the single home for those counts) matches all three.
+  4. docs/FEATURE_MAP.md lists every user-invocable script, and skills cross-referenced
+     from docs resolve to a real skill.
+  5. No tracked file names a real repo from the operator's gitignored fleet config. The
+     registries were kept generic from the start; the leak came through prose.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -107,8 +112,11 @@ HOOKS = {
 # Checked most-specific first: "private" wins over a bare mention of "template".
 _HOOK_CUES = (
     ("template-private", ("private variant", "pre-commit-private", "private template")),
+    # "registered"/"governed" repo are what the launcher and validate.sh call a fleet
+    # repo in their own output, so docs reach for them naturally.
     ("template", ("template", "adopted repo", "fleet repo", "product repo",
-                  "downstream", "core/templates", "project repo")),
+                  "downstream", "core/templates", "project repo",
+                  "registered repo", "governed repo")),
 )
 
 
@@ -135,9 +143,29 @@ def _hook_totals(repo_root: Path) -> tuple[dict[str, int], list[str]]:
     return totals, problems
 
 
-def _hook_for_line(rel: str, line: str) -> str:
-    """Which hook a gate-count claim refers to, from the doc path and the line's wording."""
-    haystack = f"{rel} {line}".lower()
+# How many preceding lines count as context when resolving a claim. Prose wraps, and a
+# bold lead-in ("in every registered repo") routinely sits on the line above the sentence
+# carrying the number, so single-line resolution mis-attributed wrapped paragraphs.
+#
+# Context stops at a blank line. Widening it past the paragraph boundary made the checker
+# MISS a planted wrong claim, because an unrelated cue two paragraphs up re-attributed it
+# to the other hook -- caught by the mutation suite in tests/test_gate_coverage.py.
+_CUE_CONTEXT_LINES = 2
+
+
+def _block_context(lines: list[str], i: int) -> tuple[str, ...]:
+    """The few lines above `i` that belong to the same block, stopping at a blank line."""
+    out: list[str] = []
+    for j in range(i - 1, max(-1, i - 1 - _CUE_CONTEXT_LINES), -1):
+        if not lines[j].strip():
+            break
+        out.append(lines[j])
+    return tuple(reversed(out))
+
+
+def _hook_for_line(rel: str, line: str, preceding: tuple[str, ...] = ()) -> str:
+    """Which hook a gate-count claim refers to, from the doc path and nearby wording."""
+    haystack = " ".join((rel, *preceding, line)).lower()
     for hook, cues in _HOOK_CUES:
         if any(cue in haystack for cue in cues):
             return hook
@@ -159,12 +187,14 @@ def check_gate_count(repo_root: Path) -> list[str]:
         return failures
 
     for rel in _tracked(repo_root, "*.md"):
-        for line in (repo_root / rel).read_text(encoding="utf-8").splitlines():
+        lines = (repo_root / rel).read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
             for token in GATE_CLAIM.findall(line):
                 claimed = _claimed_count(token)
                 if claimed is None:
                     continue
-                hook = _hook_for_line(rel, line)
+                context = _block_context(lines, i)
+                hook = _hook_for_line(rel, line, context)
                 actual = totals.get(hook)
                 if actual is not None and claimed != actual:
                     failures.append(
@@ -173,6 +203,80 @@ def check_gate_count(repo_root: Path) -> list[str]:
                         f"the same line (\"adopted repo\", \"private variant\"); the cue list "
                         f"is _HOOK_CUES in scripts/lib/consistency_check.py."
                     )
+    return failures
+
+
+def check_no_fleet_names_in_tracked_files(repo_root: Path) -> list[str]:
+    """No tracked file may name a real repo from the operator's fleet.
+
+    The whole three-layer design rests on real fleet data living only in gitignored
+    `local/`. Tracked files ship placeholders so the fork is shareable. That held for
+    the registries and then leaked through prose instead: BACKLOG entries naming the
+    repos that needed a re-sync, and a real repo name used as a test fixture.
+
+    Nothing caught it, because the reference and PII gates look for paths and emails,
+    and a bare repo name is neither.
+
+    The check reads the operator's own names from the gitignored profile and greps the
+    tracked tree for them, so it needs no hardcoded list of what to hide -- a hardcoded
+    list would itself be the leak. A fork with no `local/` has nothing to compare and
+    skips, which is correct: those names are not secret to the person who owns them.
+    """
+    local_profiles = repo_root / "local" / "repo-profiles.json"
+    if not local_profiles.is_file():
+        return []
+    try:
+        data = json.loads(local_profiles.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    # Names that cannot be searched for without matching the repo's own vocabulary. A
+    # profile named "core" or "docs" appears in almost every tracked file as a path
+    # component, and flagging all of them would make this check noise, which is how a
+    # check gets switched off. Derived from the tree rather than hardcoded, so it stays
+    # correct as the layout changes.
+    reserved = {p.name.lower() for p in repo_root.iterdir()}
+    reserved |= {p.stem.lower() for p in repo_root.iterdir() if p.is_file()}
+    reserved |= {"olivercode", "main", "src", "test", "tests", "template", "project"}
+
+    # Placeholder names from the tracked example are not fleet data by definition, and
+    # they are SUPPOSED to appear in tracked files. `olivercode init` seeds local/ from
+    # that example, so a fresh fork's "real fleet" is entirely placeholders -- without
+    # this the check fired on the very files the placeholders belong in, and the
+    # fork-usability sandbox failed.
+    example = repo_root / "shared" / "repo-profiles.example.json"
+    if example.is_file():
+        try:
+            reserved |= {
+                n.lower()
+                for n in json.loads(example.read_text(encoding="utf-8")).get("profiles", {})
+            }
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    names = {
+        n for n in data.get("profiles", {})
+        if n.lower() not in reserved and len(n) > 3
+    }
+    if not names:
+        return []
+
+    # `local/` is gitignored, so it is not in this list by construction.
+    tracked = _tracked(repo_root, "*.md", "*.py", "*.sh", "*.json", "*.mjs")
+    failures: list[str] = []
+    for rel in tracked:
+        try:
+            text = (repo_root / rel).read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for name in sorted(names):
+            if re.search(rf"\b{re.escape(name)}\b", text):
+                failures.append(
+                    f"  [FLEET LEAK] {rel} names the real fleet repo '{name}'. Tracked "
+                    f"files must stay generic so the fork is shareable — describe the "
+                    f"repo by role ('the repo declaring a hook variant') or use a "
+                    f"placeholder ('product-repo'). Real names belong in local/ only."
+                )
     return failures
 
 
@@ -325,6 +429,7 @@ def check_all(repo_root: Path) -> list[str]:
         + check_gate_count(repo_root)
         + check_gate_integrity(repo_root)
         + check_gate_coverage_table(repo_root)
+        + check_no_fleet_names_in_tracked_files(repo_root)
         + check_feature_map_completeness(repo_root)
         + check_skill_cross_references(repo_root)
     )

@@ -22,11 +22,12 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
 | Documentation standard | `docs/DOCUMENTATION_STANDARD.md` | Manual (no active validator) |
 | Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
+| Third-party tools the posture assumes (none shipped, none required) | `docs/external-tooling.md` | Manual (nothing here depends on them) |
 | Skill placement | `docs/skills-placement.md` | `scripts/olivercode health` (symlink + drift check) |
 | Doc/code consistency (skills index parity, gate-count claims, hook gate integrity) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
-| Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/hook_drift_check.py` | Compares gate bodies across the three hooks; an undeclared difference fails, a deliberate one is declared with a reason |
-| `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
-| Hook drift (the three pre-commit hooks implementing the same gate differently) | `scripts/lib/hook_drift_check.py` | `bash scripts/validate.sh` (fail-closed) |
+| Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
+| Hook drift (the three pre-commit hooks implementing the same gate differently) | `scripts/lib/hook_drift_check.py` | `bash scripts/validate.sh` (fail-closed). An undeclared difference fails; a deliberate one is declared with a reason |
+| Gate coverage per repo type (8 in OliverCode, 6 in an adopted repo, 2 in the private variant) | `docs/governance.md` coverage table | `scripts/lib/consistency_check.py` via `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
 | Public CI | `.github/workflows/framework-ci.yml` | Ships health + validate.sh + `check-bloat.sh --strict` + fork-usability as gating steps. **Deliberately paused on the origin repo** while GitHub Actions billing is blocked — see `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`, the canonical record. Enable it in your own fork. |

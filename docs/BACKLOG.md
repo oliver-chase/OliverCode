@@ -123,10 +123,21 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 **B6 — OPEN (LOW, fleet-side, not OliverCode's to run).** The public hook template's gate
 banners were corrected from `Gate N/5` (with a contradictory `Gate 6/6` at the end) to a
 consistent `Gate N/6`. Deployed fleet hooks now differ from the template by that banner text,
-so `health` reports `tesknota`, `oliver-app`, and `fallow` as diverging. **The difference is
+so `health` reports three of the registered fleet repos as diverging. **The difference is
 printed text only — no gate's behaviour changed**, verified by diffing the template against a
 deployed copy. Whoever owns the fleet clears it with one `scripts/olivercode sync-hooks`. Not
 done here: other agents are working in those repos and this session's scope is OliverCode.
+
+**B8 — RESOLVED 2026-07-27.** Real fleet repo names had leaked into tracked files through
+prose: BACKLOG entries naming the repos that needed a re-sync, and one real name used as a
+test fixture. The registries were generic from the start, so the three-layer design held
+where it was designed to and failed where nobody was looking. Neither the reference gate nor
+the PII gate could see it, because both match paths and email addresses and a bare repo name
+is neither. `check_no_fleet_names_in_tracked_files` now derives the names to search for from
+the operator's own gitignored profile, so there is no hardcoded list of what to hide, which
+would itself be the leak. Names that collide with the repo's own vocabulary, and placeholder
+names from the tracked example, are excluded — the first cut fired 86 times on a profile
+named `core` and would have been switched off.
 
 **B7 — OPEN (LOW).** `repo-map.json`'s `governanceProfile` and
 `approvedMaintainabilityVariances[].target` are still read by nothing. Waiver **expiry** is
@@ -135,7 +146,7 @@ become permanent, but the profile and variance targets themselves remain declara
 wire them to a check or drop the fields; do not leave a third registry that only documents.
 
 **B5 — RESOLVED 2026-07-27.** The perl guard was hand-merged into
-oliver-strategic-growth's variant hook (both `pre-commit` and `pre-commit-private`), leaving
+the variant hook of the repo that declares one (both `pre-commit` and `pre-commit-private`), leaving
 its repo-specific governance path intact. Verified against that exact hook: an emoji is still
 blocked with perl present, and with perl off PATH the commit is now blocked instead of
 allowed. Committed there as a single two-file change; the other agent's work in that repo was
@@ -154,7 +165,7 @@ repo-specific governance path. Any future template gate change needs the same tr
 synced, the declared variant skipped, `health` 12/12 HEALTHY. The perl guard reached all five
 public repos plus the vault's private variant.
 **B6 — the hook-variant tax is now recurring (LOW, watch).**
-Two repos declare `hookVariant` (oliver-strategic-growth, oliver-studios), so every template
+Two repos in the reference fleet declare `hookVariant`, so every template
 gate change needs a hand-merge into both — done twice today already (the perl guard, then
 Gate 4). That is B3's designed trade-off working correctly, but the cost compounds. If a
 third variant appears, switch to the template-composition option recorded under B3 (a base
@@ -182,7 +193,7 @@ then reports its hook divergence as WARN instead of FAIL, and `sync-hooks` SKIPS
 instead of overwriting a considered customization. Undeclared divergence still FAILs, and a
 declaration never excuses a missing, unexecutable, or unconfigured hook — those are the
 fail-open cases and remain fatal. Verified against the real divergent fleet repo
-(`oliver-strategic-growth`, which carries a repo-specific governance path): declaring it
+(the one carrying a repo-specific governance path): declaring it
 returns the fleet to HEALTHY, `sync-hooks` leaves it untouched, and breaking its `hooksPath`
 still fails. Documented in `shared/repo-profiles.example.json`.
 
@@ -249,3 +260,13 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   README; "what you get and what enforces it" contract added, `63d5b3c`.
 - 2026-07-27 [necessity] Completion gate stopped asserting a rule nobody runs; QA worktree
   double-count fixed (it was hiding real findings); Gate 8 message made actionable, `e267385`.
+- 2026-07-27 [voice] README rebuilt to the V.Two README contract (six sections, narrative, no
+  tables, second person) with a complete linked index of every document, so nothing became
+  unreachable when the old tables came out. Reference content relocated rather than deleted:
+  external tooling to `docs/external-tooling.md`, directory layout already in ARCHITECTURE.
+  `docs/DOCUMENTATION_STANDARD.md` previously mandated the old section list, which the rewrite
+  would have silently violated; it now defers to the V.Two contract and pins where each piece
+  of required content lives. GitHub About description and topics set (both were empty).
+- 2026-07-27 [audit] Fleet-name leak closed (B8). `docs/FEATURE_MAP.md` had a malformed row
+  that pointed "unfalsifiable checks" at the hook-drift module and left an orphan two-column
+  row in a three-column table.
