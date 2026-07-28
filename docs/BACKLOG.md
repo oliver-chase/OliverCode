@@ -153,10 +153,18 @@ The pass, in priority order:
    into the real file, zero hits fleet-wide otherwise. It closes the mechanizable
    half of this class; a comment that describes the wrong function WITHOUT claiming
    a return or a param is still only findable by reading.
-2. **Read every block over 8 lines, per repo, newest-first.** Roughly 1900 fleet-wide.
-   Judge against WRITING_PROCESS: does each paragraph do one job, does the last
-   sentence add anything, is any sentence carrying four clauses. Newest-first because
-   recent blocks are agent-written and that is where the density came from.
+2. **Read every block over 8 lines, per repo, newest-first — STARTED.** Judge against
+   WRITING_PROCESS: does each paragraph do one job, does the last sentence add
+   anything, is any sentence carrying four clauses. Newest-first because recent blocks
+   are agent-written and that is where the density came from.
+
+   Seventeen blocks are read and rewritten so far: the four in this repo and thirteen
+   in the studio repo, all of them the >20-line offenders the docstring fix exposed.
+   What recurred was not prose quality but structure — an opening announcing the
+   subject, a closing restating it, and a listing duplicating functions that already
+   document themselves. The block count above predates the docstring fix and is low by
+   however many triple-quoted blocks the scanner could not see; re-measure before
+   using it to size the remainder.
 3. **Sample the short ones.** Blocks under 8 lines are mostly fine and there are
    thousands; a random sample per repo is proportionate.
 
@@ -306,3 +314,18 @@ rather than accumulating manual merges.
   dated decision-IDs stripped in the crawler repo (git blame is the provenance), live-queue
   tallies rewritten as at-the-time evidence in the events repo. Dated batch and incident
   records keep their dates: there the date is the record.
+
+- 2026-07-28 [gate] Comment budget now measures Python docstrings, which were entirely
+  invisible while only `#` counted — two 40-line narrative module docstrings had passed.
+  Triple quotes pair across the line, because trimming makes a lone closing `"""` identical
+  to an opener and reading it as one swallowed the rest of the file; only a region opening
+  at a docstring position counts as prose, which leaves triple-quoted SQL as code. Template
+  literals are tracked for the same reason: `/*` inside one opened a block that never
+  closed. Four blocks fixed here, thirteen in the studio repo, `38fc227`+`5716d0a`.
+  The gate had no tests anywhere; it now has nineteen, each ablated. Three of them were
+  vacuous when first written — they asserted the phrase "over 20 lines", which is a
+  substring of the PASS line "no comment block over 20 lines", so they passed on success.
+- 2026-07-28 [gate] `docs/DECISIONS.md` added, and `check_decision_ledger` added with it:
+  §3 required the ledger and §4 required it to be gated, and this repo had neither. IDs
+  inside quoted strings are skipped — a fixture carries one as payload data. The contract
+  now names this as the reference implementation it had only described.
