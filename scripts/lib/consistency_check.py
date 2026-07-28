@@ -11,7 +11,7 @@ Checks:
   2. No tracked doc claims a pre-commit gate count that contradicts the hook it is
      about. Coverage is per-repo-type -- 8 gates in OliverCode, 6 in an adopted repo,
      2 in the private variant -- so a claim is resolved to its hook before comparing.
-  3. Every hook variant is internally consistent, and docs/governance.md's coverage
+  3. Every hook variant is internally consistent, and docs/GOVERNANCE.md's coverage
      table (the single home for those counts) matches all three.
   4. docs/FEATURE_MAP.md lists every user-invocable script, and skills cross-referenced
      from docs resolve to a real skill.
@@ -103,7 +103,7 @@ def check_skill_index(repo_root: Path) -> list[str]:
 
 # Every hook variant, and how a doc line signals which one it is talking about.
 # Gate coverage is NOT uniform: OliverCode runs 8 on itself, an adopted repo 6, the
-# vault's private variant 2. docs/governance.md holds the human table.
+# vault's private variant 2. docs/GOVERNANCE.md holds the human table.
 HOOKS = {
     "olivercode": Path(".githooks/pre-commit"),
     "template": Path("core/templates/project/pre-commit"),
@@ -281,14 +281,14 @@ def check_no_fleet_names_in_tracked_files(repo_root: Path) -> list[str]:
 
 
 def check_gate_coverage_table(repo_root: Path) -> list[str]:
-    """docs/governance.md's per-repo Total row must match the real hooks.
+    """docs/GOVERNANCE.md's per-repo Total row must match the real hooks.
 
     That table is the single home for gate coverage and every other doc points at it,
     so a stale row propagates everywhere by design.
     """
     doc = repo_root / "docs" / "governance.md"
     if not doc.is_file():
-        return ["  [GATES] docs/governance.md is missing — it holds the gate coverage table"]
+        return ["  [GATES] docs/GOVERNANCE.md is missing — it holds the gate coverage table"]
 
     row = next(
         (l for l in doc.read_text(encoding="utf-8").splitlines()
@@ -297,7 +297,7 @@ def check_gate_coverage_table(repo_root: Path) -> list[str]:
     )
     if row is None:
         return [
-            "  [GATES] docs/governance.md has no '| **Total** |' row in its gate coverage "
+            "  [GATES] docs/GOVERNANCE.md has no '| **Total** |' row in its gate coverage "
             "table — that row is what pins the per-repo counts to the hooks"
         ]
 
@@ -307,7 +307,7 @@ def check_gate_coverage_table(repo_root: Path) -> list[str]:
     expected = [e for e in expected if e is not None]
     if stated != expected:
         failures.append(
-            f"  [GATES] docs/governance.md's coverage table totals {stated} but the hooks "
+            f"  [GATES] docs/GOVERNANCE.md's coverage table totals {stated} but the hooks "
             f"have {expected} (OliverCode, adopted repo, private variant)"
         )
     return failures

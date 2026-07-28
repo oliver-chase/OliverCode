@@ -30,7 +30,7 @@ User says "yes" / approves change
     |
     v
 5.  GATE -- pre-commit enforcement runs automatically (see below; how many gates
-    |   depends on the repo -- OliverCode/docs/governance.md has the table)
+    |   depends on the repo -- OliverCode/docs/GOVERNANCE.md has the table)
     |   BLOCKED = must fix before commit
     |
     v
@@ -45,7 +45,7 @@ User says "yes" / approves change
 
 `.githooks/pre-commit` runs the gates automatically on every commit. BLOCKED means fix
 before commit; there is no bypass mode. The gate list and what each one blocks lives in
-`docs/governance.md` — one home, so a hook change updates exactly one table.
+`docs/GOVERNANCE.md` — one home, so a hook change updates exactly one table.
 
 Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
 --evidence-file <path>` blocks a WRITE MODE completion claim without required evidence.

@@ -67,7 +67,7 @@ class TestShippedTree(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(
             totals, {"olivercode": 8, "template": 6, "template-private": 2},
-            "gate coverage changed -- update the table in docs/governance.md, which is "
+            "gate coverage changed -- update the table in docs/GOVERNANCE.md, which is "
             "its single home, and every doc that points there",
         )
 
@@ -114,8 +114,8 @@ class TestMutations(unittest.TestCase):
         against the template's count rather than OliverCode's.
         """
         self.assertTrue(self._fails_after(
-            "README.md", "## What You Get\n",
-            "## What You Get\n\n**On every commit, in every adopted repo**\n"
+            "README.md", "## What you get\n",
+            "## What you get\n\n**On every commit, in every adopted repo**\n"
             "8 pre-commit gates run.\n"))
 
     def test_a_cue_in_an_earlier_paragraph_does_not_reattribute(self):
@@ -126,23 +126,23 @@ class TestMutations(unittest.TestCase):
         claim to the template hook, where the wrong number happened to be right.
         """
         self.assertTrue(self._fails_after(
-            "docs/troubleshooting.md", "## Commits are passing gates",
+            "docs/TROUBLESHOOTING.md", "## Commits are passing gates",
             "The template is unrelated to what follows.\n\n"
             "All six gates run in this repo.\n\n## Commits are passing gates"))
 
     def test_catches_the_word_form_of_a_wrong_claim(self):
         self.assertTrue(self._fails_after(
-            "docs/troubleshooting.md", "## Commits are passing gates",
+            "docs/TROUBLESHOOTING.md", "## Commits are passing gates",
             "All six gates run here.\n\n## Commits are passing gates"))
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/governance.md", "| **8** | **6** | **2** |", "| **8** | **8** | **2** |"))
+            "docs/GOVERNANCE.md", "| **8** | **6** | **2** |", "| **8** | **8** | **2** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""
         self.assertTrue(self._fails_after(
-            "docs/governance.md", "| **Total** |", "| Total |"))
+            "docs/GOVERNANCE.md", "| **Total** |", "| Total |"))
 
     def test_unmutated_sandbox_passes(self):
         """Guards the harness: if the sandbox failed on its own, every test above

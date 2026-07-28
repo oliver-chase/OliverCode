@@ -2,7 +2,7 @@
 
 > Claude's self-contained memory/state system for OliverCode. No external agent framework
 > dependency. Loaded by vault root CLAUDE.md on session start. Skills live in the top-level
-> `OliverCode/skills/` directory — see `docs/skills-placement.md`.
+> `OliverCode/skills/` directory — see `docs/SKILLS-PLACEMENT.md`.
 
 | Directory | Purpose | Tracked? |
 |-----------|---------|----------|

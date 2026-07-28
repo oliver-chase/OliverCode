@@ -24,7 +24,7 @@ security warnings written normal, per the plugin's own rules.
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
 - Installing, creating, or moving ANY skill or agent file (in OliverCode, `~/.claude/`, or any
-  repo): read `$OC/docs/skills-placement.md` first — one home per layer, ledger write in the
+  repo): read `$OC/docs/SKILLS-PLACEMENT.md` first — one home per layer, ledger write in the
   same session.
 
 ## Development Practice
@@ -36,8 +36,10 @@ Always-on while working, not on request:
   (`/simplify`, `/code-review` before commit).
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Documentation robust but manageable: one concept one home, pointers elsewhere (sync
-  trigger/scope: `$OC/docs/DOCUMENTATION_STANDARD.md` "Requirement").
+- Documentation robust but manageable: one concept one home, pointers elsewhere. ANY
+  README or doc you write, in any repo, follows `$OC/docs/DOCUMENTATION_STANDARD.md`
+  (locked outline, voice, naming, GitHub About) — the `writing-documentation` skill
+  applies it. Docs sync in the same commit as the change, always.
 - Token efficiency is a design constraint: prefer deterministic scripts over LLM calls, short
   pointers over restated rules.
 
@@ -48,7 +50,7 @@ Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement
 `.githooks/pre-commit` is the only mechanically-enforced layer (eight gates here, six in a
-repo that adopts the framework -- `$OC/docs/governance.md` has the per-repo table).
+repo that adopts the framework -- `$OC/docs/GOVERNANCE.md` has the per-repo table).
 It is installed per repo via `core.hooksPath`; if that config is unset or points at a missing
 directory, **git runs no hooks at all and says nothing** — the gates fail open. `$OC/scripts/olivercode health`
 is what detects that; `$OC/scripts/olivercode sync-hooks` repairs it.

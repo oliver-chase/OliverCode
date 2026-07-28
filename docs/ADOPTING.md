@@ -94,7 +94,7 @@ Record, for each existing rules file: what it says, and which of these it is —
 - **machine-global** (applies everywhere) → belongs in the OliverCode `CLAUDE.md`
 - **repo-specific** (only true for one product) → stays in that repo's `CLAUDE.md`
 - **personal/business** (voice, GTM, hiring) → belongs in your own user-skills area, not in
-  the framework — see `docs/skills-placement.md`
+  the framework — see `docs/SKILLS-PLACEMENT.md`
 
 Most existing setups have all three tangled in one file. Separating them IS the adoption.
 
@@ -123,7 +123,7 @@ Your old `~/.claude/CLAUDE.md` content does not disappear — it gets sorted:
 1. Rules that are genuinely machine-global → add to your fork's `CLAUDE.md`, in the existing
    sections (`## Voice`, `## Development Practice`, `## Pre-Commit`, `## Enforcement`).
 2. Rules that are really about one repo → move to that repo's own `CLAUDE.md`.
-3. Rules that are personal/business content → a skill, placed per `docs/skills-placement.md`.
+3. Rules that are personal/business content → a skill, placed per `docs/SKILLS-PLACEMENT.md`.
 4. Anything you cannot classify → leave it in the global file and flag it for the human.
 
 **The one hard constraint on the global file:** it loads from `~/.claude/CLAUDE.md` in
@@ -220,7 +220,7 @@ Every repo reported as `[SKIP] not present on this machine` is one it did **not*
 read that list rather than the exit code.
 
 An adopted repo gets six gates, not the eight OliverCode runs on itself: contract integrity
-and token policy check framework-only things, so the template does not ship them. `docs/governance.md`
+and token policy check framework-only things, so the template does not ship them. `docs/GOVERNANCE.md`
 has the coverage table.
 
 Know what you just installed: **hook enforcement fails open.** If `core.hooksPath` is unset,

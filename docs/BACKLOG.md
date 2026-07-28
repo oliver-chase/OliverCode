@@ -30,7 +30,7 @@ and several docs. They are settled decisions, not open items.
 - **ACT-3 — Skill precedence gap (known, unmitigatable at mechanism level).** A generic
   skill and a repo-specific approval-gated skill can both match the same task, and nothing
   biases selection toward the gated one before a repo file is touched. Mitigation: a named,
-  explicit directive in the repo's own `CLAUDE.md`. See `docs/skills-placement.md`.
+  explicit directive in the repo's own `CLAUDE.md`. See `docs/SKILLS-PLACEMENT.md`.
 
 ---
 
@@ -250,7 +250,7 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   non-sibling repos, pre-existing `~/.claude`). It succeeded end to end, and found that the
   headline **8-gate claim was false for every adopted repo** (they get 6; contract integrity
   and token policy are framework-only) in six documents. Coverage table added to
-  `docs/governance.md` as its one home; `consistency_check.py` extended to resolve each claim
+  `docs/GOVERNANCE.md` as its one home; `consistency_check.py` extended to resolve each claim
   to the hook it is about, check every hook variant's internal numbering, and verify that
   table — the old checker skipped `core/templates/` on purpose, and its claim pattern required
   the number to sit directly beside the noun, so the count in README's own headline (which had
@@ -271,7 +271,7 @@ still fails. Documented in `shared/repo-profiles.example.json`.
 - 2026-07-27 [voice] README rebuilt to the V.Two README contract (six sections, narrative, no
   tables, second person) with a complete linked index of every document, so nothing became
   unreachable when the old tables came out. Reference content relocated rather than deleted:
-  external tooling to `docs/external-tooling.md`, directory layout already in ARCHITECTURE.
+  external tooling to `docs/EXTERNAL-TOOLING.md`, directory layout already in ARCHITECTURE.
   `docs/DOCUMENTATION_STANDARD.md` previously mandated the old section list, which the rewrite
   would have silently violated; it now defers to the V.Two contract and pins where each piece
   of required content lives. GitHub About description and topics set (both were empty).
@@ -291,3 +291,11 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   increased") — zero minutes consumed. Workflow re-disabled to keep pushes green-quiet. B2
   stays open on the same external condition; re-enable is one command
   (`gh workflow enable "OliverCode Framework CI"`) once billing is restored.
+- 2026-07-27 [docs] Documentation standard locked in as a self-contained contract
+  (`docs/DOCUMENTATION_STANDARD.md`): problem-driven README outline, voice, formatting,
+  CAPS-KEBAB doc naming, complete doc table, open-only backlog policy, same-commit sync,
+  GitHub About required. New `writing-documentation` skill applies it anywhere, including
+  forks. README rewritten as the exemplar. Four docs renamed to the convention
+  (GOVERNANCE, TROUBLESHOOTING, SKILLS-PLACEMENT, EXTERNAL-TOOLING), every reference swept.
+  `health` now checks the About (WARN-degrades offline). Template QUALITY_BASELINE and the
+  global CLAUDE.md point at the standard, so stamped repos and every session inherit it.

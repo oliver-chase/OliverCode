@@ -23,7 +23,7 @@ If a managed quality file changes in any project, the canonical file in **this r
 
 Before committing:
 
-1. `.githooks/pre-commit` -- the gate runner; `docs/governance.md` is the one home for the gate list
+1. `.githooks/pre-commit` -- the gate runner; `docs/GOVERNANCE.md` is the one home for the gate list
 2. Follow EXECUTION_CONTRACT: CODE -> DOCS -> AUDIT -> QA -> GATE -> COMMIT -> PUSH
 3. Doc standard: forward-only, current state -- never "previously/was removed/has been"
 4. PUBLIC_REPO_PRIVACY: no project names, host paths, or personal data in public content

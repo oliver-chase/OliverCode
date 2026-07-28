@@ -12,7 +12,7 @@ Four things, and it is worth being precise about which are mechanical and which 
 
 | You get | How it reaches you | Actually enforced? |
 |---|---|---|
-| Pre-commit gates — six in an adopted repo, eight in OliverCode itself (`docs/governance.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes** — fires on every `git commit`, cannot be skipped without `--no-verify` |
+| Pre-commit gates — six in an adopted repo, eight in OliverCode itself (`docs/GOVERNANCE.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes** — fires on every `git commit`, cannot be skipped without `--no-verify` |
 | Local validation | `bash scripts/validate.sh` — gates, doc/code consistency, reference integrity, tests | **Yes**, when run. Nothing auto-runs it |
 | Contracts, templates, workflows | `core/` — inherited by every repo via the bootstrap manifest | No — instruction text an agent follows |
 | Skills | `~/.claude/skills/` symlinks, installed by `olivercode install` | No — the agent chooses to load them |
