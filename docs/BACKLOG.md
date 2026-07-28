@@ -158,13 +158,29 @@ The pass, in priority order:
    anything, is any sentence carrying four clauses. Newest-first because recent blocks
    are agent-written and that is where the density came from.
 
-   Seventeen blocks are read and rewritten so far: the four in this repo and thirteen
-   in the studio repo, all of them the >20-line offenders the docstring fix exposed.
-   What recurred was not prose quality but structure — an opening announcing the
-   subject, a closing restating it, and a listing duplicating functions that already
-   document themselves. The block count above predates the docstring fix and is low by
-   however many triple-quoted blocks the scanner could not see; re-measure before
-   using it to size the remainder.
+   Thirty-three blocks read and rewritten so far: four in this repo, thirteen in the
+   studio repo, sixteen in the growth repo. What recurred was not prose quality but
+   structure — an opening announcing the subject, a closing restating it, and a
+   listing duplicating functions or read sites that already document themselves. Two
+   were substantive: one header contradicted itself about which search providers run,
+   and one carried a hand-maintained list of its own six callers.
+
+   **The bloat is not evenly spread, and that changes how to size the rest.** Sampled
+   blocks in the crawler and the notes app were read and left alone — a live
+   domain-sale incident with its rejected alternative, an SSRF boundary, two guard
+   false positives and the regression that narrowing introduced. All earn their
+   length. The defect concentrates in agent-written script headers, where a filename
+   banner, a numbered restatement of the function below, and an env/output table
+   attach to almost every file. Audit those first; do not assume a long block in a
+   library is a long block worth cutting.
+
+   The crawler's `// ─── Title ───` banner is its convention, on 46 of 48 src files,
+   and names the CONCEPT rather than the filename. Left as is — stripping it from a
+   few files buys nothing and costs consistency. Not a finding; do not re-litigate.
+
+   The block count above predates the docstring fix and is low by however many
+   triple-quoted blocks the scanner could not see; re-measure before sizing what is
+   left.
 3. **Sample the short ones.** Blocks under 8 lines are mostly fine and there are
    thousands; a random sample per repo is proportionate.
 
