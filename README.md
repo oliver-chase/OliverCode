@@ -110,6 +110,3 @@ The scenario matrix walks every documented setup shape in an isolated sandbox wi
 122 tests across 9 files, including mutation suites that prove the checkers can fail. 8 pre-commit gates on this repo;
 an adopted repo receives six of those. 46-assertion scenario matrix over 12 sandboxed setups. Pure `python3` + `bash` + `perl`, no package dependencies. macOS verified; CI ships ready and is enabled per fork.
 
-## License
-
-MIT
