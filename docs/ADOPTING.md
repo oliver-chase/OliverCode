@@ -242,7 +242,7 @@ scripts/olivercode bootstrap <repo> --dry-run    # prints NEW/OVERWRITE per file
 scripts/olivercode bootstrap <repo>
 ```
 
-The manifest gives every file a mode, and the distinction is the whole safety story:
+The manifest gives every file a mode, and the mode determines whether your existing content is safe:
 
 - `presence` — created only if absent. Existing content is never touched, and the run
   reports it as kept.
@@ -327,7 +327,7 @@ find ~/.claude/skills -maxdepth 1 -type l -lname '*/OliverCode/skills/*' -delete
 # 3. Stop the hooks in each governed repo
 git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can stay or go
 
-# 4. The checkout itself is just a directory -- delete it. `local/` dies with it,
+# 4. The checkout itself is just a directory -- delete it. `local/` is deleted with it,
 #    so copy that out first if you want to keep your fleet config.
 ```
 

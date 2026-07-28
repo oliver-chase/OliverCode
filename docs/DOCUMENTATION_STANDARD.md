@@ -48,18 +48,24 @@ The locked outline:
 9. **Status.** Hard facts, no adjectives: runtime requirements, what is verified and
    how — stated as the command that proves it (`npm run validate`, `bash
    scripts/validate.sh`), not as a hand-maintained number. Volatile counts (tests,
-   files, coverage) rot immediately and are governed by
+   files, coverage) go stale immediately and are governed by
    `core/contracts/CODE_INTENT_STANDARD.md` §5: name the command, and quote a number
    only as a dated measurement where the date is part of the sentence.
 10. **License.** One line, and only where the repo actually ships a license and
     licensing matters to a reader (a public or forkable repo). A private product
-    repo with no licensing story omits the section — an empty ritual section is
-    exactly the padding this outline exists to prevent.
+    repo with no licensing story omits the section entirely.
 
 Sections are separated by `---` rules. Length follows surface area — a small tool gets a
 short README in the same order, never a padded one.
 
 ## Voice
+
+**No clever, metaphor, or reveal constructions — anywhere, ever.** No aphorisms, no
+personification, no setup-then-reveal, no sentence whose only job is rhetoric. Every
+sentence states a checkable fact, gives an instruction, or attaches a reason to a named
+mechanism. The test: delete the sentence — if the reader lost no information, it was
+decoration. If it can be rewritten as a plain statement and nothing is lost, write the
+plain statement.
 
 - **Problem first, mechanism second.** Every capability is introduced by the failure or cost
   that makes it necessary. A reader who skips the mechanism still learns why it exists.
@@ -84,7 +90,7 @@ short README in the same order, never a padded one.
 
 ## Readability — no word walls
 
-Density is a defect. A technically correct README nobody finishes protects nothing.
+Long unbroken prose does not get read, so the rules below cap density mechanically.
 
 - **Three sentences per paragraph, at most.** One idea each. A paragraph that needs a
   fourth sentence is two paragraphs.
@@ -97,8 +103,8 @@ Density is a defect. A technically correct README nobody finishes protects nothi
   one-sentence paragraph of its own.
 - **One-sentence paragraphs are legal and encouraged** for the sentence that matters
   most. "Feed a model `markdown`, not `text`." stands alone precisely so it lands.
-- **Prefer a short annotated list over a paragraph enumerating in prose.** Three things
-  named in a sentence with commas is a list wearing a disguise.
+- **Prefer a short annotated list over a paragraph enumerating in prose.** Three or more
+  items named in one sentence with commas should be written as a list.
 
 ## Formatting
 
@@ -149,7 +155,8 @@ describes it as "read before assuming a capability exists".
 
 ## Always current — the sync rule
 
-Documentation that lags the code is worse than no documentation, because it is believed.
+Stale documentation misleads readers precisely because they trust it, so currency is a
+hard requirement, not a preference.
 
 - A change to behaviour, options, structure, or file layout updates every document that
   states the old truth **in the same commit**. Not a follow-up, not a sweep later.
