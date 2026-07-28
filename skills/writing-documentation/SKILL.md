@@ -1,6 +1,6 @@
 ---
 name: writing-documentation
-description: Use whenever writing or rewriting a README, architecture doc, reference doc, or any repo documentation, or when asked to "document this" — in this repo, any governed repo, or a fork. Applies the locked documentation standard: problem-driven README outline, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. The standard itself lives in docs/DOCUMENTATION_STANDARD.md; this skill is how it gets applied.
+description: Use whenever writing or rewriting a README, architecture doc, reference doc, any repo documentation, or a non-trivial CODE COMMENT — in this repo, any governed repo, or a fork. Applies the locked documentation standard: problem-driven README outline, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice and Readability rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md; this skill is how it gets applied.
 ---
 
 # Writing Documentation

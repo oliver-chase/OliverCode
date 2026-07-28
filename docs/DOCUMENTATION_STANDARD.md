@@ -85,6 +85,9 @@ mechanism. The test: delete the sentence — if the reader lost no information, 
 decoration. If it can be rewritten as a plain statement and nothing is lost, write the
 plain statement.
 
+- **Say it once.** A closing sentence that restates the paragraph above it fails the delete
+  test — the reader already has it. Lead with the claim instead of building to it: when a
+  passage runs long, the setup is the part to cut, not the conclusion.
 - **Problem first, mechanism second.** Every capability is introduced by the failure or cost
   that makes it necessary. A reader who skips the mechanism still learns why it exists.
 - **Attach the reason.** No rule or behaviour is stated without its why, in the same
@@ -205,6 +208,11 @@ fork. It ships inside the framework precisely so a fork inherits it whole: ask a
 a README anywhere downstream and this is the shape it produces. The `writing-documentation`
 skill is the invocation path; `core/templates/project/` carries the same expectations into
 newly bootstrapped repos.
+
+**Voice and Readability also govern code comments.** CODE_INTENT_STANDARD decides what a
+comment must say and how long it may run; how the prose is written is here, so there is
+never a second standard for it. A comment is short documentation, and the delete test,
+say-it-once, problem-first and attach-the-reason rules apply to it unchanged.
 
 Agent-facing files (`CLAUDE.md`, skill files) follow their own contracts — they are loaded
 context, not documentation, and compress accordingly. Client-facing brand content follows
