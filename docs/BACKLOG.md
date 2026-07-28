@@ -132,6 +132,37 @@ machinery: detecting "is billing restored" needs a network call from a health ch
 work offline, which costs more than it saves. Until then the local commands are the
 enforcement, which is why those checks also run from `full-qa-pass.sh`.
 
+**B10 — comment prose is unaudited at scale (MED, open).**
+Every mechanical rule is gated: block length fails the build, density is reported
+against a per-repo guideline, references and orphans are checked. None of that can
+see whether a comment READS well, and a random sample of eight blocks found two
+defects no gate could have caught — a FLOW-3 header describing a JWT refresh while
+sitting above a dropdown helper 55 lines from the function it documents, and a
+four-clause run-on in the CSV parser. Both were under the cap, both named real IDs,
+both described real behaviour.
+
+Sampling rate so far is ~1877 medium blocks in the fleet, 8 read. Two defects in
+eight is not a rate to extrapolate from, but it is enough to say the gates are not
+sufficient.
+
+The pass, in priority order:
+
+1. **Comment-to-code correspondence.** The FLOW-3 class: does the comment describe
+   the code beneath it? Partly mechanizable — a JSDoc naming a function or a return
+   value that the next declaration does not match is detectable. Worth building
+   before reading, because it turns a judgement pass into a targeted one.
+2. **Read every block over 8 lines, per repo, newest-first.** Roughly 1900 fleet-wide.
+   Judge against WRITING_PROCESS: does each paragraph do one job, does the last
+   sentence add anything, is any sentence carrying four clauses. Newest-first because
+   recent blocks are agent-written and that is where the density came from.
+3. **Sample the short ones.** Blocks under 8 lines are mostly fine and there are
+   thousands; a random sample per repo is proportionate.
+
+Not a gate, and should not become one. A checker that judged prose would either be
+a keyword list — the failure `How Great Writers Think` names directly — or an LLM
+call per comment on every commit, which fails the token-efficiency rule. This stays
+agent work, tracked here until the read is done.
+
 **B9 — the hook-variant tax compounds (LOW, watch).**
 Two fleet repos declare `hookVariant`, so every template gate change needs a hand-merge into
 both. That is B3's designed trade-off working correctly, but hand-merging is how a security
