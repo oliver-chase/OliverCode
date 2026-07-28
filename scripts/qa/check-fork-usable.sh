@@ -1,25 +1,18 @@
 #!/usr/bin/env bash
 # ─── Fork-Usability Check ─────────────────────────────────────────────────
-# Proves a stranger can clone this repo and use it with NO configuration:
-# no local/, no runtime/control-plane/, no ~/.claude symlinks, no vault.
+# Proves a stranger can clone this repo and use it with NO configuration: no
+# local/, no runtime/control-plane/, no ~/.claude symlinks, no vault. That
+# property kept breaking silently -- every case checked here was found by
+# cloning by hand: validate.sh failing on a clean clone over per-user paths,
+# the reference gate scanning only TRACKED files so a new file's dangling ref
+# passed locally, and README's `ln -s` dying with no ~/.claude/skills.
 #
-# This exists because that property kept breaking silently. Every failure it
-# now checks was a real regression found by cloning by hand:
-#   - validate.sh failed on a clean clone (reference gate flagged gitignored,
-#     per-user paths that exist only on the author's machine)
-#   - the reference gate only scanned git-TRACKED files, so a new file's
-#     dangling ref passed locally and broke after being committed
-#   - `ln -s` in the README install died on a machine with no ~/.claude/skills
+# Runs against a pristine copy in a temp dir, HOME redirected.
 #
-# Runs against a pristine copy in a temp dir. HOME is redirected so nothing
-# reads or writes the real one.
-#
-# DELIBERATE OVERLAP with check-scenarios.sh: its S1 also walks register ->
-# sync-hooks -> probe -> health. This copy is the fast CI gate (seconds, gating);
-# the matrix is the exhaustive complement (minutes, 12 scenarios, advisory).
-# Merging them would either slow the gate or drop the walkthrough from CI --
-# the duplication is declared here and in the matrix header, the same way
-# hook_drift_check.py declares its known differences.
+# DELIBERATE OVERLAP with check-scenarios.sh, whose S1 also walks register ->
+# sync-hooks -> probe -> health. This is the fast gating copy; the matrix is the
+# exhaustive advisory one. Merging would slow the gate or drop the walkthrough
+# from CI. Declared in both headers, as hook_drift_check.py declares its own.
 #
 # Usage:
 #   bash scripts/qa/check-fork-usable.sh            # copy the working tree

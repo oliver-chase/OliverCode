@@ -164,12 +164,6 @@
       "target": "functions/api/admin/keepalive.js",
       "mode": "presence",
       "condition": "keepalive.supabase.enabled && Cloudflare Pages deployment"
-    },
-    {
-      "source": "core/templates/project/scripts/cf-worker-keepalive.js",
-      "target": "reference only -- paste the route into the worker's own fetch handler",
-      "mode": "presence",
-      "condition": "keepalive.cloudflare.enabled"
     }
   ]
 }
