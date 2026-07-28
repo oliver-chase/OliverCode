@@ -82,6 +82,24 @@ short README in the same order, never a padded one.
   design-decision defence where the old failure IS the reason — one clause, never a dated
   note.
 
+## Readability — no word walls
+
+Density is a defect. A technically correct README nobody finishes protects nothing.
+
+- **Three sentences per paragraph, at most.** One idea each. A paragraph that needs a
+  fourth sentence is two paragraphs.
+- **Break prose constantly.** A code block, an annotated list, or a table every few
+  paragraphs — never more than two consecutive paragraphs of plain prose. The exemplar
+  rhythm is prose, code, one-line verdict, prose.
+- **The squint test.** A reader scanning only the headers, the bold lead-ins, and the
+  code blocks must still get the whole story. If a load-bearing fact lives mid-paragraph
+  where a scanner cannot see it, pull it out — into a bold lead-in, a list item, or a
+  one-sentence paragraph of its own.
+- **One-sentence paragraphs are legal and encouraged** for the sentence that matters
+  most. "Feed a model `markdown`, not `text`." stands alone precisely so it lands.
+- **Prefer a short annotated list over a paragraph enumerating in prose.** Three things
+  named in a sentence with commas is a list wearing a disguise.
+
 ## Formatting
 
 - `---` between major sections.
