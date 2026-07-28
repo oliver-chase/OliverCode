@@ -223,12 +223,12 @@ def check_no_fleet_names_in_tracked_files(repo_root: Path) -> list[str]:
     skips, which is correct: those names are not secret to the person who owns them.
     """
     local_profiles = repo_root / "local" / "repo-profiles.json"
-    if not local_profiles.is_file():
-        return []
-    try:
-        data = json.loads(local_profiles.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
+    data: dict = {}
+    if local_profiles.is_file():
+        try:
+            data = json.loads(local_profiles.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
 
     # Names that cannot be searched for without matching the repo's own vocabulary. A
     # profile named "core" or "docs" appears in almost every tracked file as a path
@@ -258,6 +258,24 @@ def check_no_fleet_names_in_tracked_files(repo_root: Path) -> list[str]:
         n for n in data.get("profiles", {})
         if n.lower() not in reserved and len(n) > 3
     }
+
+    # Sibling git repos are the operator's projects whether or not they are registered
+    # as fleet. A contract shipped naming one three times; the gate never fired because
+    # the repo was not in profiles. Derive the names from the filesystem -- a hardcoded
+    # list would itself be the leak, and a fork with different siblings gets its own.
+    try:
+        for sib in repo_root.parent.iterdir():
+            if (
+                sib.is_dir()
+                and sib.name.lower() not in reserved
+                and len(sib.name) > 3
+                and (sib / ".git").exists()
+                and sib.resolve() != repo_root.resolve()
+            ):
+                names.add(sib.name)
+    except OSError:
+        pass
+
     if not names:
         return []
 

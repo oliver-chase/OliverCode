@@ -299,3 +299,11 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   (GOVERNANCE, TROUBLESHOOTING, SKILLS-PLACEMENT, EXTERNAL-TOOLING), every reference swept.
   `health` now checks the About (WARN-degrades offline). Template QUALITY_BASELINE and the
   global CLAUDE.md point at the standard, so stamped repos and every session inherit it.
+- 2026-07-27 [audit] Post-merge audit of the Code Intent Standard: three references to a
+  specific sibling repo generalized out (tracked files stay generic; the operator barred
+  that repo as a reference point), and its §5 reconciled with the documentation standard's
+  Status slot — volatile counts now stated as the command that proves them, quoted only as
+  dated measurements. README Status rewritten to comply. Leak gate hardened: fleet names
+  now also derive from sibling git repos on disk, so an UNREGISTERED project's name in a
+  tracked file fails the build — the profiles-only gate had missed exactly that. Pinned by
+  mutation test.

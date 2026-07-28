@@ -107,6 +107,10 @@ The scenario matrix walks every documented setup shape in an isolated sandbox wi
 
 ## Status
 
-122 tests across 9 files, including mutation suites that prove the checkers can fail. 8 pre-commit gates on this repo;
-an adopted repo receives six of those. 46-assertion scenario matrix over 12 sandboxed setups. Pure `python3` + `bash` + `perl`, no package dependencies. macOS verified; CI ships ready and is enabled per fork.
+`python3 -m unittest discover tests` is the test count and its result; the suites include
+mutation tests that prove the checkers can fail. 8 pre-commit gates on this repo;
+an adopted repo receives six of those — both counts machine-verified against the hook files
+by `validate.sh`, so they cannot silently rot here. `bash scripts/qa/check-scenarios.sh`
+is the setup-scenario matrix and prints its own tally. Pure `python3` + `bash` + `perl`,
+no package dependencies. macOS verified; CI ships ready and is enabled per fork.
 

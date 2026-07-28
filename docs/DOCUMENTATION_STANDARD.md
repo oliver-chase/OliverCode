@@ -45,8 +45,12 @@ The locked outline:
 8. **Documentation.** A two-column table linking EVERY document in the repo with a one-line
    purpose each. Complete, not curated: a doc missing from this table is unreachable, and
    nothing may be unreachable.
-9. **Status.** Hard numbers only: test count, file count, runtime requirements, what is
-   verified and how. No adjectives.
+9. **Status.** Hard facts, no adjectives: runtime requirements, what is verified and
+   how — stated as the command that proves it (`npm run validate`, `bash
+   scripts/validate.sh`), not as a hand-maintained number. Volatile counts (tests,
+   files, coverage) rot immediately and are governed by
+   `core/contracts/CODE_INTENT_STANDARD.md` §5: name the command, and quote a number
+   only as a dated measurement where the date is part of the sentence.
 10. **License.** One line, and only where the repo actually ships a license and
     licensing matters to a reader (a public or forkable repo). A private product
     repo with no licensing story omits the section — an empty ritual section is
