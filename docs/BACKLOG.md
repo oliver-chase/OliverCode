@@ -147,10 +147,12 @@ sufficient.
 
 The pass, in priority order:
 
-1. **Comment-to-code correspondence.** The FLOW-3 class: does the comment describe
-   the code beneath it? Partly mechanizable — a JSDoc naming a function or a return
-   value that the next declaration does not match is detectable. Worth building
-   before reading, because it turns a judgement pass into a targeted one.
+1. **Comment-to-code correspondence — DONE.** Built into the comment gate and synced
+   to all five repos: an `@param` not in the signature below it, and a stated return
+   value where the function returns none. Fires on the FLOW-3 defect re-introduced
+   into the real file, zero hits fleet-wide otherwise. It closes the mechanizable
+   half of this class; a comment that describes the wrong function WITHOUT claiming
+   a return or a param is still only findable by reading.
 2. **Read every block over 8 lines, per repo, newest-first.** Roughly 1900 fleet-wide.
    Judge against WRITING_PROCESS: does each paragraph do one job, does the last
    sentence add anything, is any sentence carrying four clauses. Newest-first because
