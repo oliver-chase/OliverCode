@@ -113,6 +113,7 @@ Every claim they test is a sentence somewhere in this documentation, so a failur
 | **[GOVERNANCE.md](docs/GOVERNANCE.md)** | Every gate, what it refuses, and which repos get which |
 | **[FEATURE_MAP.md](docs/FEATURE_MAP.md)** | Every capability, mapped to the one document that owns it |
 | **[OLIVERCODE_LAUNCHER.md](docs/OLIVERCODE_LAUNCHER.md)** | Every `olivercode` command |
+| **[WRITING_PROCESS.md](docs/WRITING_PROCESS.md)** | How to think before writing a doc or a comment. Read before the standard below, which is QA |
 | **[DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md)** | The required structure and writing style for all documentation, here and in your projects |
 | **[TOKEN_POLICY.md](docs/TOKEN_POLICY.md)** | The cost-control settings and the check that validates them |
 | **[SKILLS-PLACEMENT.md](docs/SKILLS-PLACEMENT.md)** | Where any new skill file belongs |
