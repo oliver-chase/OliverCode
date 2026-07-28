@@ -147,6 +147,19 @@ class CommentBudgetGateTests(unittest.TestCase):
         self.write("r.py", 'TEMPLATE = """\ndef g():\n    """\n' + "x = 1\n" * 40)
         self.assertIn("OK:", self.run_gate("--quiet", "--top", "1").stdout)
 
+    # ── block boundaries ─────────────────────────────────────────────────────
+
+    def test_a_jsdoc_and_the_comment_after_it_are_two_blocks(self):
+        # A function's JSDoc and the `//` block introducing the NEXT function
+        # counted as one essay and failed on their sum.
+        self.write("v.js", "/**\n * doc for f\n */\n" + "// intro for g\n" * 18 + "function g() {}\n")
+        self.assertIn("OK:", self.run_gate("--quiet").stdout)
+
+    def test_one_long_jsdoc_still_fails(self):
+        # Ablates the split above: ending a block must not exempt the block itself.
+        self.write("w.js", "/**\n" + " * narrative\n" * 25 + " */\nfunction f() {}\n")
+        self.assertEqual(self.run_gate("--quiet").returncode, 1)
+
     # ── template literals ────────────────────────────────────────────────────
 
     def test_a_block_opener_inside_a_template_literal_is_data(self):
