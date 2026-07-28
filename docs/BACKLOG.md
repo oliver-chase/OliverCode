@@ -307,3 +307,10 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   now also derive from sibling git repos on disk, so an UNREGISTERED project's name in a
   tracked file fails the build — the profiles-only gate had missed exactly that. Pinned by
   mutation test.
+- 2026-07-27 [simplify] The three deferred judgment calls executed. Launcher trimmed 1085
+  to 903 lines by extracting `lib/health_checks.py` (waiver expiry, GitHub About) and
+  `lib/skills_catalog.py` (frontmatter parsing) — launcher re-exports, tests unchanged,
+  matrix 46/46. The fork-usable/scenario-matrix overlap is now DECLARED in both headers
+  with its reason (fast CI gate vs exhaustive complement) instead of reading as
+  accidental duplication. All five fleet READMEs converted to command-style Status per
+  Code Intent §5 — the proving command is authoritative, no hand-maintained counts left.

@@ -48,6 +48,8 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/validate.sh` | Unified validation entrypoint: pre-commit gates, doc/code consistency, reference integrity, tests, gatekeeper modes |
 | `scripts/lib/consistency_check.py` | Skills INDEX-vs-directory parity, frontmatter name match, gate-count claims across docs, and hook gate-integrity (a removed gate is caught) |
 | `scripts/lib/reference_check.py` | Backtick repo-path resolution (the half a markdown link checker cannot see) |
+| `scripts/lib/health_checks.py` | Governance-waiver expiry (an exception with no reason or a lapsed date fails health) and the GitHub About check (WARN-degrades offline). Launcher re-exports both |
+| `scripts/lib/skills_catalog.py` | SKILL.md frontmatter parsing behind `olivercode skills`. Launcher re-exports |
 | `scripts/lib/falsifiability_check.py` | Detects checks that CANNOT fail — dead counters, scripts reporting failure with no nonzero exit. Built after ten defects here shared that one shape |
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation; `--check-token-policy` is Gate 8 |
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
