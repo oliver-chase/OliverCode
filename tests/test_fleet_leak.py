@@ -72,7 +72,10 @@ class TestFleetLeak(unittest.TestCase):
             self.assertIn("acme-api", found[0])
 
     def test_a_fork_without_local_config_skips(self):
-        """No local/ means no names to compare. It must not fail, and must not guess."""
+        """No local/ and no sibling repos means no names to compare — must not fail.
+
+        (The sandbox's parent holds only the copy itself, so sibling detection
+        contributes nothing here; the sibling case has its own test below.)"""
         with tempfile.TemporaryDirectory(prefix="olivercode-leak-") as tmp:
             work = _sandbox(Path(tmp) / "oc", None, extra="\n\nRe-sync acme-api next week.\n")
             self.assertEqual(cc.check_no_fleet_names_in_tracked_files(work), [])
@@ -116,6 +119,20 @@ class TestFleetLeak(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="olivercode-leak-") as tmp:
             work = _sandbox(Path(tmp) / "oc", example)
             self.assertEqual(cc.check_no_fleet_names_in_tracked_files(work), [])
+
+
+    def test_a_sibling_repo_name_is_caught_without_registration(self):
+        """The operator's projects leak by name whether or not they are registered
+        fleet. A contract shipped naming an unregistered sibling three times and the
+        profiles-only gate never fired. Names now also derive from sibling git repos."""
+        with tempfile.TemporaryDirectory(prefix="olivercode-leak-") as tmp:
+            work = _sandbox(Path(tmp) / "parent" / "oc", None,
+                            extra="\n\nReference implementation lives in acme-crawl.\n")
+            sib = work.parent / "acme-crawl"
+            (sib / ".git").mkdir(parents=True)
+            found = cc.check_no_fleet_names_in_tracked_files(work)
+            self.assertTrue(found, "unregistered sibling repo name was not caught")
+            self.assertIn("acme-crawl", found[0])
 
 
 if __name__ == "__main__":

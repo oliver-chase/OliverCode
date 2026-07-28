@@ -63,16 +63,17 @@ Report, but do **not** fail, decisions with no test. Some are structural — a
 build flag, a packaging choice — and have nothing a unit test can hold. Making
 it fatal produces hollow tests, which is worse than the gap.
 
-Reference implementation: `check-decisions.mjs` in the oliver-crawl repo's scripts directory.
+A reference implementation is a short script in the consuming repo's own `scripts/`:
+grep the source tree for `[A-Z]+-[A-Z0-9]+-\d+` IDs, parse the ledger's rows, and
+diff the two sets in both directions. Under a hundred lines; write it once per repo.
 
 ## 5. Volatile numbers never live in prose
 
 Test counts, file counts, coverage percentages, benchmark timings and dated
 measurements must not be hand-maintained in a README or a doc.
 
-They rot immediately. In one build session, oliver-crawl's README quoted a test
-count that was corrected four separate times and was wrong again by the next
-commit.
+They rot immediately. Observed for real: a README's test count was corrected four
+separate times in a single build session and was wrong again by the next commit.
 
 - **State the command**, not the number: point at the check target rather than
   quoting its output.
@@ -106,9 +107,9 @@ A suite that grows without finding defects is measuring the wrong thing. Where
 a system meets reality — real networks, real files, real inputs — a small
 number of live checks earns more per line than a large unit suite.
 
-Record that honestly when it happens: in oliver-crawl, every defect found in a
-full day of work came from running against real websites, not from ~590 unit
-tests.
+Record that honestly when it happens. Observed for real: every defect found in a
+full day of work on a crawler came from running it against real websites; its
+~590 unit tests found none of them.
 
 ## Enforcement reality
 
