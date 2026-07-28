@@ -70,6 +70,11 @@ function scan(text, hashStyle) {
       isComment = true;
       if (line.includes('*/')) inBlock = false;
     } else if (line.startsWith('/*')) {
+      // A new /* ... */ block starts a fresh run. A section banner sitting above
+      // a function's own JSDoc is two comments, not one essay, and merging them
+      // penalises correct structure. Blank lines still do NOT break a run, so an
+      // essay cannot be split into passing chunks.
+      close();
       isComment = true;
       if (!line.includes('*/')) inBlock = true;
     } else if (line.startsWith('//') || line.startsWith('*')) {
