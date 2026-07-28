@@ -1,5 +1,5 @@
 {
-  "_note": "Placeholder. Real fleet data lives in local/repo-map.json (gitignored) — see docs/BACKLOG.md G1.",
+  "_note": "Placeholder. Real fleet data lives in local/repo-map.json (gitignored) -- see docs/BACKLOG.md G1. Schema: repos[].governanceProfile (optional) -- only 'incubating' is recognized; it makes audit-staleness.py report a past-threshold repo as advisory instead of failing the run. repos[].approvedMaintainabilityVariances / approvedStrictVariances and unmanagedRepoWaivers[] each REQUIRE a reason and take an ISO-8601 expiresAt; `olivercode health` fails on an expired, unparsable, or reasonless entry, so an exception can never quietly become permanent.",
   "workspaceRoot": "<vault-root>/Oliver/Project Repos",
   "unmanagedRepoWaivers": [
     {

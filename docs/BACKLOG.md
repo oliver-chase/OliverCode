@@ -120,7 +120,12 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 
 ### Open items
 
-**B6 — OPEN (LOW, fleet-side, not OliverCode's to run).** The public hook template's gate
+**B6 — RESOLVED 2026-07-27.** `sync-hooks` run; three fleet repos took the corrected
+template (their own validation suites ran inside the hook and passed), the two declared
+variants were skipped as designed, and the hook change was committed and pushed in each repo.
+`health` reports HEALTHY with zero failures. Original entry:
+
+**B6 (was) — fleet-side.** The public hook template's gate
 banners were corrected from `Gate N/5` (with a contradictory `Gate 6/6` at the end) to a
 consistent `Gate N/6`. Deployed fleet hooks now differ from the template by that banner text,
 so `health` reports three of the registered fleet repos as diverging. **The difference is
@@ -139,11 +144,14 @@ would itself be the leak. Names that collide with the repo's own vocabulary, and
 names from the tracked example, are excluded — the first cut fired 86 times on a profile
 named `core` and would have been switched off.
 
-**B7 — OPEN (LOW).** `repo-map.json`'s `governanceProfile` and
-`approvedMaintainabilityVariances[].target` are still read by nothing. Waiver **expiry** is
-now enforced (`health`, `_check_waiver_expiry`), so a dated exception can no longer quietly
-become permanent, but the profile and variance targets themselves remain declarative. Either
-wire them to a check or drop the fields; do not leave a third registry that only documents.
+**B7 — RESOLVED 2026-07-27.** Every repo-map field now has a consumer. `governanceProfile:
+"incubating"` makes `audit-staleness.py` report a past-threshold repo as advisory instead of
+failing the run (an unknown value warns, so a typo cannot silently exempt a repo).
+`approvedStrictVariances` joined the expiry sweep alongside the maintainability variances,
+and every waiver or variance now REQUIRES a written reason — `health` fails on a reasonless
+entry, because an exception nobody can later judge can never be safely retired.
+`audit-staleness.py` also honors a profile's explicit `path`, so a scattered fleet is
+auditable. Schema documented in `shared/repo-map.json`'s `_note`.
 
 **B5 — RESOLVED 2026-07-27.** The perl guard was hand-merged into
 the variant hook of the repo that declares one (both `pre-commit` and `pre-commit-private`), leaving
@@ -270,3 +278,11 @@ still fails. Documented in `shared/repo-profiles.example.json`.
 - 2026-07-27 [audit] Fleet-name leak closed (B8). `docs/FEATURE_MAP.md` had a malformed row
   that pointed "unfalsifiable checks" at the hook-drift module and left an orphan two-column
   row in a three-column table.
+- 2026-07-27 [audit] Open items closed: B6 (fleet hooks converged, committed in each repo),
+  B7 (repo-map fields wired: incubating profile consumed by audit-staleness, strict variances
+  in the expiry sweep, reasons required), B2 attempted (CI re-enabled; next push is the live
+  billing test). 12-scenario sandbox matrix built and shipped as
+  `scripts/qa/check-scenarios.sh` — 46 assertions across fresh-machine, existing-setup,
+  scattered-fleet, --root, discover, bootstrap, hookVariant, backout, idempotency, update,
+  no-commit-probe, and zero-config cases, all green. One matrix finding: a nonexistent
+  `--root` hard-errors (fail-closed), which is stronger than the doc's skip-warning implied.
