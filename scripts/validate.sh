@@ -37,7 +37,7 @@ run_token_policy_check() {
 run_consistency() {
   # Two classes, both fail-closed, both learned from real defects here:
   #  - doc-vs-code drift (skills index parity, gate-count claims, gate integrity)
-  #  - unfalsifiable checks: a gate or script that cannot fail. Ten defects in this
+  #  - unfalsifiable checks: a gate or script that cannot fail. A string of defects in this
   #    repo shared that shape, and none was visible from output, because the output
   #    always said PASS. See scripts/lib/falsifiability_check.py.
   #  - hook drift: the three pre-commit hooks implement the same gates and nothing

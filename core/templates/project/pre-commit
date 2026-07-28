@@ -39,7 +39,7 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
       # exempt (the anon key is public by design -- it ships in client
       # HTML; service_role is the secret one). Narrow on purpose: a bare
       # "supabase-anon-key" mention elsewhere on a line must NOT bypass
-      # the scan (review finding 2026-07-09 -- the loose filter exempted
+      # the scan (a loose filter had exempted
       # any line containing the literal from every pattern).
       ANON_META='<meta name="supabase-anon-key" content="eyJ'
       if grep -nE -e "$pattern" "$file" 2>/dev/null | grep -vF "$ANON_META" | grep -qE .; then

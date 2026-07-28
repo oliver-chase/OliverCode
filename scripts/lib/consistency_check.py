@@ -102,8 +102,8 @@ def check_skill_index(repo_root: Path) -> list[str]:
 
 
 # Every hook variant, and how a doc line signals which one it is talking about.
-# Gate coverage is NOT uniform: OliverCode runs 8 on itself, an adopted repo 6, the
-# vault's private variant 2. docs/GOVERNANCE.md holds the human table.
+# Gate coverage is NOT uniform per repo type. docs/GOVERNANCE.md holds the table, and
+# the tests pin the totals — restating numbers here would just be a third copy to drift.
 HOOKS = {
     "olivercode": Path(".githooks/pre-commit"),
     "template": Path("core/templates/project/pre-commit"),

@@ -330,3 +330,12 @@ still fails. Documented in `shared/repo-profiles.example.json`.
   every fork unexamined (now scans all tracked text files, binaries skipped by content
   sniff). Open backlog after this pass: B2 (CI billing, external trigger) and the
   hook-variant watch item only.
+- 2026-07-27 [audit] Dot-file audit: junk `prompts/` dir removed (held one .DS_Store);
+  `.gitignore` comment claimed a `.claude-optimization/skills/` directory that does not
+  exist — corrected; `.env.example`, `.claude/`, `runtime/`, and the memory/state ignores
+  verified correct. Comment-longevity rule added to the Code Intent Standard (§4b: past
+  tense is stable, present tense drifts; the why stays, perishable specifics go) and
+  applied here, in the template hook, and across the fleet's recent comment additions —
+  dated decision-IDs stripped in the crawler repo (git blame is the provenance), live-queue
+  tallies rewritten as at-the-time evidence in the events repo. Dated batch and incident
+  records keep their dates: there the date is the record.

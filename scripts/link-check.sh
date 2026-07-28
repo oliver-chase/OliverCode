@@ -35,7 +35,7 @@ $QUIET || echo "=== Internal Link Integrity Check ==="
 $QUIET || echo ""
 
 # Scan docs/ plus the other tracked homes of plain [text](path.md) links. Measured
-# 2026-07-02: docs/ held 1 such link while README/core/shared held 10 — scanning only
+# Scanning only docs/ missed most real occurrences — scanning only
 # docs/ made the checker a near no-op. (Exclude docs/archive/ — archived links may break.)
 SCAN_ROOTS=("$REPO_ROOT/docs" "$REPO_ROOT/core" "$REPO_ROOT/shared" "$REPO_ROOT/README.md" "$REPO_ROOT/ARCHITECTURE.md")
 while IFS= read -r -d '' file; do
