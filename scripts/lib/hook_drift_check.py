@@ -56,6 +56,13 @@ DECLARED_DIFFERENCES = {
     "Decision records": (
         "Path only, for the reason given under Comment budget."
     ),
+    # BACKLOG-HYGIENE-1: cited here rather than in check-backlog-hygiene.mjs itself,
+    # because that file lives under core/templates/project/scripts/, outside
+    # .decisions.json's scanned sourceDirs -- the same reason check-decisions.mjs's
+    # own worked examples deliberately use ids this repo's config excludes.
+    "Backlog hygiene": (
+        "Path only, for the reason given under Comment budget."
+    ),
 }
 
 
