@@ -61,7 +61,7 @@ plus backtick repo paths).
 ## Gate Classes
 
 **Gate coverage is not uniform across repos, and the difference matters.** OliverCode runs
-eight gates on itself. A repo your fleet adopts runs six, because two of the eight check
+ten gates on itself. A repo your fleet adopts runs eight, because two of the ten check
 things that only exist in the framework repo. A repo deployed with the private variant runs
 two. This table is the one home for that; anywhere else that names a count points here.
 
@@ -75,7 +75,9 @@ two. This table is the one home for that; anywhere else that names a count point
 | Contract integrity | Hardcoded `/workspace/` container paths in staged code; `OLIVERCODE_DEPENDENCY.md` declaring paths that don't exist | 6 | — | — |
 | Planning doc governance | Contract violations in staged planning docs. Conditional: runs only where `scripts/check-planning-doc-governance.py` exists, and reports *skipped* where it does not | 7 | 6 | — |
 | Token policy | Invalid token-policy declarations in repo profiles | 8 | — | — |
-| **Total** | | **8** | **6** | **2** |
+| Comment budget | A comment block over the repo's cap. Conditional: runs where `scripts/check-comment-budget.mjs` exists and node is installed, and reports *skipped* where either is missing | 9 | 7 | — |
+| Decision records | A decision ID in the source with no ledger row, a row describing deleted code, or a ledger ID the gate cannot read. Same conditional shape as the comment budget | 10 | 8 | — |
+| **Total** | | **10** | **8** | **2** |
 
 Numbers are the gate's position in that hook's run order, so the same gate can carry a
 different number in different hooks — planning-doc governance is Gate 7 in OliverCode and

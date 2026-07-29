@@ -1,8 +1,9 @@
 """Tests for per-repo gate-coverage consistency.
 
-Gate coverage is not uniform -- 8 gates in OliverCode, 6 in a repo that adopts the
-framework, 2 in the vault's private variant -- and five tracked documents stated 8
-as though it were universal, promising forkers two gates the template does not ship.
+Gate coverage is not uniform -- 10 gates in OliverCode, 8 in a repo that adopts the
+framework, 2 in the vault's private variant -- and five tracked documents once stated
+OliverCode's own total as though it were universal, promising forkers two gates the
+template does not ship.
 GATE-COUNT-1 in docs/DECISIONS.md records why the checker passed through all of it.
 
 Each test is a mutation: it breaks one thing and asserts the checker fails. A
@@ -54,7 +55,7 @@ class TestShippedTree(unittest.TestCase):
         totals, problems = cc._hook_totals(REPO_ROOT)
         self.assertEqual(problems, [])
         self.assertEqual(
-            totals, {"olivercode": 8, "template": 6, "template-private": 2},
+            totals, {"olivercode": 10, "template": 8, "template-private": 2},
             "gate coverage changed -- update the table in docs/GOVERNANCE.md, which is "
             "its single home, and every doc that points there",
         )
@@ -84,14 +85,15 @@ class TestMutations(unittest.TestCase):
             return cc.check_all(work)
 
     def test_catches_template_disagreeing_with_itself(self):
-        # The real bug: "Gate 1/5" ... "Gate 5/5" then "Gate 6/6".
+        # The real bug: a run of banners counting to one total, then a later one
+        # counting to another.
         self.assertTrue(self._fails_after(
-            "core/templates/project/pre-commit", "Gate 1/6", "Gate 1/5"))
+            "core/templates/project/pre-commit", "Gate 1/8", "Gate 1/5"))
 
     def test_catches_a_gate_removed_without_updating_the_total(self):
         self.assertTrue(self._fails_after(
             "core/templates/project/pre-commit",
-            'echo "[pre-commit] Gate 3/6: PII scan..."',
+            'echo "[pre-commit] Gate 3/8: PII scan..."',
             'echo "[pre-commit] PII scan..."'))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
@@ -104,7 +106,7 @@ class TestMutations(unittest.TestCase):
         self.assertTrue(self._fails_after(
             "README.md", "## What you get\n",
             "## What you get\n\n**On every commit, in every adopted repo**\n"
-            "8 pre-commit gates run.\n"))
+            "10 pre-commit gates run.\n"))
 
     def test_a_cue_in_an_earlier_paragraph_does_not_reattribute(self):
         """Context stops at a blank line.
@@ -125,7 +127,7 @@ class TestMutations(unittest.TestCase):
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/GOVERNANCE.md", "| **8** | **6** | **2** |", "| **8** | **8** | **2** |"))
+            "docs/GOVERNANCE.md", "| **10** | **8** | **2** |", "| **10** | **10** | **2** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""

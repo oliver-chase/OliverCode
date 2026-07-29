@@ -219,7 +219,7 @@ siblings of the OliverCode checkout. If your layout differs, see "Folder structu
 Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern;
 read that list rather than the exit code.
 
-An adopted repo gets six gates, not the eight OliverCode runs on itself: contract integrity
+An adopted repo gets eight gates, not the ten OliverCode runs on itself: contract integrity
 and token policy check framework-only things, so the template does not ship them. `docs/GOVERNANCE.md`
 has the coverage table.
 

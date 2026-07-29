@@ -3,7 +3,7 @@
 Ten defects in this repo were one shape: a check that reported success it had not
 earned. Each was scaffolding left behind after real usage diverged, and reading the
 output could never catch any of them, because the output always said PASS.
-FALSIFIABILITY-1 in docs/DECISIONS.md lists all ten.
+GATE-FALSIFIABILITY-1 in docs/DECISIONS.md lists all ten.
 
 Two detectors, precise rather than clever -- a noisy meta-check gets ignored, which
 is the failure it exists to prevent.

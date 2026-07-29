@@ -176,15 +176,30 @@ const inventedIds = [...testIds]
   .map(([id, files]) => `${id} (${[...files][0]})`)
   .sort();
 
-// A ledger row may name its source file in a third column. Where it does, that file
-// has to exist: a row pointing at moved or deleted code sends the next reader
-// somewhere empty while reading as authoritative. Ledgers without the column are
-// unaffected, since nothing matches.
+// Every check above reads the ledger through ID_PATTERN, so a row whose id does
+// not match it is invisible to all of them: the id in the source is never seen as
+// recorded, and the row outlives the code it describes. The row reads as governed
+// and is not. The framework's own ledger carried one from the day it was written
+// — two segments where §2 requires three — and nothing could report it.
+//
+// A ledger row may also name its source file in a third column. Where it does,
+// that file has to exist: a row pointing at moved or deleted code sends the next
+// reader somewhere empty while reading as authoritative. Ledgers without the
+// column are unaffected, since nothing matches.
+const ID_SHAPE = new RegExp(`^${ID_PATTERN.source}$`);
+
 if (existsSync(cfg.ledger)) {
   for (const line of readFileSync(cfg.ledger, 'utf8').split('\n')) {
-    const row = line.match(/^\|\s*`([^`]+)`\s*\|[^|]*\|\s*`([^`]+)`\s*\|/);
-    if (!row) continue;
-    const [, id, srcPath] = row;
+    const first = line.match(/^\|\s*`([^`]+)`\s*\|/);
+    if (!first) continue;
+    const id = first[1];
+    if (!ID_SHAPE.test(id)) {
+      problems.push(`${id}: ledger row id is not AREA-TOPIC-N, so no check can read it (CODE_INTENT_STANDARD §2)`);
+      continue;
+    }
+    const withSource = line.match(/^\|\s*`[^`]+`\s*\|[^|]*\|\s*`([^`]+)`\s*\|/);
+    if (!withSource) continue;
+    const srcPath = withSource[1];
     const found = existsSync(srcPath) || cfg.sourceDirs.some((d) => existsSync(join(d, srcPath)));
     if (!found) problems.push(`${id}: ledger names ${srcPath}, which does not exist`);
   }
