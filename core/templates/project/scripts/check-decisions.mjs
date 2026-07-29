@@ -28,9 +28,12 @@ import { join, extname, relative, resolve } from 'node:path';
 // way round, satisfying its own rule.
 const SELF = relative(process.cwd(), resolve(process.argv[1] ?? ''));
 
-// The first segment needs two characters and inner segments two or more, so a
-// regex character class like [A-Z0-9] in a test does not read as an id.
-const ID_PATTERN = /\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]{2,})*-\d+[a-z]?\b/g;
+// AREA-TOPIC-N per CODE_INTENT_STANDARD §2: three segments, so at least two
+// dashes. An earlier cut made the middle segment optional and matched every
+// two-segment label in the fleet — BUG-9, BC-1, EPIC-2, US-SDR-202 — which are
+// test cases and user stories, not decision records. That noise was worked
+// around with exclusion lists before the pattern itself was the problem.
+const ID_PATTERN = /\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]{2,})+-\d+[a-z]?\b/g;
 
 const DEFAULTS = {
   sourceDirs: ['src'],
@@ -165,15 +168,27 @@ for (const id of ledgerIds.keys()) {
 }
 
 // A test naming a record that exists nowhere else reads as authoritative. Reported,
-// never fatal: across this fleet these are almost all test-CASE labels — BUG-9, BC-1,
-// PWQA-ICS-ALLDAY-1 — which share the id shape and are not decision records. No
-// reliable rule separates them from a genuine two-segment id like FG-4, and failing
-// on the whole class is how a gate gets switched off. Docs count as somewhere, since
-// a test may name an id a spec defines before any code implements it.
+// never fatal: a test may name an id whose code is specced but not yet built, and
+// failing there pushes people to delete the reference rather than build the thing.
+// Docs therefore count as somewhere the id can exist.
 const inventedIds = [...testIds]
   .filter(([id]) => !srcIds.has(id) && !ledgerIds.has(id) && !docIds.has(id))
   .map(([id, files]) => `${id} (${[...files][0]})`)
   .sort();
+
+// A ledger row may name its source file in a third column. Where it does, that file
+// has to exist: a row pointing at moved or deleted code sends the next reader
+// somewhere empty while reading as authoritative. Ledgers without the column are
+// unaffected, since nothing matches.
+if (existsSync(cfg.ledger)) {
+  for (const line of readFileSync(cfg.ledger, 'utf8').split('\n')) {
+    const row = line.match(/^\|\s*`([^`]+)`\s*\|[^|]*\|\s*`([^`]+)`\s*\|/);
+    if (!row) continue;
+    const [, id, srcPath] = row;
+    const found = existsSync(srcPath) || cfg.sourceDirs.some((d) => existsSync(join(d, srcPath)));
+    if (!found) problems.push(`${id}: ledger names ${srcPath}, which does not exist`);
+  }
+}
 
 const stale = [...accepted].filter((id) => !srcIds.has(id) || ledgerIds.has(id)).sort();
 
