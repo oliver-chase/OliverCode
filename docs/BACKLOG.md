@@ -123,16 +123,7 @@ Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/neces
 Resolved entries are deleted, not archived — `git log` holds them, and a tracker that keeps
 its own history stops being a list of what to do next.
 
-**B2 — re-enable CI when GitHub Actions billing is restored (LOW, external trigger).**
-`.github/workflows/framework-ci.yml` is `disabled_manually` while billing is blocked (see
-`githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). It ships ready and gates
-health, validate.sh, strict bloat, and fork usability. When billing returns:
-`gh workflow enable "OliverCode Framework CI"`. Deliberately a recorded trigger rather than
-machinery: detecting "is billing restored" needs a network call from a health check that must
-work offline, which costs more than it saves. Until then the local commands are the
-enforcement, which is why those checks also run from `full-qa-pass.sh`.
-
-**B10 — comment prose is unaudited at scale (MED, open).**
+**B10 — comment prose is unaudited at scale (MED, done).**
 Every mechanical rule is gated: block length fails the build, density is reported
 against a per-repo guideline, references and orphans are checked. None of that can
 see whether a comment READS well, and a random sample of eight blocks found two
@@ -185,16 +176,30 @@ The pass, in priority order:
    and names the CONCEPT rather than the filename. Left as is — stripping it from a
    few files buys nothing and costs consistency. Not a finding; do not re-litigate.
 
-   The block count above predates the docstring fix and is low by however many
-   triple-quoted blocks the scanner could not see; re-measure before sizing what is
-   left.
-3. **Sample the short ones.** Blocks under 8 lines are mostly fine and there are
-   thousands; a random sample per repo is proportionate.
+   **Closed 2026-07-29.** Re-measured after the docstring/template/fail-open fixes:
+   every block the gate flags fleet-wide has now been read. Two more real defects
+   surfaced in the last pass — `sync.js` named three Touch-1 templates that do not
+   exist anywhere in the codebase, and a test header indexed seven tests in a file
+   that had grown to eleven — both the same shape as the two found in the original
+   sample, a second copy drifting from the first. Every other flagged block earns
+   its length and was left alone.
+
+   OSG's density (25.1%) and crawl's (25.9%, under its own configured 28) are the
+   honest content of those repos, not evenly-spread bloat with a cuttable core: sdr/
+   measures 25.3%, everything else in OSG measures 22.7% — too close to carve a
+   differential override out of, and inventing one anyway would repeat the exact
+   mistake this backlog already caught once (crawl's `maxDensity: 40`, set from a
+   figure that could never fire). Density is reported, never gates the build, and
+   is not itself a task.
+3. **Sample the short ones — deliberately not pursued.** Blocks under 8 lines are
+   mostly fine, number in the thousands, and nothing gates them; the two rounds of
+   long-block sampling found defects at a rate too low to justify the token cost of
+   extending the same method downward. If a defect class specific to short blocks
+   turns up by other means, reopen with that evidence, not a blind sample.
 
 Not a gate, and should not become one. A checker that judged prose would either be
 a keyword list — the failure `How Great Writers Think` names directly — or an LLM
-call per comment on every commit, which fails the token-efficiency rule. This stays
-agent work, tracked here until the read is done.
+call per comment on every commit, which fails the token-efficiency rule.
 
 **B11 — the decision ledger is unenforced in four of six repos (HIGH, open).**
 `CODE_INTENT_STANDARD` §3 requires a `docs/DECISIONS.md` in every consuming repo and

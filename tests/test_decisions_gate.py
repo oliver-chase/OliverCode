@@ -108,6 +108,28 @@ class DecisionsGateTests(unittest.TestCase):
         (self.tmp / "tests" / "t.js").write_text("expect(x).toMatch(/F-[A-Z0-9]{6}/);\n", encoding="utf-8")
         self.assertEqual(self.run_gate().returncode, 0)
 
+    def test_a_ledger_id_the_gate_cannot_read_fails(self):
+        # This repo's own ledger held a two-segment id from the day it was written.
+        # Every check reads the ledger through the same pattern, so that row was
+        # unreachable to all of them: it could never be matched against the source,
+        # and would have survived the code being deleted.
+        self.src("// SHORTID-1: the source cites it too.\n")
+        self.ledger("SHORTID-1")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not AREA-TOPIC-N", result.stdout)
+
+    def test_a_ledger_source_column_naming_a_missing_file_fails(self):
+        # The third-column check shares the loop with the id-shape check above; a
+        # rewrite that returned early on the first row would silently drop it.
+        self.src("// CACHE-POLICY-1: recorded.\n")
+        (self.tmp / "docs" / "DECISIONS.md").write_text(
+            "| `CACHE-POLICY-1` | why | `src/gone.js` |\n", encoding="utf-8"
+        )
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not exist", result.stdout)
+
     def test_malformed_config_exits_nonzero(self):
         (self.tmp / ".decisions.json").write_text("{ not json", encoding="utf-8")
         result = self.run_gate()

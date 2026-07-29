@@ -19,6 +19,21 @@ first day: someone who knows the business context but none of the internals. Eve
 must pass the read-aloud test — a smart stranger reading it once, out loud, understands it
 with no follow-up question.
 
+**Write for the adopter, not for the builder.** The reader is deciding whether this belongs
+in their stack, and they are reading it cold. A maintainer already knows why each rule
+exists, so a maintainer can compress a decision into the rule it produced; a reader holding
+only the rule has to reconstruct the reasoning that justified it, and most will not.
+
+So each claim arrives in three moves, in this order: the situation the reader will recognise,
+the decision taken about it, then the mechanism that implements the decision. "A 403 is
+usually a bot wall rather than a refusal, so a real browser is tried before a paid API" is
+the shape. The compressed form of that same fact — "escalate cheapest-first" — is an
+internal principle, correct and unreadable, and it belongs in `ARCHITECTURE.md` if anywhere.
+
+Compression is still the goal at the sentence level. What this rule forbids is dropping the
+reasoning, not spending words on it: a sentence that adds no fact is still cut, and a
+paragraph that restates the one above it is still deleted.
+
 That audience sets how terms are introduced, never which terms are used. The precise
 term stays — `symlink`, `gitignored`, `pre-commit hook`, `fork` are the correct words and
 replacing them with a vague paraphrase ("protected project", "saves") loses the precision
@@ -32,6 +47,13 @@ your machine" is a riddle to a reader who does not know what a fork is), and gen
 paraphrase that deletes the term ("checks that run when work is saved" in place of
 pre-commit hooks). The first loses the new reader; the second loses everyone else.
 
+**Which terms need a gloss is decided by one test: could the reader look it up and get the
+right answer?** `ETag`, `robots.txt`, `JSON-LD` and `304` are the shared vocabulary of the
+domain and stand bare — glossing them insults the reader and costs a line each. A term
+carrying meaning specific to this codebase (`rung`, `lane`, `hasContentData`) or a literal
+whose significance is not in its name (`169.254.169.254` is an IP address until you are told
+it dispenses cloud credentials) is glossed at first use and bare thereafter.
+
 It opens with what the thing is in one plain sentence, then tells the reader why it exists
 through the concrete problems that drove its design — not a feature list, the problems.
 Everything after that earns its place by answering a question a reader actually has, in the
@@ -39,12 +61,17 @@ order they would ask.
 
 The locked outline:
 
-1. **`# repo-name`**, then one plain sentence stating what this is. A sentence, not a
-   blockquote, not a tagline.
+1. **`# repo-name`**, then one plain sentence stating what this is and what a reader can do
+   with it. A sentence, not a blockquote, not a tagline, and not a list of verbs standing in
+   for one.
 2. **The driving problems.** One to three short paragraphs, each a real problem with a
    concrete consequence, each answered by a design choice. "Point one at `169.254.169.254`
    and it will retrieve your cloud credentials" is the register — a specific danger, then
-   what the design does about it.
+   what the design does about it. Name each problem in its own first words ("The first is
+   security"); a reader counting two problems and finding one unlabelled has to work out
+   which they just read. Order them by what the reader came for, not by what the author
+   finds most interesting — a threat model opening a document written for someone who has
+   not yet decided to use the thing answers a question they have not asked.
 3. **Install / first use.** Runnable immediately, with real-looking values. State what the
    zero-config path costs and does. No prose between the reader and a working example.
 4. **How it works**, named in the reader's terms ("How it reads a page", not "Processing
@@ -55,9 +82,11 @@ The locked outline:
    Show failure shapes here too — what the reader holds when it does not work, and which
    field to act on.
 6. **Design decisions.** A handful of subsections, each headed by the decision stated as a
-   claim ("URLs are screened before they are requested"), each defending it with the attack,
-   cost, or failure it prevents. This is where the narrative lives; it is the section a
-   maintainer rereads a year later.
+   claim, each defending it with the attack, cost, or failure it prevents. This is where the
+   narrative lives; it is the section a maintainer rereads a year later. A heading is a
+   claim a stranger can evaluate ("Every hostname is resolved before it is requested"), not
+   a principle only the author can decode — "Repeat crawls converge on free" names a real
+   property and tells a first-time reader nothing about what the library does.
 7. **Task-oriented sections** as the surface area demands — one per major capability, each
    self-contained.
 8. **Documentation.** A two-column table linking EVERY document in the repo with a one-line
@@ -104,8 +133,18 @@ plain statement.
   branch on, what retrying will and will not change — in the main flow, not a footnote.
 - **Present tense, active, declarative.** "Every hostname is resolved and checked." Short
   sentences carry the claims; longer ones carry the reasoning. Vary the rhythm.
-- **Numbers are evidence.** "48 tests cover this behaviour alone" is a sentence; "well
-  tested" is not. Never a superlative, never hype, never an exclamation.
+- **Numbers are evidence.** "One measured page returned 1,232 characters from a plain fetch
+  and 5,519 once rendered" is a sentence; "much better coverage" is not. Use a number the
+  code fixes or a measurement you can date. A count that moves whenever someone commits —
+  tests, files, coverage — is named as the command that reports it, never typed into prose,
+  where it is wrong by the next commit.
+- **Explain the decision, do not encode it.** A sentence a reader can only understand by
+  already knowing the system has failed, however true it is. Where a rule and its reason
+  will not fit together, the reason wins and the rule follows it.
+- **No summary sentences and no product claims.** "The result is a crawler that is safer by
+  default, predictable in cost, and easy to integrate" fails the delete test twice over: it
+  restates what the reader just read, and it makes claims nothing on the page checks. End a
+  section on its last real fact.
 - **Second person for the reader's actions, third for the system's.** "Feed a model
   `markdown`, not `text`" — then why.
 - **No history in current-state docs.** Never "previously", "no longer", "has been removed".
@@ -120,7 +159,7 @@ Long unbroken prose does not get read, so the rules below cap density mechanical
 - **Three sentences per paragraph, at most.** One idea each. A paragraph that needs a
   fourth sentence is two paragraphs.
 - **Break prose constantly.** A code block, an annotated list, or a table every few
-  paragraphs — never more than two consecutive paragraphs of plain prose. The exemplar
+  paragraphs — never more than three consecutive paragraphs of plain prose. The exemplar
   rhythm is prose, code, one-line verdict, prose.
 - **The squint test.** A reader scanning only the headers, the bold lead-ins, and the
   code blocks must still get the whole story. If a load-bearing fact lives mid-paragraph
@@ -128,8 +167,10 @@ Long unbroken prose does not get read, so the rules below cap density mechanical
   one-sentence paragraph of its own.
 - **One-sentence paragraphs are legal and encouraged** for the sentence that matters
   most. "Feed a model `markdown`, not `text`." stands alone precisely so it lands.
-- **Prefer a short annotated list over a paragraph enumerating in prose.** Three or more
-  items named in one sentence with commas should be written as a list.
+- **Lists carry parallel items; paragraphs carry reasoning.** Three or more comparable
+  things named in one sentence become a list. An argument does not: a bulleted chain of
+  because-therefore steps drops the connective words that were doing the work, leaving the
+  reader to guess the relationship between two lines that merely sit next to each other.
 
 ## Formatting
 

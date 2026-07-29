@@ -47,6 +47,15 @@ DECLARED_DIFFERENCES = {
         "block that follows this gate is absorbed into it by the parser. OliverCode's "
         "copy has Gate 6 and Gate 8 after it. Structural artifact, not drift."
     ),
+    "Comment budget": (
+        "Path only. An adopted repo receives the checker at scripts/; OliverCode is where "
+        "that file is authored, under core/templates/project/scripts/, and keeping a second "
+        "copy at scripts/ to make the two hooks read alike would mean maintaining the gate "
+        "twice. Same reason for Decision records below."
+    ),
+    "Decision records": (
+        "Path only, for the reason given under Comment budget."
+    ),
 }
 
 

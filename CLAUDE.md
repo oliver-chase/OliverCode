@@ -65,7 +65,7 @@ nothing, and moves on has skipped validation without noticing.
 Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement
-`.githooks/pre-commit` is the only mechanically-enforced layer (eight gates here, six in a
+`.githooks/pre-commit` is the only mechanically-enforced layer (ten gates here, eight in a
 repo that adopts the framework -- `$OC/docs/GOVERNANCE.md` has the per-repo table).
 It is installed per repo via `core.hooksPath`; if that config is unset or points at a missing
 directory, **git runs no hooks at all and says nothing** — the gates fail open. `$OC/scripts/olivercode health`
