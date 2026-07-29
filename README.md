@@ -1,14 +1,24 @@
 # OliverCode
 
-OliverCode gives every code project you work on the same working rules and automatic safety checks — set up once, applied everywhere, without anyone having to remember them.
+OliverCode gives every code project you work on the same engineering rules, AI context, and automated safety checks — set up once, applied everywhere, without anyone having to remember them.
 
 Two problems drive its design.
 
-**An AI assistant only follows rules it can see.** Claude Code reads its instructions from one specific file name, `CLAUDE.md`. Rules saved under any other name are never read. Rules written for one project do not exist in the next one. Anything explained in a chat is forgotten when the session ends.
+### Instructions are easy to lose
 
-So everything here loads automatically. One install command symlinks the same rules and skills into every session on your machine — a symlink is a pointer file, so every project reads one shared original. The rules that must never be broken are enforced as pre-commit hooks: checks git runs before accepting each commit, whether or not anyone remembered them.
+An AI assistant only follows rules it can see. Claude Code reads its instructions from one specific file name, `CLAUDE.md`. Rules saved under any other name are never read.
 
-**Hook enforcement fails open.** Git only runs pre-commit hooks when its `core.hooksPath` setting points at them. If that setting is missing or broken:
+Rules written for one project do not exist in the next one, and anything explained in a chat is forgotten when the session ends.
+
+So everything here loads automatically. One install command symlinks the same rules and skills into every session on your machine — a symlink is a pointer file, so every project reads one shared original.
+
+### Guidance is not enforcement
+
+Documentation can explain what should happen. It cannot guarantee that it does.
+
+The rules that must never be broken are enforced as pre-commit hooks: checks git runs before accepting each commit, whether or not anyone remembered them.
+
+Hook enforcement has one dangerous failure mode: git only runs pre-commit hooks when its `core.hooksPath` setting points at them. If that setting is missing or broken:
 
 - git runs no hooks
 - git shows no warning
