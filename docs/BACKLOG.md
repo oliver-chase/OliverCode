@@ -197,35 +197,44 @@ The pass, in priority order:
    extending the same method downward. If a defect class specific to short blocks
    turns up by other means, reopen with that evidence, not a blind sample.
 
+Re-measured after the docstring fix, which is what this entry asked for before sizing
+what was left: 759 blocks over 8 lines across the fleet — 271 in the events app, 220 in
+the growth repo, 91 in the studio app, 84 in the notes-and-chat app, 54 in the crawler,
+30 here, 9 in the notes app. The two repos the earlier rounds never reached were sampled
+at their largest script headers, and every one was left alone: each states a decision
+with the failure behind it, which is the shape the standard asks for and the opposite of
+the filename-banner boilerplate the defect concentrated in.
+
 Not a gate, and should not become one. A checker that judged prose would either be
 a keyword list — the failure `How Great Writers Think` names directly — or an LLM
 call per comment on every commit, which fails the token-efficiency rule.
 
-**B11 — the decision ledger is unenforced in four of six repos (HIGH, open).**
-`CODE_INTENT_STANDARD` §3 requires a `docs/DECISIONS.md` in every consuming repo and
-§4 requires a gate that fails when an id has no row, a row names deleted code, or a
-row is referenced by nothing. Measured across the fleet, counting ids of the form
-`AREA-TOPIC-N` in tracked source:
+**B11 — the decision ledger (HIGH -> resolved for the fleet, one repo still owes rows).**
+`CODE_INTENT_STANDARD` §3 requires a `docs/DECISIONS.md` in every consuming repo and §4
+requires a gate that fails when an id has no row, a row names deleted code, or a row is
+referenced by nothing. All seven repos now carry the ledger and the gate, and the gate runs
+on commit rather than only from the validation target (see B13).
 
-| repo | ids in code | ledger rows | gate |
-| --- | --- | --- | --- |
-| this repo | 2 | 2 | yes |
-| crawler | 77 | 80 | yes |
-| events app | 186 | 14 | **none** |
-| studio app | 74 | **no ledger** | none |
-| growth repo | 6 | **no ledger** | none |
-| notes app | 1 | **no ledger** | none |
+Getting there found three defects in the gate itself, each ablation-verified:
 
-The events app is the sharp end: `SELF-HEALING-1`, `INGEST-ASYNC-1`, `QUEUE-ZERO-6`
-and `DESIGN-AUDIT-2` are each cited a dozen-plus times in code with nothing to resolve
-them against, and its ledger cannot drift-check because no gate reads it. The studio
-app cites 74 ids against no ledger at all.
+- **A ledger row the gate cannot read.** Every check reads the ledger through one id
+  pattern, so a row outside that pattern is invisible to all of them — the id in the source
+  never resolves as recorded, and the row outlives the code it describes. This repo's own
+  ledger carried `FALSIFIABILITY-1`, two segments where §2 requires three, from the day it
+  was written. Renamed, and the gate now fails on any unreadable row.
+- **A user story is not a decision record.** `US-TSK-118` and `US-SDR-202` match
+  `AREA-TOPIC-N` exactly. Harmless while the gate ran from a validation target; with the
+  gate in the hook, every story reference in a comment blocked a commit. Excluded by AREA
+  rather than by id, so a new story needs no config edit, and by first segment rather than
+  prefix, so `USER-FACING-1` is still a decision.
+- **Rows written where a reader would otherwise undo the decision.** The studio app cited
+  106 ids against an empty ledger; eight rows now cover the load-bearing ones and the
+  baseline stands at 98. Not a backfill — a row per id would manufacture a hundred
+  restatements, which is the defect this framework exists to prevent.
 
-Not a sweep. Backfilling a row per id would manufacture 260 rows of restatement, which
-is the defect this framework exists to prevent. The order that works: install the gate
-first (copy `check_decision_ledger` from `scripts/lib/consistency_check.py`), let it
-report, then write a row only where a reader would otherwise undo the decision. Ids
-that turn out to be obvious lose the id instead of gaining a row.
+What is still open is only the studio app's remaining 98 baselined ids, and they are debt
+by design: the baseline ratchets down, never up, and a row gets written when someone has a
+reason to write it.
 
 **B12 — the staleness audit flagged every repo, so it informed nothing (MED, done).**
 `scripts/audit-staleness.py` reported all seven registered repos as stale. It now
@@ -234,24 +243,36 @@ past the threshold and is the only thing that sets the exit code; UNMARKED and M
 BROKEN are setup gaps, reported apart. Reads as two genuinely stale repos, four never
 marked, and one whose marker names a sha its rewritten history no longer holds.
 
-The broken marker is left as data, not guessed at — writing a plausible sha would
-manufacture a coverage claim nobody earned. Whoever knows when that review happened
-should repair it.
+The broken marker is repaired. Neither the sha it named nor the batch's start survives the
+studio app's rewritten history, so it is now pointed at the last surviving commit whose work
+the review record actually describes — deliberately not that day's last commit, since
+pointing past the reviewed work would manufacture coverage nobody performed.
 
-**B13 — the comment gate is in no pre-commit hook (MED, open).**
-The contract had said "this is gated". It is not: `check-comment-budget.mjs` runs from
-each repo's validation target and appears in no `.githooks/pre-commit` anywhere in the
-fleet. Every commit made this session shows it — the hook banners list the secret, icon,
-PII, deleted-repo, workflow-auth, contract, planning and token gates, and never the
-comment budget. Two hooks mention `validate.sh`, both only in a comment.
+What the audit reports now is honest and worth acting on: two STALE repos (this one at 76
+commits since its last review, the notes-and-chat app at 47) and four never marked.
 
-So a commit that does not run validation lands over-cap comments silently, which is how
-the fifteen blocks the docstring fix exposed got in. The contract now states the real
-position. Making it mechanical means adding it to the hook template and both hook
-variants (see B9 — that tax is exactly what makes this more than a one-line change),
-and deciding whether it blocks on staged files only or scans the repo, since a
-whole-repo scan on every commit is slow enough that people will start passing
-`--no-verify`, which costs more than it buys.
+**B13 — the comment and decision gates now run on commit (MED, done).**
+Both checkers ran only from each repo's validation target and appeared in no
+`.githooks/pre-commit` anywhere, so a commit that skipped validation landed over-cap
+comments and unrecorded decision ids silently. Both are now gates, in the template, in this
+repo's hook, and in all six fleet hooks including the two declared variants.
+
+**The staged-files-versus-whole-repo question was decided by measuring rather than
+arguing.** A whole-repo scan is 0.13s on the largest repo here, so the objection this entry
+was written around — that it would be slow enough to push people onto `--no-verify` — was
+simply false. Whole-repo it is: a staged-only scan passes a file whose over-cap block sits
+in a hunk the commit did not touch, and every repo is under the cap today, so scanning
+everything costs nothing and keeps it that way.
+
+Counts moved: template 6 to 8, this repo 8 to 10, the studio app's variant 7 to 9. The
+coverage table in `docs/GOVERNANCE.md` and every doc pointing at it were updated in the
+same commit, which is what `consistency_check.py` requires. The path difference between
+this repo's hook and the template is declared in `hook_drift_check.py`: an adopted repo
+gets the checkers at `scripts/`, and this repo is where they are authored.
+
+It caught real work within the hour. The studio app had a 36-line nav-latency header whose
+three decisions each carried a measurement — nothing to cut, which is exactly the case
+`DECISIONS.md` exists for, so the reasoning moved there under `NAV-LATENCY-1` in full.
 
 **B9 — the hook-variant tax compounds (LOW, watch).**
 Two fleet repos declare `hookVariant`, so every template gate change needs a hand-merge into
