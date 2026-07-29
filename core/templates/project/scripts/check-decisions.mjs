@@ -84,6 +84,9 @@ function idsOnLine(line) {
   for (const m of line.matchAll(ID_PATTERN)) {
     if (NOT_DECISIONS.has(m[0])) continue;
     if (spans.some(([a, b]) => a < m.index && m.index + m[0].length <= b)) continue;
+    // A regex character class reads as an id: /[A-Z0-9]/ yields "Z0-9". No real id
+    // is written immediately before a `]`.
+    if (line[m.index + m[0].length] === ']') continue;
     out.push(m[0]);
   }
   return out;

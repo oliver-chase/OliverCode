@@ -119,6 +119,15 @@ run_comment_budget() {
     echo "=== validate: comment budget FAILED ==="
     exit 1
   fi
+
+  # CODE_INTENT_STANDARD §4. The template copy is run directly, as above: a second
+  # copy in scripts/ would be the drift this repo exists to prevent.
+  echo "=== validate: checking decision ledger ==="
+  if ! node "${REPO_ROOT}/core/templates/project/scripts/check-decisions.mjs" > /dev/null; then
+    node "${REPO_ROOT}/core/templates/project/scripts/check-decisions.mjs" | grep "FAIL:"
+    echo "=== validate: decision ledger FAILED ==="
+    exit 1
+  fi
 }
 
 run_smoke_tests() {
