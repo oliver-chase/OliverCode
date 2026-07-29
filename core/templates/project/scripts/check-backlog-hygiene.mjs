@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Backlog-hygiene gate. BACKLOG-HYGIENE-1 in docs/DECISIONS.md records why a
-// heading-level DONE marker is the check, not a line-count cap.
+// Backlog-hygiene gate. A heading-level DONE marker is the check, not a
+// line-count cap -- a cap failed a repo with a legitimately large, fully
+// open-only backlog, where the marker check does not. OliverCode's own
+// docs/DECISIONS.md records the reasoning behind that choice.
 //
 //   node scripts/check-backlog-hygiene.mjs [--quiet]
 //
