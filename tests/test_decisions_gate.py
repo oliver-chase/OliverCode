@@ -108,6 +108,22 @@ class DecisionsGateTests(unittest.TestCase):
         (self.tmp / "tests" / "t.js").write_text("expect(x).toMatch(/F-[A-Z0-9]{6}/);\n", encoding="utf-8")
         self.assertEqual(self.run_gate().returncode, 0)
 
+    def test_a_user_story_reference_is_not_a_decision(self):
+        # A story id matches AREA-TOPIC-N exactly, and code cites one when
+        # explaining what a behaviour was specified for. Demanding a ledger row
+        # per story would put the backlog in the ledger.
+        self.src("// Pinned by US-TSK-118, which specifies the surface.\n")
+        self.ledger()
+        self.assertEqual(self.run_gate().returncode, 0)
+
+    def test_the_excluded_area_is_the_whole_prefix_not_a_substring(self):
+        # 'US' must not swallow 'USER-FACING-1' — the area is the first segment.
+        self.src("// USER-FACING-1: nothing records this.\n")
+        self.ledger()
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("USER-FACING-1", result.stdout)
+
     def test_a_ledger_id_the_gate_cannot_read_fails(self):
         # This repo's own ledger held a two-segment id from the day it was written.
         # Every check reads the ledger through the same pattern, so that row was
