@@ -118,6 +118,15 @@ mechanism. The test: delete the sentence — if the reader lost no information, 
 decoration. If it can be rewritten as a plain statement and nothing is lost, write the
 plain statement.
 
+A reveal construction can carry a real fact and still fail — the fact is fine, the
+landing is the problem. "The rig seeds an account and a draft, and that is the point" adds
+a tail built to be quoted, on top of a plain fact that did not need one. Cut the tail and
+keep the fact: "The rig seeds an account and a draft before it asserts anything." Watch
+for the tell: a closing clause built to be memorable rather than to add information —
+"and that is the point", "which is the whole idea", "is a problem disguised as a
+problem", "is not a bug, it is the design". Rewrite the sentence so it states the fact
+once, in the order a person would say it out loud, and stops.
+
 - **Say it once.** A closing sentence that restates the paragraph above it fails the delete
   test — the reader already has it. Lead with the claim instead of building to it: when a
   passage runs long, the setup is the part to cut, not the conclusion.

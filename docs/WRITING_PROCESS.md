@@ -88,10 +88,14 @@ the reader to finish the thought. Say the load-bearing sentence and stop.
 
 Defensive writing anticipates a misunderstanding nobody signaled. It usually arrives through one of
 these: "this is not just", "rather than", "instead of", "the difference is", "this means that",
-"this ensures that", "this allows teams to", "so that", "not X, but Y". Treat that as a watchlist,
-not a banned-word list — cut the construction when the negative half is a manufactured foil, keep
-it when both halves carry real information, and never contort a sentence into something harder to
-parse just to dodge the word.
+"this ensures that", "this allows teams to", "so that", "not X, but Y", "X, not Y". The default is
+to cut it. Test each one by deleting the negative half: "A queued item is waiting on you, not
+broken" loses nothing when trimmed to "A queued item is waiting on you" — the negative half made
+the sentence sound more decided without adding any information. Keep the construction only when
+the negative half names something the reader would
+otherwise guess wrong — "configured through an environment variable, never a config file" earns
+its negative half because a reader coming from another tool would assume a file exists. When in
+doubt, cut it; never contort a sentence into something harder to parse just to dodge the word.
 
 For documentation specifically: answer what this is, why it exists, who uses it, what they need to
 do. Not every question a reader could theoretically have — only the ones they actually will.
