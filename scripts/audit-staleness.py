@@ -4,15 +4,20 @@
 Deterministic, no LLM: reads the fleet from repo-profiles, locates each repo as a
 sibling of OliverCode (override with --root), finds its `Reviewed through: <sha>`
 marker — the line core/templates/project/docs/BACKLOG-live-tracker.md standardizes —
-and counts commits landed since. Past the threshold, or with no marker at all, the
-repo is flagged, which is the signal to run `deep-review` or `functionality-audit`
-on it. Nothing is audited here; staleness is only made impossible to miss.
+and counts commits landed since. Past the threshold it is STALE, which is the signal
+to run `deep-review` or `functionality-audit`. Nothing is audited here; staleness is
+only made impossible to miss.
+
+A repo with no marker, or one naming a sha its history no longer holds, is a SETUP
+gap and is reported separately. Counting those as stale flagged all seven repos at
+once while five had simply never been marked, and a signal that is always on is one
+nobody reads.
 
 Usage:
   python3 scripts/audit-staleness.py [--root <dir>] [--threshold N] [--quiet]
 
-Exit 0 = all fresh, 1 = at least one stale or unmarked, so a cron wrapper can alert
-on nonzero.
+Exit 0 = every marked repo is inside the threshold, 1 = at least one has drifted past
+it, so a cron wrapper can alert on nonzero. Unmarked repos do not set it.
 """
 from __future__ import annotations
 
@@ -114,6 +119,8 @@ def main() -> int:
 
     governance = _load_governance_profiles(olivercode_root)
     any_flagged = False
+    unmarked: list[str] = []
+    broken: list[tuple[str, str]] = []
     for name in sorted(profiles):
         # Same resolution rule as the launcher: an explicit profile `path` wins over
         # the sibling convention, so a scattered fleet is auditable too.
@@ -134,14 +141,11 @@ def main() -> int:
             continue
         sha = _find_marker(repo)
         if sha is None:
-            any_flagged = True
-            print(f"STALE  {name}: no 'Reviewed through' marker in any ledger "
-                  f"({', '.join(LEDGER_CANDIDATES[:2])}...) -- never deep-reviewed, or tracker missing")
+            unmarked.append(name)
             continue
         count = _commits_since(repo, sha)
         if count is None:
-            any_flagged = True
-            print(f"STALE  {name}: marker sha {sha[:9]} unknown to the repo (history rewrite? typo?)")
+            broken.append((name, sha[:9]))
             continue
         if count > args.threshold:
             if incubating:
@@ -152,6 +156,20 @@ def main() -> int:
                 print(f"STALE  {name}: {count} commits since last review ({sha[:9]}) -- run deep-review")
         elif not args.quiet:
             print(f"  ok   {name}: {count} commits since {sha[:9]}")
+
+    # Unmarked and broken-marker repos are a SETUP gap, not a review-cadence one, and
+    # they are reported apart from STALE rather than counted with it. Every repo in the
+    # fleet failed this check at once while five had simply never been marked, and a
+    # signal that is always on is one nobody reads. The exit code now means "a repo
+    # that IS tracked has drifted past the threshold", which is a thing to act on.
+    if unmarked:
+        print(f"\nUNMARKED ({len(unmarked)}): {', '.join(unmarked)}")
+        print("  No 'Reviewed through: `<sha>`' line in any ledger. Add one when a "
+              "deep-review lands; until then coverage here is unknown, not fresh.")
+    if broken:
+        print(f"\nMARKER BROKEN ({len(broken)}): " + ", ".join(f"{n} ({s})" for n, s in broken))
+        print("  The marker names a sha the repo does not have, usually a rewritten "
+              "history. Worse than no marker, because it reads as a real coverage claim.")
 
     return 1 if any_flagged else 0
 

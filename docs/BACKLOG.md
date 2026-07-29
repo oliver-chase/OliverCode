@@ -222,14 +222,16 @@ first (copy `check_decision_ledger` from `scripts/lib/consistency_check.py`), le
 report, then write a row only where a reader would otherwise undo the decision. Ids
 that turn out to be obvious lose the id instead of gaining a row.
 
-**B12 — the staleness audit flags every repo, so it informs nothing (MED, open).**
-`scripts/audit-staleness.py` reports all seven registered repos as stale. Five carry no
-`Reviewed through` marker at all, the studio app's marker names a sha the repo does not
-have (its history was rewritten), and the two that are marked are 63 and 31 commits
-past their review. A signal that is always on is not a signal. Either the marker
-convention gets adopted where it is missing and repaired where it broke, or the check
-should report unmarked repos separately from stale ones so a real regression is
-visible. Deciding which is the work; the current state is that nobody can act on it.
+**B12 — the staleness audit flagged every repo, so it informed nothing (MED, done).**
+`scripts/audit-staleness.py` reported all seven registered repos as stale. It now
+separates the two failures it was conflating: STALE means a MARKED repo has drifted
+past the threshold and is the only thing that sets the exit code; UNMARKED and MARKER
+BROKEN are setup gaps, reported apart. Reads as two genuinely stale repos, four never
+marked, and one whose marker names a sha its rewritten history no longer holds.
+
+The broken marker is left as data, not guessed at — writing a plausible sha would
+manufacture a coverage claim nobody earned. Whoever knows when that review happened
+should repair it.
 
 **B13 — the comment gate is in no pre-commit hook (MED, open).**
 The contract had said "this is gated". It is not: `check-comment-budget.mjs` runs from
