@@ -1,0 +1,16 @@
+{
+  "sourceDirs": [
+    "scripts"
+  ],
+  "testDirs": [
+    "tests"
+  ],
+  "extensions": [
+    ".py",
+    ".mjs",
+    ".sh"
+  ],
+  "docDirs": [
+    "docs"
+  ]
+}

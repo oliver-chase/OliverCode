@@ -490,90 +490,6 @@ def check_skill_cross_references(repo_root: Path) -> list[str]:
     return failures
 
 
-_ID = re.compile(r"\b[A-Z][A-Z0-9]{2,}(?:-[A-Z0-9]+)*-[0-9]{1,3}\b")
-_LEDGER_ID = re.compile(r"^\|\s*`([^`]+)`\s*\|")
-_PATHLIKE = re.compile(r"`([A-Za-z0-9_./-]+\.(?:py|mjs|js|ts|sh|md))`")
-
-
-def _ids_outside_strings(line: str) -> set[str]:
-    """IDs on a line, ignoring any that sit inside a quoted string.
-
-    A test fixture carried the literal "docs/BACKLOG.md AUDIT-1..7" as payload data,
-    which reads as a decision reference and is not one. A real reference lives in a
-    comment, where it is unquoted.
-    """
-    spans = [m.span() for m in re.finditer(r"'[^']*'|\"[^\"]*\"", line)]
-    return {
-        m.group(0)
-        for m in _ID.finditer(line)
-        if not any(a < m.start() and m.end() <= b for a, b in spans)
-    }
-
-
-def check_decision_ledger(repo_root: Path) -> list[str]:
-    """Every decision ID in this repo's own source resolves to a docs/DECISIONS.md row,
-    and every row names a file that still exists.
-
-    CODE_INTENT_STANDARD §4. A decision nobody can find is one the next reader undoes,
-    and a row describing deleted code is worse than no row because it is confidently
-    wrong. Missing tests are reported and never fatal: some decisions are structural
-    and have nothing a unit test can hold, and making it fatal produces hollow tests.
-    """
-    failures: list[str] = []
-    ledger_path = repo_root / "docs" / "DECISIONS.md"
-    sources = [
-        f for f in _tracked(repo_root, "scripts/*", "tests/*")
-        if f.endswith((".py", ".mjs", ".js", ".sh"))
-    ]
-
-    in_code: dict[str, str] = {}
-    for rel in sources:
-        try:
-            text = (repo_root / rel).read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            for found in _ids_outside_strings(line):
-                in_code.setdefault(found, rel)
-
-    if not ledger_path.is_file():
-        if in_code:
-            failures.append(
-                f"  [LEDGER] docs/DECISIONS.md is missing, but the source references "
-                f"{len(in_code)} decision id(s): {', '.join(sorted(in_code))}"
-            )
-        return failures
-
-    ledger_text = ledger_path.read_text(encoding="utf-8")
-    rows = {
-        m.group(1): line
-        for line in ledger_text.splitlines()
-        if (m := _LEDGER_ID.match(line))
-    }
-
-    for found, rel in sorted(in_code.items()):
-        if found not in rows:
-            failures.append(
-                f"  [LEDGER] {rel} references {found}, which has no docs/DECISIONS.md row. "
-                f"Add one, or drop the id if the decision is now obvious."
-            )
-
-    for row_id, line in sorted(rows.items()):
-        for path in set(_PATHLIKE.findall(line)):
-            if not (repo_root / path).exists():
-                failures.append(
-                    f"  [LEDGER] {row_id} names {path}, which does not exist. "
-                    f"A row describing deleted code is confidently wrong."
-                )
-        if row_id not in in_code:
-            failures.append(
-                f"  [LEDGER] {row_id} has a row but nothing in scripts/ or tests/ "
-                f"references it. An unreferenced row cannot be found from the code."
-            )
-
-    return failures
-
-
 def check_all(repo_root: Path) -> list[str]:
     return (
         check_skill_index(repo_root)
@@ -584,5 +500,4 @@ def check_all(repo_root: Path) -> list[str]:
         + check_feature_map_completeness(repo_root)
         + check_contract_reachability(repo_root)
         + check_skill_cross_references(repo_root)
-        + check_decision_ledger(repo_root)
     )
