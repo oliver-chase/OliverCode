@@ -60,7 +60,7 @@ In order:
 3. **Rehearse a failure.** Put a fake password in a file and try to commit it — the commit must be refused. Step 2 saying "done" only means files were written; this rehearsal is what proves enforcement works. The full setup guide ends on it.
 4. **Run `scripts/olivercode health` regularly.** It is the only thing that notices when a repo's hooks have quietly stopped applying.
 
-A governed repo gets eight gates on every commit: secrets (passwords and keys), emoji, PII (personal information), references to deleted repos, unsafe workflow files, planning-document rules, comment length, and decision records.
+A governed repo gets nine gates on every commit: secrets (passwords and keys), emoji, PII (personal information), references to deleted repos, unsafe workflow files, planning-document rules, comment length, decision records, and backlog hygiene (a finished item marked DONE instead of removed).
 
 OliverCode runs a further pair of gates on itself, ones that only make sense here — they validate the framework's own configuration files. `docs/GOVERNANCE.md` has the full table, plus the documented way to let one repo run different hooks on purpose.
 
@@ -144,7 +144,7 @@ Every claim they test is a sentence somewhere in this documentation, so a failur
 
 `python3 -m unittest discover tests` runs the test suite and reports its own count; the suite includes tests that break each gate on purpose to confirm it notices.
 
-10 gates run on commits to this repository;
-a governed repo receives eight of those. Both numbers are verified against the actual hook files on every self-test, so a change to either fails until this file is corrected.
+11 gates run on commits to this repository;
+a governed repo receives nine of those. Both numbers are verified against the actual hook files on every self-test, so a change to either fails until this file is corrected.
 
 `bash scripts/qa/check-scenarios.sh` runs the setup walkthroughs and prints its own tally. Plain `python3`, `bash`, and `perl` throughout — no packages to install. Built on macOS; CI ships ready and is enabled per fork.

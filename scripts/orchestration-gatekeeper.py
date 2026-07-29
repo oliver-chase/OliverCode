@@ -67,7 +67,6 @@ def validate_token_policy(profiles: dict) -> list:
     for name in profiles:
         tp = get_token_policy(name, profiles)
         ignore = tp["ignore_globs"]
-        gen = tp["generated_artifact_dirs"]
         if not ignore:
             errors.append(
                 f"  {name}: token_policy.ignore_globs is missing or empty "
@@ -78,10 +77,19 @@ def validate_token_policy(profiles: dict) -> list:
                 f"  {name}: token_policy.ignore_globs contains a bare '**' "
                 f"— that excludes every file; list specific patterns instead"
             )
-        if not gen:
+        # An explicit [] is a real, checkable claim -- "this repo generates nothing" --
+        # and a repo whose entire deliverable is one committed file, with no bundler
+        # and no build-output directory, is a genuine case of it. Only the field's
+        # total ABSENCE (the declaration was never made at all) is the violation, so
+        # this reads the raw profile rather than get_token_policy's accessor, which
+        # collapses "absent" and "explicitly empty" into the same [] and cannot tell
+        # them apart.
+        raw_tp = get_repo_profile(name, profiles).get("token_policy", {})
+        if "generated_artifact_dirs" not in raw_tp:
             errors.append(
-                f"  {name}: token_policy.generated_artifact_dirs is missing or empty "
-                f"— add the build/output dirs (e.g. \"node_modules\", \".next\", \"coverage\")"
+                f"  {name}: token_policy.generated_artifact_dirs is not declared "
+                f"— add the build/output dirs (e.g. \"node_modules\", \".next\", \"coverage\"), "
+                f"or an explicit [] if this repo genuinely generates nothing"
             )
     return errors
 

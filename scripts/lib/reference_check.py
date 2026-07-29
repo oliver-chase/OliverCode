@@ -51,6 +51,7 @@ DOWNSTREAM_RELATIVE = frozenset(
         "scripts/check-planning-doc-governance.py",
         "scripts/check-comment-budget.mjs",
         "scripts/check-decisions.mjs",
+        "scripts/check-backlog-hygiene.mjs",
         "scripts/oc-supabase-keepalive.sh",
         ".github/user-stories/",
         ".github/user-stories/README.md",
