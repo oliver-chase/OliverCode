@@ -49,6 +49,16 @@ If it doesn't, cut it rather than repair it.
 sentences what one carries — and then gets a line shaved to move the cap. Think, write, then
 measure.
 
+**A hard length ceiling produces a specific shortcut, not just thinner prose.** Under real
+character or word pressure, the fastest construction that reads as a finished claim in one
+sentence is a contrast: state the wrong assumption, then correct it. That shape survives
+compression because the correction stands in for the mechanism that was never worked out — it
+sounds resolved without explaining why. Work out the observation and the mechanism first, in
+full, before compressing the sentence that will ship; compress last, never first. Not "The build
+isn't failing randomly, it's timing out on a specific step" — "The build times out on the
+asset-compression step under load, which reads as random until you check step duration." The
+second version names the mechanism and needs no contrast to do it.
+
 ## Every document has one governing idea
 
 Its topic is what it covers. Its governing idea is the single claim everything else supports. "AI
@@ -117,6 +127,14 @@ in it yet. Go back to the source, find the actual function, number, step, or rul
 This rule is about vagueness, not altitude. A synthesis sits high and is still dense, because the
 facts it compressed are recoverable from it. An empty sentence sits high with nothing underneath.
 Climbing is not what makes writing thin; leaving the evidence behind is.
+
+**The goal is never shorter writing. It is higher information density with less rhetorical
+packaging.** Those come apart under editing pressure: cutting a clarifying example shortens the
+text and lowers the density, which is a loss disguised as progress. Cut the packaging — the
+wind-up, the restatement, the reassurance, the history of how the rule was learned. Keep the facts,
+the boundary conditions, and the examples that show how a rule applies. Read the result against one
+standard: does it sound like a senior operator who knows the system, and does every sentence
+clarify a decision, a requirement, a risk, or a workflow?
 
 ## Human writing is uneven
 
