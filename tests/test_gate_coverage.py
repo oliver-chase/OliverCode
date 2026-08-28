@@ -104,8 +104,8 @@ class TestMutations(unittest.TestCase):
         against the template's count rather than OliverCode's.
         """
         self.assertTrue(self._fails_after(
-            "README.md", "## What you get\n",
-            "## What you get\n\n**On every commit, in every adopted repo**\n"
+            "README.md", "## What happens automatically\n",
+            "## What happens automatically\n\n**On every commit, in every adopted repo**\n"
             "10 pre-commit gates run.\n"))
 
     def test_a_cue_in_an_earlier_paragraph_does_not_reattribute(self):
