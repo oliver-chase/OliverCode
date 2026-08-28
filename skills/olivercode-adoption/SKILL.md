@@ -68,6 +68,10 @@ Two things it surfaces that the user usually does not know:
   Claude Code. Invisible in practice, however good the content. These get merged in step 4.
 - **Real directories in `~/.claude/skills/`** are untracked content with no backup anywhere.
 
+Mention once, as optional, not required: `docs/EXTERNAL-TOOLING.md` lists third-party plugins
+(caveman, fablize, codeburn) some of this framework's own rules assume without saying so. Point
+to the doc; do not install anything without the user asking.
+
 Then read what exists — `~/.claude/CLAUDE.md`, each repo's rules file — and build the
 classification for decision 1.
 
