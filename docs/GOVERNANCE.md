@@ -78,7 +78,7 @@ three. This table is the one home for that; anywhere else that names a count poi
 | Comment budget | A comment block over the repo's cap. Conditional: runs where `scripts/check-comment-budget.mjs` exists and node is installed, and reports *skipped* where either is missing | 9 | 7 | — |
 | Decision records | A decision ID in the source with no ledger row, a row describing deleted code, or a ledger ID the gate cannot read. Same conditional shape as the comment budget | 10 | 8 | — |
 | Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 11 | 9 | — |
-| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Private-only, because the vault and Automation Assets are the two repos whose whole premise is current state with git as the archive | — | — | 3 |
+| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Private-only: those are the repos whose whole premise is current state, with git as the archive | — | — | 3 |
 | **Total** | | **11** | **9** | **3** |
 
 Numbers are the gate's position in that hook's run order, so the same gate can carry a
@@ -95,7 +95,7 @@ Which hook a repo receives:
 | Source | Deployed to | Selected by |
 |---|---|---|
 | `core/templates/project/pre-commit` | every fleet repo | the default for `olivercode sync-hooks` |
-| `core/templates/project/pre-commit-private` | the vault and Automation Assets | `_install_hook_pair(private_repo=True)` for the vault; Automation Assets was installed by hand on 2026-08-31 and is not yet in a profile, so `sync-hooks` will not maintain it |
+| `core/templates/project/pre-commit-private` | the vault, plus any repo whose profile sets `"private": true` | the vault is unconditional; every other private repo declares itself, so `sync-hooks` maintains it like any other target |
 | a repo's own hook | that repo | the profile declares `hookVariant: "<reason>"`, which makes `sync-hooks` skip it and `health` report WARN instead of FAIL |
 
 The private variant drops the PII gate deliberately: the vault *is* personal data, so a gate
