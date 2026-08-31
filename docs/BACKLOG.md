@@ -24,7 +24,7 @@ and several docs. They are settled decisions, not open items.
   Delegated suites are a CONVENTION with no implementation: a profile may carry
   `"suites": ["sdr"]` and one repo does, but nothing reads it. The JS resolver that did
   (`findSuiteRepo` in a `repo-profiles.mjs` mirror) existed only for the bots-gateway
-  subsystem removed in `94dbec7`; it survived orphaned, tested only by itself, and was
+  subsystem removed in `8486cb8`; it survived orphaned, tested only by itself, and was
   deleted 2026-07-27. If delegated suites are ever built, resolve via the flag rather than a
   hardcoded repo name — that part of the decision stands.
 - **ACT-3 — Skill precedence gap (known, unmitigatable at mechanism level).** A generic
@@ -116,7 +116,7 @@ Nothing is open that blocks a fork. The two items below are operator-side.
 
 ### Coverage
 
-Reviewed through: `e267385` (2026-07-27, full-file audit + activation/fork/necessity passes)
+Reviewed through: `4c418ab` (2026-07-27, full-file audit + activation/fork/necessity passes)
 
 ### Open items
 
@@ -309,19 +309,19 @@ rather than accumulating manual merges.
 
 ### Activity log (append here, newest last)
 
-- 2026-07-27 [audit] Defect fixes + orphan removal, `ed1e4d1`.
-- 2026-07-27 [audit] Legacy-reference strip, doc consolidation, specs written, `e773ff1`.
-- 2026-07-27 [audit] Path map / baseline rules to one home, `67bc6ff`.
-- 2026-07-27 [audit] FEATURE_MAP made a real index, `8e19b17`.
-- 2026-07-27 [audit] Product paths out of the location contract, lib imports unified, `9c87a91`.
+- 2026-07-27 [audit] Defect fixes + orphan removal, `82145bb`.
+- 2026-07-27 [audit] Legacy-reference strip, doc consolidation, specs written, `032b8e2`.
+- 2026-07-27 [audit] Path map / baseline rules to one home, `b22cf41`.
+- 2026-07-27 [audit] FEATURE_MAP made a real index, `ef99e61`.
+- 2026-07-27 [audit] Product paths out of the location contract, lib imports unified, `c1d46b3`.
 - 2026-07-27 [audit] Owner decisions: keepalive into scope, `vault-content-parsing` moved to
-  the vault, `model-routing` kept as a declared exception. A6/A8 resolved, `16a1849`.
+  the vault, `model-routing` kept as a declared exception. A6/A8 resolved, `7c50960`.
 - 2026-07-27 [audit] A1-A5 built: reference integrity, consistency checker, enforcement tests,
-  CI gating, `8db0cf3`.
+  CI gating, `4d0689e`.
 - 2026-07-27 [activation] Global CLAUDE.md made path-independent; fleet hooksPath converged;
-  5 repo CLAUDE.md pointer blocks repaired; hook-install fail-open closed, `fc5aa7e`.
+  5 repo CLAUDE.md pointer blocks repaired; hook-install fail-open closed, `72340e5`.
 - 2026-07-27 [fork] Stranger-clone blockers fixed; `docs/ADOPTING.md` + `olivercode-adoption`
-  skill added, `dc1c4bb`. Reference gate taught to scan untracked files, `0ccf2f6`.
+  skill added, `d71a663`. Reference gate taught to scan untracked files, `39449a4`.
 - 2026-07-27 [fork] Fresh-agent adoption run on a sandboxed machine (throwaway HOME, three
   non-sibling repos, pre-existing `~/.claude`). It succeeded end to end, and found that the
   headline **8-gate claim was false for every adopted repo** (they get 6; contract integrity
@@ -335,15 +335,15 @@ rather than accumulating manual merges.
   tested the project-level adoption skill, ADOPTING's register/enforce steps were in the wrong
   order (`sync-hooks` ran before the fleet file existed), health now counts skips separately
   from passes, and waiver expiry in `repo-map.json` is enforced instead of decorative.
-- 2026-07-27 [fork] `olivercode init`, real `--root`, unknown args rejected, `9e672f5`.
-- 2026-07-27 [fork] Fork-usability gate built and mutation-tested, `5220316`; extended to walk
-  the adoption path itself, `659eba8`.
+- 2026-07-27 [fork] `olivercode init`, real `--root`, unknown args rejected, `5225bcd`.
+- 2026-07-27 [fork] Fork-usability gate built and mutation-tested, `13d6b58`; extended to walk
+  the adoption path itself, `ec1ba55`.
 - 2026-07-27 [fork] CI-only gates moved onto the local path; Actions pause recorded as policy,
-  `386395c`.
+  `c16e0fa`.
 - 2026-07-27 [docs] `olivercode install` added; ARCHITECTURE rewritten; INSTALL.md folded into
-  README; "what you get and what enforces it" contract added, `63d5b3c`.
+  README; "what you get and what enforces it" contract added, `b404f5f`.
 - 2026-07-27 [necessity] Completion gate stopped asserting a rule nobody runs; QA worktree
-  double-count fixed (it was hiding real findings); Gate 8 message made actionable, `e267385`.
+  double-count fixed (it was hiding real findings); Gate 8 message made actionable, `4c418ab`.
 - 2026-07-27 [voice] README rebuilt to the V.Two README contract (six sections, narrative, no
   tables, second person) with a complete linked index of every document, so nothing became
   unreachable when the old tables came out. Reference content relocated rather than deleted:
@@ -422,7 +422,7 @@ rather than accumulating manual merges.
   to an opener and reading it as one swallowed the rest of the file; only a region opening
   at a docstring position counts as prose, which leaves triple-quoted SQL as code. Template
   literals are tracked for the same reason: `/*` inside one opened a block that never
-  closed. Four blocks fixed here, thirteen in the studio repo, `38fc227`+`5716d0a`.
+  closed. Four blocks fixed here, thirteen in the studio repo, `3e84cb1`+`5716d0a`.
   The gate had no tests anywhere; it now has nineteen, each ablated. Three of them were
   vacuous when first written — they asserted the phrase "over 20 lines", which is a
   substring of the PASS line "no comment block over 20 lines", so they passed on success.
