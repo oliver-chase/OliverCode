@@ -1,7 +1,7 @@
 """Tests for per-repo gate-coverage consistency.
 
 Gate coverage is not uniform -- 11 gates in OliverCode, 9 in a repo that adopts the
-framework, 2 in the vault's private variant -- and five tracked documents once stated
+framework, 3 in the private variant -- and five tracked documents once stated
 OliverCode's own total as though it were universal, promising forkers two gates the
 template does not ship.
 GATE-COUNT-1 in docs/DECISIONS.md records why the checker passed through all of it.
@@ -55,7 +55,7 @@ class TestShippedTree(unittest.TestCase):
         totals, problems = cc._hook_totals(REPO_ROOT)
         self.assertEqual(problems, [])
         self.assertEqual(
-            totals, {"olivercode": 11, "template": 9, "template-private": 2},
+            totals, {"olivercode": 11, "template": 9, "template-private": 3},
             "gate coverage changed -- update the table in docs/GOVERNANCE.md, which is "
             "its single home, and every doc that points there",
         )
@@ -127,7 +127,7 @@ class TestMutations(unittest.TestCase):
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/GOVERNANCE.md", "| **11** | **9** | **2** |", "| **11** | **11** | **2** |"))
+            "docs/GOVERNANCE.md", "| **11** | **9** | **3** |", "| **11** | **11** | **3** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""
