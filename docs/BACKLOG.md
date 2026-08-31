@@ -422,7 +422,9 @@ rather than accumulating manual merges.
   to an opener and reading it as one swallowed the rest of the file; only a region opening
   at a docstring position counts as prose, which leaves triple-quoted SQL as code. Template
   literals are tracked for the same reason: `/*` inside one opened a block that never
-  closed. Four blocks fixed here, thirteen in the studio repo, `3e84cb1`+`5716d0a`.
+  closed. Four blocks fixed here (`3e84cb1`), thirteen in the studio repo, whose own
+  commit is `5716d0a` -- named as belonging there, because a bare hash in this file
+  reads as a commit in this repo and a reader who checks it finds nothing.
   The gate had no tests anywhere; it now has nineteen, each ablated. Three of them were
   vacuous when first written — they asserted the phrase "over 20 lines", which is a
   substring of the PASS line "no comment block over 20 lines", so they passed on success.
