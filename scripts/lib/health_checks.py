@@ -136,3 +136,196 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     soonest = min(_aware(r) for _, r in dated)
     print(f"  [OK] {len(dated)} waiver(s) current; next expires {soonest.date()}")
     return 1, 0, 0
+
+
+# ── Topology checks ──────────────────────────────────────────────────────────
+# The gates cover CONTENT: no secret, no emoji, no archived copy in a commit.
+# Nothing covered TOPOLOGY -- where things live, whether they are still wired
+# together, whether they could be recovered. Every failure below ran undetected
+# for weeks because no check looked:
+#   - two folder repos pointed at a GitHub repo that had been deleted, so
+#     neither was backed up anywhere and pushing was impossible
+#   - a 423MB blob sat in one of those histories, over GitHub's 100MB per-file
+#     hard limit, so that repo could never have pushed even with a live remote
+#   - four plugins were symlinked into ~/.claude/plugins by hand, and nothing
+#     would have recreated them on another machine
+#   - two folder-level structure validators sat red for eleven findings
+# All of them read outside the framework repo, so all of them degrade to WARN
+# rather than FAIL when that context is absent: a standalone clone stays HEALTHY.
+
+GITHUB_FILE_LIMIT = 100 * 1024 * 1024
+
+
+def _check_plugin_links(vault_root: Path) -> tuple[int, int, int]:
+    """Every plugin in the vault must be symlinked into ~/.claude/plugins/.
+
+    The symlink IS the install: Claude Code discovers plugins in that directory and
+    nowhere else, so a missing link means the slash commands silently do not exist.
+    `olivercode install` covers ~/.claude/skills and has never touched plugins.
+    """
+    print("\nPlugin links:")
+    plugins_src = vault_root / "Work Vault" / "06 - Strategy" / "_Plugins"
+    target_dir = Path.home() / ".claude" / "plugins"
+
+    if not plugins_src.is_dir():
+        print("  [WARN] no _Plugins/ directory in the vault — skipping")
+        return 0, 0, 1
+    if not target_dir.is_dir():
+        print("  [WARN] ~/.claude/plugins/ not present — skipping")
+        return 0, 0, 1
+
+    declared = sorted(
+        p.name for p in plugins_src.iterdir()
+        if p.is_dir() and (p / ".claude-plugin" / "plugin.json").is_file()
+    )
+    if not declared:
+        print("  [WARN] _Plugins/ holds no plugin with a plugin.json — skipping")
+        return 0, 0, 1
+
+    passed = failed = 0
+    for name in declared:
+        link = target_dir / name
+        expected = plugins_src / name
+        if not link.exists() and not link.is_symlink():
+            print(f"  [FAIL] {name}: not linked into ~/.claude/plugins/ — its skills do not load")
+            failed += 1
+        elif link.is_symlink() and not link.exists():
+            print(f"  [FAIL] {name}: symlink is broken (points at {link.readlink()})")
+            failed += 1
+        elif link.is_symlink() and link.resolve() != expected.resolve():
+            print(f"  [FAIL] {name}: linked to {link.resolve()}, not {expected}")
+            failed += 1
+        else:
+            passed += 1
+    if passed and not failed:
+        print(f"  [OK] all {passed} plugins linked")
+    return passed, failed, 0
+
+
+def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int]:
+    """Every repo's origin must actually exist on the remote host.
+
+    A deleted or renamed remote is the failure mode with no local symptom at all:
+    committing keeps working, `git status` stays clean, and the work is simply not
+    backed up anywhere. Two folder repos sat that way for weeks.
+
+    Only a host that answers and DENIES the repo counts as a FAIL. Two cases that
+    look similar are deliberately warnings instead:
+      - a network error means unverifiable, not broken
+      - no origin at all is a local-only repo, which is a legitimate state; a fresh
+        `git init` scratch repo has no remote and is not a governance failure
+    """
+    print("\nRemote reachability:")
+    passed = failed = skipped = 0
+    for name, path in repos:
+        if not (path / ".git").exists():
+            continue
+        url = subprocess.run(["git", "-C", str(path), "remote", "get-url", "origin"],
+                             capture_output=True, text=True).stdout.strip()
+        if not url:
+            print(f"  [WARN] {name}: no origin remote — local only, nothing to verify")
+            skipped += 1
+            continue
+        try:
+            r = subprocess.run(["git", "-C", str(path), "ls-remote", "--exit-code", "-h", url],
+                               capture_output=True, text=True, timeout=25)
+        except subprocess.TimeoutExpired:
+            print(f"  [WARN] {name}: remote check timed out — unverified")
+            skipped += 1
+            continue
+        err = (r.stderr or "").lower()
+        if r.returncode == 0:
+            passed += 1
+        elif "not found" in err or "does not exist" in err or "repository not found" in err:
+            print(f"  [FAIL] {name}: origin does not exist ({url}) — this repo is not backed up")
+            failed += 1
+        elif "could not resolve host" in err or "network" in err or "timed out" in err:
+            print(f"  [WARN] {name}: host unreachable — unverified, not a failure")
+            skipped += 1
+        else:
+            print(f"  [WARN] {name}: origin unverified ({err.strip().splitlines()[0][:70] if err.strip() else 'no detail'})")
+            skipped += 1
+    if passed and not failed:
+        print(f"  [OK] {passed} remote(s) reachable")
+    elif not (passed or failed or skipped):
+        print("  [WARN] no repo with a remote to check — skipping")
+        skipped = 1
+    return passed, failed, skipped
+
+
+def _check_oversized_tracked(repos: list[tuple[str, Path]]) -> tuple[int, int, int]:
+    """No tracked file may exceed GitHub's 100MB per-file hard limit.
+
+    Over that, the push is rejected outright -- and if the file is already in
+    history, no amount of deleting it from the tree fixes the push. Catching it at
+    the tracked-file stage is the only cheap moment.
+    """
+    print("\nTracked file sizes:")
+    passed = failed = skipped = 0
+    for name, path in repos:
+        if not (path / ".git").exists():
+            continue
+        r = subprocess.run(["git", "-C", str(path), "ls-files", "-z"],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            skipped += 1
+            continue
+        over = []
+        for rel in filter(None, r.stdout.split("\0")):
+            f = path / rel
+            try:
+                if f.is_file() and f.stat().st_size > GITHUB_FILE_LIMIT:
+                    over.append((rel, f.stat().st_size))
+            except OSError:
+                continue
+        if over:
+            for rel, size in over[:5]:
+                print(f"  [FAIL] {name}: {rel} is {size // (1024*1024)}MB — GitHub rejects over 100MB")
+            failed += 1
+        else:
+            passed += 1
+    if passed and not failed:
+        print(f"  [OK] {passed} repo(s) under the limit")
+    elif not (passed or failed or skipped):
+        print("  [WARN] no git repo to check — skipping")
+        skipped = 1
+    return passed, failed, skipped
+
+
+def _check_folder_validators(vault_root: Path) -> tuple[int, int, int]:
+    """Every _validate_structure.js in the vault must exit clean.
+
+    These are the per-folder structure contracts. They are deliberately not wired to
+    a git hook, so the only thing that runs them is an instruction to remember to --
+    and both sat red, one on eleven findings, while sessions worked around them.
+    """
+    print("\nFolder structure validators:")
+    if not vault_root.is_dir():
+        print("  [WARN] vault root not resolvable — skipping")
+        return 0, 0, 1
+    found = sorted(vault_root.glob("*/*/_validate_structure.js"))
+    if not found:
+        print("  [WARN] no _validate_structure.js found — skipping")
+        return 0, 0, 1
+    passed = failed = skipped = 0
+    for script in found:
+        label = script.parent.name
+        try:
+            r = subprocess.run(["node", str(script.name)], cwd=str(script.parent),
+                               capture_output=True, text=True, timeout=60)
+        except FileNotFoundError:
+            print("  [WARN] node not installed — skipping validators")
+            return passed, failed, skipped + 1
+        except subprocess.TimeoutExpired:
+            print(f"  [WARN] {label}: validator timed out")
+            skipped += 1
+            continue
+        if r.returncode == 0:
+            passed += 1
+        else:
+            n = len([l for l in (r.stdout or "").splitlines() if "FAIL" in l])
+            print(f"  [FAIL] {label}: structure validator reports {n or 'some'} finding(s) — run it there for detail")
+            failed += 1
+    if passed and not failed:
+        print(f"  [OK] {passed} validator(s) clean")
+    return passed, failed, skipped
