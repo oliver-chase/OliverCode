@@ -537,9 +537,6 @@ def command_health(fleet_root: Path | None = None) -> int:
     for name, _profile, repo_path in _iter_fleet(_profiles, fleet_root or OC_ROOT.parent):
         if repo_path.is_dir():
             topo_repos.append((name, repo_path))
-    aa = vault_root / "Oliver" / "Automation Assets"
-    if (aa / ".git").exists():
-        topo_repos.append(("automation-assets", aa))
 
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
@@ -654,7 +651,7 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
     3. Present but not executable. Git skips a non-executable hook silently too.
     4. Present, executable, but content matches neither canonical template.
 
-    A repo running the private (2-gate) variant still deploys it under the filename
+    A repo running the private variant still deploys it under the filename
     `pre-commit`, so a live `pre-commit` is checked against BOTH template contents.
     """
     if not hooks_dir.is_dir():
@@ -874,8 +871,15 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
             print(f"  [SKIP] {name}: declared hook variant ({variant}) — left untouched")
             skipped += 1
             continue
-        _install_hook_pair(repo_path, templates_dir, private_repo=False)
-        print(f"  [OK] {name}: hooks synced, hooksPath set")
+        # A private repo gets the private variant, which drops the PII gate (it holds
+        # personal data by design) and adds the archived-content gate. Declared per
+        # profile rather than hardcoded: the vault below was the only private target
+        # for a while, so the second one had its hook installed by hand and would have
+        # gone stale on the next template change, silently.
+        is_private = bool(profile.get("private"))
+        _install_hook_pair(repo_path, templates_dir, private_repo=is_private)
+        variant_note = "private-variant " if is_private else ""
+        print(f"  [OK] {name}: {variant_note}hooks synced, hooksPath set")
         updated += 1
 
     if (vault_root / ".git").exists():
