@@ -19,7 +19,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.repo_profiles import load_repo_profiles  # noqa: E402
 from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E402,F401
-from lib.health_checks import _local_or_shared, _check_waiver_expiry, _check_github_about  # noqa: E402,F401
+from lib.health_checks import (  # noqa: E402,F401
+    _local_or_shared, _check_waiver_expiry, _check_github_about,
+    _check_plugin_links, _check_remotes_resolve, _check_oversized_tracked,
+    _check_folder_validators,
+)
 
 # This file lives at <OliverCode>/scripts/olivercode, so the repo root is two up.
 # Nothing else is hardcoded.
@@ -30,6 +34,7 @@ COMMANDS = [
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md + skills into ~/.claude (backs up anything it replaces)"),
     ("olivercode init", "Create local/ fleet config from the tracked examples (never overwrites)"),
+    ("olivercode link-plugins [--dry-run]", "Symlink the vault's plugins into ~/.claude/plugins"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
@@ -513,9 +518,93 @@ def command_health(fleet_root: Path | None = None) -> int:
     passed, failed, skipped = _check_github_about(OC_ROOT)
     t.add(passed, failed, skipped)
 
+    # 6. Topology. The gates cover what goes INTO a commit; these cover whether the
+    # pieces are still wired together and recoverable. See health_checks.py for the
+    # four failures that ran undetected because nothing looked.
+    import os as _os
+    _env_vault = _os.environ.get("OLIVERCODE_VAULT_ROOT")
+    vault_root = Path(_env_vault) if _env_vault else OC_ROOT.parent.parent.parent
+
+    t.add(*_check_plugin_links(vault_root))
+
+    # Repos to check for remote reachability and oversized files: the vault, this
+    # framework repo, and every fleet repo that exists on disk.
+    topo_repos: list[tuple[str, Path]] = []
+    if (vault_root / ".git").exists():
+        topo_repos.append(("vault", vault_root))
+    topo_repos.append((OC_ROOT.name, OC_ROOT))
+    _profiles, _ = load_repo_profiles(OC_ROOT)
+    for name, _profile, repo_path in _iter_fleet(_profiles, fleet_root or OC_ROOT.parent):
+        if repo_path.is_dir():
+            topo_repos.append((name, repo_path))
+    aa = vault_root / "Oliver" / "Automation Assets"
+    if (aa / ".git").exists():
+        topo_repos.append(("automation-assets", aa))
+
+    t.add(*_check_oversized_tracked(topo_repos))
+    t.add(*_check_remotes_resolve(topo_repos))
+    t.add(*_check_folder_validators(vault_root))
+
     print(f"\n{'=' * 40}")
     print(t.summary())
     return 1 if t.failed else 0
+
+
+def command_link_plugins(vault_root: Path | None = None, dry_run: bool = False) -> int:
+    """Symlink every vault plugin into ~/.claude/plugins/.
+
+    This is the step that had no command. `install` wires ~/.claude/skills, and the
+    plugin directory -- the only place Claude Code discovers plugins -- was left to
+    whoever remembered. Four links were made by hand and nothing would have
+    recreated them on another machine, which is the same class of gap as an
+    uninstalled hook: everything looks fine and the capability is simply absent.
+    """
+    import os as _os
+    _env = _os.environ.get("OLIVERCODE_VAULT_ROOT")
+    vault_root = vault_root or (Path(_env) if _env else OC_ROOT.parent.parent.parent)
+    src = vault_root / "Work Vault" / "06 - Strategy" / "_Plugins"
+    dst = Path.home() / ".claude" / "plugins"
+
+    print("OliverCode link-plugins" + (" (dry run)" if dry_run else ""))
+    if not src.is_dir():
+        print(f"  [WARN] no _Plugins/ directory at {src} — nothing to link")
+        return 0
+
+    plugins = sorted(
+        d for d in src.iterdir()
+        if d.is_dir() and (d / ".claude-plugin" / "plugin.json").is_file()
+    )
+    if not plugins:
+        print(f"  [WARN] {src} holds no plugin with a .claude-plugin/plugin.json")
+        return 0
+
+    if not dry_run:
+        dst.mkdir(parents=True, exist_ok=True)
+
+    changed = 0
+    for pl in plugins:
+        link = dst / pl.name
+        if link.is_symlink() and link.exists() and link.resolve() == pl.resolve():
+            print(f"  [OK] {pl.name} already linked")
+            continue
+        if dry_run:
+            print(f"  [DRY] would link {pl.name} -> {pl}")
+            changed += 1
+            continue
+        # A stale or broken link is replaced; a REAL directory is never touched --
+        # that would be somebody's actual plugin install, not our link to overwrite.
+        if link.is_symlink():
+            link.unlink()
+        elif link.exists():
+            print(f"  [FAIL] {pl.name}: a real directory is already there — not overwriting it")
+            continue
+        link.symlink_to(pl)
+        print(f"  [OK] linked {pl.name}")
+        changed += 1
+
+    print(f"\n{len(plugins)} plugin(s) declared, {changed} " + ("would change" if dry_run else "changed"))
+    print("Restart Claude Code (or /reload-plugins) for newly linked plugins to appear.")
+    return 0
 
 
 def _resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
@@ -880,6 +969,9 @@ def main() -> int:
     if cmd == "init":
         _reject_extra(cmd, argv)
         return command_init(OC_ROOT)
+    if cmd == "link-plugins":
+        return command_link_plugins(dry_run="--dry-run" in sys.argv[2:])
+
     if cmd == "health":
         root, rest = _take_root_flag(argv)
         _reject_extra(cmd, rest)

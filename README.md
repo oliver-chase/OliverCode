@@ -241,6 +241,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | Document | Purpose |
 | --- | --- |
 | [`ADOPTING.md`](docs/ADOPTING.md) | Complete setup and enforcement walkthrough |
+| [`NEW_MACHINE.md`](docs/NEW_MACHINE.md) | Restoring an existing setup on a blank machine, and what no script can do |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the three layers fit together |
 | [`GOVERNANCE.md`](docs/GOVERNANCE.md) | Every gate, what it blocks, and which repos receive which gates |
 | [`FEATURE_MAP.md`](docs/FEATURE_MAP.md) | Every capability and its owning document |
