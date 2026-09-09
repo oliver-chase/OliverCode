@@ -54,7 +54,7 @@ character or word pressure, the fastest construction that reads as a finished cl
 sentence is a contrast: state the wrong assumption, then correct it. That shape survives
 compression because the correction stands in for the mechanism that was never worked out — it
 sounds resolved without explaining why. Work out the observation and the mechanism first, in
-full, before compressing the sentence that will ship; compress last, never first. Not "The build
+full, before compressing the sentence that will ship. Compress last, never first. Not "The build
 isn't failing randomly, it's timing out on a specific step" — "The build times out on the
 asset-compression step under load, which reads as random until you check step duration." The
 second version names the mechanism and needs no contrast to do it.
@@ -63,7 +63,7 @@ second version names the mechanism and needs no contrast to do it.
 
 Its topic is what it covers. Its governing idea is the single claim everything else supports. "AI
 code generation" is a topic. "Code generation moves the bottleneck to coordination" is a governing
-idea. State it in one sentence before drafting; if you can't, the thinking isn't finished, and
+idea. State it in one sentence before drafting. If you can't, the thinking isn't finished, and
 drafting will not finish it.
 
 From there the structure follows: Should we do this? → Yes. → Why? → Evidence. → Why now? →
@@ -74,7 +74,7 @@ intro/body/conclusion.
 explain a mechanism, define something, give evidence, state a decision, draw an implication, or
 give direction. A paragraph doing two jobs gets split.
 
-Before the paragraph the reader thinks X; after it, Y. If nothing changed, delete it — it was
+Before the paragraph the reader thinks X. After it, Y. If nothing changed, delete it — it was
 restating, not moving the argument. Every paragraph also has one sentence carrying almost all the
 weight, and the rest exists to support that sentence.
 
@@ -103,13 +103,13 @@ outrunning the capacity to absorb it" is a truth, and it can be argued with.
 
 **Resolution.** When two facts look contradictory, the contradiction is the signal that a
 higher-order explanation exists — so find it rather than listing both. AI generates code far
-faster; delivery velocity has not risen proportionally. Listed, that is a puzzle handed to the
+faster. Delivery velocity has not risen proportionally. Listed, that is a puzzle handed to the
 reader. Resolved: the binding constraint moved from producing code to coordinating it into
 production.
 
 **Synthesis compresses, abstraction discards — this is the line that matters.** Getting it wrong is
 worse than staying concrete, because the result reads authoritative and says nothing. "AI is
-transforming software delivery" threw its observations away; nothing sits underneath it. "Engineering
+transforming software delivery" threw its observations away. Nothing sits underneath it. "Engineering
 capacity is now constrained by the coordination required to put AI-generated code into production"
 still carries every observation that produced it — a reader can ask what evidence sits under it and
 you can name it. **A synthesis you cannot decompose back into its facts is a buzzword.**
@@ -126,7 +126,7 @@ in it yet. Go back to the source, find the actual function, number, step, or rul
 
 This rule is about vagueness, not altitude. A synthesis sits high and is still dense, because the
 facts it compressed are recoverable from it. An empty sentence sits high with nothing underneath.
-Climbing is not what makes writing thin; leaving the evidence behind is.
+Climbing is not what makes writing thin. Leaving the evidence behind is.
 
 **The goal is never shorter writing. It is higher information density with less rhetorical
 packaging.** Those come apart under editing pressure: cutting a clarifying example shortens the
@@ -148,7 +148,7 @@ and spend the room on the parts that are genuinely hard.
 ## Trust the reader
 
 Good writing leaves things unsaid on purpose. "This creates greater accountability because
-ownership becomes clearer across teams" over-explains; "Decision rights become explicit" trusts
+ownership becomes clearer across teams" over-explains. The plainer version, "Decision rights become explicit," trusts
 the reader to finish the thought. Say the load-bearing sentence and stop.
 
 Defensive writing anticipates a misunderstanding nobody signaled. It usually arrives through one of
@@ -160,7 +160,7 @@ the sentence sound more decided without adding any information. Keep the constru
 the negative half names something the reader would
 otherwise guess wrong — "configured through an environment variable, never a config file" earns
 its negative half because a reader coming from another tool would assume a file exists. When in
-doubt, cut it; never contort a sentence into something harder to parse just to dodge the word.
+doubt, cut it. Never contort a sentence into something harder to parse just to dodge the word.
 
 For documentation specifically: answer what this is, why it exists, who uses it, what they need to
 do. Not every question a reader could theoretically have — only the ones they actually will.

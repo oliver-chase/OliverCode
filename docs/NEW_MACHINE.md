@@ -60,12 +60,12 @@ Each of these needs a person. They are listed so the list is finite rather than 
 
 **The other repos.** The vault deliberately holds only what is not already its own repo, so
 the rest are separate clones under `Oliver/Project Repos/` plus `Oliver/Automation Assets/`.
-`scripts/olivercode discover --root <dir>` finds whatever is present; it cannot clone what is
+`scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
 absent. `local/repo-map.json` in the old machine's config is the list of what should be there.
 
 **The fleet config in `local/`.** Gitignored on purpose -- real repo names never enter tracked
-files, which is what makes the fork shareable. `init` creates the files from tracked examples;
-the real contents are re-entered. Copy `local/` off the old machine if it still exists.
+files, which is what makes the fork shareable. `init` creates the files from tracked examples.
+The real contents are re-entered. Copy `local/` off the old machine if it still exists.
 
 **Marketplace plugins.** Third-party, installed through Claude Code, not through this repo:
 
@@ -78,7 +78,7 @@ the real contents are re-entered. Copy `local/` off the old machine if it still 
 arbitrary without them.
 
 **Obsidian plugins.** The vault tracks each plugin's `data.json` and `manifest.json`, so
-settings come back with the clone; the compiled code does not. `.obsidian/community-plugins.json`
+settings come back with the clone. The compiled code does not. `.obsidian/community-plugins.json`
 lists what to reinstall from the community store.
 
 **MCP server authorization.** Interactive OAuth per server, in a Claude Code session.

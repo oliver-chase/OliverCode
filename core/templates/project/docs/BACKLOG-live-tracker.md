@@ -2,7 +2,7 @@
 
 > Canonical template (OliverCode `core/templates/project/docs/`). Copy this
 > section into the target repo's BACKLOG (or equivalent open-work ledger) as
-> its head or tail section. The `deep-review` skill maintains it;
+> its head or tail section. The `deep-review` skill maintains it.
 > `scripts/audit-staleness.py` reads the "Reviewed through" marker fleet-wide.
 
 ---
@@ -13,7 +13,7 @@
 including review/audit subagents — finishing a unit of work APPENDS a
 one-line status entry under "Activity log" in the same commit as the
 work, so an agent picking up mid-stream (or working in parallel) sees
-reality, not a stale snapshot. One line per entry; detail lives in the
+reality, not a stale snapshot. One line per entry. Detail lives in the
 commit message or the spec it points to.**
 
 ### Where things stand (<date>)

@@ -9,7 +9,7 @@
 | `memory/` | User profile + durable facts | No (personal, gitignored) |
 | `state/` | Current optimization targets, decision log, next actions | No (personal, gitignored) |
 
-On a fresh clone only this README exists; `memory/` and `state/` are created locally per user.
+On a fresh clone only this README exists. `memory/` and `state/` are created locally per user.
 
 ---
 

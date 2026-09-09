@@ -71,7 +71,7 @@ Catches `require_file`-style shell gates, code comments citing the doc, CI workf
 
 ### Phase 6 — Design the Target Structure
 
-Apply concept ownership: every fact, table, or contract gets exactly one home file; every other file references it by name instead of restating it. Typical shape for a small-to-mid repo:
+Apply concept ownership: every fact, table, or contract gets exactly one home file. Every other file references it by name instead of restating it. Typical shape for a small-to-mid repo:
 
 - One root `README.md` — front door, quick start, links out.
 - One current-state doc (route inventory, data model, contracts, known gaps) — not split into N parts unless a real enforced size cap requires it (check for one before assuming — a "split for size compliance" note is often a one-time decision with no enforcement behind it anymore).
@@ -106,8 +106,8 @@ Confirm the gate still passes and no dangling references remain.
 | Editing dated QA/evidence log entries to match the new doc structure | Evidence logs (dated "on YYYY-MM-DD we did X") are historical record, not living docs — rewriting them falsifies the audit trail. Only fix live navigation references, never the timestamped entries themselves |
 | Deleting/merging a doc without grepping for hardcoded path references | Breaks shell `require_file` gates, stale code comments, CI configs silently |
 | Assuming a doc split (e.g. "part-01..part-06") is enforced | Check for an actual size-cap validator before assuming the split can't be undone — it's often just a one-time unenforced decision that's now causing the docs to drift out of sync with each other |
-| "Fixing" a stale doc mechanically without checking relevance | Ask whether the described feature is still used/prominent before polishing a more-accurate detail onto it; sometimes the right fix is to trim, not correct |
-| Applying a vault-specific formatting rule (e.g. "no tables") to an unrelated repo | Formatting standards from one system (e.g. a Word-paste vault) don't automatically transfer to a git-hosted code repo's README — GitHub renders tables fine; port the *discipline* (SSOT, no duplication), not every literal rule |
+| "Fixing" a stale doc mechanically without checking relevance | Ask whether the described feature is still used/prominent before polishing a more-accurate detail onto it. Sometimes the right fix is to trim, not correct |
+| Applying a vault-specific formatting rule (e.g. "no tables") to an unrelated repo | Formatting standards from one system (e.g. a Word-paste vault) don't automatically transfer to a git-hosted code repo's README — GitHub renders tables fine. Port the *discipline* (SSOT, no duplication), not every literal rule |
 
 ## Complementary Skills — Use Alongside, Don't Duplicate
 
@@ -116,7 +116,7 @@ This skill covers doc-vs-code truth and doc consolidation only. It deliberately 
 - **`/code-review`** — when the audit's code-verification steps (Phase 3) turn up an actual correctness bug in the code itself (not just a doc claiming something false about it), don't fix it ad hoc as a side effect of the doc audit. Run `/code-review` on it as its own pass.
 - **`/simplify`** — if Phase 3/4 surfaces real duplication or dead code in the codebase (not just in the docs), that's a `/simplify` job, not a docs-reality-audit job — they share the no-duplication principle but operate on different material.
 - **`diagnosing-bugs`** — if verifying a doc's claim requires figuring out *why* something is actually broken (not just confirming that it is), switch to that skill for the root-cause work, then come back to the doc fix once the real behavior is known.
-- **A frontend/UX skill** — docs-reality-audit doesn't evaluate interface or interaction quality. If the project has a UI and the audit is part of a broader "review this project" ask, pair it with whichever design skill the machine has installed (see `docs/EXTERNAL-TOOLING.md`; OliverCode ships none, by scope) and run them as separate, parallel-purpose passes rather than folding one into the other.
+- **A frontend/UX skill** — docs-reality-audit doesn't evaluate interface or interaction quality. If the project has a UI and the audit is part of a broader "review this project" ask, pair it with whichever design skill the machine has installed (see `docs/EXTERNAL-TOOLING.md` — OliverCode ships none, by scope) and run them as separate, parallel-purpose passes rather than folding one into the other.
 
 ## Report Format
 

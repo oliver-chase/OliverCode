@@ -41,7 +41,7 @@ The launcher invokes nothing outside this repo. Treat multi-environment routing 
 
 ### `update` fails
 - **Cause:** `git -C <OC_ROOT> pull` hit a conflict, detached HEAD, or no remote tracking branch.
-- **Fix:** resolve the git state directly; the command has no retry/fallback logic by design (fail fast, not hidden).
+- **Fix:** resolve the git state directly. The command has no retry/fallback logic by design (fail fast, not hidden).
 
 ### Help surface drift
 - **Fix:** re-verify the alias set stated above (`--help`, `-h`, `help`, no-args) still all resolve to the same usage block with exit 0 — this is the fact most likely to silently break in a refactor.
@@ -54,4 +54,4 @@ The launcher invokes nothing outside this repo. Treat multi-environment routing 
 4. `python3 scripts/olivercode health` — confirm HEALTHY on a clean checkout
 5. Confirm `runtime/control-plane/olivercode` shim still delegates correctly (bash shim → same Python CLI)
 6. Verify help aliases: bare, `--help`, `-h`, `help` all exit 0
-7. `python3 scripts/olivercode skills` — confirm the count matches `find skills -name SKILL.md | wc -l` (everything under `skills/` is real, tracked content); `skills --grep <term>` — confirm it filters, `skills --grep` (no term) errors instead of matching everything
+7. `python3 scripts/olivercode skills` — confirm the count matches `find skills -name SKILL.md | wc -l` (everything under `skills/` is real, tracked content). `skills --grep <term>` — confirm it filters, `skills --grep` (no term) errors instead of matching everything

@@ -1,6 +1,6 @@
 ---
 name: automation-first-agent-design
-description: "Use when designing or reviewing a cron job, scheduled pipeline, or agent workflow, or when the user asks 'should this be automated', 'can we make this deterministic instead of LLM-based', 'reduce LLM calls in this pipeline', or 'add a fail-closed guard'. Prefers deterministic flows and zero-LLM paths over agent calls; enforces fail-closed behavior on any gate."
+description: "Use when designing or reviewing a cron job, scheduled pipeline, or agent workflow, or when the user asks 'should this be automated', 'can we make this deterministic instead of LLM-based', 'reduce LLM calls in this pipeline', or 'add a fail-closed guard'. Prefers deterministic flows and zero-LLM paths over agent calls. Enforces fail-closed behavior on any gate."
 ---
 
 # Automation-First Agent Design

@@ -37,8 +37,8 @@ Declare repo-specific canonical paths and keep them synchronized with story file
 
 1. Active backlog source: `<set explicit path>`
 2. Story catalog source: `<set explicit path>`
-3. Acceptance test matrix source:
-   - `<set explicit path>`, or
+3. Acceptance test matrix source, pick one:
+   - `<set explicit path>`
    - `N/A (story files carry AC/test evidence directly)`
 4. Story artifact source:
    - Profile A: `<set explicit module artifact root>`

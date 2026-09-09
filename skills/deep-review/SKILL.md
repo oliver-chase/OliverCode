@@ -20,7 +20,7 @@ we just built"). The unit of review is a commit RANGE, not a repo.
 ## Non-negotiables (owner-set)
 
 1. **One review agent, sequential — never a fan-out.** A single
-   general-purpose agent walks the whole range; the orchestrating agent
+   general-purpose agent walks the whole range. The orchestrating agent
    runs the simplify pass itself. Two workers total, maximum.
 2. **Findings must be verified against actual code before reporting.**
    The reviewer reads the files, not just the diff. Real bugs only:
@@ -105,7 +105,7 @@ Mechanical evidence first, opinions second:
 - Superseded code the session's own diffs made redundant.
 - Wasted work: repeated I/O, sequential independent calls, counts via
   `len(list(...))` where a COUNT query belongs.
-Fix what's safe; backlog what isn't.
+Fix what's safe. Backlog what isn't.
 
 ### 4. Apply findings
 
@@ -124,7 +124,7 @@ the archive. Validation per file:
 **Never delete current-state files** — backlog, audit tracking, gap
 registers, capability matrices, anything that showcases where the
 project stands. When unsure whether a file is expired or current-state,
-ask the owner; deletion is cheap to defer.
+ask the owner. Deletion is cheap to defer.
 After deleting: patch every dangling reference to live paths (prose
 history mentions may stay — they describe the past accurately).
 
@@ -143,20 +143,20 @@ The repo's backlog carries a **live session tracker** section (template:
 `core/templates/project/docs/BACKLOG-live-tracker.md`):
 - "Where things stand" summary (rewrite, keep current)
 - Ranked open items (top item = what the next agent should do first)
-- "Reviewed through: `<commit sha>`" — THE coverage marker;
+- "Reviewed through: `<commit sha>`" — THE coverage marker.
   `scripts/audit-staleness.py` computes staleness fleet-wide from it
 - Append-only activity log (one line per completed unit, same commit)
 
 ## Mechanical gotchas (hit for real)
 
 - Local test substrates lie by omission: SQLite has no RLS, always
-  populates `lastrowid`; dev machines have no container memory limit.
+  populates `lastrowid`. Dev machines have no container memory limit.
   If the deploy differs structurally, review the difference explicitly.
 - A rule without a gate regresses. If review keeps finding the same
   class (inline styles, archive dirs, secrets), add a validate-script
   gate in the same session — the finding class dies permanently.
 - Reference-scanning traps: alias-only greps miss same-dir relative
-  imports; anchored env greps miss commented `# VAR=` doc lines; a
+  imports. Anchored env greps miss commented `# VAR=` doc lines. A
   code reference found only inside another file already on the kill
   list doesn't count.
 

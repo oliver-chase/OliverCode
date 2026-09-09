@@ -1,12 +1,12 @@
 ---
 name: olivercode-adoption
-description: "Use when adopting OliverCode into a machine — the user forked or cloned it and says 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode', 'audit my Claude config', or opens a fresh OliverCode checkout wanting it running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points; never amputates."
+description: "Use when adopting OliverCode into a machine — the user forked or cloned it and says 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode', 'audit my Claude config', or opens a fresh OliverCode checkout wanting it running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
 ---
 
 # OliverCode Adoption
 
-Drive the whole setup so the user does not have to read the documentation first. You read it;
-they answer questions. `$OC/docs/ADOPTING.md` is the reference contract — consult it when you
+Drive the whole setup so the user does not have to read the documentation first. You read it.
+They answer questions. `$OC/docs/ADOPTING.md` is the reference contract — consult it when you
 need detail, but do not make the user read it.
 
 ## The rule that governs everything here
@@ -40,7 +40,7 @@ This is the whole adoption. Most setups tangle all three in one file.
 Present as a table with your proposed bucket per item. Get agreement before moving anything.
 
 **2. Which repos are in the fleet?**
-`discover` lists what exists; only the user knows which are live, which are archived, and
+`discover` lists what exists. Only the user knows which are live, which are archived, and
 which they do not want governed. Do not register a repo they did not confirm.
 
 **3. Any repo that genuinely needs a different hook?**
@@ -59,8 +59,8 @@ Only they know. `npm run build`, `pytest`, a repo script. This lands in the prof
 scripts/olivercode discover --root <each directory their code lives under>
 ```
 
-Read-only. Pass every root; they do not have to share a parent. It reports per repo: the
-agent-rules filename, hook state, ungoverned repos; then inventories `~/.claude`; then emits a
+Read-only. Pass every root. They do not have to share a parent. It reports per repo: the
+agent-rules filename, hook state, ungoverned repos. Then inventories `~/.claude`. Then emits a
 profile skeleton with `path` pre-filled.
 
 Two things it surfaces that the user usually does not know:
@@ -70,7 +70,7 @@ Two things it surfaces that the user usually does not know:
 
 Mention once, as optional, not required: `docs/EXTERNAL-TOOLING.md` lists third-party plugins
 (caveman, fablize, codeburn) some of this framework's own rules assume without saying so. Point
-to the doc; do not install anything without the user asking.
+to the doc. Do not install anything without the user asking.
 
 Then read what exists — `~/.claude/CLAUDE.md`, each repo's rules file — and build the
 classification for decision 1.
@@ -133,7 +133,7 @@ scripts/olivercode health
 ```
 
 Tell them plainly: **hook enforcement fails open.** Unset or broken `core.hooksPath` means git
-runs no hooks and prints nothing. `health` is the only detector; `validate.sh` now surfaces it
+runs no hooks and prints nothing. `health` is the only detector. `validate.sh` now surfaces it
 too.
 
 ### 7. Prove it, do not assume it
@@ -162,7 +162,7 @@ Report what moved where, what stayed, what is still ambiguous. Ask before deleti
 
 - A repo `CLAUDE.md` pointing at a workspace-root-relative path. Reads fine, resolves to
   nothing from inside the repo.
-- `~/.claude/skills/` absent on a fresh machine — `install` handles it; a bare `ln -s` does not.
+- `~/.claude/skills/` absent on a fresh machine — `install` handles it. A bare `ln -s` does not.
 - An uninstalled symlink makes `dirname "$(readlink ~/.claude/CLAUDE.md)"` return `.`, silently
   resolving to whatever repo the agent is standing in. Always guard the resolution.
 - A layout the scripts cannot resolve degrades to WARN and skips. **WARN is not coverage.**

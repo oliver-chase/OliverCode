@@ -13,7 +13,7 @@ Canonical source-of-truth (outside project docs):
 
 ## Rule
 
-If one managed quality file changes in any project, the canonical file in `OliverCode` must be changed first and then synced to all projects. Runtime-minimal baseline lock is mandatory across managed repos; local divergence is not the default path.
+If one managed quality file changes in any project, the canonical file in `OliverCode` must be changed first and then synced to all projects. Runtime-minimal baseline lock is mandatory across managed repos. Local divergence is not the default path.
 
 ## Sync Command
 
@@ -44,5 +44,5 @@ After changing any baseline surface, run sync then audit before merge.
 Every README and document in this repo follows the framework's documentation standard —
 the locked README outline, voice, CAPS-KEBAB file naming, complete doc table, open-only
 backlog, same-commit sync, and a filled-in GitHub About. The standard is
-`docs/DOCUMENTATION_STANDARD.md` in the framework checkout; the `writing-documentation`
+`docs/DOCUMENTATION_STANDARD.md` in the framework checkout. The `writing-documentation`
 skill applies it. Ask an agent for a README here and that is the shape it produces.
