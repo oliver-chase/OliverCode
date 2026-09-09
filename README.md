@@ -286,4 +286,4 @@ bash scripts/qa/check-scenarios.sh
 
 The command reports its own scenario count.
 
-OliverCode uses only `python3`, `bash`, and `perl`. No packages are required. It is built and verified on macOS; CI is included and can be enabled per fork.
+OliverCode uses only `python3`, `bash`, and `perl`. No packages are required. It is built and verified on macOS. CI is included and can be enabled per fork.

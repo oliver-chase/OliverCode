@@ -19,7 +19,7 @@ Four things, and it is worth being precise about which are mechanical and which 
 
 The honest summary: **the hook is the only thing that blocks you.** Everything else is a rule an agent follows because it is loaded, not because it is enforced. `CONTRIBUTING.md`'s "Enforcement Reality" section is the one home for that distinction.
 
-And one property that surprises people: **hook enforcement fails open.** An unset or broken `core.hooksPath` means git runs no hooks and prints nothing — `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix; `olivercode health` is the only thing that detects it.
+And one property that surprises people: **hook enforcement fails open.** An unset or broken `core.hooksPath` means git runs no hooks and prints nothing — `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix. `olivercode health` is the only thing that detects it.
 
 ## The Three Layers
 
@@ -56,9 +56,9 @@ Nothing here depends on an agent choosing to look:
 - `~/.claude/CLAUDE.md` symlinks to this repo's `CLAUDE.md` — rules present in every Claude Code session on the machine, any working directory.
 - `~/.claude/skills/<name>` symlinks to `skills/<name>` — every skill discoverable from any repo.
 - `.githooks/pre-commit` runs on every commit in every fleet repo — enforcement that works even when context doesn't.
-- `olivercode install` creates both sets of symlinks; `olivercode health` verifies them (symlinks, hooks, placement drift).
+- `olivercode install` creates both sets of symlinks. `olivercode health` verifies them (symlinks, hooks, placement drift).
 
-Because the global `CLAUDE.md` loads in sessions whose working directory is almost never OliverCode, **it contains no repo-relative paths**. It resolves `$OC` from the symlink itself and says so explicitly; a bare path in it means the repo the agent is currently in. Getting that wrong is how a rules file becomes dead text agents silently fail to follow.
+Because the global `CLAUDE.md` loads in sessions whose working directory is almost never OliverCode, **it contains no repo-relative paths**. It resolves `$OC` from the symlink itself and says so explicitly. A bare path in it means the repo the agent is currently in. Getting that wrong is how a rules file becomes dead text agents silently fail to follow.
 
 Anything that must always apply is enforced as a hook, not as an instruction an agent might not read.
 
@@ -68,9 +68,9 @@ Anything that must always apply is enforced as a hook, not as an instruction an 
 
 ## Operating Principles
 
-- Claude Code is the sole runtime; Anthropic the sole model provider. By design, not as an interim state.
+- Claude Code is the sole runtime. Anthropic is the sole model provider. By design, not as an interim state.
 - Fail-closed before fail-open. No capability claim without a runnable verification.
-- Sheet-of-truth rule for docs: one concept, one home; everything else points.
+- Sheet-of-truth rule for docs: one concept, one home. Everything else points.
 - Project-specific behavior lives in the owning project repo, never here.
 - A rule without a gate regresses. When a finding class keeps recurring, it becomes a check.
 
