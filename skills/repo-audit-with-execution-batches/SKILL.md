@@ -53,7 +53,7 @@ Produce a ranked list by impact × fix difficulty. Each finding: file:line, cate
 
 ## Complementary Skills — Hand Off, Don't Improvise Inline
 
-This audit finds and categorizes issues; it doesn't fix them in depth. When a batch turns up something that has its own dedicated skill, hand off to it rather than doing a lighter version here:
+This audit finds and categorizes issues. It doesn't fix them in depth. When a batch turns up something that has its own dedicated skill, hand off to it rather than doing a lighter version here:
 
 - Batch 2 (markers) surfaces an actual bug → `/code-review`
 - Batch 6 (security) surfaces something worth a real vulnerability-class walkthrough → `code-security-review`

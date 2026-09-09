@@ -18,7 +18,7 @@ full stop, regardless of what it is or where it should actually live instead.
 
 1. `skills/<name>/SKILL.md` — real content, tracked.
 2. Add a row to `skills/INDEX.md` in the same change.
-3. Symlink it into the live skills directory: `ln -s <path-to-OliverCode>/skills/<name> ~/.claude/skills/<name>` — this is what makes it invocable from any repo on the machine. All three steps in the same session; an unsymlinked skill is invisible, an un-indexed one is undiscoverable.
+3. Symlink it into the live skills directory: `ln -s <path-to-OliverCode>/skills/<name> ~/.claude/skills/<name>` — this is what makes it invocable from any repo on the machine. All three steps in the same session. An unsymlinked skill is invisible, an un-indexed one is undiscoverable.
 
 ## The one project-level pointer
 
@@ -38,7 +38,7 @@ through `~/.claude/skills/`.
 - **OliverCode stays orchestration-only.** If anything that isn't engineering method or framework tooling shows up inside `skills/`, that's drift — remove it.
 - **Every new skill pairs with its `INDEX.md` row and its symlink** in the same session.
 - **Never store skills in the vault's note folders** (`Work Vault/.../Claude Skills/*.skill` archives are historical exports, not a live location).
-- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home); every fleet repo (and the vault itself) gets its copy via the bootstrap manifest, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos (the vault) use the 2-gate private variant.
+- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo (and the vault itself) gets its copy via the bootstrap manifest, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos (the vault) use the 2-gate private variant.
 
 ## When a repo-specific skill must win over a generic one
 
@@ -63,7 +63,7 @@ approval-gated skill a generic one could shadow, add this directive.
 
 `scripts/olivercode health` flags: any of OliverCode's own skills missing its symlink at
 `~/.claude/skills/<name>`, or a symlink there pointing somewhere other than
-`OliverCode/skills/<name>`; and, for every fleet repo plus the vault, any hook install state
+`OliverCode/skills/<name>`. It also flags, for every fleet repo plus the vault, any hook install state
 that would make git run no hooks — `core.hooksPath` unset, pointing at a missing directory,
 a hooks directory with no `pre-commit` file, a `pre-commit` that isn't executable, or one
 whose content diverges from the template.

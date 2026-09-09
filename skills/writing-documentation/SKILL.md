@@ -1,6 +1,6 @@
 ---
 name: writing-documentation
-description: Use whenever writing or rewriting a README, architecture doc, reference doc, any repo documentation, or a non-trivial CODE COMMENT — in this repo, any governed repo, or a fork. Applies the locked documentation standard: problem-driven README outline, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice, Readability, and Sentence clarity rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md; this skill is how it gets applied.
+description: Use whenever writing or rewriting a README, architecture doc, reference doc, any repo documentation, or a non-trivial CODE COMMENT — in this repo, any governed repo, or a fork. Applies the locked documentation standard: problem-driven README outline, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice, Readability, and Sentence clarity rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
 ---
 
 # Writing Documentation
@@ -20,7 +20,7 @@ contract instead of a generic house style.
    first is what produces checklist-patched prose that passes every rule and still sounds
    like nobody. Do not restate either from memory — read them.
 2. **Read what exists.** The repo's current README, its `docs/`, its tests and entry points.
-   Every claim you write must be checkable against the code as it is now; numbers (test
+   Every claim you write must be checkable against the code as it is now. Numbers (test
    counts, gate counts, option lists) come from running or counting, never from prior docs.
 3. **Write to the locked README outline** — one-sentence identity, driving problems,
    install-with-runnable-example, how-it-works, what-comes-back, design decisions as claims,
@@ -37,9 +37,9 @@ contract instead of a generic house style.
 7. **Run `asd-ste100`.** STE-flavored mode, `--disable long-sentence` — see
    `docs/DOCUMENTATION_STANDARD.md`'s "Sentence clarity" section for what it catches and the
    one rule this framework doesn't take from it. Skip this step for client-facing brand
-   content; it's out of scope for both this skill and that skill.
+   content. It's out of scope for both this skill and that skill.
 8. **Verify.** `bash scripts/validate.sh` in OliverCode, or the repo's own
-   `scripts/validate.sh` elsewhere — the reference and consistency gates are the floor; read
+   `scripts/validate.sh` elsewhere — the reference and consistency gates are the floor. Read
    the result yourself for what they cannot check (voice, ordering, completeness).
 
 ## Boundaries
@@ -48,4 +48,4 @@ contract instead of a generic house style.
   loaded-context artifacts follow their own contracts and compress accordingly.
 - Client-facing brand content (marketing copy, decks, posts) follows the operator's own
   voice standards outside this framework — do not apply this skill to it.
-- Never introduce a document that restates a rule owned elsewhere; point to the owning doc.
+- Never introduce a document that restates a rule owned elsewhere. Point to the owning doc.

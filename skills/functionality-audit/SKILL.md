@@ -16,45 +16,45 @@ inline, and assumes the session may be cut off at any moment.
 2. **Write-as-you-go, commit-per-chunk.** Before auditing anything, write a
    progress tracker into the repo's backlog doc (checkbox per area) and commit
    it. Append findings per area, commit + push after every 1-2 areas. A cutoff
-   must lose nothing; the next session resumes from the first unchecked box.
+   must lose nothing. The next session resumes from the first unchecked box.
 3. **Tracker boxes start UNCHECKED.** Mark `[x]` only when the area is done.
    (Real mistake: pre-marking all boxes made the tracker a lie on commit 1.)
-4. **Quick wins fixed inline; everything larger becomes a SPEC** written so a
+4. **Quick wins fixed inline. Everything larger becomes a SPEC** written so a
    future agent with zero session context can execute it: the ask, the files,
    the evidence, the tradeoffs, a recommended order. Never build features
    mid-audit.
 5. **Verify, never assume. Code wins.** Session memory, doc claims, and code
    comments all lie: a header comment claimed two consumers that didn't
-   reference it; memory said a lane was a stub that had since been built;
-   docs claimed nav state 5 days stale. Check the actual code every time.
+   reference it. Memory said a lane was a stub that had since been built.
+   Docs claimed nav state 5 days stale. Check the actual code every time.
 6. **Full verification loop before every commit:** typecheck + full test
    suite + repo's own structure/contract gates + full production build.
 
-## Area list (run in order; add follow-ups as new numbered areas)
+## Area list (run in order. Add follow-ups as new numbered areas)
 
 1. **Repo/folder structure.** Loose root files, untracked-but-code-referenced
    files (dangling on fresh clone), empty dirs, template/real data splits,
    gitignore correctness. Root-doc sprawl → one home.
 2. **API route inventory.** For every route: who consumes it? Categories that
-   fall out: **dead** (zero consumers — delete; anonymous endpoints that cost
+   fall out: **dead** (zero consumers — delete. Anonymous endpoints that cost
    money per call are top priority), **stub** (runs and reports success while
    doing nothing — flag as marked-complete-but-isn't), **dormant-but-gated**
    (auth'd, unused — backlog a surface-or-remove decision, don't delete
    unilaterally).
-3. **Public user journey.** Every nav/footer/page link resolves; pages
-   reachable ONLY via one widget chip; sunset pages still telling visitors
+3. **Public user journey.** Every nav/footer/page link resolves. Pages
+   reachable ONLY via one widget chip. Sunset pages still telling visitors
    things that are no longer true (e.g. "sign in to submit" when sign-in is
-   admin-only); flows that dead-end at a login wall for users who can't log
+   admin-only). Flows that dead-end at a login wall for users who can't log
    in. Walk it as a first-time visitor would.
 4. **Docs-vs-code behavior diff.** Diff documented intents/flows against the
    real dispatch code. Diff env vars: code reads vs `.env.example` vs setup
    doc. Gotcha: commented-out `# VAR=` entries in an env example ARE
    documentation — an anchored `^VAR` grep falsely reports them missing.
-5. **Admin journey.** Every dashboard card/link resolves; redirects preserve
-   query strings; every admin-editable thing actually round-trips to the
+5. **Admin journey.** Every dashboard card/link resolves. Redirects preserve
+   query strings. Every admin-editable thing actually round-trips to the
    backend (form field → API field → storage → display).
 6. **Dead code sweep.** Zero-importer modules. MUST grep BOTH import forms —
-   `@/alias/path` AND same-dir `./relative` — before deleting; run typecheck
+   `@/alias/path` AND same-dir `./relative` — before deleting. Run typecheck
    immediately after deletion to catch false positives. Verify a "consumed by
    X" comment by checking X actually references it. Record the method gotchas
    you hit in the backlog so the next sweep doesn't repeat them.
@@ -85,24 +85,24 @@ areas. The recurring four:
 11. **UI affordance consistency (tooltips).** Scan every interactive element
     for `title=`. Regex traps: JSX tags span lines, and `() =>` inside props
     contains `>` — use a brace-aware scanner, not `<button[^>]*title`.
-    Fix the consequential gaps (destructive/high-stakes actions first);
-    deliberately leave elements whose visible label self-describes.
+    Fix the consequential gaps (destructive/high-stakes actions first).
+    Deliberately leave elements whose visible label self-describes.
 12. **Change-AND-revert symmetry.** For everything the admin can change: can
     they see its history, and can they restore a prior value in one click?
     Read-only history views and audit logs with no UI are the common gaps.
 13. **Marked-complete-but-isn't.** Three shapes: runtime (jobs/runs reporting
     "completed" while doing nothing), docs ("verified against code" claims
     predating N commits), and memory (session/agent memory describing a stub
-    that has since been built — correct the record; code wins).
+    that has since been built — correct the record. Code wins).
 
 ## Design-system consolidation sub-method
 
 When the audit turns up visual drift (or the owner asks for "less variation"):
 inventory variance with grep counts first (`fontSize:`, hex colors, margins),
 then merge each ROLE to one token. Rules that held up: merge SIZE, keep COLOR
-semantic (warn/error/muted carry meaning; a 12.5px one-off doesn't); bake an
+semantic (warn/error/muted carry meaning. A 12.5px one-off doesn't). Bake an
 override into the token only when 100% of call sites already agree (6/7 with a
-documented exception = leave it); backgrounds that encode state (quarantined/
+documented exception = leave it). Backgrounds that encode state (quarantined/
 open/closed) are signal, not drift.
 
 ## Mechanical gotchas (all hit for real)
@@ -113,8 +113,8 @@ open/closed) are signal, not drift.
   verify emitted syntax, then typecheck.
 - Never hand-edit generated type files (`.next/types/*`) after deleting a
   route — rebuild regenerates them correctly.
-- After `git rm` on a wrong guess, `git checkout HEAD -- <file>` restores;
-  typecheck is the safety net that catches it.
+- After `git rm` on a wrong guess, `git checkout HEAD -- <file>` restores.
+  Typecheck is the safety net that catches it.
 
 ## Output conventions
 

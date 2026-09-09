@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Use when the user says 'make a plan', 'write this up as a plan first', or 'don't start coding yet, just plan'. Writes a structured plan (Goal/Steps/Risks/Definition-of-Done) as a markdown file to <repo>/docs/plans/; does not execute. Distinct from Claude Code's built-in ephemeral Plan Mode, which writes no file."
+description: "Use when the user says 'make a plan', 'write this up as a plan first', or 'don't start coding yet, just plan'. Writes a structured plan (Goal/Steps/Risks/Definition-of-Done) as a markdown file to <repo>/docs/plans/. Does not execute. Distinct from Claude Code's built-in ephemeral Plan Mode, which writes no file."
 ---
 
 # Plan — Markdown Planning Protocol

@@ -20,16 +20,16 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Governance policy and the gate list | `docs/GOVERNANCE.md` | `.githooks/pre-commit` |
 | Execution order (CODE -> ... -> PUSH) and the WRITE MODE completion gate | `core/contracts/EXECUTION_CONTRACT.md` | `scripts/orchestration-gatekeeper.py --evidence-file` (on demand) |
 | Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
-| Public / local / private-overlay split every adopted repo must keep | `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` | `.githooks/pre-commit` Gates 1 and 3 block the leak; the split itself is agent-applied at adoption |
-| Writing process (how to think before a doc or comment exists) | `docs/WRITING_PROCESS.md` | Read first by the `writing-documentation` skill; agent-applied, not gated — a gate is QA and this is what runs before one |
-| Documentation standard (locked README outline, voice, naming, About) | `docs/DOCUMENTATION_STANDARD.md` + the `writing-documentation` skill | `validate.sh` covers references/consistency/index; `olivercode health` checks the GitHub About; the writing rules are agent-applied |
-| Comment intent, sentence form, length cap and density guideline | `core/contracts/CODE_INTENT_STANDARD.md` | `check-comment-budget.mjs` fails on block length, reports density; wired into each repo's own check target |
+| Public / local / private-overlay split every adopted repo must keep | `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` | `.githooks/pre-commit` Gates 1 and 3 block the leak. The split itself is agent-applied at adoption |
+| Writing process (how to think before a doc or comment exists) | `docs/WRITING_PROCESS.md` | Read first by the `writing-documentation` skill. Agent-applied, not gated — a gate is QA and this is what runs before one |
+| Documentation standard (locked README outline, voice, naming, About) | `docs/DOCUMENTATION_STANDARD.md` + the `writing-documentation` skill | `validate.sh` covers references/consistency/index. `olivercode health` checks the GitHub About. The writing rules are agent-applied |
+| Comment intent, sentence form, length cap and density guideline | `core/contracts/CODE_INTENT_STANDARD.md` | `check-comment-budget.mjs` fails on block length, reports density. Wired into each repo's own check target |
 | Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
 | Third-party tools the posture assumes (none shipped, none required) | `docs/EXTERNAL-TOOLING.md` | Manual (nothing here depends on them) |
 | Skill placement | `docs/SKILLS-PLACEMENT.md` | `scripts/olivercode health` (symlink + drift check) |
 | Doc/code consistency (skills index parity, gate-count claims, hook gate integrity) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
-| Hook drift (the three pre-commit hooks implementing the same gate differently) | `scripts/lib/hook_drift_check.py` | `bash scripts/validate.sh` (fail-closed). An undeclared difference fails; a deliberate one is declared with a reason |
+| Hook drift (the three pre-commit hooks implementing the same gate differently) | `scripts/lib/hook_drift_check.py` | `bash scripts/validate.sh` (fail-closed). An undeclared difference fails. A deliberate one is declared with a reason |
 | Cross-doc content duplication (the same rule restated near-verbatim in two tracked docs) | `scripts/lib/duplication_check.py` | `bash scripts/validate.sh` (fail-closed). A shared 15+ word passage fails unless it matches a declared canonical phrase |
 | Gate coverage per repo type (8 in OliverCode, 6 in an adopted repo, 2 in the private variant) | `docs/GOVERNANCE.md` coverage table | `scripts/lib/consistency_check.py` via `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
@@ -56,11 +56,11 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/lib/skills_catalog.py` | SKILL.md frontmatter parsing behind `olivercode skills`. Launcher re-exports |
 | `scripts/lib/falsifiability_check.py` | Detects checks that CANNOT fail — dead counters, scripts reporting failure with no nonzero exit. Built after ten defects here shared that one shape |
 | `scripts/lib/duplication_check.py` | Detects the same rule restated near-verbatim across two tracked docs with no cross-reference — a sliding-window substring match, declared-marker exceptions for deliberate reuse |
-| `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation; `--check-token-policy` is Gate 8 |
+| `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation. `--check-token-policy` is Gate 8 |
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
-| `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax; TypeScript-leaning, aimed at the fleet repos |
+| `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax. TypeScript-leaning, aimed at the fleet repos |
 | `scripts/qa/check-docs-cohesion.sh` | Broken wiki-links and opt-in stale-domain references |
 | `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |
 | `scripts/qa/check-fork-usable.sh` | Proves a stranger's clone works with no config AND that the documented adoption path produces a fleet whose gates actually block, in a sandbox with a virgin HOME |
@@ -78,13 +78,13 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `core/personas/oliver/` | the one orchestration persona |
 | `core/workflows/` | repeatable cross-repo procedures |
 | `core/templates/project/` | the single template home stamped into new repos |
-| `skills/` | engineering-method and framework-tooling skills; `skills/INDEX.md` is the catalog |
+| `skills/` | engineering-method and framework-tooling skills. `skills/INDEX.md` is the catalog |
 | `shared/project-bootstrap-manifest.json` | managed-file list and strictness for downstream repos |
 | `shared/workflow-standards.md` | trigger routing, branch lifecycle, testing baseline |
 | `shared/repo-map.json` | cross-project repo registry |
 | `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder) | per-repo validation commands and evidence requirements |
 | `shared/task-policies/` | task-type policies and result schema |
-| `docs/KEEPALIVE_STANDARD.md` | Supabase/Cloudflare keepalive contract; its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
+| `docs/KEEPALIVE_STANDARD.md` | Supabase/Cloudflare keepalive contract. Its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
 
 ## Non-Drift Rule
 

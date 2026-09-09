@@ -36,7 +36,7 @@ scripts/olivercode health
 ```
 
 All three must pass on a clean clone with no configuration. `health` will WARN about a
-missing control plane and an unregistered fleet; that is correct and still reports HEALTHY.
+missing control plane and an unregistered fleet. That is correct and still reports HEALTHY.
 If `validate.sh` fails here, stop — the fork is broken, not your setup.
 
 One command checks all of this at once, in a sandbox with a throwaway HOME:
@@ -86,7 +86,7 @@ Two things it will likely surface in an existing setup:
 - **Repos with `hooksPath=unset`** — no gates at all, silently.
 - **Real directories in `~/.claude/skills/`** — untracked content with no backup anywhere.
   Usually vendor skills, which is fine. Anything else is a skill that exists in exactly one
-  place on one machine; decide where it belongs before it is lost. `install` never touches
+  place on one machine. Decide where it belongs before it is lost. `install` never touches
   these, and reports how many it left alone.
 
 Record, for each existing rules file: what it says, and which of these it is —
@@ -102,7 +102,7 @@ Most existing setups have all three tangled in one file. Separating them IS the 
 
 `install` backs up an existing `~/.claude/CLAUDE.md` to `CLAUDE.md.pre-olivercode` itself,
 so do not copy it by hand first — you would be writing the same backup path twice. It does
-**not** copy `~/.claude/skills/`, because it never deletes anything there; back that up
+**not** copy `~/.claude/skills/`, because it never deletes anything there. Back that up
 yourself if you want a restore point:
 
 ```bash
@@ -167,13 +167,13 @@ Rules for this rewrite:
   `Some/Vault/Path/OliverCode/CLAUDE.md` do not resolve from inside the repo and are dead
   text. Verify each pointer with `ls` before you leave it in.
 - **Do not delete repo-specific content** to make the file shorter. Duplicated *framework*
-  rules come out; repo truth stays.
+  rules come out. Repo truth stays.
 - If a repo has an `AGENTS.md`, `.cursorrules`, or similarly-named rules file, merge it INTO
-  `CLAUDE.md`. Claude Code only auto-loads `CLAUDE.md`; anything else is invisible in
+  `CLAUDE.md`. Claude Code only auto-loads `CLAUDE.md`. Anything else is invisible in
   practice. **Then decide the original's fate explicitly, and say which you chose:**
   - another tool still reads it (Cursor, Copilot, Codex) → keep it, and replace its body
     with a one-line pointer to `CLAUDE.md` so the two cannot drift into disagreeing
-  - nothing reads it → delete it in the same commit as the merge. Git is the archive; a
+  - nothing reads it → delete it in the same commit as the merge. Git is the archive. A
     stale second rules file is the thing that made the content invisible in the first place
 
   Never leave both files carrying live rules. That is the duplication this step exists to end.
@@ -216,8 +216,8 @@ scripts/olivercode health         # confirms each repo's hooks are installed and
 
 `sync-hooks` resolves your fleet from `local/repo-profiles.json` and expects those repos as
 siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below.
-Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern;
-read that list rather than the exit code.
+Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern.
+Read that list rather than the exit code.
 
 An adopted repo gets nine gates, not the eleven OliverCode runs on itself: contract integrity
 and token policy check framework-only things, so the template does not ship them. `docs/GOVERNANCE.md`
@@ -305,7 +305,7 @@ scripts/olivercode sync-hooks                        # templates may have change
 ```
 
 Expect conflicts in `CLAUDE.md` and anything under `core/` you customized. Those are the
-files you were supposed to change; keep your version and take upstream's structural fixes.
+files you were supposed to change. Keep your version and take upstream's structural fixes.
 
 ## Backing out
 

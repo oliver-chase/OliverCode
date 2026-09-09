@@ -10,7 +10,7 @@ Run from the repo:
 scripts/olivercode --help
 ```
 
-If a shell alias is expected, verify host setup separately; do not commit host-specific paths.
+If a shell alias is expected, verify host setup separately. Do not commit host-specific paths.
 
 ## Governance failure
 
@@ -61,7 +61,7 @@ scripts/olivercode sync-hooks
 
 `validate.sh` shells out to `.githooks/pre-commit`, which runs `git diff --cached` — it
 needs a real `.git`. Running it against an extracted archive/tarball without `git init`
-first will fail this way; this is expected, not a bug.
+first will fail this way. This is expected, not a bug.
 
 ## More context
 

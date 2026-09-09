@@ -7,7 +7,7 @@ a contract, not a suggestion: the same request produces the same shape of docume
 repo, every time.
 
 `bash scripts/validate.sh` enforces the mechanical parts (reference integrity, doc/code
-consistency, the feature-map index). The writing rules below are what an agent applies; the
+consistency, the feature-map index). The writing rules below are what an agent applies. The
 `writing-documentation` skill loads this file and is the way to invoke them.
 
 ---
@@ -21,7 +21,7 @@ with no follow-up question.
 
 **Write for the adopter, not for the builder.** The reader is deciding whether this belongs
 in their stack, and they are reading it cold. A maintainer already knows why each rule
-exists, so a maintainer can compress a decision into the rule it produced; a reader holding
+exists, so a maintainer can compress a decision into the rule it produced. A reader holding
 only the rule has to reconstruct the reasoning that justified it, and most will not.
 
 So each claim arrives in three moves, in this order: the situation the reader will recognise,
@@ -45,7 +45,7 @@ document.
 Two failure modes, both banned: insider shorthand with no gloss ("a bug in the fork, not
 your machine" is a riddle to a reader who does not know what a fork is), and generic
 paraphrase that deletes the term ("checks that run when work is saved" in place of
-pre-commit hooks). The first loses the new reader; the second loses everyone else.
+pre-commit hooks). The first loses the new reader. The second loses everyone else.
 
 **Which terms need a gloss is decided by one test: could the reader look it up and get the
 right answer?** `ETag`, `robots.txt`, `JSON-LD` and `304` are the shared vocabulary of the
@@ -68,7 +68,7 @@ The locked outline:
    concrete consequence, each answered by a design choice. "Point one at `169.254.169.254`
    and it will retrieve your cloud credentials" is the register — a specific danger, then
    what the design does about it. Name each problem in its own first words ("The first is
-   security"); a reader counting two problems and finding one unlabelled has to work out
+   security"). A reader counting two problems and finding one unlabelled has to work out
    which they just read. Order them by what the reader came for, not by what the author
    finds most interesting — a threat model opening a document written for someone who has
    not yet decided to use the thing answers a question they have not asked.
@@ -83,7 +83,7 @@ The locked outline:
    field to act on.
 6. **Design decisions.** A handful of subsections, each headed by the decision stated as a
    claim, each defending it with the attack, cost, or failure it prevents. This is where the
-   narrative lives; it is the section a maintainer rereads a year later. A heading is a
+   narrative lives. It is the section a maintainer rereads a year later. A heading is a
    claim a stranger can evaluate ("Every hostname is resolved before it is requested"), not
    a principle only the author can decode — "Repeat crawls converge on free" names a real
    property and tells a first-time reader nothing about what the library does.
@@ -141,9 +141,9 @@ once, in the order a person would say it out loud, and stops.
 - **Failure modes are content, not caveats.** What comes back when it fails, which field to
   branch on, what retrying will and will not change — in the main flow, not a footnote.
 - **Present tense, active, declarative.** "Every hostname is resolved and checked." Short
-  sentences carry the claims; longer ones carry the reasoning. Vary the rhythm.
+  sentences carry the claims. Longer ones carry the reasoning. Vary the rhythm.
 - **Numbers are evidence.** "One measured page returned 1,232 characters from a plain fetch
-  and 5,519 once rendered" is a sentence; "much better coverage" is not. Use a number the
+  and 5,519 once rendered" is a sentence. The vague phrase "much better coverage" is not. Use a number the
   code fixes or a measurement you can date. A count that moves whenever someone commits —
   tests, files, coverage — is named as the command that reports it, never typed into prose,
   where it is wrong by the next commit.
@@ -157,7 +157,7 @@ once, in the order a person would say it out loud, and stops.
 - **Second person for the reader's actions, third for the system's.** "Feed a model
   `markdown`, not `text`" — then why.
 - **No history in current-state docs.** Never "previously", "no longer", "has been removed".
-  What was removed does not appear; `git log` is the changelog. The one exception is a
+  What was removed does not appear. `git log` is the changelog. The one exception is a
   design-decision defence where the old failure IS the reason — one clause, never a dated
   note.
 
@@ -176,7 +176,7 @@ Long unbroken prose does not get read, so the rules below cap density mechanical
   one-sentence paragraph of its own.
 - **One-sentence paragraphs are legal and encouraged** for the sentence that matters
   most. "Feed a model `markdown`, not `text`." stands alone precisely so it lands.
-- **Lists carry parallel items; paragraphs carry reasoning.** Three or more comparable
+- **Lists carry parallel items. Paragraphs carry reasoning.** Three or more comparable
   things named in one sentence become a list. An argument does not: a bulleted chain of
   because-therefore steps drops the connective words that were doing the work, leaving the
   reader to guess the relationship between two lines that merely sit next to each other.
@@ -202,7 +202,7 @@ Run the `asd-ste100` skill on a finished draft, before Formatting.
 - **Never let a rewrite flatten a hedge or a synthesis line.** "May have failed" stays "may
   have failed" — the skill protects this itself, but check the diff. A sentence that
   compresses several observations into one claim (`WRITING_PROCESS.md`'s Compression) is not
-  a one-instruction-per-sentence violation; that rule is for procedures, not synthesis.
+  a one-instruction-per-sentence violation. That rule is for procedures, not synthesis.
 
 Client-facing brand content is out of scope for this rule, same as the rest of this document
 — see Scope below.
@@ -213,7 +213,7 @@ Client-facing brand content is out of scope for this rule, same as the rest of t
 - **Bold lead-ins** open list items and short paragraphs that enumerate ("**Request the
   page.** Works for most of the web.").
 - Tables only where the content is genuinely a matrix — options, coverage grids, the
-  documentation index. Narrative everywhere else; a table of prose is a smell.
+  documentation index. Narrative everywhere else. A table of prose is a smell.
 - Code blocks use real-looking values and carry inline annotations naming what each line
   demonstrates. A reader should be able to paste the first example and watch it work.
 - Mermaid diagrams where flow or ownership matters, with the reader's own code drawn as a
@@ -243,7 +243,7 @@ The standing set, present in any repo with enough surface to need it:
 | `docs/BACKLOG.md` | Open work only — see below |
 | `docs/TROUBLESHOOTING.md` | Failures a user will actually hit, symptom-first |
 
-One concept, one home. A rule stated in two documents is a future contradiction; secondary
+One concept, one home. A rule stated in two documents is a future contradiction. Secondary
 mentions point to the owning doc by name. `docs/FEATURE_MAP.md` (where present) is the
 machine-checked index mapping every capability to its one owning doc.
 
@@ -264,7 +264,7 @@ hard requirement, not a preference.
 - The README's documentation table, the feature map, and the backlog are part of "every
   document".
 - `bash scripts/validate.sh` fails closed on the drift it can detect: dangling references,
-  doc/code contradictions, index omissions. What it cannot detect is still the rule; the
+  doc/code contradictions, index omissions. What it cannot detect is still the rule. The
   gate is the floor, not the standard.
 - A capability change is incomplete until `docs/FEATURE_MAP.md` (where present) is updated
   in the same change set.
@@ -274,7 +274,7 @@ hard requirement, not a preference.
 Every repo carries a filled-in About: a description and topics. The description is one dense
 sentence-group in the README's own register — what it is, the differentiator, and the cost
 or trust posture if one exists. Topics are the real technologies and problem domains. An
-empty About is treated as missing documentation; `olivercode health` checks for it where the
+empty About is treated as missing documentation. `olivercode health` checks for it where the
 `gh` CLI is available and warns where it cannot check.
 
 ```bash
@@ -286,11 +286,11 @@ gh repo edit --description "..." --add-topic <topic>
 This standard governs OliverCode itself, every repo the framework stamps or governs, and any
 fork. It ships inside the framework precisely so a fork inherits it whole: ask an agent for
 a README anywhere downstream and this is the shape it produces. The `writing-documentation`
-skill is the invocation path; `core/templates/project/` carries the same expectations into
+skill is the invocation path. `core/templates/project/` carries the same expectations into
 newly bootstrapped repos.
 
 **Voice and Readability also govern code comments.** CODE_INTENT_STANDARD decides what a
-comment must say and how long it may run; how the prose is written is here, so there is
+comment must say and how long it may run. How the prose is written is here, so there is
 never a second standard for it. A comment is short documentation, and the delete test,
 say-it-once, problem-first and attach-the-reason rules apply to it unchanged.
 

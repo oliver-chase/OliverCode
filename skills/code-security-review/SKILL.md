@@ -5,7 +5,7 @@ description: "Review code for real security vulnerabilities — injection, auth/
 
 # Security Review
 
-A procedural checklist for finding real, exploitable vulnerabilities — not a restatement of "don't hardcode secrets." Pre-commit hooks already catch secrets/PII mechanically (`.githooks/pre-commit` Gate 1); this skill covers what a mechanical gate can't: judgment calls about how untrusted input flows through the system.
+A procedural checklist for finding real, exploitable vulnerabilities — not a restatement of "don't hardcode secrets." Pre-commit hooks already catch secrets/PII mechanically (`.githooks/pre-commit` Gate 1). This skill covers what a mechanical gate can't: judgment calls about how untrusted input flows through the system.
 
 ## Process
 
@@ -32,14 +32,14 @@ For each trust boundary from Phase 1, check the vulnerability classes that apply
 | SSRF | Server making an outbound request to a URL supplied (even partially) by the user | Webhook URLs, "fetch this image from a URL" features, PDF/screenshot generators that follow user-supplied URLs |
 | Path traversal | User-supplied filename/path used in a filesystem operation without normalization | `../../etc/passwd`-style checks — confirm the path is resolved and checked against an allowed root, not just string-matched for `..` |
 | XSS | User content rendered without escaping, especially `dangerouslySetInnerHTML`/`v-html`/raw template output | Any place user content reaches the DOM outside the framework's default auto-escaping |
-| CSRF | State-changing endpoint reachable via a simple `GET` or missing origin/token check | Relevant mainly for cookie-session auth; less relevant for bearer-token APIs |
+| CSRF | State-changing endpoint reachable via a simple `GET` or missing origin/token check | Relevant mainly for cookie-session auth. Less relevant for bearer-token APIs |
 | Dependency vulnerabilities | Known-CVE packages in use | `npm audit` / `pip-audit` / equivalent — don't hand-review what a scanner already covers |
 
 Skip rows that don't apply to the boundaries actually found in Phase 1 — a read-only static site has no SQL injection surface to check.
 
 ### Phase 3 — Verify, Don't Assume
 
-A framework's default behavior is not a substitute for confirming it. React escapes by default; a specific component might still use `dangerouslySetInnerHTML`. An ORM parameterizes by default; a specific query might still use raw SQL for a "quick fix." Grep for the actual escape hatches (`dangerouslySetInnerHTML`, `raw(`, `execute(f"`, `.raw(`) rather than trusting the stack's general reputation.
+A framework's default behavior is not a substitute for confirming it. React escapes by default. A specific component might still use `dangerouslySetInnerHTML`. An ORM parameterizes by default. A specific query might still use raw SQL for a "quick fix." Grep for the actual escape hatches (`dangerouslySetInnerHTML`, `raw(`, `execute(f"`, `.raw(`) rather than trusting the stack's general reputation.
 
 ### Phase 4 — Report
 
@@ -50,9 +50,9 @@ For each finding: the trust boundary, the vulnerability class, the exact file:li
 - **Don't confuse "looks risky" with "is exploitable."** A raw SQL query built from a hardcoded string with no user input in it is not a SQL injection risk, however it looks. Trace the actual data flow before flagging.
 - **Don't stop at the first layer.** An API that validates input at the route handler but calls an internal function elsewhere that skips validation is still vulnerable if that internal function is reachable another way.
 - **Secrets in code are a different, already-mechanically-caught problem.** Don't spend review time re-finding what `.githooks/pre-commit` Gate 1 already blocks — this skill is for the vulnerability classes that require judgment, not pattern-matching.
-- **A security review is not a rewrite.** Fix the specific vulnerable line; don't use the finding as license to refactor the surrounding code.
+- **A security review is not a rewrite.** Fix the specific vulnerable line. Don't use the finding as license to refactor the surrounding code.
 
 ## Related Skills
 
-- `repo-audit-with-execution-batches` — Batch 6 (Security Surface) is a lightweight presence check (secrets, `.gitignore` coverage, public exposure) as part of a broader 7-part audit; hand off to this skill for the actual vulnerability-class walkthrough rather than improvising it inline there.
+- `repo-audit-with-execution-batches` — Batch 6 (Security Surface) is a lightweight presence check (secrets, `.gitignore` coverage, public exposure) as part of a broader 7-part audit. Hand off to this skill for the actual vulnerability-class walkthrough rather than improvising it inline there.
 - `diagnosing-bugs` — if a security finding needs root-cause work to understand why a check is missing (not just confirming that it's missing), switch to that skill for the investigation, then return here for the fix.
