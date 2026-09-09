@@ -38,7 +38,8 @@ through `~/.claude/skills/`.
 - **OliverCode stays orchestration-only.** If anything that isn't engineering method or framework tooling shows up inside `skills/`, that's drift — remove it.
 - **Every new skill pairs with its `INDEX.md` row and its symlink** in the same session.
 - **Never store skills in the vault's note folders** (`Work Vault/.../Claude Skills/*.skill` archives are historical exports, not a live location).
-- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo (and the vault itself) gets its copy via the bootstrap manifest, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos (the vault) use the 2-gate private variant.
+- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo (and the vault itself) gets its copy via the bootstrap manifest, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos (the vault) use the 4-gate private variant.
+- **Every `SKILL.md` and `CLAUDE.md`, in this repo or any fleet repo, must pass the asd-ste100 writing-clarity gate at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate; it fails the commit rather than relying on the author to remember to run the skill by hand.
 
 ## When a repo-specific skill must win over a generic one
 
