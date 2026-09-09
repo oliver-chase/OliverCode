@@ -25,7 +25,7 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 - Hooks: `scripts/olivercode sync-hooks` (run from OliverCode). This is the automated part.
 - Everything else: manually re-copy the managed files listed in
   `shared/project-bootstrap-manifest.json` from `core/templates/project/` into the target
-  repo -- `strict` files get overwritten unconditionally; `presence` files are only copied
+  repo -- `strict` files get overwritten unconditionally. `presence` files are only copied
   in if missing (never overwrite existing repo-specific content).
 - Workflow fail-safe is policy-driven: `shared/project-bootstrap-manifest.json`'s
   `githubActionsPolicy.mode` field controls whether managed repos are in `normal` mode or
@@ -39,14 +39,14 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 - Drift is blocking for strict files and required paths.
 
 4. Promotion and alignment:
-- Update project tracks via the same sync source; branch roles are defined once in
+- Update project tracks via the same sync source. Branch roles are defined once in
   `shared/workflow-standards.md` ("Branch Lifecycle Standard").
 - Verify branch status and ahead/behind after push.
 - Never promote without a passing hygiene audit.
 
 ## Managed File Policy
 - `strict`: file content must exactly match template.
-- `presence`: file must exist; repo-specific content is allowed.
+- `presence`: file must exist. Repo-specific content is allowed.
 
 ## Mandatory Repo Contract File
 
@@ -60,7 +60,7 @@ Each repo must keep `docs/repo-structure-contract.md` current with:
 1. Run sync + audit before major releases.
 2. Run sync + audit after adding any new project.
 3. Run sync + audit when workflow templates change.
-4. Run sync immediately after changing `githubActionsPolicy.mode`; this is the canonical way to suspend or restore mapped repo workflows.
+4. Run sync immediately after changing `githubActionsPolicy.mode`. This is the canonical way to suspend or restore mapped repo workflows.
 
 ## Incident Response
 If a repo fails audit:

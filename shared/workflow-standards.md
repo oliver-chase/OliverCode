@@ -11,10 +11,10 @@ Workflow routing and standards.
 
 ## Trigger Routing
 
-Use these trigger terms as workflow selectors. This list is the complete one; `core/workflows/README.md`
+Use these trigger terms as workflow selectors. This list is the complete one. `core/workflows/README.md`
 points here. `CLAUDE.md`'s Development Practice section carries a compressed copy of the
 most-used rows (broken/failing/slow, multi-commit session ending) so they load every
-session with no extra file read — that copy is deliberate, not drift; this table is where
+session with no extra file read — that copy is deliberate, not drift. This table is where
 a less-common trigger term resolves.
 
 - `backlog`, `story lifecycle` -> `core/workflows/story-lifecycle-sop.md`
@@ -38,14 +38,14 @@ All product repos live under `<vault-root>/Oliver/Project Repos/`.
 - Keep shared standards in one place (`<vault-root>/Oliver/Project Repos/OliverCode/shared/*`).
 - Keep shared skills in one place (`<vault-root>/Oliver/Project Repos/OliverCode/skills/*`).
 - Do not duplicate product workflow docs into runtime folders.
-- Do not duplicate shared SOP/workflow files into project repos; reference canonical shared workflows instead.
+- Do not duplicate shared SOP/workflow files into project repos. Reference canonical shared workflows instead.
 - Treat live machine layout as source of truth over stale cached paths.
 
 ## Testing Baseline
 
 Testing applies to all code work:
 
-- Add or update tests for every behavior change; treat a stale or missing impacted test
+- Add or update tests for every behavior change. Treat a stale or missing impacted test
   update as a failure, not a follow-up.
 - Check downstream and adjacent tests for impact and update all of them.
 - Strengthen weak coverage around changed paths, edge cases, and regressions.
