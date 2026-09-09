@@ -118,8 +118,7 @@ with a live-run or an ablation as evidence, not a claim.
 
 ### Coverage
 
-Reviewed through: `PENDING` (2026-09-09, deep-review of `4c418ab..HEAD` — updated to the
-real sha in the commit that lands this line, see `audit-staleness.py`'s marker format)
+Reviewed through: `c996e58` (2026-09-09, deep-review of `4c418ab..HEAD`)
 
 ### Open items
 
