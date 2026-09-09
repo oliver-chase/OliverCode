@@ -106,6 +106,30 @@ run_reference_check() {
   echo "=== validate: references passed ==="
 }
 
+run_duplication_check() {
+  # Cross-doc content duplication (scripts/lib/duplication_check.py) -- the same rule
+  # restated near-verbatim in two docs with no cross-reference between them. A full
+  # manual read found this four times in a repo already through one dedup audit; this
+  # is what watches for it regrowing between reads.
+  echo "=== validate: checking documentation duplication ==="
+  local out
+  if ! out="$(python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '${SCRIPT_DIR}')
+from lib.duplication_check import check_all
+failures = check_all(Path('${REPO_ROOT}'))
+for f in failures:
+    print(f)
+sys.exit(1 if failures else 0)
+")"; then
+    printf '%s\n' "$out"
+    echo "=== validate: duplication check FAILED ==="
+    exit 1
+  fi
+  echo "=== validate: duplication check passed ==="
+}
+
 run_comment_budget() {
   # CODE_INTENT_STANDARD §1 was instruction text until this gate; see the script
   # header for why block length is fatal and density is not. Runs the template
@@ -259,6 +283,7 @@ main() {
       run_precommit
       run_consistency
       run_reference_check
+      run_duplication_check
       run_comment_budget
       run_smoke_tests
       run_hook_state

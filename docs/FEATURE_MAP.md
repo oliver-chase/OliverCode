@@ -30,6 +30,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Doc/code consistency (skills index parity, gate-count claims, hook gate integrity) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Hook drift (the three pre-commit hooks implementing the same gate differently) | `scripts/lib/hook_drift_check.py` | `bash scripts/validate.sh` (fail-closed). An undeclared difference fails; a deliberate one is declared with a reason |
+| Cross-doc content duplication (the same rule restated near-verbatim in two tracked docs) | `scripts/lib/duplication_check.py` | `bash scripts/validate.sh` (fail-closed). A shared 15+ word passage fails unless it matches a declared canonical phrase |
 | Gate coverage per repo type (8 in OliverCode, 6 in an adopted repo, 2 in the private variant) | `docs/GOVERNANCE.md` coverage table | `scripts/lib/consistency_check.py` via `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
@@ -54,6 +55,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/lib/health_checks.py` | Governance-waiver expiry (an exception with no reason or a lapsed date fails health) and the GitHub About check (WARN-degrades offline). Launcher re-exports both |
 | `scripts/lib/skills_catalog.py` | SKILL.md frontmatter parsing behind `olivercode skills`. Launcher re-exports |
 | `scripts/lib/falsifiability_check.py` | Detects checks that CANNOT fail — dead counters, scripts reporting failure with no nonzero exit. Built after ten defects here shared that one shape |
+| `scripts/lib/duplication_check.py` | Detects the same rule restated near-verbatim across two tracked docs with no cross-reference — a sliding-window substring match, declared-marker exceptions for deliberate reuse |
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation; `--check-token-policy` is Gate 8 |
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |

@@ -223,10 +223,10 @@ An adopted repo gets nine gates, not the eleven OliverCode runs on itself: contr
 and token policy check framework-only things, so the template does not ship them. `docs/GOVERNANCE.md`
 has the coverage table.
 
-Know what you just installed: **hook enforcement fails open.** If `core.hooksPath` is unset,
-points at a missing directory, or the hook is not executable, git runs no hooks and prints
-nothing — a commit carrying secrets simply succeeds. `scripts/olivercode health` is the only
-thing that detects this. Run it on a schedule, not just at setup.
+Know what you just installed: **hook enforcement fails open.** See
+`docs/TROUBLESHOOTING.md`'s "Commits are passing gates that should have blocked them" for
+why and how to fix it. `scripts/olivercode health` is the only detector — run it on a
+schedule, not just at setup.
 
 ## Step 6b — Stamp the project template into a repo (optional)
 

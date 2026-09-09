@@ -19,7 +19,7 @@ Four things, and it is worth being precise about which are mechanical and which 
 
 The honest summary: **the hook is the only thing that blocks you.** Everything else is a rule an agent follows because it is loaded, not because it is enforced. `CONTRIBUTING.md`'s "Enforcement Reality" section is the one home for that distinction.
 
-And one property that surprises people: **hook enforcement fails open.** If `core.hooksPath` is unset, points at a missing directory, or the hook is not executable, git runs no hooks and prints nothing — a commit carrying secrets simply succeeds. `olivercode health` is the only thing that detects it.
+And one property that surprises people: **hook enforcement fails open.** An unset or broken `core.hooksPath` means git runs no hooks and prints nothing — `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix; `olivercode health` is the only thing that detects it.
 
 ## The Three Layers
 

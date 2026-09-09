@@ -302,6 +302,35 @@ the rehearsal in prose and pointed at `docs/ADOPTING.md`. The three real copies
 `scripts/qa/probe-secret-gate.sh`, invoked by name from all three. Verified live against this
 repo: writes the fake secret, commit is blocked, cleans up, exits 0.
 
+**B16 — no mechanical duplication gate; doc-vs-doc drift only caught by a full manual
+read (HIGH, done).** The owner asked what would make this framework's governance
+actually better; the honest answer included "duplication regrows even after an audit,
+and nothing mechanical watches for it" — verified true within the same session (B14/B15
+were fresh regrowth in a repo dedup-audited weeks earlier). Built
+`scripts/lib/duplication_check.py` (`GATE-DUPLICATION-1` in `docs/DECISIONS.md`): slides
+a 15-word window across every tracked markdown file, fails on any window shared by two
+files unless it matches a declared canonical-reuse marker. Wired into
+`bash scripts/validate.sh` as its own step. First live run found three real undeclared
+duplicates the manual read had missed (hook-enforcement-fails-open restated in
+`ARCHITECTURE.md` + `docs/ADOPTING.md`, boundary-tests-over-volume restated in
+`CODE_INTENT_STANDARD.md` + `DEVELOPMENT_LIFECYCLE_STANDARD.md`, structure-drift-audit
+restated in `PROJECT_STRUCTURE_STANDARD.md` + `project-standardization-lifecycle.md`) —
+all three fixed in the same session, each collapsed to one owner + a pointer. Ablated:
+neutering a declared marker makes the gate re-detect the real duplicate it was masking;
+restoring it returns to clean. `bash scripts/validate.sh` green after.
+
+**B17 — `audit-staleness.py` existed but nothing ran it (HIGH, done).** `olivercode
+health` was already cron'd weekly (Mondays 9am, `~/.oliver_runtime/logs/health.log`) —
+the staleness checker was not, so a repo's review coverage could silently rot with
+nobody watching, the same failure class B12 already named once. Added
+`5 9 * * 1 python3 ".../OliverCode/scripts/audit-staleness.py" >>
+"~/.oliver_runtime/logs/audit-staleness.log" 2>&1` to the crontab, right after the
+existing health line — verified the diff touched exactly that one line, nothing else in
+a crontab shared with unrelated SDR automation. Live-run before scheduling: real signal,
+not hypothetical — it flagged OliverCode ITSELF as STALE (92 commits since the last
+`deep-review`, `4c418ab`). Not resolved here; that's a separate `deep-review` pass, not a
+governance-tooling fix, and is the owner's call on when to run it.
+
 ### Deliberately kept / decided (do not redo)
 
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the

@@ -82,11 +82,9 @@ valuable kind.
 
 ## 6. Prefer boundary verification over volume
 
-A suite that grows without finding defects is measuring the wrong thing. Where
-the system meets reality — real networks, real files, real inputs — a small
-live suite earns more per line than a large unit suite.
-
-Record it honestly when volume is not what found the bug.
+`CODE_INTENT_STANDARD.md` §7 has the rule and the evidence (a crawler's real defects all
+came from live checks, not its ~590 unit tests) — applies here unchanged: verify where
+the system meets reality, and say so honestly when volume was not what found the bug.
 
 ---
 
