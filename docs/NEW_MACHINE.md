@@ -70,12 +70,15 @@ The real contents are re-entered. Copy `local/` off the old machine if it still 
 **Marketplace plugins.** Third-party, installed through Claude Code, not through this repo:
 
 ```
-/plugin marketplace add fivetaku/fablize        then  /plugin install fablize
 /plugin marketplace add JuliusBrussee/caveman   then  /plugin install caveman
 ```
 
 `docs/EXTERNAL-TOOLING.md` explains what each is for and why some rules in `CLAUDE.md` read as
 arbitrary without them.
+
+**OliverCode's own session hook.** `core/contracts/EXECUTION_CONTRACT.md` ("Session Hooks")
+has the manual registration step for `scripts/hooks/early-stop-guard.py` — not a marketplace
+plugin, and `olivercode install` does not wire it yet.
 
 **Obsidian plugins.** The vault tracks each plugin's `data.json` and `manifest.json`, so
 settings come back with the clone. The compiled code does not. `.obsidian/community-plugins.json`

@@ -69,6 +69,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
 | `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |
 | `scripts/run-governance-target.sh` | CI entrypoint that points the QA stack at a downstream repo |
+| `scripts/hooks/early-stop-guard.py` | Claude Code `Stop` hook (`EARLY-STOP-1`) — blocks a turn that ends by promising work instead of doing it. Registered manually in `~/.claude/settings.json`, not by `olivercode install` |
 
 ## Shared Framework Assets
 
