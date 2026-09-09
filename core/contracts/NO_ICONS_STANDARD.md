@@ -37,7 +37,7 @@ shapes, and the like. The authoritative, exact range list is the emoji scanner i
 1. **Professionalism** — Emojis undermine the tone of serious business communication.
 2. **Consistency** — Mixed emoji/text creates unpredictable rendering across devices and platforms.
 3. **Searchability** — Emojis break grep, search, and automated analysis tools.
-4. **Accessibility** — Screen readers handle emojis inconsistently; plain text is universally accessible.
+4. **Accessibility** — Screen readers handle emojis inconsistently. Plain text is universally accessible.
 5. **Version control hygiene** — Emojis in commit messages and code comments degrade diffs and blame views.
 
 ## Enforcement

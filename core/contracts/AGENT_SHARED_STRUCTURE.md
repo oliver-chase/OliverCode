@@ -1,7 +1,7 @@
 # Agent Shared Structure
 
 Shared contract for Claude Code, this machine's sole agent runtime. This file is the one
-home for the canonical path map and the ownership rules that follow from it;
+home for the canonical path map and the ownership rules that follow from it.
 `core/contracts/AGENT_SYSTEM_MANIFEST.json` is the machine-readable mirror of the same map
 (placeholder in git, real values in gitignored `local/`, per `docs/BACKLOG.md` G1).
 
@@ -21,7 +21,7 @@ home for the canonical path map and the ownership rules that follow from it;
 
 - Product-specific implementation docs/workflows belong in each project repo.
 - Cross-project orchestration standards belong in `<vault-root>/Oliver/Project Repos/OliverCode/shared/*`.
-- Orchestration identity is `Oliver` and must remain present in shared persona routing;
+- Orchestration identity is `Oliver` and must remain present in shared persona routing.
   `core/personas/oliver/persona_soul.md` is the orchestration authority even when execution
   personas differ.
 - Shared skills/tools belong in `<vault-root>/Oliver/Project Repos/OliverCode/skills/*`.

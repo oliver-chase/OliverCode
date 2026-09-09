@@ -20,7 +20,7 @@ Define one locked folder/file contract for backlog, epics, user stories, and lif
 ## Required Base Paths (All Repos)
 
 1. `README.md`
-2. `CLAUDE.md` — the only agent-rules file; Claude Code is this framework's sole runtime, so there's no separate AGENTS.md to keep in sync
+2. `CLAUDE.md` — the only agent-rules file. Claude Code is this framework's sole runtime, so there's no separate AGENTS.md to keep in sync
 3. `docs/repo-structure-contract.md`
 4. `.github/user-stories/README.md`
 5. `.github/user-stories/_index.md`
@@ -43,13 +43,13 @@ Define one locked folder/file contract for backlog, epics, user stories, and lif
 2. Epics/story catalog doc: long-form story inventory and scope map.
 3. Acceptance test matrix: AC-to-test evidence mapping.
 4. Story files: execution-level acceptance criteria and evidence updates.
-5. Index files: registry navigation and lifecycle visibility; they must not become the active backlog queue.
+5. Index files: registry navigation and lifecycle visibility. They must not become the active backlog queue.
 
 ## Path Map
 
 Each managed repo declares its own canonical backlog/story/index/evidence paths in its
 `docs/repo-structure-contract.md`, following one of the Allowed Repo Profiles below. Use
-those declared locations exactly; do not create parallel backlog systems, and do not
+those declared locations exactly. Do not create parallel backlog systems, and do not
 hardcode per-repo paths here — the per-repo contract is the source of truth.
 
 ## Allowed Repo Profiles
