@@ -11,7 +11,6 @@ written on a machine running these, and a few of the rules read as arbitrary wit
 
 | Tool | What it does | Install |
 |---|---|---|
-| [fablize](https://github.com/fivetaku/fablize) | Enforces completion-with-evidence, verification grounding, and systematic investigation as procedure. The enforcement-side complement to this repo's instruction-side practice rules. | `/plugin marketplace add fivetaku/fablize` then `/plugin install fablize` |
 | [caveman](https://github.com/JuliusBrussee/caveman) | Compresses agent chat output by roughly 65% at full technical accuracy. Pair it with a `## Voice` section in your `CLAUDE.md`. This repo's own is the worked example. | Claude Code plugin marketplace |
 | [codeburn](https://github.com/getagentseal/codeburn) | Local token-usage, cost, and health dashboard across AI coding tools. Reads session data from disk, with no proxy and no API keys. | per repo README |
 
