@@ -13,7 +13,7 @@ VIOLATIONS=0
 
 # ─── Gate 1: Secrets ──────────────────────────────────────────────────────────
 # Block commits containing API keys, tokens, JWTs, private keys.
-echo "[pre-commit] Gate 1/12: Secret scan..."
+echo "[pre-commit] Gate 1/13: Secret scan..."
 
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
@@ -56,7 +56,7 @@ echo "  Gate 1 passed."
 
 # ─── Gate 2: Icons / Emojis ───────────────────────────────────────────────────
 # Block ALL emojis and Unicode icons. Plain text only. No exceptions.
-echo "[pre-commit] Gate 2/12: Icon/Emoji scan..."
+echo "[pre-commit] Gate 2/13: Icon/Emoji scan..."
 
 EMOJI_PATTERN='[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2300}-\x{23FF}\x{2B50}\x{2764}\x{1F004}\x{1F0CF}\x{2934}-\x{2935}\x{25AA}-\x{25FE}\x{2B05}-\x{2B07}\x{2B1B}-\x{2B1C}\x{3030}\x{303D}\x{3297}\x{3299}\x{2139}\x{2328}\x{23CF}\x{24C2}\x{25B6}\x{23E9}-\x{23F3}\x{23F8}-\x{23FA}\x{200D}\x{20E3}]'
 
@@ -87,7 +87,7 @@ echo "  Gate 2 passed."
 
 # ─── Gate 3: PII ──────────────────────────────────────────────────────────────
 # Block commits containing personal identifiers: home paths, usernames, hostnames.
-echo "[pre-commit] Gate 3/12: PII scan..."
+echo "[pre-commit] Gate 3/13: PII scan..."
 
 PII_PATTERNS=(
   '/Users/[a-z]+/'                              # macOS home directory paths
@@ -149,7 +149,7 @@ echo "  Gate 3 passed."
 # ─── Gate 4: Deleted Repository References ────────────────────────────────────
 # Block commits referencing repos that no longer exist.
 # Add project-specific deleted repo names here.
-echo "[pre-commit] Gate 4/12: Deleted repo scan..."
+echo "[pre-commit] Gate 4/13: Deleted repo scan..."
 
 DELETED_REPO_PATTERNS=(
   # Add deleted repo names here. Example:
@@ -191,7 +191,7 @@ fi
 # (a bare PAT/password with no workflow scope) or an SSH key with no workflow
 # grant. Check the actual credential's scopes via `gh api`, don't assume from
 # the remote URL scheme.
-echo "[pre-commit] Gate 5/12: Workflow push auth..."
+echo "[pre-commit] Gate 5/13: Workflow push auth..."
 WORKFLOW_STAGED=$(printf '%s\n' "$STAGED_FILES" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
 if [[ -n "$WORKFLOW_STAGED" ]]; then
   HAS_WORKFLOW_SCOPE=false
@@ -217,7 +217,7 @@ echo "  Gate 5 passed."
 # Two checks: no hardcoded container paths in staged code, and every path the
 # control plane declares as a dependency still exists. OliverCode-only -- the
 # downstream template ships neither.
-echo "[pre-commit] Gate 6/12: Contract integrity..."
+echo "[pre-commit] Gate 6/13: Contract integrity..."
 
 # `/workspace/` is the container-path class this framework bans; every path must
 # derive from the script's own location. (A `_Management/` pattern sat here too,
@@ -272,14 +272,14 @@ fi
 echo "  [OK] Contract integrity"
 PLANNING_CHECKER="$REPO_ROOT/scripts/check-planning-doc-governance.py"
 if [[ -f "$PLANNING_CHECKER" ]]; then
-  echo "[pre-commit] Gate 7/12: Planning doc governance..."
+  echo "[pre-commit] Gate 7/13: Planning doc governance..."
   if ! python3 "$PLANNING_CHECKER"; then
     echo "  BLOCKED: Planning doc governance failed."
     exit 1
   fi
   echo "  Gate 7 passed."
 else
-  echo "[pre-commit] Gate 7/12: Planning doc governance... skipped (checker not present in this repo)."
+  echo "[pre-commit] Gate 7/13: Planning doc governance... skipped (checker not present in this repo)."
 fi
 
 # ─── Gate 8: Token policy ─────────────────────────────────────────────────────
@@ -287,14 +287,14 @@ fi
 # real hook so it can't be skipped by forgetting to run validate.sh before commit.
 GATEKEEPER="$REPO_ROOT/scripts/orchestration-gatekeeper.py"
 if [[ -f "$GATEKEEPER" ]]; then
-  echo "[pre-commit] Gate 8/12: Token policy..."
+  echo "[pre-commit] Gate 8/13: Token policy..."
   if ! python3 "$GATEKEEPER" --check-token-policy; then
     echo "  BLOCKED: Token policy check failed."
     exit 1
   fi
   echo "  Gate 8 passed."
 else
-  echo "[pre-commit] Gate 8/12: Token policy... skipped (gatekeeper not present in this repo)."
+  echo "[pre-commit] Gate 8/13: Token policy... skipped (gatekeeper not present in this repo)."
 fi
 
 # ─── Gate 9: Comment budget ──────────────────────────────────────────────────
@@ -309,14 +309,14 @@ fi
 # everything costs nothing and keeps it that way.
 COMMENT_GATE="$REPO_ROOT/core/templates/project/scripts/check-comment-budget.mjs"
 if [[ -f "$COMMENT_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 9/12: Comment budget..."
+  echo "[pre-commit] Gate 9/13: Comment budget..."
   if ! node "$COMMENT_GATE" --quiet; then
     echo "  BLOCKED: Comment budget failed."
     exit 1
   fi
   echo "  Gate 9 passed."
 else
-  echo "[pre-commit] Gate 9/12: Comment budget... skipped (checker or node not present in this repo)."
+  echo "[pre-commit] Gate 9/13: Comment budget... skipped (checker or node not present in this repo)."
 fi
 
 # ─── Gate 10: Decision records ─────────────────────────────────────────────────
@@ -325,7 +325,7 @@ fi
 # first.
 DECISIONS_GATE="$REPO_ROOT/core/templates/project/scripts/check-decisions.mjs"
 if [[ -f "$DECISIONS_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 10/12: Decision records..."
+  echo "[pre-commit] Gate 10/13: Decision records..."
   if ! node "$DECISIONS_GATE" > /dev/null; then
     node "$DECISIONS_GATE" | grep "FAIL:"
     echo "  BLOCKED: Decision record integrity failed."
@@ -333,7 +333,7 @@ if [[ -f "$DECISIONS_GATE" ]] && command -v node >/dev/null 2>&1; then
   fi
   echo "  Gate 10 passed."
 else
-  echo "[pre-commit] Gate 10/12: Decision records... skipped (checker or node not present in this repo)."
+  echo "[pre-commit] Gate 10/13: Decision records... skipped (checker or node not present in this repo)."
 fi
 
 # ─── Gate 11: Backlog hygiene ───────────────────────────────────────────────
@@ -342,7 +342,7 @@ fi
 # 15,058 lines before anyone noticed.
 BACKLOG_GATE="$REPO_ROOT/core/templates/project/scripts/check-backlog-hygiene.mjs"
 if [[ -f "$BACKLOG_GATE" ]] && command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 11/12: Backlog hygiene..."
+  echo "[pre-commit] Gate 11/13: Backlog hygiene..."
   if ! node "$BACKLOG_GATE" --quiet; then
     node "$BACKLOG_GATE" --quiet
     echo "  BLOCKED: Backlog hygiene failed."
@@ -350,10 +350,59 @@ if [[ -f "$BACKLOG_GATE" ]] && command -v node >/dev/null 2>&1; then
   fi
   echo "  Gate 11 passed."
 else
-  echo "[pre-commit] Gate 11/12: Backlog hygiene... skipped (checker or node not present in this repo)."
+  echo "[pre-commit] Gate 11/13: Backlog hygiene... skipped (checker or node not present in this repo)."
 fi
 
-# ─── Gate 12: Writing clarity (asd-ste100) ────────────────────────────────────
+# ─── Gate 12: Archived content ─────────────────────────────────────────────────
+# Current state only, fleet-wide. A superseded file gets deleted or replaced, never
+# parked in an Archive/ folder or beside its replacement as "-old" -- git already
+# holds every past version, so a second copy on disk is a copy nothing keeps in
+# sync, and the reader cannot tell which one is live.
+#
+# Matched previously only in the vault's private-variant hook. "Remove don't
+# archive" existed as instruction text (deep-review skill, CLAUDE.md) for every
+# other repo, which is what gets skipped -- this is the gate, fleet-wide.
+ARCHIVE_SEGMENTS='^(_?[Aa]rchive[ds]?|[Ll]egacy|[Dd]eprecated|[Oo]utdated|_?[Bb]ackups?|[Oo]ld)$'
+ARCHIVE_SUFFIX='(\.bak|~|[ _-]old|[ _-]backup|[ _-]deprecated|[ _-]superseded)(\.[A-Za-z0-9]+)?$'
+
+# Deliberate exceptions. Each is a permanent record by decision, not drift.
+#   Past To Dos/  - the vault's own weekly-task archive, called permanent in its CLAUDE.md.
+#                    A no-op everywhere else; kept identical to the private-variant hook
+#                    on purpose so the two implementations never silently drift apart.
+is_archive_exempt() {
+  case "$1" in
+    *"Past To Dos/"*) return 0 ;;
+  esac
+  return 1
+}
+
+echo "[pre-commit] Gate 12/13: Archived-content scan..."
+
+if [ -n "$STAGED_FILES" ]; then
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    is_archive_exempt "$file" && continue
+
+    printf '%s\n' "$file" | tr '/' '\n' | grep -qE "$ARCHIVE_SEGMENTS" && {
+      echo "  BLOCKED: $file sits under a directory that names an archive."
+      echo "  This repo holds current state only. Delete the superseded copy --"
+      echo "  git history is the archive. If it is genuinely still live, rename the"
+      echo "  directory to say what it holds."
+      exit 1
+    }
+
+    if printf '%s\n' "${file##*/}" | grep -qE "$ARCHIVE_SUFFIX"; then
+      echo "  BLOCKED: $file is named as a superseded copy."
+      echo "  Replace the file it supersedes instead of committing both; git keeps"
+      echo "  the previous version."
+      exit 1
+    fi
+  done <<< "$STAGED_FILES"
+fi
+
+echo "  Gate 12 passed."
+
+# ─── Gate 13: Writing clarity (asd-ste100) ────────────────────────────────────
 # SKILL.md and CLAUDE.md are agent-parsed instructions, not human-read prose --
 # a dense sentence in one caused a real skill-matching bug (SKILLS-PLACEMENT.md's
 # ACT-3). Strict mode: full default ste-lint, no rule disabled.
@@ -367,9 +416,9 @@ for candidate in "$HOME/.claude/skills/asd-ste100/scripts/ste-lint.py" "$HOME/.a
 done
 
 if [ -z "$STE_LINT" ] || ! command -v python3 >/dev/null 2>&1; then
-  echo "[pre-commit] Gate 12/12: Writing clarity (asd-ste100)... skipped (ste-lint.py or python3 not found on this machine)."
+  echo "[pre-commit] Gate 13/13: Writing clarity (asd-ste100)... skipped (ste-lint.py or python3 not found on this machine)."
 else
-  echo "[pre-commit] Gate 12/12: Writing clarity (asd-ste100)..."
+  echo "[pre-commit] Gate 13/13: Writing clarity (asd-ste100)..."
   CLARITY_FAILED=0
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
@@ -385,7 +434,7 @@ else
     echo "  Fix the flagged sentences, then re-commit."
     exit 1
   fi
-  echo "  Gate 12 passed."
+  echo "  Gate 13 passed."
 fi
 
 # ─── All gates passed ─────────────────────────────────────────────────────────

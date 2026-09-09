@@ -61,9 +61,9 @@ plus backtick repo paths).
 ## Gate Classes
 
 **Gate coverage is not uniform across repos, and the difference matters.** OliverCode runs
-twelve gates on itself. A repo your fleet adopts runs ten, because two of the twelve check
-things that only exist in the framework repo. A repo deployed with the private variant runs
-four. This table is the one home for that. Anywhere else that names a count points here.
+thirteen gates on itself. A repo your fleet adopts runs eleven, because two of the thirteen
+check things that only exist in the framework repo. A repo deployed with the private variant
+runs four. This table is the one home for that. Anywhere else that names a count points here.
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
 |------|---------------|:---:|:---:|:---:|
@@ -78,9 +78,9 @@ four. This table is the one home for that. Anywhere else that names a count poin
 | Comment budget | A comment block over the repo's cap. Conditional: runs where `scripts/check-comment-budget.mjs` exists and node is installed, and reports *skipped* where either is missing | 9 | 7 | — |
 | Decision records | A decision ID in the source with no ledger row, a row describing deleted code, or a ledger ID the gate cannot read. Same conditional shape as the comment budget | 10 | 8 | — |
 | Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 11 | 9 | — |
-| Writing clarity (asd-ste100) | A staged `SKILL.md` or `CLAUDE.md` that fails strict-mode ASD-STE100 rules (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 12 | 10 | 4 |
-| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Private-only: those are the repos whose whole premise is current state, with git as the archive | — | — | 3 |
-| **Total** | | **12** | **10** | **4** |
+| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Current-state-only, fleet-wide: git is the archive, so a superseded file is deleted or replaced, never parked | 12 | 10 | 3 |
+| Writing clarity (asd-ste100) | A staged `SKILL.md` or `CLAUDE.md` that fails strict-mode ASD-STE100 rules (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 13 | 11 | 4 |
+| **Total** | | **13** | **11** | **4** |
 
 Numbers are the gate's position in that hook's run order, so the same gate can carry a
 different number in different hooks — planning-doc governance is Gate 7 in OliverCode and
