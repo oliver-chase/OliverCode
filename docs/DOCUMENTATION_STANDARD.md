@@ -181,6 +181,32 @@ Long unbroken prose does not get read, so the rules below cap density mechanical
   because-therefore steps drops the connective words that were doing the work, leaving the
   reader to guess the relationship between two lines that merely sit next to each other.
 
+## Sentence clarity — asd-ste100
+
+Voice and Readability decide what a sentence should say and how dense a paragraph gets. This
+section catches a different failure: a sentence that carries the right facts at the right
+density and still resolves two ways when a reader, or an agent parsing it without a human in
+the loop, hits it cold.
+
+Run the `asd-ste100` skill on a finished draft, before Formatting.
+
+- **Skill/tool descriptions, error strings, CLI help text — Strict mode.** These are read by
+  an agent matching against many candidates with no human resolving ambiguity, which is
+  exactly `SKILLS-PLACEMENT.md`'s ACT-3 failure: two skills matched the same phrasing because
+  neither description was unambiguous. Apply every structural rule, length caps included.
+- **READMEs, other docs, code comments — STE-flavored mode, minus the length cap.** Run the
+  skill's own linter with `--disable long-sentence` (or apply the skill's output by hand and
+  ignore its `long-sentence` findings). This framework's own "Human writing is uneven" rule
+  (`WRITING_PROCESS.md`) already forbids the exact shortcut a hard word-count ceiling
+  produces — do not let asd-ste100's default cap override it.
+- **Never let a rewrite flatten a hedge or a synthesis line.** "May have failed" stays "may
+  have failed" — the skill protects this itself, but check the diff. A sentence that
+  compresses several observations into one claim (`WRITING_PROCESS.md`'s Compression) is not
+  a one-instruction-per-sentence violation; that rule is for procedures, not synthesis.
+
+Client-facing brand content is out of scope for this rule, same as the rest of this document
+— see Scope below.
+
 ## Formatting
 
 - `---` between major sections.
