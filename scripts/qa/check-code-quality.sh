@@ -3,8 +3,11 @@
 # Static analysis, no LLM calls: oversized files, missing test coverage per lib
 # module, Python syntax, and (with --verbose) magic numbers and non-standard throws.
 #
-# Aimed at the TypeScript/Next.js fleet repos -- it finds little in this framework
-# repo itself, which is Python and shell. That is expected, not a bug.
+# File-size and syntax checks are aimed at the TypeScript/Next.js fleet repos. The
+# test-coverage map (section 2) checks both layouts: one-directory-per-module (TS
+# fleet) and flat scripts/lib/*.py (this repo) -- GATE-FALSIFIABILITY-1's own lesson
+# was that a check silently inert for the repo it runs against is worse than no
+# check, because it reports clean either way.
 #
 # Usage: bash scripts/qa/check-code-quality.sh [--target <dir>] [--verbose]
 #
@@ -63,21 +66,39 @@ echo ""
 # ─── 2. Test coverage map ────────────────────────────────────────────────
 echo "--- 2. Test Coverage Map ---"
 if [ -d "$TARGET_DIR/tests" ]; then
-  # Map each lib module to its test file
   MISSING_TESTS=0
-  for module in "$TARGET_DIR/lib/"*/; do
-    module_name=$(basename "$module")
-    # Look for matching test file
-    test_file=$(find "$TARGET_DIR/tests" -name "*${module_name}*" -o -name "*${module_name}*.test.*" 2>/dev/null | head -1)
-    if [ -z "$test_file" ]; then
-      # Check if there are any .ts files in the module
-      ts_count=$(find "$module" -maxdepth 1 -name '*.ts' 2>/dev/null | wc -l)
-      if [ "$ts_count" -gt 0 ]; then
-        echo "  MISSING: No test file for lib/$module_name/ ($ts_count source files)"
+  # TS/Next.js fleet layout: one directory per lib module.
+  if [ -d "$TARGET_DIR/lib" ]; then
+    for module in "$TARGET_DIR/lib/"*/; do
+      [ -e "$module" ] || continue
+      module_name=$(basename "$module")
+      test_file=$(find "$TARGET_DIR/tests" -name "*${module_name}*" -o -name "*${module_name}*.test.*" 2>/dev/null | head -1)
+      if [ -z "$test_file" ]; then
+        ts_count=$(find "$module" -maxdepth 1 -name '*.ts' 2>/dev/null | wc -l)
+        if [ "$ts_count" -gt 0 ]; then
+          echo "  MISSING: No test file for lib/$module_name/ ($ts_count source files)"
+          MISSING_TESTS=$((MISSING_TESTS + 1))
+        fi
+      fi
+    done
+  fi
+  # Python flat-file layout (COVERAGE-MAP-1): one .py file per module, no subdirs --
+  # the directory-only glob above silently matches nothing here. Test files here are
+  # named by behavior, not by module (test_falsifiability.py tests
+  # falsifiability_check.py), so filename substring matching is not reliable; every
+  # test loads its module with `REPO_ROOT / "scripts" / "lib" / "<module>.py"`
+  # (importlib.util.spec_from_file_location), so grep for that literal instead.
+  if [ -d "$TARGET_DIR/scripts/lib" ]; then
+    for pyfile in "$TARGET_DIR/scripts/lib/"*.py; do
+      [ -e "$pyfile" ] || continue
+      module_name=$(basename "$pyfile")
+      [ "$module_name" = "__init__.py" ] && continue
+      if ! grep -ql "\"${module_name}\"" "$TARGET_DIR/tests/"*.py 2>/dev/null; then
+        echo "  MISSING: No test file for scripts/lib/${module_name}"
         MISSING_TESTS=$((MISSING_TESTS + 1))
       fi
-    fi
-  done
+    done
+  fi
   TOTAL_ISSUES=$((TOTAL_ISSUES + MISSING_TESTS))
   if [ "$MISSING_TESTS" -eq 0 ]; then
     echo "  All lib modules have test coverage."

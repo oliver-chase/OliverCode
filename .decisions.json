@@ -8,7 +8,8 @@
   "extensions": [
     ".py",
     ".mjs",
-    ".sh"
+    ".sh",
+    ""
   ],
   "docDirs": [
     "docs"

@@ -164,7 +164,7 @@ def _check_plugin_links(vault_root: Path) -> tuple[int, int, int]:
     `olivercode install` covers ~/.claude/skills and has never touched plugins.
     """
     print("\nPlugin links:")
-    plugins_src = vault_root / "Work Vault" / "06 - Strategy" / "_Plugins"
+    plugins_src = vault_root / "Operations Vault" / "01 - Plugins"
     target_dir = Path.home() / ".claude" / "plugins"
 
     if not plugins_src.is_dir():

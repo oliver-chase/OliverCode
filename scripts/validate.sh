@@ -143,12 +143,15 @@ run_comment_budget() {
     echo "=== validate: comment budget FAILED ==="
     exit 1
   fi
+}
 
-  # CODE_INTENT_STANDARD §4. The template copy is run directly, as above: a second
-  # copy in scripts/ would be the drift this repo exists to prevent.
+run_decision_ledger() {
+  # CODE_INTENT_STANDARD §4. The template copy is run directly: a second copy in
+  # scripts/ would be the drift this repo exists to prevent.
   echo "=== validate: checking decision ledger ==="
-  if ! node "${REPO_ROOT}/core/templates/project/scripts/check-decisions.mjs" > /dev/null; then
-    node "${REPO_ROOT}/core/templates/project/scripts/check-decisions.mjs" | grep "FAIL:"
+  local out
+  if ! out="$(node "${REPO_ROOT}/core/templates/project/scripts/check-decisions.mjs")"; then
+    printf '%s\n' "$out" | grep "FAIL:"
     echo "=== validate: decision ledger FAILED ==="
     exit 1
   fi
@@ -285,6 +288,7 @@ main() {
       run_reference_check
       run_duplication_check
       run_comment_budget
+      run_decision_ledger
       run_smoke_tests
       run_hook_state
       ;;

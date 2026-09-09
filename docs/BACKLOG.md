@@ -84,39 +84,42 @@ symlink.
 
 ## Live tracker — current state for the next agent
 
-### Where things stand (2026-07-27)
+### Where things stand (2026-09-09)
 
-A full read-every-file audit ran over all tracked files, then three follow-on passes:
-activation (does this actually work outside OliverCode), fork usability (does a stranger get
-a working framework), and a necessity audit (is everything here earning its place).
+The 2026-07-27 audit below is history, not current state — a full doc-dedup pass, a
+governance self-assessment, and a code-level deep-review all ran since, closing the gap
+between "last reviewed" and HEAD.
 
-- **Audit + cleanup.** Removed the conflicting `install-enforcement.sh`/`pre-commit-gate.sh`
-  hook installer, a no-op QA phase, orphaned docs/configs, and four micro-workflows folded
-  into canonical homes. Duplicated authority collapsed to one home each: trigger routing,
-  testing baseline, backlog procedure, gate table, branch lifecycle, quality baseline,
-  skills catalog, and the orchestration path map.
-- **The framework now fails closed** on the two classes that produced the audit's findings:
-  a reference naming a path that isn't there (`scripts/lib/reference_check.py`, 322 backtick
-  paths on top of 9 markdown links) and a doc asserting what the code contradicts
-  (`scripts/lib/consistency_check.py`).
-- **Activation was loading but not resolving.** The rules reached every session, but 8 of the
-  global `CLAUDE.md`'s pointers dangled outside OliverCode — including both blocking "read
-  this first" directives. That file is now path-independent: `$OC` resolves from the symlink
-  and is checked; a bare path explicitly means the current repo.
-- **Hook enforcement fails open, and the detector shared the bug.** `health` reported `[OK]`
-  for a repo whose hooks directory did not exist. Fixed, with regression tests per state.
-- **A fork works with no configuration**, and it is gated rather than hoped:
-  `scripts/qa/check-fork-usable.sh` (Phase 4 of `full-qa-pass.sh`) builds a pristine sandbox
-  with a throwaway HOME, then walks the documented adoption path against two throwaway repos
-  and asserts a staged secret is actually blocked.
-- **Onboarding is four commands** — `clone`, `install`, `init`, `sync-hooks` — with the
-  judgment steps driven by the `olivercode-adoption` skill. `docs/ADOPTING.md` is the path.
+- **Doc duplication, twice.** A full manual read found the same rule restated across four
+  doc pairs with no cross-reference (process sequence, trigger routing, story-ID rule,
+  `QUALITY_BASELINE.md`'s near-total restatement) — all collapsed to one owner each (B10-B15
+  is the earlier chapter; B14/B15 above are this one).
+- **Duplication now has a mechanical gate**, not just a periodic manual read.
+  `scripts/lib/duplication_check.py` (`GATE-DUPLICATION-1`) is wired into `validate.sh` and
+  caught three more real duplicates its own first live run found (B16).
+- **`audit-staleness.py` is now scheduled**, not just runnable — weekly cron alongside the
+  already-scheduled `health` check (B17). Its own first live run is what flagged this repo
+  stale and triggered the deep-review below.
+- **Deep-review of `4c418ab..HEAD`** (93 commits): mechanical QA (`full-qa-pass.sh`) clean,
+  one review agent read the code-risk surface. Six real findings, all fixed same-session —
+  highest-cost first: an unscoped `git commit` in the secret-probe script that could sweep
+  in unrelated staged work, a silent backup-clobber on a third install collision, the new
+  duplication gate landing with zero tests (now six, ablation-proven), the test-coverage-map
+  checker being silently inert for this repo's own Python layout (the reason the gap above
+  went undetected), two CLI commands skipping the unknown-argument rejection every sibling
+  command has, and a cosmetic double-invocation in `validate.sh`. A seventh, unprompted:
+  `link-plugins` and `health`'s plugin-link check were both pointed at a vault path that
+  moved 2026-08-31 — link-plugins was silently non-functional on this machine until fixed.
+- **Coverage-map fix surfaced five more untested `scripts/lib/*.py` modules** (not part of
+  this range, pre-existing) — specced, not built; see the live tracker below.
 
-Nothing is open that blocks a fork. The two items below are operator-side.
+Nothing here blocks a fork. Everything found this session was fixed in the same session,
+with a live-run or an ablation as evidence, not a claim.
 
 ### Coverage
 
-Reviewed through: `4c418ab` (2026-07-27, full-file audit + activation/fork/necessity passes)
+Reviewed through: `PENDING` (2026-09-09, deep-review of `4c418ab..HEAD` — updated to the
+real sha in the commit that lands this line, see `audit-staleness.py`'s marker format)
 
 ### Open items
 
@@ -330,6 +333,65 @@ a crontab shared with unrelated SDR automation. Live-run before scheduling: real
 not hypothetical — it flagged OliverCode ITSELF as STALE (92 commits since the last
 `deep-review`, `4c418ab`). Not resolved here; that's a separate `deep-review` pass, not a
 governance-tooling fix, and is the owner's call on when to run it.
+
+**B18 — deep-review of `4c418ab..HEAD`, six real findings, all fixed (done).** Triggered
+by `audit-staleness.py`'s first live run flagging this repo itself STALE. Mechanical QA
+(`full-qa-pass.sh`) ran clean first; one review agent then read the code-risk surface
+(`scripts/olivercode`, the new lib modules, `validate.sh`, the new QA/test files). Fixed in
+cost-of-being-wrong order:
+
+- `scripts/qa/probe-secret-gate.sh`'s `git commit -m probe` had no pathspec, so it would
+  commit the *entire staged index*, not just the probe file — a real silent-data-loss shape
+  for a script meant to run in a live working repo. Fixed: `git commit -m probe -- leak-probe.txt`.
+  Verified live: still blocks correctly, and a modified-but-unrelated file in the working tree
+  is left untouched.
+- `scripts/olivercode`'s `install` backup chain (`BACKUP-COLLISION-1`) silently overwrote the
+  second backup on a third real-file collision at the same path — `Path.rename` clobbers its
+  destination on POSIX, and the fallback only had two names. Fixed: count suffixes until a
+  free name is found. Not observed live, found in review.
+- `scripts/lib/duplication_check.py` shipped with zero tests, unlike every sibling gate this
+  session added — the exact falsifiability gap this repo's own history keeps naming. Added
+  `tests/test_duplication_check.py`, six cases. Ablated twice: broke `check_all` to always
+  return clean (2 tests correctly went red), and reused the same neuter-a-marker ablation
+  already proven by hand when the gate was built, now automated.
+- `scripts/qa/check-code-quality.sh`'s Test Coverage Map (`COVERAGE-MAP-1`) globbed
+  `lib/*/` — one directory per module — which silently matches nothing against this repo's
+  flat `scripts/lib/*.py` layout, so it always reported clean regardless of truth. This is
+  why the gap above shipped invisibly through "mechanical QA ran clean." Fixed: a parallel
+  pass matching each test file's actual `importlib` load string, not filename substring
+  (tried first, produced false positives — tests here are named by behavior, not by module).
+- `scripts/olivercode`'s `skills` and `link-plugins` commands skipped the unknown-argument
+  rejection every other command has (`_reject_extra`). Fixed both; live-verified `--typo`
+  now errors on each while valid usage (`--grep`, `--dry-run`) still works.
+- `validate.sh`'s `run_comment_budget()` ran a comment-budget check plus an unrelated
+  decision-ledger check under one function name, and double-invoked `check-decisions.mjs`
+  on the failure path. Split into
+  `run_comment_budget` + `run_decision_ledger`, single output capture. Ablated: removed a
+  real ledger row, confirmed the exact FAIL line surfaces correctly, restored.
+
+**Unprompted, found while verifying `link-plugins` live:** both it and `health`'s plugin-link
+check pointed at `Work Vault/06 - Strategy/_Plugins`, which moved to
+`Operations Vault/01 - Plugins` on 2026-08-31 — `link-plugins` was completely non-functional
+on this machine since. Fixed both call sites; live-verified `health` now reports "all 4
+plugins linked" instead of a false WARN.
+
+Also surfaced, not built here: the coverage-map fix found five more `scripts/lib/*.py`
+modules with no direct test file (`health_checks.py`, `reference_check.py`,
+`repo_profiles.py`, `skills_catalog.py`, `token_policy.py`) — pre-existing, outside this
+range, real coverage may exist indirectly through `tests/test_launcher_commands.py`'s
+whole-launcher load for the ones the CLI re-exports, unverified per-module. See B19.
+
+`bash scripts/validate.sh` and `bash scripts/qa/full-qa-pass.sh` both green after every fix
+above (167 tests, up from 161).
+
+**B19 — five `scripts/lib/*.py` modules with no direct test file (LOW, spec only).**
+Surfaced by B18's coverage-map fix, not part of the reviewed range. `health_checks.py`,
+`reference_check.py`, `repo_profiles.py`, `skills_catalog.py`, `token_policy.py`. Some may
+already be exercised indirectly — `skills_catalog.py` and `health_checks.py` are re-exported
+through `scripts/olivercode` and `tests/test_launcher_commands.py` /
+`test_hook_install_health.py` load the whole launcher — but none has a test that loads it
+directly by its own `scripts/lib/<name>.py` path the way every other lib module now does.
+Not built here: five test files is a separate session's work, not a quick win.
 
 ### Deliberately kept / decided (do not redo)
 
