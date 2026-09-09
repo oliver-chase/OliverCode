@@ -78,6 +78,19 @@ QA verifies by **running**, never by reading. Its findings are fixed before the
 work is called done, and a finding in the author's own recent edits is the most
 valuable kind.
 
+**For a rendered or executable artifact — an HTML page, an SVG, a UI, a chart, a
+game, a script with observable output — running it means observing the actual
+render, not parsing the file.** A static check (a linter, `node --check`, an XML
+parser) confirms the file is well-formed. It does not confirm the artifact looks
+or behaves correctly, and those are different claims. Before calling this kind of
+work done: render it in its real environment (a headless browser and a
+screenshot for web artifacts, an SVG-to-PNG render, executing a script and
+capturing its output), then actually look at what came back — read the
+screenshot, read the console, check the layout is intact and nothing is
+obscured. A produced-but-unlooked-at screenshot is not observation. Stop once
+you've looked and it's clean. Re-render only after a change, not to accumulate
+confidence on an artifact that already looked right the first time.
+
 ---
 
 ## 6. Prefer boundary verification over volume

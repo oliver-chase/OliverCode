@@ -55,6 +55,22 @@ before commit. There is no bypass mode. The gate list and what each one blocks l
 Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
 --evidence-file <path>` blocks a WRITE MODE completion claim without required evidence.
 
+## Session Hooks (Claude Code, not git)
+
+`.githooks/pre-commit` is commit-time. `scripts/hooks/early-stop-guard.py`
+(`EARLY-STOP-1` in `docs/DECISIONS.md`) is turn-time — a Claude Code `Stop` hook,
+a different mechanism the framework did not ship before this. It catches a turn
+that ends by stating an intent to act ("I'll implement this now") with no tool
+call and no question to the user, and blocks the stop so the work actually
+happens instead of being promised. Deterministic regex, not a model call. Fails
+open on anything it cannot parse.
+
+Not wired into `olivercode install` yet — it is registered manually in the
+consuming machine's `~/.claude/settings.json` under `hooks.Stop`, pointing at
+this script's absolute path. A future capability, not covered here: teaching
+`install` to register it automatically the way it registers the `CLAUDE.md` and
+skill symlinks.
+
 ## Completion Gate (opt-in, on demand)
 
 The gatekeeper can validate a completion claim against a machine-readable evidence record:
