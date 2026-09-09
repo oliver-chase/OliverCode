@@ -14,7 +14,7 @@ exactly one of:
 - **support** — current-state docs explaining the active surface (`docs/`, root docs)
 
 If a file does none of those, delete it, merge it, or move it to the repo that owns it.
-`core/contracts/FRAMEWORK_BASELINE.md` "Purpose" is the contract; this is where you apply it.
+`core/contracts/FRAMEWORK_BASELINE.md` "Purpose" is the contract. This is where you apply it.
 
 ## Mandatory Rules
 
@@ -57,7 +57,7 @@ what to update. Enforced by manual review (no active automated validator).
 ## Source-of-Truth Documents
 
 Canonical current-state authority: `core/contracts/FRAMEWORK_BASELINE.md` "Support" (the
-full list) and "Ship" (reusable contract/template surfaces). One home; not restated here.
+full list) and "Ship" (reusable contract/template surfaces). One home, not restated here.
 
 ## Review Standard
 
