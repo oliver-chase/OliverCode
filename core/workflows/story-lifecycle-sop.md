@@ -42,7 +42,7 @@ Process items one at a time from the canonical backlog source declared in the re
 
 - Read it fully and restate the ask.
 - Check current code, tests, docs, and architecture against that ask.
-- If current state conflicts with the ask, pause and show the exact differences; wait for
+- If current state conflicts with the ask, pause and show the exact differences. Wait for
   approval before overwriting, updating, or skipping.
 - Rewrite the story if needed, with accurate acceptance criteria.
 - Add any prerequisite and follow-on stories the item implies.
