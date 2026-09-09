@@ -295,14 +295,15 @@ into `FRAMEWORK_BASELINE.md` or `docs/GOVERNANCE.md` and retire the file. Not do
 retiring a file `README.md`'s table and `consistency_check.py` both reference needs its own
 change set, not a drive-by.
 
-**B15 — secret-probe snippet duplicated verbatim in three docs (LOW, judgment call, spec only).**
-`README.md` ("Prove the hooks work"), `docs/ADOPTING.md` (Step 7), and `docs/NEW_MACHINE.md`
-(step 5) each inline the same `printf 'K="sk-%s"...' | git commit` probe. Possibly
-deliberate — `docs/DOCUMENTATION_STANDARD.md`'s own README rule wants a runnable example with
-no hop to another file, and each of these three is a self-contained walkthrough for a
-different reader (contributor, forker, restorer). Owner call, not a clear defect: keep three
-copies for self-containment, or extract to a new probe script under `scripts/qa/` and have
-each doc invoke it by name.
+**B15 — secret-probe snippet duplicated verbatim in four places (LOW, judgment call, spec
+only).** `README.md` ("Prove the hooks work"), `docs/ADOPTING.md` (Step 7),
+`docs/NEW_MACHINE.md` (step 5), and `skills/olivercode-adoption/SKILL.md` (step 7) each
+inline the same `printf 'K="sk-%s"...' | git commit` probe. Possibly deliberate —
+`docs/DOCUMENTATION_STANDARD.md`'s own README rule wants a runnable example with no hop to
+another file, and each is a self-contained walkthrough for a different reader (contributor,
+forker, restorer, adopting agent). Owner call, not a clear defect: keep four copies for
+self-containment, or extract to a new probe script under `scripts/qa/` and have each doc
+invoke it by name.
 
 ### Deliberately kept / decided (do not redo)
 
