@@ -29,6 +29,7 @@ cd "Obsidian Vault"
 
 # 2. Activate OliverCode: rules and skills into ~/.claude
 cd "Oliver/Project Repos/OliverCode"
+OC="$(pwd)"                       # kept for step 5, run after cd-ing away
 bash scripts/validate.sh          # the clone is sound before anything is changed
 scripts/olivercode install        # symlinks CLAUDE.md + skills, backs up what it replaces
 scripts/olivercode init           # seeds local/ from the tracked examples
@@ -44,9 +45,7 @@ scripts/olivercode health                       # must end HEALTHY
 
 # 5. Prove a gate blocks, rather than assuming it
 cd <any governed repo>
-printf 'K="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt
-git add leak-probe.txt && git commit -m probe    # MUST be refused
-git reset -q HEAD leak-probe.txt && rm -f leak-probe.txt
+bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
 ```
 
 `health` at step 4 is the checkpoint. It verifies the plugin links, that every remote actually

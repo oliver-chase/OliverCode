@@ -19,18 +19,7 @@ All managed quality files originate here and are synced to consuming projects:
 
 If a managed quality file changes in any project, the canonical file in **this repo** must be changed first and then synced to all projects. OliverCode is the single source of truth.
 
-## Framework-Level Quality Gates
-
-Before committing:
-
-1. `.githooks/pre-commit` -- the gate runner; `docs/GOVERNANCE.md` is the one home for the gate list
-2. Follow `core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` + `core/contracts/EXECUTION_CONTRACT.md`
-3. Doc standard: `docs/DOCUMENTATION_STANDARD.md` -- forward-only, current state
-4. Public-repo redaction: `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md`
-
-## Template Driven Design
-
-All project repos derive their quality baseline from this repo's `core/templates/project/` directory. To update a quality standard across all projects:
-
-1. Edit the canonical file here
-2. Sync to downstream repos via the bootstrap manifest and their repo-specific bootstrap process
+The commit sequence, the gate list, doc voice, and public-repo redaction are each owned
+elsewhere — `core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` + `core/contracts/EXECUTION_CONTRACT.md`,
+`docs/GOVERNANCE.md`, `docs/DOCUMENTATION_STANDARD.md`, `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md`
+respectively — and are not restated here.

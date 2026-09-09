@@ -281,29 +281,26 @@ fix reaches five repos and misses two. If a third variant appears, switch to the
 template-composition option recorded under B3 — a base hook plus declared per-repo gates —
 rather than accumulating manual merges.
 
-**B14 — root `QUALITY_BASELINE.md` is mostly restatement (LOW, spec only).**
-A full-file duplication pass (2026-09-09) found its process-order, doc-voice, and
-redaction lines each restating a rule owned elsewhere (`DEVELOPMENT_LIFECYCLE_STANDARD.md`
-+ `EXECUTION_CONTRACT.md`, `docs/DOCUMENTATION_STANDARD.md`, `PUBLIC_PRIVATE_REPO_STANDARD.md`
-respectively) — trimmed to pointers in the same pass. What is left after that trim: a
-`docs/GOVERNANCE.md` pointer and a "Template Driven Design" section that itself overlaps
-`FRAMEWORK_BASELINE.md`'s "Template Directory Architecture" and
-`project-standardization-lifecycle.md`'s "Source of Truth" list. The file is also not in
-`FRAMEWORK_BASELINE.md`'s "Support" required-file list or `docs/FEATURE_MAP.md`'s Governance
-table — only `README.md`'s doc table links it. Candidate to fold its remaining real content
-into `FRAMEWORK_BASELINE.md` or `docs/GOVERNANCE.md` and retire the file. Not done here:
-retiring a file `README.md`'s table and `consistency_check.py` both reference needs its own
-change set, not a drive-by.
+**B14 — root `QUALITY_BASELINE.md` was mostly restatement (LOW, done).**
+A full-file duplication pass (2026-09-09) found its process-order, doc-voice, and redaction
+lines each restating a rule owned elsewhere. First trimmed to pointers; on the owner's
+"do backlog" pass, resolved further: the "Framework-Level Quality Gates" and "Template Driven
+Design" sections were cut outright — the first was pure pointers by then, the second
+duplicated the file's own "Source of Truth" + "Rule" sections sitting directly above it.
+The file was NOT retired, despite the original finding suggesting it: `PROJECT_HYGIENE_STANDARD.md`'s
+"Required shared quality baseline hygiene" section names this file specifically as the owner
+of "what the managed files are, and the change-canonical-first rule" — a real inbound
+citation the first pass missed by not reading that contract closely enough. What's left is
+exactly the content that citation names: title, Source of Truth list, Rule.
 
-**B15 — secret-probe snippet duplicated verbatim in four places (LOW, judgment call, spec
-only).** `README.md` ("Prove the hooks work"), `docs/ADOPTING.md` (Step 7),
-`docs/NEW_MACHINE.md` (step 5), and `skills/olivercode-adoption/SKILL.md` (step 7) each
-inline the same `printf 'K="sk-%s"...' | git commit` probe. Possibly deliberate —
-`docs/DOCUMENTATION_STANDARD.md`'s own README rule wants a runnable example with no hop to
-another file, and each is a self-contained walkthrough for a different reader (contributor,
-forker, restorer, adopting agent). Owner call, not a clear defect: keep four copies for
-self-containment, or extract to a new probe script under `scripts/qa/` and have each doc
-invoke it by name.
+**B15 — secret-probe snippet duplicated verbatim (LOW, done).**
+Grepping for the actual snippet (`leak-probe.txt`) on the "do backlog" pass found it in
+three files, not the four the audit claimed — `README.md` never inlined it, only described
+the rehearsal in prose and pointed at `docs/ADOPTING.md`. The three real copies
+(`docs/ADOPTING.md` Step 7, `docs/NEW_MACHINE.md` step 5,
+`skills/olivercode-adoption/SKILL.md` step 7) are now one script,
+`scripts/qa/probe-secret-gate.sh`, invoked by name from all three. Verified live against this
+repo: writes the fake secret, commit is blocked, cleans up, exits 0.
 
 ### Deliberately kept / decided (do not redo)
 

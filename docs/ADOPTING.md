@@ -266,17 +266,11 @@ Then prove enforcement actually fires, rather than assuming it:
 
 ```bash
 cd <one of your repos>
-printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt
-git add leak-probe.txt
-git commit -m "probe"      # MUST be blocked by Gate 1
-
-# Clean up. `git rm --cached` also works in a repo with no commits yet, where
-# `git reset HEAD <path>` aborts with "fatal: Failed to resolve 'HEAD'".
-git rm -q --cached leak-probe.txt && rm -f leak-probe.txt
+bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
 ```
 
-The probe file is written straight into the repo, not staged through `/tmp`: the gate scans
-what is staged, so the copy step proved nothing and only risked leaving a file behind.
+`scripts/qa/probe-secret-gate.sh` is the one home for this probe — see its own header for why
+it writes straight into the repo instead of staging through `/tmp`.
 
 If that commit succeeds, your hooks are not installed. Go back to Step 6.
 

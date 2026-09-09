@@ -62,6 +62,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/qa/check-docs-cohesion.sh` | Broken wiki-links and opt-in stale-domain references |
 | `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |
 | `scripts/qa/check-fork-usable.sh` | Proves a stranger's clone works with no config AND that the documented adoption path produces a fleet whose gates actually block, in a sandbox with a virgin HOME |
+| `scripts/qa/probe-secret-gate.sh` | Writes a fake secret into the current repo, commits, and confirms Gate 1 blocks it. The one home for the probe `docs/ADOPTING.md`, `docs/NEW_MACHINE.md`, and `olivercode-adoption` all invoke by name |
 | `scripts/qa/check-scenarios.sh` | The exhaustive complement to the fork check: 12 sandboxed setup/walkthrough scenarios (existing ~/.claude, scattered fleet, --root, discover, bootstrap, hookVariant, backout, idempotency, update, no-commit probe). Run after changing the launcher, hooks, or `docs/ADOPTING.md` |
 | `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
 | `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |
