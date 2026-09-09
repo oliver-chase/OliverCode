@@ -16,7 +16,7 @@ These IDs are cited from `.gitignore`, `scripts/validate.sh`, contract JSON `_no
 and several docs. They are settled decisions, not open items.
 
 - **G1 — Example-config + local-overlay pattern.** Tracked files ship placeholder-only
-  registries (`shared/*.example.json`, placeholder `shared/repo-map.json` etc.); the real
+  registries (`shared/*.example.json`, placeholder `shared/repo-map.json` etc.). The real
   fleet lives in gitignored `local/` copies. Loaders try the local overlay first and fall
   back to the tracked example with a WARN. Personal data never enters tracked files.
 - **D2 — No repo-specific enforcement in the framework.** `validate.sh --target-repo <root>`
@@ -24,7 +24,7 @@ and several docs. They are settled decisions, not open items.
   Delegated suites are a CONVENTION with no implementation: a profile may carry
   `"suites": ["sdr"]` and one repo does, but nothing reads it. The JS resolver that did
   (`findSuiteRepo` in a `repo-profiles.mjs` mirror) existed only for the bots-gateway
-  subsystem removed in `8486cb8`; it survived orphaned, tested only by itself, and was
+  subsystem removed in `8486cb8`. It survived orphaned, tested only by itself, and was
   deleted 2026-07-27. If delegated suites are ever built, resolve via the flag rather than a
   hardcoded repo name — that part of the decision stands.
 - **ACT-3 — Skill precedence gap (known, unmitigatable at mechanism level).** A generic
@@ -37,7 +37,7 @@ and several docs. They are settled decisions, not open items.
 ## Resolved — the A-series
 
 What was built and why. Kept because each entry records the failure class the gate exists to
-stop; deleting it invites rebuilding the same thing. Currently-open work lives under the live
+stop. Deleting it invites rebuilding the same thing. Currently-open work lives under the live
 tracker's "Open items" below.
 
 ### A1-A5 — resolved 2026-07-27 (built, verified, wired in)
@@ -46,7 +46,7 @@ Kept here as the record of what the gates are and why, since each one exists to 
 failure class this repo actually hit. All five are live in `bash scripts/validate.sh`.
 
 - **A1 — reference integrity.** `scripts/link-check.sh` saw 9 markdown links while the real
-  cross-references were hundreds of backtick repo paths; every stale path the audit found
+  cross-references were hundreds of backtick repo paths. Every stale path the audit found
   lived in that blind spot. Now a second pass (`scripts/lib/reference_check.py`) resolves
   backtick-quoted paths whose first segment is a tracked top-level directory: 303 refs
   checked. Exemptions are explicit and commented -- downstream-relative contract paths,
@@ -54,10 +54,10 @@ failure class this repo actually hit. All five are live in `bash scripts/validat
   in `FILE_LOCATION_STANDARD.md` (whose paths must NOT resolve).
 - **A2 — skills index parity.** INDEX rows vs `skills/*/SKILL.md` directories, both
   directions, plus frontmatter `name:` vs directory name (the launcher lists by frontmatter,
-  humans read the table; they drifted apart silently before).
-- **A3 — gate-count claims.** The hook is the source of truth; any tracked doc claiming a
+  humans read the table. They drifted apart silently before).
+- **A3 — gate-count claims.** The hook is the source of truth. Any tracked doc claiming a
   different "N gates" fails. `QUALITY_BASELINE.md` had drifted to 6 against a hook with 8.
-- **A4 — CI gating.** `check-bloat.sh --strict` now fails the build; full-qa-pass stays
+- **A4 — CI gating.** `check-bloat.sh --strict` now fails the build. full-qa-pass stays
   advisory (its other phases are heuristic and would false-positive as a gate).
 - **A5 — enforcement-surface tests.** 46 tests: 28 over `validate_evidence()` (one block and
   one pass case per required-evidence field, in both the missing and malformed shape) and 18
@@ -76,7 +76,7 @@ failure class gets merged. Both are the same class: a doc asserting what the cod
 tiers, while `CONTRIBUTING.md` mandatory rule 1 names Anthropic the sole model provider and
 forbids multi-provider framing without an implementation behind it. Kept deliberately
 (owner decision, 2026-07-27) as a pattern contract rather than a claim about this
-framework's runtime. Do not re-raise as drift; if it is ever removed, tear down
+framework's runtime. Do not re-raise as drift. If it is ever removed, tear down
 `~/.claude/skills/model-routing` in the same session or `olivercode health` reports a broken
 symlink.
 
@@ -93,7 +93,7 @@ between "last reviewed" and HEAD.
 - **Doc duplication, twice.** A full manual read found the same rule restated across four
   doc pairs with no cross-reference (process sequence, trigger routing, story-ID rule,
   `QUALITY_BASELINE.md`'s near-total restatement) — all collapsed to one owner each (B10-B15
-  is the earlier chapter; B14/B15 above are this one).
+  is the earlier chapter. B14/B15 above are this one).
 - **Duplication now has a mechanical gate**, not just a periodic manual read.
   `scripts/lib/duplication_check.py` (`GATE-DUPLICATION-1`) is wired into `validate.sh` and
   caught three more real duplicates its own first live run found (B16).
@@ -111,7 +111,7 @@ between "last reviewed" and HEAD.
   `link-plugins` and `health`'s plugin-link check were both pointed at a vault path that
   moved 2026-08-31 — link-plugins was silently non-functional on this machine until fixed.
 - **Coverage-map fix surfaced five more untested `scripts/lib/*.py` modules** (not part of
-  this range, pre-existing) — specced, not built; see the live tracker below.
+  this range, pre-existing) — specced, not built. See the live tracker below.
 
 Nothing here blocks a fork. Everything found this session was fixed in the same session,
 with a live-run or an ablation as evidence, not a claim.
@@ -144,7 +144,7 @@ The pass, in priority order:
    to all five repos: an `@param` not in the signature below it, and a stated return
    value where the function returns none. Fires on the FLOW-3 defect re-introduced
    into the real file, zero hits fleet-wide otherwise. It closes the mechanizable
-   half of this class; a comment that describes the wrong function WITHOUT claiming
+   half of this class. A comment that describes the wrong function WITHOUT claiming
    a return or a param is still only findable by reading.
 2. **Read every block over 8 lines, per repo, newest-first — STARTED.** Judge against
    WRITING_PROCESS: does each paragraph do one job, does the last sentence add
@@ -166,7 +166,7 @@ The pass, in priority order:
    plainly which path it leaves unverified. All earn their length. The defect
    concentrates in agent-written script headers, where a filename banner, a numbered
    restatement of the function below, and an env/output table attach to almost every
-   file. Audit those first; do not assume a long block in a library is worth cutting.
+   file. Audit those first. Do not assume a long block in a library is worth cutting.
 
    That sample was drawn twice. The first pass ran while the scanner was hiding
    comments, so it was re-run after the fail-open fix: the block rankings were
@@ -176,7 +176,7 @@ The pass, in priority order:
 
    The crawler's `// ─── Title ───` banner is its convention, on 46 of 48 src files,
    and names the CONCEPT rather than the filename. Left as is — stripping it from a
-   few files buys nothing and costs consistency. Not a finding; do not re-litigate.
+   few files buys nothing and costs consistency. Not a finding. Do not re-litigate.
 
    **Closed 2026-07-29.** Re-measured after the docstring/template/fail-open fixes:
    every block the gate flags fleet-wide has now been read. Two more real defects
@@ -194,7 +194,7 @@ The pass, in priority order:
    figure that could never fire). Density is reported, never gates the build, and
    is not itself a task.
 3. **Sample the short ones — deliberately not pursued.** Blocks under 8 lines are
-   mostly fine, number in the thousands, and nothing gates them; the two rounds of
+   mostly fine, number in the thousands, and nothing gates them. The two rounds of
    long-block sampling found defects at a rate too low to justify the token cost of
    extending the same method downward. If a defect class specific to short blocks
    turns up by other means, reopen with that evidence, not a blind sample.
@@ -225,12 +225,12 @@ Getting there found three defects in the gate itself, each ablation-verified:
   ledger carried `FALSIFIABILITY-1`, two segments where §2 requires three, from the day it
   was written. Renamed, and the gate now fails on any unreadable row.
 - **A user story is not a decision record.** `US-TSK-118` and `US-SDR-202` match
-  `AREA-TOPIC-N` exactly. Harmless while the gate ran from a validation target; with the
+  `AREA-TOPIC-N` exactly. Harmless while the gate ran from a validation target. With the
   gate in the hook, every story reference in a comment blocked a commit. Excluded by AREA
   rather than by id, so a new story needs no config edit, and by first segment rather than
   prefix, so `USER-FACING-1` is still a decision.
 - **Rows written where a reader would otherwise undo the decision.** The studio app cited
-  106 ids against an empty ledger; eight rows now cover the load-bearing ones and the
+  106 ids against an empty ledger. Eight rows now cover the load-bearing ones and the
   baseline stands at 98. Not a backfill — a row per id would manufacture a hundred
   restatements, which is the defect this framework exists to prevent.
 
@@ -241,7 +241,7 @@ reason to write it.
 **B12 — the staleness audit flagged every repo, so it informed nothing (MED, done).**
 `scripts/audit-staleness.py` reported all seven registered repos as stale. It now
 separates the two failures it was conflating: STALE means a MARKED repo has drifted
-past the threshold and is the only thing that sets the exit code; UNMARKED and MARKER
+past the threshold and is the only thing that sets the exit code. UNMARKED and MARKER
 BROKEN are setup gaps, reported apart. Reads as two genuinely stale repos, four never
 marked, and one whose marker names a sha its rewritten history no longer holds.
 
@@ -285,7 +285,7 @@ rather than accumulating manual merges.
 
 **B14 — root `QUALITY_BASELINE.md` was mostly restatement (LOW, done).**
 A full-file duplication pass (2026-09-09) found its process-order, doc-voice, and redaction
-lines each restating a rule owned elsewhere. First trimmed to pointers; on the owner's
+lines each restating a rule owned elsewhere. First trimmed to pointers. On the owner's
 "do backlog" pass, resolved further: the "Framework-Level Quality Gates" and "Template Driven
 Design" sections were cut outright — the first was pure pointers by then, the second
 duplicated the file's own "Source of Truth" + "Rule" sections sitting directly above it.
@@ -304,9 +304,9 @@ the rehearsal in prose and pointed at `docs/ADOPTING.md`. The three real copies
 `scripts/qa/probe-secret-gate.sh`, invoked by name from all three. Verified live against this
 repo: writes the fake secret, commit is blocked, cleans up, exits 0.
 
-**B16 — no mechanical duplication gate; doc-vs-doc drift only caught by a full manual
+**B16 — no mechanical duplication gate. Doc-vs-doc drift only caught by a full manual
 read (HIGH, done).** The owner asked what would make this framework's governance
-actually better; the honest answer included "duplication regrows even after an audit,
+actually better. The honest answer included "duplication regrows even after an audit,
 and nothing mechanical watches for it" — verified true within the same session (B14/B15
 were fresh regrowth in a repo dedup-audited weeks earlier). Built
 `scripts/lib/duplication_check.py` (`GATE-DUPLICATION-1` in `docs/DECISIONS.md`): slides
@@ -318,8 +318,8 @@ duplicates the manual read had missed (hook-enforcement-fails-open restated in
 `CODE_INTENT_STANDARD.md` + `DEVELOPMENT_LIFECYCLE_STANDARD.md`, structure-drift-audit
 restated in `PROJECT_STRUCTURE_STANDARD.md` + `project-standardization-lifecycle.md`) —
 all three fixed in the same session, each collapsed to one owner + a pointer. Ablated:
-neutering a declared marker makes the gate re-detect the real duplicate it was masking;
-restoring it returns to clean. `bash scripts/validate.sh` green after.
+neutering a declared marker makes the gate re-detect the real duplicate it was masking.
+Restoring it returns to clean. `bash scripts/validate.sh` green after.
 
 **B17 — `audit-staleness.py` existed but nothing ran it (HIGH, done).** `olivercode
 health` was already cron'd weekly (Mondays 9am, `~/.oliver_runtime/logs/health.log`) —
@@ -330,12 +330,12 @@ nobody watching, the same failure class B12 already named once. Added
 existing health line — verified the diff touched exactly that one line, nothing else in
 a crontab shared with unrelated SDR automation. Live-run before scheduling: real signal,
 not hypothetical — it flagged OliverCode ITSELF as STALE (92 commits since the last
-`deep-review`, `4c418ab`). Not resolved here; that's a separate `deep-review` pass, not a
+`deep-review`, `4c418ab`). Not resolved here. That's a separate `deep-review` pass, not a
 governance-tooling fix, and is the owner's call on when to run it.
 
 **B18 — deep-review of `4c418ab..HEAD`, six real findings, all fixed (done).** Triggered
 by `audit-staleness.py`'s first live run flagging this repo itself STALE. Mechanical QA
-(`full-qa-pass.sh`) ran clean first; one review agent then read the code-risk surface
+(`full-qa-pass.sh`) ran clean first. One review agent then read the code-risk surface
 (`scripts/olivercode`, the new lib modules, `validate.sh`, the new QA/test files). Fixed in
 cost-of-being-wrong order:
 
@@ -360,7 +360,7 @@ cost-of-being-wrong order:
   pass matching each test file's actual `importlib` load string, not filename substring
   (tried first, produced false positives — tests here are named by behavior, not by module).
 - `scripts/olivercode`'s `skills` and `link-plugins` commands skipped the unknown-argument
-  rejection every other command has (`_reject_extra`). Fixed both; live-verified `--typo`
+  rejection every other command has (`_reject_extra`). Fixed both. Live-verified `--typo`
   now errors on each while valid usage (`--grep`, `--dry-run`) still works.
 - `validate.sh`'s `run_comment_budget()` ran a comment-budget check plus an unrelated
   decision-ledger check under one function name, and double-invoked `check-decisions.mjs`
@@ -371,7 +371,7 @@ cost-of-being-wrong order:
 **Unprompted, found while verifying `link-plugins` live:** both it and `health`'s plugin-link
 check pointed at `Work Vault/06 - Strategy/_Plugins`, which moved to
 `Operations Vault/01 - Plugins` on 2026-08-31 — `link-plugins` was completely non-functional
-on this machine since. Fixed both call sites; live-verified `health` now reports "all 4
+on this machine since. Fixed both call sites. Live-verified `health` now reports "all 4
 plugins linked" instead of a false WARN.
 
 Also surfaced, not built here: the coverage-map fix found five more `scripts/lib/*.py`
@@ -395,8 +395,8 @@ Not built here: five test files is a separate session's work, not a quick win.
 ### Deliberately kept / decided (do not redo)
 
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the
-  OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy); the template
-  carries the anon-key meta-tag allowlist. Both correct; do not converge them.
+  OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy). The template
+  carries the anon-key meta-tag allowlist. Both correct. Do not converge them.
 - `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
   `AGENT_SHARED_STRUCTURE.md` but is the tracked half of the G1 example/overlay pair and has a
   real `local/` counterpart. Keep both.
@@ -411,8 +411,8 @@ Not built here: five test files is a separate session's work, not a quick win.
 - **`olivercode add-repo` — WONT-FIX.** Registering a fleet still means hand-editing
   `local/repo-profiles.json` once per repo. A command for that would be ~60 LOC plus tests
   plus docs to save a one-time edit, and satisfies none of `FRAMEWORK_BASELINE.md`'s four
-  admission criteria. The real sharp edge was Gate 8 failing with an unactionable message;
-  that is fixed. Revisit only if fleet size makes the edit genuinely repetitive.
+  admission criteria. The real sharp edge was Gate 8 failing with an unactionable message.
+  That is fixed. Revisit only if fleet size makes the edit genuinely repetitive.
 - The governance CI pathway (`scripts/run-governance-target.sh` +
   `core/templates/project/.github/workflows/olivercode-governance.yml`) is absent from every
   fleet repo today. That is the billing pause, not dead code — it is a working path the moment
@@ -429,15 +429,15 @@ Not built here: five test files is a separate session's work, not a quick win.
   the vault, `model-routing` kept as a declared exception. A6/A8 resolved, `7c50960`.
 - 2026-07-27 [audit] A1-A5 built: reference integrity, consistency checker, enforcement tests,
   CI gating, `4d0689e`.
-- 2026-07-27 [activation] Global CLAUDE.md made path-independent; fleet hooksPath converged;
-  5 repo CLAUDE.md pointer blocks repaired; hook-install fail-open closed, `72340e5`.
-- 2026-07-27 [fork] Stranger-clone blockers fixed; `docs/ADOPTING.md` + `olivercode-adoption`
+- 2026-07-27 [activation] Global CLAUDE.md made path-independent. Fleet hooksPath converged.
+  5 repo CLAUDE.md pointer blocks repaired. Hook-install fail-open closed, `72340e5`.
+- 2026-07-27 [fork] Stranger-clone blockers fixed. `docs/ADOPTING.md` + `olivercode-adoption`
   skill added, `d71a663`. Reference gate taught to scan untracked files, `39449a4`.
 - 2026-07-27 [fork] Fresh-agent adoption run on a sandboxed machine (throwaway HOME, three
   non-sibling repos, pre-existing `~/.claude`). It succeeded end to end, and found that the
-  headline **8-gate claim was false for every adopted repo** (they get 6; contract integrity
+  headline **8-gate claim was false for every adopted repo** (they get 6. Contract integrity
   and token policy are framework-only) in six documents. Coverage table added to
-  `docs/GOVERNANCE.md` as its one home; `consistency_check.py` extended to resolve each claim
+  `docs/GOVERNANCE.md` as its one home. `consistency_check.py` extended to resolve each claim
   to the hook it is about, check every hook variant's internal numbering, and verify that
   table — the old checker skipped `core/templates/` on purpose, and its claim pattern required
   the number to sit directly beside the noun, so the count in README's own headline (which had
@@ -447,27 +447,27 @@ Not built here: five test files is a separate session's work, not a quick win.
   order (`sync-hooks` ran before the fleet file existed), health now counts skips separately
   from passes, and waiver expiry in `repo-map.json` is enforced instead of decorative.
 - 2026-07-27 [fork] `olivercode init`, real `--root`, unknown args rejected, `5225bcd`.
-- 2026-07-27 [fork] Fork-usability gate built and mutation-tested, `13d6b58`; extended to walk
+- 2026-07-27 [fork] Fork-usability gate built and mutation-tested, `13d6b58`. Extended to walk
   the adoption path itself, `ec1ba55`.
-- 2026-07-27 [fork] CI-only gates moved onto the local path; Actions pause recorded as policy,
+- 2026-07-27 [fork] CI-only gates moved onto the local path. Actions pause recorded as policy,
   `c16e0fa`.
-- 2026-07-27 [docs] `olivercode install` added; ARCHITECTURE rewritten; INSTALL.md folded into
-  README; "what you get and what enforces it" contract added, `b404f5f`.
-- 2026-07-27 [necessity] Completion gate stopped asserting a rule nobody runs; QA worktree
-  double-count fixed (it was hiding real findings); Gate 8 message made actionable, `4c418ab`.
+- 2026-07-27 [docs] `olivercode install` added. ARCHITECTURE rewritten. INSTALL.md folded into
+  README. "What you get and what enforces it" contract added, `b404f5f`.
+- 2026-07-27 [necessity] Completion gate stopped asserting a rule nobody runs. QA worktree
+  double-count fixed (it was hiding real findings). Gate 8 message made actionable, `4c418ab`.
 - 2026-07-27 [voice] README rebuilt to the V.Two README contract (six sections, narrative, no
   tables, second person) with a complete linked index of every document, so nothing became
   unreachable when the old tables came out. Reference content relocated rather than deleted:
   external tooling to `docs/EXTERNAL-TOOLING.md`, directory layout already in ARCHITECTURE.
   `docs/DOCUMENTATION_STANDARD.md` previously mandated the old section list, which the rewrite
-  would have silently violated; it now defers to the V.Two contract and pins where each piece
+  would have silently violated. It now defers to the V.Two contract and pins where each piece
   of required content lives. GitHub About description and topics set (both were empty).
 - 2026-07-27 [audit] Fleet-name leak closed (B8). `docs/FEATURE_MAP.md` had a malformed row
   that pointed "unfalsifiable checks" at the hook-drift module and left an orphan two-column
   row in a three-column table.
 - 2026-07-27 [audit] Open items closed: B6 (fleet hooks converged, committed in each repo),
   B7 (repo-map fields wired: incubating profile consumed by audit-staleness, strict variances
-  in the expiry sweep, reasons required), B2 attempted (CI re-enabled; next push is the live
+  in the expiry sweep, reasons required), B2 attempted (CI re-enabled. Next push is the live
   billing test). 12-scenario sandbox matrix built and shipped as
   `scripts/qa/check-scenarios.sh` — 46 assertions across fresh-machine, existing-setup,
   scattered-fleet, --root, discover, bootstrap, hookVariant, backout, idempotency, update,
@@ -476,7 +476,7 @@ Not built here: five test files is a separate session's work, not a quick win.
 - 2026-07-27 [audit] B2 tested live: workflow enabled, push triggered a run, GitHub refused
   to start the job ("recent account payments have failed or your spending limit needs to be
   increased") — zero minutes consumed. Workflow re-disabled to keep pushes green-quiet. B2
-  stays open on the same external condition; re-enable is one command
+  stays open on the same external condition. Re-enable is one command
   (`gh workflow enable "OliverCode Framework CI"`) once billing is restored.
 - 2026-07-27 [docs] Documentation standard locked in as a self-contained contract
   (`docs/DOCUMENTATION_STANDARD.md`): problem-driven README outline, voice, formatting,
@@ -487,7 +487,7 @@ Not built here: five test files is a separate session's work, not a quick win.
   `health` now checks the About (WARN-degrades offline). Template QUALITY_BASELINE and the
   global CLAUDE.md point at the standard, so stamped repos and every session inherit it.
 - 2026-07-27 [audit] Post-merge audit of the Code Intent Standard: three references to a
-  specific sibling repo generalized out (tracked files stay generic; the operator barred
+  specific sibling repo generalized out (tracked files stay generic. The operator barred
   that repo as a reference point), and its §5 reconciled with the documentation standard's
   Status slot — volatile counts now stated as the command that proves them, quoted only as
   dated measurements. README Status rewritten to comply. Leak gate hardened: fleet names
@@ -517,11 +517,11 @@ Not built here: five test files is a separate session's work, not a quick win.
   every fork unexamined (now scans all tracked text files, binaries skipped by content
   sniff). Open backlog after this pass: B2 (CI billing, external trigger) and the
   hook-variant watch item only.
-- 2026-07-27 [audit] Dot-file audit: junk `prompts/` dir removed (held one .DS_Store);
+- 2026-07-27 [audit] Dot-file audit: junk `prompts/` dir removed (held one .DS_Store).
   `.gitignore` comment claimed a skills subdirectory of the Claude OS layer that does not
-  exist — corrected; `.env.example`, `.claude/`, `runtime/`, and the memory/state ignores
+  exist — corrected. `.env.example`, `.claude/`, `runtime/`, and the memory/state ignores
   verified correct. Comment-longevity rule added to the Code Intent Standard (§4b: past
-  tense is stable, present tense drifts; the why stays, perishable specifics go) and
+  tense is stable, present tense drifts. The why stays, perishable specifics go) and
   applied here, in the template hook, and across the fleet's recent comment additions —
   dated decision-IDs stripped in the crawler repo (git blame is the provenance), live-queue
   tallies rewritten as at-the-time evidence in the events repo. Dated batch and incident
@@ -530,13 +530,13 @@ Not built here: five test files is a separate session's work, not a quick win.
 - 2026-07-28 [gate] Comment budget now measures Python docstrings, which were entirely
   invisible while only `#` counted — two 40-line narrative module docstrings had passed.
   Triple quotes pair across the line, because trimming makes a lone closing `"""` identical
-  to an opener and reading it as one swallowed the rest of the file; only a region opening
+  to an opener and reading it as one swallowed the rest of the file. Only a region opening
   at a docstring position counts as prose, which leaves triple-quoted SQL as code. Template
   literals are tracked for the same reason: `/*` inside one opened a block that never
   closed. Four blocks fixed here (`3e84cb1`), thirteen in the studio repo, whose own
   commit is `5716d0a` -- named as belonging there, because a bare hash in this file
   reads as a commit in this repo and a reader who checks it finds nothing.
-  The gate had no tests anywhere; it now has nineteen, each ablated. Three of them were
+  The gate had no tests anywhere. It now has nineteen, each ablated. Three of them were
   vacuous when first written — they asserted the phrase "over 20 lines", which is a
   substring of the PASS line "no comment block over 20 lines", so they passed on success.
 - 2026-07-28 [gate] `docs/DECISIONS.md` added, and `check_decision_ledger` added with it:
