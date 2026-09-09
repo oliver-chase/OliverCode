@@ -34,7 +34,7 @@ Every gap becomes a written spec before any code is written. A spec states:
 - the **watch-out** — the way a plausible implementation gets it wrong.
 
 Specs live in the repo's `docs/BACKLOG.md`. Nothing is built that is not
-specced; nothing is specced that cannot name its failure.
+specced. Nothing is specced that cannot name its failure.
 
 ---
 
@@ -49,7 +49,7 @@ Rank by what breaking it costs, not by effort:
 5. **Ergonomics.**
 
 A defect that surfaces as *worse results blamed on something else* outranks one
-that throws. An exception gets fixed; silently thinner data gets shipped.
+that throws. An exception gets fixed. Silently thinner data gets shipped.
 
 ---
 
@@ -70,7 +70,7 @@ One spec per commit. A commit spanning two specs cannot be reverted cleanly.
 
 ## 5. QA is a separate pass, by a separate reader
 
-The author cannot QA their own work; they will confirm what they intended.
+The author cannot QA their own work. They will confirm what they intended.
 Where an agent is available, QA runs as its own adversarial pass with an
 explicit brief to find what is wrong.
 
@@ -118,7 +118,7 @@ This standard is itself subject to it. Prefer:
 - **Pointers over restatement.** A contract that repeats another contract is
   two things to keep in sync. Name the owner instead.
 - **Measure once, cite everywhere.** A number belongs in one place with its
-  date; every other mention links to it.
+  date. Every other mention links to it.
 - **Read what you need.** Targeted greps and line ranges over whole-file reads.
 
 ## Related contracts

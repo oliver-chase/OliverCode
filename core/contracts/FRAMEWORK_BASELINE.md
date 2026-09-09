@@ -80,7 +80,7 @@ Only one persona (`oliver`) is defined and no team template. This is intentional
 
 ### Template Directory Architecture
 - `core/templates/project/` -- the canonical template repository. All project templates are authored here.
-- Rule: `core/templates/project/` is the single template home -- hooks, CI workflows, docs, and governance scripts all ship to downstream repos from here via the bootstrap manifest. There is exactly one template directory; a second one drifts from the masters.
+- Rule: `core/templates/project/` is the single template home -- hooks, CI workflows, docs, and governance scripts all ship to downstream repos from here via the bootstrap manifest. There is exactly one template directory. A second one drifts from the masters.
 
 ### Runtime Manifests
 `runtime/manifests/` does not exist as a tracked path. `.gitignore` reserves the path

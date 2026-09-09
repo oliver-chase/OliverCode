@@ -13,7 +13,7 @@ Scope: All repositories, modules, and workstreams
 - Acceptance Criteria
 - QA / Evidence
 - Test Plan (positive, negative, regression)
-3. Story IDs are immutable (`PROJECT_STRUCTURE_STANDARD.md` Core Invariant 3); updates happen in-place.
+3. Story IDs are immutable (`PROJECT_STRUCTURE_STANDARD.md` Core Invariant 3). Updates happen in-place.
 
 ## Required epic hygiene
 1. Every commit maps to exactly one owning epic.
@@ -29,7 +29,7 @@ Scope: All repositories, modules, and workstreams
 
 ## Required documentation hygiene
 1. Module docs, backlog docs, and story files are updated in the same change when behavior/contracts change.
-2. One canonical location per module/workstream; no duplicate story maps across docs.
+2. One canonical location per module/workstream. No duplicate story maps across docs.
 3. Backlog root files must keep current epic map and list unassigned-epic debt explicitly.
 4. Public tracked docs use placeholders for service URLs, account emails, local usernames, device paths, and deployment identifiers unless the value is intentionally public product information.
 
@@ -46,7 +46,7 @@ Scope: All repositories, modules, and workstreams
 ## Required secret hygiene
 1. Real credentials, tokens, API keys, service-role keys, webhook secrets, private keys, and local auth files stay in ignored local env or provider secret stores.
 2. Concrete project URLs and public anon keys stay in ignored local env unless there is a documented reason they must be public.
-3. `.env.local` is the local holding area during rotation; examples in git show variable names and placeholders only.
+3. `.env.local` is the local holding area during rotation. Examples in git show variable names and placeholders only.
 4. Runtime adapter settings and auth state are never committed to `<vault-root>/Oliver/Project Repos/OliverCode`.
 
 ## Required discoverability hygiene

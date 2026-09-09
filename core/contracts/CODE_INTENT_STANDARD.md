@@ -9,7 +9,7 @@ that cannot quietly go stale.
 
 The failure this prevents: a decision is made for a good reason, written into a
 comment, and six months later a refactor undoes it because the reason is no
-longer legible. The comment survives; the protection does not.
+longer legible. The comment survives. The protection does not.
 
 ## 1. Comment the decision, not the mechanism
 
@@ -82,7 +82,7 @@ the problem, not the thing that stops it landing. Per-repo overrides and
 exemptions (each needing a stated `why`) go in a root `.comment-budget.json`.
 
 Density is reported by the same script and never fails. A repo can legitimately
-run high density in short comments sitting beside the code they govern; block
+run high density in short comments sitting beside the code they govern. Block
 length is the property that has no defence.
 
 ## 2. Every non-obvious decision gets an ID
@@ -120,7 +120,7 @@ it fatal produces hollow tests, which is worse than the gap.
 
 A reference implementation is a short script in the consuming repo's own `scripts/`:
 grep the source tree for `[A-Z]+-[A-Z0-9]+-\d+` IDs, parse the ledger's rows, and
-diff the two sets in both directions. Under a hundred lines; write it once per repo.
+diff the two sets in both directions. Under a hundred lines. Write it once per repo.
 `check_decision_ledger` in OliverCode's `scripts/lib/consistency_check.py` is one to
 copy from. Skip IDs that sit inside a quoted string — a fixture carrying one as
 payload data reads as a reference and is not one.
@@ -131,11 +131,11 @@ A comment that states current-state specifics — a count, a date, a list of whi
 do something — is wrong the moment the state changes, and nothing reminds anyone to
 update it. Two rules keep comments from drifting:
 
-- **Past tense is stable; present tense drifts.** "A loose filter exempted template
+- **Past tense is stable. Present tense drifts.** "A loose filter exempted template
   hooks from the scan" records an event and stays true forever. "The three hooks are
   identical" is a claim about now, goes stale silently, and belongs in a check, not a
   comment.
-- **The why stays; the perishable specifics go.** Keep the defect the code prevents.
+- **The why stays. The perishable specifics go.** Keep the defect the code prevents.
   Drop the session date, the file count at the time, the tally of occurrences — if a
   number matters, it belongs in a test or a gate that fails when it changes, or in the
   backlog's dated tracker where the date is part of the record.
@@ -181,12 +181,12 @@ a system meets reality — real networks, real files, real inputs — a small
 number of live checks earns more per line than a large unit suite.
 
 Record that honestly when it happens. Observed for real: every defect found in a
-full day of work on a crawler came from running it against real websites; its
+full day of work on a crawler came from running it against real websites. Its
 ~590 unit tests found none of them.
 
 ## Enforcement reality
 
 Point 1's length rule and points 4 and 5 are mechanically enforceable and should
-be gated; point 1 ships a gate. Points 2, 3, 6 and 7 are instruction text — see
+be gated. Point 1 ships a gate. Points 2, 3, 6 and 7 are instruction text — see
 this repo's CONTRIBUTING "Enforcement Reality" section before assuming a written
 rule is unbreakable.

@@ -49,7 +49,7 @@ User says "yes" / approves change
 ## Gates (Non-Negotiable)
 
 `.githooks/pre-commit` runs the gates automatically on every commit. BLOCKED means fix
-before commit; there is no bypass mode. The gate list and what each one blocks lives in
+before commit. There is no bypass mode. The gate list and what each one blocks lives in
 `docs/GOVERNANCE.md` — one home, so a hook change updates exactly one table.
 
 Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
@@ -84,7 +84,7 @@ The deploy platform must not be the first place a build or type error is discove
 repo profile declares its own `canonicalValidationCommand` and `finalAuthority` — run the
 canonical command locally before the commit, and treat the declared final authority (a full
 build, not a lint pass) as the thing that decides whether the change is sound. Pre-commit
-gates catch secrets, structure, and hygiene; they do not catch a block-scoped `const`
+gates catch secrets, structure, and hygiene. They do not catch a block-scoped `const`
 referenced before declaration, which only a full type-checking build surfaces.
 
 ## Secrets vs Git Boundary

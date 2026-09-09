@@ -57,8 +57,8 @@ and must re-include:
 - `!.secrets/README.md`
 
 ## Standardization source
-Canonical template files live in `OliverCode/core/templates/project/`. Apply them manually;
-hooks specifically are converged by `scripts/olivercode sync-hooks`.
+Canonical template files live in `OliverCode/core/templates/project/`. Apply them manually.
+Hooks specifically are converged by `scripts/olivercode sync-hooks`.
 
 ## Public-repo redaction
 A public/shared repo describes the PATTERN, not your implementation. Never commit:
