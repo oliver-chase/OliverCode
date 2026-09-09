@@ -140,9 +140,7 @@ too.
 
 ```bash
 cd <one of their repos>
-printf 'K="sk-%s"\\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt
-git add leak-probe.txt && git commit -m probe    # MUST be blocked
-git reset -q HEAD leak-probe.txt && rm -f leak-probe.txt
+bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
 ```
 
 If that commit succeeds, the hooks are not installed. Quote the actual output — "should be
