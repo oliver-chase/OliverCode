@@ -281,6 +281,29 @@ fix reaches five repos and misses two. If a third variant appears, switch to the
 template-composition option recorded under B3 — a base hook plus declared per-repo gates —
 rather than accumulating manual merges.
 
+**B14 — root `QUALITY_BASELINE.md` is mostly restatement (LOW, spec only).**
+A full-file duplication pass (2026-09-09) found its process-order, doc-voice, and
+redaction lines each restating a rule owned elsewhere (`DEVELOPMENT_LIFECYCLE_STANDARD.md`
++ `EXECUTION_CONTRACT.md`, `docs/DOCUMENTATION_STANDARD.md`, `PUBLIC_PRIVATE_REPO_STANDARD.md`
+respectively) — trimmed to pointers in the same pass. What is left after that trim: a
+`docs/GOVERNANCE.md` pointer and a "Template Driven Design" section that itself overlaps
+`FRAMEWORK_BASELINE.md`'s "Template Directory Architecture" and
+`project-standardization-lifecycle.md`'s "Source of Truth" list. The file is also not in
+`FRAMEWORK_BASELINE.md`'s "Support" required-file list or `docs/FEATURE_MAP.md`'s Governance
+table — only `README.md`'s doc table links it. Candidate to fold its remaining real content
+into `FRAMEWORK_BASELINE.md` or `docs/GOVERNANCE.md` and retire the file. Not done here:
+retiring a file `README.md`'s table and `consistency_check.py` both reference needs its own
+change set, not a drive-by.
+
+**B15 — secret-probe snippet duplicated verbatim in three docs (LOW, judgment call, spec only).**
+`README.md` ("Prove the hooks work"), `docs/ADOPTING.md` (Step 7), and `docs/NEW_MACHINE.md`
+(step 5) each inline the same `printf 'K="sk-%s"...' | git commit` probe. Possibly
+deliberate — `docs/DOCUMENTATION_STANDARD.md`'s own README rule wants a runnable example with
+no hop to another file, and each of these three is a self-contained walkthrough for a
+different reader (contributor, forker, restorer). Owner call, not a clear defect: keep three
+copies for self-containment, or extract to a new probe script under `scripts/qa/` and have
+each doc invoke it by name.
+
 ### Deliberately kept / decided (do not redo)
 
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the

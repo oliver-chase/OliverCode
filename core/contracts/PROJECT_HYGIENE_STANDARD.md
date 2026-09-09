@@ -13,7 +13,7 @@ Scope: All repositories, modules, and workstreams
 - Acceptance Criteria
 - QA / Evidence
 - Test Plan (positive, negative, regression)
-3. Story IDs are immutable; updates happen in-place.
+3. Story IDs are immutable (`PROJECT_STRUCTURE_STANDARD.md` Core Invariant 3); updates happen in-place.
 
 ## Required epic hygiene
 1. Every commit maps to exactly one owning epic.

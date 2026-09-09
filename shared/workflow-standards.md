@@ -11,11 +11,16 @@ Workflow routing and standards.
 
 ## Trigger Routing
 
-Use these trigger terms as workflow selectors. This list is the one home; `core/workflows/README.md` points here.
+Use these trigger terms as workflow selectors. This list is the complete one; `core/workflows/README.md`
+points here. `CLAUDE.md`'s Development Practice section carries a compressed copy of the
+most-used rows (broken/failing/slow, multi-commit session ending) so they load every
+session with no extra file read — that copy is deliberate, not drift; this table is where
+a less-common trigger term resolves.
 
 - `backlog`, `story lifecycle` -> `core/workflows/story-lifecycle-sop.md`
 - `OliverCode sync` -> `core/workflows/olivercode-sync.md`
 - `project standardization` -> `core/workflows/project-standardization-lifecycle.md`
+- `broken`, `failing`, `slow` -> the `diagnosing-bugs` skill loop
 - `qa`, `full qa` -> `scripts/qa/full-qa-pass.sh` (deterministic checkers), then the
   `functionality-audit` skill for whether the product actually works end to end
 - `testing` -> the `tdd` skill
