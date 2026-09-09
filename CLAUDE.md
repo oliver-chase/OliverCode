@@ -5,7 +5,7 @@ This file loads in every session on this machine, from any directory, via the
 path below is written to resolve from wherever you are:
 
 - `$OC/...` means a path inside the OliverCode repo. Resolve `$OC` once, when you first need
-  it, and check it — an uninstalled or moved symlink resolves to `.`, which would silently
+  it, and verify it — an uninstalled or moved symlink resolves to `.`, which would silently
   point at the wrong repo:
   ```bash
   OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
@@ -42,7 +42,7 @@ apply constantly. That contract is the order they run in.
   `check` (`$OC/core/contracts/CODE_INTENT_STANDARD.md`). Never hand-maintain a volatile
   number (test counts, coverage, timings) in prose — state the command instead. Dated
   measurements go in the backlog tracker once, with their date.
-- Ablate before trusting a test: remove the guard, confirm it goes red, restore. A test that
+- Ablate before trusting a test: remove the guard, verify it goes red, restore. A test that
   stays green without the code it protects reports confidence it has not earned.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
@@ -59,13 +59,13 @@ apply constantly. That contract is the order they run in.
 ## Pre-Commit
 Run the current repo's own canonical validation before committing, never OliverCode's.
 Usually `scripts/validate.sh`. Where that file does not exist, the repo runs validation
-through its own npm script instead (`validate`, or `check`). Confirm which from that repo's
+through its own npm script instead (`validate`, or `check`). Verify which from that repo's
 CLAUDE.md or package.json rather than assuming the filename — an agent that assumes, finds
 nothing, and moves on has skipped validation without noticing.
 Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement
-`.githooks/pre-commit` is the only mechanically-enforced layer (eleven gates here, nine in a
+`.githooks/pre-commit` is the only mechanically-enforced layer (twelve gates here, ten in a
 repo that adopts the framework -- `$OC/docs/GOVERNANCE.md` has the per-repo table).
 It is installed per repo via `core.hooksPath`. If that config is unset or points at a missing
 directory, **git runs no hooks at all and says nothing** — the gates fail open. `$OC/scripts/olivercode health`
