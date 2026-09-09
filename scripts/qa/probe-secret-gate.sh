@@ -22,7 +22,7 @@ fi
 
 printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt
 git add leak-probe.txt
-git commit -m probe >/dev/null 2>&1
+git commit -m probe -- leak-probe.txt >/dev/null 2>&1
 COMMIT_EXIT=$?
 
 if [ "$COMMIT_EXIT" -ne 0 ]; then

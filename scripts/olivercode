@@ -52,12 +52,15 @@ def print_usage() -> None:
 def command_skills(argv: list[str]) -> int:
     """List every skill under skills/, optionally filtered by --grep TERM."""
     term = None
-    if "--grep" in argv:
-        idx = argv.index("--grep")
-        if idx + 1 >= len(argv):
+    rest = list(argv)
+    if "--grep" in rest:
+        idx = rest.index("--grep")
+        if idx + 1 >= len(rest):
             print("Error: --grep requires a search term.")
             return 1
-        term = argv[idx + 1].lower()
+        term = rest[idx + 1].lower()
+        del rest[idx : idx + 2]
+    _reject_extra("skills", rest)
 
     skills = _load_skills(OC_ROOT)
     if not skills:
@@ -310,9 +313,15 @@ def command_install(oc_root: Path) -> int:
             target.unlink()
             return _link(target, source)
         if target.exists():
+            # BACKUP-COLLISION-1: rename() overwrites an existing destination on POSIX,
+            # so a fixed two-name fallback silently destroyed the second backup on a
+            # third real-file collision at the same path -- contradicts "never
+            # destructive". Keep counting until a free name is found instead.
             backup = target.with_name(target.name + ".pre-olivercode")
-            if backup.exists():
-                backup = target.with_name(target.name + ".pre-olivercode.bak")
+            n = 1
+            while backup.exists():
+                n += 1
+                backup = target.with_name(f"{target.name}.pre-olivercode.{n}")
             target.rename(backup)
             backups.append(str(backup))
             target.symlink_to(source)
@@ -559,7 +568,7 @@ def command_link_plugins(vault_root: Path | None = None, dry_run: bool = False) 
     import os as _os
     _env = _os.environ.get("OLIVERCODE_VAULT_ROOT")
     vault_root = vault_root or (Path(_env) if _env else OC_ROOT.parent.parent.parent)
-    src = vault_root / "Work Vault" / "06 - Strategy" / "_Plugins"
+    src = vault_root / "Operations Vault" / "01 - Plugins"
     dst = Path.home() / ".claude" / "plugins"
 
     print("OliverCode link-plugins" + (" (dry run)" if dry_run else ""))
@@ -974,7 +983,9 @@ def main() -> int:
         _reject_extra(cmd, argv)
         return command_init(OC_ROOT)
     if cmd == "link-plugins":
-        return command_link_plugins(dry_run="--dry-run" in sys.argv[2:])
+        rest = [a for a in argv if a != "--dry-run"]
+        _reject_extra(cmd, rest)
+        return command_link_plugins(dry_run="--dry-run" in argv)
 
     if cmd == "health":
         root, rest = _take_root_flag(argv)
