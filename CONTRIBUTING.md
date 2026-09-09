@@ -45,10 +45,9 @@ whether it's a hook or a sentence.
 
 ## Required Workflow
 
-1. Make the code/config change.
-2. Update affected docs/contracts in the same change set.
-3. Run `bash scripts/validate.sh`.
-4. Commit only when the gates pass.
+The sequence is `core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` (gap analysis through
+commit, the human-facing loop) plus `core/contracts/EXECUTION_CONTRACT.md` (the gate and
+evidence mechanics the loop ends in) — one home each, not restated here.
 
 ## Documentation Sync Requirement
 

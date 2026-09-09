@@ -2,6 +2,11 @@
 
 Every change, in any project, follows this locked process. No gate is skippable.
 
+`core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` owns the human-facing sequence this
+mechanism sits inside — gap analysis, spec, priority, the build/verify/commit loop. This
+file owns the gate and evidence mechanics that loop ends in: what runs, what blocks, and
+the machine-readable policies behind it.
+
 **Backend policies (machine-readable, loaded per task):**
 - `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder) -- per-repo validation and evidence requirements
 - `shared/task-policies/task-types.json` -- per-task-type evidence requirements

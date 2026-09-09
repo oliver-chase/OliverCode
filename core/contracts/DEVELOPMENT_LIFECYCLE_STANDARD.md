@@ -130,6 +130,7 @@ This standard is itself subject to it. Prefer:
 | `CODE_INTENT_STANDARD.md` | Comments, decision records, volatile numbers, ablation |
 | `PROJECT_HYGIENE_STANDARD.md` | Story and epic hygiene, commit format |
 | `PROJECT_STRUCTURE_STANDARD.md` | Folder layout |
+| `EXECUTION_CONTRACT.md` | Gate mechanics, evidence schema, the pre-commit hook contract this loop ends in |
 | `../../docs/DOCUMENTATION_STANDARD.md` | README and doc shape, backlog policy |
 
 ## Enforcement reality
