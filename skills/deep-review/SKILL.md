@@ -1,20 +1,25 @@
 ---
 name: deep-review
-description: "Post-build deep review loop — single sequential review agent over a commit range, simplify pass, validate-then-DELETE legacy cleanup, live re-verification on the real deploy, and a live session tracker so coverage and current state survive the session. Run before closing any multi-commit build session."
+description: "Post-build deep review loop: single sequential review agent over a commit range, simplify pass, validate-then-remove legacy cleanup, live re-verification on the real deploy. Ends with a live session tracker so coverage and current state survive the session. Run before closing any multi-commit build session."
 ---
 
 # Deep Review (post-build review loop)
 
 Reviews a session's own output before it is considered done: findings
-verified against code, validated-expired legacy deleted, and all state
+verified against code, validated-expired legacy removed, and all state
 written into a tracker another agent can resume from. Distinct from
 `functionality-audit` (does the PRODUCT work end to end) and
 `repo-audit-with-execution-batches` (surface scan of a repo at rest).
 
+This is the operational "how" for `DEVELOPMENT_LIFECYCLE_STANDARD.md` §5 (QA as a
+separate, adversarial pass) and §7 (simplify as part of finishing) — that contract
+states the principle, this skill runs it. Consult it for the why. This file never
+restates it.
+
 ## When to run
 
 Before closing any session that produced multiple commits — features,
-fixes, refactors. Also on request ("review tonight's work", "check what
+fixes, refactors. Also on request ("review tonight's work", "validate what
 we just built"). The unit of review is a commit RANGE, not a repo.
 
 ## Non-negotiables (owner-set)
@@ -52,7 +57,7 @@ hunt in priority order:
   conditions, SQL that must run on every supported backend, broken
   references after refactors (functions/ids/classes used but no longer
   defined), event wiring whose selectors no longer match the markup.
-- **Security:** injection, auth bypass, tenant/scope leaks (check every
+- **Security:** injection, auth bypass, tenant/scope leaks (validate every
   scope-switch try/finally), secrets in the diff.
 - **Behavioral regressions:** what did the old code do that the new
   code silently dropped? (Real example: a page consolidation lost the
@@ -115,17 +120,17 @@ tracker entry instead, marked with why.
 
 ### 5. Cleanup: remove, don't archive
 
-Legacy found during review gets VALIDATED then DELETED — git history is
+Legacy found during review gets VALIDATED then REMOVED — git history is
 the archive. Validation per file:
 - Zero code references (`grep -r` across code, scripts, configs —
   remember same-dir relative imports and commented env-var docs).
-- Content describes deleted functionality or a superseded era, or the
+- Content describes removed functionality or a superseded era, or the
   file self-declares historical.
-**Never delete current-state files** — backlog, audit tracking, gap
+**Never remove current-state files** — backlog, audit tracking, gap
 registers, capability matrices, anything that showcases where the
 project stands. When unsure whether a file is expired or current-state,
-ask the owner. Deletion is cheap to defer.
-After deleting: patch every dangling reference to live paths (prose
+ask the owner. Removal is cheap to defer.
+After removing: patch every dangling reference to live paths (prose
 history mentions may stay — they describe the past accurately).
 
 ### 6. Live re-verification
@@ -164,7 +169,7 @@ The repo's backlog carries a **live session tracker** section (template:
 
 - Findings and fixes land in commit messages (the durable audit trail)
   plus one tracker line each.
-- Cleanup commits state what was deleted, the validation done, what was
+- Cleanup commits state what was removed, the validation done, what was
   deliberately KEPT and why.
 - Close the session with the tracker's "where things stand" rewritten
   to match reality.
