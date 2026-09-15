@@ -1,12 +1,13 @@
-"""Health checks with no fleet-walking: governance-waiver expiry and the GitHub About.
+"""Health checks: governance-waiver expiry, the GitHub About, and fleet topology.
 
 Extracted from the launcher; it re-exports these names, so callers and tests are
-unchanged. Both checks return (passed, failed, skipped) for the launcher's tally.
+unchanged. Every check returns (passed, failed, skipped) for the launcher's tally.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -148,7 +149,9 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
 #   - a 423MB blob sat in one of those histories, over GitHub's 100MB per-file
 #     hard limit, so that repo could never have pushed even with a live remote
 #   - four plugins were symlinked into ~/.claude/plugins by hand, and nothing
-#     would have recreated them on another machine
+#     would have recreated them on another machine (the check this added, since
+#     retired 2026-09-15 when 01 - Plugins merged into 01 - Skills -- see
+#     `_check_vault_skill_links` for the same risk at the skill layer instead)
 #   - two folder-level structure validators sat red for eleven findings
 # All of them read outside the framework repo, so all of them degrade to WARN
 # rather than FAIL when that context is absent: a standalone clone stays HEALTHY.
@@ -156,49 +159,59 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
 GITHUB_FILE_LIMIT = 100 * 1024 * 1024
 
 
-def _check_plugin_links(vault_root: Path) -> tuple[int, int, int]:
-    """Every plugin in the vault must be symlinked into ~/.claude/plugins/.
+def _check_vault_skill_links(vault_root: Path) -> tuple[int, int, int]:
+    """Every skill under the vault's 01 - Skills/ must be symlinked into ~/.claude/skills/.
 
-    The symlink IS the install: Claude Code discovers plugins in that directory and
-    nowhere else, so a missing link means the slash commands silently do not exist.
-    `olivercode install` covers ~/.claude/skills and has never touched plugins.
+    Replaces `_check_plugin_links`, 2026-09-15: `01 - Plugins/` was merged into
+    `01 - Skills/` once every V.Two skill converted off plugin packaging, so the old
+    check had permanently stopped finding anything -- the directory it looked for no
+    longer exists. The same missing-symlink risk moved to the skill layer instead: a
+    skill added to `01 - Skills/` with no matching symlink is invisible to the Skill
+    tool and nothing said why. Walks the same way `check_skill_structure.py` does in
+    the vault's own `meta/skill-fleet-audit`, so a skill nested under any family
+    subfolder (`vtwo-ops/`, `personal/`, `_shared/`, ...) is still found.
     """
-    print("\nPlugin links:")
-    plugins_src = vault_root / "Operations Vault" / "01 - Plugins"
-    target_dir = Path.home() / ".claude" / "plugins"
+    print("\nVault skill links:")
+    skills_root = vault_root / "Operations Vault" / "01 - Skills"
+    target_dir = Path.home() / ".claude" / "skills"
 
-    if not plugins_src.is_dir():
-        print("  [WARN] no _Plugins/ directory in the vault — skipping")
+    if not skills_root.is_dir():
+        print("  [WARN] no 01 - Skills/ directory in the vault — skipping")
         return 0, 0, 1
     if not target_dir.is_dir():
-        print("  [WARN] ~/.claude/plugins/ not present — skipping")
+        print("  [WARN] ~/.claude/skills/ not present — skipping")
         return 0, 0, 1
 
-    declared = sorted(
-        p.name for p in plugins_src.iterdir()
-        if p.is_dir() and (p / ".claude-plugin" / "plugin.json").is_file()
-    )
+    non_skill_dirs = {"vtwo-growth-shared", "docs"}
+    declared = []
+    for dirpath, dirnames, filenames in os.walk(skills_root):
+        dirnames[:] = [d for d in dirnames if d not in non_skill_dirs and not d.startswith(".")]
+        if "SKILL.md" in filenames:
+            declared.append(Path(dirpath))
+            dirnames[:] = []
+    declared.sort()
+
     if not declared:
-        print("  [WARN] _Plugins/ holds no plugin with a plugin.json — skipping")
+        print("  [WARN] 01 - Skills/ holds no skill with a SKILL.md — skipping")
         return 0, 0, 1
 
     passed = failed = 0
-    for name in declared:
+    for skill_dir in declared:
+        name = skill_dir.name
         link = target_dir / name
-        expected = plugins_src / name
         if not link.exists() and not link.is_symlink():
-            print(f"  [FAIL] {name}: not linked into ~/.claude/plugins/ — its skills do not load")
+            print(f"  [FAIL] {name}: not linked into ~/.claude/skills/ — invisible to the Skill tool")
             failed += 1
         elif link.is_symlink() and not link.exists():
             print(f"  [FAIL] {name}: symlink is broken (points at {link.readlink()})")
             failed += 1
-        elif link.is_symlink() and link.resolve() != expected.resolve():
-            print(f"  [FAIL] {name}: linked to {link.resolve()}, not {expected}")
+        elif link.is_symlink() and link.resolve() != skill_dir.resolve():
+            print(f"  [FAIL] {name}: linked to {link.resolve()}, not {skill_dir}")
             failed += 1
         else:
             passed += 1
     if passed and not failed:
-        print(f"  [OK] all {passed} plugins linked")
+        print(f"  [OK] all {passed} vault skills linked")
     return passed, failed, 0
 
 
