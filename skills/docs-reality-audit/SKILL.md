@@ -1,6 +1,6 @@
 ---
 name: docs-reality-audit
-description: "Use when the user asks 'are these docs accurate', 'audit the docs', 'check the README against the code', 'do these docs contradict each other', or reports doc drift/stale instructions. Cross-checks every factual claim against live code, flags doc-vs-doc contradictions, consolidates to one file per concept."
+description: "Use when the user asks 'are these docs accurate', 'audit the docs', or 'do these docs contradict each other'. Also use for 'check the README against the code' or a doc-drift/stale-instructions report. Cross-checks every factual claim against live code, flags doc-vs-doc contradictions, consolidates to one file per concept."
 ---
 
 # Docs Reality Audit
@@ -11,11 +11,11 @@ description: "Use when the user asks 'are these docs accurate', 'audit the docs'
 Live code/config > package.json/tooling output > git log recency > docs
 ```
 
-Docs are never truth — they're a claim about truth. A doc that reads as authoritative (dated, "Status: Active", specific line numbers, structured tables) is not more likely to be correct than a stale one. Verify every load-bearing claim against the thing it describes before trusting it.
+Docs are never truth — they're a claim about truth. A doc that reads as authoritative (dated, "Status: Active", specific line numbers, structured tables) is not more likely to be accurate than a stale one. Check every load-bearing claim against the thing it describes before trusting it.
 
 ## When to Use
 
-The user wants documentation simplified, "brought up to date," or reviewed for accuracy — not just tidied. Also use proactively when a doc's own internal evidence (a "last updated" date far behind recent commits, a status note contradicted by the file tree) suggests drift.
+The user wants documentation simplified, "brought up to date," or reviewed for accuracy — not just tidied. Also use proactively when a doc's own internal evidence suggests drift. Example signals: a "last updated" date far behind recent commits, or a status note the file tree contradicts.
 
 ## Process
 
@@ -29,27 +29,15 @@ git log --oneline -15                                   # what's actually been h
 
 Compare doc last-touch dates against recent commit activity in the areas they describe. A doc untouched while its subject area has 10+ recent commits is the highest-probability drift candidate — read it first.
 
-Also check local-vs-tracked drift before reading content: `git status` + `git diff origin/main --name-only`. A doc file present locally but not in git (or vice versa) needs reconciling before you audit its content — you could otherwise be auditing a file nobody else's clone even has.
+Also check local-vs-tracked drift before reading content: `git status` + `git diff origin/main --name-only`. A doc file present locally but not in git (or vice versa) needs reconciling before you audit its content. Otherwise you could be auditing a file nobody else's clone even has.
 
 ### Phase 2 — Read Every Doc Fully
 
-Skimming misses contradictions. Read each doc completely and extract its verifiable claims: routes/pages, file paths, env vars, table row counts (migrations, stories, API routes), commands, design tokens/colors/fonts, "required files" lists, status labels ("Active", "Functional", "Archived").
+Read each doc completely — skimming misses contradictions. Extract its verifiable claims: routes/pages, file paths, env vars, and commands. Also capture table row counts (migrations, stories, API routes), design tokens/colors/fonts, "required files" lists, and status labels ("Active", "Functional", "Archived").
 
-### Phase 3 — Verify Every Claim Against Code
+### Phase 3 — Check Every Claim Against Code
 
-Never trust a doc's inventory of itself. Check the filesystem directly:
-
-| Claim type | Verify against |
-|---|---|
-| Routes/pages exist | `find app -name "page.tsx"` (or framework equivalent) — not the doc's route table |
-| Commands work | `package.json` `scripts` block |
-| Env vars | `.env.example` + the config loader (e.g. `lib/config/env.ts`) that reads `process.env` |
-| Migration/file counts | `ls <migrations-dir>` — count directly, don't trust a doc's "N migrations" claim |
-| Design tokens/colors/fonts | The actual CSS/theme file's current contents, not a PRD or historical mockup |
-| Cron/schedule claims | The actual scheduler config (`wrangler.toml`, CI YAML, crontab) — read its comments, they often record what was *tried and reverted* |
-| CI/deploy steps described in docs | `.github/workflows/*.yml` — confirm the doc's described steps match what the workflow actually runs |
-| Story/ticket IDs in status tables | The actual story/ticket files — an ID scheme with zero matching files is fiction, however structured the table looks |
-| "Required files" / "deliberately removed" lists | Check existence directly — these lists across different docs frequently contradict each other |
+Never trust a doc's inventory of itself. Check the filesystem directly, per claim type. See `references/claim-checks-table.md` for the full table — routes, commands, env vars, migration counts, design tokens, cron/schedule, CI steps, ticket IDs, and required-files lists.
 
 ### Phase 4 — Cross-Doc Contradiction Check
 
@@ -57,7 +45,7 @@ Never trust a doc's inventory of itself. Check the filesystem directly:
 grep -rln "<claim-or-number>" --include="*.md" .
 ```
 
-The same fact stated in two files is itself a finding, independent of which one (if either) is correct — per the no-duplication rule, one of them is wrong the moment the other changes, even if both are accurate today.
+The same fact stated in two files is itself a finding, independent of which one (if either) is accurate. Per the no-duplication rule, one of them turns wrong the moment the other changes, even if both are accurate today.
 
 ### Phase 5 — Dependency Scan Before Touching Anything
 
@@ -74,7 +62,7 @@ Catches `require_file`-style shell gates, code comments citing the doc, CI workf
 Apply concept ownership: every fact, table, or contract gets exactly one home file. Every other file references it by name instead of restating it. Typical shape for a small-to-mid repo:
 
 - One root `README.md` — front door, quick start, links out.
-- One current-state doc (route inventory, data model, contracts, known gaps) — not split into N parts unless a real enforced size cap requires it (check for one before assuming — a "split for size compliance" note is often a one-time decision with no enforcement behind it anymore).
+- One current-state doc (route inventory, data model, contracts, known gaps). Don't split it into N parts unless a real, enforced size cap requires it — check for one before assuming. A "split for size compliance" note is often a one-time decision with no enforcement left behind it.
 - One architecture/tech-stack doc.
 - One doc per genuinely distinct operational concern (e.g. a bot, a setup/install flow) — merge sibling files that repeat the same env-var/command lists under different headings.
 - Delete point-in-time audit/snapshot files that no longer describe current reality and aren't append-only evidence records (see Pitfalls — don't confuse the two).
@@ -82,45 +70,32 @@ Apply concept ownership: every fact, table, or contract gets exactly one home fi
 
 ### Phase 7 — Handle Ambiguous Backlog/Roadmap Content
 
-If an audit turns up a backlog, roadmap, or status table that can't be verified against code (no matching story files, IDs from a scheme nobody recognizes), that's a business judgment call, not a code fact — don't silently delete it and don't silently keep asserting it. Ask the user: cut it, keep it explicitly labeled as unverified, or pause for them to review. Whatever they choose, if it's kept, flag it in the new doc as needing owner review rather than reproducing it as settled fact.
+If an audit turns up a backlog, roadmap, or status table, check it against code first. One that fails — no matching story files, or IDs from an unrecognized scheme — is a business judgment call, not a code fact. Don't silently delete it, and don't silently keep asserting it. Ask the user: cut it, keep it explicitly labeled as unverified, or pause for them to review. Whatever they choose, if it's kept, flag it in the new doc as needing owner review rather than reproducing it as settled fact.
 
 ### Phase 8 — Execute + Reference Fixes
 
 Rewrite/merge/delete per the target structure. Fix every downstream reference found in Phase 5 (scripts, code comments, cross-links between docs).
 
-### Phase 9 — Verify
+### Phase 9 — Check
 
 ```bash
 npm run check:structure   # or equivalent structure/lint gate
 grep -rn "<deleted-or-renamed-filename>" --include="*.md" --include="*.ts" --include="*.sh" . | grep -v node_modules | grep -v archive
 ```
 
-Confirm the gate still passes and no dangling references remain.
+Check that the gate still passes and no dangling references remain.
 
 ## Key Pitfalls (Check Every Audit)
 
-| Pitfall | Why it bites |
-|---|---|
-| Trusting a doc's own "current design system" / "current stack" claim | Multiple docs can each claim to be current and contradict each other — only the file that matches the live CSS/config wins |
-| A structured status table with plausible-looking IDs | Structure and specificity are not evidence. Cross-check IDs against real files before treating rows as fact |
-| Editing dated QA/evidence log entries to match the new doc structure | Evidence logs (dated "on YYYY-MM-DD we did X") are historical record, not living docs — rewriting them falsifies the audit trail. Only fix live navigation references, never the timestamped entries themselves |
-| Deleting/merging a doc without grepping for hardcoded path references | Breaks shell `require_file` gates, stale code comments, CI configs silently |
-| Assuming a doc split (e.g. "part-01..part-06") is enforced | Check for an actual size-cap validator before assuming the split can't be undone — it's often just a one-time unenforced decision that's now causing the docs to drift out of sync with each other |
-| "Fixing" a stale doc mechanically without checking relevance | Ask whether the described feature is still used/prominent before polishing a more-accurate detail onto it. Sometimes the right fix is to trim, not correct |
-| Applying a vault-specific formatting rule (e.g. "no tables") to an unrelated repo | Formatting standards from one system (e.g. a Word-paste vault) don't automatically transfer to a git-hosted code repo's README — GitHub renders tables fine. Port the *discipline* (SSOT, no duplication), not every literal rule |
+See `references/pitfalls.md` for the full table. It covers design-system claims, plausible-looking status IDs, dated evidence-log entries, and ungrepped path references before a delete or merge. It also covers assumed-enforced doc splits, mechanical fixes on dead features, and vault-specific rules leaking into unrelated repos.
 
 ## Complementary Skills — Use Alongside, Don't Duplicate
 
-This skill covers doc-vs-code truth and doc consolidation only. It deliberately does not hunt for code bugs, quality issues, or UI problems — pull in the dedicated tool for those instead of improvising a lighter version inline:
-
-- **`/code-review`** — when the audit's code-verification steps (Phase 3) turn up an actual correctness bug in the code itself (not just a doc claiming something false about it), don't fix it ad hoc as a side effect of the doc audit. Run `/code-review` on it as its own pass.
-- **`/simplify`** — if Phase 3/4 surfaces real duplication or dead code in the codebase (not just in the docs), that's a `/simplify` job, not a docs-reality-audit job — they share the no-duplication principle but operate on different material.
-- **`diagnosing-bugs`** — if verifying a doc's claim requires figuring out *why* something is actually broken (not just confirming that it is), switch to that skill for the root-cause work, then come back to the doc fix once the real behavior is known.
-- **A frontend/UX skill** — docs-reality-audit doesn't evaluate interface or interaction quality. If the project has a UI and the audit is part of a broader "review this project" ask, pair it with whichever design skill the machine has installed (see `docs/EXTERNAL-TOOLING.md` — OliverCode ships none, by scope) and run them as separate, parallel-purpose passes rather than folding one into the other.
+See `references/complementary-skills.md` for the dedicated tool to reach for instead of improvising: `/code-review`, `/simplify`, `diagnosing-bugs`, or a frontend/UX skill.
 
 ## Report Format
 
 - File-count before/after (e.g. "25 doc files → 12, N contradictions found").
-- A findings table: file, claim, verified fact, fix applied.
+- A findings table: file, claim, checked fact, fix applied.
 - An explicit "needs owner review" section for anything ambiguous/business-judgment (see Phase 7) — never silently resolved.
-- If a complementary skill (above) was invoked as part of this audit, name it and summarize what it found separately from the doc findings.
+- If this audit invoked a complementary skill (above), name it and summarize what it found separately from the doc findings.
