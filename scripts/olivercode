@@ -929,8 +929,13 @@ def command_audit_fleet(oc_root: Path) -> int:
     Non-interactive: writes findings to a log file and prints one line per check,
     never fixes anything. A cron job with nobody watching should never auto-fix --
     see that plan's Step 4 Risk.
+
+    Respects OLIVERCODE_VAULT_ROOT like health/link-plugins/sync-hooks do -- this
+    command was missing that override until a live question about its placement
+    caught the inconsistency (2026-09-15).
     """
-    vault_root = oc_root.parent.parent.parent
+    _env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
+    vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
     audit_dir = vault_root / "Operations Vault" / "01 - Skills" / "meta" / "skill-fleet-audit"
     scripts_dir = audit_dir / "scripts"
     if not scripts_dir.is_dir():
@@ -994,8 +999,11 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
     uncommitted changes or no upstream tracking branch. Each repo's own pre-push
     hook is the real safety gate here (secret scan, no force-push) -- this command
     only decides which repos to attempt, never overrides what that hook blocks.
+
+    Respects OLIVERCODE_VAULT_ROOT like health/link-plugins/sync-hooks do.
     """
-    vault_root = oc_root.parent.parent.parent
+    _env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
+    vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
     targets = {"olivercode": oc_root, "vault": vault_root}
 
     for name, repo_path in targets.items():
