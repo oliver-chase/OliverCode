@@ -1,6 +1,6 @@
 ---
 name: writing-documentation
-description: Use whenever writing or rewriting a README, architecture doc, reference doc, any repo documentation, or a non-trivial CODE COMMENT — in this repo, any governed repo, or a fork. Applies the locked documentation standard: problem-driven README outline, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice, Readability, and Sentence clarity rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
+description: Use whenever writing or rewriting a README, architecture doc, reference doc, or repo documentation — this repo, a governed repo, or a fork. Also use for a non-trivial CODE COMMENT. Applies the locked documentation standard: problem-driven README outline, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice, Readability, and Sentence clarity rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
 ---
 
 # Writing Documentation
@@ -40,7 +40,7 @@ contract instead of a generic house style.
    content. It's out of scope for both this skill and that skill.
 8. **Verify.** `bash scripts/validate.sh` in OliverCode, or the repo's own
    `scripts/validate.sh` elsewhere — the reference and consistency gates are the floor. Read
-   the result yourself for what they cannot check (voice, ordering, completeness).
+   the result yourself for what they cannot verify (voice, ordering, completeness).
 
 ## Boundaries
 
