@@ -223,21 +223,30 @@ same discipline this plan just modeled: never assert a gap without checking it l
 
 ## Definition of Done
 
-- [ ] Kiana confirms the `meta/` family-folder decision (Step 3) before it's created.
-- [ ] `_audit.py` + the 3 audit skills merged into one `meta/skill-fleet-audit/` skill,
-      verified against each original tool's own existing test fixtures, old directories and
-      `_audit.py` deleted, `README.md`/inventory/`_validate_structure.js` updated.
-- [ ] `olivercode audit-fleet` runs non-interactively against both the vault's `01 -
-      Skills/` and OliverCode's own `skills/`, writes findings to each tree's own backlog
-      convention, fixes nothing unattended.
-- [ ] `sync-hooks` (or a sibling mechanism) manages `pre-push` for every repo `push-fleet`
-      will touch, not just the vault.
-- [ ] `olivercode push-fleet --dry-run` reviewed live before the real (non-dry-run) version
-      is scheduled anywhere.
+- [x] Kiana confirms the `meta/` family-folder decision (Step 3) before it's created --
+      confirmed by "yes execute" immediately after this exact decision was presented.
+- [x] `_audit.py` + the 3 audit skills merged into one `meta/skill-fleet-audit/` skill. One
+      deviation from the original wording: no test fixtures existed on disk to verify
+      against (Pressure-Test Finding 2) -- verified instead by empirical live testing (real
+      skill counts, real fleet-wide runs) before trusting either moved script again. Old
+      directories and `_audit.py` deleted, `README.md`/inventory updated;
+      `_validate_structure.js` needed no changes at all (Pressure-Test Finding 3).
+- [x] `olivercode audit-fleet` runs non-interactively against both the vault's `01 -
+      Skills/` and OliverCode's own `skills/`, fixes nothing unattended. One deviation from
+      the original wording: it writes to `runtime/manifests/logs/audit-fleet.log`, not
+      directly into each tree's backlog -- findings still need a real triage session before
+      landing in a backlog (see SPEC-21, opened by hand from this command's first live run,
+      not by the command itself).
+- [x] `sync-hooks` now manages `pre-push` for every repo it touches, not just the vault --
+      new `core/templates/project/pre-push`, `_install_hook_pair` extended, run live.
+- [x] `olivercode push-fleet --dry-run` reviewed live, then the real version run twice
+      against OliverCode's own repo (5 commits, then 1) before this plan itself checked this
+      box -- both landed on the real remote, confirmed via `git rev-parse HEAD @{u}`.
 - [ ] `scripts/local-scheduler/` installed and confirmed running via `launchctl list`,
-      cadence explicitly confirmed with Kiana beforehand.
-- [ ] `push-fleet`'s automatic scope starts at vault + OliverCode only, per-repo opt-in for
-      anything wider.
+      cadence explicitly confirmed with Kiana beforehand. Built, not yet installed -- see
+      this plan's own risk on this exact point.
+- [x] `push-fleet`'s automatic scope starts at vault + OliverCode only, per-repo opt-in for
+      anything wider -- hardcoded, not reading a not-yet-real `repo-profiles.json` field.
 - [x] `meta/plan-pressure-test` built and symlinked, verified against this very plan as its
       first real case (the Pressure-Test Findings section above was that first case).
 - [x] Memory written: `feedback-pressure-test-every-plan.md`, indexed in `MEMORY.md`.
