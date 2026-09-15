@@ -18,6 +18,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.repo_profiles import load_repo_profiles  # noqa: E402
+from lib.repo_profiles import resolve_repo_path as _resolve_repo_path  # noqa: E402
+from lib.repo_profiles import iter_fleet as _iter_fleet  # noqa: E402
 from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E402,F401
 from lib.health_checks import (  # noqa: E402,F401
     _local_or_shared, _check_waiver_expiry, _check_github_about,
@@ -615,36 +617,10 @@ def command_link_plugins(vault_root: Path | None = None, dry_run: bool = False) 
     return 0
 
 
-def _resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
-    """Where a fleet repo actually lives.
-
-    Default is the sibling convention `<fleet_root>/<name>`, which assumes every repo
-    sits under one parent. That assumption breaks the moment someone adopts this into
-    an existing setup whose repos are spread across several directories -- and before
-    this existed, such a repo could not be registered at all, because the name WAS the
-    path. An optional `path` in the profile takes precedence: absolute, `~`-relative,
-    or relative to fleet_root.
-    """
-    declared = profile.get("path")
-    if not declared:
-        return fleet_root / name
-    p = Path(declared).expanduser()
-    return p if p.is_absolute() else (fleet_root / p)
-
-
-def _iter_fleet(profiles: dict, fleet_root: Path):
-    """Yield (name, profile, repo_path) for every fleet repo, framework repo excluded.
-
-    Single definition on purpose. health and sync-hooks previously each carried their
-    own copy of this filter and had already drifted apart: one compared the self-skip
-    case-sensitively and the other did not, so a profile named "OliverCode" -- the
-    casing `discover` emits from a directory name -- was skipped by sync-hooks and
-    treated as a governed repo by health.
-    """
-    for name, profile in profiles.items():
-        if name.lower() == "olivercode":
-            continue
-        yield name, profile, _resolve_repo_path(name, profile, fleet_root)
+# _resolve_repo_path / _iter_fleet moved to lib/repo_profiles.py 2026-09-15 so
+# find-spec.py could reuse fleet-repo resolution instead of a third copy. Imported
+# under their original names below so `launcher._iter_fleet` etc. keep working for
+# existing callers and tests.
 
 
 def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
