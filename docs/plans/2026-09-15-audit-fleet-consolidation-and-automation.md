@@ -3,8 +3,9 @@
 Date: 2026-09-15
 Related: this session's `skill-usage-audit` findings and hook-drift fixes (OliverCode
 `6b5543b`, `d5d3dbe`); `docs-reality-audit`'s new `references/` split (same session,
-precedent for progressive disclosure); `fallow/scripts/local-scheduler` (launchd pattern,
-including its documented duplicate-scheduler incident); `Operations Vault/01 -
+precedent for progressive disclosure); a fleet product repo's existing local `launchd`
+scheduler (real pattern, including its documented duplicate-scheduler incident, name kept out
+of this tracked doc per OliverCode's own fleet-privacy gate); `Operations Vault/01 -
 Skills/vtwo-ops/meeting-notes` (existing router precedent, different shape — see Step 2).
 
 Cross-repo note: this plan is centered on OliverCode (the CLI already owns fleet iteration
@@ -143,21 +144,21 @@ above, and consider a per-repo `repo-profiles.json` opt-in flag (`"autoPush": tr
 than blanket-enabling everything at once — mirrors how `hookVariant` already lets a repo
 opt out of `sync-hooks`.
 
-## Step 6 — The scheduler itself: mirror `fallow/scripts/local-scheduler` exactly
+## Step 6 — The scheduler itself: mirror the existing product-repo `launchd` scheduler exactly
 
 **What:** `OliverCode/scripts/local-scheduler/` — `install.sh`, `uninstall.sh`, a
 `tick`-style entry point, README with setup/migration/retirement instructions. Same shape as
-fallow's, adapted to call `olivercode audit-fleet` (weekly cadence — matches actual
-skill-build session frequency, not something that needs hourly checks) and
+that existing scheduler, adapted to call `olivercode audit-fleet` (weekly cadence — matches
+actual skill-build session frequency, not something that needs hourly checks) and
 `olivercode push-fleet` (more frequent — e.g. every few hours — since it's just flushing
 already-made commits) via `launchd`.
-**Why mirror fallow's exact pattern:** That scheduler already survived a real incident —
-two schedulers (`launchd` + a separate `crontab` job) running simultaneously with no lock
-between them, discovered live. Reusing its install/uninstall/lock discipline avoids
-re-discovering that failure mode here.
+**Why mirror that pattern exactly:** That scheduler already survived a real incident — two
+schedulers (`launchd` + a separate `crontab` job) running simultaneously with no lock between
+them, discovered live. Reusing its install/uninstall/lock discipline avoids re-discovering
+that failure mode here.
 **Risk — exact cadence is a real open decision, not something to hardcode on a guess:**
-confirm weekly/hourly-ish numbers with Kiana before `install.sh` ships, the same way
-fallow's own cadence was a deliberate choice, not a default.
+confirm weekly/hourly-ish numbers with Kiana before `install.sh` ships, the same way that
+scheduler's own cadence was a deliberate choice, not a default.
 **Risk — Mac-asleep cron-skip:** already a known, documented gap for this class of
 scheduler (see `osg-security`/Fallow memory) — launchd fires on wake, not while asleep, so a
 window can be missed. Acceptable for this use case (skill audits and pushes have no

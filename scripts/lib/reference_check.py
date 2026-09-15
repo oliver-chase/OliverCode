@@ -67,6 +67,13 @@ ANTI_PATTERN_FILES = frozenset({"core/contracts/FILE_LOCATION_STANDARD.md"})
 # Everything under here describes the repo a template is stamped INTO.
 TEMPLATE_PREFIX = "core/templates/"
 
+# A plan's whole job is describing paths that don't exist yet (what Step N will build)
+# or that exist in a different repo the plan is centered on (the vault, a fleet repo) --
+# neither case is a real claim about this repo's current tree. Added 2026-09-15 after a
+# plan doc correctly describing a not-yet-built scripts/local-scheduler/ failed this
+# check the same way a real broken reference would, with no way to tell the two apart.
+PLANS_PREFIX = "docs/plans/"
+
 # Gitignored local layers. Documenting them is correct, and a fresh clone lacks them --
 # these must stay exempt or `validate.sh` fails for everyone who forks this repo
 # (verified against a clean clone: memory/ and state/ are created per user, never tracked).
@@ -130,7 +137,7 @@ def check_references(repo_root: Path) -> tuple[int, list[str]]:
     checked = 0
 
     for rel in _tracked_files(repo_root):
-        if rel.startswith(TEMPLATE_PREFIX) or rel in ANTI_PATTERN_FILES:
+        if rel.startswith(TEMPLATE_PREFIX) or rel.startswith(PLANS_PREFIX) or rel in ANTI_PATTERN_FILES:
             continue
         if not rel.endswith((".md", ".json", ".sh", ".py", ".yml", ".yaml", ".mjs")):
             continue
