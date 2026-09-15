@@ -946,7 +946,11 @@ def command_audit_fleet(oc_root: Path) -> int:
     # once per target here. Harmless, just redundant work, not worth a special case.
     checks = ["check_skill_structure.py", "check_mcp_patterns.py", "check_clarity.py"]
 
-    log_dir = oc_root / "runtime" / "control-plane" / "logs"
+    # runtime/manifests/ is the sanctioned home for a generated observability
+    # artifact -- runtime/control-plane/ specifically means the local control
+    # plane install and trips a health check expecting its full shape (a
+    # launcher shim) the moment anything creates a directory under it.
+    log_dir = oc_root / "runtime" / "manifests" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "audit-fleet.log"
     log_lines = [f"=== audit-fleet run {datetime.now(timezone.utc).isoformat()} ==="]
