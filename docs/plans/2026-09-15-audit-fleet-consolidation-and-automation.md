@@ -237,6 +237,6 @@ same discipline this plan just modeled: never assert a gap without checking it l
       cadence explicitly confirmed with OliverCBot beforehand.
 - [ ] `push-fleet`'s automatic scope starts at vault + OliverCode only, per-repo opt-in for
       anything wider.
-- [ ] `meta/plan-pressure-test` built and symlinked, verified against this very plan as its
-      first real case.
-- [ ] Memory written: pressure-test every `/plan` output before executing it, going forward.
+- [x] `meta/plan-pressure-test` built and symlinked, verified against this very plan as its
+      first real case (the Pressure-Test Findings section above was that first case).
+- [x] Memory written: `feedback-pressure-test-every-plan.md`, indexed in `MEMORY.md`.
