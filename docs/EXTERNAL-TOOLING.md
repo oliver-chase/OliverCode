@@ -23,7 +23,7 @@ written on a machine running these, and a few of the rules read as arbitrary wit
 ## Frontend and design references
 
 Routing between these lives in the `frontend-ui-references` skill, which sits in the vault's
-`.olivercode/user-skills/` rather than here: design and UI routing is outside this
+`Operations Vault/01 - Skills/` rather than here: design and UI routing is outside this
 framework's declared scope (`docs/FRAMEWORK_BOUNDARY.md`).
 
 | Tool | What it does | Install |

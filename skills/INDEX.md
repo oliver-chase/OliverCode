@@ -40,7 +40,8 @@ No team template.
 - Keep only orchestration/security/optimization skills in `skills/<name>/SKILL.md`. Anything
   that isn't an engineering-method skill or the framework's own tooling doesn't belong here —
   no exceptions. A skill that only makes sense inside one product repo belongs in that repo's
-  own `.claude/skills/`. Personal/business skills belong in the vault's `.olivercode/user-skills/`.
+  own `.claude/skills/`. Personal/business skills belong in the vault's
+  `Operations Vault/01 - Skills/`.
 - Update this table in the same change when a skill is added or removed. This index is the
   only catalog — do not create a second copy of the skill list anywhere.
 - Remove references to retired skills instead of keeping dead aliases alive.
