@@ -833,6 +833,13 @@ Public repos get the 6-gate public template as the live `pre-commit` file
     auto-invokes that exact filename, there's no such thing as a repo
     literally running a file named `pre-commit-private`.
 
+    Also deploys `pre-push` (force-push/history-rewrite block, secret scan on the
+    push range) -- one template, no public/private variant, since nothing about
+    what's safe to push differs by repo visibility the way commit-time PII/token
+    policy does. Added 2026-09-15 so `olivercode push-fleet` has a real mechanical
+    gate on every repo it might touch, not just the vault (which got pre-push by
+    hand before this templating existed).
+
     Counts are verified against the hook files themselves by
     scripts/lib/consistency_check.py; see docs/governance.md for the table.
     """
@@ -849,6 +856,11 @@ Public repos get the 6-gate public template as the live `pre-commit` file
         reference_target = hooks_dir / "pre-commit-private"
         reference_target.write_bytes(reference_source.read_bytes())
         reference_target.chmod(0o755)
+
+    push_source = templates_dir / "pre-push"
+    push_target = hooks_dir / "pre-push"
+    push_target.write_bytes(push_source.read_bytes())
+    push_target.chmod(0o755)
 
     subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
 
