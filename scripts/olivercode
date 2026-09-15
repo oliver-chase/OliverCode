@@ -38,6 +38,8 @@ COMMANDS = [
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
+    ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against the vault + OliverCode's own skills"),
+    ("olivercode push-fleet [--dry-run]", "Push already-committed work for the vault + OliverCode, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
 
@@ -915,6 +917,121 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
     return 0
 
 
+def command_audit_fleet(oc_root: Path) -> int:
+    """Run meta/skill-fleet-audit's 3 static checks against every known skill root.
+
+    Targets exactly 2 fixed roots -- the vault's Operations Vault/01 - Skills and
+    OliverCode's own skills/ -- not the fleet-repo iteration sync-hooks uses. Fleet
+    iteration walks git repos for hook management; this walks 2 known skill-directory
+    trees, a different job with a different unit. See the audit-fleet plan's
+    Pressure-Test Finding 4 for why reusing repo-profiles.json here would be wrong.
+
+    Non-interactive: writes findings to a log file and prints one line per check,
+    never fixes anything. A cron job with nobody watching should never auto-fix --
+    see that plan's Step 4 Risk.
+    """
+    vault_root = oc_root.parent.parent.parent
+    audit_dir = vault_root / "Operations Vault" / "01 - Skills" / "meta" / "skill-fleet-audit"
+    scripts_dir = audit_dir / "scripts"
+    if not scripts_dir.is_dir():
+        print(f"Error: {scripts_dir} not found -- meta/skill-fleet-audit isn't on this machine.")
+        return 1
+
+    targets = {
+        "vault-skills": vault_root / "Operations Vault" / "01 - Skills",
+        "olivercode-skills": oc_root / "skills",
+    }
+    # check_clarity.py always re-runs the vault's own _validate_structure.js
+    # regardless of target -- that check is fleet-wide by design, so it repeats
+    # once per target here. Harmless, just redundant work, not worth a special case.
+    checks = ["check_skill_structure.py", "check_mcp_patterns.py", "check_clarity.py"]
+
+    log_dir = oc_root / "runtime" / "control-plane" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "audit-fleet.log"
+    log_lines = [f"=== audit-fleet run {datetime.now(timezone.utc).isoformat()} ==="]
+
+    any_failed = False
+    for target_name, target_path in targets.items():
+        if not target_path.is_dir():
+            print(f"  [SKIP] {target_name}: {target_path} not found")
+            continue
+        print(f"-- {target_name} ({target_path}) --")
+        for check in checks:
+            result = subprocess.run(
+                ["python3", str(scripts_dir / check), str(target_path)],
+                capture_output=True, text=True,
+            )
+            out_lines = result.stdout.strip().splitlines()
+            summary = out_lines[-1] if out_lines else "(no output)"
+            status = "FAIL" if result.returncode != 0 else "ok"
+            if status == "FAIL":
+                any_failed = True
+            print(f"  [{status}] {check}: {summary}")
+            log_lines.append(f"{target_name} {check}: {status} -- {summary}")
+
+    log_path.write_text("\n".join(log_lines) + "\n", encoding="utf-8")
+    print(f"\nFull output: {log_path}")
+    print("Findings are heuristic. Read the flagged locations before treating any as a real "
+          "defect -- this command never fixes anything on its own.")
+    return 1 if any_failed else 0
+
+
+def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
+    """Push already-committed work for the vault + OliverCode, unattended.
+
+    Scoped to just these two targets per the audit-fleet plan's Step 5 -- lowest
+    blast radius, both effectively personal/framework repos. A wider rollout needs
+    its own opt-in (a per-repo repo-profiles.json flag), not a blanket expansion,
+    and needs every target repo to actually carry the pre-push hook first (a repo
+    with a declared hookVariant still has none -- see sync-hooks' own skip logic).
+
+    Never commits anything. Skips, reports, and moves on for a repo with
+    uncommitted changes or no upstream tracking branch. Each repo's own pre-push
+    hook is the real safety gate here (secret scan, no force-push) -- this command
+    only decides which repos to attempt, never overrides what that hook blocks.
+    """
+    vault_root = oc_root.parent.parent.parent
+    targets = {"olivercode": oc_root, "vault": vault_root}
+
+    for name, repo_path in targets.items():
+        if not (repo_path / ".git").exists():
+            print(f"  [SKIP] {name}: no .git found at {repo_path}")
+            continue
+        status = subprocess.run(
+            ["git", "-C", str(repo_path), "status", "--porcelain"],
+            capture_output=True, text=True,
+        )
+        if status.stdout.strip():
+            print(f"  [SKIP] {name}: uncommitted changes present -- never auto-committed")
+            continue
+        upstream = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-parse", "--abbrev-ref", "@{u}"],
+            capture_output=True, text=True,
+        )
+        if upstream.returncode != 0:
+            print(f"  [SKIP] {name}: no upstream tracking branch")
+            continue
+        ahead = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-list", "--count", "@{u}..HEAD"],
+            capture_output=True, text=True,
+        )
+        count = int(ahead.stdout.strip() or "0")
+        if count == 0:
+            print(f"  [OK] {name}: up to date, nothing to push")
+            continue
+        if dry_run:
+            print(f"  [DRY-RUN] {name}: would push {count} commit(s)")
+            continue
+        result = subprocess.run(["git", "-C", str(repo_path), "push"], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"  [OK] {name}: pushed {count} commit(s)")
+        else:
+            err_lines = result.stderr.strip().splitlines()
+            print(f"  [FAIL] {name}: push blocked -- {err_lines[-1] if err_lines else 'unknown error'}")
+    return 0
+
+
 def command_update() -> int:
     """Pull this checkout's tracking branch, then converge fleet hooks.
 
@@ -1010,6 +1127,14 @@ def main() -> int:
         root, rest = _take_root_flag(argv)
         _reject_extra(cmd, rest)
         return command_sync_hooks(OC_ROOT, root)
+    if cmd == "audit-fleet":
+        _reject_extra(cmd, argv)
+        return command_audit_fleet(OC_ROOT)
+    if cmd == "push-fleet":
+        dry = "--dry-run" in argv
+        rest = [a for a in argv if a != "--dry-run"]
+        _reject_extra(cmd, rest)
+        return command_push_fleet(OC_ROOT, dry_run=dry)
     if cmd == "skills":
         return command_skills(argv)
 
