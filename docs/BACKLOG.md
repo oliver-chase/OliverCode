@@ -392,6 +392,18 @@ through `scripts/olivercode` and `tests/test_launcher_commands.py` /
 directly by its own `scripts/lib/<name>.py` path the way every other lib module now does.
 Not built here: five test files is a separate session's work, not a quick win.
 
+**B20 — OliverCode's own `skills/` has no structure/MCP-efficiency gate (MED, spec only).**
+`core/contracts/SKILL_EFFICIENCY_STANDARD.md` sets a fleet-wide bar (no monolith
+`SKILL.md`, no duplicate paragraphs, MCP-call efficiency by named pattern) but the only
+mechanical enforcement is the vault's `Operations Vault/01 - Skills/meta/skill-fleet-audit`,
+scoped to `01 - Skills/` and not runnable against this repo's own `skills/` as shipped —
+it resolves paths relative to a `01 - Skills/`-shaped tree. Port its 3 checkers
+(`check_skill_structure.py`, `check_mcp_patterns.py`, `check_clarity.py` is already
+covered fleet-wide by the ASD-STE100 gate) into a repo-local script under
+`scripts/lib/` that walks `skills/*/SKILL.md` instead, and wire it into `validate.sh`.
+Not built here: a new checker plus a `validate.sh` gate is a separate session's work, not
+a quick win.
+
 ### Deliberately kept / decided (do not redo)
 
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the
