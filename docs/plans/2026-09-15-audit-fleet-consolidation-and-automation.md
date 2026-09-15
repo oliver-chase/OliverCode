@@ -242,9 +242,11 @@ same discipline this plan just modeled: never assert a gap without checking it l
 - [x] `olivercode push-fleet --dry-run` reviewed live, then the real version run twice
       against OliverCode's own repo (5 commits, then 1) before this plan itself checked this
       box -- both landed on the real remote, confirmed via `git rev-parse HEAD @{u}`.
-- [ ] `scripts/local-scheduler/` installed and confirmed running via `launchctl list`,
-      cadence explicitly confirmed with OliverCBot beforehand. Built, not yet installed -- see
-      this plan's own risk on this exact point.
+- [ ] `scripts/local-scheduler/` installed and confirmed running via `launchctl list`.
+      Built, deliberately not installed -- OliverCBot's own choice when asked, 2026-09-15: build
+      only, install later. `bash scripts/local-scheduler/install.sh` when ready; edit
+      `tick.py`'s `JOBS` list first for different cadence numbers than the ~3h/weekly
+      defaults shipped here.
 - [x] `push-fleet`'s automatic scope starts at vault + OliverCode only, per-repo opt-in for
       anything wider -- hardcoded, not reading a not-yet-real `repo-profiles.json` field.
 - [x] `meta/plan-pressure-test` built and symlinked, verified against this very plan as its
