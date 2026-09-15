@@ -212,7 +212,9 @@ class TestSelfSkipIsCaseInsensitive(unittest.TestCase):
     sync-hooks would have installed FLEET hooks into the framework repo itself."""
 
     def test_source_uses_case_insensitive_comparison(self):
-        src = LAUNCHER.read_text(encoding="utf-8")
+        # Moved to lib/repo_profiles.py 2026-09-15 (iter_fleet), scripts/olivercode
+        # imports it under its original _iter_fleet name -- read the real source.
+        src = (REPO_ROOT / "scripts" / "lib" / "repo_profiles.py").read_text(encoding="utf-8")
         self.assertIn('name.lower() == "olivercode"', src)
         self.assertNotIn('if name == "olivercode"', src)
 

@@ -16,8 +16,8 @@ found, created, and kept current, so the next resumption doesn't repeat the same
 ## Findings (verified on disk this session, not estimated)
 
 1. **Spec-ID collisions across repos.** `SPEC-21` exists, unrelated, in both
-   `Operations Vault/01 - Skills/_BACKLOG.md` and `Oliver/Project Repos/tesknota/docs/
-   SPEC_BACKLOG.md` + `AUDIT_BACKLOG.md`. No repo namespaces its IDs. This is what
+   `Operations Vault/01 - Skills/_BACKLOG.md` and a fleet product repo's own
+   `docs/SPEC_BACKLOG.md` + `AUDIT_BACKLOG.md`. No repo namespaces its IDs. This is what
    forced the grep-and-read-both this session paid for.
 2. **Skill-count prose has no mechanical check against reality.** `01 - Skills/
    README.md`, `personal/README.md`, and `.olivercode/user-skills-inventory.md` each
@@ -39,8 +39,9 @@ found, created, and kept current, so the next resumption doesn't repeat the same
    symlink, and three separate README/ledger edits are done from memory, with no
    check against `core/contracts/SKILL_EFFICIENCY_STANDARD.md` before shipping.
 6. **Structure and MCP-efficiency are audit-only.** `Operations Vault/.githooks/
-   pre-commit` runs 4 gates (secret, icon, archived-content, ASD-STE100 clarity) — no
-   structure or MCP-efficiency gate. Only clarity blocks a commit. SPEC-22 through
+   pre-commit`, the private variant, runs 4 gates (secret, icon, archived-content,
+   ASD-STE100 clarity) — no structure or MCP-efficiency gate. Only clarity blocks a
+   commit. SPEC-22 through
    SPEC-25 (49 findings) exist today precisely because nothing forced the check earlier.
 7. **No symlink-completeness check for vault skills.** `scripts/olivercode health`
    exhaustively checks OliverCode's own `skills/` against `~/.claude/skills/`, using
@@ -166,9 +167,9 @@ Step 4's immediate scope to just the one real total in
 `user-skills-inventory.md`, and move the per-family header-count check to a backlog
 spec alongside Step 6 rather than folding it into this plan's direct-edit set.
 
-**Checked-good — Step 3's premise.** Confirmed `Oliver/Project Repos/tesknota/docs/
-SPEC_BACKLOG.md` carries 122 real `^#{1,4} SPEC-[0-9]+` headings (counted directly, not
-estimated) — the collision risk this step addresses is a substantial, repeated pattern
+**Checked-good — Step 3's premise.** Confirmed the fleet product repo's own
+`docs/SPEC_BACKLOG.md` carries 122 real `^#{1,4} SPEC-[0-9]+` headings (counted directly,
+not estimated) — the collision risk this step addresses is a substantial, repeated pattern
 in a real, actively-used file, not a one-off coincidence.
 
 **Checked-good — the historical plan file is correctly left alone.**
@@ -179,17 +180,81 @@ Code Intent Standard (rule 4b, past tense is stable), a dated plan is a historic
 record of what was true when it was written, not living documentation — fixing it would
 misdescribe what the original plan actually said at the time.
 
+## Execution Log (2026-09-15)
+
+All 6 steps executed same session, approved as-is. Two more corrections surfaced during
+execution itself, beyond the pressure-test pass — logged here rather than editing Step
+text, per this skill's own protocol.
+
+**Step 1 — done as corrected.** All 3 pointer files fixed; `.olivercode/user-skills/`
+removed with `rmdir` (fails loudly on anything non-empty, so the emptiness claim from
+the pressure test was verified a second time by the deletion method itself, not just
+trusted). Re-grepped afterward: only the two dated plan files still mention the old
+path, both correctly left alone.
+
+**Step 2 — done, and reuse went further than planned.** Building
+`_check_vault_skill_links` surfaced that its natural home, `iter_fleet`/
+`resolve_repo_path`, lived inline in `scripts/olivercode` itself, not in a shared lib —
+exactly the kind of single-copy-that-should-be-shared this whole plan is about. Moved
+both into `scripts/lib/repo_profiles.py` so Step 3's `find-spec.py` could import them
+instead of becoming a third inline copy. One test broke from the move
+(`test_source_uses_case_insensitive_comparison`, which read the launcher's own source
+text for a string that had moved) — fixed to read the new location; not a behavior
+change, a test that was checking a file path instead of a behavior. Ablated the new
+check against a fake unlinked skill before trusting it: confirmed the FAIL path fires,
+not just the happy path. Live run: 38/38 vault skills correctly linked, 167 framework
+tests still pass.
+
+**Step 3 — done, and the tool caught 2 real bugs in itself before shipping.**
+`find-spec.py` walks the vault plus every profiled fleet repo for `*BACKLOG*.md` files
+with no hardcoded list — first live run against `SPEC-21` printed 14 matches, double
+what existed, because the vault-root walk and the separately-profiled fleet repo's own
+walk both scanned the same physical files under two different labels. Fixed by refusing
+to descend into any nested git repo other than the root being walked. Second bug: `B20`
+(OliverCode's own B-series) returned zero matches, because `iter_fleet` deliberately
+excludes the framework repo from fleet iteration and nothing added it back as an
+explicit search root. Fixed by adding OliverCode's own root explicitly. Both caught by
+testing against real, known-answer cases (`SPEC-21`'s known collision, `B20`'s known
+existence) before trusting the tool, not by reading the code and reasoning it looked
+right. One-line scoping notes added to both files that define `SPEC-N` headings (the
+vault's `_BACKLOG.md`, and the other fleet repo's own `SPEC_BACKLOG.md`); `find-spec.py`
+documented in OliverCode's own `CLAUDE.md`, which loads in every session on the machine.
+
+**Step 4 — done, but not the way the plan or the pressure test described.** Writing the
+cross-check surfaced a simpler fix: the fleet's own Code Intent Standard (rule 5) already
+says a volatile number should not live in prose at all, only the command that computes
+it. Since `.olivercode/user-skills-inventory.md`'s "38 skills" was the only real
+fleet-wide total anywhere (confirmed in the pressure-test pass), removing the number and
+pointing at `node _validate_structure.js` instead closes the drift risk completely, with
+no parser to maintain and nothing left that can go stale. Checked whether the same move
+was cheap for the one per-family count too (`vtwo-growth/`'s header, pressure-test found
+this was a single instance, not "N scattered counts" as Finding 2 first described) —
+it was: the section already lists all 6 skills by name directly below the header, so the
+header's own number was redundant, not load-bearing, and got dropped the same way.
+No backlog spec needed for either half of Finding 2; both are closed, not deferred.
+
+**Step 5 — decided, not built.** Recorded the plan's own recommendation (audit-only
+stays; a process rule instead of a gate) as a standing instruction in
+`Operations Vault/CLAUDE.md`, next to the existing `_validate_structure.js` rule it
+extends.
+
+**Step 6 — spec'd, not built, as planned.** Added SPEC-26 to the vault's
+`01 - Skills/_BACKLOG.md`, pointing at Step 2's finished symlink-completeness check so a
+future build does not reimplement it.
+
 ## Definition of Done
 
-- [ ] `skills/INDEX.md`, `FILE_LOCATION_STANDARD.md`, `EXTERNAL-TOOLING.md` all point at
+- [x] `skills/INDEX.md`, `FILE_LOCATION_STANDARD.md`, `EXTERNAL-TOOLING.md` all point at
       `Operations Vault/01 - Skills/`; `.olivercode/user-skills/` deleted
-- [ ] `health_checks.py` has a live vault-skill symlink-completeness check; the dead
+- [x] `health_checks.py` has a live vault-skill symlink-completeness check; the dead
       plugin-links check is gone
-- [ ] Every repo's backlog file states its SPEC-IDs are locally scoped; a `find-spec`
+- [x] Every repo's backlog file states its SPEC-IDs are locally scoped; a `find-spec`
       lookup script exists and is documented in at least one CLAUDE.md
-- [ ] `_validate_structure.js` fails or warns when README/ledger skill-count prose
-      disagrees with the real folder count
-- [ ] The structure/MCP-efficiency gate-vs-audit-only decision is made explicitly and
+- [x] The one real skill-count claim (`.olivercode/user-skills-inventory.md`) and the one
+      real per-family count (`README.md`'s `vtwo-growth/` header) both point at the live
+      count or the list itself instead of a hand-maintained number — no cross-check
+      script needed because there is no longer a number to drift
+- [x] The structure/MCP-efficiency gate-vs-audit-only decision is made explicitly and
       recorded (this plan's step 5, or Kiana's own call if different)
-- [ ] A spec for the vault-side skill-creation walkthrough exists in `01 - Skills/
+- [x] A spec for the vault-side skill-creation walkthrough exists in `01 - Skills/
       _BACKLOG.md`, referencing the finished symlink-completeness check
