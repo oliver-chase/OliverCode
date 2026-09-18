@@ -12,9 +12,25 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 3. For each step: what, why, expected outcome, risk level
 4. Write to file (markdown), NOT executed
 
+## Claims Discipline
+
+A plan is a set of assertions about live state — "this file exists," "this skill has no
+probe," "3 of 8 items already do X." Every assertion of that shape names a set of N items.
+Before writing a sentence that claims to check something for a set of N named items, read
+all N — never a sample, never "checked most of them," never one representative case
+generalized to the rest. A `find`/`grep` listing that only names the items is not a check of
+them.
+
+This applies whether N is 3 or 30. A larger N is a reason to batch the reads efficiently, not
+a reason to sample. If reading all N is genuinely too expensive to do before drafting, the
+plan says so explicitly — "checked 3 of 8, the rest assumed from their names" — instead of
+writing "checked all 8" and letting `plan-pressure-test` catch the gap after the fact.
+`plan-pressure-test` is the safety net for a wrong inference from real evidence, not a
+substitute for gathering the evidence in the first place.
+
 ## Plan File Location
 
-Repo: `<repo>/docs/plans/`. For work that isn't scoped to one repo (spans the vault or multiple product repos), there is currently no dedicated vault-level plans directory — write the plan into whichever single repo the work is centered on, or ask the user where they want it if the work is genuinely cross-repo.
+Repo: `<repo>/docs/plans/`. Some work spans the vault or multiple product repos, not one repo. There is currently no dedicated vault-level plans directory for that case. Write the plan into whichever single repo the work centers on. If the work is genuinely cross-repo, ask the user where they want it instead.
 
 ## Plan Headers
 
