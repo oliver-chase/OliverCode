@@ -8,7 +8,7 @@ description: "Use when the user asks 'are these docs accurate', 'audit the docs'
 ## Truth Hierarchy
 
 ```
-Live code/config > package.json/tooling output > git log recency > docs
+Live code/config > package.json/tooling output > git log recency > a configured GitHub Project's live state > docs
 ```
 
 Docs are never truth — they're a claim about truth. A doc that reads as authoritative (dated, "Status: Active", specific line numbers, structured tables) is not more likely to be accurate than a stale one. Check every load-bearing claim against the thing it describes before trusting it.
@@ -47,7 +47,23 @@ grep -rln "<claim-or-number>" --include="*.md" .
 
 The same fact stated in two files is itself a finding, independent of which one (if either) is accurate. Per the no-duplication rule, one of them turns wrong the moment the other changes, even if both are accurate today.
 
-### Phase 5 — Dependency Scan Before Touching Anything
+### Phase 5 — Check a Configured GitHub Project (When One Exists)
+
+Skip this phase if the repo has no `backlog-config.json` (or its per-repo equivalent) — no
+configured Project, nothing to check. When one exists:
+
+```bash
+gh project view <projectNumber> --owner <repoOwner> --format json   # shortDescription, item count
+gh issue list --repo <repoOwner>/<repoName> --state open --limit 20 --json number,title
+```
+
+A configured Project is live state, not a doc — it drifts independently of any file in the
+repo. Spot-check its `shortDescription` and a sample of open issues against whatever the repo's
+own docs claim about current status, open work, or backlog size (a README's "N open items," a
+status doc's "in progress" list). Flag drift the same way any other Phase 3 finding gets
+flagged — report it, don't silently edit the Project or the doc to match the other.
+
+### Phase 6 — Dependency Scan Before Touching Anything
 
 Before deleting, renaming, or merging any doc file, check what actually depends on its path:
 
@@ -57,7 +73,7 @@ grep -rl "<filename>" --include="*.ts" --include="*.mjs" --include="*.py" --incl
 
 Catches `require_file`-style shell gates, code comments citing the doc, CI workflows, and PR templates. Update these alongside the doc change — a doc merge that breaks a structure-check script is not a simplification.
 
-### Phase 6 — Design the Target Structure
+### Phase 7 — Design the Target Structure
 
 Apply concept ownership: every fact, table, or contract gets exactly one home file. Every other file references it by name instead of restating it. Typical shape for a small-to-mid repo:
 
@@ -68,15 +84,15 @@ Apply concept ownership: every fact, table, or contract gets exactly one home fi
 - Delete point-in-time audit/snapshot files that no longer describe current reality and aren't append-only evidence records (see Pitfalls — don't confuse the two).
 - Don't combine docs that serve different audiences even if they'd otherwise fit the same concept (e.g. CLAUDE.md/AGENTS.md vs CONTRIBUTING.md vs ARCHITECTURE.md serve different readers) — "no duplication" targets restating the same fact twice, not collapsing every doc into one file.
 
-### Phase 7 — Handle Ambiguous Backlog/Roadmap Content
+### Phase 8 — Handle Ambiguous Backlog/Roadmap Content
 
 If an audit turns up a backlog, roadmap, or status table, check it against code first. One that fails — no matching story files, or IDs from an unrecognized scheme — is a business judgment call, not a code fact. Don't silently delete it, and don't silently keep asserting it. Ask the user: cut it, keep it explicitly labeled as unverified, or pause for them to review. Whatever they choose, if it's kept, flag it in the new doc as needing owner review rather than reproducing it as settled fact.
 
-### Phase 8 — Execute + Reference Fixes
+### Phase 9 — Execute + Reference Fixes
 
-Rewrite/merge/delete per the target structure. Fix every downstream reference found in Phase 5 (scripts, code comments, cross-links between docs).
+Rewrite/merge/delete per the target structure. Fix every downstream reference found in Phase 6 (scripts, code comments, cross-links between docs).
 
-### Phase 9 — Check
+### Phase 10 — Check
 
 ```bash
 npm run check:structure   # or equivalent structure/lint gate
@@ -97,5 +113,5 @@ See `references/complementary-skills.md` for the dedicated tool to reach for ins
 
 - File-count before/after (e.g. "25 doc files → 12, N contradictions found").
 - A findings table: file, claim, checked fact, fix applied.
-- An explicit "needs owner review" section for anything ambiguous/business-judgment (see Phase 7) — never silently resolved.
+- An explicit "needs owner review" section for anything ambiguous/business-judgment (see Phase 8) — never silently resolved.
 - If this audit invoked a complementary skill (above), name it and summarize what it found separately from the doc findings.
