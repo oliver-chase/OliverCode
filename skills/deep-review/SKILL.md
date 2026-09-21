@@ -1,6 +1,6 @@
 ---
 name: deep-review
-description: "Post-build deep review loop: single sequential review agent over a commit range, simplify pass, validate-then-remove legacy cleanup, live re-verification on the real deploy. Ends with a live session tracker so coverage and current state survive the session. Run before closing any multi-commit build session."
+description: "Post-build deep review loop: single sequential review agent over a commit range, simplify pass, validate-then-remove legacy cleanup, live re-verification on the real deploy. When the repo names a live GitHub Project backlog, also validates that closed-issue evidence still matches reality. Ends with a live session tracker so coverage and current state survive the session. Run before closing any multi-commit build session. Also run it on direct request: 'QA this', 'QA the work', 'bring in another agent to review/QA this', 'review tonight's work'."
 ---
 
 # Deep Review (post-build review loop)
@@ -51,6 +51,20 @@ angles below.
 
 ### 2. Review agent (the one subagent)
 
+**Scope the prompt tightly — this is the real token-cost lever, not review depth.**
+A prompt that asks the agent to "validate everything live, build your own tests, run
+every X against every Y" multiplies into an unbounded number of tool calls with no
+natural stopping point, on a fresh agent with none of the orchestrator's cache. Seen
+live: an open-ended 7-point ask burned 160k tokens and 68 tool calls in one run.
+Fix the prompt, not the checklist:
+- Name the exact commands to run, not "make sure this works."
+- Cap the re-test surface — one fresh fixture per code path under review, not "build
+  your own and also test edge cases." Name a specific edge case if one matters, instead
+  of asking the agent to go find edge cases itself.
+- Prefer resuming or forking a session with shared cache over a fresh general-purpose
+  agent when the review would benefit from context already gathered — a fresh agent
+  re-derives everything from zero, which is usually the actual cost driver.
+
 Prompt it to read the full diff per file plus surrounding context, then
 hunt in priority order:
 - **Correctness:** logic errors, None/undefined handling, race
@@ -100,6 +114,19 @@ alike, not just the screens the session worked on:
 - **Responsiveness:** at ~360/768/1024/1440/1920 — no horizontal page
   overflow, nothing overlaps, wide content scrolls inside its own
   container.
+
+### 2c. Backlog-issue accuracy (only when the repo names a live GitHub Project)
+
+Not every repo tracks work this way — skip this phase entirely if the repo's own
+`CLAUDE.md` names no `backlog-config.json` (or equivalent). Where one exists, the
+session likely closed some issues with an evidence comment during the range under
+review. Sample a few of those closes against the real repo state: the file
+paths and line numbers the comment cites still exist and say what it claims, the
+commit SHA it names is real and in this range, and the claimed fix is actually present
+in the code today, not just in the commit message. A close with unverifiable or wrong
+evidence is a finding — reopen it or fix the comment, same as any other defect.
+Same discipline `docs-reality-audit`'s own Truth Hierarchy phase for a configured
+Project already applies, scoped to one review pass here instead of a whole-repo audit.
 
 ### 3. Simplify pass (run it yourself, in parallel with the agent)
 
