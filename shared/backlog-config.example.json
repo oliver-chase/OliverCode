@@ -1,0 +1,26 @@
+{
+  "_comment": "Placeholder for the backlog-management skill's per-repo config. Copy this file into your own repo (or wherever your repo's CLAUDE.md names it), fill in your real repo/Project/field IDs via `gh project field-list <number> --owner <owner> --format json`, and name its real path in that repo's own CLAUDE.md. See skills/backlog-management/references/project-fields.md for the full shape and how each ID is read.",
+  "repoOwner": "your-github-org-or-user",
+  "repoName": "your-repo-name",
+  "projectOwner": "your-github-org-or-user",
+  "projectNumber": 1,
+  "projectId": "PVT_...",
+  "fields": {
+    "status": {
+      "id": "...",
+      "options": {"Backlog": "...", "Ready": "...", "In Progress": "...", "Complete": "..."}
+    },
+    "priority": {
+      "id": "...",
+      "options": {"P0": "...", "P1": "...", "P2": "..."}
+    },
+    "size": {
+      "id": "...",
+      "options": {"XS": "...", "S": "...", "M": "...", "L": "...", "XL": "..."}
+    },
+    "workType": {
+      "id": "...",
+      "options": {"Epic": "...", "Story": "..."}
+    }
+  }
+}
