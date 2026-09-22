@@ -61,6 +61,9 @@ apply constantly. That contract is the order they run in.
   loop, each round re-paying the checker's full output cost.
 - Never re-read a file already read earlier in the same session. Edit from what is already
   in context. A file changes only through your own edits, which you already see.
+- Read a file before editing it, every first touch. Grep for callers before changing a
+  function signature. Research before you edit, not after — an edit made blind gets retried
+  once the read finally happens, paying for the file twice.
 
 ## Pre-Commit
 Run the current repo's own canonical validation before committing, never OliverCode's.

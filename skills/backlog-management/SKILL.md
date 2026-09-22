@@ -27,6 +27,30 @@ This skill is repo-agnostic. It never hardcodes a repo name, a Project number, o
 4. **Set all 3 fields, every time**. Status: `Backlog` if the item is blocked or needs a decision, `Ready` if the next action is already clear and unblocked. Priority and Size: per that repo's own prioritization doc, if it names one — Operations Vault's is `01 - Skills/docs/PRIORITIZATION.md`. Never leave a field blank because the judgment feels obvious — state it explicitly instead.
 5. **Work Type**: `Epic` if the item spans multiple skills or families. `Story` otherwise.
 
+### Sizing an XL or L item for real completeness
+
+XL or L almost always means "touches N things across the fleet" — the size where a
+memory-based "got them all" claim is most likely wrong. Seen live 2026-09-22 (vault
+issue `#186`): its own stated audit command was `.md`-only and missed 2 real `.py` citations
+of the exact same string it was meant to enumerate. The issue read as thorough — it named a
+real command — and still had a gap, because nobody re-ran it against a wider net before
+filing.
+
+1. **Audit first, as its own Story, before any fix Story exists.** The audit's output is a
+   real, re-runnable command (a grep, a script) stated in the issue body — not a remembered
+   list. Anyone should be able to run that exact command fresh and get the same count.
+2. **Split the fix by the real boundary** — family, file type, whatever the actual seams
+   are — one Story per boundary. Never one Story doing all N edits in a single unverified
+   pass. Same Epic/Story split this skill already uses, applied inside one big change instead
+   of across a whole initiative.
+3. **Before-count and after-count, same command, every time.** Run the audit command, record
+   N. Fix. Re-run the identical command, read the real number left — 0, or the real, expected residual,
+   named explicitly, never silent. The close-out evidence comment states both numbers. "Fixed
+   them all" with no number attached is not evidence.
+4. **A wider-than-expected audit result is itself a finding.** If the real command turns up a
+   file type, a family, or a count the drafting session didn't expect, comment that the same
+   way a correction gets commented — don't quietly narrow scope to match what was assumed.
+
 ## Close a Story or Epic
 
 1. Move Status to `Complete`.
@@ -56,6 +80,8 @@ A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism
 - Read the calling repo's own config before running any command — never hardcode a repo, Project, or field ID.
 - Search the Project before creating anything.
 - Set Status, Priority, and Size on every item this skill files, no exceptions.
+- Size an XL or L item with a real, re-runnable audit command, split into boundary-scoped
+  sub-Stories with a before/after count — never file it as one flat mega-item.
 - Report triage findings without changing anything on its own.
 
 **Will not:**
