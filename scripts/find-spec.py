@@ -106,6 +106,13 @@ def main() -> int:
 
     if total == 0:
         print(f"No match for {args.spec_id!r} in any *BACKLOG*.md under the vault or a fleet repo.")
+        if re.match(r"^SPEC-\d+$", args.spec_id):
+            print(
+                "If this was a vault SPEC-N: the vault's own 01 - Skills/_BACKLOG.md was "
+                "retired (vault issue #186) -- every entry it held now lives as a real "
+                "GitHub issue in oliver-chase/vault's Project instead. Search that Project "
+                "for the same ID text, it's likely in an issue's own title or body."
+            )
         return 1
     print(f"{total} match(es) for {args.spec_id!r}.")
     return 0
