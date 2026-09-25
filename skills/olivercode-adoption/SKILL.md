@@ -1,6 +1,6 @@
 ---
 name: olivercode-adoption
-description: "Use when adopting OliverCode into a machine — the user forked or cloned it and says 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode', 'audit my Claude config', or opens a fresh OliverCode checkout wanting it running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
+description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode', 'audit my Claude config'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
 ---
 
 # OliverCode Adoption
@@ -15,7 +15,7 @@ need detail, but do not make the user read it.
 them. A rule you cannot classify is a rule you keep and flag. Never delete a user's config
 because it looks redundant — redundancy is their call.
 
-Back up before the first mutation. Do not remove a backup until the user confirms the result.
+Back up before the first mutation. Do not delete a backup until the user confirms the result.
 
 ## Run this before anything else
 
@@ -32,7 +32,7 @@ Everything else is mechanical. Bring the user exactly these, with your recommend
 evidence for it — do not decide them silently, and do not dump the whole inventory on them.
 
 **1. For each existing rules file: global, repo-specific, or personal?**
-This is the whole adoption. Most setups tangle all three in one file.
+The whole adoption. Most setups tangle all three in one file.
 - *machine-global* (applies everywhere) → the fork's `CLAUDE.md`
 - *repo-specific* (true of one product only) → that repo's `CLAUDE.md`
 - *personal/business* (voice, GTM, hiring) → their own user-skills area, NOT the framework
