@@ -85,7 +85,7 @@ Add the repo to:
 local/repo-profiles.json
 ```
 
-This is your local fleet list. It is gitignored, so your real repo names and machine-specific information never get uploaded.
+Your local fleet list, gitignored, so your real repo names and machine-specific information never get uploaded.
 
 `init` creates the file. You can also find your repos automatically:
 

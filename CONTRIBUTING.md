@@ -1,6 +1,6 @@
 # Contributing to OliverCode
 
-This file is the contribution entry point for OliverCode framework changes.
+Contribution entry point for OliverCode framework changes.
 
 ## Locked Framework Rule
 

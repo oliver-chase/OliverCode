@@ -4,7 +4,7 @@ Status: Active
 Purpose: the order to restore this setup from nothing, and which steps no script can do.
 
 `docs/ADOPTING.md` covers adopting OliverCode into a machine that already has work on it.
-This file covers the other case: a blank machine, restoring an existing setup from its remotes.
+The other case, a blank machine restoring an existing setup from its remotes, is covered here.
 
 The two differ in one way that matters. Adopting starts at OliverCode. Restoring starts at the
 **vault**, because the vault holds the plugins and OliverCode is a submodule inside it.

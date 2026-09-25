@@ -11,10 +11,9 @@ written into a tracker another agent can resume from. Distinct from
 `functionality-audit` (does the PRODUCT work end to end) and
 `repo-audit-with-execution-batches` (surface scan of a repo at rest).
 
-This is the operational "how" for `DEVELOPMENT_LIFECYCLE_STANDARD.md` §5 (QA as a
+The operational "how" for `DEVELOPMENT_LIFECYCLE_STANDARD.md` §5 (QA as a
 separate, adversarial pass) and §7 (simplify as part of finishing) — that contract
-states the principle, this skill runs it. Consult it for the why. This file never
-restates it.
+states the principle, this skill runs it. Consult it for the why. Never restated here.
 
 ## When to run
 
