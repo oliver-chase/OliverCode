@@ -668,7 +668,10 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
             problems.append(f"{filename} diverges from the template")
 
     # Without the wrapper the clarity gate blocks every commit that stages a
-    # SKILL.md or CLAUDE.md (STE-JOIN-1).
+    # SKILL.md or CLAUDE.md (STE-JOIN-1). A declared variant hook that never calls
+    # it has no clarity gate to block, so the wrapper is not required there.
+    if STE_JOIN_WRAPPER.encode() not in live.read_bytes():
+        return problems
     wrapper = hooks_dir / STE_JOIN_WRAPPER
     canonical_wrapper = templates_dir / STE_JOIN_WRAPPER
     if not wrapper.is_file():
