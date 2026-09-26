@@ -623,6 +623,9 @@ def command_link_plugins(vault_root: Path | None = None, dry_run: bool = False) 
 # existing callers and tests.
 
 
+STE_JOIN_WRAPPER = "ste-lint-joined.py"
+
+
 def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
     """Return human-readable problems with a repo's live hook directory.
 
@@ -663,6 +666,15 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
             continue
         if candidate.read_bytes() not in canonical_contents:
             problems.append(f"{filename} diverges from the template")
+
+    # Without the wrapper the clarity gate blocks every commit that stages a
+    # SKILL.md or CLAUDE.md (STE-JOIN-1).
+    wrapper = hooks_dir / STE_JOIN_WRAPPER
+    canonical_wrapper = templates_dir / STE_JOIN_WRAPPER
+    if not wrapper.is_file():
+        problems.append(f"no {STE_JOIN_WRAPPER} in {hooks_dir} — the clarity gate blocks SKILL.md/CLAUDE.md commits")
+    elif canonical_wrapper.exists() and wrapper.read_bytes() != canonical_wrapper.read_bytes():
+        problems.append(f"{STE_JOIN_WRAPPER} diverges from the template")
     return problems
 
 
@@ -839,6 +851,12 @@ Public repos get the 6-gate public template as the live `pre-commit` file
     push_target = hooks_dir / "pre-push"
     push_target.write_bytes(push_source.read_bytes())
     push_target.chmod(0o755)
+
+    # The clarity gate runs the linter through this wrapper (STE-JOIN-1).
+    join_source = templates_dir / STE_JOIN_WRAPPER
+    join_target = hooks_dir / STE_JOIN_WRAPPER
+    join_target.write_bytes(join_source.read_bytes())
+    join_target.chmod(0o755)
 
     subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
 

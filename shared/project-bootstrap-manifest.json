@@ -100,6 +100,11 @@
       "mode": "strict"
     },
     {
+      "source": "core/templates/project/ste-lint-joined.py",
+      "target": ".githooks/ste-lint-joined.py",
+      "mode": "strict"
+    },
+    {
       "source": "core/templates/project/.env.example",
       "target": ".env.example",
       "mode": "presence"
