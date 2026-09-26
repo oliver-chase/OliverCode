@@ -96,6 +96,15 @@ class TestHookProblems(unittest.TestCase):
         problems = launcher._hook_problems(hooks, TEMPLATES)
         self.assertTrue(any(launcher.STE_JOIN_WRAPPER in p for p in problems), problems)
 
+    def test_hook_without_clarity_gate_does_not_need_wrapper(self):
+        """A declared variant hook that never lints must not fail health for the wrapper."""
+        hooks = self._install()
+        (hooks / "pre-commit").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        (hooks / "pre-commit").chmod(0o755)
+        (hooks / launcher.STE_JOIN_WRAPPER).unlink()
+        problems = launcher._hook_problems(hooks, TEMPLATES)
+        self.assertFalse(any(launcher.STE_JOIN_WRAPPER in p for p in problems), problems)
+
     def test_diverged_ste_join_wrapper_is_reported(self):
         hooks = self._install()
         (hooks / launcher.STE_JOIN_WRAPPER).write_text("print('stale')\n", encoding="utf-8")
