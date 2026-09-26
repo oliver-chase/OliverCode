@@ -51,6 +51,7 @@ class TestHookProblems(unittest.TestCase):
             live.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         else:
             live.chmod(mode & ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
+        shutil.copy2(TEMPLATES / launcher.STE_JOIN_WRAPPER, hooks / launcher.STE_JOIN_WRAPPER)
         return hooks
 
     def test_missing_directory_is_reported(self):
@@ -87,6 +88,29 @@ class TestHookProblems(unittest.TestCase):
         """The vault runs the 2-gate variant under the filename `pre-commit`."""
         hooks = self._install("pre-commit-private")
         self.assertEqual(launcher._hook_problems(hooks, TEMPLATES), [])
+
+    def test_missing_ste_join_wrapper_is_reported(self):
+        """The clarity gate blocks without it (STE-JOIN-1), so health must say so."""
+        hooks = self._install()
+        (hooks / launcher.STE_JOIN_WRAPPER).unlink()
+        problems = launcher._hook_problems(hooks, TEMPLATES)
+        self.assertTrue(any(launcher.STE_JOIN_WRAPPER in p for p in problems), problems)
+
+    def test_diverged_ste_join_wrapper_is_reported(self):
+        hooks = self._install()
+        (hooks / launcher.STE_JOIN_WRAPPER).write_text("print('stale')\n", encoding="utf-8")
+        problems = launcher._hook_problems(hooks, TEMPLATES)
+        self.assertTrue(any("diverges" in p for p in problems), problems)
+
+    def test_install_hook_pair_output_is_clean_for_both_variants(self):
+        """What sync-hooks writes must pass health, wrapper included."""
+        import subprocess
+        for private in (True, False):
+            repo = self.tmp / f"repo-{private}"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            launcher._install_hook_pair(repo, TEMPLATES, private_repo=private)
+            self.assertEqual(launcher._hook_problems(repo / ".githooks", TEMPLATES), [])
 
 
 if __name__ == "__main__":

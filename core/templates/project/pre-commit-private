@@ -159,6 +159,16 @@ for candidate in "$HOME/.claude/skills/asd-ste100/scripts/ste-lint.py" "$HOME/.a
   [ -f "$candidate" ] && STE_LINT="$candidate" && break
 done
 
+# ste-lint.py counts sentence length one physical line at a time, so a hard-wrapped
+# paragraph never trips the long-sentence cap (STE-JOIN-1 in OliverCode's
+# docs/DECISIONS.md). ste-lint-joined.py joins soft-wrapped lines first and keeps the
+# line numbers. sync-hooks installs it beside this hook. OliverCode's own hook reads
+# the template copy.
+STE_JOIN=""
+for candidate in "$HOOK_DIR/ste-lint-joined.py" "$REPO_ROOT/core/templates/project/ste-lint-joined.py"; do
+  [ -f "$candidate" ] && STE_JOIN="$candidate" && break
+done
+
 # path:rule pairs exempted from strict mode, one per accepted case. Lives outside
 # this template (sync-hooks overwrites this file wholesale) in a plain per-repo
 # file so an exemption survives every future hook sync untouched.
@@ -179,6 +189,12 @@ else
         SKILL.md|CLAUDE.md) [ -f "$file" ] || continue ;;
         *) continue ;;
       esac
+      if [ -z "$STE_JOIN" ]; then
+        echo "  BLOCKED: $file needs ste-lint-joined.py, which is missing from $HOOK_DIR."
+        echo "  Without it, hard-wrapped prose passes the long-sentence cap unchecked."
+        echo "  Run: olivercode sync-hooks"
+        exit 1
+      fi
       disable_rules=""
       while IFS=: read -r ex_path ex_rule; do
         [ -z "$ex_path" ] && continue
@@ -191,14 +207,14 @@ else
       # was repeating in full on every commit for every staged file regardless of
       # whether it was actually blocking, real token waste on any commit touching
       # more than a couple of SKILL.md/CLAUDE.md files.
-      JSON_OUT="$(python3 "$STE_LINT" "${lint_args[@]}" "$file" 2>&1)" && EXIT_CODE=0 || EXIT_CODE=$?
+      JSON_OUT="$(python3 "$STE_JOIN" "$STE_LINT" "${lint_args[@]}" "$file" 2>&1)" && EXIT_CODE=0 || EXIT_CODE=$?
       if [ "$EXIT_CODE" -ne 0 ]; then
         CLARITY_FAILED=1
         # Re-run in plain mode so the failing file gets full fix-it detail.
         if [ -n "$disable_rules" ]; then
-          python3 "$STE_LINT" --disable "$disable_rules" "$file" || true
+          python3 "$STE_JOIN" "$STE_LINT" --disable "$disable_rules" "$file" || true
         else
-          python3 "$STE_LINT" "$file" || true
+          python3 "$STE_JOIN" "$STE_LINT" "$file" || true
         fi
       elif [ "$HAVE_JQ" -eq 1 ]; then
         soft=$(printf '%s' "$JSON_OUT" | jq -r '.count')
