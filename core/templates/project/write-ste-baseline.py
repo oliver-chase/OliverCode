@@ -26,17 +26,20 @@ HERE = Path(__file__).resolve().parent
 JOIN_WRAPPER = HERE / "ste-lint-joined.py"
 
 
+def tracked_files(repo_root: Path):
+    """Git-tracked files only -- matches what Gate 4 can ever actually see staged.
+    A raw filesystem walk also picked up gitignored worktree copies (.claude/worktrees/),
+    padding the baseline with debt nothing will ever commit."""
+    out = subprocess.run(["git", "ls-files", "-z"], cwd=repo_root, capture_output=True, text=True)
+    return [repo_root / p for p in out.stdout.split("\0") if p]
+
+
 def scoped_files(repo_root: Path):
-    for name in ("SKILL.md", "CLAUDE.md"):
-        for p in repo_root.rglob(name):
-            if ".git" in p.parts:
-                continue
+    for p in tracked_files(repo_root):
+        if p.name in ("SKILL.md", "CLAUDE.md"):
             yield p
-    for p in repo_root.rglob("references"):
-        if not p.is_dir() or ".git" in p.parts:
-            continue
-        for md in p.glob("*.md"):
-            yield md
+        elif p.parent.name == "references" and p.suffix == ".md":
+            yield p
 
 
 def hard_count(ste_lint: Path, path: Path) -> int:
