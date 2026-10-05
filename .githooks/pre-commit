@@ -403,9 +403,14 @@ fi
 echo "  Gate 12 passed."
 
 # ─── Gate 13: Writing clarity (asd-ste100) ────────────────────────────────────
-# SKILL.md and CLAUDE.md are agent-parsed instructions, not human-read prose --
-# a dense sentence in one caused a real skill-matching bug (SKILLS-PLACEMENT.md's
-# ACT-3). Strict mode: full default ste-lint, no rule disabled, except a repo's own
+# GATE-SCOPE-1: this gate matched only the two literal filenames SKILL.md and
+# CLAUDE.md. A fleet repo's references/*.md file carried 17 real violations the
+# gate never saw, because a reference file is the same agent-parsed prose by a
+# different name. Matched by path shape (`*/SKILL.md`, `*/CLAUDE.md`,
+# `*/references/*.md`) now, not by bare filename. See docs/DECISIONS.md.
+# SKILL.md, CLAUDE.md, and references/*.md are agent-parsed instructions, not
+# human-read prose -- a dense sentence in one caused a real skill-matching bug
+# (SKILLS-PLACEMENT.md's ACT-3). Strict mode: full default ste-lint, no rule disabled, except a repo's own
 # named per-file exemptions (see .githooks/ste-exemptions below) for a documented,
 # checked false positive -- e.g. a real sheet-column name colliding with a real
 # CLI-subcommand name under synonym-rotation's whole-file scope, where renaming
@@ -445,8 +450,8 @@ else
   command -v jq >/dev/null 2>&1 && HAVE_JQ=1
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
-      case "${file##*/}" in
-        SKILL.md|CLAUDE.md) [ -f "$file" ] || continue ;;
+      case "$file" in
+        */SKILL.md|SKILL.md|*/CLAUDE.md|CLAUDE.md|*/references/*.md) [ -f "$file" ] || continue ;;
         *) continue ;;
       esac
       if [ -z "$STE_JOIN" ]; then
@@ -482,9 +487,47 @@ else
       fi
     done <<< "$STAGED_FILES"
   fi
+
+  # GATE-CITATION-1: a staged skill file can cite `#N` as a real GitHub issue
+  # that was never filed -- two commits did exactly this before anything
+  # caught it. Checked only when `gh` is installed and already authenticated;
+  # any network, auth, or rate-limit problem skips the check silently rather
+  # than blocking a commit on infrastructure the content gate does not own.
+  # See docs/DECISIONS.md.
+  CITATION_FAILED=0
+  CITED_NUMS=""
+  if [ -n "$STAGED_FILES" ]; then
+    while IFS= read -r file; do
+      case "$file" in
+        */SKILL.md|SKILL.md|*/CLAUDE.md|CLAUDE.md|*/references/*.md) [ -f "$file" ] || continue ;;
+        *) continue ;;
+      esac
+      hits=$(grep -ohE '(^|[^A-Za-z0-9&])#[0-9]{1,5}([^0-9]|$)' "$file" 2>/dev/null | grep -oE '[0-9]{1,5}' || true)
+      [ -n "$hits" ] && CITED_NUMS="$CITED_NUMS
+$hits"
+    done <<< "$STAGED_FILES"
+  fi
+  CITED_NUMS=$(printf '%s\n' "$CITED_NUMS" | grep -E '^[0-9]+$' | sort -un || true)
+  if [ -n "$CITED_NUMS" ] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    ALL_ISSUES=$(cd "$REPO_ROOT" && gh issue list --state all --limit 5000 --json number --jq '.[].number' 2>/dev/null) || ALL_ISSUES=""
+    if [ -n "$ALL_ISSUES" ]; then
+      while IFS= read -r n; do
+        [ -z "$n" ] && continue
+        if ! printf '%s\n' "$ALL_ISSUES" | grep -qx "$n"; then
+          echo "  BLOCKED: #$n is cited in a staged skill file but resolves to no real issue."
+          CITATION_FAILED=1
+        fi
+      done <<< "$CITED_NUMS"
+    fi
+  fi
+
   if [ "$CLARITY_FAILED" -eq 1 ]; then
-    echo "  BLOCKED: one or more SKILL.md/CLAUDE.md files fail asd-ste100 strict mode (see output above)."
+    echo "  BLOCKED: one or more SKILL.md/CLAUDE.md/references/*.md files fail asd-ste100 strict mode (see output above)."
     echo "  Fix the flagged sentences, then re-commit."
+    exit 1
+  fi
+  if [ "$CITATION_FAILED" -eq 1 ]; then
+    echo "  Fix each citation to a real issue number, or remove it, then re-commit."
     exit 1
   fi
   echo "  Gate 13 passed."
