@@ -839,6 +839,9 @@ Public repos get the 6-gate public template as the live `pre-commit` file
     gate on every repo it might touch, not just the vault (which got pre-push by
     hand before this templating existed).
 
+    A repo's own `.githooks/pre-commit.local` is never written here. The private
+    hook runs it when it exists (GATE-LOCAL-1).
+
     Counts are verified against the hook files themselves by
     scripts/lib/consistency_check.py; see docs/governance.md for the table.
     """
