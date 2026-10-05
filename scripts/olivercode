@@ -666,10 +666,11 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
             continue
         if candidate.read_bytes() not in canonical_contents:
             # A byte-identical check, not a feature-by-feature one. A template
-            # change -- the references/*.md scope from GATE-SCOPE-1, or the
-            # issue-citation check from GATE-CITATION-1 -- reaches every
-            # installed hook through this same divergence check, with no
-            # separate check needed per gate.
+            # change -- the references/*.md scope from GATE-SCOPE-1, the
+            # issue-citation check from GATE-CITATION-1, or the per-file
+            # hard-violation baseline from GATE-BASELINE-1 -- reaches every
+            # installed hook through this same divergence check. No separate
+            # check is needed per gate.
             problems.append(f"{filename} diverges from the template")
 
     # Without the wrapper the clarity gate blocks every commit that stages a

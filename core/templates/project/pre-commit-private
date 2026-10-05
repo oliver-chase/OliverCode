@@ -181,6 +181,15 @@ STE_EXEMPTIONS=""
 STE_EXEMPTIONS_FILE="$REPO_ROOT/.githooks/ste-exemptions"
 [ -f "$STE_EXEMPTIONS_FILE" ] && STE_EXEMPTIONS="$(cat "$STE_EXEMPTIONS_FILE")"
 
+# GATE-BASELINE-1: path:count pairs, the hard-violation count accepted per file,
+# frozen at adoption so GATE-SCOPE-1's references/*.md scope does not block every
+# pre-existing reference file on debt this gate never checked before. A file not
+# listed here keeps baseline 0. Same per-repo, outside-the-template location as
+# STE_EXEMPTIONS, for the same reason. See docs/DECISIONS.md.
+STE_BASELINE=""
+STE_BASELINE_FILE="$REPO_ROOT/.githooks/ste-baseline"
+[ -f "$STE_BASELINE_FILE" ] && STE_BASELINE="$(cat "$STE_BASELINE_FILE")"
+
 if [ -z "$STE_LINT" ] || ! command -v python3 >/dev/null 2>&1; then
   echo "[pre-commit] Gate 4/4: Writing clarity (asd-ste100)... skipped (ste-lint.py or python3 not found on this machine)."
 else
@@ -205,8 +214,13 @@ else
         [ -z "$ex_path" ] && continue
         [ "$ex_path" = "$file" ] && disable_rules="${disable_rules:+$disable_rules,}$ex_rule"
       done <<< "$STE_EXEMPTIONS"
-      lint_args=(--json)
-      [ -n "$disable_rules" ] && lint_args=(--disable "$disable_rules" --json)
+      baseline=0
+      while IFS=: read -r bl_path bl_count; do
+        [ -z "$bl_path" ] && continue
+        [ "$bl_path" = "$file" ] && baseline="$bl_count"
+      done <<< "$STE_BASELINE"
+      lint_args=(--baseline "$baseline" --json)
+      [ -n "$disable_rules" ] && lint_args=(--disable "$disable_rules" --baseline "$baseline" --json)
       # Decide pass/fail from --json first, so a clean file (the common case) costs
       # one summary line instead of ste-lint's full per-finding dump -- that dump
       # was repeating in full on every commit for every staged file regardless of
@@ -217,13 +231,21 @@ else
         CLARITY_FAILED=1
         # Re-run in plain mode so the failing file gets full fix-it detail.
         if [ -n "$disable_rules" ]; then
-          python3 "$STE_JOIN" "$STE_LINT" --disable "$disable_rules" "$file" || true
+          python3 "$STE_JOIN" "$STE_LINT" --disable "$disable_rules" --baseline "$baseline" "$file" || true
         else
-          python3 "$STE_JOIN" "$STE_LINT" "$file" || true
+          python3 "$STE_JOIN" "$STE_LINT" --baseline "$baseline" "$file" || true
         fi
       elif [ "$HAVE_JQ" -eq 1 ]; then
         soft=$(printf '%s' "$JSON_OUT" | jq -r '.count')
-        echo "  $file: $soft soft violation(s) (0 hard) -- not blocking."
+        hard=$(printf '%s' "$JSON_OUT" | jq -r '.hard_count')
+        if [ "$baseline" -gt 0 ]; then
+          echo "  $file: $hard hard / baseline $baseline, $soft soft -- not blocking."
+          if [ "$hard" -lt "$baseline" ]; then
+            echo "    baseline could drop to $hard -- .githooks/ste-baseline is informational, never auto-edited."
+          fi
+        else
+          echo "  $file: $soft soft violation(s) (0 hard) -- not blocking."
+        fi
       fi
     done <<< "$STAGED_FILES"
   fi
