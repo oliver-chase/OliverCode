@@ -49,3 +49,6 @@ contract instead of a generic house style.
 - Client-facing brand content (marketing copy, decks, posts) follows the operator's own
   voice standards outside this framework — do not apply this skill to it.
 - Never introduce a document that restates a rule owned elsewhere. Point to the owning doc.
+- A comment inside a skill folder that ships in a zip is the exception to the decision-id rule.
+  It says what the code does, carries no `AREA-TOPIC-N` id and no history, and points to no
+  ledger. The reason for the rule lives in the commit or the issue.
