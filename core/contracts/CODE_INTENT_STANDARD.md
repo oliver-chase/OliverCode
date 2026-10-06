@@ -98,6 +98,10 @@ An ID is required when the decision is:
 
 Not required for ordinary code that reads as intended.
 
+Exception: a file inside a skill folder that ships in a zip carries no ID and points to no
+ledger. Its comment says what the code does and keeps the reason in plain words. The commit
+or the issue holds the longer reasoning.
+
 **Exception: code that ships in a zip.** A skill folder uploaded to another organization holds no decision ID, no ledger and no history. A comment in it says what the code does. The reason lives in the rule's own doc, the commit message or the closed issue. Sections 2 to 4 do not apply to those files.
 
 ## 3. IDs live in one indexed ledger
