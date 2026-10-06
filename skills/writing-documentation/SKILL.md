@@ -1,6 +1,6 @@
 ---
 name: writing-documentation
-description: Use whenever writing or rewriting a README, architecture doc, reference doc, or repo documentation — this repo, a governed repo, or a fork. Also use for a non-trivial CODE COMMENT. Applies the locked documentation standard: problem-driven README outline, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice, Readability, and Sentence clarity rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
+description: Use whenever writing or rewriting a README, architecture doc, reference doc, or repo documentation — this repo, a governed repo, or a fork. Also use for a non-trivial CODE COMMENT. Applies the locked documentation standard: README outline, index README shape, voice, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice, Readability, and Sentence clarity rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
 ---
 
 # Writing Documentation
@@ -22,11 +22,19 @@ contract instead of a generic house style.
 2. **Read what exists.** The repo's current README, its `docs/`, its tests and entry points.
    Every claim you write must be checkable against the code as it is now. Numbers (test
    counts, gate counts, option lists) come from running or counting, never from prior docs.
-3. **Write to the locked README outline** — one-sentence identity, driving problems,
-   install-with-runnable-example, how-it-works, what-comes-back, design decisions as claims,
-   the COMPLETE documentation table, hard-numbers status, license. For a non-README
-   document: `# Title`, one orientation sentence, then the standard's voice and formatting
-   rules throughout.
+3. **Write to the locked README outline.** The parts, in order:
+   - One-sentence identity, driving problems, install with a runnable example.
+   - How it works, what comes back, design decisions as claims.
+   - The COMPLETE documentation table, hard-numbers status, license.
+
+   For a non-README document, write `# Title`, one orientation sentence, then follow the
+   standard's voice and formatting rules throughout.
+
+   A README that catalogs many things, such as a suite or a monorepo, follows the standard's
+   "Index READMEs" section. Before you deliver one, compare every path, command, count and
+   table row it names against disk. Say what you compared. Then read it as a stranger. Rewrite
+   any paragraph over three sentences. Rewrite any internal term used before the text explains
+   it. Rewrite any matrix written as a sentence.
 4. **Name files to the convention.** CAPS-KEBAB names under `docs/`. Renaming an existing file means
    sweeping every reference in the same commit — the reference gate fails on stragglers.
 5. **Same-commit sync.** Anything the new text contradicts elsewhere gets fixed in the same
