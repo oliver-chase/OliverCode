@@ -69,3 +69,13 @@ gh api graphql -f query="{ repository(owner: \"$(jq -r '.repoOwner' "$CONFIG")\"
 ```bash
 gh project item-list "$(jq -r '.projectNumber' "$CONFIG")" --owner "$(jq -r '.projectOwner' "$CONFIG")" --format json --limit 200
 ```
+
+## Find one issue's board item
+
+Use this query to read the item ID for one known issue. It costs one GraphQL call. A list of the board costs one call per 100 items. Every session and tool on the account spends the same hourly GraphQL limit. A board of several hundred items spends several calls on each list.
+
+```bash
+gh api graphql -f query="{ repository(owner: \"$(jq -r '.repoOwner' "$CONFIG")\", name: \"$(jq -r '.repoName' "$CONFIG")\") { issue(number: <n>) { projectItems(first: 5) { nodes { id project { number } } } } } }"
+```
+
+Pick the node whose `project.number` equals `projectNumber` in the config. Read an issue, post a comment and close an issue through the REST API (`gh api repos/<owner>/<repo>/issues/<n>`). REST has its own limit and keeps working when GraphQL runs out.
