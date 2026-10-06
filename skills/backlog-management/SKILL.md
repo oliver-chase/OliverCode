@@ -72,6 +72,8 @@ A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism
 **Will not:**
 
 - Assume a config path. Ask, if the repo's `CLAUDE.md` doesn't name one.
+- File an item that the repo's prioritization doc lists under "What never gets filed". Read that section before step 1 of filing.
+- Finish a filing or answer a backlog question without running `board-hygiene`. Hygiene is the baseline: run it whenever a person mentions the backlog and after every item you file.
 - Create a duplicate item without first searching for an existing one.
 - Decide Priority or Size from a template — each one is a real per-item judgment call.
 - File a quick fix as a Story.
