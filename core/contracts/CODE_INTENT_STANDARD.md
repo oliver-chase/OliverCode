@@ -98,6 +98,8 @@ An ID is required when the decision is:
 
 Not required for ordinary code that reads as intended.
 
+**Exception: code that ships in a zip.** A skill folder uploaded to another organization holds no decision ID, no ledger and no history. A comment in it says what the code does. The reason lives in the rule's own doc, the commit message or the closed issue. Sections 2 to 4 do not apply to those files.
+
 ## 3. IDs live in one indexed ledger
 
 A `DECISIONS.md` in the consuming repo's docs directory: one row per ID — what it protects, source file, test.
