@@ -105,6 +105,42 @@ The locked outline:
 Sections are separated by `---` rules. Length follows surface area — a small tool gets a
 short README in the same order, never a padded one.
 
+## Index READMEs
+
+Some READMEs catalog a set of things instead of introducing one thing: a skill suite, a
+monorepo of packages, a folder of tools. The product outline above does not fit them. An
+index README answers six questions in this order, each under its own heading:
+
+1. **What is this, and who is it for.** Two sentences, then one short paragraph on how it is
+   built.
+2. **How do I get it.** Clone, install and the first command, in a code block.
+3. **How is it organized.** A directory tree in a code block, then one short subsection per
+   top-level folder: what belongs there, what does not, and where the detail lives.
+4. **How do the parts relate.** Shipping and dependency rules, as tables where the content is
+   a matrix (audience by destination, folder by dependency).
+5. **What is in each part.** One subsection per group: two or three sentences on what the
+   group is for and what it depends on, then a two-column table with one row per item, the
+   item's name and what it does.
+6. **How to keep it current.** One short section.
+
+Rules that apply to index READMEs on top of Voice and Readability:
+
+- **One idea per paragraph, three sentences at most.** A paragraph that names folders, rules
+  and commands together is three paragraphs. Split it by subject under headings. A single
+  block over about 600 characters is a word wall however accurate it is.
+- **Gloss every internal term at first use.** `org-context`, `runtime dependency`, `swap set`
+  and `bundle` mean nothing to a reader on day one. Say what each one is in a clause the
+  first time it appears. Leave established terms bare, per the gloss test above.
+- **Structure carries the reading order.** Headings name subjects, trees show layout, tables
+  hold matrices, code blocks hold commands. A matrix written as a sentence ("`org` uploads,
+  `shared` goes to the colleague repo, `personal` stays") is a table.
+- **A table row describes the item in its own terms.** It is the opening of the item's own
+  description, not its trigger list, and a reader of the row alone knows what the item does.
+- **Every named path, command, count and row is checked against the repo before delivery.**
+  List what was checked in the reply. A row that drifts from its item's own file is the
+  failure this section exists to prevent. State a count only as the command that reports it.
+- **Describe the current structure only.** Never say how files used to be arranged.
+
 ## Voice
 
 > This section is QA. `WRITING_PROCESS.md` is the thinking that comes first — read it before a
