@@ -41,7 +41,7 @@ COMMANDS = [
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
     ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against the vault + OliverCode's own skills"),
-    ("olivercode push-fleet [--dry-run]", "Push already-committed work for the vault + OliverCode, unattended"),
+    ("olivercode push-fleet [--dry-run]", "Push already-committed work for the vault, skill-suite and OliverCode, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
 
@@ -942,7 +942,7 @@ def command_audit_fleet(oc_root: Path) -> int:
     """
     _env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
     vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
-    audit_dir = vault_root / "Operations Vault" / "01 - Skills" / "meta" / "skill-fleet-audit"
+    audit_dir = vault_root / "Operations Vault" / "01 - Skills" / "skill-governance" / "skill-fleet-audit"
     scripts_dir = audit_dir / "scripts"
     if not scripts_dir.is_dir():
         print(f"Error: {scripts_dir} not found -- meta/skill-fleet-audit isn't on this machine.")
@@ -993,9 +993,9 @@ def command_audit_fleet(oc_root: Path) -> int:
 
 
 def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
-    """Push already-committed work for the vault + OliverCode, unattended.
+    """Push already-committed work for the vault, skill-suite and OliverCode, unattended.
 
-    Scoped to just these two targets per the audit-fleet plan's Step 5 -- lowest
+    Scoped to just these three targets per the audit-fleet plan's Step 5 -- lowest
     blast radius, both effectively personal/framework repos. A wider rollout needs
     its own opt-in (a per-repo repo-profiles.json flag), not a blanket expansion,
     and needs every target repo to actually carry the pre-push hook first (a repo
@@ -1010,7 +1010,11 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
     """
     _env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
     vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
-    targets = {"olivercode": oc_root, "vault": vault_root}
+    targets = {
+        "olivercode": oc_root,
+        "vault": vault_root,
+        "skill-suite": vault_root / "Operations Vault" / "01 - Skills",
+    }
 
     for name, repo_path in targets.items():
         if not (repo_path / ".git").exists():
