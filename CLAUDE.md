@@ -20,6 +20,9 @@ Compressed, high-signal. No filler. Caveman mode (`caveman` plugin, full intensi
 default from the first response, every session — not trigger-based, don't wait for "less
 tokens" or "be brief" to turn it on. Off only on explicit "stop caveman." Code/commits/PRs/
 security warnings written normal, per the plugin's own rules.
+Text a person reads as written is also normal: a skill's questions, options and instructions to
+the person, and any document or message you draft. Write it in full, plain sentences, word for
+word as the skill gives it. Compression applies to your own commentary only.
 
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
