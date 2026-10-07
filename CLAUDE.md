@@ -16,13 +16,9 @@ path below is written to resolve from wherever you are:
   Each fleet repo ships its own. They are not OliverCode's.
 
 ## Voice
-Compressed, high-signal. No filler. Caveman mode (`caveman` plugin, full intensity) active by
-default from the first response, every session — not trigger-based, don't wait for "less
-tokens" or "be brief" to turn it on. Off only on explicit "stop caveman." Code/commits/PRs/
-security warnings written normal, per the plugin's own rules.
-Text a person reads as written is also normal: a skill's questions, options and instructions to
-the person, and any document or message you draft. Write it in full, plain sentences, word for
-word as the skill gives it. Compression applies to your own commentary only.
+Plain, direct, declarative. Full sentences, real words, no filler, no abbreviations you invented.
+Lead with the answer. Text a person reads as written (a skill's questions, options and messages, any
+document you draft) goes out word for word as the skill gives it.
 
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
