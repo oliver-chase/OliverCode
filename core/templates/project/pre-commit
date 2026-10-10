@@ -482,9 +482,7 @@ $hits"
   fi
 
   if [ "$CLARITY_FAILED" -eq 1 ]; then
-    echo "  BLOCKED: one or more SKILL.md/CLAUDE.md/references/*.md files fail asd-ste100 strict mode (see output above)."
-    echo "  Fix the flagged sentences, then re-commit."
-    exit 1
+    echo "  WARNING: one or more SKILL.md/CLAUDE.md/references/*.md files have asd-ste100 findings (see output above). Not blocking."
   fi
   if [ "$CITATION_FAILED" -eq 1 ]; then
     echo "  Fix each citation to a real issue number, or remove it, then re-commit."

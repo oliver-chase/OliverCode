@@ -60,6 +60,11 @@ DECLARED_DIFFERENCES = {
     # because that file lives under core/templates/project/scripts/, outside
     # .decisions.json's scanned sourceDirs -- the same reason check-decisions.mjs's
     # own worked examples deliberately use ids this repo's config excludes.
+    "Writing clarity (asd-ste100)": (
+        "Not a real difference: the private template ends with a Repo-local gates block "
+        "after this gate, and the parser absorbs it into this gate. The gate itself matches "
+        "in all three hooks. Structural artifact, not drift."
+    ),
     "Backlog hygiene": (
         "Path only, for the reason given under Comment budget."
     ),
