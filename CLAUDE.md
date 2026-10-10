@@ -18,9 +18,10 @@ path below is written to resolve from wherever you are:
 ## Voice
 In chat, lead with the answer. Then give the context a reader needs to act on it: what you
 verified, what you found, what is still unknown. Never cut words if the cut costs meaning.
-Anything you write for a person to read follows the `shared-company` skill's voice files
-(`voice-core.md` first). Text a person reads as written (a skill's questions, options and
-messages, any document you draft) goes out word for word as the skill gives it.
+Never use contrast framing ("not X, but Y", "rather than", "instead of", "less X, more Y").
+State the plain fact. For anything you write for a person to read, use the `clean-writing`
+skill. Text a person reads as written (a skill's questions, options and messages, any
+document you draft) goes out word for word as the skill gives it.
 
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
