@@ -1,6 +1,6 @@
 # Decisions
 
-Design decisions whose reasoning is longer than a code comment should carry. Each entry is referenced from the code it governs by its ID, so the comment states what breaks and the ledger holds why the fix is shaped the way it is. The format is set by `core/contracts/CODE_INTENT_STANDARD.md` §3.
+Design decisions whose reasoning is longer than a code comment should carry. Code may cite an entry by its ID, so the comment states what breaks and the ledger holds why the fix is shaped the way it is.
 
 Add an entry only when the reasoning outlives the code — a boundary that was measured, a rule that was tried and rejected, a failure that recurs if the constraint is dropped. Everything else belongs in the comment.
 

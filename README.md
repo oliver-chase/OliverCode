@@ -127,9 +127,9 @@ scripts/olivercode health
 
 Run it regularly to catch repos whose hooks have stopped applying.
 
-### The eleven gates in a governed repo
+### The nine gates in a governed repo
 
-Every governed repo runs eleven checks on every commit:
+Every governed repo runs nine checks on every commit:
 
 1. **Secrets** — passwords, keys, and other credentials
 2. **Emoji**
@@ -137,11 +137,9 @@ Every governed repo runs eleven checks on every commit:
 4. **Deleted-repo references**
 5. **Unsafe workflow files**
 6. **Planning-document rules**
-7. **Comment length**
-8. **Decision records**
-9. **Backlog hygiene** — including finished items incorrectly marked `DONE`
-10. **Archived content** — a staged path under an `Archive`/`legacy`/`deprecated`/`old` directory, or a `.bak`/`-old`/`-backup`-suffixed file. Current state only; git is the archive
-11. **Writing clarity (asd-ste100)** — SKILL.md/CLAUDE.md files with strict-mode ASD-STE100 findings (a warning). Skips cleanly if the linter is not installed on the machine
+7. **Backlog hygiene** — including finished items incorrectly marked `DONE`
+8. **Archived content** — a staged path under an `Archive`/`legacy`/`deprecated`/`old` directory, or a `.bak`/`-old`/`-backup`-suffixed file. Current state only; git is the archive
+9. **Writing clarity (asd-ste100)** — SKILL.md/CLAUDE.md files with strict-mode ASD-STE100 findings (a warning). Skips cleanly if the linter is not installed on the machine
 
 OliverCode itself runs a further pair of gates that validate the framework's own configuration files.
 
@@ -277,8 +275,8 @@ python3 -m unittest discover tests
 
 The suite reports its own test count and deliberately breaks each gate to verify that the gate catches the failure.
 
-**OliverCode has 13 gates.**
-A governed repo receives eleven. Both counts are verified against the actual hook files during every self-test, so changing either number without updating the README causes the self-test to fail.
+**OliverCode has 11 gates.**
+A governed repo receives nine. Both counts are verified against the actual hook files during every self-test, so changing either number without updating the README causes the self-test to fail.
 
 Run the complete setup scenarios with:
 

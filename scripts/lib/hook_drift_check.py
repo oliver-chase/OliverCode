@@ -47,26 +47,16 @@ DECLARED_DIFFERENCES = {
         "block that follows this gate is absorbed into it by the parser. OliverCode's "
         "copy has Gate 6 and Gate 8 after it. Structural artifact, not drift."
     ),
-    "Comment budget": (
-        "Path only. An adopted repo receives the checker at scripts/; OliverCode is where "
-        "that file is authored, under core/templates/project/scripts/, and keeping a second "
-        "copy at scripts/ to make the two hooks read alike would mean maintaining the gate "
-        "twice. Same reason for Decision records below."
-    ),
-    "Decision records": (
-        "Path only, for the reason given under Comment budget."
-    ),
-    # BACKLOG-HYGIENE-1: cited here rather than in check-backlog-hygiene.mjs itself,
-    # because that file lives under core/templates/project/scripts/, outside
-    # .decisions.json's scanned sourceDirs -- the same reason check-decisions.mjs's
-    # own worked examples deliberately use ids this repo's config excludes.
     "Writing clarity (asd-ste100)": (
         "Not a real difference: the private template ends with a Repo-local gates block "
         "after this gate, and the parser absorbs it into this gate. The gate itself matches "
         "in all three hooks. Structural artifact, not drift."
     ),
     "Backlog hygiene": (
-        "Path only, for the reason given under Comment budget."
+        "Path only. An adopted repo receives the checker at scripts/; OliverCode is where "
+        "that file is authored, under core/templates/project/scripts/, and keeping a second "
+        "copy at scripts/ to make the two hooks read alike would mean maintaining the gate "
+        "twice."
     ),
 }
 

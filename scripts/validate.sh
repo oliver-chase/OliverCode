@@ -130,33 +130,6 @@ sys.exit(1 if failures else 0)
   echo "=== validate: duplication check passed ==="
 }
 
-run_comment_budget() {
-  # CODE_INTENT_STANDARD §1 was instruction text until this gate; see the script
-  # header for why block length is fatal and density is not. Runs the template
-  # this repo ships to the fleet, so OliverCode is held to the rule it publishes.
-  echo "=== validate: checking comment budget ==="
-  if ! command -v node &>/dev/null; then
-    echo "  [WARN] node not found — skipping comment-budget check"
-    return 0
-  fi
-  if ! node "${REPO_ROOT}/core/templates/project/scripts/check-comment-budget.mjs" --quiet; then
-    echo "=== validate: comment budget FAILED ==="
-    exit 1
-  fi
-}
-
-run_decision_ledger() {
-  # CODE_INTENT_STANDARD §4. The template copy is run directly: a second copy in
-  # scripts/ would be the drift this repo exists to prevent.
-  echo "=== validate: checking decision ledger ==="
-  local out
-  if ! out="$(node "${REPO_ROOT}/core/templates/project/scripts/check-decisions.mjs")"; then
-    printf '%s\n' "$out" | grep "FAIL:"
-    echo "=== validate: decision ledger FAILED ==="
-    exit 1
-  fi
-}
-
 run_smoke_tests() {
   # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read only the
   # tracked shared/repo-profiles.example.json, never local/ (gitignored, absent on
@@ -287,8 +260,6 @@ main() {
       run_consistency
       run_reference_check
       run_duplication_check
-      run_comment_budget
-      run_decision_ledger
       run_smoke_tests
       run_hook_state
       ;;
