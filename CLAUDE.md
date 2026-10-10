@@ -37,11 +37,9 @@ apply constantly. That contract is the order they run in.
   simplify, remove-don't-archive cleanup, live re-verify, tracker update) before closing.
 - Simplify as you go: after any nontrivial change, ask what the diff makes redundant
   (`/simplify`, `/code-review` before commit).
-- Comment the DECISION, not the mechanism: name the defect the code prevents, give it an
-  `AREA-TOPIC-N` id, index it in that repo's own DECISIONS ledger, and gate the index in
-  `check` (`$OC/core/contracts/CODE_INTENT_STANDARD.md`). A file in a shipping skill folder is the
-  exception: no id, no ledger, the reason in plain words. Never hand-maintain a volatile
-  number (test counts, coverage, timings) in prose — state the command instead. Dated
+- Comment the reason, not the mechanism: say what defect the code prevents or why it is shaped
+  this way. Keep a comment only if the code could not say it. Never hand-maintain a volatile
+  number (test counts, coverage, timings) in prose. State the command instead. Dated
   measurements go in the backlog tracker once, with their date.
 - Ablate before trusting a test: remove the guard, verify it goes red, restore. A test that
   stays green without the code it protects reports confidence it has not earned.
