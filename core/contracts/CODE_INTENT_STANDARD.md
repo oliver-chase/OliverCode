@@ -85,18 +85,19 @@ Density is reported by the same script and never fails. A repo can legitimately
 run high density in short comments sitting beside the code they govern. Block
 length is the property that has no defence.
 
-## 2. Every non-obvious decision gets an ID
+## 2. A non-obvious decision may carry an ID
 
-Format: `AREA-TOPIC-N` (`ROBOTS-4XX-1`, `CACHE-POLICY-1`). Assign one when the
-code does something a competent reader would otherwise simplify away.
+Format: `AREA-TOPIC-N` (`ROBOTS-4XX-1`, `CACHE-POLICY-1`). Use one when the
+code does something a competent reader would otherwise simplify away. An ID is optional.
+The decision-records gate checks only that an ID already in the code is indexed.
 
-An ID is required when the decision is:
+An ID is worth adding when the decision is:
 - a fix for a defect that reached production or a live run,
 - a deliberate deviation from an obvious implementation,
 - a security or correctness boundary,
 - an asymmetry (fail-closed here, fail-open there).
 
-Not required for ordinary code that reads as intended.
+Skip it for ordinary code that reads as intended.
 
 Exception: a file inside a skill folder that ships in a zip carries no ID and points to no
 ledger. Its comment says what the code does and keeps the reason in plain words. The commit

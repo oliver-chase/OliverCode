@@ -141,7 +141,7 @@ Every governed repo runs eleven checks on every commit:
 8. **Decision records**
 9. **Backlog hygiene** — including finished items incorrectly marked `DONE`
 10. **Archived content** — a staged path under an `Archive`/`legacy`/`deprecated`/`old` directory, or a `.bak`/`-old`/`-backup`-suffixed file. Current state only; git is the archive
-11. **Writing clarity (asd-ste100)** — SKILL.md/CLAUDE.md files that fail strict-mode ASD-STE100 rules. Skips cleanly if the linter is not installed on the machine
+11. **Writing clarity (asd-ste100)** — SKILL.md/CLAUDE.md files with strict-mode ASD-STE100 findings (a warning). Skips cleanly if the linter is not installed on the machine
 
 OliverCode itself runs a further pair of gates that validate the framework's own configuration files.
 

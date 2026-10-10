@@ -38,7 +38,7 @@ no hash check watching it is a duplicate the fleet will not notice drifting.
 
 ## 3. Writing itself is held to the density gate
 
-`docs/SKILLS-PLACEMENT.md` already makes ASD-STE100 a hard, gated rule for every
+`docs/SKILLS-PLACEMENT.md` already makes ASD-STE100 a warned, gated check for every
 `SKILL.md`. That gate is this standard's authoring-density axis — restated here only as
 a pointer, not a second copy: dense, unhedged, un-duplicated prose is not a style
 preference for a skill file, it is the same token-cost concern as rules 1 and 2 applied
@@ -80,7 +80,7 @@ Each is grounded in a real, previously-shipped defect (SPEC-9, SPEC-16 in the va
 Mechanical today, for the vault's `01 - Skills/` only: `meta/skill-fleet-audit` runs all
 three checkers named above (structure/duplication, MCP-efficiency, ASD-STE100 clarity)
 and its `SKILL.md` states the pattern each finding must clear before being treated as a
-real defect. ASD-STE100 alone is also gated fleet-wide at commit time per
+real defect. ASD-STE100 alone is also checked fleet-wide at commit time per
 `docs/SKILLS-PLACEMENT.md` and `docs/GOVERNANCE.md`'s coverage table.
 
 OliverCode's own `skills/` directory has no equivalent structure or MCP-efficiency gate
