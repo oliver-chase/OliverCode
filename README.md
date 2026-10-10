@@ -248,8 +248,8 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | [`GOVERNANCE.md`](docs/GOVERNANCE.md) | Every gate, what it blocks, and which repos receive which gates |
 | [`FEATURE_MAP.md`](docs/FEATURE_MAP.md) | Every capability and its owning document |
 | [`OLIVERCODE_LAUNCHER.md`](docs/OLIVERCODE_LAUNCHER.md) | Every `olivercode` command |
-| [`WRITING_PROCESS.md`](docs/WRITING_PROCESS.md) | How to think before writing documentation or comments |
-| [`DOCUMENTATION_STANDARD.md`](docs/DOCUMENTATION_STANDARD.md) | Required documentation structure and writing style |
+| [`WRITING_PROCESS.md`](docs/WRITING_PROCESS.md) | Thinking that precedes repository documentation and comments |
+| [`DOCUMENTATION_STANDARD.md`](docs/DOCUMENTATION_STANDARD.md) | Required README outline, naming and repo-documentation rules |
 | [`TOKEN_POLICY.md`](docs/TOKEN_POLICY.md) | Token-cost controls and validation |
 | [`SKILLS-PLACEMENT.md`](docs/SKILLS-PLACEMENT.md) | Where new skill files belong |
 | [`FRAMEWORK_BOUNDARY.md`](docs/FRAMEWORK_BOUNDARY.md) | What OliverCode deliberately does not do |

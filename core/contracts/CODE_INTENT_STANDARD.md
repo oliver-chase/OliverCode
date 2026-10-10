@@ -55,7 +55,7 @@ Three things that are always cuts, never edits: an opening that announces what
 the comment is about, a closing that summarises what it just said, and a second
 copy of something a doc or the code below already owns.
 
-**Think before you write it — `docs/WRITING_PROCESS.md`.** The gate below is QA.
+**Think before you write it (`docs/WRITING_PROCESS.md`).** The gate below is QA.
 Writing to a cap produces a block that passes at 19 lines and still says in three
 sentences what one carries. Voice and Readability in
 `docs/DOCUMENTATION_STANDARD.md` govern comment prose as well as docs.

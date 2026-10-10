@@ -143,109 +143,47 @@ Rules that apply to index READMEs on top of Voice and Readability:
 
 ## Voice
 
-> This section is QA. `WRITING_PROCESS.md` is the thinking that comes first — read it before a
-> draft exists, not after. Reading these rules first produces checklist-patched prose that passes
-> every one of them and still sounds like nobody.
+Voice for all writing belongs to the `shared-company` skill's voice files (`voice-core.md`
+first). `WRITING_PROCESS.md` adds the repository-documentation thinking. This section holds only
+what is specific to a README or repo doc.
 
-**No clever, metaphor, or reveal constructions — anywhere, ever.** No aphorisms, no
-personification, no setup-then-reveal, no sentence whose only job is rhetoric. Every
-sentence states a checkable fact, gives an instruction, or attaches a reason to a named
-mechanism. The test: delete the sentence — if the reader lost no information, it was
-decoration. If it can be rewritten as a plain statement and nothing is lost, write the
-plain statement.
-
-A reveal construction can carry a real fact and still fail — the fact is fine, the
-landing is the problem. "The rig seeds an account and a draft, and that is the point" adds
-a tail built to be quoted, on top of a plain fact that did not need one. Cut the tail and
-keep the fact: "The rig seeds an account and a draft before it asserts anything." Watch
-for the tell: a closing clause built to be memorable rather than to add information —
-"and that is the point", "which is the whole idea", "is a problem disguised as a
-problem", "is not a bug, it is the design". Rewrite the sentence so it states the fact
-once, in the order a person would say it out loud, and stops.
-
-- **Say it once.** A closing sentence that restates the paragraph above it fails the delete
-  test — the reader already has it. Lead with the claim instead of building to it: when a
-  passage runs long, the setup is the part to cut, not the conclusion.
-- **Problem first, mechanism second.** Every capability is introduced by the failure or cost
-  that makes it necessary. A reader who skips the mechanism still learns why it exists.
-- **Attach the reason.** No rule or behaviour is stated without its why, in the same
-  paragraph. "Off unless a request explicitly asks for it" is incomplete until the sentence
-  that explains what silent spending would look like.
-- **Concrete over abstract.** Real addresses, real prices, real field names, worked
-  micro-examples. If a claim can be demonstrated in four lines ("Which number is the seat
-  count?"), demonstrate it rather than asserting it.
-- **Failure modes are content, not caveats.** What comes back when it fails, which field to
-  branch on, what retrying will and will not change — in the main flow, not a footnote.
-- **Present tense, active, declarative.** "Every hostname is resolved and checked." Short
-  sentences carry the claims. Longer ones carry the reasoning. Vary the rhythm.
-- **Numbers are evidence.** "One measured page returned 1,232 characters from a plain fetch
-  and 5,519 once rendered" is a sentence. The vague phrase "much better coverage" is not. Use a number the
-  code fixes or a measurement you can date. A count that moves whenever someone commits —
-  tests, files, coverage — is named as the command that reports it, never typed into prose,
-  where it is wrong by the next commit.
-- **Explain the decision, do not encode it.** A sentence a reader can only understand by
-  already knowing the system has failed, however true it is. Where a rule and its reason
-  will not fit together, the reason wins and the rule follows it.
-- **No summary sentences and no product claims.** "The result is a crawler that is safer by
-  default, predictable in cost, and easy to integrate" fails the delete test twice over: it
-  restates what the reader just read, and it makes claims nothing on the page checks. End a
-  section on its last real fact.
-- **Second person for the reader's actions, third for the system's.** "Feed a model
-  `markdown`, not `text`" — then why.
+- **Problem first, mechanism second.** Introduce each capability by the failure or cost that
+  makes it necessary. A reader who skips the mechanism still learns why it exists.
+- **Attach the reason.** State no rule or behaviour without its why in the same paragraph.
+- **Concrete over abstract.** Use real addresses, real prices, real field names and worked
+  micro-examples.
+- **Failure modes are content.** What comes back when it fails, which field to branch on, and
+  what retrying will and will not change belong in the main flow.
+- **Numbers are evidence.** Use a number the code fixes or a measurement you can date. A count
+  that moves with every commit (tests, files, coverage) is named as the command that reports it
+  and never typed into prose.
+- **Explain the decision, do not encode it.** A sentence a reader can only understand by already
+  knowing the system has failed. Where a rule and its reason will not fit together, the reason
+  wins.
+- **Second person for the reader's actions, third for the system's.**
 - **No history in current-state docs.** Never "previously", "no longer", "has been removed".
-  What was removed does not appear. `git log` is the changelog. The one exception is a
-  design-decision defence where the old failure IS the reason — one clause, never a dated
-  note.
+  `git log` is the changelog. A design-decision defence may carry one clause of history where the
+  old failure is the reason.
 
-## Readability — no word walls
+## Readability
 
-Long unbroken prose does not get read, so the rules below cap density mechanically.
+- **One idea per paragraph.** A paragraph that needs a fourth sentence is usually two.
+- **Break up prose.** Put a code block, list or table within every few paragraphs.
+- **The squint test.** A reader scanning only headers, bold lead-ins and code blocks must still
+  get the whole story. Pull a load-bearing fact out of mid-paragraph.
+- **Lists carry parallel items. Paragraphs carry reasoning.** A chain of because-therefore steps
+  loses the connecting words when bulleted.
 
-- **Three sentences per paragraph, at most.** One idea each. A paragraph that needs a
-  fourth sentence is two paragraphs.
-- **Break prose constantly.** A code block, an annotated list, or a table every few
-  paragraphs — never more than three consecutive paragraphs of plain prose. The exemplar
-  rhythm is prose, code, one-line verdict, prose.
-- **The squint test.** A reader scanning only the headers, the bold lead-ins, and the
-  code blocks must still get the whole story. If a load-bearing fact lives mid-paragraph
-  where a scanner cannot see it, pull it out — into a bold lead-in, a list item, or a
-  one-sentence paragraph of its own.
-- **One-sentence paragraphs are legal and encouraged** for the sentence that matters
-  most. "Feed a model `markdown`, not `text`." stands alone precisely so it lands.
-- **Lists carry parallel items. Paragraphs carry reasoning.** Three or more comparable
-  things named in one sentence become a list. An argument does not: a bulleted chain of
-  because-therefore steps drops the connective words that were doing the work, leaving the
-  reader to guess the relationship between two lines that merely sit next to each other.
+## Sentence clarity
 
-## Sentence clarity — asd-ste100
+`SKILL.md`, `CLAUDE.md`, skill and tool descriptions, error strings and CLI help text are read by
+an agent that has no human to resolve ambiguity, so they get the `asd-ste100` skill in strict
+mode. A commit-time gate warns on every staged `SKILL.md`, `CLAUDE.md` and `references/*.md`
+(`docs/GOVERNANCE.md`'s coverage table).
 
-Voice and Readability decide what a sentence should say and how dense a paragraph gets. This
-section catches a different failure: a sentence that carries the right facts at the right
-density and still resolves two ways when a reader, or an agent parsing it without a human in
-the loop, hits it cold.
-
-Run the `asd-ste100` skill on a finished draft, before Formatting. A commit-time gate also
-runs it on every staged `SKILL.md` and `CLAUDE.md`, in this repo and every fleet repo
-(`docs/GOVERNANCE.md`'s coverage table) — running it by hand first means a clean commit
-instead of a blocked one.
-
-- **`SKILL.md`, `CLAUDE.md`, skill/tool descriptions, error strings, CLI help text — Strict
-  mode.** These are read by an agent matching against many candidates with no human resolving
-  ambiguity, which is exactly `SKILLS-PLACEMENT.md`'s ACT-3 failure: two skills matched the
-  same phrasing because neither description was unambiguous. Apply every structural rule,
-  length caps included.
-- **READMEs, other docs, code comments — STE-flavored mode, minus the length cap.** Run the
-  skill's own linter with `--disable long-sentence` (or apply the skill's output by hand and
-  ignore its `long-sentence` findings). This framework's own "Human writing is uneven" rule
-  (`WRITING_PROCESS.md`) already forbids the exact shortcut a hard word-count ceiling
-  produces — do not let asd-ste100's default cap override it.
-- **Never let a rewrite flatten a hedge or a synthesis line.** "May have failed" stays "may
-  have failed" — the skill protects this itself, but check the diff. A sentence that
-  compresses several observations into one claim (`WRITING_PROCESS.md`'s Compression) is not
-  a one-instruction-per-sentence violation. That rule is for procedures, not synthesis.
-
-Client-facing brand content is out of scope for this rule, same as the rest of this document
-— see Scope below.
+READMEs, other docs and code comments are not run through strict mode and are never held to its
+sentence-length cap. Never let an automated rewrite flatten a hedge ("may have failed") or split a
+sentence that compresses several observations into one claim.
 
 ## Formatting
 
@@ -329,11 +267,11 @@ a README anywhere downstream and this is the shape it produces. The `writing-doc
 skill is the invocation path. `core/templates/project/` carries the same expectations into
 newly bootstrapped repos.
 
-**Voice and Readability also govern code comments.** CODE_INTENT_STANDARD decides what a
+**Voice and Readability also govern code comment prose.** CODE_INTENT_STANDARD decides what a
 comment must say and how long it may run. How the prose is written is here, so there is
-never a second standard for it. A comment is short documentation, and the delete test,
-say-it-once, problem-first and attach-the-reason rules apply to it unchanged.
+never a second standard for it. A comment is short documentation, and the problem-first and
+attach-the-reason rules apply to it unchanged.
 
-Agent-facing files (`CLAUDE.md`, skill files) follow their own contracts — they are loaded
-context, not documentation, and compress accordingly. Client-facing brand content follows
-the operator's own voice standards, which live outside this framework.
+Agent-facing files (`CLAUDE.md`, skill files) follow their own contracts. They are loaded
+context, not documentation, and compress accordingly. Company and client writing follows the
+`shared-company` voice files, not this document.
