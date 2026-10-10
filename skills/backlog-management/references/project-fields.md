@@ -67,8 +67,10 @@ gh api graphql -f query="{ repository(owner: \"$(jq -r '.repoOwner' "$CONFIG")\"
 ## List items with fields, for the triage check
 
 ```bash
-gh project item-list "$(jq -r '.projectNumber' "$CONFIG")" --owner "$(jq -r '.projectOwner' "$CONFIG")" --format json --limit 200
+gh project item-list "$(jq -r '.projectNumber' "$CONFIG")" --owner "$(jq -r '.projectOwner' "$CONFIG")" --format json --limit 1000
 ```
+
+The command stops silently at `--limit`. Compare `jq '.items|length'` with the Project's own total. A count equal to the limit means the list is cut.
 
 ## Find one issue's board item
 
