@@ -47,24 +47,20 @@ apply constantly. That contract is the order they run in.
   stays green without the code it protects reports confidence it has not earned.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Before you write ANY doc, README, or non-trivial comment: `$OC/docs/WRITING_PROCESS.md`.
-  Think, write plainly, then QA. A length gate is QA — writing to a cap produces prose that
-  passes and still says in three sentences what one carries.
-- Documentation complete but manageable: one concept one home, pointers elsewhere. The QA pass
-  is `$OC/docs/DOCUMENTATION_STANDARD.md` (locked outline, voice, naming, GitHub About),
-  applied by the `writing-documentation` skill, and its Voice rules govern comment prose too.
-  Docs sync in the same commit as the change, always.
-- Token efficiency is a design constraint: prefer deterministic scripts over LLM calls, short
-  pointers over restated rules.
+- Writing a doc, note, email or comment: work out what the reader will do with it and say that
+  first. Use the specific facts you have. Keep the words plain. Review the draft after you write
+  it, not while you compose it. For a README or repo doc, use the `writing-documentation` skill.
+  One concept has one home. Docs sync in the same commit as the change.
+- Prefer deterministic scripts over LLM calls, and short pointers over restated rules.
 - Fixing gate or lint violations in a file: read the full violation list once, fix every
   violation in one pass, then re-verify once. Never fix one violation, re-run the checker,
   fix the next one it finds, and repeat — that turns an N-violation fix into an N-round
   loop, each round re-paying the checker's full output cost.
-- Never re-read a file already read earlier in the same session. Edit from what is already
-  in context. A file changes only through your own edits, which you already see.
-- Read a file before editing it, every first touch. Grep for callers before changing a
-  function signature. Research before you edit, not after — an edit made blind gets retried
-  once the read finally happens, paying for the file twice.
+- Re-read a file before you edit it when anything else could have changed it. Another session
+  in a shared tree, a hook or a generator can do that. Read a file before editing it, every first
+  touch. Grep for callers before changing a function signature. Research before you edit, not
+  after. An edit made blind gets retried once the read finally happens, which pays for the file
+  twice.
 
 ## Pre-Commit
 Run the current repo's own canonical validation before committing, never OliverCode's.
