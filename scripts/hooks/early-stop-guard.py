@@ -26,7 +26,11 @@ PROMISE_RE = re.compile(
     r"\b(now|next|then|implement|create|write|add|run|fix|save|build|start|proceed)\b",
     re.IGNORECASE,
 )
-ASKS_USER_RE = re.compile(r"(\?|shall i|would you like|do you want|let me know|which option)", re.IGNORECASE)
+ASKS_USER_RE = re.compile(
+    r"(\?|shall i|would you like|do you want|want me to|let me know|which option|"
+    r"say (go|yes|the word)|tell me|your call|if you want|once you confirm|waiting on you)",
+    re.IGNORECASE,
+)
 TAIL_CHARS = 400
 
 
