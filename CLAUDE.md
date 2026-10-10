@@ -16,12 +16,11 @@ path below is written to resolve from wherever you are:
   Each fleet repo ships its own. They are not OliverCode's.
 
 ## Voice
-In chat, lead with the answer. Then give the context a reader needs to act on it: what you
-verified, what you found, what is still unknown. Never cut words if the cut costs meaning.
-Never use contrast framing ("not X, but Y", "rather than", "instead of", "less X, more Y").
-State the plain fact. For anything you write for a person to read, use the `clean-writing`
-skill. Text a person reads as written (a skill's questions, options and messages, any
-document you draft) goes out word for word as the skill gives it.
+@~/.claude/skills/shared-company/voice/baseline.md
+
+For a document, an email or a post, use the `clean-writing` skill. Text a person reads as written
+(a skill's questions, options and messages, any document you draft) goes out word for word as the
+skill gives it.
 
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
