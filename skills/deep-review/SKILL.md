@@ -5,7 +5,7 @@ description: "Post-build deep review loop: single sequential review agent over a
 
 # Deep Review (post-build review loop)
 
-This skill reviews a session's own output before the session calls it done. It verifies findings against code, removes validated-expired legacy, and writes all state into a tracker another agent can resume from. It differs from `functionality-audit`, which asks whether the PRODUCT works end to end. It also differs from `repo-audit-with-execution-batches`, a surface scan of a repo at rest.
+This skill reviews a session's own output before the session calls it done. It verifies findings against code, removes validated-expired legacy, and writes all state into a tracker another agent can resume from. It differs from `repo-audit-with-execution-batches`, a surface scan of a repo at rest.
 
 This skill is the operational "how" for `DEVELOPMENT_LIFECYCLE_STANDARD.md` §5 (QA as a separate, adversarial pass) and §7 (simplify as part of finishing). That contract states the principle and this skill runs it. Read the contract for the why. This file never restates it.
 

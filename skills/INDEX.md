@@ -9,21 +9,14 @@
 
 | Skill | Domain | Load When |
 |-------|--------|-----------|
-| `never-guess` | Data-first approach | When tempted to estimate instead of measure |
 | `diagnosing-bugs` | Tight-feedback-loop bug diagnosis (6 phases) | Hard bugs, regressions, "debug this" |
-| `tdd` | Test-driven development — tracer-bullet vertical slices | Building features test-first, red-green-refactor |
 | `docs-reality-audit` | Docs-vs-code truth check + no-duplication consolidation | Simplifying/updating docs, or docs claim things that look stale |
-| `repo-discovery` | Read-only repo exploration | Entering an unfamiliar repo |
 | `repo-audit-with-execution-batches` | Structured repo audit — surface scan, marker hunt, report | Quick scan-and-report audit of a repo |
-| `functionality-audit` | Full product functionality audit — crash-safe incremental, quick wins inline, context-free specs, RLS/tooltips/revert/complete-but-isn't | Full audit of a live product ("audit everything", "what's broken/missing/fake-done") |
-| `code-security-review` | Vulnerability-class review — injection, auth bypass, IDOR, SSRF, path traversal, XSS, insecure deserialization | Security review, or touching auth/input-parsing/file-paths/external-requests/serialization |
 | `deep-review` | Post-build review loop — single review agent over a commit range, simplify pass, remove-don't-archive cleanup, live re-verification, session tracker | Before closing any multi-commit build session ("review tonight's work") |
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
-| `olivercode-cli` | OliverCode CLI launcher | Modifying CLI, command routing, help surface |
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
 | `backlog-management` | Config-driven GitHub Project backlog ops | Filing, closing, or triaging backlog work in a repo that names a backlog-config.json in its own CLAUDE.md |
-| `model-routing` | Model tier selection strategy (cheap vs capable) | Choosing which model tier handles a task |
 | `writing-documentation` | Write any README/doc to the locked documentation standard (outline, voice, naming, About) — docs/DOCUMENTATION_STANDARD.md is the one home |
 
 ## Personas (not skills, kept in `core/personas/`)

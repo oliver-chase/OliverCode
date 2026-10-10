@@ -11,7 +11,7 @@ Run in order. Each batch produces a report section. Don't batch all at once — 
 
 ### Batch 1 — Surface Scan
 
-Same first step as `repo-discovery` — reuse that skill's Surface Scan/Entry Points steps instead of re-deriving them here. Identify: language, framework, build system, test runner, CI config.
+Read-only. Identify: language, framework, build system, test runner, CI config.
 
 ### Batch 2 — Marker Hunt
 
@@ -43,9 +43,8 @@ Against `PROJECT_STRUCTURE_STANDARD.md` (from OliverCode contracts):
 ### Batch 6 — Security Surface
 
 Presence check only — hardcoded secrets (API keys, tokens, passwords), `.gitignore`
-coverage, public exposure risk. For the real vulnerability-class walkthrough (injection,
-auth bypass, IDOR, SSRF, path traversal, XSS, insecure deserialization), that's a distinct
-pass — use `code-security-review`, don't improvise it inline here.
+coverage, public exposure risk. A real vulnerability-class walkthrough (injection, auth
+bypass, SSRF, XSS) is a distinct pass: use `/security-review`, don't improvise it inline here.
 
 ### Batch 7 — Summary + Priority
 
@@ -56,11 +55,10 @@ Produce a ranked list by impact × fix difficulty. Each finding: file:line, cate
 This audit finds and categorizes issues. It doesn't fix them in depth. When a batch turns up something that has its own dedicated skill, hand off to it rather than doing a lighter version here:
 
 - Batch 2 (markers) surfaces an actual bug → `/code-review`
-- Batch 6 (security) surfaces something worth a real vulnerability-class walkthrough → `code-security-review`
+- Batch 6 (security) surfaces something worth a real vulnerability-class walkthrough → `/security-review`
 - Batch 2 or Batch 4 surfaces real duplication/dead code (not just a marker comment) → `/simplify`
 - Any batch surfaces something actually broken, not just messy → `diagnosing-bugs` for root cause, before proposing a fix
 - The repo has a UI and the audit is part of a broader project review → hand off to whichever frontend/design skill the machine has installed (OliverCode ships none — see `docs/EXTERNAL-TOOLING.md`), as a separate pass
-- The ask is a FULL functionality audit of a live product (does everything actually work end to end, fix quick wins inline, crash-safe incremental findings) → `functionality-audit`, not this skill
 
 ## Output Format
 

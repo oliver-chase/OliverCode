@@ -459,7 +459,7 @@ def check_contract_reachability(repo_root: Path) -> list[str]:
 
 
 # Skill names this repo ships that read like prose, so a bare mention is not a reference.
-_NOT_A_CROSS_REF = {"plan", "tdd"}
+_NOT_A_CROSS_REF = {"plan"}
 
 
 def check_skill_cross_references(repo_root: Path) -> list[str]:

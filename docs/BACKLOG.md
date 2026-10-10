@@ -70,15 +70,9 @@ A2 and A3 are collapsed into one checker (`scripts/lib/consistency_check.py`) ra
 two scripts, per `FRAMEWORK_BASELINE.md`'s rule that a validator duplicating another's
 failure class gets merged. Both are the same class: a doc asserting what the code contradicts.
 
-### A7 — model-routing remains a declared scope exception (LOW)
+### A7 — model-routing (resolved)
 
-`skills/model-routing/` is built on `LLM_PROVIDER_ORDER` and cheapest-vs-capable provider
-tiers, while `CONTRIBUTING.md` mandatory rule 1 names Anthropic the sole model provider and
-forbids multi-provider framing without an implementation behind it. Kept deliberately
-(owner decision, 2026-07-27) as a pattern contract rather than a claim about this
-framework's runtime. Do not re-raise as drift. If it is ever removed, tear down
-`~/.claude/skills/model-routing` in the same session or `olivercode health` reports a broken
-symlink.
+The `model-routing` skill is removed. Nothing in the framework depends on it.
 
 ---
 
@@ -412,7 +406,6 @@ a quick win.
 - `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
   `AGENT_SHARED_STRUCTURE.md` but is the tracked half of the G1 example/overlay pair and has a
   real `local/` counterpart. Keep both.
-- `skills/model-routing/` — see A7 above.
 - The keepalive surface — in scope by owner decision, synced via the manifest's
   `conditionalFiles`, not an orphan.
 - **The WRITE MODE evidence gate is opt-in, not a completion requirement.** The machinery
