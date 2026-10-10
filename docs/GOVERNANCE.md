@@ -102,7 +102,7 @@ Which hook a repo receives:
 The private variant drops the PII gate deliberately: the vault *is* personal data, so a gate
 that blocks host paths and email addresses would block every legitimate commit in it. It is
 deployed as a file literally named `pre-commit` — git auto-invokes that name and no other.
-A repo adds its own blocking checks in `.githooks/pre-commit.local` (`GATE-LOCAL-1`). The private hook runs it after Gate 4. `sync-hooks` does not manage it.
+A repo adds its own blocking checks in a `pre-commit.local` file beside the hook (`GATE-LOCAL-1`). The private hook runs it after Gate 4. `sync-hooks` does not manage it.
 Fleet repos also receive `pre-commit-private` alongside their live hook as an inert reference
 copy. Git never runs it.
 
