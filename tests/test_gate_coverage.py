@@ -1,6 +1,6 @@
 """Tests for per-repo gate-coverage consistency.
 
-Gate coverage is not uniform -- 13 gates in OliverCode, 11 in a repo that adopts the
+Gate coverage is not uniform -- 11 gates in OliverCode, 9 in a repo that adopts the
 framework, 4 in the private variant -- and five tracked documents once stated
 OliverCode's own total as though it were universal, promising forkers two gates the
 template does not ship.
@@ -55,7 +55,7 @@ class TestShippedTree(unittest.TestCase):
         totals, problems = cc._hook_totals(REPO_ROOT)
         self.assertEqual(problems, [])
         self.assertEqual(
-            totals, {"olivercode": 13, "template": 11, "template-private": 4},
+            totals, {"olivercode": 11, "template": 9, "template-private": 4},
             "gate coverage changed -- update the table in docs/GOVERNANCE.md, which is "
             "its single home, and every doc that points there",
         )
@@ -88,12 +88,12 @@ class TestMutations(unittest.TestCase):
         # The real bug: a run of banners counting to one total, then a later one
         # counting to another.
         self.assertTrue(self._fails_after(
-            "core/templates/project/pre-commit", "Gate 1/11", "Gate 1/5"))
+            "core/templates/project/pre-commit", "Gate 1/9", "Gate 1/5"))
 
     def test_catches_a_gate_removed_without_updating_the_total(self):
         self.assertTrue(self._fails_after(
             "core/templates/project/pre-commit",
-            'echo "[pre-commit] Gate 3/11: PII scan..."',
+            'echo "[pre-commit] Gate 3/9: PII scan..."',
             'echo "[pre-commit] PII scan..."'))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
@@ -127,7 +127,7 @@ class TestMutations(unittest.TestCase):
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/GOVERNANCE.md", "| **13** | **11** | **4** |", "| **13** | **13** | **4** |"))
+            "docs/GOVERNANCE.md", "| **11** | **9** | **4** |", "| **11** | **11** | **4** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""

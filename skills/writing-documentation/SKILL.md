@@ -54,6 +54,5 @@ contract instead of a generic house style.
 - Company and client writing (marketing copy, decks, posts) follows the `shared-company` voice
   files. Do not apply this skill to it.
 - Never introduce a document that restates a rule owned elsewhere. Point to the owning doc.
-- A comment inside a skill folder that ships in a zip is the exception to the decision-id rule.
-  It says what the code does, carries no `AREA-TOPIC-N` id and no history, and points to no
-  ledger. The reason for the rule lives in the commit or the issue.
+- A comment inside a skill folder that ships in a zip says what the code does, carries no
+  history, and points to no ledger. The reason for the rule lives in the commit or the issue.

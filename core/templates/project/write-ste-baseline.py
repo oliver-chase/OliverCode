@@ -5,8 +5,8 @@ adoption. GATE-BASELINE-1 in OliverCode's docs/DECISIONS.md.
 Gate 4 (writing clarity) only ever checked SKILL.md/CLAUDE.md before GATE-SCOPE-1 extended it
 to references/*.md. A repo's existing reference files can carry real pre-existing debt that
 gate never saw -- committing an unrelated one-line fix to such a file would then have to clear
-all of it first, the same "fails a thousand times on day one" problem check-decisions.mjs's own
-adoption baseline already solves for decision records. This script is that same idea for Gate 4.
+all of it first, which would fail a thousand times on day one. This script freezes that debt
+at adoption instead.
 
 A file not listed here has baseline 0 -- any hard violation blocks, same as today. A file
 listed here passes as long as its hard-violation count does not exceed its frozen baseline;

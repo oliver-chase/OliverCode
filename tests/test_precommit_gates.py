@@ -157,7 +157,7 @@ class TestGates5And7NonFiring(GateHarness):
         """Gate 5 needs staged workflow YAML; gate 7 needs the checker present."""
         self.stage("src/app.py", "print('hello')\n")
         result = self.assertAllowed()
-        self.assertIn("Gate 7/13", result.stdout)
+        self.assertIn("Gate 7/11", result.stdout)
         self.assertIn("skipped", result.stdout)
 
 
@@ -197,7 +197,7 @@ class TestGateIntegrity(unittest.TestCase):
             (tmp / ".githooks" / "pre-commit").write_text(text[:start] + text[end:])
             failures = self._check(tmp)
             self.assertTrue(failures, "removing a gate must be caught")
-            self.assertIn("only 12 are present", failures[0])
+            self.assertIn("only 10 are present", failures[0])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

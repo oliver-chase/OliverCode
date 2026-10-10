@@ -95,8 +95,7 @@ The locked outline:
 9. **Status.** Hard facts, no adjectives: runtime requirements, what is verified and
    how — stated as the command that proves it (`npm run validate`, `bash
    scripts/validate.sh`), not as a hand-maintained number. Volatile counts (tests,
-   files, coverage) go stale immediately and are governed by
-   `core/contracts/CODE_INTENT_STANDARD.md` §5: name the command, and quote a number
+   files, coverage) go stale immediately: name the command, and quote a number
    only as a dated measurement where the date is part of the sentence.
 10. **License.** One line, and only where the repo actually ships a license and
     licensing matters to a reader (a public or forkable repo). A private product
@@ -267,9 +266,7 @@ a README anywhere downstream and this is the shape it produces. The `writing-doc
 skill is the invocation path. `core/templates/project/` carries the same expectations into
 newly bootstrapped repos.
 
-**Voice and Readability also govern code comment prose.** CODE_INTENT_STANDARD decides what a
-comment must say and how long it may run. How the prose is written is here, so there is
-never a second standard for it. A comment is short documentation, and the problem-first and
+**Voice and Readability also govern code comment prose.** A comment is short documentation, and the problem-first and
 attach-the-reason rules apply to it unchanged.
 
 Agent-facing files (`CLAUDE.md`, skill files) follow their own contracts. They are loaded

@@ -61,7 +61,7 @@ plus backtick repo paths).
 ## Gate Classes
 
 **Gate coverage is not uniform across repos, and the difference matters.** OliverCode runs
-thirteen gates on itself. A repo your fleet adopts runs eleven, because two of the thirteen
+eleven gates on itself. A repo your fleet adopts runs nine, because two of the eleven
 check things that only exist in the framework repo. A repo deployed with the private variant
 runs four. This table is the one home for that. Anywhere else that names a count points here.
 
@@ -75,12 +75,10 @@ runs four. This table is the one home for that. Anywhere else that names a count
 | Contract integrity | Hardcoded `/workspace/` container paths in staged code. `OLIVERCODE_DEPENDENCY.md` declaring paths that don't exist | 6 | — | — |
 | Planning doc governance | Contract violations in staged planning docs. Conditional: runs only where `scripts/check-planning-doc-governance.py` exists, and reports *skipped* where it does not | 7 | 6 | — |
 | Token policy | Invalid token-policy declarations in repo profiles | 8 | — | — |
-| Comment budget | A comment block over the repo's cap. Conditional: runs where `scripts/check-comment-budget.mjs` exists and node is installed, and reports *skipped* where either is missing | 9 | 7 | — |
-| Decision records | A decision ID in the source with no ledger row, a row describing deleted code, or a ledger ID the gate cannot read. Same conditional shape as the comment budget | 10 | 8 | — |
-| Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 11 | 9 | — |
-| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Current-state-only, fleet-wide: git is the archive, so a superseded file is deleted or replaced, never parked | 12 | 10 | 3 |
-| Writing clarity (asd-ste100) | Warns, never blocks: a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` with strict-mode ASD-STE100 findings (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Long sentences are measured after `core/templates/project/ste-lint-joined.py` (installed beside each hook) joins hard-wrapped lines, so wrapping a paragraph cannot hide one. Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 13 | 11 | 4 |
-| **Total** | | **13** | **11** | **4** |
+| Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 9 | 7 | — |
+| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Current-state-only, fleet-wide: git is the archive, so a superseded file is deleted or replaced, never parked | 10 | 8 | 3 |
+| Writing clarity (asd-ste100) | Warns, never blocks: a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` with strict-mode ASD-STE100 findings (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Long sentences are measured after `core/templates/project/ste-lint-joined.py` (installed beside each hook) joins hard-wrapped lines, so wrapping a paragraph cannot hide one. Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 11 | 9 | 4 |
+| **Total** | | **11** | **9** | **4** |
 
 Numbers are the gate's position in that hook's run order, so the same gate can carry a
 different number in different hooks — planning-doc governance is Gate 7 in OliverCode and

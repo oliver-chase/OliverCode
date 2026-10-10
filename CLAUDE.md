@@ -65,7 +65,7 @@ repo's CLAUDE.md or package.json. Do not assume the filename.
 Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement
-`.githooks/pre-commit` is the only mechanically-enforced layer (thirteen gates here, eleven in a
+`.githooks/pre-commit` is the only mechanically-enforced layer (eleven gates here, nine in a
 repo that adopts the framework -- `$OC/docs/GOVERNANCE.md` has the per-repo table).
 It is installed per repo via `core.hooksPath`. If that config is unset or points at a missing
 directory, **git runs no hooks at all and says nothing** — the gates fail open. `$OC/scripts/olivercode health`

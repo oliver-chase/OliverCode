@@ -95,9 +95,9 @@ confidence on an artifact that already looked right the first time.
 
 ## 6. Prefer boundary verification over volume
 
-`CODE_INTENT_STANDARD.md` §7 has the rule and the evidence (a crawler's real defects all
-came from live checks, not its ~590 unit tests) — applies here unchanged: verify where
-the system meets reality, and say so honestly when volume was not what found the bug.
+A suite that grows without finding defects measures the wrong thing. Verify where the
+system meets reality (real networks, real files, real inputs), and say so honestly when
+volume was not what found the bug.
 
 ---
 
@@ -138,7 +138,6 @@ This standard is itself subject to it. Prefer:
 
 | Contract | Owns |
 |---|---|
-| `CODE_INTENT_STANDARD.md` | Comments, decision records, volatile numbers, ablation |
 | `PROJECT_HYGIENE_STANDARD.md` | Story and epic hygiene, commit format |
 | `PROJECT_STRUCTURE_STANDARD.md` | Folder layout |
 | `EXECUTION_CONTRACT.md` | Gate mechanics, evidence schema, the pre-commit hook contract this loop ends in |
