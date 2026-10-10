@@ -18,10 +18,6 @@
 | `functionality-audit` | Full product functionality audit — crash-safe incremental, quick wins inline, context-free specs, RLS/tooltips/revert/complete-but-isn't | Full audit of a live product ("audit everything", "what's broken/missing/fake-done") |
 | `code-security-review` | Vulnerability-class review — injection, auth bypass, IDOR, SSRF, path traversal, XSS, insecure deserialization | Security review, or touching auth/input-parsing/file-paths/external-requests/serialization |
 | `deep-review` | Post-build review loop — single review agent over a commit range, simplify pass, remove-don't-archive cleanup, live re-verification, session tracker | Before closing any multi-commit build session ("review tonight's work") |
-| `repo-structural-cleanup` | File moves, renames, deletes | Restructuring a repo |
-| `structured-code-removal` | Safe feature/module removal | Removing a feature safely |
-| `behavior-preserving-module-extraction` | Refactoring patterns | Extracting a module from a monolith |
-| `validator-consolidation` | Merge validate scripts | Consolidating overlapping validators |
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
 | `olivercode-cli` | OliverCode CLI launcher | Modifying CLI, command routing, help surface |
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
