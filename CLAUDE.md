@@ -16,10 +16,11 @@ path below is written to resolve from wherever you are:
   Each fleet repo ships its own. They are not OliverCode's.
 
 ## Voice
-Plain full sentences and real words. Lead with the answer. Then give the context a reader needs to
-act on it: what you verified, what you found, what is still unknown. Never cut words if the cut costs
-meaning. Text a person reads as written (a skill's questions, options and messages, any document you
-draft) goes out word for word as the skill gives it.
+In chat, lead with the answer. Then give the context a reader needs to act on it: what you
+verified, what you found, what is still unknown. Never cut words if the cut costs meaning.
+Anything you write for a person to read follows the `shared-company` skill's voice files
+(`voice-core.md` first). Text a person reads as written (a skill's questions, options and
+messages, any document you draft) goes out word for word as the skill gives it.
 
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
@@ -28,10 +29,8 @@ draft) goes out word for word as the skill gives it.
   same session.
 
 ## Development Practice
-Always-on while working, not on request. Full sequence — gap analysis, spec, priority,
-build/verify/commit loop, separate QA pass, simplify —
-`$OC/core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md`. The rules below are the ones you
-apply constantly. That contract is the order they run in.
+Always-on. The full sequence (gap analysis, spec, priority, build/verify/commit loop, QA pass,
+simplify) is `$OC/core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md`. These rules apply constantly.
 - Something broken/failing/slow? Run the `diagnosing-bugs` skill loop — never patch on a guess.
 - Multi-commit build session ending? Run the `deep-review` skill (single review agent,
   simplify, remove-don't-archive cleanup, live re-verify, tracker update) before closing.
@@ -45,15 +44,11 @@ apply constantly. That contract is the order they run in.
   stays green without the code it protects reports confidence it has not earned.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Writing a doc, note, email or comment: work out what the reader will do with it and say that
-  first. Use the specific facts you have. Keep the words plain. Review the draft after you write
-  it, not while you compose it. For a README or repo doc, use the `writing-documentation` skill.
-  One concept has one home. Docs sync in the same commit as the change.
+- Writing a README or repo doc: use the `writing-documentation` skill. One concept has one
+  home. Docs sync in the same commit as the change.
 - Prefer deterministic scripts over LLM calls, and short pointers over restated rules.
-- Fixing gate or lint violations in a file: read the full violation list once, fix every
-  violation in one pass, then re-verify once. Never fix one violation, re-run the checker,
-  fix the next one it finds, and repeat — that turns an N-violation fix into an N-round
-  loop, each round re-paying the checker's full output cost.
+- Fixing gate or lint violations: read the full list once, fix every violation in one pass,
+  then re-verify once. Never fix one, re-run, and repeat.
 - Re-read a file before you edit it when anything else could have changed it. Another session
   in a shared tree, a hook or a generator can do that. Read a file before editing it, every first
   touch. Grep for callers before changing a function signature. Research before you edit, not
@@ -61,11 +56,9 @@ apply constantly. That contract is the order they run in.
   twice.
 
 ## Pre-Commit
-Run the current repo's own canonical validation before committing, never OliverCode's.
-Usually `scripts/validate.sh`. Where that file does not exist, the repo runs validation
-through its own npm script instead (`validate`, or `check`). Verify which from that repo's
-CLAUDE.md or package.json rather than assuming the filename — an agent that assumes, finds
-nothing, and moves on has skipped validation without noticing.
+Run the current repo's own validation before committing, never OliverCode's. Usually
+`scripts/validate.sh`; otherwise an npm script (`validate` or `check`). Confirm which from that
+repo's CLAUDE.md or package.json. Do not assume the filename.
 Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
 
 ## Enforcement

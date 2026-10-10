@@ -21,7 +21,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Execution order (CODE -> ... -> PUSH) and the WRITE MODE completion gate | `core/contracts/EXECUTION_CONTRACT.md` | `scripts/orchestration-gatekeeper.py --evidence-file` (on demand) |
 | Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
 | Public / local / private-overlay split every adopted repo must keep | `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` | `.githooks/pre-commit` Gates 1 and 3 block the leak. The split itself is agent-applied at adoption |
-| Writing process (how to think before a doc or comment exists) | `docs/WRITING_PROCESS.md` | Read first by the `writing-documentation` skill. Agent-applied, not gated — a gate is QA and this is what runs before one |
+| Writing process (how to think before a doc or comment exists) | `docs/WRITING_PROCESS.md` | Repo-documentation thinking, read by the `writing-documentation` skill. Agent-applied, not gated — a gate is QA and this is what runs before one |
 | Documentation standard (locked README outline, voice, naming, About) | `docs/DOCUMENTATION_STANDARD.md` + the `writing-documentation` skill | `validate.sh` covers references/consistency/index. `olivercode health` checks the GitHub About. The writing rules are agent-applied |
 | Comment intent, sentence form, length cap and density guideline | `core/contracts/CODE_INTENT_STANDARD.md` | `check-comment-budget.mjs` fails on block length, reports density. Wired into each repo's own check target |
 | Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
