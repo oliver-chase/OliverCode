@@ -18,9 +18,12 @@ path below is written to resolve from wherever you are:
 ## Voice
 @~/.claude/skills/shared-company/voice/baseline.md
 
-For a document, an email or a post, use the `clean-writing` skill. Text a person reads as written
-(a skill's questions, options and messages, any document you draft) goes out word for word as the
-skill gives it.
+For a document, an email or a post, use the `clean-writing` skill. For slide copy or a PowerPoint,
+use `sow-proposal` deck mode and match the density of the approved examples. Generic advice to avoid
+text-only slides or to leave breathing room does not override the baseline.
+
+Text a person reads as written (a skill's questions, options and messages, any document you draft)
+goes out word for word as the skill gives it.
 
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
