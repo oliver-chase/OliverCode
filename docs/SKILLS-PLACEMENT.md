@@ -39,7 +39,7 @@ through `~/.claude/skills/`.
 - **Every new skill pairs with its `INDEX.md` row and its symlink** in the same session.
 - **Never store skills in the vault's note folders** (`Work Vault/.../Claude Skills/*.skill` archives are historical exports, not a live location).
 - **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo (and the vault itself) gets its copy via the bootstrap manifest, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos (the vault) use the 4-gate private variant.
-- **Every `SKILL.md` and `CLAUDE.md`, in this repo or any fleet repo, must pass the asd-ste100 writing-clarity gate at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate; it fails the commit rather than relying on the author to remember to run the skill by hand.
+- **Every `SKILL.md` and `CLAUDE.md`, in this repo or any fleet repo, be checked by the asd-ste100 writing-clarity gate at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate. It warns on findings so the author sees them without running the skill by hand.
 - **Every skill's structure and MCP-tool usage, not just its prose, is held to a token-cost bar.** No monolith `SKILL.md`, no duplicated paragraph, gap-filling automated instead of asked for, MCP calls following the named efficiency patterns — `core/contracts/SKILL_EFFICIENCY_STANDARD.md` is the full rule set. Checked mechanically today only for the vault's `01 - Skills/`, by hand everywhere else.
 
 ## When a repo-specific skill must win over a generic one
