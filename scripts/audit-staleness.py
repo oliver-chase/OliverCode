@@ -5,7 +5,7 @@ Deterministic, no LLM: reads the fleet from repo-profiles, locates each repo as 
 sibling of OliverCode (override with --root), finds its `Reviewed through: <sha>`
 marker — the line core/templates/project/docs/BACKLOG-live-tracker.md standardizes —
 and counts commits landed since. Past the threshold it is STALE, which is the signal
-to run `deep-review` or `functionality-audit`. Nothing is audited here; staleness is
+to run `deep-review`. Nothing is audited here; staleness is
 only made impossible to miss.
 
 A repo with no marker, or one naming a sha its history no longer holds, is a SETUP

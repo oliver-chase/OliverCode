@@ -22,13 +22,10 @@ written on a machine running these, and a few of the rules read as arbitrary wit
 
 ## Frontend and design references
 
-Routing between these lives in the `frontend-ui-references` skill, which sits in the vault's
-`Operations Vault/01 - Skills/` rather than here: design and UI routing is outside this
-framework's declared scope (`docs/FRAMEWORK_BOUNDARY.md`).
+No frontend skills are installed. Fetch these per task when a UI request needs them.
 
 | Tool | What it does | Install |
 |---|---|---|
-| [taste-skill](https://github.com/Leonxlnx/taste-skill) | Anti-slop frontend design skills, 13 of them, installed selectively. `design-taste-frontend` and `full-output-enforcement` carry the weight. | `npx skills add https://github.com/Leonxlnx/taste-skill` |
-| ui-ux-pro-max-cli | Broader design-asset suite of 7 skills. `ui-styling` (shadcn/Tailwind implementation) carries the weight. | npm |
 | [claude-code-ui-agents](https://github.com/mustafakendiguzel/claude-code-ui-agents) | Frontend prompt library in plain markdown, fetched per task. | reference only |
 | [Ant Design](https://github.com/ant-design/ant-design) | Component-API and design-token sanity reference. | reference only |
+

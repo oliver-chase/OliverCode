@@ -11,20 +11,14 @@ Workflow routing and standards.
 
 ## Trigger Routing
 
-Use these trigger terms as workflow selectors. This list is the complete one. `core/workflows/README.md`
-points here. `CLAUDE.md`'s Development Practice section carries a compressed copy of the
-most-used rows (broken/failing/slow, multi-commit session ending) so they load every
-session with no extra file read — that copy is deliberate, not drift. This table is where
-a less-common trigger term resolves.
+Use these trigger terms as workflow selectors. This list is the complete one for procedures
+and scripts. `core/workflows/README.md` points here. `CLAUDE.md`'s Development Practice
+section owns the skill triggers (broken/failing/slow, multi-commit session ending, review).
 
 - `backlog`, `story lifecycle` -> `core/workflows/story-lifecycle-sop.md`
 - `OliverCode sync` -> `core/workflows/olivercode-sync.md`
 - `project standardization` -> `core/workflows/project-standardization-lifecycle.md`
-- `broken`, `failing`, `slow` -> the `diagnosing-bugs` skill loop
-- `qa`, `full qa` -> `scripts/qa/full-qa-pass.sh` (deterministic checkers), then the
-  `functionality-audit` skill for whether the product actually works end to end
-- `testing` -> the `tdd` skill
-- `review` -> the `deep-review` skill (before closing a multi-commit session)
+- `qa`, `full qa` -> `scripts/qa/full-qa-pass.sh` (deterministic checkers)
 
 If a trigger term conflicts with active repo docs, surface the conflict before continuing.
 
@@ -51,8 +45,6 @@ Testing applies to all code work:
 - Strengthen weak coverage around changed paths, edge cases, and regressions.
 - Implementation is not complete without test alignment, and a test-suite-only change still
   needs its own QA pass.
-
-Method for building features test-first: the `tdd` skill.
 
 ## Branch Lifecycle Standard (All Projects)
 

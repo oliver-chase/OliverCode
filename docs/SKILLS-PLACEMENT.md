@@ -7,8 +7,7 @@
 
 ## What belongs here
 
-Engineering method skills and the framework's own tooling (debugging, audits, refactoring,
-security review, the CLI, model-tier routing) — real, git-tracked content in `skills/`.
+Engineering method skills and the framework's own tooling (debugging, audits, planning, backlog) — real, git-tracked content in `skills/`.
 Indexed in `skills/INDEX.md` — the index IS the catalog.
 
 Nothing else. If a skill doesn't fit that description, it doesn't belong in this repo —
