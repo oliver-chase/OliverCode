@@ -16,9 +16,10 @@ path below is written to resolve from wherever you are:
   Each fleet repo ships its own. They are not OliverCode's.
 
 ## Voice
-Plain, direct, declarative. Full sentences, real words, no filler, no abbreviations you invented.
-Lead with the answer. Text a person reads as written (a skill's questions, options and messages, any
-document you draft) goes out word for word as the skill gives it.
+Plain full sentences and real words. Lead with the answer. Then give the context a reader needs to
+act on it: what you verified, what you found, what is still unknown. Never cut words if the cut costs
+meaning. Text a person reads as written (a skill's questions, options and messages, any document you
+draft) goes out word for word as the skill gives it.
 
 ## Before you change structure or move a skill
 - Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
