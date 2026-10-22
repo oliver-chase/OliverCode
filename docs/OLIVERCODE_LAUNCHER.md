@@ -9,6 +9,8 @@ Current lightweight launcher surface:
 - `olivercode health [--root DIR]` — dependency/entrypoint/placement-drift checks (SYS-2), plus the topology checks: plugin links, remote reachability, tracked-file size against GitHub's 100MB limit, and each folder-level `_validate_structure.js`
 - `olivercode update` — `git pull`, then runs `sync-hooks`
 - `olivercode sync-hooks [--root DIR]` — converges pre-commit hooks + `core.hooksPath` across the fleet and vault (SYS-3). Also runs automatically at the end of `update`
+- `olivercode audit-fleet` — runs `skill-fleet-audit`'s 3 static checks (structure, MCP patterns, clarity) against 2 fixed roots: the vault's `Operations Vault/01 - Skills` and OliverCode's own `skills/`. Non-interactive, writes findings to a log, never fixes anything. Scheduled weekly by `scripts/local-scheduler/`.
+- `olivercode push-fleet [--dry-run]` — pushes already-committed work, unattended, for exactly three targets: the vault, the skill-suite (`Operations Vault/01 - Skills`), and OliverCode itself. Never commits anything; skips and reports a repo with uncommitted changes or no upstream tracking branch. Each repo's own pre-push hook is the real safety gate.
 - `olivercode skills [--grep TERM]` — lists OliverCode's own orchestration skills under `skills/` (name + description, read from each `SKILL.md`'s frontmatter directly, never from a hand-maintained copy). `--grep` filters by name or description.
 
 `--root DIR` overrides where fleet repos are looked for. The default is the parent of the
@@ -30,6 +32,6 @@ python3 scripts/olivercode health
 python3 scripts/olivercode bogus || true
 ```
 
-The launcher is intentionally small -- these 8 commands are the entire surface. The copy at
+The launcher is intentionally small -- these 11 commands are the entire surface. The copy at
 `runtime/control-plane/olivercode` (present only when the local control plane is installed)
 is a thin shim that delegates to this same CLI. It carries no additional commands.

@@ -17,17 +17,22 @@ If one managed quality file changes in any project, the canonical file in `Olive
 
 ## Sync Command
 
+Run from OliverCode to deploy the current managed files and hooks to this repo:
+
 ```bash
-.githooks/pre-commit
+scripts/olivercode sync-hooks
 ```
 
 ## Audit Command
 
+Run from OliverCode to check this repo's hook state against the shipped template:
+
 ```bash
-.githooks/pre-commit
+scripts/olivercode health
 ```
 
-Pre-commit gates must pass before merging quality/workflow policy edits.
+Pre-commit gates (`.githooks/pre-commit`) must also pass before merging quality/workflow
+policy edits.
 
 ## Lock Enforcement
 

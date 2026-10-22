@@ -127,6 +127,9 @@ stop: that boundary is what makes the fork shareable.
 
 ### 6. Install enforcement
 
+Mechanical form of this same step, for a repo whose onboarding is already decided (no
+discovery or human decisions left): `core/workflows/project-standardization-lifecycle.md`.
+
 ```bash
 scripts/olivercode sync-hooks
 scripts/olivercode health

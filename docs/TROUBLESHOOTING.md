@@ -4,13 +4,15 @@ Purpose: short current-state fixes for common operator failures.
 
 ## Command not found
 
-Run from the repo:
+`scripts/olivercode` has no global alias — it only runs from inside this checkout, not from
+an arbitrary cwd. `cd` into the OliverCode repo first, then run:
 
 ```zsh
 scripts/olivercode --help
 ```
 
-If a shell alias is expected, verify host setup separately. Do not commit host-specific paths.
+If a host sets up its own alias or PATH entry for convenience, verify that separately; do not
+commit host-specific paths into this repo.
 
 ## Governance failure
 

@@ -924,7 +924,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
 
 
 def command_audit_fleet(oc_root: Path) -> int:
-    """Run meta/skill-fleet-audit's 3 static checks against every known skill root.
+    """Run skill-governance/skill-fleet-audit's 3 static checks against every known skill root.
 
     Targets exactly 2 fixed roots -- the vault's Operations Vault/01 - Skills and
     OliverCode's own skills/ -- not the fleet-repo iteration sync-hooks uses. Fleet
@@ -945,7 +945,7 @@ def command_audit_fleet(oc_root: Path) -> int:
     audit_dir = vault_root / "Operations Vault" / "01 - Skills" / "skill-governance" / "skill-fleet-audit"
     scripts_dir = audit_dir / "scripts"
     if not scripts_dir.is_dir():
-        print(f"Error: {scripts_dir} not found -- meta/skill-fleet-audit isn't on this machine.")
+        print(f"Error: {scripts_dir} not found -- skill-governance/skill-fleet-audit isn't on this machine.")
         return 1
 
     targets = {

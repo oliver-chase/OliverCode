@@ -25,7 +25,7 @@ Report counts per category, not every occurrence.
 
 ### Batch 3 — Doc Freshness
 
-Presence check only — does `README.md`/`AGENTS.md`/`CLAUDE.md`/`ARCHITECTURE.md`/`docs/` exist and look current at a glance? For a real claim-by-claim verification of docs against live code (routes, migration counts, design tokens, cron schedules, story IDs) plus no-duplication consolidation, that's a distinct pass — use `docs-reality-audit`, don't improvise it inline here.
+Presence check only — does `README.md`/`AGENTS.md`/`CLAUDE.md`/`ARCHITECTURE.md`/`docs/` exist and look current at a glance. A real claim-by-claim verification of docs against live code (routes, migration counts, design tokens, cron schedules, story IDs) plus no-duplication consolidation is a distinct pass — see "Complementary Skills" below.
 
 ### Batch 4 — Structural Validation
 
@@ -44,7 +44,7 @@ Against `PROJECT_STRUCTURE_STANDARD.md` (from OliverCode contracts):
 
 Presence check only — hardcoded secrets (API keys, tokens, passwords), `.gitignore`
 coverage, public exposure risk. A real vulnerability-class walkthrough (injection, auth
-bypass, SSRF, XSS) is a distinct pass: use `/security-review`, don't improvise it inline here.
+bypass, SSRF, XSS) is a distinct pass — see "Complementary Skills" below.
 
 ### Batch 7 — Summary + Priority
 

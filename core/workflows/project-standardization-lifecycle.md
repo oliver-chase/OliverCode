@@ -11,7 +11,9 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 5. `core/contracts/PROJECT_STRUCTURE_STANDARD.md` for locked story/backlog/index naming and folder shape.
 
 ## Lifecycle
-1. Bootstrap new project:
+1. Bootstrap new project (for the human-in-the-loop version of this same step — discovery,
+   backup, the four decisions only a human can make — see `skills/olivercode-adoption/SKILL.md`
+   instead; this is the mechanical form for a repo whose onboarding is already decided):
 - `scripts/olivercode bootstrap <repo-path>` stamps every managed file from
   `core/templates/project/` per the manifest, honouring strict/presence modes.
   Add `--dry-run` first to see the plan.

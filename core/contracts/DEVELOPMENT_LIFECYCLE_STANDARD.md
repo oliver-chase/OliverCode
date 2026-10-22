@@ -19,7 +19,7 @@ Count what exists, run what runs, read the live code. A gap analysis that
 cites no command is a guess. The output is a list of differences between what
 is claimed and what is true — each with the evidence that proves it.
 
-**Measure, do not assume.** "Fallow is huge" became actionable only once
+**Measure, do not assume.** "`[repo-name]` is huge" became actionable only once
 counted: 141,801 lines, of which 13,000 were build artifacts and 11,140 were a
 single backlog file.
 

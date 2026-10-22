@@ -1,13 +1,12 @@
 # Manual Setup
 
-Fastest path for a new local checkout:
+Fastest path for a new local checkout, after `README.md`'s load order has you reading
+`docs/SETUP_MODES.md`:
 
-1. Review `README.md`
-2. Review `docs/SETUP_MODES.md`
-3. Create local runtime env from `.env.example`
-4. Keep real values in `.env.local` only
-5. Keep private runtime artifacts in `.secrets/*`
-6. Run `bash scripts/run-profile-checks.sh --profile local-runtime --mode repo-local`
+1. Create local runtime env from `.env.example`
+2. Keep real values in `.env.local` only
+3. Keep private runtime artifacts in `.secrets/*`
+4. Run `bash scripts/run-profile-checks.sh --profile local-runtime --mode repo-local`
 
 ## Private overlay workflow
 

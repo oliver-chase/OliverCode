@@ -2,21 +2,16 @@
 
 This document defines the current locked governance baseline for OliverCode.
 
-## Required Gate Runner
-
-Run before commit:
-
-```bash
-.githooks/pre-commit
-```
-
 ## Unified Validation Entrypoint
 
 `bash scripts/validate.sh` runs all active gates from repo root:
 - `bash scripts/validate.sh` — pre-commit gates, doc/code consistency, reference integrity, tests
-- `bash scripts/validate.sh --evidence <file>` — pre-commit + orchestration gatekeeper
+- `bash scripts/validate.sh --evidence <file>` — pre-commit + orchestration gatekeeper. `scripts/orchestration-gatekeeper.py` validates WRITE MODE evidence against repo profiles (`local/repo-profiles.json` gitignored real fleet, or `shared/repo-profiles.example.json` tracked placeholder) and `shared/task-policies/`.
 - `bash scripts/validate.sh --gatekeeper-only <file>` — gatekeeper only
 - `bash scripts/validate.sh --check-consistency` — doc/code consistency only
+
+The gatekeeper's `--check-token-policy` mode is already wired into the commit hook (Gate 8);
+`--evidence <file>` runs the fuller check on demand, for WRITE MODE completion verification.
 
 Fail-closed: any failed gate blocks the commit. There is no bypass mode.
 (OliverCode ships `.github/workflows/framework-ci.yml` — health, validate.sh,
@@ -40,9 +35,8 @@ in a weekly log. A repo that must diverge from the template declares `hookVarian
 profile -- see `shared/repo-profiles.example.json`.
 
 `validate.sh` also fails closed on **unfalsifiable checks** — a gate or script that
-cannot fail, whatever the input. Ten defects in this repo shared that shape (a hook that
-always exited 0, a counter compared but never incremented, a gate scanning an empty list),
-and none was visible from the output, because the output always said PASS. Detector:
+cannot fail, whatever the input. See `GATE-FALSIFIABILITY-1` in `docs/DECISIONS.md` for the
+ten defects that shape covered and why none was visible from the output. Detector:
 `scripts/lib/falsifiability_check.py`. A genuinely advisory script declares itself in that
 module's `ADVISORY_BY_CONTRACT` map, with a reason, so the exemption list cannot quietly
 absorb a real bug.
@@ -104,15 +98,8 @@ A repo adds its own blocking checks in a `pre-commit.local` file beside the hook
 Fleet repos also receive `pre-commit-private` alongside their live hook as an inert reference
 copy. Git never runs it.
 
-`hookVariant` carries a real cost, recorded because it bit: a declared variant stops
-receiving template updates, **including security fixes**. The perl guard that closed a
-fail-open in the emoji gate reached every repo except the one carrying a variant. Re-check
-variant repos by hand whenever the template's gates change.
-
-## Backend Enforcement (Supplementary)
-
-- `scripts/orchestration-gatekeeper.py` -- validates WRITE MODE evidence against repo profiles (`local/repo-profiles.json` gitignored real fleet, or `shared/repo-profiles.example.json` tracked placeholder) and task-type policies (shared/task-policies/)
-- Its `--check-token-policy` mode IS wired into the commit hook (Gate 8). Full evidence validation runs on demand (`validate.sh --evidence <file>`) for WRITE MODE completion verification.
+`hookVariant` carries a real cost. See `_hookVariant_note` in
+`shared/repo-profiles.example.json` for the trade-off and the incident that proved it.
 
 ## Locked Baseline Rules
 
@@ -131,12 +118,5 @@ The reusable baseline lives in:
 - `core/templates/project/QUALITY_BASELINE.md`
 - `shared/project-bootstrap-manifest.json`
 
-Enforcement for downstream repos is handled by their own `.githooks/pre-commit` and repo-specific `validate:merge` commands (declared in `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder)).
+Enforcement for downstream repos is handled by their own `.githooks/pre-commit` and their declared `canonicalValidationCommand` (in `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder)).
 
-## What Must Stay True
-
-- launcher surface is documented and validated
-- setup/runtime command surface is documented and validated
-- docs/feature registry stay synchronized with behavior changes
-- shared contracts remain centralized here
-- caches, generated status, and local operator state stay out of tracked authority

@@ -33,13 +33,13 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Gate coverage per repo type (8 in OliverCode, 6 in an adopted repo, 2 in the private variant) | `docs/GOVERNANCE.md` coverage table | `scripts/lib/consistency_check.py` via `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
-| Public CI | `.github/workflows/framework-ci.yml` | Ships health + validate.sh + `check-bloat.sh --strict` + fork-usability as gating steps. **Deliberately paused on the origin repo** while GitHub Actions billing is blocked — see `githubActionsPolicy` in `shared/project-bootstrap-manifest.json`, the canonical record. Enable it in your own fork. |
+| Public CI | `.github/workflows/framework-ci.yml` | Ships health + validate.sh + `check-bloat.sh --strict` + fork-usability as gating steps. Paused on the origin repo — see `docs/GOVERNANCE.md`'s "Unified Validation Entrypoint" for why. Enable it in your own fork. |
 
 ## Runtime and Launcher
 
 | Surface | Source of Truth | Verification |
 |---|---|---|
-| Terminal launcher — `bootstrap`, `discover`, `install`, `init`, `health`, `update`, `sync-hooks`, `skills`, `audit-fleet`, `push-fleet` | `docs/OLIVERCODE_LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
+| Terminal launcher — `bootstrap`, `discover`, `install`, `init`, `link-plugins`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet`, `skills` | `docs/OLIVERCODE_LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
 | Local scheduler — unattended `audit-fleet`/`push-fleet` via `launchd`, mirroring a fleet product repo's own proven pattern | `scripts/local-scheduler/README.md`, `scripts/local-scheduler/install.sh`, `scripts/local-scheduler/tick.py`, `scripts/local-scheduler/uninstall.sh` | `bash scripts/local-scheduler/install.sh`, then `launchctl list \| grep olivercode` |
 
 Claude Code is this framework's sole runtime and Anthropic its sole model provider — there is
@@ -97,4 +97,5 @@ updated in the same change set.
 
 Only list a script/gate here if it exists and runs (verify with `ls`/`grep` before adding a
 row). The active enforcement surfaces are `.githooks/pre-commit` and, for downstream repos,
-whatever `scripts/validate-repo.sh` they declare. Everything else is manually verified.
+whatever `scripts/validate-repo.sh` they declare (`scripts/validate.sh --target-repo` execs it
+if present, per D2 in `docs/BACKLOG.md`). Everything else is manually verified.

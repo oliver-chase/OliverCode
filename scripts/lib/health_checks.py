@@ -168,7 +168,7 @@ def _check_vault_skill_links(vault_root: Path) -> tuple[int, int, int]:
     longer exists. The same missing-symlink risk moved to the skill layer instead: a
     skill added to `01 - Skills/` with no matching symlink is invisible to the Skill
     tool and nothing said why. Walks the same way `check_skill_structure.py` does in
-    the vault's own `meta/skill-fleet-audit`, so a skill nested under any family
+    the vault's own `skill-governance/skill-fleet-audit`, so a skill nested under any family
     subfolder (`vtwo-ops/`, `personal/`, `_shared/`, ...) is still found.
     """
     print("\nVault skill links:")
