@@ -2,6 +2,10 @@
 
 Status: Active
 
+This file-based contract applies only when this repo has no `backlog-config.json`. If this
+repo's `CLAUDE.md` names one, its backlog is the GitHub Project `backlog-management` reads
+and writes, and this contract's user-stories structure does not apply here.
+
 ## Canonical Contract Sources
 
 1. `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_HYGIENE_STANDARD.md`

@@ -410,29 +410,36 @@ requires the number immediately before the word "gates," and both lines put the 
 before "in" / "checks" instead. Fix both lines to nine/eleven, and widen the checker's
 regex to catch this phrasing, or it drifts again the same way.
 
-**B22 — two unreconciled backlog paradigms, no routing rule (HIGH, open).**
+**B22 — two unreconciled backlog paradigms, no routing rule (HIGH, done).**
 `core/contracts/PROJECT_STRUCTURE_STANDARD.md` and `core/templates/project/docs/repo-structure-contract.md`
-mandate a file-based `.github/user-stories/<project>/US-*.md` story system and state
+mandated a file-based `.github/user-stories/<project>/US-*.md` story system and stated
 "backlog.md is retired as an active planning filename." `docs/DOCUMENTATION_STANDARD.md`
-requires `docs/BACKLOG.md` as the standing file, and `core/templates/project/docs/BACKLOG-live-tracker.md`
-tells the reader to copy its section into "the target repo's BACKLOG." The `backlog-management`,
-`board-hygiene`, and `deep-review` skills all assume a GitHub Project board
-(`backlog-config.json`) is the live backlog and never mention `.github/user-stories/`;
-`story-lifecycle-sop.md` and `repo-structure-contract.md` never mention `backlog-config.json`.
-A repo bootstrapped from this template inherits two unreconciled "canonical backlog" systems.
-Pick one as canonical — the GitHub Project board, since it has the live tooling — and either
-delete the file-based system from the template and `PROJECT_STRUCTURE_STANDARD.md`, or scope
-it explicitly as a legacy/alternate profile with a routing rule stated in both places.
+required `docs/BACKLOG.md` as the standing file, and neither side named the other or said
+which wins. Checked against the live fleet before deciding — not a guess: both systems are real and
+currently populated. Three fleet repos have genuine, populated
+`.github/user-stories/<project>/US-*.md` files under the file-based contract. Seven other
+repos have a real `backlog-config.json` and use the GitHub Project board instead — one
+of those seven still carries an inert `.github/user-stories/README.md`, left over from
+before its own history shows the commit that moved it off the file-based system. Deleting
+the file-based contract would have orphaned three live repos' real content; declaring either
+side the sole winner would have been false. Decision:
+scope, not delete. `PROJECT_STRUCTURE_STANDARD.md` and `repo-structure-contract.md` now state
+up front that a repo naming a `backlog-config.json` uses the GitHub Project board instead and
+this contract doesn't apply there; `docs/DOCUMENTATION_STANDARD.md`'s backlog policy (B23)
+now states the GitHub Project board is the default for a newly bootstrapped repo, and this
+file-based contract stays in force, unchanged, for a repo that already adopted it. See B42
+for the gap this surfaced in `olivercode-adoption` and the bootstrap manifest.
 
-**B23 — documented backlog policy contradicts BACKLOG.md's own shape (MED, open).**
-`docs/DOCUMENTATION_STANDARD.md` (lines 229-232) states "`docs/BACKLOG.md` holds open work only...
-History lives in git... No archive sections accumulating." This file carries a "Design
-decisions," a "Resolved — the A-series," and a "Deliberately kept / decided" section, all
-explicitly historical and defended in its own prose ("kept because each entry records the
-failure class the gate exists to stop"). Rewrite the standard to state the rule it actually
-enforces — a bounded decision-rationale and resolved-failure-class record is allowed;
-genuinely finished busywork still gets deleted — instead of asserting "open work only" when
-the framework's own exemplar doesn't follow that.
+**B23 — documented backlog policy contradicted BACKLOG.md's own shape (MED, done).**
+`docs/DOCUMENTATION_STANDARD.md` stated "`docs/BACKLOG.md` holds open work only... History
+lives in git... No archive sections accumulating." This file carries a "Design decisions," a
+"Resolved — the A-series," and a "Deliberately kept / decided" section, all explicitly
+historical and defended in its own prose ("kept because each entry records the failure class
+the gate exists to stop"). Rewritten to state the rule it actually enforces — a bounded
+decision-rationale and resolved-failure-class record is allowed; genuinely finished busywork
+still gets deleted — instead of asserting "open work only." Also scoped the whole backlog
+policy and the README table's `docs/BACKLOG.md` row to repos with no `backlog-config.json`,
+per B22.
 
 **B24 — structure/hygiene contracts had no OliverCode carve-out, and OliverCode didn't
 comply with what they mandated (MED, done).** `core/contracts/PROJECT_STRUCTURE_STANDARD.md`'s
@@ -582,6 +589,19 @@ there. Fixed to match.
 done).** The section's only content is "run `scripts/olivercode --help`" plus an unrelated
 aside — it never names the actual cause (no PATH alias, wrong cwd) or gives a verification
 step. Rewritten to name the real cause (no PATH alias, must run from inside the clone).
+
+**B42 — `olivercode-adoption`'s four human decisions don't cover which backlog paradigm a
+repo uses, and bootstrap stamps the file-based scaffold into every new repo regardless (MED,
+open).** Surfaced while fixing B22. `shared/project-bootstrap-manifest.json` unconditionally
+creates `.github/user-stories/README.md` and `_index.md` (`presence` mode) for every repo
+`olivercode bootstrap` touches, whether or not that repo will ever use the file-based
+backlog — the same repo B22 names as having moved to a GitHub Project board still carries
+exactly this: a bare `.github/user-stories/README.md` scaffold nobody ever filled in. A repo that
+adopts the GitHub Project board from day one still gets handed dead scaffolding. Add a fifth
+decision to `skills/olivercode-adoption/SKILL.md`'s "decisions only a human can make" —
+which backlog paradigm this repo uses — and make the manifest's `.github/user-stories/`
+entries conditional on that choice rather than unconditional. Not built here: changing
+bootstrap's conditional logic is a mechanism change, not a doc fix.
 
 ### Deliberately kept / decided (do not redo)
 
