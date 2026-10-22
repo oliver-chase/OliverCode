@@ -11,6 +11,14 @@ and `core/workflows/`.
 
 Define one locked folder/file contract for backlog, epics, user stories, and lifecycle evidence so every agent follows the same read/write flow.
 
+**Two backlog systems coexist in the fleet today, and this contract only governs one of
+them.** A repo whose `CLAUDE.md` names a `backlog-config.json` uses the GitHub Project board
+instead — `skills/backlog-management/SKILL.md` governs it, and nothing below applies there.
+This file-based system governs every other repo. As of this decision, the GitHub Project
+board is the default for a newly bootstrapped repo (`docs/DOCUMENTATION_STANDARD.md`'s
+backlog policy states it); this contract stays in force, unchanged, for a repo that already
+adopted it before that default was set.
+
 ## Core Invariants
 
 1. Every repo has exactly one active backlog source.

@@ -217,7 +217,7 @@ The standing set, present in any repo with enough surface to need it:
 | `docs/ARCHITECTURE.md` | How a request or change actually flows, module map, design boundaries |
 | A reference doc (`REFERENCE.md`, or split by surface) | Every option and field, exhaustively — the README links here instead of bloating. This repo splits its own across `FEATURE_MAP.md` and `OLIVERCODE_LAUNCHER.md` |
 | `docs/ADOPTING.md` | Onboarding path for a new user or a fork, stepwise, each step verifiable |
-| `docs/BACKLOG.md` | Open work only — see below |
+| `docs/BACKLOG.md` | Only for a repo with no `backlog-config.json` — see below |
 | `docs/TROUBLESHOOTING.md` | Failures a user will actually hit, symptom-first |
 
 One concept, one home. A rule stated in two documents is a future contradiction. Secondary
@@ -226,10 +226,18 @@ machine-checked index mapping every capability to its one owning doc.
 
 ## The backlog policy
 
-`docs/BACKLOG.md` holds open work only, and opens by saying so. History lives in git: an
-entry leaves the file when its work ships. No archive sections accumulating. A reader of the
-backlog learns what does not work yet — which is why the README's documentation table
-describes it as "read before assuming a capability exists".
+A repo whose `CLAUDE.md` names a `backlog-config.json` has no `docs/BACKLOG.md` to maintain
+— its backlog lives in the GitHub Project that `backlog-management` and `board-hygiene`
+read and write. This section governs the other case: a repo (OliverCode included) whose
+backlog is a tracked file.
+
+`docs/BACKLOG.md` opens by saying what it holds. Finished busywork is deleted, not ticked —
+an entry whose work shipped leaves the file, because git already holds that history. A
+bounded "Design decisions" section and a "Resolved" section are allowed to stay: each
+entry there earns its place by recording a failure class a gate now exists to stop, not by
+being a log of what happened. A reader of the backlog should still come away knowing what
+does not work yet — which is why the README's documentation table describes it as "read
+before assuming a capability exists".
 
 ## Always current — the sync rule
 
