@@ -398,6 +398,187 @@ covered fleet-wide by the ASD-STE100 gate) into a repo-local script under
 Not built here: a new checker plus a `validate.sh` gate is a separate session's work, not
 a quick win.
 
+**B21 — gate-count drift, invisible to the mechanical checker (HIGH, open).**
+`ARCHITECTURE.md:15` states "Pre-commit gates — six in an adopted repo, eight in
+OliverCode itself." `core/contracts/FRAMEWORK_BASELINE.md` (line 93) separately lists the hook as
+"8 checks" and names only 8, omitting backlog hygiene, archived-content, and writing-clarity
+entirely. The real counts, per `.githooks/pre-commit`'s own `Gate N/11` markers and
+`docs/GOVERNANCE.md`'s table, are nine (adopted) and eleven (OliverCode) — the numbers
+`README.md:278` already states correctly. `scripts/lib/consistency_check.py` (the GATES
+check, built for exactly this failure class per A3) does not catch either line: its regex
+requires the number immediately before the word "gates," and both lines put the number
+before "in" / "checks" instead. Fix both lines to nine/eleven, and widen the checker's
+regex to catch this phrasing, or it drifts again the same way.
+
+**B22 — two unreconciled backlog paradigms, no routing rule (HIGH, open).**
+`core/contracts/PROJECT_STRUCTURE_STANDARD.md` and `core/templates/project/docs/repo-structure-contract.md`
+mandate a file-based `.github/user-stories/<project>/US-*.md` story system and state
+"backlog.md is retired as an active planning filename." `docs/DOCUMENTATION_STANDARD.md`
+requires `docs/BACKLOG.md` as the standing file, and `core/templates/project/docs/BACKLOG-live-tracker.md`
+tells the reader to copy its section into "the target repo's BACKLOG." The `backlog-management`,
+`board-hygiene`, and `deep-review` skills all assume a GitHub Project board
+(`backlog-config.json`) is the live backlog and never mention `.github/user-stories/`;
+`story-lifecycle-sop.md` and `repo-structure-contract.md` never mention `backlog-config.json`.
+A repo bootstrapped from this template inherits two unreconciled "canonical backlog" systems.
+Pick one as canonical — the GitHub Project board, since it has the live tooling — and either
+delete the file-based system from the template and `PROJECT_STRUCTURE_STANDARD.md`, or scope
+it explicitly as a legacy/alternate profile with a routing rule stated in both places.
+
+**B23 — documented backlog policy contradicts BACKLOG.md's own shape (MED, open).**
+`docs/DOCUMENTATION_STANDARD.md` (lines 229-232) states "`docs/BACKLOG.md` holds open work only...
+History lives in git... No archive sections accumulating." This file carries a "Design
+decisions," a "Resolved — the A-series," and a "Deliberately kept / decided" section, all
+explicitly historical and defended in its own prose ("kept because each entry records the
+failure class the gate exists to stop"). Rewrite the standard to state the rule it actually
+enforces — a bounded decision-rationale and resolved-failure-class record is allowed;
+genuinely finished busywork still gets deleted — instead of asserting "open work only" when
+the framework's own exemplar doesn't follow that.
+
+**B24 — structure/hygiene contracts have no OliverCode carve-out, and OliverCode doesn't
+comply with what they mandate (MED, open).** `core/contracts/PROJECT_STRUCTURE_STANDARD.md`'s
+scope is "All project repositories under `<vault-root>/Oliver/Project Repos/*`" — the exact
+path OliverCode itself sits at — with no exclusion, and it mandates `.github/user-stories/`,
+root `docs/repo-structure-contract.md`, and `package.json`-based `npm run check:structure`.
+None of these exist in OliverCode (confirmed by `find`). `core/contracts/PROJECT_HYGIENE_STANDARD.md` (line 55)
+has the same gap for `qa:hygiene`. `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` (lines 5-10)
+already carries the needed sentence — "Does not apply to OliverCode itself" — add the
+identical carve-out to both files, or a reader reasonably concludes OliverCode violates its
+own contract.
+
+**B25 — FILE_LOCATION_STANDARD.md points personal/voice content at a dead path (MED, open).**
+`core/contracts/FILE_LOCATION_STANDARD.md` (lines 18,28,56) maps personal/voice content to
+`private-runtime/voice/`. That path appears nowhere else in the tracked tree — not in
+`.gitignore`, not in any script, not in any other doc. The real, working voice mechanism is
+`~/.claude/skills/shared-company/voice/baseline.md`, loaded via this repo's own `CLAUDE.md`
+"## Voice" section. Remove the row or rewrite it to point at the real mechanism.
+
+**B26 — a real fleet repo's name and metrics are leaked into a contract every fork inherits
+(LOW, needs owner call).** `core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` (lines 22-24) names
+"Fallow" by name with real line-count metrics (141,801 lines; 13,000 build artifacts; 11,140
+one backlog file) as a worked example. `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md`'s own
+redaction rule requires project-name placeholders in files every fork ships. Replace the real
+name with `[repo-name]` and keep the line-count shape as an illustrative, non-attributed
+example.
+
+**B27 — CLAUDE.md restates EXECUTION_CONTRACT.md's pipeline instead of citing it (LOW, open).**
+`CLAUDE.md`'s "## Pre-Commit" section prints "CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH," the same
+7-stage pipeline `core/contracts/EXECUTION_CONTRACT.md` (lines 16-47) already owns as a detailed
+diagram. `CONTRIBUTING.md`'s "Required Workflow" section does this correctly — it names the
+contract instead of reprinting the chain. Make `CLAUDE.md` do the same, so a stage rename
+only has to be caught in one file.
+
+**B28 — stale path `meta/skill-fleet-audit` repeated in four files (MED, open).**
+`core/contracts/SKILL_EFFICIENCY_STANDARD.md` (lines 63,80), `docs/BACKLOG.md` (line 392), and
+`scripts/local-scheduler/README.md` (line 28) all cite `meta/skill-fleet-audit` as the skill's path.
+It actually lives at `Operations Vault/01 - Skills/skill-governance/skill-fleet-audit/`
+(family `skill-governance`, not `meta`) — confirmed on disk. Fix all four in one pass, per
+this framework's own rule 2 for duplicate findings.
+
+**B29 — skills/INDEX.md's `writing-documentation` row breaks its own table (LOW, open).**
+The table declares three columns (`Skill | Domain | Load When`); the `writing-documentation`
+row collapses Domain and Load When into one cell with no closing `Load When` value. Split it
+into its own Domain and Load When cells to match every other row.
+
+**B30 — `backlog-management/SKILL.md` restates its own frontmatter, and loads a full incident
+narrative on every filing (LOW, open).** The body's "Which repo, which config" section
+("This skill is repo-agnostic. It never hardcodes...") is a near-verbatim restatement of the
+frontmatter description one paragraph above the `---`. Separately, step 6 embeds a full
+incident narrative (the ad-hoc deletion precedent, "19 other closed-work plan docs") inline
+in the main procedure, loaded on every single filing though it only matters for the rare
+"should I delete this plan doc" branch. Cut the restated sentence; move the narrative to a
+`references/plan-doc-deletion.md` and leave only the operative rule in the body.
+
+**B31 — template QUALITY_BASELINE.md's Sync and Audit sections give the identical,
+undifferentiated command (LOW, open).** `core/templates/project/QUALITY_BASELINE.md` (lines 18-28)
+labels two sections "Sync Command" and "Audit Command," both showing `.githooks/pre-commit`
+with no distinction of what each actually checks or changes. Either collapse to one
+"Verification" section, or name the two real, distinct commands
+(`scripts/olivercode sync-hooks` / `scripts/olivercode health`) that
+`core/workflows/project-standardization-lifecycle.md` already uses for this exact split.
+
+**B32 — two procedure pairs cover identical ground with no cross-reference (MED, open).**
+`core/workflows/story-lifecycle-sop.md` and `skills/backlog-management/SKILL.md` both walk
+"intake gate, status fields, acceptance criteria, close with evidence" in different
+vocabulary, and neither names the other — `core/workflows/README.md` points only to the SOP,
+so a reader never learns the GitHub-Project skill exists. Separately,
+`core/workflows/project-standardization-lifecycle.md`'s step 1 independently restates
+`skills/olivercode-adoption/SKILL.md`'s bootstrap/sync-hooks/registration steps, with neither
+file pointing at the other. Fold the SOP's generic language into `backlog-management` (or
+scope the SOP explicitly to repos without `backlog-config.json`), and have the lifecycle
+workflow's step 1 point to `olivercode-adoption` for onboarding rather than restating it.
+
+**B33 — MANUAL_SETUP.md restates the README's load order before its real content starts
+(LOW, open).** `core/templates/project/docs/MANUAL_SETUP.md` (lines 5-6)'s steps 1-2 repeat
+`core/templates/project/docs/README.md` (lines 8-12)'s load order (README → SETUP_MODES →
+MANUAL_SETUP → product docs) verbatim before step 3 reaches the actual env-file setup. Drop
+steps 1-2 and start at step 3.
+
+**B34 — `repo-audit-with-execution-batches/SKILL.md` restates its own hand-offs twice in one
+file (LOW, open).** Batch 3's and Batch 6's inline hand-off sentences (to `docs-reality-audit`
+and `/security-review`) are restated almost verbatim in the file's own "Complementary Skills"
+section at the bottom. Cut the inline sentences; the bottom section already owns this list.
+
+**B35 — two template doc stubs have zero callers anywhere in the framework (LOW, open).**
+`core/templates/project/docs/product/README.md` and `core/templates/project/docs/tech-debt/README.md` are two-line
+stubs ("keep this aligned with X") that `grep -rn` across `core/`, `skills/`, and `docs/`
+finds no reference to outside the files themselves — nothing instructs an agent to read or
+write them. Remove them from the template, or give them a real caller (a line in
+`repo-structure-contract.md` or the story workflow naming when to write to them).
+
+**B36 — `docs/OLIVERCODE_LAUNCHER.md` miscounts its own command surface and omits two real
+commands (HIGH, open).** The doc lists 9 bullet commands, then states "these 8 commands are
+the entire surface" — wrong even against its own list. `scripts/olivercode` implements 11
+(`grep -n 'if cmd ==' scripts/olivercode`): `audit-fleet` and `push-fleet` are real, used
+commands missing from the doc entirely. This is the one file whose whole job is to be the
+complete surface. Rewrite with all 11 commands, pulled from the code, and fix the count.
+
+**B37 — the launcher command list disagrees across three sources, and two docs use dead
+field names (MED, open).** `docs/FEATURE_MAP.md` (line 42)'s launcher row lists a third, different
+subset of the same 11 commands (it has `audit-fleet`/`push-fleet`, which B36's doc is missing,
+but itself omits `link-plugins`, which `docs/NEW_MACHINE.md` actually invokes by name). Fix in
+the same pass as B36 so code, `FEATURE_MAP.md`, and `OLIVERCODE_LAUNCHER.md` finally agree.
+Separately, `docs/FEATURE_MAP.md` (line 100) and `docs/GOVERNANCE.md` (line 134) call the downstream
+validation field `scripts/validate-repo.sh` and `validate:merge` respectively — neither name
+exists anywhere in the repo. The real field, used correctly in `docs/NEW_MACHINE.md` (line 42) and
+`shared/repo-profiles.example.json` (line 8), is `canonicalValidationCommand`. Rewrite both lines to
+match.
+
+**B38 — `docs/GOVERNANCE.md` is the single most duplication-heavy file found, six separate
+ways (MED, open).** (1) Its `hookVariant` trade-off anecdote (lines 107-110) is duplicated
+near-verbatim in `shared/repo-profiles.example.json`'s `_hookVariant_note` — invisible to
+`duplication_check.py` since one side is JSON. (2) Lines 42-48 retell the
+`GATE-FALSIFIABILITY-1` story from `docs/DECISIONS.md` in full instead of citing it by ID,
+the exact thing that ledger exists to prevent. (3) The CI-pause policy is explained in full
+prose three times with no shared owner — here, in `docs/ADOPTING.md` (lines 55-59), and in
+`docs/FEATURE_MAP.md` (line 36) — each calling the JSON block "canonical" but none pointing to this
+file's own fuller version. (4) Lines 136-142 ("What Must Stay True") are unfalsifiable
+bullets naming no check or owner, overlapping `docs/FEATURE_MAP.md` (lines 91-94)'s Non-Drift Rule,
+which states the same thing with an actual mechanism — the prose-form version of the exact
+failure `GATE-FALSIFIABILITY-1` warns against. (5) Lines 112-115 ("Backend Enforcement
+(Supplementary)") restate facts already given at lines 17-21 of the same file. (6) "Required
+Gate Runner" (lines 9-11) tells the reader to run bare `.githooks/pre-commit`, three lines
+above "Unified Validation Entrypoint" presenting the real sanctioned command
+(`scripts/validate.sh`) — redundant, and liable to make a reader run the weaker check. Fix
+(1)-(3) by merging each duplicate into its one cited owner; remove (4) and (5) as pure
+restatement; remove (6)'s weaker recommendation.
+
+**B39 — KEEPALIVE_STANDARD.md's new-repo checklist pure-restates the section above it (LOW,
+open).** `docs/KEEPALIVE_STANDARD.md` (lines 100-109)'s 7-step "Adding a New Repo" checklist repeats,
+point for point, the more precise wiring table and commands already given at lines 24-83.
+Remove it, or inline it as a one-line pointer to the per-deployment-type steps above.
+
+**B40 — EXTERNAL-TOOLING.md understates the writing-clarity gate's real scope (LOW, open).**
+`docs/EXTERNAL-TOOLING.md` (line 21) says the gate covers staged `SKILL.md`/`CLAUDE.md` only. Per
+`docs/DECISIONS.md`'s `GATE-SCOPE-1` and `docs/GOVERNANCE.md`'s own table, the gate was
+deliberately extended to also cover `references/*.md` after a real violation went undetected
+there. Add "or `references/*.md`" to match.
+
+**B41 — TROUBLESHOOTING.md's "Command not found" section doesn't address that failure (LOW,
+open).** The section's only content is "run `scripts/olivercode --help`" plus an unrelated
+aside — it never names the actual cause (no PATH alias, wrong cwd) or gives a verification
+step. Rewrite to name the real cause, or remove if the one-line fix is genuinely the whole
+answer.
+
 ### Deliberately kept / decided (do not redo)
 
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the
