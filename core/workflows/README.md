@@ -14,5 +14,5 @@ Procedures in this directory:
 
 System-level references:
 - `core/contracts/AGENT_SHARED_STRUCTURE.md`
-- `core/contracts/PROJECT_HYGIENE_STANDARD.md`
+- `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 - `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
