@@ -52,7 +52,7 @@ Scope: All repositories, modules, and workstreams
 ## Required discoverability hygiene
 1. Provide one backlog root per module with quick commands for listing stories, epics, and unassigned entries.
 2. Keep archive indexes for deferred functionality with clear re-enable instructions.
-3. Define a single orchestration command named `qa:hygiene` in each repo package scripts that runs all required story/epic/test hygiene gates for that repo.
+3. Define a single orchestration command named `qa:hygiene` in each repo package scripts that runs all required story/epic/test hygiene gates for that repo. Does not apply to OliverCode itself, which has no `package.json` and runs `bash scripts/validate.sh` as its own equivalent.
 
 ## Required shared quality baseline hygiene
 1. Managed files must stay byte-identical across all repos where they are marked strict in

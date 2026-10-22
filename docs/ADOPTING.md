@@ -53,10 +53,9 @@ stranger" property has broken silently more than once. It is also Phase 4 of
 `scripts/qa/full-qa-pass.sh`.
 
 **Enable CI in your fork.** `.github/workflows/framework-ci.yml` ships ready to run, but is
-deliberately paused on the origin repo while its GitHub Actions billing is blocked (see
-`githubActionsPolicy` in `shared/project-bootstrap-manifest.json`). Where CI is off, the
-local commands are the entire enforcement layer — run `full-qa-pass.sh` before you push
-rather than assuming a build will catch it.
+paused on the origin repo — `docs/GOVERNANCE.md`'s "Unified Validation Entrypoint" section
+is the one home for why. Where CI is off, the local commands are the entire enforcement
+layer — run `full-qa-pass.sh` before you push rather than assuming a build will catch it.
 
 ## Step 1 — Inventory before you touch anything
 

@@ -99,12 +99,6 @@ of the same fact drift independently and the JSON is already machine-readable.
 
 ## Adding a New Repo
 
-When onboarding a new repo that uses Supabase:
-
-1. Add `keepalive` block to the repo's entry in `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder)
-2. If deployed to Cloudflare Pages: add `functions/api/admin/keepalive.js` from template
-3. If deployed to Cloudflare Worker: add `/keepalive` route + `[triggers]` cron
-4. If non-deployed: install `oc-supabase-keepalive.sh` as a crontab / external cron job
-5. Ensure `_keepalive_log` table exists in the Supabase project
-6. Configure the cron trigger (Cloudflare Dashboard or crontab)
-7. Run the repo's canonical validation to confirm nothing broke
+Follow the per-deployment-type steps above (Cloudflare Pages, Worker, or scripted cron),
+add the repo's `keepalive` block per "Per-Repo Status" above, then run the repo's canonical
+validation to confirm nothing broke.

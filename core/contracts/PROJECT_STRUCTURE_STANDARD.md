@@ -2,7 +2,10 @@
 
 Status: Active
 Effective Date: 2026-05-01
-Scope: All project repositories under `<vault-root>/Oliver/Project Repos/*`
+Scope: All project repositories under `<vault-root>/Oliver/Project Repos/*`. Excludes
+OliverCode's own root, the same carve-out `PUBLIC_PRIVATE_REPO_STANDARD.md` states and
+explains. OliverCode's equivalent surfaces here are `docs/BACKLOG.md`, `docs/DECISIONS.md`,
+and `core/workflows/`.
 
 ## Purpose
 

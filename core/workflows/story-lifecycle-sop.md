@@ -1,6 +1,8 @@
 # Story Lifecycle SOP
 
-Canonical backlog discipline for this workspace.
+Canonical backlog discipline for a repo with no `backlog-config.json` — once a repo names
+one in its own `CLAUDE.md`, `skills/backlog-management/SKILL.md` governs its GitHub Project
+backlog instead, and this generic gate no longer applies there.
 
 Use this before and after implementation work unless the user explicitly asks for execution-only work.
 

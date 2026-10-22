@@ -70,7 +70,7 @@ simplify) is `$OC/core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md`. These rules
 Run the current repo's own validation before committing, never OliverCode's. Usually
 `scripts/validate.sh`; otherwise an npm script (`validate` or `check`). Confirm which from that
 repo's CLAUDE.md or package.json. Do not assume the filename.
-Follow: CODE→DOCS→AUDIT→QA→GATE→COMMIT→PUSH.
+Follow the locked process in `$OC/core/contracts/EXECUTION_CONTRACT.md`.
 
 ## Enforcement
 `.githooks/pre-commit` is the only mechanically-enforced layer (eleven gates here, nine in a

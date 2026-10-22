@@ -60,7 +60,7 @@ wherever correctness does not require judgment.
 ## 5. MCP-call efficiency, by name
 
 A skill that documents an MCP-backed workflow is judged on the same named anti-patterns
-`meta/skill-fleet-audit`'s `check_mcp_patterns.py` checks for — full detection logic and
+`skill-governance/skill-fleet-audit`'s `check_mcp_patterns.py` checks for — full detection logic and
 real precedent for each lives in that skill's `references/mcp-checks.md`, not restated
 here:
 
@@ -77,7 +77,7 @@ Each is grounded in a real, previously-shipped defect (SPEC-9, SPEC-16 in the va
 
 ## Enforcement reality
 
-Mechanical today, for the vault's `01 - Skills/` only: `meta/skill-fleet-audit` runs all
+Mechanical today, for the vault's `01 - Skills/` only: `skill-governance/skill-fleet-audit` runs all
 three checkers named above (structure/duplication, MCP-efficiency, ASD-STE100 clarity)
 and its `SKILL.md` states the pattern each finding must clear before being treated as a
 real defect. ASD-STE100 alone is also checked fleet-wide at commit time per

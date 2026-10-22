@@ -90,7 +90,7 @@ consumes manifests.
 
 ### Validation Surface
 Run `bash scripts/validate.sh` from repo root for unified validation. It wraps:
-- `.githooks/pre-commit` (primary gate — 8 checks: secrets, emoji, PII, deleted repo refs, workflow push-auth, contract integrity, planning-doc governance, token policy)
+- `.githooks/pre-commit` (primary gate — `docs/GOVERNANCE.md` has the current per-repo gate count and table)
 - Optional smoke tests in `tests/` (WARN-skip if absent)
 - `scripts/orchestration-gatekeeper.py` (separately, with `--evidence <file>`)
 
