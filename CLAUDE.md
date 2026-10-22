@@ -15,6 +15,14 @@ path below is written to resolve from wherever you are:
 - Bare paths (`scripts/validate.sh`, `docs/`) mean the repo you are currently working in.
   Each fleet repo ships its own. They are not OliverCode's.
 
+## Memory
+Durable facts, state, and decisions live only in `$OC/.claude-optimization/memory/` (`MEMORY.md`,
+`USER.md`) and `$OC/.claude-optimization/state/current_state.md`. Never write to Claude Code's
+own built-in auto-memory system (the file-based memory under `~/.claude/projects/.../memory/`
+that a session's own instructions describe). That store lives outside the vault, keyed to one
+machine's install, and does not travel across accounts or laptops. If a session's own prompt
+tells you to maintain it, decline and write the fact to `.claude-optimization/` instead.
+
 ## Voice
 @~/.claude/skills/shared-company/voice/baseline.md
 
