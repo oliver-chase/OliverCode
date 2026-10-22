@@ -283,11 +283,13 @@ lines each restating a rule owned elsewhere. First trimmed to pointers. On the o
 "do backlog" pass, resolved further: the "Framework-Level Quality Gates" and "Template Driven
 Design" sections were cut outright — the first was pure pointers by then, the second
 duplicated the file's own "Source of Truth" + "Rule" sections sitting directly above it.
-The file was NOT retired, despite the original finding suggesting it: `PROJECT_HYGIENE_STANDARD.md`'s
-"Required shared quality baseline hygiene" section names this file specifically as the owner
-of "what the managed files are, and the change-canonical-first rule" — a real inbound
-citation the first pass missed by not reading that contract closely enough. What's left is
-exactly the content that citation names: title, Source of Truth list, Rule.
+The file was NOT retired, despite the original finding suggesting it: the hygiene contract's
+(since merged into `core/contracts/PROJECT_STRUCTURE_STANDARD.md`'s "Shared Quality Baseline
+Hygiene" section) "Required shared quality baseline hygiene" section names this file
+specifically as the owner of "what the managed files are, and the change-canonical-first
+rule" — a real inbound citation the first pass missed by not reading that contract closely
+enough. What's left is exactly the content that citation names: title, Source of Truth list,
+Rule.
 
 **B15 — secret-probe snippet duplicated verbatim (LOW, done).**
 Grepping for the actual snippet (`leak-probe.txt`) on the "do backlog" pass found it in
@@ -446,8 +448,9 @@ comply with what they mandated (MED, done).** `core/contracts/PROJECT_STRUCTURE_
 scope is "All project repositories under `<vault-root>/Oliver/Project Repos/*`" — the exact
 path OliverCode itself sits at — with no exclusion, and it mandates `.github/user-stories/`,
 root `docs/repo-structure-contract.md`, and `package.json`-based `npm run check:structure`.
-None of these exist in OliverCode (confirmed by `find`). `core/contracts/PROJECT_HYGIENE_STANDARD.md` (line 55)
-has the same gap for `qa:hygiene`. `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` (lines 5-10)
+None of these exist in OliverCode (confirmed by `find`). The hygiene rules then living in a
+separate `PROJECT_HYGIENE_STANDARD.md` had the same gap for `qa:hygiene`, before that file
+was merged into this one (see the activity log). `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` (lines 5-10)
 already carries the needed sentence — "Does not apply to OliverCode itself" — add the
 identical carve-out to both files, or a reader reasonably concludes OliverCode violates its
 own contract.
@@ -753,3 +756,15 @@ bootstrap's conditional logic is a mechanism change, not a doc fix.
   §3 required the ledger and §4 required it to be gated, and this repo had neither. IDs
   inside quoted strings are skipped — a fixture carries one as payload data. The contract
   now names this as the reference implementation it had only described.
+- 2026-10-22 [simplify] `core/contracts/` cut from 10 files to 9: `PROJECT_HYGIENE_STANDARD.md`
+  merged into `PROJECT_STRUCTURE_STANDARD.md` (renamed "Project Structure and Hygiene
+  Standard") — the two already cross-referenced each other for the same audience, one for
+  shape and one for process, and the merge removed a now-pointless internal redirect
+  section. Every cross-reference (`AGENT_SHARED_STRUCTURE.md`, `AGENT_SYSTEM_MANIFEST.json`,
+  `DEVELOPMENT_LIFECYCLE_STANDARD.md`'s contract table, `core/workflows/README.md`,
+  `repo-structure-contract.md`, `shared/workflow-standards.md`) repointed in the same pass.
+  Also deduped the secret/env-file rules that `FILE_LOCATION_STANDARD.md` and
+  `PUBLIC_PRIVATE_REPO_STANDARD.md` both restated: `FILE_LOCATION_STANDARD.md` is now the one
+  owner (and gained the `.secrets/*` gitignore entry it was missing), and
+  `PUBLIC_PRIVATE_REPO_STANDARD.md` cites it instead of repeating it. All gates, references,
+  duplication check, and 142 smoke tests pass after the merge.

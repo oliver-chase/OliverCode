@@ -1,4 +1,4 @@
-# Project Structure Standard
+# Project Structure and Hygiene Standard
 
 Status: Active
 Effective Date: 2026-05-01
@@ -9,7 +9,9 @@ and `core/workflows/`.
 
 ## Purpose
 
-Define one locked folder/file contract for backlog, epics, user stories, and lifecycle evidence so every agent follows the same read/write flow.
+Define one locked folder/file contract for backlog, epics, user stories, and lifecycle
+evidence, and the hygiene rules that govern how they get used, so every agent follows the
+same read/write flow.
 
 **Two backlog systems coexist in the fleet today, and this contract only governs one of
 them.** A repo whose `CLAUDE.md` names a `backlog-config.json` uses the GitHub Project board
@@ -27,6 +29,9 @@ adopted it before that default was set.
 4. `_index.md` is the only allowed story index filename.
 5. `backlog.md` is retired as an active planning filename.
 6. Each repo must keep `docs/repo-structure-contract.md` current.
+7. Every implementation change maps to an existing story or creates a new story first.
+8. Every story includes `Epic`, `Status`, `Verified`, Acceptance Criteria, QA/Evidence, and a Test Plan (positive, negative, regression).
+9. The same story ID filename must not exist in more than one artifact root.
 
 ## Required Base Paths (All Repos)
 
@@ -55,6 +60,39 @@ adopted it before that default was set.
 3. Acceptance test matrix: AC-to-test evidence mapping.
 4. Story files: execution-level acceptance criteria and evidence updates.
 5. Index files: registry navigation and lifecycle visibility. They must not become the active backlog queue.
+6. Module docs, backlog docs, and story files are updated in the same change when behavior/contracts change.
+7. One canonical location per module/workstream — no duplicate story maps across docs.
+8. Backlog root files must keep a current epic map and list unassigned-epic debt explicitly.
+9. Public tracked docs use placeholders for service URLs, account emails, local usernames, device paths, and deployment identifiers unless the value is intentionally public product information.
+
+## Epic and Commit Hygiene
+
+1. Every commit maps to exactly one owning epic.
+2. Commit message format: `<type>(epic-<name>): <summary>`.
+3. Commit body must include `Tickets:` and `Scope:` lines.
+4. Mixed-epic work must be split into separate commits.
+
+## Test Hygiene
+
+1. Every behavior change updates or adds automated tests in the correct lane (contract, regression, visual, integration).
+2. Every story needs at least one negative-path assertion.
+3. `Verified: true` is blocked unless fresh evidence is present in git.
+4. Archived (not removed) features must retain non-regression tests for data/telemetry paths.
+
+## Secret Hygiene
+
+Where a secret, credential, or runtime artifact goes is `core/contracts/FILE_LOCATION_STANDARD.md`'s rule, not restated here. The story/backlog-specific addition: `.env.local` is the local holding area during rotation, and tracked examples show variable names and placeholders only.
+
+## Discoverability
+
+1. Provide one backlog root per module with quick commands for listing stories, epics, and unassigned entries.
+2. Keep archive indexes for deferred functionality with clear re-enable instructions.
+3. Define a single orchestration command named `qa:hygiene` in each repo's package scripts that runs all required story/epic/test hygiene gates for that repo.
+
+## Shared Quality Baseline Hygiene
+
+1. Managed files must stay byte-identical across all repos where they are marked strict in `shared/project-bootstrap-manifest.json`.
+2. What the managed files are, and the change-canonical-first rule: `QUALITY_BASELINE.md`. How sync and drift audit run: `core/workflows/project-standardization-lifecycle.md`.
 
 ## Path Map
 
@@ -103,7 +141,8 @@ hardcode per-repo paths here — the per-repo contract is the source of truth.
 
 ## Enforcement
 
-1. Run the repo's structure gate (`npm run check:structure` or `npm run check-stories`, depending on profile).
+1. Run the repo's structure gate (`npm run check:structure` or `npm run check-stories`, depending on profile). It must fail when an artifact root validates zero stories where stories are expected, when a planning root contains executable story artifact files, or when a required index/contract file is missing.
 2. `npm run qa:hygiene` in each repo.
 3. Cross-repo structure drift: `core/workflows/project-standardization-lifecycle.md` ("Audit drift") has the procedure.
 4. Contract drift in `docs/repo-structure-contract.md` is a blocker.
+5. Pre-push: story linked with AC/evidence/test-plan complete, epic assignment explicit and correct, commit scope is one epic, tests added/updated with the relevant suite passing, docs/backlog/story metadata synchronized, and secret/privacy scans passing.

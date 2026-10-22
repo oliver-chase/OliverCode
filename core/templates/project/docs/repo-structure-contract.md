@@ -8,8 +8,7 @@ and writes, and this contract's user-stories structure does not apply here.
 
 ## Canonical Contract Sources
 
-1. `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_HYGIENE_STANDARD.md`
-2. `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+1. `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 
 ## Profile
 

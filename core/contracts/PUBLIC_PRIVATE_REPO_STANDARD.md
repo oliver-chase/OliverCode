@@ -20,12 +20,9 @@ Any repo with the full split profile serves as the reference implementation for 
 ## Required concepts
 1. Installation profile and runtime mode are separate concepts.
 2. Public repos own code, docs, templates, validators, and bootstrap entrypoints.
-3. Private overlays own `.env.local`, `.secrets/*`, delegated tokens, `.runtime/`, per-agent OS state (e.g. `.claude-optimization/memory/`, `.claude-optimization/state/`), host scheduler wiring, and machine-specific state.
-4. `.env.example` is placeholder-only and tracked.
-5. `.env.local` is local-only and ignored.
-6. `.secrets/README.md` is tracked. Other `.secrets/*` files are ignored.
-7. README must link to canonical setup docs.
-8. Each repo must provide:
+3. Private overlays own delegated tokens, `.runtime/`, per-agent OS state (e.g. `.claude-optimization/memory/`, `.claude-optimization/state/`), host scheduler wiring, and machine-specific state. What goes in `.env.local` / `.secrets/*` and what each tracked `.example` file shows is `core/contracts/FILE_LOCATION_STANDARD.md`'s rule, not restated here.
+4. README must link to canonical setup docs.
+5. Each repo must provide:
    - `docs/SETUP_MODES.md`
    - `docs/MANUAL_SETUP.md`
    - `scripts/bootstrap-profile.sh`
@@ -50,11 +47,9 @@ Repos may extend these profiles, but they must support this baseline vocabulary:
 5. run repo-native hygiene validation when available
 
 ## Git hygiene contract
-Repos must ignore at least:
-- `.env.local`
-- `.secrets/*`
-and must re-include:
-- `!.secrets/README.md`
+The required gitignore entries are `core/contracts/FILE_LOCATION_STANDARD.md`'s rule. This
+standard's own addition: the private-overlay profile must honor that list in full, with no
+per-repo exceptions.
 
 ## Standardization source
 Canonical template files live in `OliverCode/core/templates/project/`. Apply them manually.

@@ -51,6 +51,8 @@ These paths must be gitignored in ALL repos:
 *.secret
 *.pem
 *.key
+.secrets/*
+!.secrets/README.md
 
 # Runtime artifacts — add the repo's own generated-output directory here
 # (whatever it declares in docs/repo-structure-contract.md)

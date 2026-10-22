@@ -138,8 +138,7 @@ This standard is itself subject to it. Prefer:
 
 | Contract | Owns |
 |---|---|
-| `PROJECT_HYGIENE_STANDARD.md` | Story and epic hygiene, commit format |
-| `PROJECT_STRUCTURE_STANDARD.md` | Folder layout |
+| `PROJECT_STRUCTURE_STANDARD.md` | Folder layout, story and epic hygiene, commit format |
 | `EXECUTION_CONTRACT.md` | Gate mechanics, evidence schema, the pre-commit hook contract this loop ends in |
 | `../../docs/DOCUMENTATION_STANDARD.md` | README and doc shape, backlog policy |
 
