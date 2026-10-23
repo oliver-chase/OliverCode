@@ -381,10 +381,10 @@ Inside each product repo, the structure contract is
 ├── .githooks/                      installed by sync-hooks, activated by core.hooksPath
 ├── docs/
 │   ├── repo-structure-contract.md  this repo's declared paths
-│   ├── BACKLOG.md                  the live board
+│   ├── BACKLOG.md                  the live board, if the repo has no backlog-config.json
 │   └── ARCHITECTURE.md
 ├── scripts/validate.sh             this repo's canonical validation
-└── .github/user-stories/           story registry, if the repo uses stories
+└── .github/user-stories/           story registry, if the repo uses file-based stories
 ```
 
 Do not add top-level directories without a contract reason. That rule is the one that keeps
