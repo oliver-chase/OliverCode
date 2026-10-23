@@ -9,11 +9,11 @@
     "status": {
       "id": "PVTSSF_lAHOCyeGV84BoY_xzhm5VCQ",
       "options": {
-        "Todo": "f75ad846",
-        "In Progress": "47fc9ee4",
-        "Done": "98236657"
-      },
-      "_note": "This project's own real option labels (fleet default is Backlog/Ready/In progress/Done -- this project kept the GitHub default Todo/In Progress/Done instead)."
+        "Backlog": "e4bb8de7",
+        "Ready": "87bf165b",
+        "In Progress": "f40bfa45",
+        "Complete": "27846d19"
+      }
     },
     "priority": {
       "id": "PVTSSF_lAHOCyeGV84BoY_xzhm5VMg",
@@ -31,6 +31,13 @@
         "M": "86c9c508",
         "L": "4c49404f",
         "XL": "e8f9920f"
+      }
+    },
+    "workType": {
+      "id": "PVTSSF_lAHOCyeGV84BoY_xzhm6WB4",
+      "options": {
+        "Epic": "fa49b04e",
+        "Story": "1f939005"
       }
     }
   }
