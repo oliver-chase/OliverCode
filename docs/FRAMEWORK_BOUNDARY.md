@@ -42,7 +42,7 @@ For "where does a new skill/agent file go," see `docs/SKILLS-PLACEMENT.md`'s dec
 
 The dependency between OliverCode and the runtime environment is one-directional:
 
-- **The runtime environment depends on OliverCode.** It reads contracts, templates, personas, skills, and workflow definitions from OliverCode.
+- **The runtime environment depends on OliverCode.** It reads contracts, templates, skills, and workflow definitions from OliverCode.
 - **OliverCode does NOT depend on the runtime environment.** It can be used standalone. It must not reference runtime-specific paths, scripts, or configuration in its documentation or contracts.
 
 Architectural descriptions may mention the runtime environment as a deployment concept, but must not depend on it for correctness or functionality.
@@ -68,4 +68,4 @@ Standalone mode provides:
 
 When the local control plane is installed (`runtime/control-plane/`, gitignored), it adds per-machine state on top of OliverCode: the dependency declaration `health` reads, session/handoff state, and a bash shim at `runtime/control-plane/olivercode` that delegates to `scripts/olivercode` and carries no additional commands (`docs/OLIVERCODE_LAUNCHER.md`).
 
-The control plane reads contracts, templates, personas, skills, and workflow definitions from OliverCode. It does not maintain its own copies of these framework artifacts, and OliverCode stays fully usable without it.
+The control plane reads contracts, templates, skills, and workflow definitions from OliverCode. It does not maintain its own copies of these framework artifacts, and OliverCode stays fully usable without it.
