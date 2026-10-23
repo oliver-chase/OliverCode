@@ -8,7 +8,6 @@
   },
   "requiredDirectories": [
     ".github/workflows",
-    ".github/user-stories",
     ".githooks"
   ],
   "templatedFiles": [
@@ -41,16 +40,6 @@
       "source": "core/templates/project/QUALITY_BASELINE.md",
       "target": "QUALITY_BASELINE.md",
       "mode": "strict"
-    },
-    {
-      "source": "core/templates/project/.github/user-stories/README.md",
-      "target": ".github/user-stories/README.md",
-      "mode": "presence"
-    },
-    {
-      "source": "core/templates/project/.github/user-stories/_index.md",
-      "target": ".github/user-stories/_index.md",
-      "mode": "presence"
     },
     {
       "source": "core/templates/project/config/contracts/planning-doc-governance.json",

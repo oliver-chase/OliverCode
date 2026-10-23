@@ -1,7 +1,7 @@
 {
   "version": "2026-05-21",
   "owner": "<project-repo>",
-  "canonical_planning_authority": ".github/user-stories/_index.md",
+  "canonical_planning_authority": "docs/BACKLOG-live-tracker.md",
   "current_state_solution_docs": [],
   "active_docs": [
     "docs/BACKLOG-live-tracker.md"

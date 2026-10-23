@@ -432,6 +432,22 @@ now states the GitHub Project board is the default for a newly bootstrapped repo
 file-based contract stays in force, unchanged, for a repo that already adopted it. See B42
 for the gap this surfaced in `olivercode-adoption` and the bootstrap manifest.
 
+**Follow-up, same day: the file-based system is now fully retired, not just scoped.** Read
+all three holdout repos' stories before touching anything: two of the three (6 and 9
+stories) were already Done/Complete with real commits, so there was no open work to carry
+over -- deleted outright. The third (19 stories) was genuinely open with real dependency
+chains and milestones, so each story became a GitHub Issue (title, body, Acceptance
+Criteria preserved verbatim), with a new Project, 5 milestones matching the live tracker's
+own milestone groupings, 14 epic labels from each story's own Epic field, and every
+dependency chain added as a "Blocked by #N" comment once issue numbers existed. A fourth
+repo, not one of the three originally found, turned up the same inert
+`.github/user-stories/README.md` leftover B22 already flagged in passing -- deleted too.
+With the holdout count at zero, `PROJECT_STRUCTURE_STANDARD.md`'s file-based sections
+(Story Artifact Rules, Path Map, Allowed Repo Profiles, Story Path Flow) were removed
+rather than kept dormant, since nothing reads them now, and the bootstrap manifest's
+`.github/user-stories/` template scaffold was deleted so no future repo gets stamped with
+it. Closes B42.
+
 **B23 — documented backlog policy contradicted BACKLOG.md's own shape (MED, done).**
 `docs/DOCUMENTATION_STANDARD.md` stated "`docs/BACKLOG.md` holds open work only... History
 lives in git... No archive sections accumulating." This file carries a "Design decisions," a
@@ -593,18 +609,13 @@ done).** The section's only content is "run `scripts/olivercode --help`" plus an
 aside — it never names the actual cause (no PATH alias, wrong cwd) or gives a verification
 step. Rewritten to name the real cause (no PATH alias, must run from inside the clone).
 
-**B42 — `olivercode-adoption`'s four human decisions don't cover which backlog paradigm a
-repo uses, and bootstrap stamps the file-based scaffold into every new repo regardless (MED,
-open).** Surfaced while fixing B22. `shared/project-bootstrap-manifest.json` unconditionally
-creates `.github/user-stories/README.md` and `_index.md` (`presence` mode) for every repo
-`olivercode bootstrap` touches, whether or not that repo will ever use the file-based
-backlog — the same repo B22 names as having moved to a GitHub Project board still carries
-exactly this: a bare `.github/user-stories/README.md` scaffold nobody ever filled in. A repo that
-adopts the GitHub Project board from day one still gets handed dead scaffolding. Add a fifth
-decision to `skills/olivercode-adoption/SKILL.md`'s "decisions only a human can make" —
-which backlog paradigm this repo uses — and make the manifest's `.github/user-stories/`
-entries conditional on that choice rather than unconditional. Not built here: changing
-bootstrap's conditional logic is a mechanism change, not a doc fix.
+**B42 — `olivercode-adoption`'s four human decisions didn't cover which backlog paradigm a
+repo uses, and bootstrap stamped the file-based scaffold into every new repo regardless
+(MED, done).** Closed by deleting the thing instead of making its stamping conditional: with
+every holdout repo migrated to a GitHub Project (B22's follow-up), the file-based backlog
+paradigm no longer exists anywhere in the fleet, so the manifest's `.github/user-stories/`
+template entries were removed rather than gated behind a fifth adoption decision that would
+have had only one real answer left. `olivercode-adoption`'s four decisions stay four.
 
 ### Deliberately kept / decided (do not redo)
 

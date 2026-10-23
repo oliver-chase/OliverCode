@@ -107,9 +107,13 @@ instead of a drive-by fix, each checked against live state first, not assumed.
 
 ## Definition of Done
 
-- [ ] Step 1: all three holdout repos have their open stories in GitHub Projects;
-      `.github/user-stories/` contract and template scaffold removed; B42 closed.
-- [ ] Step 2: `AGENT_SHARED_STRUCTURE.md` deleted, content merged into
+- [x] Step 1: all three holdout repos migrated (two had zero open stories and were
+      deleted outright; the third's 19 open stories became GitHub Issues with a new
+      Project, milestones, labels, and dependency comments). A fourth repo's inert
+      leftover scaffold, found during the sweep, was deleted too.
+      `.github/user-stories/` contract and template scaffold removed from OliverCode;
+      B42 closed.
+- [x] Step 2: `AGENT_SHARED_STRUCTURE.md` deleted, content merged into
       `FRAMEWORK_BOUNDARY.md`, all referrers repointed, `validate.sh` passes.
 - [ ] Step 3: `DOCUMENTATION_STANDARD.md`'s Voice section trimmed to non-redundant
       content, `validate.sh` passes.
