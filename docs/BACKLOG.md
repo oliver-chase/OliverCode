@@ -617,6 +617,20 @@ paradigm no longer exists anywhere in the fleet, so the manifest's `.github/user
 template entries were removed rather than gated behind a fifth adoption decision that would
 have had only one real answer left. `olivercode-adoption`'s four decisions stay four.
 
+**B43 — `check-backlog-hygiene.mjs` was never shipped to most of the fleet, so Gate 9
+silently skipped almost everywhere (MED, done).** `core/templates/project/pre-commit`
+hard-references `scripts/check-backlog-hygiene.mjs` as Gate 9's script, but the file was in
+neither `templatedFiles` nor `conditionalFiles` in `shared/project-bootstrap-manifest.json`
+— confirmed by diffing every tracked file under `core/templates/project/` against both
+lists, not sampled. Only 5 of roughly 19 fleet repos had the file on disk. Everywhere else,
+Gate 9 reported "skipped (checker not present)" on every commit, forever, which reads as
+fine and isn't — the same unfalsifiable-check shape `GATE-FALSIFIABILITY-1` exists to catch,
+just in the bootstrap layer instead of a check's own logic. Added to `templatedFiles`,
+`presence` mode (never overwrites a repo's existing copy, since 5 repos already have one).
+The two other files the same diff first flagged, `pre-push` and `write-ste-baseline.py`,
+were checked individually and confirmed real: `pre-push` is deployed by real code in
+`sync-hooks`, and `write-ste-baseline.py` is deliberately excluded per `GATE-BASELINE-1`.
+
 ### Deliberately kept / decided (do not redo)
 
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the
