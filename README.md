@@ -248,7 +248,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | [`TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Troubleshooting by symptom |
 | [`EXTERNAL-TOOLING.md`](docs/EXTERNAL-TOOLING.md) | Optional third-party tooling |
 | [`KEEPALIVE_STANDARD.md`](docs/KEEPALIVE_STANDARD.md) | Keeping free-tier cloud services from going dormant |
-| [`BACKLOG.md`](docs/BACKLOG.md) | Open work and planned features |
+| [`BACKLOG.md`](docs/BACKLOG.md) | Decision rationale and institutional memory — open work is the `OliverCode` GitHub Project |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Which rules block commits and which are guidance |
 | [`QUALITY_BASELINE.md`](QUALITY_BASELINE.md) | Quality standard for governed repos |
 | [`CLAUDE.md`](CLAUDE.md) | Rules Claude loads in every session |

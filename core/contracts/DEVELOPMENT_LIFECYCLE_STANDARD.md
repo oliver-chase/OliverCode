@@ -33,8 +33,9 @@ Every gap becomes a written spec before any code is written. A spec states:
 - what is **in scope** and explicitly what is not,
 - the **watch-out** — the way a plausible implementation gets it wrong.
 
-Specs live in the repo's `docs/BACKLOG.md`. Nothing is built that is not
-specced. Nothing is specced that cannot name its failure.
+Specs live as issues in the repo's GitHub Project (`core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+has the model). Nothing is built that is not specced. Nothing is specced that cannot name its
+failure.
 
 ---
 

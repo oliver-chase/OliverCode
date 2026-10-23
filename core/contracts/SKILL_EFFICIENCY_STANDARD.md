@@ -85,6 +85,6 @@ real defect. ASD-STE100 alone is also checked fleet-wide at commit time per
 
 OliverCode's own `skills/` directory has no equivalent structure or MCP-efficiency gate
 yet — rules 1, 2, 4, and 5 apply to it by this standard but are checked only by hand
-until that gate exists (`docs/BACKLOG.md` B20). Until then, treat this file as the bar a
+until that gate exists (tracked in the `OliverCode` GitHub Project, issue #5). Until then, treat this file as the bar a
 skill is written and reviewed against, not as something a hook currently blocks a commit
 on outside the vault.
