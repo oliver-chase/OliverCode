@@ -11,7 +11,6 @@ home for the canonical path map and the ownership rules that follow from it.
 - Shared system root: `<vault-root>/Oliver/Project Repos/OliverCode`
 - Claude runtime/orchestration: `~/.claude`
 - Shared skills root: `<vault-root>/Oliver/Project Repos/OliverCode/skills`
-- Shared orchestration persona: `<vault-root>/Oliver/Project Repos/OliverCode/core/personas/oliver/persona_soul.md`
 - Shared manifest: `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/AGENT_SYSTEM_MANIFEST.json`
 - Shared hygiene standard: `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 - Workflow standards and trigger routing: `<vault-root>/Oliver/Project Repos/OliverCode/shared/workflow-standards.md`
@@ -21,9 +20,6 @@ home for the canonical path map and the ownership rules that follow from it.
 
 - Product-specific implementation docs/workflows belong in each project repo.
 - Cross-project orchestration standards belong in `<vault-root>/Oliver/Project Repos/OliverCode/shared/*`.
-- Orchestration identity is `Oliver` and must remain present in shared persona routing.
-  `core/personas/oliver/persona_soul.md` is the orchestration authority even when execution
-  personas differ.
 - Shared skills/tools belong in `<vault-root>/Oliver/Project Repos/OliverCode/skills/*`.
 - Project hygiene and security rules belong in `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`.
 - Runtime state in `~/.claude` is operational data, not product source code.

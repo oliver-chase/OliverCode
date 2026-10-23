@@ -62,7 +62,6 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/find-spec.py` | Resolves a bare backlog ID (`SPEC-21`, `B20`) fleet-wide across every `*BACKLOG*.md` in the vault and profiled fleet repos. A vault `SPEC-N` miss points at the vault's GitHub Project |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
 | `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax. TypeScript-leaning, aimed at the fleet repos |
-| `scripts/qa/check-docs-cohesion.sh` | Broken wiki-links and opt-in stale-domain references |
 | `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |
 | `scripts/qa/check-fork-usable.sh` | Proves a stranger's clone works with no config AND that the documented adoption path produces a fleet whose gates actually block, in a sandbox with a virgin HOME |
 | `scripts/qa/probe-secret-gate.sh` | Writes a fake secret into the current repo, commits, and confirms Gate 1 blocks it. The one home for the probe `docs/ADOPTING.md`, `docs/NEW_MACHINE.md`, and `olivercode-adoption` all invoke by name |
@@ -77,7 +76,6 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | Inventory | Scope |
 |---|---|
 | `core/contracts/` | baseline contracts shipped from OliverCode |
-| `core/personas/oliver/` | the one orchestration persona |
 | `core/workflows/` | repeatable cross-repo procedures |
 | `core/templates/project/` | the single template home stamped into new repos |
 | `skills/` | engineering-method and framework-tooling skills. `skills/INDEX.md` is the catalog |

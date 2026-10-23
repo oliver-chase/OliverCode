@@ -75,9 +75,6 @@ Any variance must be explicit, temporary, and recorded in `shared/repo-map.json`
 
 ## Design Decisions
 
-### Personas and Teams
-Only one persona (`oliver`) is defined and no team template. This is intentional -- the framework ships one authoritative orchestration persona. Additional personas and teams can be added by downstream projects or by extending `core/personas/`. The CLAUDE.md and ARCHITECTURE.md describe the composable system that the framework enables, not the current inventory count.
-
 ### Template Directory Architecture
 - `core/templates/project/` -- the canonical template repository. All project templates are authored here.
 - Rule: `core/templates/project/` is the single template home -- hooks, CI workflows, docs, and governance scripts all ship to downstream repos from here via the bootstrap manifest. There is exactly one template directory. A second one drifts from the masters.
