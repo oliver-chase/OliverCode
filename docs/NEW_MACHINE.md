@@ -20,7 +20,8 @@ it wrong leaves things half-wired:
 - OliverCode is a submodule *of* the vault, so it arrives with the vault or not at all
 - the vault's `CLAUDE.md` points *at* OliverCode, so OliverCode must be installed for a
   session in the vault to load its rules
-- `local/` is gitignored, so no clone brings the fleet config -- it is rebuilt, not restored
+- the fleet config (`shared/repo-profiles.json` and friends) is tracked, so it comes back
+  with the clone -- nothing to rebuild there
 
 ```bash
 # 1. The vault, with the OliverCode submodule
@@ -32,14 +33,12 @@ cd "Oliver/Project Repos/OliverCode"
 OC="$(pwd)"                       # kept for step 5, run after cd-ing away
 bash scripts/validate.sh          # the clone is sound before anything is changed
 scripts/olivercode install        # symlinks CLAUDE.md + skills, backs up what it replaces
-scripts/olivercode init           # seeds local/ from the tracked examples
 
 # 3. The plugins. Nothing else does this step.
 scripts/olivercode link-plugins
 
-# 4. Register the fleet, then install enforcement
-scripts/olivercode discover --root ../          # writes a profile skeleton to paste into local/
-#   ... paste into local/repo-profiles.json, add each repo's canonicalValidationCommand
+# 4. Confirm the fleet (already registered, tracked with the clone), then install enforcement
+scripts/olivercode discover --root ../          # confirms what's present vs. the registry
 scripts/olivercode sync-hooks
 scripts/olivercode health                       # must end HEALTHY
 
@@ -61,11 +60,7 @@ Each of these needs a person. They are listed so the list is finite rather than 
 **The other repos.** The vault deliberately holds only what is not already its own repo, so
 the rest are separate clones under `Oliver/Project Repos/` plus `Oliver/Automation Assets/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
-absent. `local/repo-map.json` in the old machine's config is the list of what should be there.
-
-**The fleet config in `local/`.** Gitignored on purpose -- real repo names never enter tracked
-files, which is what makes the fork shareable. `init` creates the files from tracked examples.
-The real contents are re-entered. Copy `local/` off the old machine if it still exists.
+absent. `shared/repo-map.json` is the tracked list of what should be there.
 
 **Marketplace plugins.** Third-party, installed through Claude Code, not through this repo:
 

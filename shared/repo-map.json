@@ -1,18 +1,52 @@
 {
-  "_note": "Placeholder. Real fleet data lives in local/repo-map.json (gitignored) -- see docs/BACKLOG.md G1. Schema: repos[].governanceProfile (optional) -- only 'incubating' is recognized; it makes audit-staleness.py report a past-threshold repo as advisory instead of failing the run. repos[].approvedMaintainabilityVariances / approvedStrictVariances and unmanagedRepoWaivers[] each REQUIRE a reason and take an ISO-8601 expiresAt; `olivercode health` fails on an expired, unparsable, or reasonless entry, so an exception can never quietly become permanent.",
   "workspaceRoot": "<vault-root>/Oliver/Project Repos",
-  "unmanagedRepoWaivers": [
-    {
-      "name": "example-standalone-repo",
-      "reason": "Intentional standalone workspace pending onboarding into shared governance contract.",
-      "owner": "orchestration-owner",
-      "expiresAt": "2026-12-31T23:59:59+00:00"
-    }
-  ],
+  "unmanagedRepoWaivers": [],
   "repos": [
     {
-      "name": "example-app",
-      "path": "<vault-root>/Oliver/Project Repos/example-app"
+      "name": "oliver-studios",
+      "path": "<vault-root>/Oliver/Project Repos/oliver-studios",
+      "governanceProfile": "incubating",
+      "approvedMaintainabilityVariances": [
+        {
+          "target": "complexity",
+          "reason": "Known legacy complexity in orchestration_api.do_POST tracked for refactor; waiver keeps governance fail-closed everywhere else."
+        }
+      ]
+    },
+    {
+      "name": "fallow",
+      "path": "<vault-root>/Oliver/Project Repos/fallow"
+    },
+    {
+      "name": "oliver-app",
+      "path": "<vault-root>/Oliver/Project Repos/oliver-app"
+    },
+    {
+      "name": "oliver-strategic-growth",
+      "path": "<vault-root>/Oliver/Project Repos/oliver-strategic-growth",
+      "tracking": "filesystem",
+      "approvedStrictVariances": [
+        {
+          "target": ".github/workflows/qa-hygiene.yml",
+          "reason": "Pending migration to shared QA workflow template for legacy GTM automation stack."
+        },
+        {
+          "target": ".github/workflows/governance-secrets-gate.yml",
+          "reason": "Pending migration to shared secrets gate while legacy pipeline is retired."
+        },
+        {
+          "target": ".github/workflows/dependency-review.yml",
+          "reason": "Legacy dependency-review workflow intentionally diverges during phased convergence."
+        },
+        {
+          "target": "QUALITY_BASELINE.md",
+          "reason": "Project-specific quality baseline retained while shared template migration is staged."
+        }
+      ]
+    },
+    {
+      "name": "tesknota",
+      "path": "<vault-root>/Oliver/Project Repos/tesknota"
     }
   ]
 }

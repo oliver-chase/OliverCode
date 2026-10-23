@@ -16,15 +16,15 @@ that genuinely need you. This document is the reference it works from.
 
 ## What you are actually installing
 
-Three layers, and it matters which is which:
+Two layers, and it matters which is which:
 
 | Layer | Where | Tracked? | Who owns it |
 |---|---|---|---|
-| The framework | your OliverCode fork | yes, public | shared, forkable |
-| Your fleet's real config | `local/` inside that fork | no, gitignored | you |
+| The framework + your fleet's real config | your OliverCode fork (`shared/repo-profiles.json` and friends) | yes, tracked | you |
 | Activation | `~/.claude/CLAUDE.md` + `~/.claude/skills/*` symlinks | no, per machine | your machine |
 
-Nothing personal ever enters the tracked layer. That is what makes the fork shareable.
+Your fleet's real names and config live directly in the tracked registry — there is no
+placeholder layer to keep in sync with it. `ARCHITECTURE.md`'s "The Two Layers" explains why.
 
 ## Step 0 — Prove the clone is sound before changing anything
 
@@ -46,11 +46,10 @@ bash scripts/qa/check-fork-usable.sh
 ```
 
 That check also walks this guide's own load-bearing steps against two throwaway repos --
-`init`, fleet registration, `sync-hooks`, the secret probe, and `health` -- so the
+fleet registration, `sync-hooks`, the secret probe, and `health` -- so the
 instructions below are verified, not just written. If it passes, the fork is sound and every
-failure below is a setup problem, not a repo problem. Run it after any change to the framework's own plumbing — the "works for a
-stranger" property has broken silently more than once. It is also Phase 4 of
-`scripts/qa/full-qa-pass.sh`.
+failure below is a setup problem, not a repo problem. Run it after any change to the
+framework's own plumbing. It is also Phase 4 of `scripts/qa/full-qa-pass.sh`.
 
 **Enable CI in your fork.** `.github/workflows/framework-ci.yml` ships ready to run, but is
 paused on the origin repo — `docs/GOVERNANCE.md`'s "Unified Validation Entrypoint" section
@@ -75,7 +74,7 @@ scripts/olivercode discover --root ~/dev --root ~/work
 installed, and which repos are ungoverned. It then inventories `~/.claude` — separating
 skills symlinked into this checkout from ones symlinked elsewhere, real untracked
 directories, and broken links — and ends with a profile skeleton containing explicit `path`
-values, ready to paste into `local/repo-profiles.json`.
+values, ready to paste into `shared/repo-profiles.json`.
 
 Two things it will likely surface in an existing setup:
 
@@ -177,28 +176,16 @@ Rules for this rewrite:
 
   Never leave both files carrying live rules. That is the duplication this step exists to end.
 
-## Step 5 — Register your fleet (the local layer)
+## Step 5 — Register your fleet
 
 Enforcement has to know which repos it governs before it can reach them, so registration
-comes first. (This guide had these two steps the other way round: `sync-hooks` reads the
-file `init` creates, so running it first found no fleet, skipped every repo, and still
-printed a success line.)
+comes first.
 
-```bash
-scripts/olivercode init
-```
-
-That seeds `local/` from the tracked examples and **never overwrites an existing file**, so
-it is safe to re-run. Then edit the copies with your real repo names, validation commands,
-and token policy. `local/` is gitignored, so real names and paths never reach the tracked
-fork. Every loader tries `local/` first and falls back to the tracked example with a WARN —
-which is why a stranger's clone still works.
-
-`shared/repo-profiles.example.json` is the annotated schema: every field is documented in a
-`_<field>_note` key beside a worked example. `scripts/olivercode discover` emits a
-paste-ready profile per repo, including the `token_policy` block. Each profile needs that
-block, with `ignore_globs` and `generated_artifact_dirs`, or Gate 8 fails the commit —
-`docs/TOKEN_POLICY.md` has the shape.
+Edit `shared/repo-profiles.json` directly with your real repo names, validation commands,
+and token policy. `_<field>_note` keys beside a worked example document the schema in place.
+`scripts/olivercode discover` emits a paste-ready profile per repo, including the
+`token_policy` block. Each profile needs that block, with `ignore_globs` and
+`generated_artifact_dirs`, or Gate 8 fails the commit — `docs/TOKEN_POLICY.md` has the shape.
 
 Confirm the fleet really registered before continuing:
 
@@ -213,7 +200,7 @@ scripts/olivercode sync-hooks     # writes .githooks/ + sets core.hooksPath in e
 scripts/olivercode health         # confirms each repo's hooks are installed and current
 ```
 
-`sync-hooks` resolves your fleet from `local/repo-profiles.json` and expects those repos as
+`sync-hooks` resolves your fleet from `shared/repo-profiles.json` and expects those repos as
 siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below.
 Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern.
 Read that list rather than the exit code.
@@ -320,8 +307,7 @@ find ~/.claude/skills -maxdepth 1 -type l -lname '*/OliverCode/skills/*' -delete
 # 3. Stop the hooks in each governed repo
 git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can stay or go
 
-# 4. The checkout itself is just a directory -- delete it. `local/` is deleted with it,
-#    so copy that out first if you want to keep your fleet config.
+# 4. The checkout itself is just a directory -- delete it.
 ```
 
 Nothing outside those four places is touched: OliverCode writes no system config, no shell
@@ -338,8 +324,7 @@ Recommended:
 
 ```
 <workspace-root>/
-├── OliverCode/              the fork -- framework, skills, contracts, gates
-│   ├── local/               (gitignored) YOUR real fleet config
+├── OliverCode/              the fork -- framework, skills, contracts, gates, your real fleet config
 │   └── runtime/control-plane/  (gitignored, optional) per-machine state
 ├── product-repo-a/          siblings of OliverCode
 ├── product-repo-b/
@@ -347,7 +332,7 @@ Recommended:
 ```
 
 **If your repos do not share a parent at all** — the normal case when adopting into an
-existing setup — give each profile an explicit `path` in `local/repo-profiles.json`:
+existing setup — give each profile an explicit `path` in `shared/repo-profiles.json`:
 
 ```json
 "acme-api": { "name": "acme-api", "path": "~/work/clients/acme/api", ... }
@@ -392,10 +377,10 @@ a fleet legible to an agent that has never seen it.
 
 ## What a fork gets, and what it does not
 
-Tracked and shared: contracts, templates, skills, gates, launcher, docs, tests, and
-placeholder registries.
+Tracked and shared: contracts, templates, skills, gates, launcher, docs, tests, and the
+real fleet registries.
 
-Never tracked, created per user: `local/` (your fleet), `runtime/control-plane/` (machine
-state), `.claude-optimization/memory/` and `state/` (your agent's memory), and the
-`~/.claude/` symlinks. The framework works without every one of them — that is the property
-that makes it forkable, and `scripts/validate.sh` passing on a clean clone is the test of it.
+Never tracked, created per user: `runtime/control-plane/` (machine state),
+`.claude-optimization/memory/` and `state/` (your agent's memory), and the `~/.claude/`
+symlinks. The framework works without every one of them, and `scripts/validate.sh` passing
+on a clean clone is the test of it.

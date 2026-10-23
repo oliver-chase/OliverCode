@@ -97,5 +97,5 @@ deliberately paused on the origin repo (see `githubActionsPolicy` in
 `shared/project-bootstrap-manifest.json`), which makes the local commands the real gate there. There is no type checker or schema validator beyond
 what the gates above cover -- this is acceptable for a framework repo whose primary change
 risk is secrets/PII leaks and drift, not compiled-language runtime correctness. Downstream
-project repos have their own validation commands declared in `local/repo-profiles.json`
-(gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder).
+project repos have their own validation commands declared in `shared/repo-profiles.json`
+(tracked, real fleet).

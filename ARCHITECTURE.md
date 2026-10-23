@@ -21,13 +21,13 @@ The honest summary: **the hook is the only thing that blocks you.** Everything e
 
 And one property that surprises people: **hook enforcement fails open.** An unset or broken `core.hooksPath` means git runs no hooks and prints nothing — `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix. `olivercode health` is the only thing that detects it.
 
-## The Three Layers
+## The Two Layers
 
-**1. OliverCode (this repo).** Contracts, skills, templates, launcher, governance hooks. Clone-and-use standalone. Kept clean of personal data so it can be forked without rework — `scripts/qa/check-fork-usable.sh` proves that property still holds.
+**1. OliverCode (this repo).** Contracts, skills, templates, launcher, governance hooks, and the real fleet registries (`shared/repo-profiles.json`, `shared/repo-map.json`, `shared/project-structure-rules.json`, `core/contracts/AGENT_SYSTEM_MANIFEST.json`) — tracked, not gitignored. This is a single operator's framework across that operator's own accounts, not a project shared with strangers.
 
-**2. Local machine state (gitignored, optional).** `local/` holds your real fleet registries, seeded by `olivercode init`. `runtime/control-plane/` holds private per-machine state. OliverCode works without either.
+**2. Product repos (yours).** Sibling repos that inherit hooks, templates, and standards from OliverCode. Declared in `shared/repo-profiles.json`. OliverCode is never a runtime dependency of a product repo — it defines standards, not implementations.
 
-**3. Product repos (yours).** Sibling repos that inherit hooks, templates, and standards from OliverCode. Declared in `local/repo-profiles.json`. OliverCode is never a runtime dependency of a product repo — it defines standards, not implementations.
+`runtime/control-plane/` (gitignored, optional) holds private per-machine runtime state. OliverCode works without it.
 
 ```
 OliverCode
@@ -37,14 +37,13 @@ OliverCode
 │   ├── templates/     project template — the single template home
 │   └── workflows/     repeatable procedures
 ├── skills/            engineering-method + framework tooling skills (symlinked into ~/.claude/skills/)
-├── shared/            bootstrap manifest, task policies, placeholder registries
+├── shared/            bootstrap manifest, task policies, the real fleet registries
 ├── scripts/           launcher (olivercode) + validation gates + qa checkers
 ├── docs/              current-state authority docs (one concept, one home)
 ├── tests/             the enforcement surfaces: pre-commit gates, evidence gatekeeper,
 │                      hook-install health, launcher commands
 ├── .githooks/         pre-commit governance (secrets, emoji, PII, contracts)
 ├── .claude-optimization/  standalone Claude OS memory/state (local layer)
-├── local/             (gitignored) your real fleet config
 └── runtime/control-plane/  (gitignored) private machine state
 ```
 

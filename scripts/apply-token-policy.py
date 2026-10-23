@@ -17,9 +17,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE
-# The example file (not the real, gitignored local/repo-profiles.json) is the
-# marker — it's the one file guaranteed to exist in every checkout.
-while not (REPO_ROOT / "shared" / "repo-profiles.example.json").exists():
+# repo-profiles.json is the one file guaranteed to exist in every checkout.
+while not (REPO_ROOT / "shared" / "repo-profiles.json").exists():
     REPO_ROOT = REPO_ROOT.parent
     if REPO_ROOT == Path("/"):
         print("ERROR: Could not find OliverCode root", file=sys.stderr)

@@ -114,16 +114,9 @@ what belongs there.
 
 ### 5. Register the fleet
 
-```bash
-scripts/olivercode init      # seeds local/, never overwrites
-```
-
-Paste `discover`'s skeleton into `local/repo-profiles.json`, keeping the `path` values for any
-repo that is not a sibling. Add each repo's `canonicalValidationCommand` (decision 4) and a
-`token_policy` block — without the latter, Gate 8 blocks their commits.
-
-Real names go in `local/` only. If you are about to write a repo name into a tracked file,
-stop: that boundary is what makes the fork shareable.
+Paste `discover`'s skeleton into `shared/repo-profiles.json`, keeping the `path` values for
+any repo that is not a sibling. Add each repo's `canonicalValidationCommand` (decision 4) and
+a `token_policy` block — without the latter, Gate 8 blocks their commits.
 
 ### 6. Install enforcement
 

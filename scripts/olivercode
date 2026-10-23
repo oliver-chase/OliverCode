@@ -22,7 +22,7 @@ from lib.repo_profiles import resolve_repo_path as _resolve_repo_path  # noqa: E
 from lib.repo_profiles import iter_fleet as _iter_fleet  # noqa: E402
 from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E402,F401
 from lib.health_checks import (  # noqa: E402,F401
-    _local_or_shared, _check_waiver_expiry, _check_github_about,
+    _check_waiver_expiry, _check_github_about,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
     _check_folder_validators,
 )
@@ -35,7 +35,6 @@ COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md + skills into ~/.claude (backs up anything it replaces)"),
-    ("olivercode init", "Create local/ fleet config from the tracked examples (never overwrites)"),
     ("olivercode link-plugins [--dry-run]", "Symlink the vault's plugins into ~/.claude/plugins"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
@@ -190,7 +189,7 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
     print("auto-load in Claude Code — merge them into CLAUDE.md (docs/ADOPTING.md Step 4).")
 
     _report_claude_dir(oc_root)
-    print("\nProfile skeleton — paste into local/repo-profiles.json under \"profiles\",")
+    print("\nProfile skeleton — paste into shared/repo-profiles.json under \"profiles\",")
     print("then add each repo's token_policy (see docs/TOKEN_POLICY.md):\n")
     skeleton = {
         name: {"name": name, "path": str(repo), "canonicalValidationCommand": "<command>"}
@@ -366,58 +365,8 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    print("Next: `olivercode init` to seed local/, then `olivercode health` to verify.")
+    print("Next: register the repo in shared/repo-profiles.json, then `olivercode health` to verify.")
     return 1 if broken else 0
-
-
-# local/ overlay files, each seeded from a tracked placeholder. Adding a pair here is
-# all it takes to make a new registry part of `init`.
-LOCAL_SEEDS = (
-    ("shared/repo-profiles.example.json", "local/repo-profiles.json"),
-    ("shared/repo-map.json", "local/repo-map.json"),
-    ("shared/project-structure-rules.json", "local/project-structure-rules.json"),
-)
-
-
-def command_init(oc_root: Path) -> int:
-    """Seed the gitignored local/ overlay from the tracked example registries.
-
-    Non-destructive and idempotent by contract: an existing local/ file is never
-    overwritten, because it holds the operator's real fleet and this command is the
-    one a confused user is most likely to re-run.
-    """
-    print("OliverCode init — seeding local/ from tracked examples")
-    print("=" * 40)
-    created, kept, missing = [], [], []
-
-    for src_rel, dst_rel in LOCAL_SEEDS:
-        src, dst = oc_root / src_rel, oc_root / dst_rel
-        if not src.exists():
-            missing.append(src_rel)
-            continue
-        if dst.exists():
-            kept.append(dst_rel)
-            continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(src.read_bytes())
-        created.append(dst_rel)
-
-    for rel in created:
-        print(f"  [NEW]  {rel}")
-    for rel in kept:
-        print(f"  [KEPT] {rel} — already exists, left untouched")
-    for rel in missing:
-        print(f"  [FAIL] {rel} — example missing from this checkout")
-
-    print()
-    if created:
-        print("Next: edit the files above with your real repo names, validation commands,")
-        print("and token policy, then run `olivercode sync-hooks` to install enforcement.")
-        print("local/ is gitignored — real names never reach the tracked fork.")
-    elif not missing:
-        print("Nothing to do: local/ is already seeded.")
-    print("See docs/ADOPTING.md for the full onboarding path.")
-    return 1 if missing else 0
 
 
 class _HealthTally:
@@ -755,7 +704,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     profiles, _ = load_repo_profiles(oc_root)
     fleet = list(_iter_fleet(profiles, fleet_root or oc_root.parent))
     if not fleet:
-        print("  [WARN] no fleet registered in local/repo-profiles.json — skipping hook-drift check")
+        print("  [WARN] no fleet registered in shared/repo-profiles.json — skipping hook-drift check")
         skipped += 1
     else:
         for name, profile, repo_path in fleet:
@@ -1130,9 +1079,6 @@ def main() -> int:
     if cmd == "install":
         _reject_extra(cmd, argv)
         return command_install(OC_ROOT)
-    if cmd == "init":
-        _reject_extra(cmd, argv)
-        return command_init(OC_ROOT)
     if cmd == "link-plugins":
         rest = [a for a in argv if a != "--dry-run"]
         _reject_extra(cmd, rest)

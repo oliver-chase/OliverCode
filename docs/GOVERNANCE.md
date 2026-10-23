@@ -6,7 +6,7 @@ This document defines the current locked governance baseline for OliverCode.
 
 `bash scripts/validate.sh` runs all active gates from repo root:
 - `bash scripts/validate.sh` — pre-commit gates, doc/code consistency, reference integrity, tests
-- `bash scripts/validate.sh --evidence <file>` — pre-commit + orchestration gatekeeper. `scripts/orchestration-gatekeeper.py` validates WRITE MODE evidence against repo profiles (`local/repo-profiles.json` gitignored real fleet, or `shared/repo-profiles.example.json` tracked placeholder) and `shared/task-policies/`.
+- `bash scripts/validate.sh --evidence <file>` — pre-commit + orchestration gatekeeper. `scripts/orchestration-gatekeeper.py` validates WRITE MODE evidence against repo profiles (`shared/repo-profiles.json`, tracked real fleet) and `shared/task-policies/`.
 - `bash scripts/validate.sh --gatekeeper-only <file>` — gatekeeper only
 - `bash scripts/validate.sh --check-consistency` — doc/code consistency only
 
@@ -32,7 +32,7 @@ governance CI workflow template for downstream repos exists at
 fatal). Hook enforcement fails open, so a repo with an unset or broken `core.hooksPath` is
 silently ungoverned. Surfacing it here puts the signal where agents already look rather than
 in a weekly log. A repo that must diverge from the template declares `hookVariant` in its
-profile -- see `shared/repo-profiles.example.json`.
+profile -- see `shared/repo-profiles.json`.
 
 `validate.sh` also fails closed on **unfalsifiable checks** — a gate or script that
 cannot fail, whatever the input. See `GATE-FALSIFIABILITY-1` in `docs/DECISIONS.md` for the
@@ -99,7 +99,7 @@ Fleet repos also receive `pre-commit-private` alongside their live hook as an in
 copy. Git never runs it.
 
 `hookVariant` carries a real cost. See `_hookVariant_note` in
-`shared/repo-profiles.example.json` for the trade-off and the incident that proved it.
+`shared/repo-profiles.json` for the trade-off and the incident that proved it.
 
 ## Locked Baseline Rules
 
@@ -118,5 +118,5 @@ The reusable baseline lives in:
 - `core/templates/project/QUALITY_BASELINE.md`
 - `shared/project-bootstrap-manifest.json`
 
-Enforcement for downstream repos is handled by their own `.githooks/pre-commit` and their declared `canonicalValidationCommand` (in `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder)).
+Enforcement for downstream repos is handled by their own `.githooks/pre-commit` and their declared `canonicalValidationCommand` (in `shared/repo-profiles.json`, tracked real fleet).
 

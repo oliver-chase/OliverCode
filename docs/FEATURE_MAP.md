@@ -63,7 +63,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
 | `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax. TypeScript-leaning, aimed at the fleet repos |
 | `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |
-| `scripts/qa/check-fork-usable.sh` | Proves a stranger's clone works with no config AND that the documented adoption path produces a fleet whose gates actually block, in a sandbox with a virgin HOME |
+| `scripts/qa/check-fork-usable.sh` | Proves a fresh clone's commands run without crashing AND that the documented adoption path produces a fleet whose gates actually block, in a sandbox with a virgin HOME |
 | `scripts/qa/probe-secret-gate.sh` | Writes a fake secret into the current repo, commits, and confirms Gate 1 blocks it. The one home for the probe `docs/ADOPTING.md`, `docs/NEW_MACHINE.md`, and `olivercode-adoption` all invoke by name |
 | `scripts/qa/check-scenarios.sh` | The exhaustive complement to the fork check: 12 sandboxed setup/walkthrough scenarios (existing ~/.claude, scattered fleet, --root, discover, bootstrap, hookVariant, backout, idempotency, update, no-commit probe). Run after changing the launcher, hooks, or `docs/ADOPTING.md` |
 | `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
@@ -82,7 +82,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `shared/project-bootstrap-manifest.json` | managed-file list and strictness for downstream repos |
 | `shared/workflow-standards.md` | trigger routing, branch lifecycle, testing baseline |
 | `shared/repo-map.json` | cross-project repo registry |
-| `local/repo-profiles.json` (gitignored, real fleet) or `shared/repo-profiles.example.json` (tracked placeholder) | per-repo validation commands and evidence requirements |
+| `shared/repo-profiles.json` (tracked, real fleet) | per-repo validation commands and evidence requirements |
 | `shared/task-policies/` | task-type policies and result schema |
 | `docs/KEEPALIVE_STANDARD.md` | Supabase/Cloudflare keepalive contract. Its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
 

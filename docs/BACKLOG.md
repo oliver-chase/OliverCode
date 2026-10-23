@@ -15,10 +15,12 @@ misleading), LOW (polish, drift).
 These IDs are cited from `.gitignore`, `scripts/validate.sh`, contract JSON `_note` fields,
 and several docs. They are settled decisions, not open items.
 
-- **G1 — Example-config + local-overlay pattern.** Tracked files ship placeholder-only
-  registries (`shared/*.example.json`, placeholder `shared/repo-map.json` etc.). The real
-  fleet lives in gitignored `local/` copies. Loaders try the local overlay first and fall
-  back to the tracked example with a WARN. Personal data never enters tracked files.
+- **G1 — Superseded: example-config + local-overlay pattern retired.** Tracked files used
+  to ship placeholder-only registries (`shared/*.example.json`) with the real fleet in
+  gitignored `local/` copies, falling back to the placeholder with a WARN. Retired per the
+  owner's own call: there was no stranger to protect, so the split was pure maintenance
+  weight for a property nobody needed. The four registries listed in `ARCHITECTURE.md`'s
+  "The Two Layers" are now tracked directly with real data. `local/` no longer exists.
 - **D2 — No repo-specific enforcement in the framework.** `validate.sh --target-repo <root>`
   execs the target's own `scripts/validate-repo.sh` if present, else skips cleanly.
   Delegated suites are a CONVENTION with no implementation: a profile may carry
@@ -50,8 +52,8 @@ failure class this repo actually hit. All five are live in `bash scripts/validat
   lived in that blind spot. Now a second pass (`scripts/lib/reference_check.py`) resolves
   backtick-quoted paths whose first segment is a tracked top-level directory: 303 refs
   checked. Exemptions are explicit and commented -- downstream-relative contract paths,
-  gitignored local layers, placeholder tokens, template files, and the anti-pattern examples
-  in `FILE_LOCATION_STANDARD.md` (whose paths must NOT resolve).
+  gitignored runtime/memory layers, placeholder tokens, template files, and the anti-pattern
+  examples in `FILE_LOCATION_STANDARD.md` (whose paths must NOT resolve).
 - **A2 — skills index parity.** INDEX rows vs `skills/*/SKILL.md` directories, both
   directions, plus frontmatter `name:` vs directory name (the launcher lists by frontmatter,
   humans read the table. They drifted apart silently before).
@@ -570,7 +572,8 @@ missing, but itself omitted `link-plugins`, which `docs/NEW_MACHINE.md` actually
 name). Fixed in the same pass as B36, so code, `FEATURE_MAP.md`, and `OLIVERCODE_LAUNCHER.md`
 now agree. Separately, `docs/GOVERNANCE.md` called the downstream validation field
 `validate:merge` — that name exists nowhere in the repo. The real field, used correctly in
-`docs/NEW_MACHINE.md` and `shared/repo-profiles.example.json`, is `canonicalValidationCommand`
+`docs/NEW_MACHINE.md` and the repo-profiles registry (then shared/repo-profiles.example.json,
+since retired per G1), is `canonicalValidationCommand`
 — fixed. `docs/FEATURE_MAP.md`'s separate mention of `scripts/validate-repo.sh` was checked
 against the original finding and found correct as written: `scripts/validate.sh
 --target-repo` really does exec that filename by convention (per D2 above) — left as is, not
@@ -578,7 +581,8 @@ the same mechanism as `canonicalValidationCommand`.
 
 **B38 — `docs/GOVERNANCE.md` was the single most duplication-heavy file found, six separate
 ways (MED, done).** (1) Its `hookVariant` trade-off anecdote was duplicated near-verbatim in
-`shared/repo-profiles.example.json`'s `_hookVariant_note` — invisible to
+the repo-profiles registry's (then shared/repo-profiles.example.json, since retired per
+G1) `_hookVariant_note` — invisible to
 `duplication_check.py` since one side is JSON. Cut here; the file now points to the JSON
 note as the one home. (2) It retold the `GATE-FALSIFIABILITY-1` story from
 `docs/DECISIONS.md` in full instead of citing it by ID, the exact thing that ledger exists to
@@ -658,8 +662,8 @@ consistency, and B22/B23/B42/B43's factual claims against live repo state.
   OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy). The template
   carries the anon-key meta-tag allowlist. Both correct. Do not converge them.
 - `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
-  `docs/FRAMEWORK_BOUNDARY.md`'s path map but is the tracked half of the G1 example/overlay
-  pair and has a real `local/` counterpart. Keep both.
+  `docs/FRAMEWORK_BOUNDARY.md`'s path map but is the machine-readable mirror of it (tracked,
+  real values, since G1's retirement). Keep both.
 - The keepalive surface — in scope by owner decision, synced via the manifest's
   `conditionalFiles`, not an orphan.
 - **The WRITE MODE evidence gate is opt-in, not a completion requirement.** The machinery
@@ -668,7 +672,7 @@ consistency, and B22/B23/B42/B43's factual claims against live repo state.
   universal precondition — a contract every commit violates teaches that written rules are
   optional.
 - **`olivercode add-repo` — WONT-FIX.** Registering a fleet still means hand-editing
-  `local/repo-profiles.json` once per repo. A command for that would be ~60 LOC plus tests
+  `shared/repo-profiles.json` once per repo. A command for that would be ~60 LOC plus tests
   plus docs to save a one-time edit, and satisfies none of `FRAMEWORK_BASELINE.md`'s four
   admission criteria. The real sharp edge was Gate 8 failing with an unactionable message.
   That is fixed. Revisit only if fleet size makes the edit genuinely repetitive.

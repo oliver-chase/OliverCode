@@ -39,37 +39,35 @@ LEDGER_CANDIDATES = (
 
 
 def _load_profiles(olivercode_root: Path) -> dict:
-    for rel in ("local/repo-profiles.json", "shared/repo-profiles.example.json"):
-        p = olivercode_root / rel
-        if p.is_file():
-            try:
-                return json.loads(p.read_text()).get("profiles", {})
-            except (json.JSONDecodeError, OSError) as exc:
-                print(f"WARN: could not parse {p}: {exc}", file=sys.stderr)
-    return {}
+    p = olivercode_root / "shared" / "repo-profiles.json"
+    if not p.is_file():
+        return {}
+    try:
+        return json.loads(p.read_text()).get("profiles", {})
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"WARN: could not parse {p}: {exc}", file=sys.stderr)
+        return {}
 
 
 def _load_governance_profiles(olivercode_root: Path) -> dict[str, str]:
-    """name -> governanceProfile, from repo-map (local overlay first).
+    """name -> governanceProfile, from shared/repo-map.json.
 
     The only recognized value is "incubating": the repo is young or mid-overhaul,
     so staleness is reported but does not fail the run. Anything else is reported
     as unknown so a typo cannot silently exempt a repo. This is the field's one
     consumer -- before it, a declared profile changed nothing anywhere.
     """
-    for rel in ("local/repo-map.json", "shared/repo-map.json"):
-        f = olivercode_root / rel
-        if not f.is_file():
-            continue
-        try:
-            data = json.loads(f.read_text())
-        except (json.JSONDecodeError, OSError):
-            continue
-        return {
-            r.get("name", ""): r.get("governanceProfile", "")
-            for r in data.get("repos", []) if r.get("governanceProfile")
-        }
-    return {}
+    f = olivercode_root / "shared" / "repo-map.json"
+    if not f.is_file():
+        return {}
+    try:
+        data = json.loads(f.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return {
+        r.get("name", ""): r.get("governanceProfile", "")
+        for r in data.get("repos", []) if r.get("governanceProfile")
+    }
 
 
 def _find_marker(repo: Path) -> str | None:
@@ -114,7 +112,7 @@ def main() -> int:
     fleet_root = Path(args.root).resolve() if args.root else olivercode_root.parent
     profiles = _load_profiles(olivercode_root)
     if not profiles:
-        print("No repo profiles found (local/repo-profiles.json or the example).", file=sys.stderr)
+        print("No repo profiles found (shared/repo-profiles.json).", file=sys.stderr)
         return 1
 
     governance = _load_governance_profiles(olivercode_root)

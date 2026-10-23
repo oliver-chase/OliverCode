@@ -92,8 +92,7 @@ For repos that are intentionally inactive:
 ## Per-Repo Status
 
 Each repo's actual keepalive configuration lives in its `keepalive` block in
-`local/repo-profiles.json` (gitignored — see `docs/BACKLOG.md` G1) or, for a fresh
-clone with no local fleet configured, `shared/repo-profiles.example.json`. That JSON
+`shared/repo-profiles.json` (tracked, real fleet). That JSON
 is the sole source of truth — no markdown table duplicates it here, since two copies
 of the same fact drift independently and the JSON is already machine-readable.
 

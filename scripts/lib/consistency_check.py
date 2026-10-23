@@ -202,106 +202,6 @@ def check_gate_count(repo_root: Path) -> list[str]:
     return failures
 
 
-def check_no_fleet_names_in_tracked_files(repo_root: Path) -> list[str]:
-    """No tracked file may name a real repo from the operator's fleet.
-
-    The whole three-layer design rests on real fleet data living only in gitignored
-    `local/`. Tracked files ship placeholders so the fork is shareable. That held for
-    the registries and then leaked through prose instead: BACKLOG entries naming the
-    repos that needed a re-sync, and a real repo name used as a test fixture.
-
-    Nothing caught it, because the reference and PII gates look for paths and emails,
-    and a bare repo name is neither.
-
-    The check reads the operator's own names from the gitignored profile and greps the
-    tracked tree for them, so it needs no hardcoded list of what to hide -- a hardcoded
-    list would itself be the leak. A fork with no `local/` has nothing to compare and
-    skips, which is correct: those names are not secret to the person who owns them.
-    """
-    local_profiles = repo_root / "local" / "repo-profiles.json"
-    data: dict = {}
-    if local_profiles.is_file():
-        try:
-            data = json.loads(local_profiles.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            data = {}
-
-    # Names that cannot be searched for without matching the repo's own vocabulary. A
-    # profile named "core" or "docs" appears in almost every tracked file as a path
-    # component, and flagging all of them would make this check noise, which is how a
-    # check gets switched off. Derived from the tree rather than hardcoded, so it stays
-    # correct as the layout changes.
-    reserved = {p.name.lower() for p in repo_root.iterdir()}
-    reserved |= {p.stem.lower() for p in repo_root.iterdir() if p.is_file()}
-    reserved |= {"olivercode", "main", "src", "test", "tests", "template", "project"}
-
-    # Placeholder names from the tracked example are not fleet data by definition, and
-    # they are SUPPOSED to appear in tracked files. `olivercode init` seeds local/ from
-    # that example, so a fresh fork's "real fleet" is entirely placeholders -- without
-    # this the check fired on the very files the placeholders belong in, and the
-    # fork-usability sandbox failed.
-    example = repo_root / "shared" / "repo-profiles.example.json"
-    if example.is_file():
-        try:
-            reserved |= {
-                n.lower()
-                for n in json.loads(example.read_text(encoding="utf-8")).get("profiles", {})
-            }
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    names = {
-        n for n in data.get("profiles", {})
-        if n.lower() not in reserved and len(n) > 3
-    }
-
-    # Sibling git repos are the operator's projects whether or not they are registered
-    # as fleet. A contract shipped naming one three times; the gate never fired because
-    # the repo was not in profiles. Derive the names from the filesystem -- a hardcoded
-    # list would itself be the leak, and a fork with different siblings gets its own.
-    try:
-        for sib in repo_root.parent.iterdir():
-            if (
-                sib.is_dir()
-                and sib.name.lower() not in reserved
-                and len(sib.name) > 3
-                and (sib / ".git").exists()
-                and sib.resolve() != repo_root.resolve()
-            ):
-                names.add(sib.name)
-    except OSError:
-        pass
-
-    if not names:
-        return []
-
-    # `local/` is gitignored, so it is not in this list by construction. Scan every
-    # tracked text file rather than an extension list: the hooks have no extension,
-    # workflows are .yml, and a name in either ships to every fork just the same.
-    # Binary formats are skipped by content sniff, not by filename guess.
-    tracked = _tracked(repo_root)
-    failures: list[str] = []
-    for rel in tracked:
-        path = repo_root / rel
-        try:
-            with open(path, "rb") as fh:
-                head = fh.read(1024)
-            if b"\x00" in head:  # binary
-                continue
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for name in sorted(names):
-            if re.search(rf"\b{re.escape(name)}\b", text):
-                failures.append(
-                    f"  [FLEET LEAK] {rel} names the real fleet repo '{name}'. Tracked "
-                    f"files must stay generic so the fork is shareable — describe the "
-                    f"repo by role ('the repo declaring a hook variant') or use a "
-                    f"placeholder ('product-repo'). Real names belong in local/ only."
-                )
-    return failures
-
-
 def check_gate_coverage_table(repo_root: Path) -> list[str]:
     """docs/GOVERNANCE.md's per-repo Total row must match the real hooks.
 
@@ -496,7 +396,6 @@ def check_all(repo_root: Path) -> list[str]:
         + check_gate_count(repo_root)
         + check_gate_integrity(repo_root)
         + check_gate_coverage_table(repo_root)
-        + check_no_fleet_names_in_tracked_files(repo_root)
         + check_feature_map_completeness(repo_root)
         + check_contract_reachability(repo_root)
         + check_skill_cross_references(repo_root)
