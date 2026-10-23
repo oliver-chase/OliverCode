@@ -78,7 +78,6 @@ PLANS_PREFIX = "docs/plans/"
 OPTIONAL_PREFIXES = (
     "runtime/control-plane/",
     "runtime/manifests",
-    "local/",
     ".claude-optimization/memory/",
     ".claude-optimization/state/",
 )

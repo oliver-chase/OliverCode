@@ -12,14 +12,6 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-def _local_or_shared(oc_root: Path, filename: str) -> Path | None:
-    """Resolve a registry the same way every other loader does: local/ overlay first,
-    tracked shared/ placeholder as the fallback, None if neither exists."""
-    for candidate in (oc_root / "local" / filename, oc_root / "shared" / filename):
-        if candidate.is_file():
-            return candidate
-    return None
-
 def _check_github_about(oc_root: Path) -> tuple[int, int, int]:
     """WARN-degrading check that this repo's GitHub About is filled in.
 
@@ -69,8 +61,8 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     Reported, never fatal. The point is to make the date mean something at the moment
     someone looks at fleet health, not to block a commit in an unrelated repo.
     """
-    path = _local_or_shared(oc_root, "repo-map.json")
-    if path is None:
+    path = oc_root / "shared" / "repo-map.json"
+    if not path.is_file():
         print("  [WARN] no repo-map.json — skipping waiver expiry check")
         return 0, 0, 1
     try:

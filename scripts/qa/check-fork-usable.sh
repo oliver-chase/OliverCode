@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
-# ─── Fork-Usability Check ─────────────────────────────────────────────────
-# Proves a stranger can clone this repo and use it with NO configuration: no
-# local/, no runtime/control-plane/, no ~/.claude symlinks, no vault. That
-# property kept breaking silently -- every case checked here was found by
-# cloning by hand: validate.sh failing on a clean clone over per-user paths,
-# the reference gate scanning only TRACKED files so a new file's dangling ref
-# passed locally, and README's `ln -s` dying with no ~/.claude/skills.
+# ─── Clean-Checkout Check ─────────────────────────────────────────────────
+# Proves a fresh clone of this repo actually runs: every launcher command
+# executes without crashing, the adoption skill resolves, the documented
+# install works on a machine with no ~/.claude, and the documented adoption
+# path (registering a repo in shared/repo-profiles.json, then sync-hooks)
+# actually produces enforcement that blocks a real secret.
 #
 # Runs against a pristine copy in a temp dir, HOME redirected.
-#
-# DELIBERATE OVERLAP with check-scenarios.sh, whose S1 also walks register ->
-# sync-hooks -> probe -> health. This is the fast gating copy; the matrix is the
-# exhaustive advisory one. Merging would slow the gate or drop the walkthrough
-# from CI. Declared in both headers, as hook_drift_check.py declares its own.
 #
 # Usage:
 #   bash scripts/qa/check-fork-usable.sh            # copy the working tree
 #   bash scripts/qa/check-fork-usable.sh --clone    # clone origin/main instead
 #
-# Exit codes: 0 = a fork works, 1 = a fork is broken.
+# Exit codes: 0 = a clean clone works, 1 = it's broken.
 
 set -uo pipefail
 
@@ -29,8 +23,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --clone) MODE="clone"; shift ;;
     # full-qa-pass.sh passes --target to every checker. This one always tests the
-    # repo it ships in -- it asserts THIS repo is forkable -- so the value is
-    # accepted and ignored deliberately rather than silently swallowed.
+    # repo it ships in -- it asserts THIS repo works from a clean clone -- so the
+    # value is accepted and ignored deliberately rather than silently swallowed.
     --target) shift 2 || shift ;;
     *) echo "check-fork-usable.sh: unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -42,15 +36,14 @@ CHECKOUT="$SANDBOX/OliverCode"
 mkdir -p "$FAKE_HOME"
 trap 'rm -rf "$SANDBOX"' EXIT
 
-echo "=== Fork-usability check (mode: $MODE) ==="
+echo "=== Clean-checkout check (mode: $MODE) ==="
 echo "sandbox: $SANDBOX"
 echo ""
 
 if [ "$MODE" = "clone" ]; then
   git clone -q "$REPO_ROOT" "$CHECKOUT" || { echo "FAIL: clone failed"; exit 1; }
 else
-  # Copy only what git tracks -- an untracked local/ or runtime/ would defeat
-  # the entire point of the check.
+  # Copy only what git tracks, so the sandbox matches a real clone.
   mkdir -p "$CHECKOUT"
   (cd "$REPO_ROOT" && git ls-files -z | while IFS= read -r -d '' f; do
     mkdir -p "$CHECKOUT/$(dirname "$f")"
@@ -63,12 +56,12 @@ else
   # Leaving everything merely staged is a state no fresh clone is ever in -- it makes
   # the pre-commit hook evaluate every file, and Gate 5 then blocks on the staged
   # workflow YAML because a sandbox HOME has no gh credential. That is a harness
-  # artifact, not a fork problem.
+  # artifact, not a clean-clone problem.
   # The identity deliberately contains no "@": an email literal here would trip Gate 3.
   git -C "$CHECKOUT" init -q .
   git -C "$CHECKOUT" add -A >/dev/null 2>&1
   git -C "$CHECKOUT" -c user.email=forkcheck -c user.name=forkcheck \
-      commit -q -m "fork-usability baseline" --no-verify >/dev/null 2>&1
+      commit -q -m "clean-clone baseline" --no-verify >/dev/null 2>&1
 fi
 
 FAILED=0
@@ -84,30 +77,13 @@ step() {
   fi
 }
 
-echo "--- A fresh checkout must work with zero configuration ---"
+echo "--- A fresh checkout's commands must run without crashing ---"
 step "scripts/olivercode --help"     python3 scripts/olivercode --help
 step "scripts/olivercode health"     python3 scripts/olivercode health
 step "scripts/olivercode skills"     python3 scripts/olivercode skills
-step "scripts/olivercode init"       python3 scripts/olivercode init
 step "bash scripts/validate.sh"      bash scripts/validate.sh
 step "bash scripts/link-check.sh"    bash scripts/link-check.sh
 step "bash scripts/qa/check-bloat.sh --strict" bash scripts/qa/check-bloat.sh --strict
-
-echo ""
-echo "--- No personal data may be present in a fresh checkout ---"
-for leaked in local runtime/control-plane .claude-optimization/memory .claude-optimization/state; do
-  if [ -e "$CHECKOUT/$leaked" ] && [ "$leaked" != "local" ]; then
-    echo "  [FAIL] $leaked is present in a tracked checkout"
-    FAILED=1
-  fi
-done
-# `init` legitimately creates local/, so check its CONTENT is placeholder-only.
-if grep -rqI "$(basename "$HOME")" "$CHECKOUT/local" 2>/dev/null; then
-  echo "  [FAIL] local/ seeded from examples contains the real username"
-  FAILED=1
-else
-  echo "  [OK]   no personal identifiers in the seeded local/"
-fi
 
 echo ""
 echo "--- The adoption skill must be usable on a fresh clone, before any setup ---"
@@ -161,8 +137,7 @@ done
 
 adopt() { (cd "$WS/OliverCode" && HOME="$FAKE_HOME" "$@" 2>&1); }
 
-adopt python3 scripts/olivercode init >/dev/null 2>&1
-HOME="$FAKE_HOME" python3 - "$WS/OliverCode/local/repo-profiles.json" <<'PY' >/dev/null 2>&1
+HOME="$FAKE_HOME" python3 - "$WS/OliverCode/shared/repo-profiles.json" <<'PY' >/dev/null 2>&1
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
@@ -205,9 +180,9 @@ fi
 
 echo ""
 if [ "$FAILED" -eq 0 ]; then
-  echo "PASS: a fork of this repo works with no configuration, and the documented"
-  echo "      adoption path produces a fleet whose gates actually block."
+  echo "PASS: a fresh clone of this repo works, and the documented adoption path"
+  echo "      produces a fleet whose gates actually block."
   exit 0
 fi
-echo "FAIL: a fork of this repo would NOT work as documented."
+echo "FAIL: a fresh clone of this repo would NOT work as documented."
 exit 1

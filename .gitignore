@@ -81,12 +81,6 @@ yarn-error.log*
 .secrets/*
 !.secrets/README.md
 
-# Real fleet/registry data (repo names, paths, profiles). Tracked
-# counterparts under shared/*.example.json and core/contracts/*.example.json
-# ship placeholder-only data; this is where the real values for this
-# machine's fleet live. See docs/BACKLOG.md G1.
-/local/
-
 # Runtime control plane (local-only agent orchestration state)
 runtime/control-plane/
 runtime/control-plane/**

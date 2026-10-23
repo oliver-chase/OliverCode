@@ -16,8 +16,8 @@ OliverCode can be cloned, inspected, and used standalone to read contracts, temp
 ## Canonical Paths and Ownership
 
 Claude Code is this machine's sole agent runtime. `core/contracts/AGENT_SYSTEM_MANIFEST.json`
-is the machine-readable mirror of the paths below (placeholder in git, real values in
-gitignored `local/`, per `docs/BACKLOG.md` G1).
+is the machine-readable mirror of the paths below -- tracked, with real values, since this
+is a single operator's framework across that operator's own accounts.
 
 - Product repos: `<vault-root>/Oliver/Project Repos/*`
 - Shared system root: `<vault-root>/Oliver/Project Repos/OliverCode`

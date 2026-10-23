@@ -39,7 +39,6 @@ Setup also includes a rehearsal: put a fake password in a file and try to commit
 git clone <your-fork> OliverCode && cd OliverCode
 bash scripts/validate.sh
 scripts/olivercode install
-scripts/olivercode init
 ```
 
 These commands work from a fresh clone with no configuration, accounts, or packages.
@@ -68,8 +67,7 @@ The built-in setup skill walks through the process, asks only for decisions that
 OliverCode preserves what you already have:
 
 * If `~/.claude/CLAUDE.md` exists, `install` backs it up and tells you where the backup is.
-* `init` never overwrites an existing file.
-* Both commands are safe to run more than once.
+* `install` is safe to run more than once.
 
 ---
 
@@ -82,12 +80,10 @@ Once OliverCode is installed, connect each repo in four steps.
 Add the repo to:
 
 ```text
-local/repo-profiles.json
+shared/repo-profiles.json
 ```
 
-Your local fleet list, gitignored, so your real repo names and machine-specific information never get uploaded.
-
-`init` creates the file. You can also find your repos automatically:
+Your fleet list. You can also find your repos automatically:
 
 ```bash
 scripts/olivercode discover
@@ -204,11 +200,9 @@ A check that reports `PASS` without actually checking anything is a defect. For 
 
 OliverCode tests for this failure mode in its own code. The test suite also deliberately breaks every gate and confirms that the gate catches the failure.
 
-### Private data stays private
+### One operator, real data
 
-Real repo names, file paths, and machine details live in gitignored `local/` and `runtime/` files. Tracked files contain only placeholder examples.
-
-A gate prevents private repo names from entering tracked files. A separate test confirms that a fresh clone works without any of those private files.
+The fleet registry (`shared/repo-profiles.json` and friends) is tracked and holds real repo names — there is no placeholder layer to keep in sync. Only `runtime/control-plane/` (private per-machine runtime state) is gitignored. `ARCHITECTURE.md`'s "The Two Layers" explains why.
 
 ---
 

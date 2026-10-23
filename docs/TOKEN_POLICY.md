@@ -2,8 +2,8 @@
 
 ## Where It Lives
 
-The cross-repo token policy is defined in `local/repo-profiles.json` (gitignored, real fleet)
-or `shared/repo-profiles.example.json` (tracked placeholder). Each repo profile carries a
+The cross-repo token policy is defined in `shared/repo-profiles.json` (tracked, real fleet).
+Each repo profile carries a
 `token_policy` object with three fields:
 
 ```json

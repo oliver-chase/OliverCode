@@ -24,8 +24,8 @@ Run the full gate suite:
 
 ## Product commands are not here
 
-Product runtime authority lives in the owning project repo (see `local/repo-map.json`,
-gitignored). OliverCode ships standards, not product implementations — use that repo's own
+Product runtime authority lives in the owning project repo (see `shared/repo-map.json`).
+OliverCode ships standards, not product implementations — use that repo's own
 scripts and docs.
 
 ## Gate 5 blocks a staged workflow file

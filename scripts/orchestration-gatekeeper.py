@@ -18,15 +18,13 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-# Resolve repo root (OliverCode) from script location. The example file (not
-# the real, gitignored local/repo-profiles.json) is the marker — it's the one
-# file guaranteed to exist in every checkout, including a stranger clone with
-# no local fleet configured yet.
+# Resolve repo root (OliverCode) from script location. repo-profiles.json is
+# the marker — it's the one file guaranteed to exist in every checkout.
 REPO_ROOT = HERE
-while not (REPO_ROOT / "shared" / "repo-profiles.example.json").exists():
+while not (REPO_ROOT / "shared" / "repo-profiles.json").exists():
     REPO_ROOT = REPO_ROOT.parent
     if REPO_ROOT == Path("/"):
-        print("ERROR: Could not find OliverCode root (shared/repo-profiles.example.json)", file=sys.stderr)
+        print("ERROR: Could not find OliverCode root (shared/repo-profiles.json)", file=sys.stderr)
         sys.exit(1)
 
 sys.path.insert(0, str(HERE))
@@ -176,9 +174,7 @@ def main():
     args = parser.parse_args()
 
     # Load policies
-    profiles, profiles_source = load_repo_profiles(REPO_ROOT)
-    if profiles_source.name == "repo-profiles.example.json":
-        print(f"[GATEKEEPER] WARN: no local/repo-profiles.json — using placeholder example profiles ({profiles_source})", file=sys.stderr)
+    profiles, _profiles_source = load_repo_profiles(REPO_ROOT)
 
     # Token policy check mode (no evidence needed)
     if args.check_token_policy:

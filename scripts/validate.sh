@@ -85,7 +85,7 @@ run_hook_state() {
   registered="$(printf '%s\n' "$out" | grep -cE '^\s+\[(OK|FAIL|WARN)\] [^ ]+: ' || true)"
   if [[ "$rc" -eq 0 && "$registered" -eq 0 ]]; then
     echo "  [SKIP] no fleet repos registered — nothing to check."
-    echo "         Register repos in local/repo-profiles.json (see docs/ADOPTING.md)."
+    echo "         Register repos in shared/repo-profiles.json (see docs/ADOPTING.md)."
   elif [[ "$rc" -eq 0 ]]; then
     echo "  [OK] all $registered registered repo(s) have working hooks"
   else
@@ -131,9 +131,8 @@ sys.exit(1 if failures else 0)
 }
 
 run_smoke_tests() {
-  # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read only the
-  # tracked shared/repo-profiles.example.json, never local/ (gitignored, absent on
-  # forks), so they pass identically everywhere.
+  # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read the one
+  # tracked shared/repo-profiles.json, so they pass identically everywhere.
   #
   # Python-only by design. A `node --test <dir>/*.mjs` block used to run here; with no
   # .mjs test present the unmatched glob makes node exit 0, so it reported success on

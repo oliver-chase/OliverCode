@@ -17,8 +17,7 @@
     "claude": "~/.claude/skills"
   },
   "product_roots": [
-    "$PROJECT_ROOT"
+    "<vault-root>/Oliver/Project Repos"
   ],
-  "_product_roots_note": "Placeholder. Real per-machine product roots live in local/AGENT_SYSTEM_MANIFEST.json (gitignored) \u2014 see docs/BACKLOG.md G1.",
   "system_root": "<vault-root>/Oliver/Project Repos/OliverCode"
 }

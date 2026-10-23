@@ -7,7 +7,7 @@ templates. Does not apply to OliverCode itself -- OliverCode is the standard-set
 consumer of its own downstream template (`docs/SETUP_MODES.md`'s own text, "this repo uses
 the OliverCode public/private boundary standard," would be circular applied to OliverCode's
 own root). OliverCode's equivalent surfaces are `docs/ADOPTING.md`, `README.md`'s Quick Start, and
-`local/` + `runtime/control-plane/` for its own local/private state.
+`runtime/control-plane/` for its own private machine state.
 
 ## Goal
 Every repo must separate:

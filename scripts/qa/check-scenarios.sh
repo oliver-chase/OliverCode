@@ -52,7 +52,7 @@ mk_repo() { # $1 = dest, $2 = optional rules filename
 
 register() { # $1 = oc dir, $2.. = "name[:path]" entries
   local oc="$1"; shift
-  HOME="$H" python3 - "$oc/local/repo-profiles.json" "$@" <<'PY'
+  HOME="$H" python3 - "$oc/shared/repo-profiles.json" "$@" <<'PY'
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
@@ -89,7 +89,6 @@ mk_oc "$WS/OliverCode"; mk_repo "$WS/app-a"; mk_repo "$WS/app-b"
 oc() { (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode "$@"); }
 oc install >/dev/null 2>&1 && ok "install on virgin HOME" s1 || bad "install on virgin HOME" s1
 [ -L "$H/.claude/CLAUDE.md" ] && ok "CLAUDE.md symlinked" s1 || bad "CLAUDE.md symlinked" s1
-oc init >/dev/null 2>&1 && ok "init seeds local/" s1 || bad "init seeds local/" s1
 register "$WS/OliverCode" app-a app-b
 oc sync-hooks 2>&1 | grep -q "app-a: hooks synced" && ok "sync-hooks reaches fleet" s1 || bad "sync-hooks reaches fleet" s1
 probe_blocked "$WS/app-a" && ok "secret blocked in app-a" s1 || bad "secret blocked in app-a" s1
@@ -119,7 +118,6 @@ new_case s3
 mk_oc "$WS/OliverCode"
 mkdir -p "$WS/deep/work/clients" "$WS/side"
 mk_repo "$WS/deep/work/clients/api"; mk_repo "$WS/side/tool"
-oc init >/dev/null 2>&1
 register "$WS/OliverCode" "api:$WS/deep/work/clients/api" "tool:$WS/side/tool"
 oc sync-hooks 2>&1 | grep -q "api: hooks synced" && ok "path field resolves absolute" s3 || bad "path field resolves absolute" s3
 probe_blocked "$WS/deep/work/clients/api" && ok "secret blocked in scattered repo" s3 || bad "secret blocked in scattered repo" s3
@@ -131,7 +129,6 @@ new_case s4
 mkdir -p "$WS/tools" "$WS/code"
 mk_oc "$WS/tools/OliverCode"; mk_repo "$WS/code/web"; mk_repo "$WS/code/api"
 oc4() { (cd "$WS/tools/OliverCode" && HOME="$H" python3 scripts/olivercode "$@"); }
-oc4 init >/dev/null 2>&1
 register "$WS/tools/OliverCode" web api
 oc4 sync-hooks --root "$WS/code" 2>&1 | grep -q "web: hooks synced" && ok "--root honored by sync-hooks" s4 || bad "--root honored by sync-hooks" s4
 probe_blocked "$WS/code/web" && ok "secret blocked under --root" s4 || bad "secret blocked under --root" s4
@@ -181,9 +178,8 @@ mkdir -p "$WS/special/.githooks"
 printf '#!/usr/bin/env bash\necho custom-gate\nexit 0\n' > "$WS/special/.githooks/pre-commit"
 chmod +x "$WS/special/.githooks/pre-commit"
 git -C "$WS/special" config core.hooksPath .githooks
-oc init >/dev/null 2>&1
 register "$WS/OliverCode" special
-HOME="$H" python3 - "$WS/OliverCode/local/repo-profiles.json" <<'PY'
+HOME="$H" python3 - "$WS/OliverCode/shared/repo-profiles.json" <<'PY'
 import json, sys
 p = sys.argv[1]; d = json.load(open(p))
 d["profiles"]["special"]["hookVariant"] = "custom governance path"
@@ -202,7 +198,7 @@ mk_oc "$WS/OliverCode"; mk_repo "$WS/app"
 printf 'original rules\n' > "$H/.claude-orig-marker"
 mkdir -p "$H/.claude"
 printf 'original rules\n' > "$H/.claude/CLAUDE.md"
-oc install >/dev/null 2>&1; oc init >/dev/null 2>&1
+oc install >/dev/null 2>&1
 register "$WS/OliverCode" app
 oc sync-hooks >/dev/null 2>&1
 probe_blocked "$WS/app" || bad "precondition: hooks active before backout" s8
@@ -223,17 +219,7 @@ say "--- S9: every command safe to run twice ---"
 new_case s9
 mk_oc "$WS/OliverCode"; mk_repo "$WS/app"
 oc install >/dev/null 2>&1 && oc install >/dev/null 2>&1 && ok "install x2" s9 || bad "install x2" s9
-oc init >/dev/null 2>&1
 register "$WS/OliverCode" app
-marker="sentinel-$(date +%s)"
-HOME="$H" python3 - "$WS/OliverCode/local/repo-profiles.json" "$marker" <<'PY'
-import json, sys
-p, m = sys.argv[1], sys.argv[2]
-d = json.load(open(p)); d["_user_edit"] = m
-json.dump(d, open(p, "w"), indent=2)
-PY
-oc init >/dev/null 2>&1
-grep -q "$marker" "$WS/OliverCode/local/repo-profiles.json" && ok "init x2 keeps user edits" s9 || bad "init x2 keeps user edits" s9
 oc sync-hooks >/dev/null 2>&1 && oc sync-hooks >/dev/null 2>&1 && ok "sync-hooks x2" s9 || bad "sync-hooks x2" s9
 probe_blocked "$WS/app" && ok "still enforcing after re-runs" s9 || bad "still enforcing after re-runs" s9
 
@@ -245,7 +231,6 @@ git -C "$WS/origin" branch -m main 2>/dev/null
 git clone -q "$WS/origin" "$WS/OliverCode"
 chmod +x "$WS/OliverCode/scripts/olivercode" "$WS/OliverCode"/scripts/*.sh 2>/dev/null
 mk_repo "$WS/app"
-oc init >/dev/null 2>&1
 register "$WS/OliverCode" app
 ( cd "$WS/origin" && printf '\n# upstream change\n' >> README.md \
   && git add README.md && git -c user.email=matrix -c user.name=matrix commit -q -m upstream --no-verify )
@@ -258,7 +243,6 @@ say "--- S11: ADOPTING's probe cleanup works in a repo with no commits ---"
 new_case s11
 mk_oc "$WS/OliverCode"
 mkdir -p "$WS/fresh" && git -C "$WS/fresh" init -q .
-oc init >/dev/null 2>&1
 register "$WS/OliverCode" fresh
 oc sync-hooks >/dev/null 2>&1
 ( cd "$WS/fresh" \
@@ -273,7 +257,7 @@ oc sync-hooks >/dev/null 2>&1
 say "--- S12: zero-config clone basics ---"
 new_case s12
 mk_oc "$WS/OliverCode"
-for cmd in "--help" "health" "skills" "init"; do
+for cmd in "--help" "health" "skills"; do
   (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode $cmd) >/dev/null 2>&1 \
     && ok "olivercode $cmd" s12 || bad "olivercode $cmd" s12
 done

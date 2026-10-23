@@ -1,8 +1,5 @@
-"""Tests for the launcher's command surface: `init` and argument handling.
-
-`init` seeds the gitignored local/ overlay for a fork. It is the command a confused
-operator is most likely to re-run, so "never overwrites an existing local/ file" is a
-correctness property, not a nicety -- that file holds their real fleet.
+"""Tests for the launcher's command surface: `install`, `bootstrap`, and argument
+handling.
 
 Argument handling gets tests because ignoring an unknown flag silently produced a
 *wrong success*: `sync-hooks --root /somewhere` ignored the flag, synced the default
@@ -35,47 +32,6 @@ def _load():
 
 
 launcher = _load()
-
-
-class TestInit(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-init-"))
-        (self.tmp / "shared").mkdir()
-        for rel in ("repo-profiles.example.json", "repo-map.json", "project-structure-rules.json"):
-            shutil.copy2(REPO_ROOT / "shared" / rel, self.tmp / "shared" / rel)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def test_seeds_local_from_examples(self):
-        rc = launcher.command_init(self.tmp)
-        self.assertEqual(rc, 0)
-        for rel in ("repo-profiles.json", "repo-map.json", "project-structure-rules.json"):
-            self.assertTrue((self.tmp / "local" / rel).is_file(), f"local/{rel} not created")
-
-    def test_never_overwrites_existing_local_file(self):
-        """The operator's real fleet config must survive a re-run."""
-        local = self.tmp / "local"
-        local.mkdir()
-        real = local / "repo-profiles.json"
-        real.write_text('{"profiles": {"my-real-repo": {}}}', encoding="utf-8")
-
-        launcher.command_init(self.tmp)
-
-        preserved = json.loads(real.read_text())
-        self.assertIn("my-real-repo", preserved["profiles"])
-
-    def test_is_idempotent(self):
-        self.assertEqual(launcher.command_init(self.tmp), 0)
-        self.assertEqual(launcher.command_init(self.tmp), 0)
-
-    def test_reports_failure_when_an_example_is_missing(self):
-        (self.tmp / "shared" / "repo-map.json").unlink()
-        # Capture stdout: this path prints a [FAIL] line by design, and letting it
-        # through makes a passing `validate.sh` run look like something broke.
-        with contextlib.redirect_stdout(io.StringIO()):
-            rc = launcher.command_init(self.tmp)
-        self.assertEqual(rc, 1)
 
 
 class TestInstall(unittest.TestCase):
@@ -166,11 +122,6 @@ class TestUnknownArgsRejected(unittest.TestCase):
 
     def test_health_rejects_unknown_flag(self):
         result = self._run("health", "--bogus")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unexpected argument", result.stdout)
-
-    def test_init_rejects_unknown_flag(self):
-        result = self._run("init", "--bogus")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unexpected argument", result.stdout)
 
@@ -305,8 +256,8 @@ class TestWaiverExpiryDateHandling(unittest.TestCase):
         import contextlib, io, json
         tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
         try:
-            (tmp / "local").mkdir()
-            (tmp / "local" / "repo-map.json").write_text(json.dumps({
+            (tmp / "shared").mkdir()
+            (tmp / "shared" / "repo-map.json").write_text(json.dumps({
                 "unmanagedRepoWaivers": [
                     {"name": "a", "reason": "r", "expiresAt": "2099-06-01T00:00:00+00:00"},
                     {"name": "b", "reason": "r", "expiresAt": "2099-07-01T00:00:00"},
