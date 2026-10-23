@@ -1,7 +1,7 @@
 {
   "version": 1,
   "shared_contract": {
-    "structure": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/AGENT_SHARED_STRUCTURE.md",
+    "structure": "<vault-root>/Oliver/Project Repos/OliverCode/docs/FRAMEWORK_BOUNDARY.md",
     "project_hygiene": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md"
   },
   "runtime_entries": {

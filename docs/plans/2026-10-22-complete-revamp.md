@@ -5,8 +5,7 @@ Related: `docs/BACKLOG.md` B22/B23/B42, today's commits `278da37`..`cdc65aa`
 
 ## Goal
 
-OliverCode is one operator's shared orchestration layer across ~19 product repos
-(tesknota, fallow, oliver-app, oliver-strategic-growth, oliver-studios, and others), run
+OliverCode is one operator's shared orchestration layer across ~19 product repos, run
 from one Mac, with Claude Code as the sole runtime. Its job is to keep every repo
 consistent and catch known failure classes (secret leaks, stale docs, duplication
 regrowth) without becoming a bigger maintenance burden than the problem it solves.
@@ -20,9 +19,9 @@ instead of a drive-by fix, each checked against live state first, not assumed.
 
 1. **Converge the two backlog paradigms to one.** — *why:* `PROJECT_STRUCTURE_STANDARD.md`
    still carries a full file-based `.github/user-stories/` contract for repos that haven't
-   adopted a GitHub Project board. Checked all three repos still on it
-   (`family-stories`, `fallow`, `tesknota` — read, not assumed): all three have real,
-   populated `US-*.md` story files, so this isn't dead weight to delete outright. The
+   adopted a GitHub Project board. Checked all three repos still on it (read, not
+   assumed, three product repos in the fleet): all three have real, populated
+   `US-*.md` story files, so this isn't dead weight to delete outright. The
    seven repos with a real `backlog-config.json` already use the GitHub Project board,
    and it's the only paradigm the live tooling (`backlog-management`, `board-hygiene`,
    `deep-review`) understands. *Outcome:* migrate the three holdout repos' open stories
@@ -48,11 +47,14 @@ instead of a drive-by fix, each checked against live state first, not assumed.
    from an earlier, unrelated deletion) that a single merged file would have made easier
    to catch, since there'd be one path map instead of two drifting against each other.
    *Outcome:* fold `AGENT_SHARED_STRUCTURE.md`'s Canonical Paths / Ownership / Sync
-   Contract sections into `FRAMEWORK_BOUNDARY.md`, delete the file, repoint its three
-   referrers (`AGENT_SYSTEM_MANIFEST.json`'s `shared_contract.structure` key,
-   `ARCHITECTURE.md`'s repo-tree mention, and `docs/GOVERNANCE.md`'s "Policy" pointer).
+   Contract sections into `FRAMEWORK_BOUNDARY.md`, delete the file, repoint its real
+   referrers (confirmed by grep, not assumed: `AGENT_SYSTEM_MANIFEST.json`'s
+   `shared_contract.structure` key in both the tracked and gitignored copy,
+   `core/workflows/README.md`, `shared/workflow-standards.md`, and a historical note in
+   `docs/BACKLOG.md`).
    - **Risk: LOW.** Pure doc merge, no runtime behavior depends on the filename — verify
      with `grep -rl "AGENT_SHARED_STRUCTURE"` before and after, run `scripts/validate.sh`.
+   - **DONE 2026-10-22.**
 
 3. **Trim `docs/DOCUMENTATION_STANDARD.md`'s `## Voice` section.** — *why:* Already
    identified and flagged to the operator this session, not yet executed. The section
@@ -71,7 +73,8 @@ instead of a drive-by fix, each checked against live state first, not assumed.
      rather than deleting the section heading outright, so a skimming reader still finds
      the Voice section and gets redirected instead of finding nothing.
 
-4. **Leave the gate count (11 OliverCode / 9 downstream) alone.** — *why:* checked every
+4. **Leave the gate count alone (nine in an adopted repo, eleven in OliverCode itself).**
+   — *why:* checked every
    gate's entry in `docs/BACKLOG.md`'s Design-decisions and Resolved sections, not
    assumed from the count alone. Each one maps to a real incident that already happened
    once (a leaked secret, a gate-count claim that drifted for months undetected, a
@@ -95,7 +98,7 @@ instead of a drive-by fix, each checked against live state first, not assumed.
   three repos the operator runs daily) → mitigated by splitting it into three
   human-approved sub-steps, never one batched pass.
 - Steps 2-3 touch files every downstream fork inherits verbatim → mitigated by running
-  `bash scripts/validate.sh` (all 11 gates, reference check, duplication check, 142
+  `bash scripts/validate.sh` (every gate OliverCode itself runs, reference check, duplication check, 142
   smoke tests) after each, before committing, same as every change made today.
 - This plan itself could go stale if the operator migrates a repo off the file-based
   backlog independently before Step 1 runs → re-check `find . -iname "*.github/user-stories*"`
@@ -104,9 +107,8 @@ instead of a drive-by fix, each checked against live state first, not assumed.
 
 ## Definition of Done
 
-- [ ] Step 1: `family-stories`, `fallow`, and `tesknota` have their open stories in
-      GitHub Projects; `.github/user-stories/` contract and template scaffold removed;
-      B42 closed.
+- [ ] Step 1: all three holdout repos have their open stories in GitHub Projects;
+      `.github/user-stories/` contract and template scaffold removed; B42 closed.
 - [ ] Step 2: `AGENT_SHARED_STRUCTURE.md` deleted, content merged into
       `FRAMEWORK_BOUNDARY.md`, all referrers repointed, `validate.sh` passes.
 - [ ] Step 3: `DOCUMENTATION_STANDARD.md`'s Voice section trimmed to non-redundant

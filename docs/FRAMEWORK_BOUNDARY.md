@@ -13,6 +13,35 @@ OliverCode is the **shared orchestration framework**. It contains:
 
 OliverCode can be cloned, inspected, and used standalone to read contracts, templates, and documentation without any runtime being installed.
 
+## Canonical Paths and Ownership
+
+Claude Code is this machine's sole agent runtime. `core/contracts/AGENT_SYSTEM_MANIFEST.json`
+is the machine-readable mirror of the paths below (placeholder in git, real values in
+gitignored `local/`, per `docs/BACKLOG.md` G1).
+
+- Product repos: `<vault-root>/Oliver/Project Repos/*`
+- Shared system root: `<vault-root>/Oliver/Project Repos/OliverCode`
+- Claude runtime/orchestration: `~/.claude`
+- Shared skills root: `<vault-root>/Oliver/Project Repos/OliverCode/skills`
+- Shared manifest: `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/AGENT_SYSTEM_MANIFEST.json`
+- Shared structure and hygiene standard: `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+- Workflow standards and trigger routing: `<vault-root>/Oliver/Project Repos/OliverCode/shared/workflow-standards.md`
+- Workflow procedures: `<vault-root>/Oliver/Project Repos/OliverCode/core/workflows/`
+
+Ownership follows from the map above:
+
+- Product-specific implementation docs/workflows belong in each project repo.
+- Cross-project orchestration standards belong in `shared/*`.
+- Shared skills/tools belong in `skills/*`.
+- Project structure and hygiene rules belong in `core/contracts/PROJECT_STRUCTURE_STANDARD.md`.
+- Runtime state in `~/.claude` is operational data, not product source code.
+- Do not duplicate product workflow docs into runtime folders.
+
+When workspace structure or cross-project standards change: update this section (the path
+map lives here and nowhere else), update `AGENT_SYSTEM_MANIFEST.json` if paths or roots
+changed, and keep the `~/.claude/CLAUDE.md` symlink pointing at this repo's `CLAUDE.md`
+(verified by `scripts/olivercode health`).
+
 ## What Lives Next To It (Not Inside It)
 
 The `runtime/control-plane/` directory lives inside the OliverCode repo tree but is gitignored. It contains the runtime orchestration state that makes the framework actionable — session handoff, provider health, validation manifests. This is private per-machine state, never pushed to GitHub. See its README for details.

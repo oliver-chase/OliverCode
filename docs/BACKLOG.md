@@ -612,8 +612,8 @@ bootstrap's conditional logic is a mechanism change, not a doc fix.
   OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy). The template
   carries the anon-key meta-tag allowlist. Both correct. Do not converge them.
 - `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
-  `AGENT_SHARED_STRUCTURE.md` but is the tracked half of the G1 example/overlay pair and has a
-  real `local/` counterpart. Keep both.
+  `docs/FRAMEWORK_BOUNDARY.md`'s path map but is the tracked half of the G1 example/overlay
+  pair and has a real `local/` counterpart. Keep both.
 - The keepalive surface — in scope by owner decision, synced via the manifest's
   `conditionalFiles`, not an orphan.
 - **The WRITE MODE evidence gate is opt-in, not a completion requirement.** The machinery
