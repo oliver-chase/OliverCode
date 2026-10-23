@@ -34,7 +34,6 @@ OliverCode
 ├── CLAUDE.md          agent entry — symlinked to ~/.claude/CLAUDE.md, loads in every session
 ├── core/
 │   ├── contracts/     structural standards all repos follow
-│   ├── personas/      agent role definitions (one: oliver)
 │   ├── templates/     project template — the single template home
 │   └── workflows/     repeatable procedures
 ├── skills/            engineering-method + framework tooling skills (symlinked into ~/.claude/skills/)

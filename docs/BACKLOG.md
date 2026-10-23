@@ -768,3 +768,22 @@ bootstrap's conditional logic is a mechanism change, not a doc fix.
   owner (and gained the `.secrets/*` gitignore entry it was missing), and
   `PUBLIC_PRIVATE_REPO_STANDARD.md` cites it instead of repeating it. All gates, references,
   duplication check, and 142 smoke tests pass after the merge.
+- 2026-10-22 [simplify] Three more cuts, checked against live state before acting on any of
+  them. (1) `docs/OLIVERCODE_LAUNCHER.md` claimed `audit-fleet` is "scheduled weekly" --
+  `launchctl list` on this machine shows no `com.olivercode.local-scheduler` job, only a
+  different repo's own scheduler. The automation is real and tested, but it isn't installed
+  here; the doc now says so and names the opt-in install command instead of implying it
+  runs by default. (2) The QA docs-cohesion checker, since removed, run live against
+  this repo before deleting it, structurally could not find anything here: its checks were
+  Obsidian-style wiki-links (this repo doesn't use that syntax) and a `.stale-domains`
+  config (doesn't exist, always skipped) -- it reported "0 issues" for reasons that had
+  nothing to do with doc quality. Removed from `full-qa-pass.sh`'s rotation and deleted.
+  (3) A persona file under core/personas/oliver/, now removed, was never loaded by anything
+  -- no `@` include, no read instruction, anywhere in `CLAUDE.md` or the launcher. It
+  existed as unenforced identity narrative, cataloged in four other tracked files that
+  pointed at it without anything consuming it. Deleted along with
+  `FRAMEWORK_BASELINE.md`'s "Personas and Teams" design-decision section defending it, and
+  every cross-reference (`AGENT_SHARED_STRUCTURE.md`, `AGENT_SYSTEM_MANIFEST.json` including
+  its gitignored `local/` overlay, `docs/FEATURE_MAP.md`, `docs/FRAMEWORK_BOUNDARY.md`,
+  `skills/INDEX.md`, `ARCHITECTURE.md`'s repo tree). All gates, references, duplication
+  check, and 142 smoke tests pass after all three.

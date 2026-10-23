@@ -19,12 +19,6 @@
 | `backlog-management` | Config-driven GitHub Project backlog ops | Filing, closing, or triaging backlog work in a repo that names a backlog-config.json in its own CLAUDE.md |
 | `writing-documentation` | Write any README/doc to the locked documentation standard (outline, voice, naming, About) | Writing a README, documenting X, or a non-trivial code comment — `docs/DOCUMENTATION_STANDARD.md` is the one home |
 
-## Personas (not skills, kept in `core/personas/`)
-
-- `oliver` -> `core/personas/oliver/persona_soul.md`
-
-No team template.
-
 ## Rules
 
 - Keep only orchestration/security/optimization skills in `skills/<name>/SKILL.md`. Anything

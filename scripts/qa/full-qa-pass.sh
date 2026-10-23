@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ─── Full QA Pass (Automated) ─────────────────────────────────────────────
-# Combines code quality, docs cohesion, and bloat checks into a single
-# automated sweep. No LLM calls — pure static analysis.
+# Combines code quality and bloat checks into a single automated sweep.
+# No LLM calls — pure static analysis.
 #
 # Usage: bash scripts/qa/full-qa-pass.sh [--verbose] [--target <dir>]
 #
-# This delegates entirely to check-code-quality.sh, check-docs-cohesion.sh, and
-# check-bloat.sh — the three canonical checkers — and sums their exit codes. It
-# does not reimplement their checks; a divergent inline copy here would just
-# drift from the canonical logic again.
+# This delegates entirely to check-code-quality.sh and check-bloat.sh — the
+# canonical checkers — and sums their exit codes. It does not reimplement
+# their checks; a divergent inline copy here would just drift from the
+# canonical logic again.
 #
 # Exit codes:
 #   0 - All checks pass
@@ -69,15 +69,14 @@ if [ "$VERBOSE" = true ]; then
 else
   run_phase "Phase 1: Code Quality" "check-code-quality.sh"
 fi
-PHASES=3
-run_phase "Phase 2: Documentation Cohesion" "check-docs-cohesion.sh"
-run_phase "Phase 3: Bloat & Legacy" "check-bloat.sh"
-# Phase 4 only applies to OliverCode itself (it asserts THIS repo is forkable), and
+PHASES=2
+run_phase "Phase 2: Bloat & Legacy" "check-bloat.sh"
+# Phase 3 only applies to OliverCode itself (it asserts THIS repo is forkable), and
 # it must never live inside validate.sh -- the check runs validate.sh in its sandbox,
 # so calling it from there would recurse without end.
 if [ -f "$REPO_ROOT/scripts/qa/check-fork-usable.sh" ] && [ "$TARGET_DIR" = "$REPO_ROOT" ]; then
-  run_phase "Phase 4: Fork Usability" "check-fork-usable.sh"
-  PHASES=4
+  run_phase "Phase 3: Fork Usability" "check-fork-usable.sh"
+  PHASES=3
 fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────

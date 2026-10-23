@@ -7,11 +7,6 @@
   "runtime_entries": {
     "claude": "~/.claude/CLAUDE.md"
   },
-  "orchestration_persona": {
-    "name": "oliver",
-    "path": "<vault-root>/Oliver/Project Repos/OliverCode/core/personas/oliver/persona_soul.md",
-    "scope": "required_in_shared_persona_routing"
-  },
   "contracts_root": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts",
   "shared_workflows": {
     "standards": "<vault-root>/Oliver/Project Repos/OliverCode/shared/workflow-standards.md",
