@@ -143,26 +143,16 @@ Rules that apply to index READMEs on top of Voice and Readability:
 ## Voice
 
 Voice for all writing belongs to the `shared-company` skill's voice files (`voice-core.md`
-first). `WRITING_PROCESS.md` adds the repository-documentation thinking. This section holds only
-what is specific to a README or repo doc.
+first). `WRITING_PROCESS.md` adds the repository-documentation thinking. Problem-first,
+attach-the-reason, concrete-over-abstract, failure-modes-as-content, and numbers-as-evidence
+are all stated once already, with the reasoning, under "The shape of a README" above — this
+section holds only what's specific to a README or repo doc and said nowhere else:
 
-- **Problem first, mechanism second.** Introduce each capability by the failure or cost that
-  makes it necessary. A reader who skips the mechanism still learns why it exists.
-- **Attach the reason.** State no rule or behaviour without its why in the same paragraph.
-- **Concrete over abstract.** Use real addresses, real prices, real field names and worked
-  micro-examples.
-- **Failure modes are content.** What comes back when it fails, which field to branch on, and
-  what retrying will and will not change belong in the main flow.
-- **Numbers are evidence.** Use a number the code fixes or a measurement you can date. A count
-  that moves with every commit (tests, files, coverage) is named as the command that reports it
-  and never typed into prose.
-- **Explain the decision, do not encode it.** A sentence a reader can only understand by already
-  knowing the system has failed. Where a rule and its reason will not fit together, the reason
-  wins.
 - **Second person for the reader's actions, third for the system's.**
 - **No history in current-state docs.** Never "previously", "no longer", "has been removed".
-  `git log` is the changelog. A design-decision defence may carry one clause of history where the
-  old failure is the reason.
+  `git log` is the changelog. A design-decision defence may carry one clause of history where
+  the old failure is the reason. Same rule the Index-README rules state for "current
+  structure only" — one rule, two contexts, not two rules.
 
 ## Readability
 
