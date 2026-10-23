@@ -631,6 +631,27 @@ The two other files the same diff first flagged, `pre-push` and `write-ste-basel
 were checked individually and confirmed real: `pre-push` is deployed by real code in
 `sync-hooks`, and `write-ste-baseline.py` is deliberately excluded per `GATE-BASELINE-1`.
 
+**B44 — `deep-review` of today's own session (`47cabed..eb893fd`), two real findings, both
+fixed (MED, done).** (1) `core/workflows/README.md` listed `PROJECT_STRUCTURE_STANDARD.md`
+twice — the `AGENT_SHARED_STRUCTURE.md` merge commit changed the first mention correctly but
+left a pre-existing duplicate of the same filename two lines below unfixed. Neither the
+duplication checker (built for shared text across *different* files) nor the reference
+checker (link validity, not redundancy) is built to catch this shape. Fixed: the line now
+lists each file once. (2) `docs/FEATURE_MAP.md`'s "Gate coverage per repo type" row still
+said "8 in OliverCode, 6 in an adopted repo, 2 in the private variant" — stale by the same
+margin as the ARCHITECTURE.md line B21 already fixed, missed because `GATE_CLAIM`'s regex
+requires the word "gates" near the number and this row's phrasing never repeats it per
+clause. Fixed the three numbers to 11/9/4. Tried widening the regex to catch "`N in
+<hook>`" generally, per the mechanical-gotcha rule ("a rule without a gate regresses") —
+reverted it after ablation testing surfaced two real false positives on the first run:
+`docs/GOVERNANCE.md`'s "Gate 7 in OliverCode" means gate *position* 7, not a total count,
+and `docs/BACKLOG.md`'s own B21 entry quotes the original broken phrasing as history, which
+should never be flagged. A precise, narrow gate for this exact row would need to exclude
+both shapes; not worth building for a defect that's now fixed in its only two live
+occurrences. Everything else checked clean: JSON validity, the `PROJECT_HYGIENE_STANDARD`/
+`AGENT_SHARED_STRUCTURE`/persona reference sweeps, the two merge targets' internal
+consistency, and B22/B23/B42/B43's factual claims against live repo state.
+
 ### Deliberately kept / decided (do not redo)
 
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the

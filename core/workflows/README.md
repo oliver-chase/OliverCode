@@ -15,4 +15,3 @@ Procedures in this directory:
 System-level references:
 - `docs/FRAMEWORK_BOUNDARY.md`
 - `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
-- `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
