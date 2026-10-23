@@ -84,8 +84,12 @@ Everything else in this file and in `CONTRIBUTING.md` is instruction text — se
 
 ## OliverCode's own surface (only when working IN OliverCode)
 - `bash scripts/validate.sh` — gates, doc/code consistency, reference integrity, tests
-- `python3 scripts/find-spec.py SPEC-N` — resolves a bare backlog ID (`SPEC-21`, `B20`)
-  fleet-wide in one command. Every repo numbers its own backlog independently, so the
-  same ID can name unrelated work in two different files — grep-and-read-both is the
-  wrong instinct, run this instead.
+- Open work lives in the GitHub Project `docs/backlog-config.json` names. `docs/BACKLOG.md`
+  holds decision rationale and institutional memory, not open items — see its own "Live
+  tracker" section.
+- `python3 scripts/find-spec.py SPEC-N` — resolves a bare backlog ID (`SPEC-21`) against a
+  fleet repo's own markdown backlog file, fleet-wide in one command. Every repo numbers its
+  own backlog independently, so the same ID can name unrelated work in two different files
+  — grep-and-read-both is the wrong instinct, run this instead. Does not resolve a GitHub
+  Issue number; use `gh issue view N --repo <repo>` for a repo on that model.
 - Every other script, layout and config path: `docs/FEATURE_MAP.md`
