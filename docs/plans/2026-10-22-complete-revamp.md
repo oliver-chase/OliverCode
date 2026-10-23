@@ -115,6 +115,8 @@ instead of a drive-by fix, each checked against live state first, not assumed.
       B42 closed.
 - [x] Step 2: `AGENT_SHARED_STRUCTURE.md` deleted, content merged into
       `FRAMEWORK_BOUNDARY.md`, all referrers repointed, `validate.sh` passes.
-- [ ] Step 3: `DOCUMENTATION_STANDARD.md`'s Voice section trimmed to non-redundant
-      content, `validate.sh` passes.
-- [ ] Steps 4-5: recorded as checked, no action needed — not left silently unconsidered.
+- [x] Step 3: `DOCUMENTATION_STANDARD.md`'s Voice section trimmed from 8 bullets to the
+      2 that weren't already said, with reasoning, above it. `validate.sh` passes.
+- [x] Steps 4-5: recorded as checked, no action needed — not left silently unconsidered.
+
+All five steps closed.
