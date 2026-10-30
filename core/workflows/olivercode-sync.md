@@ -4,7 +4,7 @@ Use this workflow when the user asks to sync, reconcile, or refresh `OliverCode`
 
 ## Scope
 
-`OliverCode` is the shared orchestration repo at `<vault-root>/Personal Vault/02 - Project Repos/OliverCode`, not an app repo.
+`OliverCode` is the shared orchestration repo at `OliverCode`, not an app repo.
 
 This workflow keeps these files aligned with the live machine state:
 
@@ -20,8 +20,8 @@ This workflow keeps these files aligned with the live machine state:
 1. Confirm repo health.
 
 ```bash
-git -C <vault-root>/Personal Vault/02 - Project Repos/OliverCode status --short --branch
-test -d <vault-root>/Personal Vault/02 - Project Repos/OliverCode
+git -C OliverCode status --short --branch
+test -d OliverCode
 ```
 
 2. Run structure drift checks.
@@ -33,8 +33,8 @@ test -d <vault-root>/Personal Vault/02 - Project Repos/OliverCode
 3. Reconcile local repo inventory against disk.
 
 ```bash
-ls -1 <vault-root>/Personal Vault/02 - Project Repos
-jq -r '.repos[].name + " -> " + .path' <vault-root>/Personal Vault/02 - Project Repos/OliverCode/shared/repo-map.json
+ls -1 <fleet-root>
+jq -r '.repos[].name + " -> " + .path' OliverCode/shared/repo-map.json
 ```
 
 4. If inventory drift exists:
@@ -47,8 +47,8 @@ jq -r '.repos[].name + " -> " + .path' <vault-root>/Personal Vault/02 - Project 
 
 ```bash
 .githooks/pre-commit
-bash <vault-root>/Personal Vault/02 - Project Repos/OliverCode/scripts/validate.sh
-bash <vault-root>/Personal Vault/02 - Project Repos/OliverCode/scripts/link-check.sh
+bash OliverCode/scripts/validate.sh
+bash OliverCode/scripts/link-check.sh
 ```
 
 6. Commit only sync-scope files.
@@ -58,12 +58,12 @@ bash <vault-root>/Personal Vault/02 - Project Repos/OliverCode/scripts/link-chec
 Example:
 
 ```bash
-git -C <vault-root>/Personal Vault/02 - Project Repos/OliverCode add shared/repo-map.json docs README.md CLAUDE.md shared/workflow-standards.md
-git -C <vault-root>/Personal Vault/02 - Project Repos/OliverCode commit -m "docs: sync OliverCode repo map and workflow metadata"
+git -C OliverCode add shared/repo-map.json docs README.md CLAUDE.md shared/workflow-standards.md
+git -C OliverCode commit -m "docs: sync OliverCode repo map and workflow metadata"
 ```
 
 7. Push `main` immediately.
 
 ```bash
-git -C <vault-root>/Personal Vault/02 - Project Repos/OliverCode push origin main
+git -C OliverCode push origin main
 ```

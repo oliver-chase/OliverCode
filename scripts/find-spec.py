@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.repo_profiles import load_repo_profiles, iter_fleet  # noqa: E402
+from lib.local_config import vault_root as local_vault_root  # noqa: E402
 
 SKIP_DIRS = {".git", "node_modules", ".obsidian"}
 CONTEXT_LINES = 2
@@ -73,8 +74,7 @@ def main() -> int:
     args = parser.parse_args()
 
     oc_root = Path(__file__).resolve().parent.parent
-    env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
-    vault_root = Path(env_vault) if env_vault else oc_root.parent.parent.parent
+    vault_root = local_vault_root()
     fleet_root = Path(args.root).resolve() if args.root else oc_root.parent
 
     pattern = re.compile(r"\b" + re.escape(args.spec_id) + r"\b")
@@ -84,7 +84,7 @@ def main() -> int:
     # own explicit root here or it silently never gets searched -- caught live: a
     # first pass found every SPEC-N but zero B-series IDs.
     roots: list[tuple[str, Path]] = [("olivercode", oc_root)]
-    if vault_root.is_dir():
+    if vault_root and vault_root.is_dir():
         roots.append(("vault", vault_root))
     profiles, _ = load_repo_profiles(oc_root)
     for name, _profile, repo_path in iter_fleet(profiles, fleet_root):

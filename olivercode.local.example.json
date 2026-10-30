@@ -1,0 +1,8 @@
+{
+  "vaultRoot": "~/path/to/vault",
+  "skillsRoot": "~/path/to/skills",
+  "repoPaths": {
+    "repo-name": "~/path/to/repo-outside-the-fleet-folder"
+  },
+  "pushRepos": ["repo-name"]
+}

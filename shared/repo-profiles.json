@@ -698,13 +698,12 @@
     },
     "automation-assets": {
       "name": "automation-assets",
-      "path": "../Automation Assets",
       "type": "content-source",
       "private": true,
       "canonicalValidationCommand": "git diff --cached --name-only",
       "preCommitGatesHook": ".githooks/pre-commit",
       "supplementaryValidators": [],
-      "notes": "Brand voice, visual specs, and the content repo the SDR pipeline reads from. Registered 2026-08-31: it had no hook at all, so nothing checked for secrets or emoji on the way in and 165 files had to be hand-scanned before a commit. private means it gets the private variant (no PII gate -- it is internal content by design; plus the archived-content gate, since current-state-only is this repo's premise). path is set because it lives beside Project Repos, not inside it.",
+      "notes": "Brand voice, visual specs, and the content repo the SDR pipeline reads from. Registered 2026-08-31: it had no hook at all, so nothing checked for secrets or emoji on the way in and 165 files had to be hand-scanned before a commit. private means it gets the private variant (no PII gate -- it is internal content by design; plus the archived-content gate, since current-state-only is this repo's premise).",
       "token_policy": {
         "ignore_globs": [
           "*.log"
@@ -718,13 +717,12 @@
     },
     "personal-vault": {
       "name": "personal-vault",
-      "path": "..",
       "type": "content-source",
       "private": true,
       "canonicalValidationCommand": "git diff --cached --name-only",
       "preCommitGatesHook": ".githooks/pre-commit",
       "supplementaryValidators": [],
-      "notes": "The personal skills and files vault. private gives it the private hook variant: no PII gate, plus the archived-content gate. path is set because the repo is the parent of Project Repos. Its own .githooks/pre-commit.local runs the skill fleet audit.",
+      "notes": "The personal skills and files vault. private gives it the private hook variant: no PII gate, plus the archived-content gate. Its own .githooks/pre-commit.local runs the skill fleet audit.",
       "token_policy": {
         "ignore_globs": [
           "*.log"
@@ -737,6 +735,6 @@
     }
   },
   "_hookVariant_note": "Optional per-profile field. Set it to a short reason string when a repo must run a pre-commit hook that differs from core/templates/project/pre-commit (a repo-specific governance path, a gate whose checker only exists there). `olivercode health` then reports the divergence as WARN instead of FAIL, and `sync-hooks` skips the repo instead of overwriting it. It never excuses a MISSING or unexecutable hook -- those still fail, because that is the fail-open case. Remove the field to bring the repo back under the template. TRADE-OFF: a declared variant is SKIPPED by sync-hooks, so it also stops receiving template fixes -- including security ones. Observed for real: a perl guard that closed a fail-open in the emoji gate reached every repo except the one carrying a variant. Re-check a variant repo by hand whenever the template's gates change.",
-  "_path_note": "Optional per-profile field. Without it a repo is located at <fleet-root>/<profile-name>, the sibling convention. Set `path` (absolute, ~-relative, or relative to the fleet root) when repos are NOT siblings -- adopting into an existing setup usually means they are spread across several directories, and without this such a repo cannot be registered at all. `olivercode discover --root DIR` emits a skeleton with these filled in.",
+  "_path_note": "Optional per-profile field. Without it a repo is located at <fleet-root>/<profile-name>, the sibling convention. A `path` here is shared by every machine, so use it only for a location that is the same everywhere (relative to the fleet root). A path that belongs to one machine goes in that machine's olivercode.local.json under repoPaths.",
   "_suites_note": "Convention only -- nothing currently reads this field. Kept as the declared shape for delegated validation suites (see docs/BACKLOG.md D2). Do not assume setting it causes anything to run."
 }

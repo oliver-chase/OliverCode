@@ -39,7 +39,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 
 | Surface | Source of Truth | Verification |
 |---|---|---|
-| Terminal launcher — `bootstrap`, `discover`, `install`, `init`, `link-plugins`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet`, `skills` | `docs/OLIVERCODE_LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
+| Terminal launcher — `bootstrap`, `discover`, `install`, `init`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet`, `skills` | `docs/OLIVERCODE_LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
 | Local scheduler — unattended `audit-fleet`/`push-fleet` via `launchd`, mirroring a fleet product repo's own proven pattern | `scripts/local-scheduler/README.md`, `scripts/local-scheduler/install.sh`, `scripts/local-scheduler/tick.py`, `scripts/local-scheduler/uninstall.sh` | `bash scripts/local-scheduler/install.sh`, then `launchctl list \| grep olivercode` |
 
 Claude Code is this framework's sole runtime and Anthropic its sole model provider — there is
