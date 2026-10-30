@@ -2,7 +2,7 @@
 
 Status: Active
 Effective Date: 2026-05-01
-Scope: All project repositories under `<vault-root>/Oliver/Project Repos/*`. Excludes
+Scope: All project repositories under `<vault-root>/Personal Vault/02 - Project Repos/*`. Excludes
 OliverCode's own root for Epic/Commit Hygiene and Required Base Paths — the same carve-out
 `PUBLIC_PRIVATE_REPO_STANDARD.md` states and explains, since OliverCode is a framework, not a
 product repo with epics. The GitHub Project backlog model below applies to OliverCode too:

@@ -29,7 +29,7 @@ git clone --recurse-submodules https://github.com/<owner>/vault.git "Obsidian Va
 cd "Obsidian Vault"
 
 # 2. Activate OliverCode: rules and skills into ~/.claude
-cd "Oliver/Project Repos/OliverCode"
+cd "Personal Vault/02 - Project Repos/OliverCode"
 OC="$(pwd)"                       # kept for step 5, run after cd-ing away
 bash scripts/validate.sh          # the clone is sound before anything is changed
 scripts/olivercode install        # symlinks CLAUDE.md + skills, backs up what it replaces
@@ -58,7 +58,7 @@ resolves, that no tracked file exceeds GitHub's 100MB limit, and that each folde
 Each of these needs a person. They are listed so the list is finite rather than remembered.
 
 **The other repos.** The vault deliberately holds only what is not already its own repo, so
-the rest are separate clones under `Oliver/Project Repos/` plus `Oliver/Automation Assets/`.
+the rest are separate clones under `Personal Vault/02 - Project Repos/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
 absent. `shared/repo-map.json` is the tracked list of what should be there.
 

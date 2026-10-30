@@ -14,20 +14,20 @@ description: >
 
 ## Which repo, which config
 
-**Find the config, every time, before running anything**. Read the current repo's own `CLAUDE.md` for a line naming where `backlog-config.json` lives. This matches `plan`'s own "Plan File Location" convention for the same problem. Operations Vault's own `CLAUDE.md` names its copy today, at `01 - Skills/docs/backlog-config.json`. A repo's own `CLAUDE.md` may name no config file — that means it hasn't adopted this skill yet. Ask the user where one should live, write it there, and name it in that repo's `CLAUDE.md` in the same session. Never guess a path or silently skip this skill. Until a repo adopts one, `core/workflows/story-lifecycle-sop.md` governs its backlog discipline instead.
+**Find the config, every time, before running anything**. Read the current repo's own `CLAUDE.md` for a line naming where `backlog-config.json` lives. This matches `plan`'s own "Plan File Location" convention for the same problem. A repo's own `CLAUDE.md` may name no config file — that means it hasn't adopted this skill yet. Ask the user where one should live, write it there, and name it in that repo's `CLAUDE.md` in the same session. Never guess a path or silently skip this skill. Until a repo adopts one, `core/workflows/story-lifecycle-sop.md` governs its backlog discipline instead.
 
 ## File a Story or Epic
 
 1. **Search first**. Use `references/project-fields.md`'s search command, loading the repo's config first. An existing open item wins. Extend it with a comment. Never create a duplicate.
 2. **Classify the work**. A quick fix — a missing fallback, a stale word, a small config change with an obvious safe default — gets fixed inline. No Project item. Real new scope — a schema change, a new mechanism, a cross-family contract — gets filed before it gets built. Follow the repo's own quick-wins-only convention if it states one. Assume the same split if it doesn't.
 3. **Create it**. `references/project-fields.md`'s exact create-and-add command shape.
-4. **Set all 3 fields, every time**. Status: `Backlog` if something blocks the item or it needs a decision, `Ready` if the next action is already clear and unblocked. Priority and Size: per that repo's own prioritization doc, if it names one — Operations Vault's is `01 - Skills/docs/PRIORITIZATION.md`. Never leave a field blank because the judgment feels obvious — state it explicitly instead.
+4. **Set all 3 fields, every time**. Status: `Backlog` if something blocks the item or it needs a decision, `Ready` if the next action is already clear and unblocked. Priority and Size: per that repo's own prioritization doc, if it names one. Never leave a field blank because the judgment feels obvious — state it explicitly instead.
 5. **Work Type**: `Epic` if the item spans multiple skills or families. `Story` otherwise.
 6. **Filed from a plan doc? Delete the plan file once every Step/Story in it has a filed issue**. A plan doc (the `plan` skill's output file) is a drafting tool, not a second home for the same content. Once you transcribe its Steps into Epics/Stories with real Status/Priority/Size, the issue is the source of truth. Delete it in the same pass that files the last issue from it. Git holds the history. Copy real reasoning (the "why," evidence, tradeoffs) into the issue body once, concisely. A plan may cover ground beyond what got filed, such as an open question or a deliberately deferred step. Keep that file until you file the rest too. Never delete a plan doc for a still-open Story, or one nobody has read yet just because a Story exists. Check the actual Status field, not the filename's date. See `references/plan-doc-deletion.md` for why this rule exists.
 
 ### Sizing an XL or L item for real completeness
 
-XL or L almost always means the item touches N things across the fleet. That is the size where a memory-based "got them all" claim is most likely wrong. Seen live 2026-09-22 (vault issue `#186`): its own stated audit command was `.md`-only. It missed 2 real `.py` citations of the exact same string it meant to enumerate. The issue read as thorough because it named a real command. It still had a gap, because nobody re-ran that command against a wider net before filing.
+XL or L almost always means the item touches N things across the fleet. That is the size where a memory-based "got them all" claim is most likely wrong. Seen live 2026-09-22: its own stated audit command was `.md`-only. It missed 2 real `.py` citations of the exact same string it meant to enumerate. The issue read as thorough because it named a real command. It still had a gap, because nobody re-ran that command against a wider net before filing.
 
 1. **Audit first, as its own Story, before any fix Story exists**. The audit's output is a real, re-runnable command (a grep, a script) stated in the issue body — not a remembered list. Anyone should be able to run that exact command fresh and get the same count.
 2. **Split the fix by the real boundary** — family, file type, whatever the actual seams are — one Story per boundary. Never one Story doing all N edits in a single unverified pass. This is the same Epic/Story split this skill already uses, applied inside one big change instead of across a whole initiative.
@@ -54,7 +54,7 @@ Report one grouped digest. Say "Nothing due" if genuinely clean.
 
 ## The gap-analysis reflex
 
-A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism for gap-analysis-before-build. Real new scope gets filed here before it gets built, not on request. Operations Vault's own copy already does this. A calling skill states this once in its own text ("file via `backlog-management`") rather than repeating this skill's procedure inline.
+A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism for gap-analysis-before-build. Real new scope gets filed here before it gets built, not on request. A calling skill states this once in its own text ("file via `backlog-management`") rather than repeating this skill's procedure inline.
 
 ## Boundaries
 

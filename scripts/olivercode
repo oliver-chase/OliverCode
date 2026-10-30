@@ -40,7 +40,7 @@ COMMANDS = [
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
     ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against the vault + OliverCode's own skills"),
-    ("olivercode push-fleet [--dry-run]", "Push already-committed work for the vault, skill-suite and OliverCode, unattended"),
+    ("olivercode push-fleet [--dry-run]", "Push already-committed work for the vault, Personal Vault and OliverCode, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
 
@@ -521,7 +521,7 @@ def command_link_plugins(vault_root: Path | None = None, dry_run: bool = False) 
     import os as _os
     _env = _os.environ.get("OLIVERCODE_VAULT_ROOT")
     vault_root = vault_root or (Path(_env) if _env else OC_ROOT.parent.parent.parent)
-    src = vault_root / "Operations Vault" / "01 - Plugins"
+    src = vault_root / "Personal Vault" / "01 - Plugins"
     dst = Path.home() / ".claude" / "plugins"
 
     print("OliverCode link-plugins" + (" (dry run)" if dry_run else ""))
@@ -875,7 +875,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
 def command_audit_fleet(oc_root: Path) -> int:
     """Run skill-governance/skill-fleet-audit's 3 static checks against every known skill root.
 
-    Targets exactly 2 fixed roots -- the vault's Operations Vault/01 - Skills and
+    Targets exactly 2 fixed roots -- the vault's Personal Vault/01 - Skills and
     OliverCode's own skills/ -- not the fleet-repo iteration sync-hooks uses. Fleet
     iteration walks git repos for hook management; this walks 2 known skill-directory
     trees, a different job with a different unit. See the audit-fleet plan's
@@ -891,14 +891,14 @@ def command_audit_fleet(oc_root: Path) -> int:
     """
     _env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
     vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
-    audit_dir = vault_root / "Operations Vault" / "01 - Skills" / "skill-governance" / "skill-fleet-audit"
+    audit_dir = vault_root / "Personal Vault" / "01 - Skills" / "skill-governance" / "skill-fleet-audit"
     scripts_dir = audit_dir / "scripts"
     if not scripts_dir.is_dir():
         print(f"Error: {scripts_dir} not found -- skill-governance/skill-fleet-audit isn't on this machine.")
         return 1
 
     targets = {
-        "vault-skills": vault_root / "Operations Vault" / "01 - Skills",
+        "vault-skills": vault_root / "Personal Vault" / "01 - Skills",
         "olivercode-skills": oc_root / "skills",
     }
     # check_clarity.py always re-runs the vault's own _validate_structure.js
@@ -942,7 +942,7 @@ def command_audit_fleet(oc_root: Path) -> int:
 
 
 def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
-    """Push already-committed work for the vault, skill-suite and OliverCode, unattended.
+    """Push already-committed work for the vault, Personal Vault and OliverCode, unattended.
 
     Scoped to just these three targets per the audit-fleet plan's Step 5 -- lowest
     blast radius, both effectively personal/framework repos. A wider rollout needs
@@ -962,7 +962,7 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
     targets = {
         "olivercode": oc_root,
         "vault": vault_root,
-        "skill-suite": vault_root / "Operations Vault" / "01 - Skills",
+        "personal-vault": vault_root / "Personal Vault",
     }
 
     for name, repo_path in targets.items():

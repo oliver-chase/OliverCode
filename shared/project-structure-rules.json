@@ -3,7 +3,7 @@
   "repos": [
     {
       "name": "oliver-studios",
-      "path": "<vault-root>/Oliver/Project Repos/oliver-studios",
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/oliver-studios",
       "required_paths": [
         "README.md",
         "docs/README.md",
@@ -18,7 +18,7 @@
     },
     {
       "name": "oliver-app",
-      "path": "<vault-root>/Oliver/Project Repos/oliver-app",
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/oliver-app",
       "required_paths": [
         "README.md",
         "CLAUDE.md",
@@ -40,7 +40,7 @@
     },
     {
       "name": "oliver-strategic-growth",
-      "path": "<vault-root>/Oliver/Project Repos/oliver-strategic-growth",
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/oliver-strategic-growth",
       "required_paths": [
         "README.md",
         "AGENTS.md",
@@ -64,7 +64,7 @@
     },
     {
       "name": "tesknota",
-      "path": "<vault-root>/Oliver/Project Repos/tesknota",
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/tesknota",
       "required_paths": [
         "README.md",
         "AGENTS.md",
@@ -83,7 +83,7 @@
     },
     {
       "name": "fallow",
-      "path": "<vault-root>/Oliver/Project Repos/fallow",
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/fallow",
       "required_paths": [
         "README.md",
         "CLAUDE.md",
