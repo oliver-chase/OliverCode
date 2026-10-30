@@ -164,7 +164,7 @@ def _check_vault_skill_links(vault_root: Path) -> tuple[int, int, int]:
     subfolder (`vtwo-ops/`, `personal/`, `_shared/`, ...) is still found.
     """
     print("\nVault skill links:")
-    skills_root = vault_root / "Operations Vault" / "01 - Skills"
+    skills_root = vault_root / "Personal Vault" / "01 - Skills"
     target_dir = Path.home() / ".claude" / "skills"
 
     if not skills_root.is_dir():

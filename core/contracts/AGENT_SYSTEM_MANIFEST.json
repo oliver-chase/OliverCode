@@ -1,23 +1,23 @@
 {
   "version": 1,
   "shared_contract": {
-    "structure": "<vault-root>/Oliver/Project Repos/OliverCode/docs/FRAMEWORK_BOUNDARY.md",
-    "project_hygiene": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md"
+    "structure": "<vault-root>/Personal Vault/02 - Project Repos/OliverCode/docs/FRAMEWORK_BOUNDARY.md",
+    "project_hygiene": "<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md"
   },
   "runtime_entries": {
     "claude": "~/.claude/CLAUDE.md"
   },
-  "contracts_root": "<vault-root>/Oliver/Project Repos/OliverCode/core/contracts",
+  "contracts_root": "<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts",
   "shared_workflows": {
-    "standards": "<vault-root>/Oliver/Project Repos/OliverCode/shared/workflow-standards.md",
-    "index": "<vault-root>/Oliver/Project Repos/OliverCode/core/workflows/README.md"
+    "standards": "<vault-root>/Personal Vault/02 - Project Repos/OliverCode/shared/workflow-standards.md",
+    "index": "<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/workflows/README.md"
   },
-  "shared_skills_root": "<vault-root>/Oliver/Project Repos/OliverCode/skills",
+  "shared_skills_root": "<vault-root>/Personal Vault/02 - Project Repos/OliverCode/skills",
   "shared_skill_adapters": {
     "claude": "~/.claude/skills"
   },
   "product_roots": [
-    "<vault-root>/Oliver/Project Repos"
+    "<vault-root>/Personal Vault/02 - Project Repos"
   ],
-  "system_root": "<vault-root>/Oliver/Project Repos/OliverCode"
+  "system_root": "<vault-root>/Personal Vault/02 - Project Repos/OliverCode"
 }

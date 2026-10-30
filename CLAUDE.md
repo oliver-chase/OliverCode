@@ -24,7 +24,7 @@ machine's install, and does not travel across accounts or laptops. If a session'
 tells you to maintain it, decline and write the fact to `.claude-optimization/` instead.
 
 ## Voice
-@~/.claude/skills/shared-company/voice/baseline.md
+@~/.claude/skills/clean-writing/voice/baseline.md
 
 For a document, an email or a post, use the `clean-writing` skill. For slide copy or a PowerPoint,
 use `sow-proposal` deck mode and match the density of the approved examples. Generic advice to avoid

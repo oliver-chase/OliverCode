@@ -1,10 +1,10 @@
 {
-  "workspaceRoot": "<vault-root>/Oliver/Project Repos",
+  "workspaceRoot": "<vault-root>/Personal Vault/02 - Project Repos",
   "unmanagedRepoWaivers": [],
   "repos": [
     {
       "name": "oliver-studios",
-      "path": "<vault-root>/Oliver/Project Repos/oliver-studios",
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/oliver-studios",
       "governanceProfile": "incubating",
       "approvedMaintainabilityVariances": [
         {
@@ -15,15 +15,15 @@
     },
     {
       "name": "fallow",
-      "path": "<vault-root>/Oliver/Project Repos/fallow"
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/fallow"
     },
     {
       "name": "oliver-app",
-      "path": "<vault-root>/Oliver/Project Repos/oliver-app"
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/oliver-app"
     },
     {
       "name": "oliver-strategic-growth",
-      "path": "<vault-root>/Oliver/Project Repos/oliver-strategic-growth",
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/oliver-strategic-growth",
       "tracking": "filesystem",
       "approvedStrictVariances": [
         {
@@ -46,7 +46,7 @@
     },
     {
       "name": "tesknota",
-      "path": "<vault-root>/Oliver/Project Repos/tesknota"
+      "path": "<vault-root>/Personal Vault/02 - Project Repos/tesknota"
     }
   ]
 }

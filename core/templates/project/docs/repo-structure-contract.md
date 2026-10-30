@@ -4,7 +4,7 @@ Status: Active
 
 ## Canonical Contract Sources
 
-1. `<vault-root>/Oliver/Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+1. `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 
 ## Profile
 
@@ -31,7 +31,7 @@ in `docs/backlog-config.json`, read and written by the `backlog-management` skil
 1. `development`: unstarted and in-progress story housing.
 2. `staging`: completed work ready for QA validation.
 3. `main`: production-ready promotions only.
-4. Source-of-truth link: `<vault-root>/Oliver/Project Repos/OliverCode/shared/workflow-standards.md`.
+4. Source-of-truth link: `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/shared/workflow-standards.md`.
 5. Change-one/change-all:
 - If this lifecycle changes in a project repo, update this template and re-sync managed repos in the same governance cycle.
 

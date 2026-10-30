@@ -2,7 +2,7 @@
 
 Status: Active
 Effective Date: 2026-05-23
-Scope: Every downstream repository under `Oliver/Project Repos/` that consumes OliverCode's
+Scope: Every downstream repository under `Personal Vault/02 - Project Repos/` that consumes OliverCode's
 templates. Does not apply to OliverCode itself -- OliverCode is the standard-setter, not a
 consumer of its own downstream template (`docs/SETUP_MODES.md`'s own text, "this repo uses
 the OliverCode public/private boundary standard," would be circular applied to OliverCode's

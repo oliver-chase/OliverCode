@@ -24,13 +24,13 @@ If a trigger term conflicts with active repo docs, surface the conflict before c
 
 ## Repo Location
 
-All product repos live under `<vault-root>/Oliver/Project Repos/`.
+All product repos live under `<vault-root>/Personal Vault/02 - Project Repos/`.
 
 ## Orchestration Rules
 
 - Claude Code runtime state (`~/.claude`) is operational data, not framework source.
-- Keep shared standards in one place (`<vault-root>/Oliver/Project Repos/OliverCode/shared/*`).
-- Keep shared skills in one place (`<vault-root>/Oliver/Project Repos/OliverCode/skills/*`).
+- Keep shared standards in one place (`<vault-root>/Personal Vault/02 - Project Repos/OliverCode/shared/*`).
+- Keep shared skills in one place (`<vault-root>/Personal Vault/02 - Project Repos/OliverCode/skills/*`).
 - Do not duplicate product workflow docs into runtime folders.
 - Do not duplicate shared SOP/workflow files into project repos. Reference canonical shared workflows instead.
 - Treat live machine layout as source of truth over stale cached paths.
@@ -51,7 +51,7 @@ Testing applies to all code work:
 - `development`: unstarted and in-progress story housing.
 - `staging`: completed work that is ready for QA validation.
 - `main`: production-ready promotions only.
-- This lifecycle is mandatory across all project repos under `<vault-root>/Oliver/Project Repos/`.
+- This lifecycle is mandatory across all project repos under `<vault-root>/Personal Vault/02 - Project Repos/`.
 - Change-one/change-all rule: if any repo lifecycle wording changes, update this file and the managed template files in the same governance cycle.
 
 ## Cross-Repo Quality Baseline

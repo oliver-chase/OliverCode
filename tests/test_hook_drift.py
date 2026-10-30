@@ -60,7 +60,7 @@ class TestDetection(unittest.TestCase):
         target = self.tmp / hd.HOOKS["olivercode"]
         target.write_text(
             target.read_text().replace(
-                "Oliver/Project Repos/OliverCode/core/contracts/NO_ICONS_STANDARD.md",
+                "Personal Vault/02 - Project Repos/OliverCode/core/contracts/NO_ICONS_STANDARD.md",
                 "Oliver/OliverCode/core/contracts/NO_ICONS_STANDARD.md",
                 1,
             )
