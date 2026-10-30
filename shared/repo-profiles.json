@@ -715,6 +715,25 @@
         ],
         "generated_artifact_dirs": []
       }
+    },
+    "personal-vault": {
+      "name": "personal-vault",
+      "path": "..",
+      "type": "content-source",
+      "private": true,
+      "canonicalValidationCommand": "git diff --cached --name-only",
+      "preCommitGatesHook": ".githooks/pre-commit",
+      "supplementaryValidators": [],
+      "notes": "The personal skills and files vault. private gives it the private hook variant: no PII gate, plus the archived-content gate. path is set because the repo is the parent of Project Repos. Its own .githooks/pre-commit.local runs the skill fleet audit.",
+      "token_policy": {
+        "ignore_globs": [
+          "*.log"
+        ],
+        "doc_priority_hints": [
+          "README.md"
+        ],
+        "generated_artifact_dirs": []
+      }
     }
   },
   "_hookVariant_note": "Optional per-profile field. Set it to a short reason string when a repo must run a pre-commit hook that differs from core/templates/project/pre-commit (a repo-specific governance path, a gate whose checker only exists there). `olivercode health` then reports the divergence as WARN instead of FAIL, and `sync-hooks` skips the repo instead of overwriting it. It never excuses a MISSING or unexecutable hook -- those still fail, because that is the fail-open case. Remove the field to bring the repo back under the template. TRADE-OFF: a declared variant is SKIPPED by sync-hooks, so it also stops receiving template fixes -- including security ones. Observed for real: a perl guard that closed a fail-open in the emoji gate reached every repo except the one carrying a variant. Re-check a variant repo by hand whenever the template's gates change.",
