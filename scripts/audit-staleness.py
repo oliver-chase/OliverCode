@@ -28,6 +28,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.repo_profiles import resolve_repo_path  # noqa: E402
+
 MARKER_RE = re.compile(r"Reviewed through:\s*`?([0-9a-f]{7,40})`?", re.IGNORECASE)
 # Ledger candidates, most-specific first — repos name their ledger differently.
 LEDGER_CANDIDATES = (
@@ -120,15 +123,8 @@ def main() -> int:
     unmarked: list[str] = []
     broken: list[tuple[str, str]] = []
     for name in sorted(profiles):
-        # Same resolution rule as the launcher: an explicit profile `path` wins over
-        # the sibling convention, so a scattered fleet is auditable too.
-        declared = profiles[name].get("path") if isinstance(profiles[name], dict) else None
-        if declared:
-            repo = Path(declared).expanduser()
-            if not repo.is_absolute():
-                repo = fleet_root / repo
-        else:
-            repo = fleet_root / name
+        profile = profiles[name] if isinstance(profiles[name], dict) else {}
+        repo = resolve_repo_path(name, profile, fleet_root)
         incubating = governance.get(name) == "incubating"
         if governance.get(name) and not incubating:
             print(f"  WARN {name}: unknown governanceProfile "

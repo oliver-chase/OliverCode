@@ -93,3 +93,6 @@ runtime/manifests/
 # does not depend on any of it (one-directional, per FRAMEWORK_BOUNDARY.md).
 .claude-optimization/memory/
 .claude-optimization/state/
+
+# This machine's paths (scripts/lib/local_config.py). The example is tracked.
+olivercode.local.json

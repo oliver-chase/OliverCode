@@ -35,8 +35,8 @@ bash scripts/validate.sh
 scripts/olivercode health
 ```
 
-All three must pass on a clean clone with no configuration. `health` will WARN about a
-missing control plane and an unregistered fleet. That is correct and still reports HEALTHY.
+All three must pass on a clean clone with no configuration. `health` notes that there is no
+control plane and WARNs about an unregistered fleet. That is correct and still reports HEALTHY.
 If `validate.sh` fails here, stop — the fork is broken, not your setup.
 
 One command checks all of this at once, in a sandbox with a throwaway HOME:
@@ -350,8 +350,7 @@ scripts/olivercode sync-hooks --root /path/to/where/your/repos/live
 scripts/olivercode health     --root /path/to/where/your/repos/live
 ```
 
-Set `OLIVERCODE_VAULT_ROOT` as well if the vault-hook check should look somewhere other
-than three levels above the checkout.
+Machine paths go in `olivercode.local.json` at the OliverCode root (gitignored; copy `olivercode.local.example.json`): `vaultRoot` for the vault's hooks and pushes, `skillsRoot` for the skill checks, `repoPaths` for a repo outside the fleet folder and `pushRepos` for extra `push-fleet` targets. `OLIVERCODE_VAULT_ROOT` and `OLIVERCODE_SKILLS_ROOT` override the file. An unset value means this machine has none, and nothing guesses it from the folder layout.
 
 A layout the scripts cannot resolve degrades to WARN and skips. It never fails wrongly, but
 it also never checks anything — **do not mistake the WARN for coverage.** If `sync-hooks`

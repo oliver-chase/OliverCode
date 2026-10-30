@@ -3,13 +3,13 @@
 This repository uses **shared, strict-managed quality files**.
 
 Canonical source-of-truth (outside project docs):
-- `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/.github/workflows/qa-hygiene.yml`
-- `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/.github/workflows/governance-secrets-gate.yml`
-- `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/.github/workflows/dependency-review.yml`
-- `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/.github/CODEOWNERS`
-- `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/.github/pull_request_template.md`
-- `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/templates/project/QUALITY_BASELINE.md`
-- `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/FRAMEWORK_BASELINE.md`
+- `OliverCode/core/templates/project/.github/workflows/qa-hygiene.yml`
+- `OliverCode/core/templates/project/.github/workflows/governance-secrets-gate.yml`
+- `OliverCode/core/templates/project/.github/workflows/dependency-review.yml`
+- `OliverCode/core/templates/project/.github/CODEOWNERS`
+- `OliverCode/core/templates/project/.github/pull_request_template.md`
+- `OliverCode/core/templates/project/QUALITY_BASELINE.md`
+- `OliverCode/core/contracts/FRAMEWORK_BASELINE.md`
 
 ## Rule
 

@@ -19,14 +19,14 @@ Claude Code is this machine's sole agent runtime. `core/contracts/AGENT_SYSTEM_M
 is the machine-readable mirror of the paths below -- tracked, with real values, since this
 is a single operator's framework across that operator's own accounts.
 
-- Product repos: `<vault-root>/Personal Vault/02 - Project Repos/*`
-- Shared system root: `<vault-root>/Personal Vault/02 - Project Repos/OliverCode`
+- Product repos: `<fleet-root>/*`
+- Shared system root: `OliverCode`
 - Claude runtime/orchestration: `~/.claude`
-- Shared skills root: `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/skills`
-- Shared manifest: `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/AGENT_SYSTEM_MANIFEST.json`
-- Shared structure and hygiene standard: `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
-- Workflow standards and trigger routing: `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/shared/workflow-standards.md`
-- Workflow procedures: `<vault-root>/Personal Vault/02 - Project Repos/OliverCode/core/workflows/`
+- Shared skills root: `OliverCode/skills`
+- Shared manifest: `OliverCode/core/contracts/AGENT_SYSTEM_MANIFEST.json`
+- Shared structure and hygiene standard: `OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+- Workflow standards and trigger routing: `OliverCode/shared/workflow-standards.md`
+- Workflow procedures: `OliverCode/core/workflows/`
 
 Ownership follows from the map above:
 

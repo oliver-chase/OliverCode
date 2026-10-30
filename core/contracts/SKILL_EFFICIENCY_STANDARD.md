@@ -3,7 +3,7 @@
 Status: Active
 Effective Date: 2026-09-15
 Scope: Every `SKILL.md` and its `references/` directory, in any fleet repo, including
-OliverCode's own `skills/` and the vault's `01 - Skills/`
+OliverCode's own `skills/` and the personal skills folder
 
 A skill is loaded into context before it runs and its instructions get re-executed on
 every call. A word that does not need to be in the file is a repeated cost, not a
@@ -77,7 +77,7 @@ Each is grounded in a real, previously-shipped defect (SPEC-9, SPEC-16 in the va
 
 ## Enforcement reality
 
-Mechanical today, for the vault's `01 - Skills/` only: `skill-governance/skill-fleet-audit` runs all
+Mechanical today, for the personal skills folder only: `skill-governance/skill-fleet-audit` runs all
 three checkers named above (structure/duplication, MCP-efficiency, ASD-STE100 clarity)
 and its `SKILL.md` states the pattern each finding must clear before being treated as a
 real defect. ASD-STE100 alone is also checked fleet-wide at commit time per

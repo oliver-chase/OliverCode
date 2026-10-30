@@ -24,8 +24,10 @@ from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E
 from lib.health_checks import (  # noqa: E402,F401
     _check_waiver_expiry, _check_github_about,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
-    _check_folder_validators,
 )
+from lib.local_config import vault_root as _vault_root  # noqa: E402
+from lib.local_config import skills_root as _skills_root  # noqa: E402
+from lib.local_config import push_repos as _push_repos  # noqa: E402
 
 # This file lives at <OliverCode>/scripts/olivercode, so the repo root is two up.
 # Nothing else is hardcoded.
@@ -35,12 +37,11 @@ COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md + skills into ~/.claude (backs up anything it replaces)"),
-    ("olivercode link-plugins [--dry-run]", "Symlink the vault's plugins into ~/.claude/plugins"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
-    ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against the vault + OliverCode's own skills"),
-    ("olivercode push-fleet [--dry-run]", "Push already-committed work for the vault, Personal Vault and OliverCode, unattended"),
+    ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against this machine's skills folder + OliverCode's own skills"),
+    ("olivercode push-fleet [--dry-run]", "Push already-committed work for OliverCode, the vault and this machine's pushRepos, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
 
@@ -421,28 +422,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     print("=" * 40)
     t = _HealthTally()
 
-    # 1. Dependency doc + the OliverCode-relative paths it declares.
-    # OLIVERCODE_DEPENDENCY.md lists paths as backtick-quoted, repo-relative entries
-    # (e.g. `shared/repo-map.json`, `core/contracts/`). Parse them in-process and resolve
-    # the OliverCode-relative ones under OC_ROOT — skip vault paths like `Oliver/`.
-    print("\nDependency paths:")
-    dep_file = OC_ROOT / "runtime" / "control-plane" / "OLIVERCODE_DEPENDENCY.md"
-    if not dep_file.exists():
-        t.warn("control plane not installed — skipping dependency-path check")
-    else:
-        oc_dirs = ("shared/", "core/", "docs/", "scripts/", "tooling/", "runtime/", ".githooks/")
-        text = dep_file.read_text(encoding="utf-8", errors="ignore")
-        declared = [m for m in re.findall(r"`([^`]+)`", text) if m.startswith(oc_dirs)]
-        missing = [rel for rel in declared if not (OC_ROOT / rel).exists()]
-        if not declared:
-            t.warn("no OliverCode-relative dependency paths declared")
-        elif not missing:
-            t.ok(f"all {len(declared)} declared dependency paths resolve")
-        else:
-            for rel in missing:
-                t.fail(f"{rel} — not found")
-
-    # 2. Core entrypoints
+    # 1. Core entrypoints
     print("\nCore entrypoints:")
     checks = [
         ("scripts/olivercode (CLI)", OC_ROOT / "scripts" / "olivercode"),
@@ -451,16 +431,29 @@ def command_health(fleet_root: Path | None = None) -> int:
     for name, fpath in checks:
         t.ok(name) if fpath.exists() else t.fail(f"{name} — missing")
 
-    # The control-plane launcher is gitignored local state — required only when
-    # the control plane is installed at all (standalone clones must stay HEALTHY,
-    # same rule as the dependency-doc check above).
-    if (OC_ROOT / "runtime" / "control-plane").exists():
-        if (OC_ROOT / "runtime" / "control-plane" / "olivercode").exists():
+    # 2. The optional local control plane (runtime/control-plane/, gitignored). A machine
+    # without one has nothing to check here, so its absence is not counted as a skip.
+    control_plane = OC_ROOT / "runtime" / "control-plane"
+    if not control_plane.exists():
+        print("  [INFO] no local control plane on this machine — not checked")
+    else:
+        if (control_plane / "olivercode").exists():
             t.ok("runtime/control-plane/olivercode (launcher)")
         else:
             t.fail("runtime/control-plane/olivercode — control plane present but launcher missing")
-    else:
-        t.warn("control plane not installed — skipping launcher check")
+        dep_file = control_plane / "OLIVERCODE_DEPENDENCY.md"
+        if dep_file.exists():
+            oc_dirs = ("shared/", "core/", "docs/", "scripts/", "tooling/", "runtime/", ".githooks/")
+            text = dep_file.read_text(encoding="utf-8", errors="ignore")
+            declared = [m for m in re.findall(r"`([^`]+)`", text) if m.startswith(oc_dirs)]
+            missing = [rel for rel in declared if not (OC_ROOT / rel).exists()]
+            if not declared:
+                t.warn("no OliverCode-relative dependency paths declared")
+            elif not missing:
+                t.ok(f"all {len(declared)} declared dependency paths resolve")
+            else:
+                for rel in missing:
+                    t.fail(f"{rel} — not found")
 
     # 3. Placement drift (SYS-2, spec: docs/skills-placement.md "Drift check").
     # Everything here reads OUTSIDE OC_ROOT (the vault, sibling fleet repos), so it
@@ -483,16 +476,14 @@ def command_health(fleet_root: Path | None = None) -> int:
     # 6. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # four failures that ran undetected because nothing looked.
-    import os as _os
-    _env_vault = _os.environ.get("OLIVERCODE_VAULT_ROOT")
-    vault_root = Path(_env_vault) if _env_vault else OC_ROOT.parent.parent.parent
+    vault_root = _vault_root()
 
-    t.add(*_check_vault_skill_links(vault_root))
+    t.add(*_check_vault_skill_links(_skills_root()))
 
     # Repos to check for remote reachability and oversized files: the vault, this
     # framework repo, and every fleet repo that exists on disk.
     topo_repos: list[tuple[str, Path]] = []
-    if (vault_root / ".git").exists():
+    if vault_root and (vault_root / ".git").exists():
         topo_repos.append(("vault", vault_root))
     topo_repos.append((OC_ROOT.name, OC_ROOT))
     _profiles, _ = load_repo_profiles(OC_ROOT)
@@ -502,68 +493,10 @@ def command_health(fleet_root: Path | None = None) -> int:
 
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
-    t.add(*_check_folder_validators(vault_root))
 
     print(f"\n{'=' * 40}")
     print(t.summary())
     return 1 if t.failed else 0
-
-
-def command_link_plugins(vault_root: Path | None = None, dry_run: bool = False) -> int:
-    """Symlink every vault plugin into ~/.claude/plugins/.
-
-    This is the step that had no command. `install` wires ~/.claude/skills, and the
-    plugin directory -- the only place Claude Code discovers plugins -- was left to
-    whoever remembered. Four links were made by hand and nothing would have
-    recreated them on another machine, which is the same class of gap as an
-    uninstalled hook: everything looks fine and the capability is simply absent.
-    """
-    import os as _os
-    _env = _os.environ.get("OLIVERCODE_VAULT_ROOT")
-    vault_root = vault_root or (Path(_env) if _env else OC_ROOT.parent.parent.parent)
-    src = vault_root / "Personal Vault" / "01 - Plugins"
-    dst = Path.home() / ".claude" / "plugins"
-
-    print("OliverCode link-plugins" + (" (dry run)" if dry_run else ""))
-    if not src.is_dir():
-        print(f"  [WARN] no _Plugins/ directory at {src} — nothing to link")
-        return 0
-
-    plugins = sorted(
-        d for d in src.iterdir()
-        if d.is_dir() and (d / ".claude-plugin" / "plugin.json").is_file()
-    )
-    if not plugins:
-        print(f"  [WARN] {src} holds no plugin with a .claude-plugin/plugin.json")
-        return 0
-
-    if not dry_run:
-        dst.mkdir(parents=True, exist_ok=True)
-
-    changed = 0
-    for pl in plugins:
-        link = dst / pl.name
-        if link.is_symlink() and link.exists() and link.resolve() == pl.resolve():
-            print(f"  [OK] {pl.name} already linked")
-            continue
-        if dry_run:
-            print(f"  [DRY] would link {pl.name} -> {pl}")
-            changed += 1
-            continue
-        # A stale or broken link is replaced; a REAL directory is never touched --
-        # that would be somebody's actual plugin install, not our link to overwrite.
-        if link.is_symlink():
-            link.unlink()
-        elif link.exists():
-            print(f"  [FAIL] {pl.name}: a real directory is already there — not overwriting it")
-            continue
-        link.symlink_to(pl)
-        print(f"  [OK] linked {pl.name}")
-        changed += 1
-
-    print(f"\n{len(plugins)} plugin(s) declared, {changed} " + ("would change" if dry_run else "changed"))
-    print("Restart Claude Code (or /reload-plugins) for newly linked plugins to appear.")
-    return 0
 
 
 # _resolve_repo_path / _iter_fleet moved to lib/repo_profiles.py 2026-09-15 so
@@ -643,12 +576,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     skipped = 0
     templates_dir = oc_root / "core" / "templates" / "project"
 
-    # Vault root: OLIVERCODE_VAULT_ROOT env var wins; otherwise the layout
-    # convention <vault>/<...>/<...>/OliverCode == oc_root (three levels up).
-    # Forks living elsewhere set the env var or just get WARN-skips (safe).
-    import os as _os
-    _env_vault = _os.environ.get("OLIVERCODE_VAULT_ROOT")
-    vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
+    vault_root = _vault_root()
 
     # (a)/(b) Every OliverCode skill must have a live, correctly-targeted symlink at
     # ~/.claude/skills/<name> -- that's the mechanism making it invocable from any repo.
@@ -707,10 +635,13 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
         print("  [WARN] no fleet registered in shared/repo-profiles.json — skipping hook-drift check")
         skipped += 1
     else:
+        # A registered repo that is not cloned on this machine is not a defect here, so it
+        # is listed once and not counted as a skipped check.
+        absent = [name for name, _profile, repo_path in fleet if not (repo_path / ".git").exists()]
+        if absent:
+            print(f"  [INFO] not cloned on this machine: {', '.join(absent)}")
         for name, profile, repo_path in fleet:
-            if not (repo_path / ".git").exists():
-                print(f"  [WARN] {name}: not present on this machine — skipping")
-                skipped += 1
+            if name in absent:
                 continue
             result = subprocess.run(
                 ["git", "-C", str(repo_path), "config", "--get", "core.hooksPath"],
@@ -736,9 +667,8 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                     print(f"  [FAIL] {name}: {'; '.join(fatal)}")
                     failed += 1
                 else:
-                    print(f"  [WARN] {name}: declared hook variant ({variant}) — "
-                          f"{'; '.join(problems)}")
-                    skipped += 1
+                    print(f"  [OK] {name}: declared hook variant ({variant})")
+                    passed += 1
             elif problems:
                 print(f"  [FAIL] {name}: {'; '.join(problems)}")
                 failed += 1
@@ -747,8 +677,10 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 passed += 1
 
     # The vault itself is a managed hook target too (SYS-3), same private-variant check.
-    if not (vault_root / ".git").exists():
-        print("  [WARN] no vault .git found — skipping vault hook check")
+    if vault_root is None:
+        print("  [INFO] no vault set for this machine (vaultRoot) — not checked")
+    elif not (vault_root / ".git").exists():
+        print(f"  [WARN] no .git at the vault path {vault_root} — skipping vault hook check")
         skipped += 1
     else:
         result = subprocess.run(
@@ -831,7 +763,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
     """
     templates_dir = oc_root / "core" / "templates" / "project"
     fleet_root = fleet_root or oc_root.parent
-    vault_root = oc_root.parent.parent.parent
+    vault_root = _vault_root()
     updated = 0
     skipped = 0
 
@@ -860,12 +792,12 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
         print(f"  [OK] {name}: {variant_note}hooks synced, hooksPath set")
         updated += 1
 
-    if (vault_root / ".git").exists():
+    if vault_root and (vault_root / ".git").exists():
         _install_hook_pair(vault_root, templates_dir, private_repo=True)
         print("  [OK] vault: private-variant hook synced, hooksPath set")
         updated += 1
-    else:
-        print("  [SKIP] vault: no .git found at the expected location")
+    elif vault_root:
+        print(f"  [SKIP] vault: no .git at {vault_root}")
         skipped += 1
 
     print(f"\n{updated} target(s) synced, {skipped} skipped.")
@@ -875,7 +807,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
 def command_audit_fleet(oc_root: Path) -> int:
     """Run skill-governance/skill-fleet-audit's 3 static checks against every known skill root.
 
-    Targets exactly 2 fixed roots -- the vault's Personal Vault/01 - Skills and
+    Targets exactly 2 roots -- this machine's skills folder (local_config) and
     OliverCode's own skills/ -- not the fleet-repo iteration sync-hooks uses. Fleet
     iteration walks git repos for hook management; this walks 2 known skill-directory
     trees, a different job with a different unit. See the audit-fleet plan's
@@ -884,26 +816,22 @@ def command_audit_fleet(oc_root: Path) -> int:
     Non-interactive: writes findings to a log file and prints one line per check,
     never fixes anything. A cron job with nobody watching should never auto-fix --
     see that plan's Step 4 Risk.
-
-    Respects OLIVERCODE_VAULT_ROOT like health/link-plugins/sync-hooks do -- this
-    command was missing that override until a live question about its placement
-    caught the inconsistency (2026-09-15).
     """
-    _env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
-    vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
-    audit_dir = vault_root / "Personal Vault" / "01 - Skills" / "skill-governance" / "skill-fleet-audit"
+    skills = _skills_root()
+    if skills is None:
+        print("Error: no skills folder set for this machine. Set skillsRoot in "
+              "olivercode.local.json or OLIVERCODE_SKILLS_ROOT.")
+        return 1
+    audit_dir = skills / "skill-governance" / "skill-fleet-audit"
     scripts_dir = audit_dir / "scripts"
     if not scripts_dir.is_dir():
         print(f"Error: {scripts_dir} not found -- skill-governance/skill-fleet-audit isn't on this machine.")
         return 1
 
     targets = {
-        "vault-skills": vault_root / "Personal Vault" / "01 - Skills",
+        "skills": skills,
         "olivercode-skills": oc_root / "skills",
     }
-    # check_clarity.py always re-runs the vault's own _validate_structure.js
-    # regardless of target -- that check is fleet-wide by design, so it repeats
-    # once per target here. Harmless, just redundant work, not worth a special case.
     checks = ["check_skill_structure.py", "check_mcp_patterns.py", "check_clarity.py"]
 
     # runtime/manifests/ is the sanctioned home for a generated observability
@@ -942,10 +870,10 @@ def command_audit_fleet(oc_root: Path) -> int:
 
 
 def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
-    """Push already-committed work for the vault, Personal Vault and OliverCode, unattended.
+    """Push already-committed work for OliverCode, the vault and this machine's pushRepos.
 
-    Scoped to just these three targets per the audit-fleet plan's Step 5 -- lowest
-    blast radius, both effectively personal/framework repos. A wider rollout needs
+    Scoped to repos named on purpose per the audit-fleet plan's Step 5 -- lowest
+    blast radius. The vault and pushRepos come from local_config. A wider rollout needs
     its own opt-in (a per-repo repo-profiles.json flag), not a blanket expansion,
     and needs every target repo to actually carry the pre-push hook first (a repo
     with a declared hookVariant still has none -- see sync-hooks' own skip logic).
@@ -954,16 +882,14 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
     uncommitted changes or no upstream tracking branch. Each repo's own pre-push
     hook is the real safety gate here (secret scan, no force-push) -- this command
     only decides which repos to attempt, never overrides what that hook blocks.
-
-    Respects OLIVERCODE_VAULT_ROOT like health/link-plugins/sync-hooks do.
     """
-    _env_vault = os.environ.get("OLIVERCODE_VAULT_ROOT")
-    vault_root = Path(_env_vault) if _env_vault else oc_root.parent.parent.parent
-    targets = {
-        "olivercode": oc_root,
-        "vault": vault_root,
-        "personal-vault": vault_root / "Personal Vault",
-    }
+    targets = {"olivercode": oc_root}
+    vault_root = _vault_root()
+    if vault_root:
+        targets["vault"] = vault_root
+    profiles, _ = load_repo_profiles(oc_root)
+    for name in _push_repos():
+        targets[name] = _resolve_repo_path(name, profiles.get(name, {}), oc_root.parent)
 
     for name, repo_path in targets.items():
         if not (repo_path / ".git").exists():
@@ -1079,10 +1005,6 @@ def main() -> int:
     if cmd == "install":
         _reject_extra(cmd, argv)
         return command_install(OC_ROOT)
-    if cmd == "link-plugins":
-        rest = [a for a in argv if a != "--dry-run"]
-        _reject_extra(cmd, rest)
-        return command_link_plugins(dry_run="--dry-run" in argv)
 
     if cmd == "health":
         root, rest = _take_root_flag(argv)

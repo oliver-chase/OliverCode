@@ -9,6 +9,8 @@ project shared with strangers who'd need a placeholder to start from.
 import json
 from pathlib import Path
 
+from lib.local_config import repo_paths
+
 
 def load_repo_profiles(repo_root):
     """Return (profiles: dict, source_path: Path)."""
@@ -26,8 +28,12 @@ def resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
     an existing setup whose repos are spread across several directories -- and before
     this existed, such a repo could not be registered at all, because the name WAS the
     path. An optional `path` in the profile takes precedence: absolute, `~`-relative,
-    or relative to fleet_root.
+    or relative to fleet_root. This machine's own `repoPaths` (local_config) wins over
+    both, so a tracked profile never has to name one machine's folders.
     """
+    local = repo_paths().get(name)
+    if local:
+        return local
     declared = profile.get("path")
     if not declared:
         return fleet_root / name

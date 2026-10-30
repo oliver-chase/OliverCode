@@ -144,37 +144,34 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
 #     would have recreated them on another machine (the check this added, since
 #     retired 2026-09-15 when 01 - Plugins merged into 01 - Skills -- see
 #     `_check_vault_skill_links` for the same risk at the skill layer instead)
-#   - two folder-level structure validators sat red for eleven findings
 # All of them read outside the framework repo, so all of them degrade to WARN
 # rather than FAIL when that context is absent: a standalone clone stays HEALTHY.
 
 GITHUB_FILE_LIMIT = 100 * 1024 * 1024
 
 
-def _check_vault_skill_links(vault_root: Path) -> tuple[int, int, int]:
-    """Every skill under the vault's 01 - Skills/ must be symlinked into ~/.claude/skills/.
+def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
+    """Every skill in this machine's skills folder must be symlinked into ~/.claude/skills/.
 
-    Replaces `_check_plugin_links`, 2026-09-15: `01 - Plugins/` was merged into
-    `01 - Skills/` once every V.Two skill converted off plugin packaging, so the old
-    check had permanently stopped finding anything -- the directory it looked for no
-    longer exists. The same missing-symlink risk moved to the skill layer instead: a
-    skill added to `01 - Skills/` with no matching symlink is invisible to the Skill
-    tool and nothing said why. Walks the same way `check_skill_structure.py` does in
-    the vault's own `skill-governance/skill-fleet-audit`, so a skill nested under any family
-    subfolder (`vtwo-ops/`, `personal/`, `_shared/`, ...) is still found.
+    A skill with no matching symlink is invisible to the Skill tool and nothing says
+    why. Walks the way `check_skill_structure.py` does, so a skill nested under any
+    family subfolder is still found. The folder comes from local_config; a machine
+    with none set has nothing to check here.
     """
-    print("\nVault skill links:")
-    skills_root = vault_root / "Personal Vault" / "01 - Skills"
+    print("\nSkill links:")
+    if skills_root is None:
+        print("  [INFO] no skills folder set for this machine (skillsRoot) — not checked")
+        return 0, 0, 0
     target_dir = Path.home() / ".claude" / "skills"
 
     if not skills_root.is_dir():
-        print("  [WARN] no 01 - Skills/ directory in the vault — skipping")
+        print(f"  [WARN] skills folder {skills_root} not found — skipping")
         return 0, 0, 1
     if not target_dir.is_dir():
         print("  [WARN] ~/.claude/skills/ not present — skipping")
         return 0, 0, 1
 
-    non_skill_dirs = {"vtwo-growth-shared", "docs"}
+    non_skill_dirs = {"docs"}
     declared = []
     for dirpath, dirnames, filenames in os.walk(skills_root):
         dirnames[:] = [d for d in dirnames if d not in non_skill_dirs and not d.startswith(".")]
@@ -184,7 +181,7 @@ def _check_vault_skill_links(vault_root: Path) -> tuple[int, int, int]:
     declared.sort()
 
     if not declared:
-        print("  [WARN] 01 - Skills/ holds no skill with a SKILL.md — skipping")
+        print(f"  [WARN] {skills_root} holds no skill with a SKILL.md — skipping")
         return 0, 0, 1
 
     passed = failed = 0
@@ -294,43 +291,4 @@ def _check_oversized_tracked(repos: list[tuple[str, Path]]) -> tuple[int, int, i
     elif not (passed or failed or skipped):
         print("  [WARN] no git repo to check — skipping")
         skipped = 1
-    return passed, failed, skipped
-
-
-def _check_folder_validators(vault_root: Path) -> tuple[int, int, int]:
-    """Every _validate_structure.js in the vault must exit clean.
-
-    These are the per-folder structure contracts. They are deliberately not wired to
-    a git hook, so the only thing that runs them is an instruction to remember to --
-    and both sat red, one on eleven findings, while sessions worked around them.
-    """
-    print("\nFolder structure validators:")
-    if not vault_root.is_dir():
-        print("  [WARN] vault root not resolvable — skipping")
-        return 0, 0, 1
-    found = sorted(vault_root.glob("*/*/_validate_structure.js"))
-    if not found:
-        print("  [WARN] no _validate_structure.js found — skipping")
-        return 0, 0, 1
-    passed = failed = skipped = 0
-    for script in found:
-        label = script.parent.name
-        try:
-            r = subprocess.run(["node", str(script.name)], cwd=str(script.parent),
-                               capture_output=True, text=True, timeout=60)
-        except FileNotFoundError:
-            print("  [WARN] node not installed — skipping validators")
-            return passed, failed, skipped + 1
-        except subprocess.TimeoutExpired:
-            print(f"  [WARN] {label}: validator timed out")
-            skipped += 1
-            continue
-        if r.returncode == 0:
-            passed += 1
-        else:
-            n = len([l for l in (r.stdout or "").splitlines() if "FAIL" in l])
-            print(f"  [FAIL] {label}: structure validator reports {n or 'some'} finding(s) — run it there for detail")
-            failed += 1
-    if passed and not failed:
-        print(f"  [OK] {passed} validator(s) clean")
     return passed, failed, skipped

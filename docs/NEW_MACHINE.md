@@ -6,38 +6,32 @@ Purpose: the order to restore this setup from nothing, and which steps no script
 `docs/ADOPTING.md` covers adopting OliverCode into a machine that already has work on it.
 The other case, a blank machine restoring an existing setup from its remotes, is covered here.
 
-The two differ in one way that matters. Adopting starts at OliverCode. Restoring starts at the
-**vault**, because the vault holds the plugins and OliverCode is a submodule inside it.
+Restoring starts at OliverCode. The fleet repos clone beside it, and this machine's own paths
+go in one local file, so nothing tracked has to match this machine's folders.
 
 ---
 
-## Order, and why it is this order
+## Order
 
-The pieces reference each other in both directions, so the sequence is not obvious and getting
-it wrong leaves things half-wired:
-
-- the vault holds `_Plugins/`, so the vault must exist before plugins can be linked
-- OliverCode is a submodule *of* the vault, so it arrives with the vault or not at all
-- the vault's `CLAUDE.md` points *at* OliverCode, so OliverCode must be installed for a
-  session in the vault to load its rules
+- OliverCode comes first, because its `CLAUDE.md` holds the rules every session loads
 - the fleet config (`shared/repo-profiles.json` and friends) is tracked, so it comes back
-  with the clone -- nothing to rebuild there
+  with the clone
+- the vault, the skills folder and any repo outside the fleet folder are per machine, so they
+  are named in `olivercode.local.json` before `sync-hooks` and `health` run
 
 ```bash
-# 1. The vault, with the OliverCode submodule
-git clone --recurse-submodules https://github.com/<owner>/vault.git "Obsidian Vault"
-cd "Obsidian Vault"
-
-# 2. Activate OliverCode: rules and skills into ~/.claude
-cd "Personal Vault/02 - Project Repos/OliverCode"
+# 1. OliverCode and the fleet repos, side by side in one folder (the fleet root)
+git clone https://github.com/<owner>/OliverCode.git && cd OliverCode
 OC="$(pwd)"                       # kept for step 5, run after cd-ing away
 bash scripts/validate.sh          # the clone is sound before anything is changed
+
+# 2. This machine's paths. Leave out what this machine does not have.
+cp olivercode.local.example.json olivercode.local.json   # then edit it
+
+# 3. Activate OliverCode: rules and skills into ~/.claude
 scripts/olivercode install        # symlinks CLAUDE.md + skills, backs up what it replaces
 
-# 3. The plugins. Nothing else does this step.
-scripts/olivercode link-plugins
-
-# 4. Confirm the fleet (already registered, tracked with the clone), then install enforcement
+# 4. Confirm the fleet, then install enforcement
 scripts/olivercode discover --root ../          # confirms what's present vs. the registry
 scripts/olivercode sync-hooks
 scripts/olivercode health                       # must end HEALTHY
@@ -47,9 +41,11 @@ cd <any governed repo>
 bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
 ```
 
-`health` at step 4 is the checkpoint. It verifies the plugin links, that every remote actually
-resolves, that no tracked file exceeds GitHub's 100MB limit, and that each folder-level
-`_validate_structure.js` exits clean -- the four things that previously rotted silently.
+`health` at step 4 is the checkpoint. It verifies the skill links, that every remote actually
+resolves and that no tracked file exceeds GitHub's 100MB limit. A registered repo that is not
+cloned here is listed once and is not a failure.
+
+The keys `olivercode.local.json` takes are listed in `docs/ADOPTING.md`.
 
 ---
 
@@ -58,7 +54,7 @@ resolves, that no tracked file exceeds GitHub's 100MB limit, and that each folde
 Each of these needs a person. They are listed so the list is finite rather than remembered.
 
 **The other repos.** The vault deliberately holds only what is not already its own repo, so
-the rest are separate clones under `Personal Vault/02 - Project Repos/`.
+the rest are separate clones under `<fleet-root>/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
 absent. `shared/repo-map.json` is the tracked list of what should be there.
 
