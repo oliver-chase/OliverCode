@@ -1,6 +1,6 @@
 ---
 name: writing-documentation
-description: Use whenever writing or rewriting a README, architecture doc, reference doc, or repo documentation — this repo, a governed repo, or a fork. Also use for a non-trivial CODE COMMENT. Applies the locked documentation standard: README outline, index README shape, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice and Readability rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
+description: Use whenever writing or rewriting a README, architecture doc, reference doc, or repo documentation — this repo, a governed repo, or a fork. Also use for a non-trivial CODE COMMENT. Applies the locked documentation standard: README outline, index README shape, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
 ---
 
 # Writing Documentation
@@ -12,12 +12,10 @@ contract instead of a generic house style.
 
 ## Procedure
 
-1. **Read the voice, then the contract.** Company voice lives in the `shared-company` skill's
-   voice files (`voice-core.md` first). `docs/DOCUMENTATION_STANDARD.md` is the single home for the
-   README outline, repo-doc voice, formatting, file naming, backlog policy and freshness rules, and
-   `docs/WRITING_PROCESS.md` holds the thinking behind it (resolve `$OC` from the
-   `~/.claude/CLAUDE.md` symlink when working outside OliverCode). Read them; do not restate them
-   from memory.
+1. **Read the voice, then the contract.** Voice lives in `~/.claude/skills/clean-writing/voice/voice.md`.
+   `docs/DOCUMENTATION_STANDARD.md` is the single home for the README outline, formatting, file
+   naming, backlog policy and freshness rules (resolve `$OC` from the `~/.claude/CLAUDE.md` symlink
+   when working outside OliverCode). Read both. Do not restate them from memory.
 2. **Read what exists.** The repo's current README, its `docs/`, its tests and entry points.
    Every claim you write must be checkable against the code as it is now. Numbers (test
    counts, gate counts, option lists) come from running or counting, never from prior docs.
@@ -50,9 +48,9 @@ contract instead of a generic house style.
 ## Boundaries
 
 - The standard governs documentation for humans. `CLAUDE.md` files, skill files, and other
-  loaded-context artifacts follow their own contracts and compress accordingly.
-- Company and client writing (marketing copy, decks, posts) follows the `shared-company` voice
-  files. Do not apply this skill to it.
+  loaded-context artifacts follow their own contracts.
+- Company and client writing (marketing copy, decks, posts) follows `clean-writing` alone. Do not
+  apply this skill to it.
 - Never introduce a document that restates a rule owned elsewhere. Point to the owning doc.
 - A comment inside a skill folder that ships in a zip says what the code does, carries no
   history, and points to no ledger. The reason for the rule lives in the commit or the issue.

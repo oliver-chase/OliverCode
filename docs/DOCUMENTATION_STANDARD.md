@@ -30,9 +30,8 @@ usually a bot wall rather than a refusal, so a real browser is tried before a pa
 the shape. The compressed form of that same fact — "escalate cheapest-first" — is an
 internal principle, correct and unreadable, and it belongs in `ARCHITECTURE.md` if anywhere.
 
-Compression is still the goal at the sentence level. What this rule forbids is dropping the
-reasoning, not spending words on it: a sentence that adds no fact is still cut, and a
-paragraph that restates the one above it is still deleted.
+Every sentence still carries a fact. A sentence that adds none is cut, and a paragraph that
+restates the one above it is deleted. The reasoning always stays.
 
 That audience sets how terms are introduced, never which terms are used. The precise
 term stays — `symlink`, `gitignored`, `pre-commit hook`, `fork` are the correct words and
@@ -122,7 +121,7 @@ index README answers six questions in this order, each under its own heading:
    item's name and what it does.
 6. **How to keep it current.** One short section.
 
-Rules that apply to index READMEs on top of Voice and Readability:
+Rules that apply to index READMEs on top of Voice:
 
 - **One idea per paragraph, three sentences at most.** A paragraph that names folders, rules
   and commands together is three paragraphs. Split it by subject under headings. A single
@@ -142,24 +141,14 @@ Rules that apply to index READMEs on top of Voice and Readability:
 
 ## Voice
 
-Voice for all writing belongs to the `shared-company` skill's voice files (`voice-core.md`
-first). `WRITING_PROCESS.md` adds the repository-documentation thinking. Problem-first,
-attach-the-reason, concrete-over-abstract, failure-modes-as-content, and numbers-as-evidence
-are all stated once already, with the reasoning, under "The shape of a README" above — this
-section holds only what's specific to a README or repo doc and said nowhere else:
+Voice for all writing lives in the `clean-writing` skill's `voice/voice.md`, which holds the model reply every document is measured against. This section adds only what is specific to a README or repo doc:
 
 - **Second person for the reader's actions, third for the system's.**
 - **No history in current-state docs.** Never "previously", "no longer", "has been removed".
   `git log` is the changelog. A design-decision defence may carry one clause of history where
-  the old failure is the reason. Same rule the Index-README rules state for "current
-  structure only" — one rule, two contexts, not two rules.
-
-## Readability
-
-- **One idea per paragraph.** A paragraph that needs a fourth sentence is usually two.
-- **Break up prose.** Put a code block, list or table within every few paragraphs.
+  the old failure is the reason.
 - **The squint test.** A reader scanning only headers, bold lead-ins and code blocks must still
-  get the whole story. Pull a load-bearing fact out of mid-paragraph.
+  get the whole story.
 - **Lists carry parallel items. Paragraphs carry reasoning.** A chain of because-therefore steps
   loses the connecting words when bulleted.
 
@@ -169,6 +158,9 @@ section holds only what's specific to a README or repo doc and said nowhere else
 an agent that has no human to resolve ambiguity, so they get the `asd-ste100` skill in strict
 mode. A commit-time gate warns on every staged `SKILL.md`, `CLAUDE.md` and `references/*.md`
 (`docs/GOVERNANCE.md`'s coverage table).
+
+Text inside a skill that a person reads (an opening message, a question, an option, a message
+the skill sends) follows `voice.md`. The gate's 25-word cap still applies to it.
 
 READMEs, other docs and code comments are not run through strict mode and are never held to its
 sentence-length cap. Never let an automated rewrite flatten a hedge ("may have failed") or split a
@@ -267,9 +259,8 @@ a README anywhere downstream and this is the shape it produces. The `writing-doc
 skill is the invocation path. `core/templates/project/` carries the same expectations into
 newly bootstrapped repos.
 
-**Voice and Readability also govern code comment prose.** A comment is short documentation, and the problem-first and
+**Voice also governs code comment prose.** A comment is short documentation, and the problem-first and
 attach-the-reason rules apply to it unchanged.
 
-Agent-facing files (`CLAUDE.md`, skill files) follow their own contracts. They are loaded
-context, not documentation, and compress accordingly. Company and client writing follows the
-`shared-company` voice files, not this document.
+Agent-facing files (`CLAUDE.md`, skill files) follow their own contracts. Company and client
+writing follows `voice.md` alone, not this document.

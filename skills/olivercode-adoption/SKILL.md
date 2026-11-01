@@ -69,7 +69,7 @@ Two things it surfaces that the user usually does not know:
 - **Real directories in `~/.claude/skills/`** are untracked content with no backup anywhere.
 
 Mention once, as optional, not required: `docs/EXTERNAL-TOOLING.md` lists third-party plugins
-(caveman, codeburn) some of this framework's own rules assume without saying so. Point
+(codeburn) some of this framework's own rules assume without saying so. Point
 to the doc. Do not install anything without the user asking.
 
 Then read what exists — `~/.claude/CLAUDE.md`, each repo's rules file — and build the
