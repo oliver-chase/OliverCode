@@ -6,9 +6,9 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 ## Source of Truth
 1. `core/templates/project/**` for the master scaffold templates (the single template home).
 2. `shared/project-bootstrap-manifest.json` for managed files and strictness modes.
-3. `shared/repo-map.json` for managed repo inventory.
-4. `shared/project-structure-rules.json` for structure and backlog-location enforcement.
-5. `core/contracts/PROJECT_STRUCTURE_STANDARD.md` for locked story/backlog/index naming and folder shape.
+3. The registry's `repo-profiles.json` for managed repo inventory (a private repo's
+   `olivercode/` copy, else the tracked `shared/` example).
+4. `core/contracts/PROJECT_STRUCTURE_STANDARD.md` for locked story/backlog/index naming and folder shape.
 
 ## Lifecycle
 1. Bootstrap new project (for the human-in-the-loop version of this same step — discovery,
@@ -20,8 +20,7 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 - Install hooks with `scripts/olivercode sync-hooks` (run from OliverCode) — it deploys the
   hook template and sets `core.hooksPath`. Planning-doc governance activates itself: the hook
   runs `scripts/check-planning-doc-governance.py` whenever that file is present.
-- Add the project to `shared/repo-map.json`.
-- Add structure rules entry in `shared/project-structure-rules.json`.
+- Add the project to the registry's `repo-profiles.json`.
 
 2. Sync existing projects:
 - Hooks: `scripts/olivercode sync-hooks` (run from OliverCode). This is the automated part.
@@ -35,8 +34,8 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 3. Audit drift:
 - `scripts/olivercode health` catches hook drift (compares each fleet repo's live hook
   against the template). It does not check other managed files.
-- Other managed files: audit manually against `shared/project-structure-rules.json` and the
-  managed-file list in `shared/project-bootstrap-manifest.json`.
+- Other managed files: audit manually against the managed-file list in
+  `shared/project-bootstrap-manifest.json`.
 - Drift is blocking for strict files and required paths.
 
 4. Promotion and alignment:

@@ -1,52 +1,17 @@
 {
   "workspaceRoot": "<fleet-root>",
   "unmanagedRepoWaivers": [],
-  "repos": [
-    {
-      "name": "oliver-studios",
-      "path": "<fleet-root>/oliver-studios",
-      "governanceProfile": "incubating",
-      "approvedMaintainabilityVariances": [
-        {
-          "target": "complexity",
-          "reason": "Known legacy complexity in orchestration_api.do_POST tracked for refactor; waiver keeps governance fail-closed everywhere else."
-        }
-      ]
-    },
-    {
-      "name": "fallow",
-      "path": "<fleet-root>/fallow"
-    },
-    {
-      "name": "oliver-app",
-      "path": "<fleet-root>/oliver-app"
-    },
-    {
-      "name": "oliver-strategic-growth",
-      "path": "<fleet-root>/oliver-strategic-growth",
-      "tracking": "filesystem",
-      "approvedStrictVariances": [
-        {
-          "target": ".github/workflows/qa-hygiene.yml",
-          "reason": "Pending migration to shared QA workflow template for legacy GTM automation stack."
-        },
-        {
-          "target": ".github/workflows/governance-secrets-gate.yml",
-          "reason": "Pending migration to shared secrets gate while legacy pipeline is retired."
-        },
-        {
-          "target": ".github/workflows/dependency-review.yml",
-          "reason": "Legacy dependency-review workflow intentionally diverges during phased convergence."
-        },
-        {
-          "target": "QUALITY_BASELINE.md",
-          "reason": "Project-specific quality baseline retained while shared template migration is staged."
-        }
-      ]
-    },
-    {
-      "name": "tesknota",
-      "path": "<fleet-root>/tesknota"
-    }
-  ]
+  "repos": [],
+  "_example": {
+    "name": "example-repo",
+    "path": "<fleet-root>/example-repo",
+    "governanceProfile": "incubating",
+    "approvedMaintainabilityVariances": [
+      {
+        "target": "complexity",
+        "reason": "Why the variance is accepted",
+        "expiresAt": "2099-01-01T00:00:00+00:00"
+      }
+    ]
+  }
 }

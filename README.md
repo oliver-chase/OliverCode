@@ -79,13 +79,14 @@ Once OliverCode is installed, connect each repo in four steps.
 
 ### 1. Register the repo
 
-Add the repo to:
+Add the repo to your fleet list, the registry's `repo-profiles.json`:
 
 ```text
-shared/repo-profiles.json
+<private repo>/olivercode/repo-profiles.json   # when olivercode.local.json names private repos
+shared/repo-profiles.json                      # otherwise, in your fork
 ```
 
-Your fleet list. You can also find your repos automatically:
+`olivercode discover` prints the path this checkout reads. You can also find your repos automatically:
 
 ```bash
 scripts/olivercode discover
@@ -202,9 +203,9 @@ A check that reports `PASS` without actually checking anything is a defect. For 
 
 OliverCode tests for this failure mode in its own code. The test suite also deliberately breaks every gate and confirms that the gate catches the failure.
 
-### One operator, real data
+### Your data stays out of the harness
 
-The fleet registry (`shared/repo-profiles.json` and friends) is tracked and holds real repo names — there is no placeholder layer to keep in sync. Only `runtime/control-plane/` (private per-machine runtime state) is gitignored. `ARCHITECTURE.md`'s "The Two Layers" explains why.
+OliverCode ships its fleet registry (`shared/repo-profiles.json`, `shared/repo-map.json`) as empty examples. Your real registry lives in a private repo under `olivercode/`, named in `olivercode.local.json` under `privateRepos`, so every device that clones that private repo gets it and a fork of OliverCode gets none of it. `ARCHITECTURE.md`'s "The Two Layers" has the detail.
 
 ---
 

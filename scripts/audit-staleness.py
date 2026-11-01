@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.repo_profiles import resolve_repo_path  # noqa: E402
+from lib.repo_profiles import registry_file, resolve_repo_path  # noqa: E402
 
 MARKER_RE = re.compile(r"Reviewed through:\s*`?([0-9a-f]{7,40})`?", re.IGNORECASE)
 # Ledger candidates, most-specific first — repos name their ledger differently.
@@ -42,7 +42,7 @@ LEDGER_CANDIDATES = (
 
 
 def _load_profiles(olivercode_root: Path) -> dict:
-    p = olivercode_root / "shared" / "repo-profiles.json"
+    p = registry_file(olivercode_root, "repo-profiles.json")
     if not p.is_file():
         return {}
     try:
@@ -60,7 +60,7 @@ def _load_governance_profiles(olivercode_root: Path) -> dict[str, str]:
     as unknown so a typo cannot silently exempt a repo. This is the field's one
     consumer -- before it, a declared profile changed nothing anywhere.
     """
-    f = olivercode_root / "shared" / "repo-map.json"
+    f = registry_file(olivercode_root, "repo-map.json")
     if not f.is_file():
         return {}
     try:
