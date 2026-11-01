@@ -40,6 +40,7 @@ COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
+    ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the private repos"),
@@ -385,6 +386,80 @@ def command_install(oc_root: Path) -> int:
         print()
     print(f"Next: register the repo in {registry_file(oc_root, 'repo-profiles.json')}, then `olivercode health` to verify.")
     return 1 if broken or broken_settings else 0
+
+
+def command_uninstall(oc_root: Path) -> int:
+    """Undo `install`: remove what it wrote in ~/.claude and nothing else.
+
+    A link is removed only when it points into this checkout, so a link the operator
+    made to anything else stays. A `<name>.pre-olivercode` backup install made is moved
+    back once its path is free. The hook entries come out of settings.json by the same
+    rule install uses to replace them, and every other key stays. Idempotent.
+
+    `core.hooksPath` and each repo's `.githooks/` come from `sync-hooks`, not install,
+    so they stay; docs/ADOPTING.md "Backing out" covers them.
+    """
+    claude_dir = Path.home() / ".claude"
+    skills_dir = claude_dir / "skills"
+    root = oc_root.resolve()
+    print("OliverCode uninstall — removing what install wrote in ~/.claude")
+    print("=" * 40)
+
+    def _points_into(link: Path, base: Path) -> bool:
+        # resolve() follows a link whose target is gone as far as it can, so a skill
+        # deleted from the checkout after install still reads as this checkout's.
+        target = link.resolve()
+        return target == base or target.is_relative_to(base)
+
+    def _restore(path: Path) -> str | None:
+        backup = path.with_name(path.name + ".pre-olivercode")
+        if (backup.exists() or backup.is_symlink()) and not (path.exists() or path.is_symlink()):
+            backup.rename(path)
+            return "restored"
+        return None
+
+    def _unlink(path: Path, source: Path) -> str:
+        if path.is_symlink():
+            if not _points_into(path, source.resolve()):
+                return "kept"
+            path.unlink()
+            return _restore(path) or "removed"
+        return _restore(path) or ("kept" if path.exists() else "absent")
+
+    for name, source in (("CLAUDE.md", oc_root / "CLAUDE.md"), ("VOICE.md", oc_root / "docs" / "VOICE.md")):
+        status = _unlink(claude_dir / name, source)
+        note = " (it is not a link into this checkout)" if status == "kept" else ""
+        print(f"  [{status.upper()}] ~/.claude/{name}{note}")
+
+    removed = restored = 0
+    if skills_dir.is_dir():
+        for entry in sorted(skills_dir.iterdir()):
+            if entry.is_symlink() and _points_into(entry, root / "skills"):
+                entry.unlink()
+                removed += 1
+                restored += _restore(entry) is not None
+        for backup in sorted(skills_dir.glob("*.pre-olivercode")):
+            restored += _restore(backup.with_name(backup.name[: -len(".pre-olivercode")])) is not None
+    print(f"  [OK] skills: {removed} link(s) removed, {restored} backup(s) restored")
+
+    broken_settings = False
+    try:
+        result = _claude_settings.remove(claude_dir / "settings.json")
+        print(f"  [{result.upper()}] Claude Code hooks in ~/.claude/settings.json")
+    except ValueError as exc:
+        print(f"  [FAIL] ~/.claude/settings.json could not be read ({exc}); left as it is, hooks not removed")
+        broken_settings = True
+
+    leftovers = sorted(str(p) for d in (claude_dir, skills_dir) for p in d.glob("*.pre-olivercode*"))
+    print()
+    if leftovers:
+        print("Backups left in place, because something now sits at their original path")
+        print("or a later install made them. Merge them back deliberately:")
+        for b in leftovers:
+            print(f"  {b}")
+        print()
+    print("Next: unset core.hooksPath in each governed repo (docs/ADOPTING.md \"Backing out\").")
+    return 1 if broken_settings else 0
 
 
 class _HealthTally:
@@ -1037,6 +1112,9 @@ def main() -> int:
     if cmd == "install":
         _reject_extra(cmd, argv)
         return command_install(OC_ROOT)
+    if cmd == "uninstall":
+        _reject_extra(cmd, argv)
+        return command_uninstall(OC_ROOT)
 
     if cmd == "health":
         root, rest = _take_root_flag(argv)

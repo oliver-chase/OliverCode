@@ -291,24 +291,22 @@ files you were supposed to change. Keep your version and take upstream's structu
 Adopting this should not be a one-way door. To remove it:
 
 ```bash
-# 1. Restore whatever install replaced (it never deletes)
-mv ~/.claude/CLAUDE.md.pre-olivercode ~/.claude/CLAUDE.md    # if you had one
+# 1. Remove what install wrote in ~/.claude and restore what it backed up
+scripts/olivercode uninstall
 
-# 2. Drop the symlinks this checkout owns. Real directories are NOT ours -- leave them.
-find ~/.claude/skills -maxdepth 1 -type l -lname '*/OliverCode/skills/*' -delete
-rm ~/.claude/VOICE.md                                        # the voice link install made
-# Then remove the hook entries whose command runs a script under OliverCode/scripts/hooks/
-# from ~/.claude/settings.json. Every other key in that file is yours.
-
-# 3. Stop the hooks in each governed repo
+# 2. Stop the hooks in each governed repo
 git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can stay or go
 
-# 4. The checkout itself is just a directory -- delete it.
+# 3. The checkout itself is just a directory -- delete it.
 ```
 
-Nothing outside those four places is touched: OliverCode writes nothing in `~/.claude`
-beyond those links and hook entries, no system config, no shell profile, no launchd/cron
-entry, and nothing under any product repo except `.githooks/` and that one git config key.
+`uninstall` keeps everything of yours in `~/.claude` and lists any backup it could not
+restore, so merge those back by hand. `docs/OLIVERCODE-LAUNCHER.md` says exactly what it
+removes and what it keeps.
+
+Nothing outside those places is touched: OliverCode writes nothing in `~/.claude` beyond
+those links and hook entries, no system config, no shell profile, no launchd/cron entry, and
+nothing under any product repo except `.githooks/` and that one git config key.
 
 ## Folder structure
 
