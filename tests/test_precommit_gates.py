@@ -11,6 +11,7 @@ deterministic here -- that a commit with no workflow files and no checker is not
 blocked by them.
 """
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -166,6 +167,28 @@ class TestCleanCommitPasses(GateHarness):
         self.stage("docs/module.md", "# Module\n\nAdds two numbers.\n")
         result = self.assertAllowed()
         self.assertIn("All gates passed", result.stdout)
+
+
+
+class TestTreeScan(GateHarness):
+    """A secret already committed passes a normal run, because nothing is staged, and fails a tree scan."""
+
+    def setUp(self):
+        super().setUp()
+        self.stage("config.py", 'KEY = "sk-' + "d" * 32 + '"\n')
+        subprocess.run(["git", "-C", str(self.tmp), "commit", "-q", "--no-verify", "-m", "x"], check=True)
+
+    def test_a_normal_run_sees_nothing_staged(self):
+        self.assertEqual(0, self.run_hook().returncode)
+
+    def test_a_tree_scan_finds_the_committed_secret(self):
+        result = subprocess.run(
+            ["bash", str(self.tmp / ".githooks" / "pre-commit")],
+            cwd=self.tmp, capture_output=True, text=True,
+            env={**os.environ, "OLIVERCODE_SCAN_TREE": "1"},
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("secret pattern", result.stdout)
 
 
 if __name__ == "__main__":

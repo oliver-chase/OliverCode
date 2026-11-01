@@ -179,6 +179,10 @@ run_gatekeeper() {
 
 main() {
   local mode="${1:-all}"
+  if [[ "$mode" == "--tree" ]]; then
+    export OLIVERCODE_SCAN_TREE=1
+    mode=all
+  fi
 
   case "$mode" in
     --target-repo)
@@ -238,6 +242,7 @@ main() {
       echo "  --target-repo <repo-root> [args...]"
       echo "                         Run <repo-root>/scripts/validate-repo.sh if it exists"
       echo "                         (repo-local validation hook convention), else skip"
+      echo "  --tree                 Run everything above, with the gates over every tracked file"
       echo "  --check-consistency    Run doc/code consistency checks only"
       echo "  --check-token-policy   Run token policy check only"
       echo "  --help                 Show this help"
