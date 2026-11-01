@@ -76,8 +76,8 @@ Any variance must be explicit, temporary, and recorded in the repo's profile in 
 ## Design Decisions
 
 ### Template Directory Architecture
-- `core/templates/project/` -- the canonical template repository. All project templates are authored here.
-- Rule: `core/templates/project/` is the single template home -- hooks, CI workflows, docs, and governance scripts all ship to downstream repos from here via the bootstrap manifest. There is exactly one template directory. A second one drifts from the masters.
+- `core/templates/project/` -- the single template home. CI workflows, docs, governance scripts and the built hooks all ship to downstream repos from here, through the bootstrap manifest and `sync-hooks`. A second template directory drifts from the masters.
+- The hooks are written in `core/hooks/` and built into `core/templates/project/` and `.githooks/` by `scripts/build-hooks.py`. Edit the gate files there, never a built hook.
 
 ### Runtime Manifests
 `runtime/manifests/` does not exist as a tracked path. `.gitignore` reserves the path

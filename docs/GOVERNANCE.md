@@ -115,5 +115,5 @@ The reusable baseline lives in:
 - `core/templates/project/QUALITY_BASELINE.md`
 - `shared/project-bootstrap-manifest.json`
 
-Enforcement for downstream repos is handled by their own `.githooks/pre-commit` and their declared `canonicalValidationCommand` (in `shared/repo-profiles.json`, tracked real fleet).
+Enforcement for downstream repos is handled by their own `.githooks/pre-commit` and their declared `canonicalValidationCommand` (in the registry's `repo-profiles.json`, private under `REGISTRY-PRIVATE-1`).
 

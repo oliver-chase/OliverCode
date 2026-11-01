@@ -48,7 +48,7 @@ def _candidate_files(root: Path):
             continue
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
         for name in filenames:
-            if "BACKLOG" in name.upper() and name.endswith(".md"):
+            if name.endswith(".md") and ("BACKLOG" in name.upper() or name == "DECISIONS.md"):
                 yield Path(dirpath) / name
 
 

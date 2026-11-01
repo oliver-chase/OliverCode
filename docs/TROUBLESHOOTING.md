@@ -49,13 +49,15 @@ scripts/olivercode sync-hooks        # repairs it across the fleet and the priva
 Prefer the relative `.githooks` over an absolute path — an absolute one breaks the moment the
 repo moves, and it breaks silently.
 
-## Fleet hooks report drift after a template edit
+## Fleet hooks report drift after a gate edit
 
 `scripts/olivercode health`'s placement-drift check compares each fleet repo's live hook
-against `core/templates/project/pre-commit`(`-private`). Any edit to the template makes
-every fleet repo diverge until re-synced:
+against `core/templates/project/pre-commit`(`-private`). Those templates are built from
+`core/hooks/`, so a gate change is an edit there followed by a rebuild. Every fleet repo then
+diverges until it is re-synced:
 
 ```zsh
+python3 scripts/build-hooks.py
 scripts/olivercode sync-hooks
 ```
 

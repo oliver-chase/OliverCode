@@ -35,10 +35,11 @@ OliverCode
 ├── CLAUDE.md          agent entry — symlinked to ~/.claude/CLAUDE.md, loads in every session
 ├── core/
 │   ├── contracts/     structural standards all repos follow
+│   ├── hooks/         the pre-commit gates, built into each hook by scripts/build-hooks.py
 │   ├── templates/     project template — the single template home
 │   └── workflows/     repeatable procedures
 ├── skills/            engineering-method + framework tooling skills (symlinked into ~/.claude/skills/)
-├── shared/            bootstrap manifest, task policies, the real fleet registries
+├── shared/            bootstrap manifest, task policies, the empty example registry
 ├── scripts/           launcher (olivercode), validation, qa checkers, Claude Code hooks
 ├── docs/              current-state authority docs (one concept, one home)
 ├── tests/             tests for the gates, checkers, hooks and launcher
