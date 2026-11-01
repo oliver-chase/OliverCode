@@ -286,6 +286,7 @@ FEATURE_MAP_EXEMPT = {
     "scripts/lib/__init__.py",
     "scripts/lib/repo_profiles.py",
     "scripts/lib/token_policy.py",
+    "scripts/lib/local_config.py",
 }
 
 

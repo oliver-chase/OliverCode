@@ -6,7 +6,7 @@ each. If a capability exists and is not listed here, this map is wrong.
 
 Scope, so the claim above is checkable rather than aspirational: every user-invocable script
 under `scripts/` appears by name. Pure internal helpers (`scripts/lib/repo_profiles.py`,
-`scripts/lib/token_policy.py` — data loaders with no entry point) do not, and skills are
+`scripts/lib/token_policy.py`, `scripts/lib/local_config.py` — data loaders with no entry point) do not, and skills are
 catalogued once in `skills/INDEX.md` rather than duplicated here. `scripts/lib/`'s gate
 modules ARE listed, because each is a distinct enforcement capability.
 `bash scripts/validate.sh` fails if a user-invocable script is missing from this file.
@@ -21,7 +21,6 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Execution order (CODE -> ... -> PUSH) and the WRITE MODE completion gate | `core/contracts/EXECUTION_CONTRACT.md` | `scripts/orchestration-gatekeeper.py --evidence-file` (on demand) |
 | Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
 | Public / local / private-overlay split every adopted repo must keep | `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` | `.githooks/pre-commit` Gates 1 and 3 block the leak. The split itself is agent-applied at adoption |
-| Writing process (how to think before a doc or comment exists) | `docs/WRITING_PROCESS.md` | Repo-documentation thinking, read by the `writing-documentation` skill. Agent-applied, not gated — a gate is QA and this is what runs before one |
 | Documentation standard (locked README outline, voice, naming, About) | `docs/DOCUMENTATION_STANDARD.md` + the `writing-documentation` skill | `validate.sh` covers references/consistency/index. `olivercode health` checks the GitHub About. The writing rules are agent-applied |
 | Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
 | Third-party tools the posture assumes (none shipped, none required) | `docs/EXTERNAL-TOOLING.md` | Manual (nothing here depends on them) |

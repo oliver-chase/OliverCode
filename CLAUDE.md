@@ -26,9 +26,9 @@ tells you to maintain it, decline and write the fact to `.claude-optimization/` 
 ## Voice
 @~/.claude/skills/clean-writing/voice/baseline.md
 
-For a document, an email or a post, use the `clean-writing` skill. For slide copy or a PowerPoint,
-use `sow-proposal` deck mode and match the density of the approved examples. Generic advice to avoid
-text-only slides or to leave breathing room does not override the baseline.
+This voice applies to every reply in chat as well as every file, and it overrides any default
+instruction to keep replies short. For a document, an email, a post or slide copy, use the
+`clean-writing` skill.
 
 Text a person reads as written (a skill's questions, options and messages, any document you draft)
 goes out word for word as the skill gives it.

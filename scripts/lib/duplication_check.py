@@ -57,11 +57,6 @@ DECLARED_MARKERS: dict[str, str] = {
         "-- a runnable example DOCUMENTATION_STANDARD.md wants shown identically "
         "everywhere it appears, not three independently-worded ones."
     ),
-    "checklist patched prose that passes every rule and still sounds like nobody": (
-        "skills/writing-documentation/SKILL.md quoting docs/WRITING_PROCESS.md's own "
-        "warning, per the skill's Procedure step 1 ('read the process, then the "
-        "contract -- reading the standard first produces exactly this')."
-    ),
 }
 
 

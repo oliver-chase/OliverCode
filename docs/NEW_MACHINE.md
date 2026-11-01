@@ -58,14 +58,8 @@ the rest are separate clones under `<fleet-root>/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
 absent. `shared/repo-map.json` is the tracked list of what should be there.
 
-**Marketplace plugins.** Third-party, installed through Claude Code, not through this repo:
-
-```
-/plugin marketplace add JuliusBrussee/caveman   then  /plugin install caveman
-```
-
-`docs/EXTERNAL-TOOLING.md` explains what each is for and why some rules in `CLAUDE.md` read as
-arbitrary without them.
+**Marketplace plugins.** Third-party plugins are installed through Claude Code, not through this
+repo. `docs/EXTERNAL-TOOLING.md` lists each one and what it is for.
 
 **OliverCode's own session hook.** `core/contracts/EXECUTION_CONTRACT.md` ("Session Hooks")
 has the manual registration step for `scripts/hooks/early-stop-guard.py` — not a marketplace
