@@ -7,8 +7,8 @@
 #
 # check-fork-usable.sh stays the fast gate (CI + full-qa-pass): clone works, the
 # core adoption path governs. This is the exhaustive complement -- run it after
-# changing the launcher, the hooks, or docs/ADOPTING.md. Everything it asserts is
-# a sentence somewhere in ADOPTING.md or the README; when one fails, either the
+# changing the launcher, the hooks, or docs/SETUP.md. Everything it asserts is
+# a sentence somewhere in SETUP.md or the README; when one fails, either the
 # code or that sentence is lying.
 #
 # Exercises the WORKING TREE's tracked files, so uncommitted fixes are what gets
@@ -207,7 +207,7 @@ oc sync-hooks >/dev/null 2>&1
 probe_blocked "$WS/app" || bad "precondition: hooks active before backout" s8
 grep -q "scripts/hooks/" "$H/.claude/settings.json" || bad "precondition: install wrote its settings.json hooks" s8
 [ -L "$H/.claude/VOICE.md" ] || bad "precondition: install linked VOICE.md" s8
-# docs/ADOPTING.md "Backing out", verbatim steps
+# docs/SETUP.md "Backing out", verbatim steps
 oc uninstall >/dev/null 2>&1 && ok "uninstall exits 0" s8 || bad "uninstall exits 0" s8
 git -C "$WS/app" config --unset core.hooksPath
 HOME="$H" bash "$WS/OliverCode/scripts/local-scheduler/uninstall.sh" >/dev/null 2>&1
@@ -268,7 +268,7 @@ grep -q "upstream change" "$WS/OliverCode/README.md" && ok "update pulled upstre
 [ -x "$WS/app/.githooks/pre-commit" ] && ok "update re-synced fleet hooks" s10 || bad "update re-synced fleet hooks" s10
 
 # ------------------------------------------------- S11 probe in a no-commit repo
-say "--- S11: ADOPTING's probe cleanup works in a repo with no commits ---"
+say "--- S11: SETUP's probe cleanup works in a repo with no commits ---"
 new_case s11
 mk_oc "$WS/OliverCode"
 mkdir -p "$WS/fresh" && git -C "$WS/fresh" init -q .

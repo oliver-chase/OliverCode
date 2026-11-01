@@ -50,8 +50,8 @@ if [ $VIOLATIONS -gt 0 ]; then
   echo ""
   echo "=========================================="
   echo "COMMIT BLOCKED: $VIOLATIONS PII violation(s) found."
-  echo "Use <vault-root> placeholders for paths. Remove personal identifiers."
-  echo "See OliverCode/core/contracts/FILE_LOCATION_STANDARD.md"
+  echo "Use <workspace-root> placeholders for paths. Remove personal identifiers."
+  echo "See OliverCode/docs/RULES.md (File locations)"
   echo "=========================================="
   exit 1
 fi

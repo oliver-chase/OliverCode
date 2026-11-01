@@ -4,9 +4,7 @@
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Contract integrity..."
 
 # `/workspace/` is the container-path class this framework bans; every path must
-# derive from the script's own location. (A `_Management/` pattern sat here too,
-# guarding a vault directory that has left zero trace in any of the six repos or
-# in git history -- removed rather than kept scanning for something extinct.)
+# derive from the script's own location.
 # tests/* is skipped for the same reason Gates 1 and 3 skip it: a test proving this
 # gate blocks a forbidden path must contain that path as a fixture.
 if [ -n "$STAGED_FILES" ]; then
@@ -25,7 +23,7 @@ fi
 DEP_DOC="$REPO_ROOT/runtime/control-plane/OLIVERCODE_DEPENDENCY.md"
 if [ -f "$DEP_DOC" ]; then
   # Declared paths are backtick-quoted and repo-relative (e.g. `shared/repo-profiles.json`,
-  # `core/contracts/`). Resolve the OliverCode-relative ones under $REPO_ROOT; skip paths
+  # `core/templates/`). Resolve the OliverCode-relative ones under $REPO_ROOT; skip paths
   # outside this repo. (chr(96) avoids embedding a literal backtick in this shell string.)
   DEP_PATHS=$(python3 -c "
 import re

@@ -70,7 +70,7 @@ run_hook_state() {
   registered="$(printf '%s\n' "$out" | grep -cE '^\s+\[(OK|FAIL|WARN)\] [^ ]+: ' || true)"
   if [[ "$rc" -eq 0 && "$registered" -eq 0 ]]; then
     echo "  [SKIP] no fleet repos registered — nothing to check."
-    echo "         Register repos in the registry's repo-profiles.json (see docs/ADOPTING.md)."
+    echo "         Register repos in the registry's repo-profiles.json (see docs/SETUP.md)."
   elif [[ "$rc" -eq 0 ]]; then
     echo "  [OK] all $registered registered repo(s) have working hooks"
   else

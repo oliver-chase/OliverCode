@@ -44,9 +44,6 @@ PLACEHOLDER_CHARS = set("<>*|$")
 DOWNSTREAM_RELATIVE = frozenset(
     {
         "docs/repo-structure-contract.md",
-        # OliverCode keeps its own at the repo root; `docs/ARCHITECTURE.md` only ever
-        # names a downstream repo's copy (e.g. in docs/ADOPTING.md's rewrite template).
-        "docs/ARCHITECTURE.md",
         "scripts/validate-repo.sh",
         "scripts/bootstrap-profile.sh",
         "scripts/run-profile-checks.sh",
@@ -56,9 +53,6 @@ DOWNSTREAM_RELATIVE = frozenset(
         ".githooks/pre-commit-private",
     }
 )
-
-# Files whose whole job is to name wrong locations. Their paths must NOT resolve.
-ANTI_PATTERN_FILES = frozenset({"core/contracts/FILE_LOCATION_STANDARD.md"})
 
 # Everything under here describes the repo a template is stamped INTO.
 TEMPLATE_PREFIX = "core/templates/"
@@ -138,7 +132,7 @@ def check_references(repo_root: Path) -> tuple[int, list[str]]:
     checked = 0
 
     for rel in _tracked_files(repo_root):
-        if rel.startswith(TEMPLATE_PREFIX) or rel.startswith(PLANS_PREFIX) or rel in ANTI_PATTERN_FILES or SKILL_TEST.match(rel):
+        if rel.startswith(TEMPLATE_PREFIX) or rel.startswith(PLANS_PREFIX) or SKILL_TEST.match(rel):
             continue
         if not rel.endswith((".md", ".json", ".sh", ".py", ".yml", ".yaml", ".mjs")):
             continue

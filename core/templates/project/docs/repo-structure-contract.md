@@ -4,7 +4,7 @@ Status: Active
 
 ## Canonical contract sources
 
-1. `OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+1. `OliverCode/docs/RULES.md` ("Project structure")
 
 ## Profile
 

@@ -9,7 +9,7 @@ Canonical source-of-truth (outside project docs):
 - `OliverCode/core/templates/project/.github/CODEOWNERS`
 - `OliverCode/core/templates/project/.github/pull_request_template.md`
 - `OliverCode/core/templates/project/QUALITY_BASELINE.md`
-- `OliverCode/core/contracts/FRAMEWORK_BASELINE.md`
+- `OliverCode/docs/RULES.md`
 
 ## Rule
 
@@ -49,5 +49,5 @@ After changing any baseline surface, run sync then audit before merge.
 Every README and document in this repo follows the framework's documentation standard —
 the locked README outline, voice, CAPS-KEBAB file naming, complete doc table, open-only
 backlog, same-commit sync, and a filled-in GitHub About. The standard is
-`docs/DOCUMENTATION-STANDARD.md` in the framework checkout, and `docs/VOICE.md` sets the words.
+`docs/RULES.md` ("Documents") in the framework checkout, and `docs/VOICE.md` sets the words.
 Ask an agent for a README here and that is the shape it produces.

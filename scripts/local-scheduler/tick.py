@@ -11,7 +11,7 @@ silently skipping the way plain cron does.
 Python, not bash, invoked directly (not via a shebang'd bash wrapper): a bare
 bash spawned by launchd from under ~/Documents has no Full Disk Access of its
 own on this machine and fails "Operation not permitted" just cd-ing in -- a real,
-previously-hit failure mode (TCC-1) in the sibling scheduler this one mirrors.
+previously-hit failure mode in the sibling scheduler this one mirrors.
 Invoking the python3 binary directly in the plist's ProgramArguments sidesteps it
 the same way that one invokes node directly instead of a bash entry point.
 

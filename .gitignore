@@ -50,7 +50,7 @@ credentials.json
 *.pem
 
 # Staging (active work - never commit to main). Root-anchored on purpose:
-# a bare `plans/` also matched docs/plans/, contradicting FILE_LOCATION_STANDARD
+# a bare `plans/` also matched docs/plans/, contradicting docs/RULES.md
 # which says committed plans live at <repo>/docs/plans/YYYY-MM-DD-<slug>.md.
 /staging/
 /plans/
@@ -88,9 +88,8 @@ runtime/control-plane/**
 # Generated runtime manifests (inventory reports, generated status, observability artifacts)
 runtime/manifests/
 
-# Local Claude OS: personal memory/state stay local; the generic README
-# (the documented load-order entrypoint) is tracked. The framework
-# does not depend on any of it (one-directional, per FRAMEWORK-BOUNDARY.md).
+# Local Claude OS: personal memory/state stay local. The framework
+# does not depend on any of it (one-directional, per docs/RULES.md).
 .claude-optimization/memory/
 .claude-optimization/state/
 

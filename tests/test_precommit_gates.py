@@ -296,6 +296,30 @@ class TestGate8ArchivedContent(GateHarness):
         self.stage("docs/Legacy Modernization.md", "How we replace legacy systems.\n")
         self.assertIn("Gate 8 passed.", self.assertAllowed().stdout)
 
+    def local_hook(self, body):
+        local = self.write(".githooks/pre-commit.local", "#!/usr/bin/env bash\n" + body)
+        local.chmod(0o755)
+
+    def test_a_repo_local_hook_can_exempt_a_path_with_status_10(self):
+        """The framework carries no repo-specific exemption; the repo declares its own."""
+        self.local_hook('[ "${1:-}" = archive-exempt ] && case "$2" in "records/Archive/"*) exit 10 ;; esac\nexit 0\n')
+        self.stage("records/Archive/week-1.md", "Done.\n")
+        self.assertIn("Gate 8 passed.", self.assertAllowed().stdout)
+
+    def test_the_exemption_covers_only_the_path_the_hook_names(self):
+        self.local_hook('[ "${1:-}" = archive-exempt ] && case "$2" in "records/Archive/"*) exit 10 ;; esac\nexit 0\n')
+        self.stage("docs/Archive/plan.md", "Old plan.\n")
+        self.assertIn("names an archive", self.assertBlocked("gate 8").stdout)
+
+    def test_a_local_hook_that_exits_zero_for_everything_exempts_nothing(self):
+        self.local_hook("exit 0\n")
+        self.stage("docs/plan-old.md", "Old plan.\n")
+        self.assertIn("named as a superseded copy", self.assertBlocked("gate 8").stdout)
+
+    def test_without_a_local_hook_the_same_path_blocks(self):
+        self.stage("records/Archive/week-1.md", "Done.\n")
+        self.assertBlocked("gate 8")
+
 
 class TestGate9SkillCitations(GateHarness):
     """Offline: a stub `gh` that knows issues 1 and 2."""

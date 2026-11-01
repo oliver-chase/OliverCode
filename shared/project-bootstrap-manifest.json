@@ -1,7 +1,7 @@
 {
   "version": 2,
   "status": "PROVISIONED",
-  "status_note": "All template sources exist. core/templates/project/ is the single template home (see core/contracts/FRAMEWORK_BASELINE.md).",
+  "status_note": "All template sources exist. core/templates/project/ is the single template home (see docs/RULES.md).",
   "githubActionsPolicy": {
     "mode": "manual_only",
     "reason": "GitHub Actions billing is currently blocked; managed repos must not auto-trigger workflows until billing is restored."

@@ -8,27 +8,28 @@ echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Archived-content scan..."
 # "Legacy Modernization Intelligence" is prose about legacy systems, not an archive.
 ARCHIVE_SEGMENTS='^(_?[Aa]rchive[ds]?|[Ll]egacy|[Dd]eprecated|[Oo]utdated|_?[Bb]ackups?|[Oo]ld)$'
 # Suffixes that mark a file as a superseded copy of its neighbour.
-# "copy" is deliberately NOT here. In this vault copy means written copy -- "Slide
+# "copy" is deliberately NOT here. In many repos copy means written copy -- "Slide
 # Copy", "Website Services Copy" -- so matching it blocked 30-plus live files on
 # the first run.
 ARCHIVE_SUFFIX='(\.bak|~|[ _-]old|[ _-]backup|[ _-]deprecated|[ _-]superseded)(\.[A-Za-z0-9]+)?$'
 
-# Deliberate exceptions. Each is a permanent record by decision, not drift.
-#   Past To Dos/  - the weekly-task archive the vault's CLAUDE.md calls permanent
+# A repo with permanent records in an archive-named folder declares them in its own
+# optional .githooks/pre-commit.local (GATE-LOCAL-1). The gate asks that file about one
+# path, with empty stdin, only when it is about to block. Exit status 10 exempts the path;
+# any other status keeps the block, so a local hook that does not know this argument
+# cannot exempt anything by accident.
 is_archive_exempt() {
-  case "$1" in
-    *"Past To Dos/"*) return 0 ;;
-  esac
-  return 1
+  [ -x "$HOOK_DIR/pre-commit.local" ] || return 1
+  local rc=0
+  "$HOOK_DIR/pre-commit.local" archive-exempt "$1" </dev/null >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 10 ]
 }
 
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
     [ -n "$file" ] || continue
-    is_archive_exempt "$file" && continue
-
     # Any directory segment that names an archive.
-    printf '%s\n' "$file" | tr '/' '\n' | grep -qE "$ARCHIVE_SEGMENTS" && {
+    printf '%s\n' "$file" | tr '/' '\n' | grep -qE "$ARCHIVE_SEGMENTS" && ! is_archive_exempt "$file" && {
       echo "  BLOCKED: $file sits under a directory that names an archive."
       echo "  This repo holds current state only. Delete the superseded copy --"
       echo "  git history is the archive. If it is genuinely still live, rename the"
@@ -37,7 +38,7 @@ if [ -n "$STAGED_FILES" ]; then
     }
 
     # A filename marked as a superseded copy.
-    if printf '%s\n' "${file##*/}" | grep -qE "$ARCHIVE_SUFFIX"; then
+    if printf '%s\n' "${file##*/}" | grep -qE "$ARCHIVE_SUFFIX" && ! is_archive_exempt "$file"; then
       echo "  BLOCKED: $file is named as a superseded copy."
       echo "  Replace the file it supersedes and never commit both; git keeps"
       echo "  the previous version."

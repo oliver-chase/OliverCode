@@ -20,7 +20,7 @@ if [ -n "$STAGED_FILES" ]; then
       echo "$EMOJI_HITS"
       echo "  BLOCKED: $file contains emojis or icons."
       echo "  Zero emojis allowed — plain text only."
-      echo "  See OliverCode/core/contracts/NO_ICONS_STANDARD.md"
+      echo "  See OliverCode/docs/RULES.md (No icons)"
       exit 1
     fi
   done <<< "$STAGED_FILES"
