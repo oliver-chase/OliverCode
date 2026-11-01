@@ -36,8 +36,8 @@ and several docs. They are settled decisions, not open items.
 ## Resolved — the A-series
 
 What was built and why. Kept because each entry records the failure class the gate exists to
-stop. Deleting it invites rebuilding the same thing. Currently-open work lives under the live
-tracker's "Open items" below.
+stop. Deleting it invites rebuilding the same thing. Open work lives in the GitHub Project
+(see "Live tracker" below).
 
 ### A1-A5 — resolved 2026-07-27 (built, verified, wired in)
 
@@ -68,10 +68,6 @@ failure class this repo actually hit. All five are live in `bash scripts/validat
 A2 and A3 are collapsed into one checker (`scripts/lib/consistency_check.py`) rather than
 two scripts, per `FRAMEWORK_BASELINE.md`'s rule that a validator duplicating another's
 failure class gets merged. Both are the same class: a doc asserting what the code contradicts.
-
-### A7 — model-routing (resolved)
-
-The `model-routing` skill is removed. Nothing in the framework depends on it.
 
 ---
 

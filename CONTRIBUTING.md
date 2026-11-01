@@ -20,7 +20,7 @@ If a file does none of those, delete it, merge it, or move it to the repo that o
 
 1. Claude Code is OliverCode's sole runtime and Anthropic its sole model provider — do not reintroduce multi-runtime or multi-provider framing without a real implementation behind it.
 2. Keep project-specific runtime logic in the owning project repo.
-3. Documentation sync is required in the same change set — see `docs/DOCUMENTATION-STANDARD.md` "Always current — the sync rule" for what triggers it and what to update.
+3. Documentation sync is required in the same change set — see `docs/DOCUMENTATION-STANDARD.md` "Keeping documents current".
 4. Run `bash scripts/validate.sh` before every commit.
 5. New docs should replace or merge older docs instead of creating parallel authority.
 6. No roadmap, migration, or status markdown is active authority unless explicitly promoted into current-state docs — see `core/contracts/FRAMEWORK_BASELINE.md` "Removal Rules".
@@ -30,10 +30,9 @@ If a file does none of those, delete it, merge it, or move it to the repo that o
 Not every rule in this file is machine-checked. Know which is which before assuming a rule
 is unbreakable:
 
-**Hard-enforced (`.githooks/pre-commit`, fires on every `git commit`, cannot be skipped
-without `--no-verify`):** secrets, emoji/icons, PII, deleted-repo references, workflow
-push-auth, contract integrity (incl. `OLIVERCODE_DEPENDENCY.md` path existence), planning-doc
-governance (if present), token policy (Gate 8).
+**Hard-enforced:** the gates in `.githooks/pre-commit`, which fire on every `git commit`.
+`docs/GOVERNANCE.md` lists them. Inside Claude Code, the commit guard also refuses a commit
+that would skip them (`core/contracts/EXECUTION_CONTRACT.md` "Session Hooks").
 
 **Soft — instruction only, relies on the agent actually following it, same reliability class
 as any other unenforced convention:** "read `docs/FRAMEWORK-BOUNDARY.md` before structural
@@ -49,11 +48,6 @@ The sequence is `core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` (gap analysis
 commit, the human-facing loop) plus `core/contracts/EXECUTION_CONTRACT.md` (the gate and
 evidence mechanics the loop ends in) — one home each, not restated here.
 
-## Documentation Sync Requirement
-
-See `docs/DOCUMENTATION-STANDARD.md` "Always current — the sync rule" — one home for the trigger paths and
-what to update. Enforced by manual review (no active automated validator).
-
 ## Source-of-Truth Documents
 
 Canonical current-state authority: `core/contracts/FRAMEWORK_BASELINE.md` "Support" (the
@@ -63,8 +57,7 @@ full list) and "Ship" (reusable contract/template surfaces). One home, not resta
 
 Required review evidence before commit:
 - `bash scripts/validate.sh` gates pass
-- launcher help surface still matches docs
-- setup command registry still matches docs
+- launcher help surface still matches `docs/OLIVERCODE-LAUNCHER.md`
 - removed files have no surviving canonical references
 - git diff contains only intended current-state changes
 
@@ -78,5 +71,5 @@ scripts/olivercode --help
 ## Safe Push Rules
 
 - Commit only after governance gates pass and staged files are reviewed.
-- Do not stage secrets, `.env*`, runtime state, private vault content, caches, or generated local reports.
+- Do not stage secrets, `.env*`, runtime state, private repo content, caches, or generated local reports.
 - After push, verify `git status --short --branch` is clean and record the pushed short SHA.

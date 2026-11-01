@@ -6,7 +6,7 @@ OliverCode is the **shared orchestration framework**. It contains:
 - Reusable contracts, policies, and standards (`core/contracts/`)
 - Reusable skill definitions (`skills/`)
 - Workflow procedures (`core/workflows/`)
-- Shared project templates and manifests (`shared/`)
+- Project templates (`core/templates/project/`) and shared manifests and registries (`shared/`)
 - Framework documentation (`docs/`)
 - A thin launcher entrypoint (`scripts/olivercode`)
 - Pre-commit governance hooks (`.githooks/`)
