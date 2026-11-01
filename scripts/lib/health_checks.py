@@ -204,6 +204,45 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
     return passed, failed, 0
 
 
+def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]:
+    """A self-contained suite's docs/VOICE.md must match this repo's docs/VOICE.md.
+
+    A suite ships its own copy so it runs without OliverCode, and nothing else notices
+    when one copy is edited and the others are not. A suite is found from its skills
+    linked into ~/.claude/skills (<suite>/skills/<name>), so no machine path is
+    configured anywhere.
+    """
+    print("\nVoice copies:")
+    canonical = oc_root / "docs" / "VOICE.md"
+    if not canonical.is_file():
+        print("  [FAIL] docs/VOICE.md missing — CLAUDE.md imports it through ~/.claude/VOICE.md")
+        return 0, 1, 0
+    if not skills_dir.is_dir():
+        print("  [INFO] ~/.claude/skills/ not present — not checked")
+        return 0, 0, 0
+    suites = set()
+    for link in skills_dir.iterdir():
+        if not (link.is_symlink() and link.exists()):
+            continue
+        skill = link.resolve()
+        root = skill.parent.parent
+        if skill.parent.name == "skills" and root != oc_root.resolve() and (root / "docs" / "VOICE.md").is_file():
+            suites.add(root)
+    if not suites:
+        print("  [INFO] no installed suite ships docs/VOICE.md — not checked")
+        return 0, 0, 0
+    passed = failed = 0
+    text = canonical.read_bytes()
+    for root in sorted(suites):
+        if (root / "docs" / "VOICE.md").read_bytes() == text:
+            print(f"  [OK] {root.name}/docs/VOICE.md matches")
+            passed += 1
+        else:
+            print(f"  [FAIL] {root.name}/docs/VOICE.md differs — copy it from {canonical}")
+            failed += 1
+    return passed, failed, 0
+
+
 def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int]:
     """Every repo's origin must actually exist on the remote host.
 
