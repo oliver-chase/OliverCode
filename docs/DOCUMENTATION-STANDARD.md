@@ -56,7 +56,7 @@ A count that changes, such as tests, gates or coverage, never appears in a docum
 
 ## The backlog
 
-A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which `backlog-management` and `board-hygiene` maintain. OliverCode works this way. Its `docs/BACKLOG.md` holds only the live tracker that the `audit` skill maintains, with the review marker `scripts/audit-staleness.py` reads. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
+A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which the `backlog` skill maintains. OliverCode works this way. Its `docs/BACKLOG.md` holds only the live tracker that the `audit` skill maintains, with the review marker `scripts/audit-staleness.py` reads. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
 
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`. Finished work leaves the file, because git keeps that history.
 

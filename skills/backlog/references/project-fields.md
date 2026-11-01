@@ -4,8 +4,8 @@
 
 ## Config shape
 
-A new repo adopting this skill copies `$OC/shared/backlog-config.example.json` (tracked,
-placeholder values) as its starting point. Every `backlog-config.json` this skill reads has
+A new repo adopting this skill, and every fork, copies `$OC/shared/backlog-config.example.json` (tracked,
+placeholder values) as its starting point. A fork never uses the owner's `docs/backlog-config.json`: the sweep script's `--verify-config` check refuses it. Every `backlog-config.json` this skill reads has
 this shape:
 
 ```json
@@ -20,9 +20,12 @@ this shape:
     "priority": {"id": "...", "options": {"P0": "...", "P1": "...", "P2": "..."}},
     "size": {"id": "...", "options": {"XS": "...", "S": "...", "M": "...", "L": "...", "XL": "..."}},
     "workType": {"id": "...", "options": {"Epic": "...", "Story": "..."}}
-  }
+  },
+  "areaPolicy": {"retired": [], "parked": [], "catchAll": []}
 }
 ```
+
+`areaPolicy` is optional. It lists the Area options that match no skill folder: `retired` for frozen labels on Complete items, `parked` for a family with no folder in the repo, `catchAll` for cross-family work.
 
 If a field or option is missing, re-fetch with `gh project field-list <number> --owner <owner> --format json` and update that repo's own config in the same session. Never guess an ID or skip setting a field because the ID isn't there yet.
 
@@ -64,7 +67,7 @@ Status never follows this automatically.
 gh api graphql -f query="{ repository(owner: \"$(jq -r '.repoOwner' "$CONFIG")\", name: \"$(jq -r '.repoName' "$CONFIG")\") { issue(number: <parent>) { subIssuesSummary { total completed } } } }"
 ```
 
-## List items with fields, for the triage check
+## List items with fields, for the sweep
 
 ```bash
 gh project item-list "$(jq -r '.projectNumber' "$CONFIG")" --owner "$(jq -r '.projectOwner' "$CONFIG")" --format json --limit 1000

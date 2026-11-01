@@ -16,7 +16,7 @@ Define the hygiene rules every repo's backlog, commits, and tests follow, regard
 which backlog paradigm the repo uses, so every agent follows the same read/write flow.
 
 Every repo's backlog lives in a GitHub Project named by a `backlog-config.json` the repo's
-own `CLAUDE.md` points to — `skills/backlog-management/SKILL.md` governs it. No repo keeps a
+own `CLAUDE.md` points to — `skills/backlog/SKILL.md` governs it. No repo keeps a
 file-based story registry under .github.
 
 ## Core invariants
@@ -44,7 +44,7 @@ Where a secret, credential, or runtime artifact goes is `core/contracts/FILE_LOC
 
 ## Discoverability
 
-1. Each repo's GitHub Project is the one place to list open stories, epics, and unassigned entries — `backlog-management`'s triage check covers this.
+1. Each repo's GitHub Project is the one place to list open stories, epics, and unassigned entries — the `backlog` skill's sweep covers this.
 2. Keep archive indexes for deferred functionality with clear re-enable instructions.
 
 ## Shared quality baseline hygiene
