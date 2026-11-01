@@ -4,8 +4,7 @@
 # does because sync-hooks reported "done" -- that only confirms the hook
 # files were written, not that git is running them. Extracted 2026-09-09
 # from the identical inline snippet duplicated in README.md, docs/ADOPTING.md,
-# docs/NEW-MACHINE.md, and skills/olivercode-adoption/SKILL.md (docs/BACKLOG.md
-# B15) so the four walkthroughs invoke one script instead of four copies of
+# docs/NEW-MACHINE.md, and skills/olivercode-adoption/SKILL.md so the four walkthroughs invoke one script instead of four copies of
 # the same shell that could silently drift apart.
 #
 # Writes the probe file straight into the current repo, not staged through

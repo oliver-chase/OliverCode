@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Find every backlog entry matching an ID, fleet-wide, in one command.
 
-Nothing namespaces `SPEC-N`/`B-N`-style backlog IDs across repos -- a private skills
+Nothing namespaces `SPEC-N`-style backlog IDs across repos -- a private skills
 repo's backlog and a fleet product repo's own spec backlog both used
 `SPEC-21` for two entirely unrelated pieces of work. Renumbering either history is more
 disruptive than the collision itself (every commit message and memory note that already
@@ -14,7 +14,7 @@ next run, not after someone remembers to add it here.
 
 Usage:
     scripts/find-spec.py SPEC-21
-    scripts/find-spec.py B20 --root /path/to/fleet
+    scripts/find-spec.py SPEC-21 --root /path/to/fleet
 """
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def _search(path: Path, pattern: re.Pattern) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("spec_id", help='e.g. "SPEC-21" or "B20"')
+    parser.add_argument("spec_id", help='e.g. "SPEC-21"')
     parser.add_argument("--root", default=None,
                          help="directory containing the fleet repos (default: OliverCode's parent)")
     args = parser.parse_args()
@@ -78,10 +78,8 @@ def main() -> int:
 
     pattern = re.compile(r"\b" + re.escape(args.spec_id) + r"\b")
 
-    # iter_fleet deliberately excludes the framework repo itself (it is not a "fleet"
-    # repo to iterate), so OliverCode's own docs/BACKLOG.md (the B-series) needs its
-    # own explicit root here or it silently never gets searched -- caught live: a
-    # first pass found every SPEC-N but zero B-series IDs.
+    # iter_fleet excludes the framework repo itself, so OliverCode needs its own root
+    # here or its backlog files are never searched.
     roots: list[tuple[str, Path]] = [("olivercode", oc_root)]
     roots += [(name, path) for name, path in private_repos().items() if path.is_dir()]
     profiles, _ = load_repo_profiles(oc_root)

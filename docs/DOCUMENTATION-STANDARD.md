@@ -44,7 +44,8 @@ A repo with enough surface keeps this set:
 | `ARCHITECTURE.md` | How a change flows through the system, the module map and its boundaries |
 | A reference doc, one file or split by surface | Every option and field. OliverCode splits its reference across `docs/FEATURE-MAP.md` and `docs/OLIVERCODE-LAUNCHER.md` |
 | `docs/ADOPTING.md` | The steps a new user or a fork follows, each one verifiable |
-| `docs/BACKLOG.md` | Decision rationale and current state, or the open items for a repo without a GitHub Project |
+| `docs/DECISIONS.md` | Each design decision whose reasoning is longer than a code comment, cited by ID |
+| `docs/BACKLOG.md` | The live tracker, or the open items for a repo without a GitHub Project |
 | `docs/TROUBLESHOOTING.md` | The failures a user will hit, listed by symptom |
 
 Each concept has one home, and every other mention points to it by name. `docs/FEATURE-MAP.md` maps each capability to the document that owns it, and `scripts/validate.sh` checks that it is complete.
@@ -55,11 +56,7 @@ A count that changes, such as tests, gates or coverage, never appears in a docum
 
 ## The backlog
 
-A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which `backlog-management` and `board-hygiene` maintain. OliverCode works this way. Its `docs/BACKLOG.md` holds three sections:
-
-- "Design decisions" records stable rationale that code and docs cite by ID
-- "Resolved" records each failure class that a gate now stops
-- "Live tracker" gives the next agent the current state and where open work lives
+A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which `backlog-management` and `board-hygiene` maintain. OliverCode works this way. Its `docs/BACKLOG.md` holds only the live tracker that `deep-review` maintains, with the review marker `scripts/audit-staleness.py` reads. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
 
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`. Finished work leaves the file, because git keeps that history.
 
