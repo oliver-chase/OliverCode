@@ -52,7 +52,7 @@ Before any file, write four lines and ask for a yes. Line 1: what the skill does
 
 ## 1. Does an existing skill already cover this?
 
-Search the loaded skill list's names and descriptions for the trigger phrase. Extend an existing skill that covers it with a new reference file or mode. One signal justifies a new sibling: a materially different verb or output type. Run `backlog-management`'s search step for the working name too. An Epic or Story may already exist. List the family folders live before you pick one, and match sibling naming inside the family.
+Search the loaded skill list's names and descriptions for the trigger phrase. Extend an existing skill that covers it with a new reference file or mode. One signal justifies a new sibling: a materially different verb or output type. Run `backlog`'s search step for the working name too. An Epic or Story may already exist. List the family folders live before you pick one, and match sibling naming inside the family.
 
 ## 2. Does it keep state?
 

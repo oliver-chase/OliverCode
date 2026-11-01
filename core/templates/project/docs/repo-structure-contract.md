@@ -9,7 +9,7 @@ Status: Active
 ## Profile
 
 This repo uses the GitHub Project backlog profile. Its backlog is the GitHub Project named
-in `docs/backlog-config.json`, read and written by the `backlog-management` skill.
+in `docs/backlog-config.json`, read and written by the `backlog` skill.
 
 ## Required structure
 
@@ -18,7 +18,7 @@ in `docs/backlog-config.json`, read and written by the `backlog-management` skil
 - `CLAUDE.md`
 - `docs/repo-structure-contract.md`
 2. Backlog:
-- `docs/backlog-config.json` — the `backlog-management` skill's config for this repo's Project
+- `docs/backlog-config.json` — the `backlog` skill's config for this repo's Project
 
 ## Backlog and evidence paths
 

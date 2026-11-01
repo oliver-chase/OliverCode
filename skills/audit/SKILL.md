@@ -41,7 +41,7 @@ Every route loads `references/lenses.md`. A target with a user interface also lo
 2. **Read every line.** Split the scope by area across reviewer agents when it is larger than one reader can hold, about 3,000 lines each. Brief each reviewer with its file list, the seven lenses and the output shape in `references/system.md`. A reviewer reads its files in full and makes no edits.
 3. **Re-check.** Before reporting, rerun the evidence for each reviewer's biggest claims: a security defect, a bug that changes behavior, and anything the report will recommend deleting. A claim that does not reproduce is dropped.
 4. **Report** in the order below, written per `docs/VOICE.md` in the target repo or `~/.claude/VOICE.md`.
-5. **File.** Search the backlog first. Then file one epic for the audit and one story per boundary, each with its priority, size, the evidence and a command that shows the problem before the fix and its absence after. The repo's `CLAUDE.md` names its backlog. Use `backlog-management`, or `docs/BACKLOG.md` where the repo has no Project.
+5. **File.** Search the backlog first. Then file one epic for the audit and one story per boundary, each with its priority, size, the evidence and a command that shows the problem before the fix and its absence after. The repo's `CLAUDE.md` names its backlog. Use `backlog`, or `docs/BACKLOG.md` where the repo has no Project.
 
 Fix nothing during the audit, with three exceptions: a fix the owner asked for in the same request, the changes route, which fixes its findings before the commit, and the plan route, which appends its findings to the plan.
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Placeholder for the backlog-management skill's per-repo config. Copy this file into your own repo (or wherever your repo's CLAUDE.md names it), fill in your real repo/Project/field IDs via `gh project field-list <number> --owner <owner> --format json`, and name its real path in that repo's own CLAUDE.md. See skills/backlog-management/references/project-fields.md for the full shape and how each ID is read.",
+  "_comment": "Placeholder for the `backlog` skill's per-repo config, shipped to forks. Copy this file to your own repo (docs/backlog-config.json), fill in your real repo, Project and field IDs from `gh project field-list <number> --owner <owner> --format json`, and name its path in that repo's own CLAUDE.md. Every run refuses a config that still holds these placeholders. `areaPolicy` is optional: list Area options that match no skill folder as retired (frozen labels), parked (a family with no folder here) or catchAll (cross-family work). skills/backlog/references/project-fields.md has the full shape.",
   "repoOwner": "your-github-org-or-user",
   "repoName": "your-repo-name",
   "projectOwner": "your-github-org-or-user",
@@ -8,19 +8,42 @@
   "fields": {
     "status": {
       "id": "...",
-      "options": {"Backlog": "...", "Ready": "...", "In Progress": "...", "Complete": "..."}
+      "options": {
+        "Backlog": "...",
+        "Ready": "...",
+        "In Progress": "...",
+        "Complete": "..."
+      }
     },
     "priority": {
       "id": "...",
-      "options": {"P0": "...", "P1": "...", "P2": "..."}
+      "options": {
+        "P0": "...",
+        "P1": "...",
+        "P2": "..."
+      }
     },
     "size": {
       "id": "...",
-      "options": {"XS": "...", "S": "...", "M": "...", "L": "...", "XL": "..."}
+      "options": {
+        "XS": "...",
+        "S": "...",
+        "M": "...",
+        "L": "...",
+        "XL": "..."
+      }
     },
     "workType": {
       "id": "...",
-      "options": {"Epic": "...", "Story": "..."}
+      "options": {
+        "Epic": "...",
+        "Story": "..."
+      }
     }
+  },
+  "areaPolicy": {
+    "retired": [],
+    "parked": [],
+    "catchAll": []
   }
 }
