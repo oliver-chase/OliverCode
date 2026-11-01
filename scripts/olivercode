@@ -44,7 +44,7 @@ COMMANDS = [
     ("olivercode health [--root DIR]", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
-    ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against this machine's skills folder + OliverCode's own skills"),
+    ("olivercode audit-fleet", "Run the audit skill's 3 static checks against this machine's skills folder + OliverCode's own skills"),
     ("olivercode push-fleet [--dry-run]", "Push already-committed work for OliverCode, the private repos and this machine's pushRepos, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
@@ -429,6 +429,14 @@ def command_install(oc_root: Path) -> int:
         else:
             linked += 1
     print(f"  [OK] skills: {linked} linked, {already} already correct")
+    # A skill this checkout removed leaves its link dangling into the checkout's own skills folder.
+    # Install wrote that link, so install removes it.
+    retired = sorted(p.name for p in skills_dir.iterdir() if p.is_symlink() and not p.exists()
+                     and Path(os.readlink(p)) == oc_root / "skills" / p.name)
+    for name in retired:
+        (skills_dir / name).unlink()
+    if retired:
+        print(f"  [REMOVED] links to skills this checkout no longer has: {', '.join(retired)}")
     _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, rel in _managed_links(oc_root).items()
                                if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == (oc_root / rel).resolve()})
 
@@ -985,7 +993,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
 
 
 def command_audit_fleet(oc_root: Path) -> int:
-    """Run skill-fleet-audit's 3 static checks against every known skill root.
+    """Run the audit skill's 3 static checks against every known skill root.
 
     Targets exactly 2 roots -- this machine's skills folder (local_config) and
     OliverCode's own skills/ -- not the fleet-repo iteration sync-hooks uses. Fleet
@@ -998,9 +1006,9 @@ def command_audit_fleet(oc_root: Path) -> int:
     The audit ships in this checkout, so it runs on any machine; the personal skills
     folder is checked only when this machine names one.
     """
-    scripts_dir = oc_root / "skills" / "skill-fleet-audit" / "scripts"
+    scripts_dir = oc_root / "skills" / "audit" / "scripts"
     if not scripts_dir.is_dir():
-        print(f"Error: {scripts_dir} not found -- this checkout is missing skills/skill-fleet-audit.")
+        print(f"Error: {scripts_dir} not found -- this checkout is missing skills/audit.")
         return 1
 
     targets = {"olivercode-skills": oc_root / "skills"}
@@ -1009,7 +1017,7 @@ def command_audit_fleet(oc_root: Path) -> int:
         print("  [INFO] no skills folder set for this machine (skillsRoot) — only OliverCode's skills are checked")
     else:
         targets = {"skills": skills, **targets}
-    checks = ["check_skill_structure.py", "check_mcp_patterns.py", "check_clarity.py"]
+    checks = ["check_skill_structure.py", "check_mcp_patterns.py", "check_descriptions.py"]
 
     # runtime/manifests/ is the sanctioned home for a generated observability
     # artifact -- runtime/control-plane/ specifically means the local control

@@ -4,7 +4,7 @@
 
 ## Config shape
 
-A new repo adopting this skill copies `shared/backlog-config.example.json` (tracked,
+A new repo adopting this skill copies `$OC/shared/backlog-config.example.json` (tracked,
 placeholder values) as its starting point. Every `backlog-config.json` this skill reads has
 this shape:
 

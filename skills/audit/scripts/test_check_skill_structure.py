@@ -256,9 +256,12 @@ class FileRefScan(unittest.TestCase):
     def test_the_family_ledger_and_the_fleet_readme_are_not_dangling(self):
         self.assertEqual({}, self.scan("Reasons live in `DECISIONS.md`. Rows live in `README.md`.\n"))
 
-    def test_the_board_repos_own_docs_are_not_dangling(self):
-        self.assertEqual({}, self.scan("Read `docs/backlog-config.json` and `docs/PRIORITIZATION.md`.\n"))
-        self.assertEqual({"doc": {"docs/other.md"}}, self.scan("Read `docs/other.md`.\n"))
+    def test_files_of_the_repo_the_skill_works_on_are_not_dangling(self):
+        self.assertEqual({}, self.scan("Read `docs/backlog-config.json`, `docs/VOICE.md` and `CLAUDE.md`.\n"))
+
+    def test_a_missing_file_in_the_skills_own_folders_is_dangling(self):
+        self.assertEqual({"doc": {"references/other.md"}}, self.scan("Read `references/other.md`.\n"))
+        self.assertEqual({"doc": {"notes/x.md"}}, self.scan("Read `notes/x.md`.\n", {"notes/y.md": "y"}))
 
     def test_a_run_command_names_a_script_the_skill_must_hold(self):
         self.assertEqual({"doc": {"scripts/check_pages.py"}}, self.scan('python3 "$S/check_pages.py" out.docx\n'))

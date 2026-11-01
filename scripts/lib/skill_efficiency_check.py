@@ -14,7 +14,7 @@ core/contracts/SKILL_EFFICIENCY_STANDARD.md:
 The thresholds below are the one home for these numbers. The standard points here and
 does not restate them.
 
-Ported from the skill-fleet-audit checkers check_skill_structure.py and
+Ported from the audit skill's checkers check_skill_structure.py and
 check_mcp_patterns.py as they stood when the standard was written. Those scripts later
 dropped these rules, so this module is now their only implementation. ASD-STE100 clarity
 (rule 3) is the commit hook's Gate 11 and is not repeated here.
