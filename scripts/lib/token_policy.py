@@ -1,7 +1,7 @@
 """Shared token-policy accessor.
 
-One home for the profile -> token-policy field mapping, used by both
-orchestration-gatekeeper.py and apply-token-policy.py. Two copies drift.
+One home for the profile -> token-policy field mapping, used by
+orchestration-gatekeeper.py.
 """
 
 

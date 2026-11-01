@@ -227,14 +227,6 @@ main() {
     --check-token-policy)
       run_token_policy_check
       ;;
-    --check-paths)
-      shift  # consume --check-paths
-      local repo="${1:-olivercode}"
-      # Guard the shift: a bare `shift 2` aborts under `set -e` with no repo arg.
-      [ $# -gt 0 ] && shift  # consume repo if given; remaining args are paths
-      echo "=== validate: testing token-policy path filtering for $repo ==="
-      python3 "$SCRIPT_DIR/apply-token-policy.py" "$repo" "$@" 2>&1 || echo "  (no paths provided — pipe paths via stdin)"
-      ;;
     --help|-h)
       echo "Usage: bash scripts/validate.sh [OPTIONS]"
       echo ""
@@ -248,7 +240,6 @@ main() {
       echo "                         (repo-local validation hook convention), else skip"
       echo "  --check-consistency    Run doc/code consistency checks only"
       echo "  --check-token-policy   Run token policy check only"
-      echo "  --check-paths <repo>   Test token-policy path filtering for a repo (pipe paths via stdin)"
       echo "  --help                 Show this help"
       ;;
     --check-consistency)

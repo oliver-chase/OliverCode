@@ -34,7 +34,6 @@ the commit unless, for every repo profile:
 - `ignore_globs` and `generated_artifact_dirs` are both present and non-empty
 - no `ignore_globs` entry is the catch-all `**`, which would exclude everything
 
-`scripts/apply-token-policy.py <repo> [paths...]` applies `ignore_globs` to a path list.
 
 ## Enforcement
 

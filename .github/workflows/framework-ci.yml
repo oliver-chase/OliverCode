@@ -35,5 +35,3 @@ jobs:
       - name: Fork usability (clean checkout, no config, virgin HOME)
         run: bash scripts/qa/check-fork-usable.sh
 
-      - name: Full QA pass (advisory)
-        run: bash scripts/qa/full-qa-pass.sh || true
