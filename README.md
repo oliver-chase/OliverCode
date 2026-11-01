@@ -126,23 +126,9 @@ scripts/olivercode health
 
 Run it regularly to catch repos whose hooks have stopped applying.
 
-### The nine gates in a governed repo
+### The gates in a governed repo
 
-Every governed repo runs nine checks on every commit:
-
-1. **Secrets** — passwords, keys, and other credentials
-2. **Emoji**
-3. **PII** — personal information
-4. **Deleted-repo references**
-5. **Unsafe workflow files**
-6. **Planning-document rules**
-7. **Backlog hygiene** — including finished items incorrectly marked `DONE`
-8. **Archived content** — a staged path under an `Archive`/`legacy`/`deprecated`/`old` directory, or a `.bak`/`-old`/`-backup`-suffixed file. Current state only; git is the archive
-9. **Writing clarity (asd-ste100)** — SKILL.md, CLAUDE.md and references/*.md files with strict-mode ASD-STE100 findings (a warning). Skips cleanly if the linter is not installed on the machine
-
-OliverCode itself runs a further pair of gates that validate the framework's own configuration files.
-
-See [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) for the complete gate table and the documented process for intentionally giving a repo a different set of hooks.
+Every governed repo checks each commit for secrets, personal data, unsafe workflow files and unclear agent instructions, among other things. [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) lists every gate, which repos run which, and how to give a repo a different set of hooks.
 
 ---
 
@@ -274,8 +260,6 @@ python3 -m unittest discover tests
 
 The suite reports its own test count and deliberately breaks each gate to verify that the gate catches the failure.
 
-**OliverCode has 11 gates.**
-A governed repo receives nine. Both counts are verified against the actual hook files during every self-test, so changing either number without updating the README causes the self-test to fail.
 
 Run the complete setup scenarios with:
 

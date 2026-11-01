@@ -216,9 +216,8 @@ once, right after `sync-hooks`, so only new violations block, then commit the
 python3 core/templates/project/write-ste-baseline.py /path/to/repo
 ```
 
-An adopted repo gets nine gates, not the eleven OliverCode runs on itself: contract
-integrity and token policy check framework-only things, so the template does not ship them.
-`docs/GOVERNANCE.md` has the coverage table.
+An adopted repo runs every gate except contract integrity and token policy, which check
+things only OliverCode has. `docs/GOVERNANCE.md` has the coverage table.
 
 Know what you just installed: **hook enforcement fails open.** See
 `docs/TROUBLESHOOTING.md`'s "Commits are passing gates that should have blocked them" for

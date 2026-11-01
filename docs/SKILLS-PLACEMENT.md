@@ -69,7 +69,5 @@ that would make git run no hooks — `core.hooksPath` unset, pointing at a missi
 a hooks directory with no `pre-commit` file, a `pre-commit` that isn't executable, or one
 whose content diverges from the template.
 
-The first four of those are fail-OPEN: git skips hooks silently, so a commit carrying
-secrets succeeds with no error. The Claude Code session check also reports it for the repo a
-session opens. Repair with
+The first four make git skip hooks silently (`docs/TROUBLESHOOTING.md` has why). Repair with
 `scripts/olivercode sync-hooks`.
