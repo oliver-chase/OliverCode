@@ -144,8 +144,9 @@ def check_duplicate_cards(items):
 
 
 def check_ready_occupancy(items):
+    # An empty Ready column is correct when no Backlog item is waiting to be queued.
     ready = [i for i in items if i.get("status") == "Ready"]
-    if not ready:
+    if not ready and any(i.get("status") == "Backlog" for i in items):
         return ["Ready column is empty -- nothing queued as next-up work"]
     return []
 
@@ -185,6 +186,8 @@ def check_ready_candidates(items):
     """Fires only when Ready is empty. Needs bodies fetched onto `items` first. Whitespace is
     collapsed before matching, so a phrase that spans a wrapped line still matches."""
     if any(i.get("status") == "Ready" for i in items):
+        return []
+    if not any(i.get("status") == "Backlog" for i in items):
         return []
     candidates = []
     for i in items:
