@@ -37,9 +37,7 @@ profile -- see `shared/repo-profiles.json`.
 `validate.sh` also fails closed on **unfalsifiable checks** — a gate or script that
 cannot fail, whatever the input. See `GATE-FALSIFIABILITY-1` in `docs/DECISIONS.md` for the
 defects that shape covered and why none was visible from the output. Detector:
-`scripts/lib/falsifiability_check.py`. A genuinely advisory script declares itself in that
-module's `ADVISORY_BY_CONTRACT` map, with a reason, so the exemption list cannot quietly
-absorb a real bug.
+`scripts/lib/falsifiability_check.py`.
 
 It also fails closed on **hook drift**. OliverCode's hook, the public template, and the
 private template implement the same gates, and nothing compared them: two had drifted into
