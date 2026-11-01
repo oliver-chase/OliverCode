@@ -97,21 +97,6 @@
       "mode": "presence"
     },
     {
-      "source": "core/templates/project/docs/README.md",
-      "target": "docs/README.md",
-      "mode": "presence"
-    },
-    {
-      "source": "core/templates/project/docs/SETUP_MODES.md",
-      "target": "docs/SETUP_MODES.md",
-      "mode": "presence"
-    },
-    {
-      "source": "core/templates/project/docs/MANUAL_SETUP.md",
-      "target": "docs/MANUAL_SETUP.md",
-      "mode": "presence"
-    },
-    {
       "source": "core/templates/project/scripts/bootstrap-profile.sh",
       "target": "scripts/bootstrap-profile.sh",
       "mode": "presence"
@@ -130,27 +115,6 @@
       "source": "core/templates/project/.github/workflows/olivercode-governance.yml",
       "target": ".github/workflows/olivercode-governance.yml",
       "mode": "presence"
-    }
-  ],
-  "_conditional_files_note": "Synced only into repos whose profile enables the matching keepalive block in repo-profiles (see docs/KEEPALIVE-STANDARD.md). Unconditional presence would force a Supabase keepalive script into repos with no database.",
-  "conditionalFiles": [
-    {
-      "source": "core/templates/project/supabase/keepalive.sql",
-      "target": "supabase/keepalive.sql",
-      "mode": "presence",
-      "condition": "keepalive.supabase.enabled"
-    },
-    {
-      "source": "core/templates/project/scripts/oc-supabase-keepalive.sh",
-      "target": "scripts/oc-supabase-keepalive.sh",
-      "mode": "presence",
-      "condition": "keepalive.supabase.enabled && no Cloudflare deployment"
-    },
-    {
-      "source": "core/templates/project/scripts/supabase-keepalive.js",
-      "target": "functions/api/admin/keepalive.js",
-      "mode": "presence",
-      "condition": "keepalive.supabase.enabled && Cloudflare Pages deployment"
     }
   ]
 }

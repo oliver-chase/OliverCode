@@ -41,7 +41,6 @@ HITS=0
 # spaces) -- iterate with `while read` and quote "$f", never `xargs` or
 # unquoted `for f in $(...)`, both of which word-split on internal spaces.
 # core.quotepath=false so non-ASCII filenames (em-dash etc) aren't octal-escaped.
-ARCHIVE_DIRS=$(git -c core.quotepath=false ls-files | grep -iE '(^|/)(archive|archived|old|legacy)/' | sed -E 's#/(.*)##' | sort -u || true)
 ARCHIVE_FILES=0
 ARCHIVE_LOC=0
 while IFS= read -r f; do

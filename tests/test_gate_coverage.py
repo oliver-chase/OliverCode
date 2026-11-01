@@ -54,20 +54,19 @@ class TestShippedTree(unittest.TestCase):
         totals, problems = cc._hook_totals(REPO_ROOT)
         self.assertEqual(problems, [])
         self.assertEqual(
-            totals, {"olivercode": 11, "template": 9, "template-private": 4},
+            totals, {"olivercode": 9, "template": 9, "template-private": 4},
             "gate coverage changed -- update the table in docs/GOVERNANCE.md, which is "
             "its single home, and every doc that points there",
         )
 
     def test_oliveronly_gates_are_absent_from_the_template(self):
-        """The two gates a fleet repo does not get, asserted against the files."""
+        """The gate a fleet repo does not get, asserted against the files."""
         template = (REPO_ROOT / "core/templates/project/pre-commit").read_text()
-        for gate in ("Contract integrity", "Token policy"):
-            self.assertNotIn(
-                gate, template,
-                f"'{gate}' now ships in the template; it was OliverCode-only, so the "
-                f"coverage table and the README's summary both need updating",
-            )
+        self.assertNotIn(
+            "Contract integrity", template,
+            "'Contract integrity' now ships in the template; it was OliverCode-only, so the "
+            "coverage table and the README's summary both need updating",
+        )
 
 
 class TestMutations(unittest.TestCase):
@@ -101,25 +100,26 @@ class TestMutations(unittest.TestCase):
         Exercises all three mechanisms at once: the modifier-tolerant claim pattern
         ("N pre-commit gates"), the cue sitting on the PRECEDING line, and comparison
         against the template's count rather than OliverCode's. The planted number is
-        OliverCode's own total, so only the cue makes it wrong.
+        the private variant's total, which matches neither, so the claim is wrong
+        whichever hook it resolves to.
         """
         self.assertTrue(self._fails_after(
             "README.md", "## What happens automatically\n",
             "## What happens automatically\n\n**On every commit, in every adopted repo**\n"
-            f"{cc._hook_totals(REPO_ROOT)[0]['olivercode']} pre-commit gates run.\n"))
+            f"{cc._hook_totals(REPO_ROOT)[0]['template-private']} pre-commit gates run.\n"))
 
     def test_a_cue_in_an_earlier_paragraph_does_not_reattribute(self):
         """Context stops at a blank line.
 
         Widening it past the paragraph boundary made the checker MISS a planted wrong
         claim: an unrelated "template" two paragraphs up re-attributed an OliverCode
-        claim to the template hook, where the wrong number happened to be right. The
-        planted number is the template's total, so reattribution would hide it.
+        claim to the private hook, where the wrong number happened to be right. The
+        planted number is the private variant's total, so reattribution would hide it.
         """
         self.assertTrue(self._fails_after(
             "docs/TROUBLESHOOTING.md", "## Commits are passing gates",
-            "The template is unrelated to what follows.\n\n"
-            f"All {cc._hook_totals(REPO_ROOT)[0]['template']} gates run in this repo.\n\n"
+            "The private variant is unrelated to what follows.\n\n"
+            f"All {cc._hook_totals(REPO_ROOT)[0]['template-private']} gates run in this repo.\n\n"
             "## Commits are passing gates"))
 
     def test_catches_the_word_form_of_a_wrong_claim(self):
@@ -129,7 +129,7 @@ class TestMutations(unittest.TestCase):
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/GOVERNANCE.md", "| **11** | **9** | **4** |", "| **11** | **11** | **4** |"))
+            "docs/GOVERNANCE.md", "| **9** | **9** | **4** |", "| **9** | **11** | **4** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""
@@ -141,33 +141,6 @@ class TestMutations(unittest.TestCase):
         would 'pass' without testing anything."""
         with tempfile.TemporaryDirectory(prefix="olivercode-gates-") as tmp:
             self.assertEqual(cc.check_all(_sandbox(Path(tmp) / "oc")), [])
-
-
-class TestFeatureMapCompleteness(unittest.TestCase):
-    """FEATURE-MAP.md asserts it indexes every capability under scripts/."""
-
-    def test_an_unlisted_script_is_caught(self):
-        with tempfile.TemporaryDirectory(prefix="olivercode-fm-") as tmp:
-            root = Path(tmp)
-            (root / "docs").mkdir()
-            (root / "scripts").mkdir()
-            (root / "docs" / "FEATURE-MAP.md").write_text("| scripts/listed.sh | x |\n")
-            (root / "scripts" / "listed.sh").write_text("exit 0\n")
-            (root / "scripts" / "unlisted.sh").write_text("exit 0\n")
-            subprocess.run(["git", "init", "-q", "."], cwd=root, check=True)
-            subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-            failures = cc.check_feature_map_completeness(root)
-            self.assertEqual(len(failures), 1)
-            self.assertIn("scripts/unlisted.sh", failures[0])
-
-    def test_every_exemption_is_stated_in_the_doc_too(self):
-        """The code's exempt list and the doc's stated scope must agree, or the
-        exemption becomes a place to hide an undocumented capability."""
-        fm = (REPO_ROOT / "docs" / "FEATURE-MAP.md").read_text(encoding="utf-8")
-        for rel in cc.FEATURE_MAP_EXEMPT:
-            if rel.endswith("__init__.py"):
-                continue
-            self.assertIn(rel, fm, f"{rel} is exempt in code but not explained in the doc")
 
 
 if __name__ == "__main__":

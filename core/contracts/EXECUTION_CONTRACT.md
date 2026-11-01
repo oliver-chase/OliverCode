@@ -5,12 +5,8 @@ Every change, in any project, follows this locked process. No gate is skippable.
 `core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` owns the human-facing sequence this
 mechanism sits inside — gap analysis, spec, priority, the build/verify/commit loop. This
 file owns the gate and evidence mechanics that loop ends in: what runs, what blocks, and
-the machine-readable policies behind it.
-
-**Backend policies (machine-readable, loaded per task):**
-- the fleet registry (`repo-profiles.json`; `docs/DECISIONS.md` `REGISTRY-PRIVATE-1` says where) -- per-repo validation and evidence requirements
-- `shared/task-policies/task-types.json` -- per-task-type evidence requirements
-- `scripts/orchestration-gatekeeper.py` -- deterministic pass/fail validation
+the fleet registry behind it (`repo-profiles.json`; `docs/DECISIONS.md` `REGISTRY-PRIVATE-1`
+says where).
 
 ## The Process
 
@@ -26,7 +22,6 @@ User says "yes" / approves change
     |
     v
 3.  AUDIT -- scan for stale references, conflict markers, ordering hazards
-    |   See task-types.json for per-type audit list
     |
     v
 4.  QA -- verify the change end-to-end
@@ -39,7 +34,6 @@ User says "yes" / approves change
     |
     v
 6.  COMMIT -- only on pass, with descriptive message
-    |   Record the evidence fields task-types.json requires for this task type
     |
     v
 7.  PUSH -- to the correct repo
@@ -50,9 +44,6 @@ User says "yes" / approves change
 `.githooks/pre-commit` runs the gates automatically on every commit. BLOCKED means fix
 before commit. There is no bypass mode. The gate list and what each one blocks lives in
 `docs/GOVERNANCE.md` — one home, so a hook change updates exactly one table.
-
-Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
---evidence-file <path>` blocks a WRITE MODE completion claim without required evidence.
 
 ## Session Hooks (Claude Code, not git)
 
@@ -73,27 +64,11 @@ All three are deterministic and fail open: a hook's own bug never blocks a commi
 a session. `olivercode health` fails when one is missing on a machine where install
 linked this checkout.
 
-## Completion Gate (opt-in, on demand)
+## Completion
 
-The gatekeeper can validate a completion claim against a machine-readable evidence record:
-
-```bash
-python3 scripts/orchestration-gatekeeper.py --repo <name> --task-type <type> --evidence-file <path>
-```
-
-It checks that every field `shared/task-policies/task-types.json` requires for that task type
-is present and well formed, and exits nonzero naming the exact failing stage. Use it when a completion claim needs to be auditable by something other
-than trust — a long autonomous run, a handoff, a task where "I ran the tests" needs proof.
-
-**It is opt-in, not a precondition for every commit.** Stating it as a universal requirement
-would be false: nothing invokes it automatically, no evidence record exists anywhere in this
-fleet, and every commit in this repo's history was made without one. A contract that every
-commit violates teaches agents that written rules are optional, which costs more than the
-gate was worth. The mechanically-enforced completion requirement is the pre-commit hook plus
-the repo's own `scripts/validate.sh`.
-
-What IS required on every change: run the repo's canonical validation before committing, and
-stop on failure rather than claiming completion.
+Run the repo's canonical validation before committing, and stop on failure rather than
+claiming completion. The mechanically enforced requirement is the pre-commit hook plus the
+repo's own `scripts/validate.sh`.
 
 ### Authority hierarchy
 

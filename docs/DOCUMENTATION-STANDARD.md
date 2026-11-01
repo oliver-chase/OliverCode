@@ -1,6 +1,6 @@
 # Documentation standard
 
-Every README and document in OliverCode, in each repo it governs and in any fork follows this layout. Its words follow `docs/VOICE.md`. `bash scripts/validate.sh` checks internal references, doc-to-code consistency and the feature map, and fails the run on any drift it finds.
+Every README and document in OliverCode, in each repo it governs and in any fork follows this layout. Its words follow `docs/VOICE.md`. `bash scripts/validate.sh` checks internal references and doc-to-code consistency, and fails the run on any drift it finds.
 
 ## The README
 
@@ -34,7 +34,7 @@ Check every path, command and row against the repo before the README ships.
 
 ## Files and where they live
 
-Documents live in `docs/` and use CAPS-KEBAB names, such as `FEATURE-MAP.md`. The root holds only these documents: `README.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `LICENSE` and a declared quality baseline.
+Documents live in `docs/` and use CAPS-KEBAB names, such as `GOVERNANCE.md`. The root holds only these documents: `README.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, `LICENSE` and a declared quality baseline.
 
 A repo with enough surface keeps this set:
 
@@ -42,13 +42,13 @@ A repo with enough surface keeps this set:
 |---|---|
 | `README.md` | The document a new reader starts from |
 | `ARCHITECTURE.md` | How a change flows through the system, the module map and its boundaries |
-| A reference doc, one file or split by surface | Every option and field. OliverCode splits its reference across `docs/FEATURE-MAP.md` and `docs/OLIVERCODE-LAUNCHER.md` |
+| A reference doc, one file or split by surface | Every option and field. OliverCode keeps its command reference in `docs/OLIVERCODE-LAUNCHER.md` and its layout table in `README.md` |
 | `docs/ADOPTING.md` | The steps a new user or a fork follows, each one verifiable |
 | `docs/DECISIONS.md` | Each design decision whose reasoning is longer than a code comment, cited by ID |
 | `docs/BACKLOG.md` | The live tracker, or the open items for a repo without a GitHub Project |
 | `docs/TROUBLESHOOTING.md` | The failures a user will hit, listed by symptom |
 
-Each concept has one home, and every other mention points to it by name. `docs/FEATURE-MAP.md` maps each capability to the document that owns it, and `scripts/validate.sh` checks that it is complete.
+Each concept has one home, and every other mention points to it by name.
 
 ## Numbers in prose
 
@@ -62,7 +62,7 @@ A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`
 
 ## Keeping documents current
 
-A change to behavior, options, structure or file layout updates every document that states the old fact, in the same commit. The README's documentation table, the feature map and the backlog all count as documents. `scripts/validate.sh` catches the drift it can detect, and the rule still applies to the drift it cannot.
+A change to behavior, options, structure or file layout updates every document that states the old fact, in the same commit. The README's documentation table, its layout table and the backlog all count as documents. `scripts/validate.sh` catches the drift it can detect, and the rule still applies to the drift it cannot.
 
 ## CLAUDE.md
 

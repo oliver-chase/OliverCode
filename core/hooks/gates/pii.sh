@@ -11,7 +11,7 @@ for pattern in "${PII_PATTERNS[@]}"; do
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
       case "$file" in
-        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|*.md|.githooks/pre-commit|core/templates/project/pre-commit|core/hooks/*|config/contracts/planning-doc-governance.json) continue ;;
+        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|*.md|.githooks/pre-commit|core/templates/project/pre-commit|core/hooks/*) continue ;;
       esac
       # Strip known non-PII strings before matching. `git@github.com` is the
       # SSH form npm writes into package-lock.json "resolved" entries for a git

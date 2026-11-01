@@ -165,13 +165,9 @@ Rules for this rewrite:
 Enforcement has to know which repos it governs before it can reach them, so registration
 comes first.
 
-Edit the registry's `repo-profiles.json` (a private repo's `olivercode/` copy when `olivercode.local.json` names one under `privateRepos`, else `shared/repo-profiles.json`) with your real repo names, validation commands,
-and token policy. `_<field>_note` keys beside a worked example document the schema in place.
+Edit the registry's `repo-profiles.json` (a private repo's `olivercode/` copy when `olivercode.local.json` names one under `privateRepos`, else `shared/repo-profiles.json`) with your real repo names, and validation commands. `_<field>_note` keys beside a worked example document the schema in place.
 `scripts/olivercode discover --root <dir>` emits a profile skeleton per repo with `name`, `path`
-and `canonicalValidationCommand`. Add a `token_policy` block to each profile yourself,
-because every profile needs one, with `ignore_globs` and
-`generated_artifact_dirs`, or Gate 8 fails the commit — `docs/TOKEN-POLICY.md` has the shape.
-
+and `canonicalValidationCommand`. 
 Confirm the fleet really registered before continuing:
 
 ```bash
@@ -199,7 +195,7 @@ and commit the `.githooks/ste-baseline` file it writes in that repo:
 python3 core/templates/project/write-ste-baseline.py /path/to/repo
 ```
 
-An adopted repo runs every gate except contract integrity and token policy, which check
+An adopted repo runs every gate except contract integrity, which checks
 things only OliverCode has. `docs/GOVERNANCE.md` has the coverage table.
 
 Know what you just installed: **hook enforcement fails open.** See
@@ -230,8 +226,7 @@ The manifest gives every file a mode, and the mode determines whether your exist
   The hooks and the shared baseline are strict. If you have hand-edited one of those in
   the target repo, your version is replaced.
 
-`conditionalFiles` are listed, never copied: they depend on profile flags the repo may
-not set, so the decision stays yours. Always run `--dry-run` against an existing repo
+Always run `--dry-run` against an existing repo
 first and read the OVERWRITE lines — that list is exactly what you are agreeing to lose.
 
 ## Step 7 — Verify, with evidence

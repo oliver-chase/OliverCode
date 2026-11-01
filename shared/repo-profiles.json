@@ -1,68 +1,15 @@
 {
   "version": 4,
-  "description": "Machine-readable repo profiles for enforcement routing, token policy and keepalive. This tracked copy is the example a fork registers its repos in. A checkout whose olivercode.local.json names private repos reads the real registry from the first one holding olivercode/repo-profiles.json.",
+  "description": "Machine-readable repo profiles for enforcement routing. This tracked copy is the example a fork registers its repos in. A checkout whose olivercode.local.json names private repos reads the real registry from the first one holding olivercode/repo-profiles.json.",
   "profiles": {},
   "_exampleProfile": {
     "name": "example-repo",
     "type": "python",
     "canonicalValidationCommand": ".venv/bin/python -m unittest discover -s scripts",
     "finalAuthority": "custom",
-    "keepalive": {
-      "supabase": {
-        "enabled": false
-      },
-      "cloudflare": {
-        "enabled": false
-      }
-    },
     "supplementaryValidators": [],
     "preCommitGatesHook": ".githooks/pre-commit",
-    "buildScript": null,
-    "taskTypes": {
-      "write_code": {
-        "requiredEvidence": [
-          "files_changed_on_disk",
-          "validation_command_executed",
-          "validation_result_captured",
-          "commit_hash_on_success"
-        ],
-        "fastAudits": [
-          "conflict_markers",
-          "duplicate_symbols",
-          "no_secrets"
-        ]
-      },
-      "write_doc": {
-        "requiredEvidence": [
-          "files_changed_on_disk",
-          "commit_hash_on_success"
-        ],
-        "fastAudits": [
-          "conflict_markers",
-          "stale_references"
-        ]
-      }
-    },
-    "failurePolicy": {
-      "onValidationFail": "STOP_AND_REPORT",
-      "failStageRecorded": "exact_failing_stage"
-    },
-    "token_policy": {
-      "ignore_globs": [
-        ".venv/**",
-        "__pycache__/**",
-        "*.pyc",
-        "*.log"
-      ],
-      "doc_priority_hints": [
-        "CLAUDE.md",
-        "README.md"
-      ],
-      "generated_artifact_dirs": [
-        ".venv",
-        "__pycache__"
-      ]
-    }
+    "buildScript": null
   },
   "_hookVariant_note": "Optional per-profile field. Set it to a short reason string when a repo must run a pre-commit hook that differs from core/templates/project/pre-commit (a repo-specific governance path, a gate whose checker only exists there). `olivercode health` then reports the divergence as WARN instead of FAIL, and `sync-hooks` leaves its pre-commit alone while still syncing pre-push. It never excuses a MISSING or unexecutable hook -- those still fail, because that is the fail-open case. Remove the field to bring the repo back under the template. TRADE-OFF: sync-hooks never touches a declared variant's pre-commit, so it stops receiving template fixes -- including security ones. Observed for real: a perl guard that closed a fail-open in the emoji gate reached every repo except the one carrying a variant. Re-check a variant repo by hand whenever the template's gates change.",
   "_path_note": "Optional per-profile field. Without it a repo is located at <fleet-root>/<profile-name>, the sibling convention. A `path` here is shared by every machine, so use it only for a location that is the same everywhere (relative to the fleet root). A path that belongs to one machine goes in that machine's olivercode.local.json under repoPaths.",

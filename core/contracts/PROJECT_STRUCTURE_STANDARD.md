@@ -8,7 +8,7 @@ OliverCode's own root for Epic/Commit Hygiene and Required Base Paths — the sa
 product repo with epics. The GitHub Project backlog model below applies to OliverCode too:
 its open work lives in the `OliverCode` GitHub Project, named in its own `docs/backlog-config.json`.
 `docs/DECISIONS.md` holds decision rationale, and `docs/BACKLOG.md` holds only the live
-tracker. `core/workflows/` is its equivalent of a per-repo procedure doc.
+tracker.
 
 ## Purpose
 
@@ -50,7 +50,7 @@ Where a secret, credential, or runtime artifact goes is `core/contracts/FILE_LOC
 ## Shared Quality Baseline Hygiene
 
 1. Managed files must stay byte-identical across all repos where they are marked strict in `shared/project-bootstrap-manifest.json`.
-2. What the managed files are, and the change-canonical-first rule: `QUALITY_BASELINE.md`. How sync and drift audit run: `core/workflows/project-standardization-lifecycle.md`.
+2. What the managed files are, and the change-canonical-first rule: `QUALITY_BASELINE.md`.
 
 ## Required Base Paths (All Repos)
 
@@ -69,6 +69,5 @@ Where a secret, credential, or runtime artifact goes is `core/contracts/FILE_LOC
 ## Enforcement
 
 1. `npm run qa:hygiene` in each repo.
-2. Cross-repo structure drift: `core/workflows/project-standardization-lifecycle.md` ("Audit drift") has the procedure.
-3. Contract drift in `docs/repo-structure-contract.md` is a blocker.
-4. Pre-push: epic assignment explicit and correct, commit scope is one epic, tests added/updated with the relevant suite passing, docs/backlog metadata synchronized, and secret/privacy scans passing.
+2. Contract drift in `docs/repo-structure-contract.md` is a blocker.
+3. Pre-push: epic assignment explicit and correct, commit scope is one epic, tests added/updated with the relevant suite passing, docs/backlog metadata synchronized, and secret/privacy scans passing.

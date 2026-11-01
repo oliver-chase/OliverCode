@@ -5,7 +5,6 @@
 OliverCode is the **shared orchestration framework**. It contains:
 - Reusable contracts, policies, and standards (`core/contracts/`)
 - Reusable skill definitions (`skills/`)
-- Workflow procedures (`core/workflows/`)
 - Project templates (`core/templates/project/`) and shared manifests and registries (`shared/`)
 - Framework documentation (`docs/`)
 - A thin launcher entrypoint (`scripts/olivercode`)
@@ -22,8 +21,6 @@ Claude Code is this machine's sole agent runtime.
 - Claude runtime/orchestration: `~/.claude`
 - Shared skills root: `OliverCode/skills`
 - Shared structure and hygiene standard: `OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
-- Workflow standards and trigger routing: `OliverCode/shared/workflow-standards.md`
-- Workflow procedures: `OliverCode/core/workflows/`
 
 Ownership follows from the map above:
 

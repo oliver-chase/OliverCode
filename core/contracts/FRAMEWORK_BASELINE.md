@@ -23,9 +23,8 @@ Required active runtime surfaces:
 
 ### Verify
 Required active verification surfaces:
-- `scripts/validate.sh` (unified entrypoint — wraps `.githooks/pre-commit` and `scripts/orchestration-gatekeeper.py`)
+- `scripts/validate.sh` (unified entrypoint, wraps `.githooks/pre-commit`)
 - `.githooks/pre-commit`
-- `scripts/orchestration-gatekeeper.py`
 
 ### Ship
 Required reusable contract/template surfaces:
@@ -41,7 +40,6 @@ Required current-state authority docs:
 - `ARCHITECTURE.md`
 - `docs/GOVERNANCE.md`
 - `docs/OLIVERCODE-LAUNCHER.md`
-- `docs/FEATURE-MAP.md`
 - `docs/DOCUMENTATION-STANDARD.md`
 
 ## Removal Rules
@@ -89,7 +87,6 @@ consumes manifests.
 Run `bash scripts/validate.sh` from repo root for unified validation. It wraps:
 - `.githooks/pre-commit` (primary gate — `docs/GOVERNANCE.md` has the current per-repo gate count and table)
 - Optional smoke tests in `tests/` (WARN-skip if absent)
-- `scripts/orchestration-gatekeeper.py` (separately, with `--evidence <file>`)
 
 CI and why it is paused on the origin repo: `docs/GOVERNANCE.md` "Unified Validation
 Entrypoint". There is no type checker or schema validator beyond

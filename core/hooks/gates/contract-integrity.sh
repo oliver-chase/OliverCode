@@ -12,7 +12,7 @@ echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Contract integrity..."
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
     case "$file" in
-      *.md|*.txt|docs/*|tests/*|*/tests/*|*.test.*|*_test.*|.githooks/pre-commit|core/hooks/*|scripts/check-planning-doc-governance.py) continue ;;
+      *.md|*.txt|docs/*|tests/*|*/tests/*|*.test.*|*_test.*|.githooks/pre-commit|core/hooks/*) continue ;;
     esac
     if grep -q '/workspace/' "$file" 2>/dev/null; then
       echo "  BLOCKED: $file contains hardcoded /workspace/ path reference"

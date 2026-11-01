@@ -4,11 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROFILE="local-runtime"
-MODE="repo-local"
 
 usage() {
   cat <<EOF
-Usage: $0 [--profile repo-contract-only|local-runtime|private-overlay] [--mode repo-local|vault-integrated]
+Usage: $0 [--profile repo-contract-only|local-runtime|private-overlay]
 EOF
 }
 
@@ -17,7 +16,6 @@ while [[ $# -gt 0 ]]; do
     # `shift 2` on a value-taking flag dies bare under set -e if the flag is
     # the last argument (nothing left to shift); check first for a clean FAIL.
     --profile) [[ $# -ge 2 ]] || { echo "FAIL --profile requires a value" >&2; exit 1; }; PROFILE="$2"; shift 2 ;;
-    --mode) [[ $# -ge 2 ]] || { echo "FAIL --mode requires a value" >&2; exit 1; }; MODE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "FAIL unknown argument: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -28,11 +26,6 @@ case "$PROFILE" in
   *) echo "FAIL invalid profile: $PROFILE" >&2; exit 1 ;;
 esac
 
-case "$MODE" in
-  repo-local|vault-integrated) ;;
-  *) echo "FAIL invalid mode: $MODE" >&2; exit 1 ;;
-esac
-
 require_file() {
   local path="$1"
   [[ -f "$path" ]] || { echo "FAIL missing file: $path" >&2; exit 1; }
@@ -41,11 +34,8 @@ require_file() {
 echo "== Public/private profile checks =="
 echo "repo=$REPO_ROOT"
 echo "profile=$PROFILE"
-echo "mode=$MODE"
 
 require_file "$REPO_ROOT/README.md"
-require_file "$REPO_ROOT/docs/SETUP_MODES.md"
-require_file "$REPO_ROOT/docs/MANUAL_SETUP.md"
 require_file "$REPO_ROOT/.env.example"
 require_file "$REPO_ROOT/scripts/bootstrap-profile.sh"
 require_file "$REPO_ROOT/scripts/run-profile-checks.sh"

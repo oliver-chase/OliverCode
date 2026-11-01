@@ -4,9 +4,7 @@ Status: Active
 Effective Date: 2026-05-23
 Scope: Every downstream repository under `<fleet-root>/` that consumes OliverCode's
 templates. Does not apply to OliverCode itself -- OliverCode is the standard-setter, not a
-consumer of its own downstream template (`docs/SETUP_MODES.md`'s own text, "this repo uses
-the OliverCode public/private boundary standard," would be circular applied to OliverCode's
-own root). OliverCode's equivalent surfaces are `docs/ADOPTING.md`, `README.md`'s Quick Start, and
+consumer of its own downstream template. OliverCode's equivalent surfaces are `docs/ADOPTING.md`, `README.md`'s Quick Start, and
 `runtime/control-plane/` for its own private machine state.
 
 ## Goal
@@ -18,13 +16,9 @@ Every repo must separate:
 Any repo with the full split profile serves as the reference implementation for this separation. Other repos may use simpler profiles, but they must keep the same boundary model.
 
 ## Required concepts
-1. Installation profile and runtime mode are separate concepts.
-2. Public repos own code, docs, templates, validators, and bootstrap entrypoints.
-3. Private overlays own delegated tokens, `.runtime/`, per-agent OS state (e.g. `.claude-optimization/memory/`, `.claude-optimization/state/`), host scheduler wiring, and machine-specific state. What goes in `.env.local` / `.secrets/*` and what each tracked `.example` file shows is `core/contracts/FILE_LOCATION_STANDARD.md`'s rule, not restated here.
-4. README must link to canonical setup docs.
-5. Each repo must provide:
-   - `docs/SETUP_MODES.md`
-   - `docs/MANUAL_SETUP.md`
+1. Public repos own code, docs, templates, validators, and bootstrap entrypoints.
+2. Private overlays own delegated tokens, `.runtime/`, per-agent OS state (e.g. `.claude-optimization/memory/`, `.claude-optimization/state/`), host scheduler wiring, and machine-specific state. What goes in `.env.local` / `.secrets/*` and what each tracked `.example` file shows is `core/contracts/FILE_LOCATION_STANDARD.md`'s rule, not restated here.
+3. Each repo must provide:
    - `scripts/bootstrap-profile.sh`
    - `scripts/run-profile-checks.sh`
 
@@ -33,10 +27,6 @@ Repos may extend these profiles, but they must support this baseline vocabulary:
 - `repo-contract-only`: tracked code/docs/contracts only
 - `local-runtime`: local runnable checkout using `.env.local`
 - `private-overlay`: machine-specific/private runtime overlay
-
-## Minimum runtime modes
-- `repo-local`: repo-only validation without assuming vault/private runtime state
-- `vault-integrated`: private integrated runtime with mirrored env and host wiring
 
 ## Validation contract
 `scripts/run-profile-checks.sh` must, at minimum:

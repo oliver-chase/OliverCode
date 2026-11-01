@@ -31,7 +31,6 @@ TITLES = {
     "workflow-auth": "Workflow push auth safety",
     "contract-integrity": "Contract integrity",
     "planning-docs": "Planning doc governance",
-    "token-policy": "Token policy",
     "backlog-hygiene": "Backlog hygiene",
     "archived-content": "Archived content",
     "writing-clarity": "Writing clarity (asd-ste100)",
@@ -41,15 +40,15 @@ TITLES = {
 UNNUMBERED = {"repo-local"}
 
 # The one gate list. Private repos hold personal data by design, so they skip PII and
-# the public-repo checks. Contract integrity and token policy check OliverCode's own
-# control plane, which no adopted repo has.
+# the public-repo checks. Contract integrity checks OliverCode's own control plane, which
+# no adopted repo has. Planning doc governance needs a checker only adopted repos carry.
 VARIANTS = {
     ".githooks/pre-commit": {
         "variant": "OliverCode itself",
         "backlog_checker": "core/templates/project/scripts/check-backlog-hygiene.mjs",
         "gates": ["secrets", "emojis", "pii", "deleted-repos", "workflow-auth",
-                  "contract-integrity", "planning-docs", "token-policy",
-                  "backlog-hygiene", "archived-content", "writing-clarity"],
+                  "contract-integrity", "backlog-hygiene", "archived-content",
+                  "writing-clarity"],
     },
     "core/templates/project/pre-commit": {
         "variant": "public repos",

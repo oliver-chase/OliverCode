@@ -220,6 +220,31 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 
 ---
 
+## Repository layout
+
+| Path | What it holds |
+| --- | --- |
+| `CLAUDE.md` | The rules Claude loads in every session, linked into `~/.claude` by `install` |
+| `core/contracts/` | The standards every governed repo follows |
+| `core/hooks/` | The gate scripts that `scripts/build-hooks.py` assembles into each pre-commit and pre-push hook |
+| `core/templates/project/` | The project template that `bootstrap` and `sync-hooks` copy into a repo, including the built hooks |
+| `skills/` | The skills linked into `~/.claude/skills/`. `skills/INDEX.md` lists them |
+| `shared/` | The bootstrap manifest and the example fleet registry |
+| `.githooks/` | OliverCode's own pre-commit and pre-push hooks |
+| `scripts/olivercode` | The launcher: `bootstrap`, `discover`, `install`, `uninstall`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet` and `skills` |
+| `scripts/validate.sh` | The single validation command, which runs the gates, the consistency checks, the reference check and the tests |
+| `scripts/lib/` | The checkers and helpers behind the launcher and `validate.sh` |
+| `scripts/hooks/` | The three Claude Code hooks: session check, commit guard and early-stop guard |
+| `scripts/qa/` | Code quality, bloat, fork-usability and scenario checks, plus the secret-gate probe |
+| `scripts/local-scheduler/` | Unattended `audit-fleet` and `push-fleet` runs through `launchd` |
+| `scripts/audit-staleness.py`, `scripts/find-spec.py`, `scripts/link-check.sh`, `scripts/run-governance-target.sh` | Staleness report, backlog ID lookup, reference check and the CI entrypoint for a downstream repo |
+| `docs/` | One document per concept, listed below |
+| `tests/` | Tests for the gates, checkers, hooks and launcher |
+| `.claude-optimization/` | Claude's memory and state files. Only the README is tracked |
+| `runtime/control-plane/` | Private machine state, gitignored and optional |
+
+---
+
 ## Documentation
 
 | Document | Purpose |
@@ -228,16 +253,13 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | [`NEW-MACHINE.md`](docs/NEW-MACHINE.md) | Restoring an existing setup on a blank machine, and what no script can do |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the two layers fit together |
 | [`GOVERNANCE.md`](docs/GOVERNANCE.md) | Every gate, what it blocks, and which repos receive which gates |
-| [`FEATURE-MAP.md`](docs/FEATURE-MAP.md) | Every capability and its owning document |
 | [`OLIVERCODE-LAUNCHER.md`](docs/OLIVERCODE-LAUNCHER.md) | Every `olivercode` command |
 | [`DOCUMENTATION-STANDARD.md`](docs/DOCUMENTATION-STANDARD.md) | Required README outline, naming and repo-documentation rules |
 | [`VOICE.md`](docs/VOICE.md) | How everything a person reads is written, loaded in every session |
-| [`TOKEN-POLICY.md`](docs/TOKEN-POLICY.md) | Token-cost controls and validation |
 | [`SKILLS-PLACEMENT.md`](docs/SKILLS-PLACEMENT.md) | Where new skill files belong |
 | [`FRAMEWORK-BOUNDARY.md`](docs/FRAMEWORK-BOUNDARY.md) | What OliverCode deliberately does not do |
 | [`TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Troubleshooting by symptom |
 | [`EXTERNAL-TOOLING.md`](docs/EXTERNAL-TOOLING.md) | Optional third-party tooling |
-| [`KEEPALIVE-STANDARD.md`](docs/KEEPALIVE-STANDARD.md) | Keeping free-tier cloud services from going dormant |
 | [`DECISIONS.md`](docs/DECISIONS.md) | Design decisions whose reasoning is longer than a code comment should carry |
 | [`BACKLOG.md`](docs/BACKLOG.md) | The live tracker and its review marker. Open work is the `OliverCode` GitHub Project |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Which rules block commits and which are guidance |
@@ -245,7 +267,6 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | [`CLAUDE.md`](CLAUDE.md) | Rules Claude loads in every session |
 | [`skills/INDEX.md`](skills/INDEX.md) | Every included skill |
 | [**Contracts**](core/contracts/) | Standing standards for structure, execution, hygiene, intent, and file locations |
-| [**Workflows**](core/workflows/) | Repeatable procedures across projects |
 | [**Claude OS**](.claude-optimization/README.md) | Claude's memory and state files |
 
 ---

@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 # validate.sh — Unified OliverCode validation entry point.
-# Token-policy checking is Gate 8 of .githooks/pre-commit, so run_precommit()
-# below covers it — no separate call needed.
 # Usage:
-#   bash scripts/validate.sh                    — run pre-commit gates (incl. token policy)
-#   bash scripts/validate.sh --evidence <file>  — run pre-commit + gatekeeper
-#   bash scripts/validate.sh --gatekeeper-only <file>  — run gatekeeper only
+#   bash scripts/validate.sh                    — run every check
+#   bash scripts/validate.sh --help             — list the options
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-GATEKEEPER="${SCRIPT_DIR}/orchestration-gatekeeper.py"
 PRECOMMIT="${REPO_ROOT}/.githooks/pre-commit"
 
 run_precommit() {
@@ -21,15 +17,6 @@ run_precommit() {
     echo "=== validate: pre-commit passed ==="
   else
     echo "=== validate: pre-commit hook not found at $PRECOMMIT ==="
-    exit 1
-  fi
-}
-
-run_token_policy_check() {
-  echo "=== validate: checking token policy ==="
-  if python3 "$GATEKEEPER" --check-token-policy; then
-    echo "=== validate: token policy passed ==="
-  else
     exit 1
   fi
 }
@@ -128,30 +115,6 @@ sys.exit(1 if failures else 0)
   echo "=== validate: duplication check passed ==="
 }
 
-run_skill_efficiency_check() {
-  # The mechanical rules of core/contracts/SKILL_EFFICIENCY_STANDARD.md for this repo's own
-  # skills/ (scripts/lib/skill_efficiency_check.py): no monolith SKILL.md, no restated
-  # paragraph, and the six named MCP-call patterns. The standard bound these skills with
-  # nothing checking them until this gate.
-  echo "=== validate: checking skill efficiency ==="
-  local out
-  if ! out="$(python3 -c "
-import sys
-from pathlib import Path
-sys.path.insert(0, '${SCRIPT_DIR}')
-from lib.skill_efficiency_check import check_all
-failures = check_all(Path('${REPO_ROOT}'))
-for f in failures:
-    print(f)
-sys.exit(1 if failures else 0)
-")"; then
-    printf '%s\n' "$out"
-    echo "=== validate: skill efficiency check FAILED ==="
-    exit 1
-  fi
-  echo "=== validate: skill efficiency passed ==="
-}
-
 run_smoke_tests() {
   # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read the one
   # tracked shared/repo-profiles.json, so they pass identically everywhere.
@@ -178,25 +141,6 @@ run_smoke_tests() {
     echo "  [WARN] python3 not found — skipping Python smoke tests"
   fi
   echo "=== validate: smoke tests passed ==="
-}
-
-run_gatekeeper() {
-  local evidence_file="$1"
-  local repo_name="${2:-}"
-  local task_type="${3:-write_code}"
-
-  if [[ ! -f "$GATEKEEPER" ]]; then
-    echo "=== validate: gatekeeper not found at $GATEKEEPER ==="
-    exit 1
-  fi
-
-  # Auto-detect repo name from git remote if not provided
-  if [[ -z "$repo_name" ]]; then
-    repo_name=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null | sed 's/.*\///; s/\.git$//' || echo "unknown")
-  fi
-
-  echo "=== validate: running gatekeeper (repo=$repo_name, type=$task_type) ==="
-  python3 "$GATEKEEPER" --repo "$repo_name" --task-type "$task_type" --evidence-file "$evidence_file"
 }
 
 main() {
@@ -233,41 +177,18 @@ main() {
       fi
       ;;
 
-    --evidence)
-      local evidence_file="${2:-}"
-      if [[ -z "$evidence_file" ]]; then
-        echo "Usage: bash scripts/validate.sh --evidence <file> [repo] [task-type]"
-        exit 1
-      fi
-      run_precommit
-      run_gatekeeper "$evidence_file" "${3:-}" "${4:-write_code}"
-      ;;
-    --gatekeeper-only)
-      local evidence_file="${2:-}"
-      if [[ -z "$evidence_file" ]]; then
-        echo "Usage: bash scripts/validate.sh --gatekeeper-only <file> [repo] [task-type]"
-        exit 1
-      fi
-      run_gatekeeper "$evidence_file" "${3:-}" "${4:-write_code}"
-      ;;
-    --check-token-policy)
-      run_token_policy_check
-      ;;
     --help|-h)
       echo "Usage: bash scripts/validate.sh [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  (no args)              Run pre-commit gates (Gate 8 incl.), doc/code consistency,"
-      echo "                         reference integrity, doc duplication, skill efficiency,"
+      echo "  (no args)              Run pre-commit gates, doc/code consistency,"
+      echo "                         reference integrity, doc duplication,"
       echo "                         and smoke tests (tests/, if present)"
-      echo "  --evidence <file>      Run pre-commit + gatekeeper"
-      echo "  --gatekeeper-only <file>  Run gatekeeper only"
       echo "  --target-repo <repo-root> [args...]"
       echo "                         Run <repo-root>/scripts/validate-repo.sh if it exists"
       echo "                         (repo-local validation hook convention), else skip"
       echo "  --tree                 Run everything above, with the gates over every tracked file"
       echo "  --check-consistency    Run doc/code consistency checks only"
-      echo "  --check-token-policy   Run token policy check only"
       echo "  --help                 Show this help"
       ;;
     --check-consistency)
@@ -278,7 +199,6 @@ main() {
       run_consistency
       run_reference_check
       run_duplication_check
-      run_skill_efficiency_check
       run_smoke_tests
       run_hook_state
       ;;

@@ -65,5 +65,5 @@ Follow the locked process in `$OC/core/contracts/EXECUTION_CONTRACT.md`.
 finds a repo whose hooks stopped running.
 
 ## Working inside OliverCode
-`docs/FEATURE-MAP.md` maps every script, layout and config path. Open work lives in the GitHub
+`README.md` carries the repository layout. Open work lives in the GitHub
 Project that `docs/backlog-config.json` names.
