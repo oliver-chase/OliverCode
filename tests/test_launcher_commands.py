@@ -253,7 +253,7 @@ class TestWaiverExpiryDateHandling(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
         try:
             (tmp / "shared").mkdir()
-            (tmp / "shared" / "repo-map.json").write_text(json.dumps({
+            (tmp / "shared" / "repo-profiles.json").write_text(json.dumps({
                 "unmanagedRepoWaivers": [
                     {"name": "a", "reason": "r", "expiresAt": "2099-06-01T00:00:00+00:00"},
                     {"name": "b", "reason": "r", "expiresAt": "2099-07-01T00:00:00"},
@@ -268,10 +268,24 @@ class TestWaiverExpiryDateHandling(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
         try:
             (tmp / "shared").mkdir()
-            (tmp / "shared" / "repo-map.json").write_text(json.dumps({
+            (tmp / "shared" / "repo-profiles.json").write_text(json.dumps({
                 "unmanagedRepoWaivers": [
                     {"name": "a", "reason": "r", "expiresAt": "2000-01-01T00:00:00+00:00"},
                 ]}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                passed, failed, _ = launcher._check_waiver_expiry(tmp)
+            self.assertEqual((passed, failed), (0, 1))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_expired_variance_on_a_profile_fails(self):
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
+        try:
+            (tmp / "shared").mkdir()
+            (tmp / "shared" / "repo-profiles.json").write_text(json.dumps({
+                "profiles": {"a": {"approvedStrictVariances": [
+                    {"target": "x", "reason": "r", "expiresAt": "2000-01-01T00:00:00+00:00"},
+                ]}}}))
             with contextlib.redirect_stdout(io.StringIO()):
                 passed, failed, _ = launcher._check_waiver_expiry(tmp)
             self.assertEqual((passed, failed), (0, 1))

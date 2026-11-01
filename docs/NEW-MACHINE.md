@@ -36,7 +36,7 @@ Each of these needs a person. They are listed so the list is finite rather than 
 
 **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
-absent. The private repo's `olivercode/repo-map.json` lists what should be there.
+absent. The private repo's `olivercode/repo-profiles.json` lists what should be there.
 
 **Marketplace plugins.** Third-party plugins are installed through Claude Code, not through this
 repo. `docs/EXTERNAL-TOOLING.md` lists each one and what it is for.

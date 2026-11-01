@@ -44,9 +44,7 @@ class RegistryLocation(unittest.TestCase):
 
     def test_the_tracked_registry_ships_empty(self):
         tracked = json.loads((local_config.OC_ROOT / "shared" / "repo-profiles.json").read_text())
-        self.assertEqual(tracked["profiles"], {})
-        repo_map = json.loads((local_config.OC_ROOT / "shared" / "repo-map.json").read_text())
-        self.assertEqual((repo_map["repos"], repo_map["unmanagedRepoWaivers"]), ([], []))
+        self.assertEqual((tracked["profiles"], tracked["unmanagedRepoWaivers"]), ({}, []))
 
 
 if __name__ == "__main__":

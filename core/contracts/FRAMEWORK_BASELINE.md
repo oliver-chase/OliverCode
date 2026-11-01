@@ -71,7 +71,7 @@ Required lock points:
 - `core/templates/project/QUALITY_BASELINE.md`
 - `shared/project-bootstrap-manifest.json`
 
-Any variance must be explicit, temporary, and recorded in `shared/repo-map.json`.
+Any variance must be explicit, temporary, and recorded in the repo's profile in `repo-profiles.json`.
 
 ## Design Decisions
 

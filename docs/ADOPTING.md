@@ -21,7 +21,7 @@ Two layers, and it matters which is which:
 | Layer | Where | Tracked? | Who owns it |
 |---|---|---|---|
 | The framework | your OliverCode fork | yes, tracked | you |
-| Your fleet's real config | a private repo's `olivercode/repo-profiles.json` and `repo-map.json`, or your fork's `shared/` copies | yes, in that repo | you |
+| Your fleet's real config | a private repo's `olivercode/repo-profiles.json`, or your fork's `shared/repo-profiles.json` | yes, in that repo | you |
 | Activation | `~/.claude/CLAUDE.md` + `~/.claude/skills/*` symlinks | no, per machine | your machine |
 
 Your fleet's real names and config live directly in the tracked registry — there is no

@@ -24,7 +24,7 @@ The honest summary: **the hooks are the only things that block you.** Everything
 
 ## The Two Layers
 
-**1. OliverCode (this repo).** Contracts, skills, templates, launcher and governance hooks. The fleet registries (`shared/repo-profiles.json`, `shared/repo-map.json`) ship as empty examples. An operator's real registry lives in a private repo under `olivercode/`, named through `privateRepos` in `olivercode.local.json`, so a fork carries none of it.
+**1. OliverCode (this repo).** Contracts, skills, templates, launcher and governance hooks. The fleet registry (`shared/repo-profiles.json`) ships as an empty example. An operator's real registry lives in a private repo under `olivercode/`, named through `privateRepos` in `olivercode.local.json`, so a fork carries none of it.
 
 **2. Product repos (yours).** Sibling repos that inherit hooks, templates, and standards from OliverCode. Declared in the registry's `repo-profiles.json`. OliverCode is never a runtime dependency of a product repo — it defines standards, not implementations.
 

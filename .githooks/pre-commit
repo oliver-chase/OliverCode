@@ -246,7 +246,7 @@ fi
 # Verify OLIVERCODE_DEPENDENCY.md declared paths still exist
 DEP_DOC="$REPO_ROOT/runtime/control-plane/OLIVERCODE_DEPENDENCY.md"
 if [ -f "$DEP_DOC" ]; then
-  # Declared paths are backtick-quoted and repo-relative (e.g. `shared/repo-map.json`,
+  # Declared paths are backtick-quoted and repo-relative (e.g. `shared/repo-profiles.json`,
   # `core/contracts/`). Resolve the OliverCode-relative ones under $REPO_ROOT; skip paths
   # outside this repo. (chr(96) avoids embedding a literal backtick in this shell string.)
   DEP_PATHS=$(python3 -c "

@@ -52,27 +52,6 @@ def _load_profiles(olivercode_root: Path) -> dict:
         return {}
 
 
-def _load_governance_profiles(olivercode_root: Path) -> dict[str, str]:
-    """name -> governanceProfile, from shared/repo-map.json.
-
-    The only recognized value is "incubating": the repo is young or mid-overhaul,
-    so staleness is reported but does not fail the run. Anything else is reported
-    as unknown so a typo cannot silently exempt a repo. This is the field's one
-    consumer -- before it, a declared profile changed nothing anywhere.
-    """
-    f = registry_file(olivercode_root, "repo-map.json")
-    if not f.is_file():
-        return {}
-    try:
-        data = json.loads(f.read_text())
-    except (json.JSONDecodeError, OSError):
-        return {}
-    return {
-        r.get("name", ""): r.get("governanceProfile", "")
-        for r in data.get("repos", []) if r.get("governanceProfile")
-    }
-
-
 def _find_marker(repo: Path) -> str | None:
     for rel in LEDGER_CANDIDATES:
         f = repo / rel
@@ -118,17 +97,19 @@ def main() -> int:
         print("No repo profiles found (shared/repo-profiles.json).", file=sys.stderr)
         return 1
 
-    governance = _load_governance_profiles(olivercode_root)
     any_flagged = False
     unmarked: list[str] = []
     broken: list[tuple[str, str]] = []
     for name in sorted(profiles):
         profile = profiles[name] if isinstance(profiles[name], dict) else {}
         repo = resolve_repo_path(name, profile, fleet_root)
-        incubating = governance.get(name) == "incubating"
-        if governance.get(name) and not incubating:
+        # "incubating" marks a young or mid-overhaul repo: staleness is reported, not
+        # failed. Any other value is reported so a typo cannot silently exempt a repo.
+        governance = profile.get("governanceProfile", "")
+        incubating = governance == "incubating"
+        if governance and not incubating:
             print(f"  WARN {name}: unknown governanceProfile "
-                  f"'{governance[name]}' in repo-map -- only 'incubating' is recognized")
+                  f"'{governance}' in repo-profiles -- only 'incubating' is recognized")
         if not (repo / ".git").exists():
             if not args.quiet:
                 print(f"  skip  {name}: not found at {repo}")
@@ -144,7 +125,7 @@ def main() -> int:
         if count > args.threshold:
             if incubating:
                 print(f"  ok   {name}: {count} commits since {sha[:9]} -- past threshold but "
-                      f"declared incubating in repo-map, advisory only")
+                      f"declared incubating in repo-profiles, advisory only")
             else:
                 any_flagged = True
                 print(f"STALE  {name}: {count} commits since last review ({sha[:9]}) -- run deep-review")
