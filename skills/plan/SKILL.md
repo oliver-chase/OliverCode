@@ -16,17 +16,14 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 
 A plan is a set of assertions about live state — "this file exists," "this skill has no
 probe," "3 of 8 items already do X." Every assertion of that shape names a set of N items.
-Before writing a sentence that claims to check something for a set of N named items, read
-all N — never a sample, never "checked most of them," never one representative case
-generalized to the rest. A `find`/`grep` listing that only names the items is not a check of
-them.
+Before a sentence claims a check across N named items, read all N. A sample, "most of them"
+or one case generalized to the rest is not a check. A `find`/`grep` listing that only names
+the items is not a check of them either.
 
 This applies whether N is 3 or 30. A larger N is a reason to batch the reads efficiently, not
-a reason to sample. If reading all N is genuinely too expensive to do before drafting, the
-plan says so explicitly — "checked 3 of 8, the rest assumed from their names" — instead of
-writing "checked all 8" and letting `plan-pressure-test` catch the gap after the fact.
-`plan-pressure-test` is the safety net for a wrong inference from real evidence, not a
-substitute for gathering the evidence in the first place.
+a reason to sample. When reading all N costs too much before drafting, the plan says so:
+"checked 3 of 8, the rest assumed from their names". The `audit` skill's plan check then
+tests the rest. That check is the safety net for a wrong inference from real evidence.
 
 ## Plan File Location
 

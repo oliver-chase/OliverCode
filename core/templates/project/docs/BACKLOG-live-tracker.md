@@ -2,7 +2,7 @@
 
 > Canonical template (OliverCode `core/templates/project/docs/`). Copy this
 > section into the target repo's BACKLOG (or equivalent open-work ledger) as
-> its head or tail section. The `deep-review` skill maintains it.
+> its head or tail section. The `audit` skill maintains it.
 > `scripts/audit-staleness.py` reads the "Reviewed through" marker fleet-wide.
 
 ---
@@ -23,7 +23,7 @@ Rewrite this block to stay current — it is a summary, not a log.>
 
 ### Coverage
 
-Reviewed through: `<commit sha>` (<date>, deep-review)
+Reviewed through: `<commit sha>` (<date>, audit)
 Audited (functionality) through: `<commit sha>` (<date>) — or "never"
 
 ### Open items (ranked — pick from the top)

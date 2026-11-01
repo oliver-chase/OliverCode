@@ -72,7 +72,7 @@ if [ "$TOTAL_LOC" -gt 0 ]; then
   RATIO=$(awk "BEGIN {printf \"%.2f\", $DOC_LOC / $TOTAL_LOC}")
   OVER=$(awk "BEGIN {print ($RATIO > $RATIO_MAX) ? 1 : 0}")
   if [ "$OVER" = "1" ]; then
-    echo "bloat: docs are ${RATIO} of the repo's LOC ($DOC_LOC of $TOTAL_LOC; threshold $RATIO_MAX) -- consider a docs-reality-audit / history trim"
+    echo "bloat: docs are ${RATIO} of the repo's LOC ($DOC_LOC of $TOTAL_LOC; threshold $RATIO_MAX) -- run the audit skill on the docs"
     HITS=$((HITS + 1))
   fi
 fi

@@ -5,7 +5,7 @@ Deterministic, no LLM: reads the fleet from repo-profiles, locates each repo as 
 sibling of OliverCode (override with --root), finds its `Reviewed through: <sha>`
 marker — the line core/templates/project/docs/BACKLOG-live-tracker.md standardizes —
 and counts commits landed since. Past the threshold it is STALE, which is the signal
-to run `deep-review`. Nothing is audited here; staleness is
+to run the `audit` skill on the commits since. Nothing is audited here; staleness is
 only made impossible to miss.
 
 A repo with no marker, or one naming a sha its history no longer holds, is a SETUP
@@ -128,7 +128,7 @@ def main() -> int:
                       f"declared incubating in repo-profiles, advisory only")
             else:
                 any_flagged = True
-                print(f"STALE  {name}: {count} commits since last review ({sha[:9]}) -- run deep-review")
+                print(f"STALE  {name}: {count} commits since last review ({sha[:9]}) -- run the audit skill on them")
         elif not args.quiet:
             print(f"  ok   {name}: {count} commits since {sha[:9]}")
 
@@ -140,7 +140,7 @@ def main() -> int:
     if unmarked:
         print(f"\nUNMARKED ({len(unmarked)}): {', '.join(unmarked)}")
         print("  No 'Reviewed through: `<sha>`' line in any ledger. Add one when a "
-              "deep-review lands; until then coverage here is unknown, not fresh.")
+              "review lands; until then coverage here is unknown, not fresh.")
     if broken:
         print(f"\nMARKER BROKEN ({len(broken)}): " + ", ".join(f"{n} ({s})" for n, s in broken))
         print("  The marker names a sha the repo does not have, usually a rewritten "

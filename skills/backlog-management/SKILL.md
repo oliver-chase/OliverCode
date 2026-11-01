@@ -14,16 +14,21 @@ description: >
 
 ## Which repo, which config
 
-**Find the config, every time, before running anything**. Read the current repo's own `CLAUDE.md` for a line naming where `backlog-config.json` lives. This matches `plan`'s own "Plan File Location" convention for the same problem. A repo's own `CLAUDE.md` may name no config file — that means it hasn't adopted this skill yet. Ask the user where one should live, write it there, and name it in that repo's `CLAUDE.md` in the same session. Never guess a path or silently skip this skill. Until a repo adopts one, `core/workflows/story-lifecycle-sop.md` governs its backlog discipline instead.
+**Find the config, every time, before running anything**. Read the current repo's own `CLAUDE.md` for a line naming where `backlog-config.json` lives. This matches `plan`'s own "Plan File Location" convention for the same problem. A repo's own `CLAUDE.md` may name no config file — that means it hasn't adopted this skill yet. Ask the user where one should live, write it there, and name it in that repo's `CLAUDE.md` in the same session. Never guess a path or silently skip this skill. Until a repo adopts one, `$OC/core/workflows/story-lifecycle-sop.md` governs its backlog discipline instead.
 
 ## File a Story or Epic
 
 1. **Search first**. Use `references/project-fields.md`'s search command, loading the repo's config first. An existing open item wins. Extend it with a comment. Never create a duplicate.
 2. **Classify the work**. A quick fix — a missing fallback, a stale word, a small config change with an obvious safe default — gets fixed inline. No Project item. Real new scope — a schema change, a new mechanism, a cross-family contract — gets filed before it gets built. Follow the repo's own quick-wins-only convention if it states one. Assume the same split if it doesn't.
-3. **Create it**. `references/project-fields.md`'s exact create-and-add command shape.
-4. **Set all 3 fields, every time**. Status: `Backlog` if something blocks the item or it needs a decision, `Ready` if the next action is already clear and unblocked. Priority and Size: per that repo's own prioritization doc, if it names one. Never leave a field blank because the judgment feels obvious — state it explicitly instead.
-5. **Work Type**: `Epic` if the item spans multiple skills or families. `Story` otherwise.
-6. **Filed from a plan doc? Delete the plan file once every Step/Story in it has a filed issue**. A plan doc (the `plan` skill's output file) is a drafting tool, not a second home for the same content. Once you transcribe its Steps into Epics/Stories with real Status/Priority/Size, the issue is the source of truth. Delete it in the same pass that files the last issue from it. Git holds the history. Copy real reasoning (the "why," evidence, tradeoffs) into the issue body once, concisely. A plan may cover ground beyond what got filed, such as an open question or a deliberately deferred step. Keep that file until you file the rest too. Never delete a plan doc for a still-open Story, or one nobody has read yet just because a Story exists. Check the actual Status field, not the filename's date. See `references/plan-doc-deletion.md` for why this rule exists.
+3. **Check the fit, in the issue body**. Adding to what exists is the default, so the body answers:
+   - What existing skill, reference, script or config this extends. A new skill or file states why no existing home fits
+   - Whether it belongs to the target's core or to an add-on, where the target names that split
+   - What it replaces or removes, and its expected effect on size and on always-loaded tokens
+   - Whether it still passes the lenses in `$OC/skills/audit/references/lenses.md`: a user reaches it by talking, it runs on its own, each concept keeps one home, and it adds no unused part
+4. **Create it**. `references/project-fields.md`'s exact create-and-add command shape.
+5. **Set all 3 fields, every time**. Status: `Backlog` if something blocks the item or it needs a decision, `Ready` if the next action is already clear and unblocked. Priority and Size: per that repo's own prioritization doc, if it names one. Never leave a field blank because the judgment feels obvious — state it explicitly instead.
+6. **Work Type**: `Epic` if the item spans multiple skills or families. `Story` otherwise.
+7. **Filed from a plan doc? Delete the plan file once every Step/Story in it has a filed issue**. A plan doc (the `plan` skill's output file) is a drafting tool, not a second home for the same content. Once you transcribe its Steps into Epics/Stories with real Status/Priority/Size, the issue is the source of truth. Delete it in the same pass that files the last issue from it. Git holds the history. Copy real reasoning (the "why," evidence, tradeoffs) into the issue body once, concisely. A plan may cover ground beyond what got filed, such as an open question or a deliberately deferred step. Keep that file until you file the rest too. Never delete a plan doc for a still-open Story, or one nobody has read yet just because a Story exists. Check the actual Status field, not the filename's date. See `references/plan-doc-deletion.md` for why this rule exists.
 
 ### Sizing an XL or L item for real completeness
 

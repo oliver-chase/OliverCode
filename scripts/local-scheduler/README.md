@@ -25,7 +25,7 @@ plain `cron` does.
 
 - `push-fleet` -- every ~3 hours (see `tick.py`'s `JOBS` list for the exact number).
   Flushes already-committed work for OliverCode and the private repos. Never commits.
-- `audit-fleet` -- weekly. Runs `skills/skill-fleet-audit`'s 3 static checks against the
+- `audit-fleet` -- weekly. Runs the `audit` skill's 3 static checks against the
   skills folder (`skillsRoot`) and OliverCode's own, writes findings to a log, never fixes anything.
 
 A failed job's marker is deliberately left untouched, so it stays "due" and the next tick

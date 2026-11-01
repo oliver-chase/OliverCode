@@ -82,5 +82,5 @@ ASD-STE100 (rule 3) is the commit hook's writing-clarity gate per `docs/SKILLS-P
 and `docs/GOVERNANCE.md`'s coverage table. Rule 4 needs judgment and is checked by hand.
 
 The personal skills folder runs through `olivercode audit-fleet` and the
-`skills/skill-fleet-audit` checkers, which no longer carry rules 1, 2 and 5. Those rules
+`skills/audit` checkers, which no longer carry rules 1, 2 and 5. Those rules
 apply to that folder by this standard and are checked there by hand.

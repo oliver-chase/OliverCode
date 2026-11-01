@@ -56,13 +56,17 @@ A count that changes, such as tests, gates or coverage, never appears in a docum
 
 ## The backlog
 
-A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which `backlog-management` and `board-hygiene` maintain. OliverCode works this way. Its `docs/BACKLOG.md` holds only the live tracker that `deep-review` maintains, with the review marker `scripts/audit-staleness.py` reads. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
+A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which `backlog-management` and `board-hygiene` maintain. OliverCode works this way. Its `docs/BACKLOG.md` holds only the live tracker that the `audit` skill maintains, with the review marker `scripts/audit-staleness.py` reads. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
 
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`. Finished work leaves the file, because git keeps that history.
 
 ## Keeping documents current
 
 A change to behavior, options, structure or file layout updates every document that states the old fact, in the same commit. The README's documentation table, the feature map and the backlog all count as documents. `scripts/validate.sh` catches the drift it can detect, and the rule still applies to the drift it cannot.
+
+## CLAUDE.md
+
+`CLAUDE.md` loads into every session, so every word in it is paid on every turn of every session. It holds only the rules a session must follow from any folder, each as a short paragraph or bullet that says what to do and when. The detail behind a rule lives in the document it names, which loads only when that rule fires. A new rule earns its place when a session would act wrongly without it, and it goes under the heading that already covers its kind of work. A repo's own `CLAUDE.md` holds only what is true of that repo.
 
 ## Text an agent reads
 

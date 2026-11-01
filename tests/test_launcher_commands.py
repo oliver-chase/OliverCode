@@ -207,6 +207,16 @@ class TestInstall(unittest.TestCase):
         self.assertIn("broken symlinks", out)
         self.assertIn("dead-skill", out)
 
+    def test_removes_its_own_link_to_a_skill_the_checkout_no_longer_has(self):
+        skills = self.tmp / ".claude" / "skills"
+        skills.mkdir(parents=True)
+        (skills / "retired-skill").symlink_to(REPO_ROOT / "skills" / "retired-skill")
+        (skills / "owners-skill").symlink_to(self.tmp / "nowhere" / "retired-skill")
+        rc, out = self._install()
+        self.assertIn("retired-skill", out)
+        self.assertFalse((skills / "retired-skill").is_symlink())
+        self.assertTrue((skills / "owners-skill").is_symlink(), "a link into anywhere else is the owner's")
+
     def test_leaves_a_broken_settings_file_alone_and_fails(self):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)

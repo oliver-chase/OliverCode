@@ -40,12 +40,17 @@ as the skill gives them.
 - Installing, creating, or moving ANY skill or agent file, in OliverCode, `~/.claude/` or any
   repo: read `$OC/docs/SKILLS-PLACEMENT.md` first. Each layer has one home.
 
+## Requests that arrive mid-task
+A new request from the owner while work is under way adds to the to-do list. Keep doing the
+current work in its current order, and take up the new item after it. Stop, switch or reorder
+only when the owner explicitly says to, for example "stop", "do this first" or "drop that".
+
 ## Development practice
 Always on. `$OC/core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` holds the full sequence and its
 working rules. Three triggers apply in every session:
 - Something broken, failing or slow: run the `diagnosing-bugs` skill loop before changing code
-- A multi-commit build session ending: run the `deep-review` skill before closing
-- Writing a README or repo doc: follow `$OC/docs/DOCUMENTATION-STANDARD.md` for its structure and
+- A multi-commit build session ending: run the `audit` skill on the session's commits before closing
+- Writing a README, a repo doc or a `CLAUDE.md`: follow `$OC/docs/DOCUMENTATION-STANDARD.md` for its structure and
   `$OC/docs/VOICE.md` for its words
 
 ## Pre-Commit

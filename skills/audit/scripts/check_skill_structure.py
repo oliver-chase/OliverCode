@@ -94,11 +94,13 @@ def skill_ref_scan(skill_dirs):
     return dangling, in_family, cross_family
 
 
-# SKILL-FILE-REF-1: a skill travels alone, so every file its text names must sit inside that skill's own
-# folder. A name found only in another skill passes nowhere.
-# A family-level or fleet-level file that a skill names but never holds, and the two files of the
-# repo whose board `board-hygiene` checks. That repo is the person's own, so the skill cannot hold them.
-OUTSIDE_FILES = {"DECISIONS.md", "README.md", "docs/backlog-config.json", "docs/PRIORITIZATION.md"}
+# SKILL-FILE-REF-1: a skill travels alone, so every file of its own that its text names must sit inside
+# its folder. A name found only in another skill passes nowhere. A skill's own files sit in these
+# folders, so a path starting anywhere else names a file of the repo the skill works on.
+SKILL_FOLDERS = {"references", "scripts", "assets", "modes", "templates", "examples", "agents", "tests", "lib", "bin", "data"}
+# Files of the repo a skill works on, which a skill names by bare name and never holds.
+OUTSIDE_FILES = {"AGENTS.md", "BACKLOG.md", "CHANGELOG.md", "CLAUDE.md", "CONTEXT.md", "DECISIONS.md",
+                 "README.md", "VOICE.md", "backlog-config.json", "package.json"}
 FILE_REF_RE = re.compile(r"`([^`\n]+?\.(?:md|py|json|js))`")
 # `python3 "$S/check_pages.py"` and `node scripts/build_plan.js`, where `$S` stands for `scripts`.
 RUN_REF_RE = re.compile(r"\b(?:python3|node)\s+\"?([^\s\"`]+\.(?:py|js))")
@@ -131,6 +133,8 @@ def file_ref_scan(skill_dirs):
                 token = _own_path(token)
                 if any(c in token for c in "*<>${}()[]") or token.startswith(("http", "~", "/")):
                     continue
+                if "/" in token and token.split("/", 1)[0] not in SKILL_FOLDERS | {p.parts[0] for p in map(Path, paths)}:
+                    continue  # a path in the repo the skill works on
                 found = any(q == token or q.endswith("/" + token) for q in paths) if "/" in token else token in names
                 if not found:
                     dangling.setdefault(skill.name, set()).add(token)

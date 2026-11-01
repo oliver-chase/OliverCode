@@ -10,15 +10,12 @@
 | Skill | Domain | Load When |
 |-------|--------|-----------|
 | `diagnosing-bugs` | Tight-feedback-loop bug diagnosis (6 phases) | Hard bugs, regressions, "debug this" |
-| `docs-reality-audit` | Docs-vs-code truth check + no-duplication consolidation | Simplifying/updating docs, or docs claim things that look stale |
-| `deep-review` | Post-build review loop — single review agent over a commit range, simplify pass, remove-don't-archive cleanup, live re-verification, session tracker | Before closing any multi-commit build session ("review tonight's work") |
+| `audit` | The one audit, with a router: a whole repo or suite, a skill or family, the docs, a commit range or a plan. Reads every line, checks seven lenses, files fixes as one epic | "Audit this", "QA this", "review tonight's work", "are the docs accurate", "audit my skills", "pressure test this plan", and before closing a multi-commit session |
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
 | `backlog-management` | Config-driven GitHub Project backlog ops | Filing, closing, or triaging backlog work in a repo that names a backlog-config.json in its own CLAUDE.md |
 | `board-hygiene` | Live GitHub Project board check across 6 dimensions: required fields, status drift, duplicate cards, Ready occupancy, Area freshness, Ready candidates | After filing or closing backlog items, or "is the backlog properly organized" |
-| `plan-pressure-test` | Adversarial check of a plan doc against live system state before it runs | "Pressure test this plan", or before executing a plan doc from `plan` |
-| `skill-fleet-audit` | Audit of a skills folder: structure, MCP patterns, clarity, portability, wording, word budgets and more. Gates a fleet's commits; reads that fleet's own data from its `.fleet-audit/` folder | "Audit my skills", `olivercode audit-fleet`, or a fleet's pre-commit hook |
 | `skill-creation` | Intake for a new skill: overlap check first, then the baseline every new skill meets | "New skill", "build a skill for X", "should this be a new skill" |
 
 ## Rules
