@@ -20,6 +20,18 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOK = REPO_ROOT / ".githooks" / "pre-commit"
+_SAVED_GIT_ENV = {}
+
+
+def setUpModule():
+    # `git rebase -x` and `git bisect run` export GIT_DIR, which would aim every scratch-repo
+    # git call (config, add, commit) at the real checkout. Drop them for the whole module.
+    for key in [k for k in os.environ if k.startswith("GIT_")]:
+        _SAVED_GIT_ENV[key] = os.environ.pop(key)
+
+
+def tearDownModule():
+    os.environ.update(_SAVED_GIT_ENV)
 
 
 class GateHarness(unittest.TestCase):
