@@ -17,6 +17,7 @@ import tempfile
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
@@ -31,6 +32,17 @@ def _load():
 
 
 launcher = _load()
+from lib import local_config  # noqa: E402  (importable once the launcher put scripts/ on the path)
+
+
+class NoLocalConfig(unittest.TestCase):
+    """Points local_config at a file that does not exist, so this machine's gitignored
+    olivercode.local.json (a `repoPaths` entry named alpha, say) cannot change the result."""
+
+    def setUp(self):
+        patcher = mock.patch.object(local_config, "LOCAL_FILE", Path(tempfile.gettempdir()) / "olivercode-no-such-local.json")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 class TestInstall(unittest.TestCase):
@@ -95,6 +107,35 @@ class TestInstall(unittest.TestCase):
         self.assertEqual(settings["model"], "opus")
         self.assertEqual(launcher._claude_settings.missing(claude_dir / "settings.json"), [])
 
+    def _install(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = launcher.command_install(REPO_ROOT)
+        return rc, out.getvalue()
+
+    def test_a_file_where_the_claude_folder_belongs_fails_and_is_left_alone(self):
+        (self.tmp / ".claude").write_text("not a folder")
+        rc, out = self._install()
+        self.assertEqual(rc, 1)
+        self.assertIn("is not a directory", out)
+        self.assertEqual((self.tmp / ".claude").read_text(), "not a folder")
+
+    def test_a_file_where_the_skills_folder_belongs_fails_and_is_left_alone(self):
+        (self.tmp / ".claude").mkdir()
+        (self.tmp / ".claude" / "skills").write_text("not a folder")
+        rc, out = self._install()
+        self.assertEqual(rc, 1)
+        self.assertIn("is not a directory", out)
+        self.assertEqual((self.tmp / ".claude" / "skills").read_text(), "not a folder")
+
+    def test_a_broken_skill_link_fails_install_and_is_named(self):
+        skills = self.tmp / ".claude" / "skills"
+        skills.mkdir(parents=True)
+        (skills / "dead-skill").symlink_to(self.tmp / "nowhere")
+        rc, out = self._install()
+        self.assertEqual(rc, 1)
+        self.assertIn("broken symlinks", out)
+        self.assertIn("dead-skill", out)
+
     def test_leaves_a_broken_settings_file_alone_and_fails(self):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)
@@ -153,7 +194,7 @@ class TestUnknownArgsRejected(unittest.TestCase):
 
 
 
-class TestRepoPathResolution(unittest.TestCase):
+class TestRepoPathResolution(NoLocalConfig):
     """Adopting into an existing setup usually means repos are NOT siblings. Before
     the `path` field they could not be registered at all -- the name WAS the path."""
 
@@ -213,6 +254,29 @@ class TestBootstrap(unittest.TestCase):
         self._run()
         self.assertTrue(os.access(self.tmp / ".githooks" / "pre-commit", os.X_OK))
 
+    def _fake_checkout(self, manifest: dict) -> Path:
+        """An OliverCode root holding only a bootstrap manifest, so one rule is tested alone."""
+        root = Path(tempfile.mkdtemp(prefix="olivercode-fakeoc-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "shared").mkdir()
+        (root / "shared" / "project-bootstrap-manifest.json").write_text(json.dumps(manifest))
+        return root
+
+    def test_required_directories_are_made_even_when_no_file_lands_in_them(self):
+        oc = self._fake_checkout({"requiredDirectories": ["empty/dir", ".github/workflows"]})
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = launcher.command_bootstrap(oc, self.tmp, False)
+        self.assertEqual(rc, 0)
+        self.assertTrue((self.tmp / "empty" / "dir").is_dir())
+        self.assertTrue((self.tmp / ".github" / "workflows").is_dir())
+
+    def test_a_template_source_missing_from_the_checkout_fails(self):
+        oc = self._fake_checkout({"templatedFiles": [{"source": "core/gone.md", "target": "gone.md"}]})
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = launcher.command_bootstrap(oc, self.tmp, False)
+        self.assertEqual(rc, 1)
+        self.assertIn("core/gone.md", out.getvalue())
+
     def test_refuses_a_non_git_directory(self):
         plain = Path(tempfile.mkdtemp(prefix="olivercode-nongit-"))
         try:
@@ -222,7 +286,7 @@ class TestBootstrap(unittest.TestCase):
         finally:
             shutil.rmtree(plain, ignore_errors=True)
 
-class TestFleetIteration(unittest.TestCase):
+class TestFleetIteration(NoLocalConfig):
     """health and sync-hooks each had their own copy of this filter and had drifted:
     one compared the self-skip case-sensitively, the other did not."""
 

@@ -86,6 +86,17 @@ class TestCommitGuard(RepoCase):
                     "command git commit -n -m x"):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), repr(cmd))
 
+    def test_a_leading_variable_assignment_does_not_hide_the_commit(self):
+        self.gates(point_git_at_them=True)
+        for cmd in ("FOO=1 git commit --no-verify -m x", "A=1 B=2 git commit -n -m x"):
+            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
+
+    def test_a_semicolon_or_pipe_before_the_commit_does_not_hide_it(self):
+        self.gates(point_git_at_them=True)
+        for cmd in ("git add -A; git commit --no-verify -m x", "git add -A ;git commit -n -m x",
+                    "echo msg | git commit --no-verify -F -", "true || git commit -n -m x"):
+            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
+
     def test_every_way_of_overriding_core_hookspath_is_refused(self):
         self.gates(point_git_at_them=True)
         for cmd in ("git -ccore.hooksPath=/dev/null commit -m x", "git --config-env=core.hooksPath=X commit -m x",
