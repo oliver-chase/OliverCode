@@ -1,6 +1,6 @@
 """This machine's paths, kept out of every tracked file.
 
-Where the vault, the personal skills folder and any repo outside the sibling layout
+Where the private repos, the personal skills folder and any repo outside the sibling layout
 live differs per machine. Tracked files that named them broke on every folder move,
 so they live in `olivercode.local.json` at the OliverCode root (gitignored; see
 `olivercode.local.example.json`) or in environment variables, which win.
@@ -30,9 +30,16 @@ def _path(value: str | None) -> Path | None:
     return Path(value).expanduser() if value else None
 
 
-def vault_root() -> Path | None:
-    """The vault repo, a hook and push target outside the fleet."""
-    return _path(os.environ.get("OLIVERCODE_VAULT_ROOT") or load_local().get("vaultRoot"))
+def private_repos() -> dict[str, Path]:
+    """Private repos outside the fleet, by name: each gets the private hook variant, a hook
+    check, a push and a backlog search. `vaultRoot` (or OLIVERCODE_VAULT_ROOT), the single
+    setting this replaced, still reads as one entry named "vault", so a machine configured
+    before the list existed keeps working."""
+    repos = {name: Path(p).expanduser() for name, p in load_local().get("privateRepos", {}).items()}
+    legacy = _path(os.environ.get("OLIVERCODE_VAULT_ROOT") or load_local().get("vaultRoot"))
+    if legacy and "vault" not in repos:
+        repos["vault"] = legacy
+    return repos
 
 
 def skills_root() -> Path | None:
@@ -46,5 +53,5 @@ def repo_paths() -> dict[str, Path]:
 
 
 def push_repos() -> list[str]:
-    """Profile names push-fleet pushes in addition to OliverCode and the vault."""
+    """Profile names push-fleet pushes in addition to OliverCode and the private repos."""
     return list(load_local().get("pushRepos", []))

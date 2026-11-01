@@ -11,7 +11,7 @@ path below is written to resolve from wherever you are:
   OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
   [ -f "$OC/core/contracts/FRAMEWORK_BASELINE.md" ] || echo "OliverCode not installed at ~/.claude/CLAUDE.md — see its docs/ADOPTING.md"
   ```
-  No hardcoded vault or home paths.
+  No hardcoded machine or home paths.
 - Bare paths (`scripts/validate.sh`, `docs/`) mean the repo you are currently working in.
   Each fleet repo ships its own. They are not OliverCode's.
 

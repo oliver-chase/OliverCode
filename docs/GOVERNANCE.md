@@ -88,10 +88,10 @@ Which hook a repo receives:
 | Source | Deployed to | Selected by |
 |---|---|---|
 | `core/templates/project/pre-commit` | every fleet repo | the default for `olivercode sync-hooks` |
-| `core/templates/project/pre-commit-private` | the vault, plus any repo whose profile sets `"private": true` | the vault is unconditional. Every other private repo declares itself, so `sync-hooks` maintains it like any other target |
+| `core/templates/project/pre-commit-private` | every repo in `privateRepos` in `olivercode.local.json`, plus any fleet repo whose profile sets `"private": true` | each declares itself, so `sync-hooks` maintains it like any other target |
 | a repo's own hook | that repo | the profile declares `hookVariant: "<reason>"`, which makes `sync-hooks` skip it and `health` report WARN instead of FAIL |
 
-The private variant drops the PII gate deliberately: the vault *is* personal data, so a gate
+The private variant drops the PII gate deliberately: a private repo holds personal data by design, so a gate
 that blocks host paths and email addresses would block every legitimate commit in it. It is
 deployed as a file literally named `pre-commit` — git auto-invokes that name and no other.
 A repo adds its own blocking checks in a `pre-commit.local` file beside the hook (`GATE-LOCAL-1`). The private hook runs it after Gate 4. `sync-hooks` does not manage it.

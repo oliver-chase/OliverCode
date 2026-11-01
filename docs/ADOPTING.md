@@ -317,9 +317,8 @@ that one git config key.
 
 ## Folder structure
 
-The framework assumes one layout, in exactly two places: `sync-hooks` and `health` look for
-fleet repos as **siblings of the OliverCode checkout**, and the vault-hook check looks three
-levels up from it. Nothing else depends on where anything sits.
+The framework assumes one layout, in one place: `sync-hooks` and `health` look for fleet
+repos as **siblings of the OliverCode checkout**. Nothing else depends on where anything sits.
 
 Recommended:
 
@@ -350,7 +349,7 @@ scripts/olivercode sync-hooks --root /path/to/where/your/repos/live
 scripts/olivercode health     --root /path/to/where/your/repos/live
 ```
 
-Machine paths go in `olivercode.local.json` at the OliverCode root (gitignored; copy `olivercode.local.example.json`): `vaultRoot` for the vault's hooks and pushes, `skillsRoot` for the skill checks, `repoPaths` for a repo outside the fleet folder and `pushRepos` for extra `push-fleet` targets. `OLIVERCODE_VAULT_ROOT` and `OLIVERCODE_SKILLS_ROOT` override the file. An unset value means this machine has none, and nothing guesses it from the folder layout.
+Machine paths go in `olivercode.local.json` at the OliverCode root (gitignored; copy `olivercode.local.example.json`): `privateRepos` for private repos that get the private hook variant, a hook check and a push (a `vaultRoot` set before that list existed still counts as one entry named `vault`), `skillsRoot` for the skill checks, `repoPaths` for a repo outside the fleet folder and `pushRepos` for extra `push-fleet` targets. `OLIVERCODE_SKILLS_ROOT` overrides the file. An unset value means this machine has none, and nothing guesses it from the folder layout.
 
 A layout the scripts cannot resolve degrades to WARN and skips. It never fails wrongly, but
 it also never checks anything — **do not mistake the WARN for coverage.** If `sync-hooks`

@@ -58,7 +58,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation. `--check-token-policy` is Gate 8 |
 | `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
-| `scripts/find-spec.py` | Resolves a bare backlog ID (`SPEC-21`, `B20`) fleet-wide across every `*BACKLOG*.md` in the vault and profiled fleet repos. A vault `SPEC-N` miss points at the vault's GitHub Project |
+| `scripts/find-spec.py` | Resolves a bare backlog ID (`SPEC-21`, `B20`) fleet-wide across every `*BACKLOG*.md` in the private repos and profiled fleet repos. A `SPEC-N` miss points at the GitHub Project where a retired backlog's entries may now live |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
 | `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax. TypeScript-leaning, aimed at the fleet repos |
 | `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |

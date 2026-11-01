@@ -37,7 +37,7 @@ through `~/.claude/skills/`.
 - **OliverCode stays orchestration-only.** If anything that isn't engineering method or framework tooling shows up inside `skills/`, that's drift — remove it.
 - **Every new skill pairs with its `INDEX.md` row and its symlink** in the same session.
 - **Never store skills in the vault's note folders**. A skill's one home is a skill directory.
-- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo (and the vault itself) gets its copy via the bootstrap manifest, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos (the vault) use the 4-gate private variant.
+- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo and every private repo gets its copy via the bootstrap manifest or `sync-hooks`, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos use the 4-gate private variant.
 - **Every `SKILL.md` and `CLAUDE.md`, in this repo or any fleet repo, be checked by the asd-ste100 writing-clarity gate at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate. It warns on findings so the author sees them without running the skill by hand.
 - **Every skill's structure and MCP-tool usage, not just its prose, is held to a token-cost bar.** No monolith `SKILL.md`, no duplicated paragraph, gap-filling automated instead of asked for, MCP calls following the named efficiency patterns — `core/contracts/SKILL_EFFICIENCY_STANDARD.md` is the full rule set. Checked mechanically today only for the personal skills folder, by hand everywhere else.
 
@@ -64,7 +64,7 @@ approval-gated skill a generic one could shadow, add this directive.
 
 `scripts/olivercode health` flags: any of OliverCode's own skills missing its symlink at
 `~/.claude/skills/<name>`, or a symlink there pointing somewhere other than
-`OliverCode/skills/<name>`. It also flags, for every fleet repo plus the vault, any hook install state
+`OliverCode/skills/<name>`. It also flags, for every fleet repo and private repo, any hook install state
 that would make git run no hooks — `core.hooksPath` unset, pointing at a missing directory,
 a hooks directory with no `pre-commit` file, a `pre-commit` that isn't executable, or one
 whose content diverges from the template.

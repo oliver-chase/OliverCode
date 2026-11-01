@@ -43,11 +43,11 @@ every commit succeeds. Verified: a commit containing an `sk-` key goes straight 
 ```zsh
 git config --get core.hooksPath      # expect: .githooks
 scripts/olivercode health            # FAILs with the exact reason if any repo is in that state
-scripts/olivercode sync-hooks        # repairs it across the fleet and the vault
+scripts/olivercode sync-hooks        # repairs it across the fleet and the private repos
 ```
 
 Prefer the relative `.githooks` over an absolute path — an absolute one breaks the moment the
-repo or vault moves, and it breaks silently.
+repo moves, and it breaks silently.
 
 ## Fleet hooks report drift after a template edit
 

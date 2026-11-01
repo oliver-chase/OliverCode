@@ -126,7 +126,7 @@ Hooks are installed by the launcher, from OliverCode:
 scripts/olivercode sync-hooks
 ```
 
-It deploys `core/templates/project/pre-commit` (or the private variant for the vault) to
+It deploys `core/templates/project/pre-commit` (or the private variant for a private repo) to
 each repo's `.githooks/` and sets `core.hooksPath`. Planning-doc governance needs no separate
 install step: the hook runs `scripts/check-planning-doc-governance.py` automatically whenever
 that file is present in the repo, and skips the gate when it is not.
