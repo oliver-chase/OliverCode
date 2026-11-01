@@ -37,8 +37,8 @@ that would skip them (`core/contracts/EXECUTION_CONTRACT.md` "Session Hooks").
 **Soft — instruction only, relies on the agent actually following it, same reliability class
 as any other unenforced convention:** "read `docs/FRAMEWORK-BOUNDARY.md` before structural
 changes," the skills-placement ledger-write requirement, the CODE→DOCS→AUDIT→QA→GATE→
-COMMIT→PUSH ordering, and running the QA scripts at all (`full-qa-pass.sh`/`run-on-repo.sh`
-are never auto-triggered). These are real rules worth following, but nothing blocks a commit
+COMMIT→PUSH ordering, and running the QA scripts at all (`full-qa-pass.sh`
+is never auto-triggered). These are real rules worth following, but nothing blocks a commit
 that skips them. Don't assume "it's written in CLAUDE.md" means "it's enforced" — check
 whether it's a hook or a sentence.
 

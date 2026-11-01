@@ -11,7 +11,6 @@
 |-------|--------|-----------|
 | `diagnosing-bugs` | Tight-feedback-loop bug diagnosis (6 phases) | Hard bugs, regressions, "debug this" |
 | `docs-reality-audit` | Docs-vs-code truth check + no-duplication consolidation | Simplifying/updating docs, or docs claim things that look stale |
-| `repo-audit-with-execution-batches` | Structured repo audit — surface scan, marker hunt, report | Quick scan-and-report audit of a repo |
 | `deep-review` | Post-build review loop — single review agent over a commit range, simplify pass, remove-don't-archive cleanup, live re-verification, session tracker | Before closing any multi-commit build session ("review tonight's work") |
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |

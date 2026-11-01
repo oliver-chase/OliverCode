@@ -65,7 +65,6 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/qa/probe-secret-gate.sh` | Writes a fake secret into the current repo, commits, and confirms Gate 1 blocks it. The one home for the probe `docs/ADOPTING.md`, `docs/NEW-MACHINE.md`, and `olivercode-adoption` all invoke by name |
 | `scripts/qa/check-scenarios.sh` | The exhaustive complement to the fork check: sandboxed setup/walkthrough scenarios (existing ~/.claude, scattered fleet, --root, discover, bootstrap, hookVariant, backout, idempotency, update, no-commit probe). Run after changing the launcher, hooks, or `docs/ADOPTING.md` |
 | `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
-| `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |
 | `scripts/run-governance-target.sh` | CI entrypoint that points the QA stack at a downstream repo |
 | `scripts/hooks/early-stop-guard.py` | Claude Code `Stop` hook (`EARLY-STOP-1`). What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
 | `scripts/hooks/session_check.py` | Claude Code `SessionStart` hook. What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
