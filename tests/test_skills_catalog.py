@@ -1,0 +1,81 @@
+"""Tests for scripts/lib/skills_catalog.py: the list `olivercode skills` prints.
+
+tests/test_frontmatter_parser.py covers the three common frontmatter shapes. This file
+covers the catalog itself and the frontmatter that must not crash or mislabel a skill.
+"""
+
+import importlib.util
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+spec = importlib.util.spec_from_file_location(
+    "skills_catalog", REPO_ROOT / "scripts" / "lib" / "skills_catalog.py"
+)
+catalog = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(catalog)
+
+
+class SkillsCatalogBase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def skill(self, folder, text):
+        path = self.root / "skills" / folder / "SKILL.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+
+class ParseFrontmatter(SkillsCatalogBase):
+    def test_quoted_values_lose_their_quotes(self):
+        path = self.skill("a", "---\nname: \"alpha\"\ndescription: 'Does A: and more.'\n---\n")
+        self.assertEqual(("alpha", "Does A: and more."), catalog._parse_skill_frontmatter(path))
+
+    def test_an_empty_name_keeps_the_folder_name(self):
+        path = self.skill("folder-name", "---\nname:\ndescription: x\n---\n")
+        self.assertEqual("folder-name", catalog._parse_skill_frontmatter(path)[0])
+
+    def test_frontmatter_that_never_closes_is_ignored(self):
+        path = self.skill("open", "---\nname: wrong\ndescription: never closed\n")
+        self.assertEqual(("open", ""), catalog._parse_skill_frontmatter(path))
+
+    def test_a_literal_block_joins_its_lines_and_stops_at_the_next_key(self):
+        path = self.skill(
+            "lit",
+            "---\ndescription: |-\n  First line.\n\n  Second line.\nname: lit-skill\n---\n",
+        )
+        self.assertEqual(("lit-skill", "First line. Second line."), catalog._parse_skill_frontmatter(path))
+
+    def test_an_unreadable_skill_file_falls_back_to_the_folder_name(self):
+        path = self.root / "skills" / "broken" / "SKILL.md"
+        path.mkdir(parents=True)  # a directory where the file should be
+        self.assertEqual(("broken", ""), catalog._parse_skill_frontmatter(path))
+
+
+class LoadSkills(SkillsCatalogBase):
+    def test_no_skills_folder_means_an_empty_catalog(self):
+        self.assertEqual([], catalog._load_skills(self.root))
+
+    def test_skills_are_sorted_by_declared_name_and_folders_without_skill_md_skipped(self):
+        self.skill("z-folder", "---\nname: apple\ndescription: first\n---\n")
+        self.skill("a-folder", "---\nname: zebra\ndescription: last\n---\n")
+        (self.root / "skills" / "docs").mkdir()
+        (self.root / "skills" / "docs" / "README.md").write_text("not a skill")
+        self.assertEqual(
+            [("apple", "first"), ("zebra", "last")],
+            catalog._load_skills(self.root),
+        )
+
+    def test_the_real_catalog_lists_every_skill_folder_with_a_description(self):
+        skills = catalog._load_skills(REPO_ROOT)
+        folders = sorted(p.parent.name for p in (REPO_ROOT / "skills").glob("*/SKILL.md"))
+        self.assertEqual(len(folders), len(skills))
+        self.assertEqual([], [name for name, description in skills if not description])
+
+
+if __name__ == "__main__":
+    unittest.main()
