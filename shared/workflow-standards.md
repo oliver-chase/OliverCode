@@ -5,9 +5,7 @@ Workflow routing and standards.
 ## Authoritative References
 
 - Shared structure contract and canonical path map: `docs/FRAMEWORK-BOUNDARY.md`
-- Shared manifest (machine-readable mirror): `core/contracts/AGENT_SYSTEM_MANIFEST.json`
-- Project hygiene baseline: `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
-- Project structure baseline: `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
+- Project structure and hygiene baseline: `core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 
 ## Trigger Routing
 

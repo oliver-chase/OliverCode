@@ -15,15 +15,12 @@ OliverCode can be cloned, inspected, and used standalone to read contracts, temp
 
 ## Canonical Paths and Ownership
 
-Claude Code is this machine's sole agent runtime. `core/contracts/AGENT_SYSTEM_MANIFEST.json`
-is the machine-readable mirror of the paths below -- tracked, with real values, since this
-is a single operator's framework across that operator's own accounts.
+Claude Code is this machine's sole agent runtime.
 
 - Product repos: `<fleet-root>/*`
 - Shared system root: `OliverCode`
 - Claude runtime/orchestration: `~/.claude`
 - Shared skills root: `OliverCode/skills`
-- Shared manifest: `OliverCode/core/contracts/AGENT_SYSTEM_MANIFEST.json`
 - Shared structure and hygiene standard: `OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 - Workflow standards and trigger routing: `OliverCode/shared/workflow-standards.md`
 - Workflow procedures: `OliverCode/core/workflows/`
@@ -38,8 +35,7 @@ Ownership follows from the map above:
 - Do not duplicate product workflow docs into runtime folders.
 
 When workspace structure or cross-project standards change: update this section (the path
-map lives here and nowhere else), update `AGENT_SYSTEM_MANIFEST.json` if paths or roots
-changed, and keep the `~/.claude/CLAUDE.md` and `~/.claude/VOICE.md` symlinks pointing at this repo's `CLAUDE.md` and `docs/VOICE.md`
+map lives here and nowhere else), and keep the `~/.claude/CLAUDE.md` and `~/.claude/VOICE.md` symlinks pointing at this repo's `CLAUDE.md` and `docs/VOICE.md`
 (verified by `scripts/olivercode health`).
 
 ## What Lives Next To It (Not Inside It)

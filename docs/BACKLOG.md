@@ -92,9 +92,6 @@ Reviewed through: `224b954` (2026-10-31, deep-review of the voice, skill-deletio
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the
   OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy). The template
   carries the anon-key meta-tag allowlist. Both correct. Do not converge them.
-- `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
-  `docs/FRAMEWORK-BOUNDARY.md`'s path map but is the machine-readable mirror of it (tracked,
-  real values, since G1's retirement). Keep both.
 - The keepalive surface — in scope by owner decision, synced via the manifest's
   `conditionalFiles`, not an orphan.
 - **The WRITE MODE evidence gate is opt-in, not a completion requirement.** The machinery

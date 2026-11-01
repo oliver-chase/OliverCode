@@ -207,6 +207,15 @@ siblings of the OliverCode checkout. If your layout differs, see "Folder structu
 Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern.
 Read that list rather than the exit code.
 
+A repo whose existing `SKILL.md`, `CLAUDE.md` or `references/*.md` files already break the
+writing-clarity gate would block every commit that touches them. Freeze that existing debt
+once, right after `sync-hooks`, so only new violations block, then commit the
+`.githooks/ste-baseline` file it writes in that repo:
+
+```bash
+python3 core/templates/project/write-ste-baseline.py /path/to/repo
+```
+
 An adopted repo gets nine gates, not the eleven OliverCode runs on itself: contract
 integrity and token policy check framework-only things, so the template does not ship them.
 `docs/GOVERNANCE.md` has the coverage table.

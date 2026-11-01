@@ -56,7 +56,6 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/lib/falsifiability_check.py` | Detects checks that CANNOT fail — dead counters, scripts reporting failure with no nonzero exit. Built after a run of defects here shared that one shape (`GATE-FALSIFIABILITY-1`) |
 | `scripts/lib/duplication_check.py` | Detects the same rule restated near-verbatim across two tracked docs with no cross-reference — a sliding-window substring match, declared-marker exceptions for deliberate reuse |
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation. `--check-token-policy` is Gate 8 |
-| `scripts/apply-token-policy.py` | Filters a path list through a repo's `ignore_globs` |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
 | `scripts/find-spec.py` | Resolves a bare backlog ID (`SPEC-21`, `B20`) fleet-wide across every `*BACKLOG*.md` in the private repos and profiled fleet repos. A `SPEC-N` miss points at the GitHub Project where a retired backlog's entries may now live |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
