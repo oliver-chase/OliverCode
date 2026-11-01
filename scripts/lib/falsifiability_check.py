@@ -26,15 +26,6 @@ _INCREMENTED = re.compile(r"(\w+)=\$\(\(\s*\1\s*[+]|(\w+)\+\+|let\s+(\w+)")
 _FAILURE_LANGUAGE = re.compile(r"\b(FAIL|BLOCKED|ERROR|failed|violation)\b")
 _NONZERO_EXIT = re.compile(r"\bexit\s+[1-9]\b")
 
-# Scripts whose contract is genuinely advisory: they inform, and something else
-# decides. Each needs a reason, so the exemption list cannot quietly absorb a real bug.
-ADVISORY_BY_CONTRACT = {
-    # Reports per-repo hook state for a human; validate.sh treats it as advisory
-    # because a fork with no fleet must still pass.
-    "scripts/olivercode": "CLI: exit status is per-command, not a single check",
-}
-
-
 def _tracked_shell_scripts(repo_root: Path) -> list[str]:
     out = subprocess.run(
         ["git", "-C", str(repo_root), "ls-files", "*.sh", ".githooks/*"],
@@ -72,8 +63,6 @@ def check_scripts_can_fail(repo_root: Path) -> list[str]:
     """Find scripts that report failure states but cannot exit nonzero."""
     failures: list[str] = []
     for rel in _tracked_shell_scripts(repo_root):
-        if rel in ADVISORY_BY_CONTRACT:
-            continue
         path = repo_root / rel
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")

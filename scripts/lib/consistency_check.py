@@ -251,26 +251,12 @@ def check_gate_integrity(repo_root: Path) -> list[str]:
     branches (ran / skipped), so a naive line count reports more gates than exist.
     """
     failures: list[str] = []
-    for name, rel in HOOKS.items():
-        path = repo_root / rel
-        if not path.is_file():
-            if name == "olivercode":
-                failures.append(f"  [GATES] {rel} is missing")
-            continue
-
-        declared = GATE_DECL.findall(path.read_text(encoding="utf-8"))
-        if not declared:
-            failures.append(f"  [GATES] {rel} declares no 'Gate N/M' banners")
-            continue
-
-        totals = {int(total) for _, total in declared}
-        if len(totals) > 1:
-            failures.append(
-                f"  [GATES] {rel} banners disagree on the total: {sorted(totals)}"
-            )
-            continue
-        claimed = totals.pop()
-        present = {int(num) for num, _ in declared}
+    # A missing hook, no banners or banners that disagree are _hook_totals' findings, which
+    # check_gate_count already reports. This adds the one thing only it checks.
+    totals, _ = _hook_totals(repo_root)
+    for name, claimed in totals.items():
+        rel = HOOKS[name]
+        present = {int(num) for num, _ in GATE_DECL.findall((repo_root / rel).read_text(encoding="utf-8"))}
         if len(present) != claimed:
             missing = sorted(set(range(1, claimed + 1)) - present)
             failures.append(
