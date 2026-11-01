@@ -101,6 +101,17 @@ class TestInstall(unittest.TestCase):
         self.assertEqual(
             (claude_dir / "CLAUDE.md").resolve(), (REPO_ROOT / "CLAUDE.md").resolve()
         )
+        backup = claude_dir / "CLAUDE.md.pre-olivercode"
+        self.assertTrue(backup.is_symlink(), "the owner's link was deleted, not backed up")
+        self.assertEqual(backup.resolve(), decoy.resolve())
+
+    def test_relinks_a_link_left_by_a_moved_checkout_without_a_backup(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "CLAUDE.md").symlink_to(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
+        launcher.command_install(REPO_ROOT)
+        self.assertEqual((claude_dir / "CLAUDE.md").resolve(), (REPO_ROOT / "CLAUDE.md").resolve())
+        self.assertEqual(launcher._backups(claude_dir / "CLAUDE.md"), [])
 
     def test_installs_the_claude_code_hooks_and_keeps_the_owners_settings(self):
         claude_dir = self.tmp / ".claude"
@@ -205,12 +216,71 @@ class TestUninstall(unittest.TestCase):
         self.assertEqual((self.claude / "skills" / "their-skill").resolve(), (elsewhere / "their-skill").resolve())
         self.assertTrue((self.claude / "skills" / "vendor-skill").is_dir())
 
+    def _tree(self):
+        return sorted((str(p.relative_to(self.tmp)), p.is_symlink()) for p in self.tmp.rglob("*"))
+
     def test_is_idempotent(self):
         self._quiet(launcher.command_install)
         self.assertEqual(self._quiet(launcher.command_uninstall), 0)
-        settings = (self.claude / "settings.json").read_text()
+        tree = self._tree()
         self.assertEqual(self._quiet(launcher.command_uninstall), 0)
-        self.assertEqual((self.claude / "settings.json").read_text(), settings)
+        self.assertEqual(self._tree(), tree)
+
+    def test_a_fresh_home_is_left_with_no_settings_file(self):
+        self._quiet(launcher.command_install)
+        self._quiet(launcher.command_uninstall)
+        self.assertFalse((self.claude / "settings.json").exists(), "an empty {} settings file was left behind")
+        self.assertEqual([p for p in self.claude.rglob("*") if p.is_file() or p.is_symlink()], [])
+
+    def test_removes_dangling_links_left_by_a_checkout_that_moved(self):
+        old = self.tmp / "old" / "OliverCode"
+        skill = next(p.name for p in (REPO_ROOT / "skills").iterdir() if (p / "SKILL.md").is_file())
+        skills = self.claude / "skills"
+        skills.mkdir(parents=True)
+        (self.claude / "CLAUDE.md").symlink_to(old / "CLAUDE.md")
+        (self.claude / "VOICE.md").symlink_to(old / "docs" / "VOICE.md")
+        (skills / skill).symlink_to(old / "skills" / skill)
+        (skills / "not-shipped").symlink_to(old / "skills" / "not-shipped")  # not a skill this checkout ships
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(launcher.command_uninstall(REPO_ROOT), 0)
+        for path in (self.claude / "CLAUDE.md", self.claude / "VOICE.md", skills / skill):
+            self.assertFalse(path.is_symlink(), path)
+        self.assertTrue((skills / "not-shipped").is_symlink())
+        self.assertIn("1 of them dangling", out.getvalue())
+
+    def test_restores_the_newest_backup_and_lists_the_older_one(self):
+        self.claude.mkdir(parents=True)
+        (self.claude / "CLAUDE.md").write_text("first\n")
+        self._quiet(launcher.command_install)
+        (self.claude / "CLAUDE.md").unlink()
+        (self.claude / "CLAUDE.md").write_text("second\n")
+        self._quiet(launcher.command_install)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            launcher.command_uninstall(REPO_ROOT)
+        self.assertEqual((self.claude / "CLAUDE.md").read_text(), "second\n")
+        self.assertEqual((self.claude / "CLAUDE.md.pre-olivercode").read_text(), "first\n")
+        self.assertIn("CLAUDE.md.pre-olivercode", out.getvalue())
+
+    def test_restores_an_owners_link_install_backed_up(self):
+        self.claude.mkdir(parents=True)
+        mine = self.tmp / "mine.md"
+        mine.write_text("mine")
+        (self.claude / "CLAUDE.md").symlink_to(mine)
+        self._quiet(launcher.command_install)
+        self._quiet(launcher.command_uninstall)
+        self.assertEqual((self.claude / "CLAUDE.md").resolve(), mine.resolve())
+
+    def test_names_the_owners_own_skills_copy_correctly(self):
+        (self.claude / "skills.pre-olivercode").mkdir(parents=True)
+        self._quiet(launcher.command_install)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            launcher.command_uninstall(REPO_ROOT)
+        self.assertIn("skills.pre-olivercode is your own copy", out.getvalue())
+        self.assertNotIn("An earlier install made", out.getvalue())
+        self.assertTrue((self.claude / "skills.pre-olivercode").is_dir())
 
     def test_leaves_a_broken_settings_file_alone_and_fails(self):
         self._quiet(launcher.command_install)

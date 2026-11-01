@@ -297,16 +297,21 @@ scripts/olivercode uninstall
 # 2. Stop the hooks in each governed repo
 git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can stay or go
 
-# 3. The checkout itself is just a directory -- delete it.
+# 3. Remove the local scheduler, if you turned it on
+bash scripts/local-scheduler/uninstall.sh
+
+# 4. The checkout itself is just a directory -- delete it.
 ```
 
 `uninstall` keeps everything of yours in `~/.claude` and lists any backup it could not
-restore, so merge those back by hand. `docs/OLIVERCODE-LAUNCHER.md` says exactly what it
-removes and what it keeps.
+restore, so merge those back by hand. `docs/OLIVERCODE-LAUNCHER.md` says exactly what
+`install` writes and what `uninstall` removes and keeps.
 
-Nothing outside those places is touched: OliverCode writes nothing in `~/.claude` beyond
-those links and hook entries, no system config, no shell profile, no launchd/cron entry, and
-nothing under any product repo except `.githooks/` and that one git config key.
+Those four steps cover everything OliverCode writes on a machine: the `~/.claude` entries
+`install` makes, the `.githooks/` folder and `core.hooksPath` key `sync-hooks` sets in each
+governed repo, and the `launchd` agent the opt-in scheduler installs. It writes no system
+config and no shell profile. The scheduler's state and logs stay under
+`~/Library/Application Support/olivercode-scheduler` until you delete that folder.
 
 ## Folder structure
 

@@ -210,6 +210,7 @@ grep -q "scripts/hooks/" "$H/.claude/settings.json" || bad "precondition: instal
 # docs/ADOPTING.md "Backing out", verbatim steps
 oc uninstall >/dev/null 2>&1 && ok "uninstall exits 0" s8 || bad "uninstall exits 0" s8
 git -C "$WS/app" config --unset core.hooksPath
+HOME="$H" bash "$WS/OliverCode/scripts/local-scheduler/uninstall.sh" >/dev/null 2>&1
 grep -q "original rules" "$H/.claude/CLAUDE.md" && [ ! -L "$H/.claude/CLAUDE.md" ] \
   && ok "backout restores original rules" s8 || bad "backout restores original rules" s8
 [ ! -e "$H/.claude/VOICE.md" ] && [ ! -L "$H/.claude/VOICE.md" ] \
@@ -226,6 +227,18 @@ python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d=={"model":
 oc uninstall >/dev/null 2>&1 && ok "uninstall twice exits 0" s8 || bad "uninstall twice exits 0" s8
 probe_blocked "$WS/app" && bad "backout: hooks still firing after unset" s8 || ok "backout: hooks genuinely gone (secret commits again)" s8
 ( cd "$WS/app" && git log --oneline | grep -q probe && git reset -q --hard HEAD~1 )
+
+say "--- S8b: backout after the checkout moved leaves nothing behind ---"
+new_case s8b
+mk_oc "$WS/OliverCode"
+(cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode install) >/dev/null 2>&1
+mv "$WS/OliverCode" "$WS/Moved"
+(cd "$WS/Moved" && HOME="$H" python3 scripts/olivercode uninstall) >/dev/null 2>&1 \
+  && ok "uninstall from the moved checkout exits 0" s8b || bad "uninstall from the moved checkout exits 0" s8b
+n_left="$(find "$H/.claude" -type l 2>/dev/null | wc -l | tr -d ' ')"
+[ "$n_left" = "0" ] && ok "no dangling link left after a move" s8b || bad "no dangling link left after a move ($n_left left)" s8b
+[ ! -e "$H/.claude/settings.json" ] && ok "settings.json that held only OliverCode's hooks is gone" s8b \
+  || bad "settings.json that held only OliverCode's hooks is gone" s8b
 
 # --------------------------------------------------------------- S9 idempotency
 say "--- S9: every command safe to run twice ---"

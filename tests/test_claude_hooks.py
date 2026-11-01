@@ -227,6 +227,44 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertEqual(self.path.read_text(), text)
         self.assertEqual(claude_settings.remove(self.path.with_name("missing.json")), "absent")
 
+    def test_an_owner_hook_that_runs_a_script_of_the_same_name_is_never_touched(self):
+        owners = ["python3 ~/work/myrepo/scripts/hooks/session_check.py",
+                  "/opt/x/scripts/hooks/my_commit_guard.py --strict",
+                  "bash -c 'log; python3 /oc/scripts/hooks/early-stop-guard.py'",
+                  'python3 "/oc/scripts/hooks/commit_guard.py" --extra']
+        settings = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c}]} for c in owners]}}
+        self.assertEqual(claude_settings.without(settings), settings)
+        merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for g in merged["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertTrue(all(c in commands for c in owners))
+
+    def test_a_moved_checkouts_entries_are_still_recognised(self):
+        settings = claude_settings.merge({}, Path("/old place/scripts/hooks"))
+        self.assertEqual(claude_settings.without(settings), {})
+
+    def test_a_symlinked_private_settings_file_stays_a_private_link(self):
+        real = self.path.with_name("dotfiles-settings.json")
+        real.write_text(json.dumps(self.OWNER))
+        real.chmod(0o600)
+        self.path.symlink_to(real)
+        claude_settings.install(self.path, Path("/oc/scripts/hooks"))
+        self.assertTrue(self.path.is_symlink(), "install replaced the link with a plain file")
+        self.assertEqual(oct(real.stat().st_mode & 0o777), oct(0o600))
+        self.assertEqual(claude_settings.remove(self.path), "removed")
+        self.assertTrue(self.path.is_symlink(), "remove replaced the link with a plain file")
+        self.assertEqual(oct(real.stat().st_mode & 0o777), oct(0o600))
+        self.assertEqual(json.loads(real.read_text()), self.OWNER)
+
+    def test_a_file_only_oliver_code_filled_is_deleted_unless_it_is_a_link(self):
+        claude_settings.install(self.path, Path("/oc/scripts/hooks"))
+        self.assertEqual(claude_settings.remove(self.path), "deleted")
+        self.assertFalse(self.path.exists())
+        real = self.path.with_name("dotfiles-settings.json")
+        self.path.symlink_to(real)
+        claude_settings.install(self.path, Path("/oc/scripts/hooks"))
+        self.assertEqual(claude_settings.remove(self.path), "removed")
+        self.assertEqual(json.loads(real.read_text()), {})
+
     def test_a_settings_shape_it_would_guess_at_is_refused_and_left_alone(self):
         for bad in ({"hooks": None}, {"hooks": {"Stop": ["a string"]}}, ["not", "an", "object"]):
             self.path.write_text(json.dumps(bad))
