@@ -6,4 +6,4 @@ This file is the live tracker that `deep-review` maintains. `scripts/audit-stale
 
 ## Coverage
 
-Reviewed through: `224b954` (2026-10-31, deep-review of the voice, skill-deletion and doc-rename commits `d9f2ef9`, `9085920`, `90f1276` and `224b954`. Other sessions' commits between `c996e58` and `224b954` were not part of this review)
+Reviewed through: `3653f62` (2026-11-01, deep-review of the #23 merges `e525dd5`, `3f9c975`, `3182acd` and `056ea84`, with the review's fixes in `3653f62`. Other sessions' commits in that range were not part of this review)
