@@ -39,7 +39,7 @@ Ownership follows from the map above:
 
 When workspace structure or cross-project standards change: update this section (the path
 map lives here and nowhere else), update `AGENT_SYSTEM_MANIFEST.json` if paths or roots
-changed, and keep the `~/.claude/CLAUDE.md` symlink pointing at this repo's `CLAUDE.md`
+changed, and keep the `~/.claude/CLAUDE.md` and `~/.claude/VOICE.md` symlinks pointing at this repo's `CLAUDE.md` and `docs/VOICE.md`
 (verified by `scripts/olivercode health`).
 
 ## What Lives Next To It (Not Inside It)
