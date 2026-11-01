@@ -267,7 +267,7 @@ Write the result as a short report: what moved where, what stayed, what is still
 
 ## Staying current with upstream
 
-`olivercode update` pulls **this checkout's** tracking branch and re-syncs hooks. On a fork
+`olivercode update` pulls **this checkout's** tracking branch, re-runs install so a new skill or Claude Code hook reaches this device, and re-syncs hooks. On a fork
 that is your own `origin` — it does not fetch the upstream framework. That is deliberate: a
 fork carries local edits to `CLAUDE.md`, contracts, and templates, and auto-merging upstream
 over them would be destructive.
