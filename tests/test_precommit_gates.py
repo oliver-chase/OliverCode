@@ -199,5 +199,83 @@ class TestTreeScan(GateHarness):
         self.assertIn("secret pattern", result.stdout)
 
 
+def git_env():
+    """The environment for a real `git commit` in a scratch repo. A suite that itself runs
+    inside a hook inherits GIT_DIR and GIT_INDEX_FILE, which would aim git at this checkout."""
+    return {k: v for k, v in os.environ.items()
+            if not k.startswith("GIT_") and k != "OLIVERCODE_SCAN_TREE"}
+
+
+@unittest.skipUnless(shutil.which("node"), "gate 9 needs node")
+class TestLinkedWorktree(unittest.TestCase):
+    """A commit from a linked worktree runs every gate. Git sets GIT_DIR for a hook there,
+    and `git -C .githooks rev-parse --show-toplevel` then answers with the .githooks folder,
+    so gates 7, 8 and 9 reported their checkers missing and skipped, and the secret scan
+    read no file at all."""
+
+    CHECKERS = {
+        "scripts/check-planning-doc-governance.py": "print('planning checker ran')\n",
+        "scripts/orchestration-gatekeeper.py": "print('token policy checker ran')\n",
+        "core/templates/project/scripts/check-backlog-hygiene.mjs":
+            "console.log('backlog checker ran');\n",
+    }
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-worktree-"))
+        self.main = self.tmp / "main"
+        self.wt = self.tmp / "wt"
+        self.git("init", "-q", str(self.main))
+        self.git("-C", str(self.main), "config", "user.email", "test@example.invalid")
+        self.git("-C", str(self.main), "config", "user.name", "Gate Test")
+        self.git("-C", str(self.main), "config", "core.hooksPath", ".githooks")
+        (self.main / ".githooks").mkdir()
+        shutil.copy2(HOOK, self.main / ".githooks" / "pre-commit")
+        (self.main / ".githooks" / "pre-commit").chmod(0o755)
+        for rel, body in self.CHECKERS.items():
+            self.write(self.main / rel, body)
+        self.git("-C", str(self.main), "add", "-A")
+        self.git("-C", str(self.main), "commit", "-q", "--no-verify", "-m", "base")
+        self.git("-C", str(self.main), "worktree", "add", "-q", str(self.wt))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def git(self, *args, **kw):
+        return subprocess.run(["git", *args], check=kw.pop("check", True),
+                              capture_output=True, text=True, env=git_env(), **kw)
+
+    @staticmethod
+    def write(path, body):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+
+    def commit_in_worktree(self, rel, body):
+        self.write(self.wt / rel, body)
+        self.git("-C", str(self.wt), "add", rel)
+        return self.git("-C", str(self.wt), "commit", "-m", "change", check=False)
+
+    def test_gates_7_8_and_9_run(self):
+        result = self.commit_in_worktree("src/app.py", "print('hello')\n")
+        out = result.stdout + result.stderr
+        self.assertEqual(0, result.returncode, out)
+        for gate, marker in ((7, "planning checker ran"), (8, "token policy checker ran"),
+                             (9, "backlog checker ran")):
+            self.assertIn(marker, out)
+            self.assertIn(f"Gate {gate} passed.", out)
+
+    def test_a_failing_checker_blocks(self):
+        self.write(self.wt / "scripts/orchestration-gatekeeper.py", "raise SystemExit(1)\n")
+        result = self.commit_in_worktree("src/app.py", "print('hello')\n")
+        out = result.stdout + result.stderr
+        self.assertNotEqual(0, result.returncode, out)
+        self.assertIn("BLOCKED: Token policy check failed.", out)
+
+    def test_a_secret_blocks(self):
+        result = self.commit_in_worktree("config.py", 'KEY = "sk-' + "e" * 32 + '"\n')
+        out = result.stdout + result.stderr
+        self.assertNotEqual(0, result.returncode, out)
+        self.assertIn("secret pattern", out)
+
+
 if __name__ == "__main__":
     unittest.main()
