@@ -53,15 +53,28 @@ PER_FIELD_RE = re.compile(
 )
 PER_FIELD_NEGATION_RE = re.compile(r"\bnot\b[^.]{0,20}\b(one|separate|per-field)\b", re.I)
 STRATEGY_FLIP_RE = re.compile(r"\btwo (real )?methods exist\b", re.I)
+# "direct" as a word: "directory" and "directions" name no direct-path lookup.
+DIRECT_LOOKUP_RE = re.compile(r"\bdirect\b", re.I)
 
 LABEL = "  [SKILL EFFICIENCY]"
 
 
-def skill_dirs(repo_root: Path) -> list[Path]:
+def skill_dirs(repo_root: Path) -> tuple[list[Path], list[str]]:
+    """Skill folders under skills/, and a finding for each folder that holds no SKILL.md.
+    A dot-folder such as .fleet-audit holds fleet data, not a skill."""
     root = repo_root / "skills"
     if not root.is_dir():
-        return []
-    return sorted(d for d in root.iterdir() if d.is_dir() and (d / "SKILL.md").is_file())
+        return [], []
+    dirs, failures = [], []
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        if (d / "SKILL.md").is_file():
+            dirs.append(d)
+        else:
+            failures.append(f"{LABEL} {_rel(d, repo_root)}: no SKILL.md -- a folder in skills/ "
+                            f"is a skill, so add its SKILL.md or move the folder out")
+    return dirs, failures
 
 
 def skill_texts(skill_dir: Path) -> list[Path]:
@@ -74,13 +87,32 @@ def _rel(path: Path, repo_root: Path) -> str:
     return path.relative_to(repo_root).as_posix()
 
 
-def check_monolith(skill_dir: Path, repo_root: Path) -> list[str]:
+def read_skills(dirs: list[Path], repo_root: Path) -> tuple[dict[Path, list[tuple[Path, str]]], list[str]]:
+    """Each skill's readable files as (path, text), and a finding for each file that is not UTF-8."""
+    texts: dict[Path, list[tuple[Path, str]]] = {}
+    failures = []
+    for d in dirs:
+        texts[d] = []
+        for f in skill_texts(d):
+            try:
+                texts[d].append((f, f.read_text(encoding="utf-8")))
+            except UnicodeDecodeError as exc:
+                failures.append(f"{LABEL} {_rel(f, repo_root)}: not UTF-8 ({exc.reason} at byte "
+                                f"{exc.start}) -- the gate cannot read it, so it cannot pass it")
+    return texts, failures
+
+
+def check_monolith(skill_dir: Path, files: list[tuple[Path, str]], repo_root: Path) -> list[str]:
     skill_md = skill_dir / "SKILL.md"
-    words = len(skill_md.read_text(encoding="utf-8").split())
-    if words > MONOLITH_WORD_CAP and not (skill_dir / "references").is_dir():
+    text = next((t for f, t in files if f == skill_md), None)
+    if text is None:
+        return []  # unreadable: read_skills already reported it
+    words = len(text.split())
+    split = any((skill_dir / "references").glob("*.md"))
+    if words > MONOLITH_WORD_CAP and not split:
         return [
             f"{LABEL} {_rel(skill_md, repo_root)}: monolith-without-references -- {words} words, "
-            f"over the {MONOLITH_WORD_CAP}-word cap, with no references/ split. Move a "
+            f"over the {MONOLITH_WORD_CAP}-word cap, with no references/*.md split. Move a "
             f"self-contained branch into references/ and load it from one line"
         ]
     return []
@@ -99,21 +131,20 @@ def paragraphs(text: str) -> list[list[str]]:
     return out
 
 
-def check_duplicates(dirs: list[Path], repo_root: Path) -> list[str]:
-    """Pairwise word-level comparison. Word level, not character level: one swapped word
-    early on shifts every later character, and a reworded restatement scored 0.21 by
-    character and 0.79 by word on the fixture that set the threshold."""
+def check_duplicates(texts: dict[Path, list[tuple[Path, str]]], repo_root: Path) -> list[str]:
+    """Every pair of paragraphs once, including two in the same file. Word level, not
+    character level: one swapped word early on shifts every later character, and a
+    reworded restatement scored 0.21 by character and 0.79 by word on the fixture that
+    set the threshold."""
     entries = [
         (d.name, f, words)
-        for d in dirs
-        for f in skill_texts(d)
-        for words in paragraphs(f.read_text(encoding="utf-8"))
+        for d, files in texts.items()
+        for f, text in files
+        for words in paragraphs(text)
     ]
     failures = []
     for i, (skill_a, file_a, words_a) in enumerate(entries):
         for skill_b, file_b, words_b in entries[i + 1:]:
-            if file_a == file_b:
-                continue
             ratio = SequenceMatcher(None, words_a, words_b, autojunk=False).ratio()
             if ratio >= SIMILARITY_THRESHOLD:
                 scope = "within-skill" if skill_a == skill_b else "cross-skill"
@@ -123,6 +154,16 @@ def check_duplicates(dirs: list[Path], repo_root: Path) -> list[str]:
                     f"\"{' '.join(words_a)[:100]}...\". Keep one copy and cite it"
                 )
     return failures
+
+
+SENTENCE_END = re.compile(r"[.!?\n]")
+
+
+def _sentence(text: str, start: int, end: int) -> str:
+    """The sentence (or line) around text[start:end]."""
+    left = max((m.end() for m in SENTENCE_END.finditer(text, 0, start)), default=0)
+    right = SENTENCE_END.search(text, end)
+    return text[left:right.start() if right else len(text)]
 
 
 def mcp_findings(text: str) -> list[tuple[str, str]]:
@@ -136,12 +177,14 @@ def mcp_findings(text: str) -> list[tuple[str, str]]:
         if "cursor" not in lower and "paginat" not in lower:
             found.append(("no-pagination",
                           "documents an MCP search tool with no cursor/pagination handling"))
-    m = PER_FIELD_RE.search(text)
-    if m and not PER_FIELD_NEGATION_RE.search(text):
+    # A negation clears only the sentence it sits in, never a match elsewhere in the skill.
+    loop = next((m for m in PER_FIELD_RE.finditer(text)
+                 if not PER_FIELD_NEGATION_RE.search(_sentence(text, m.start(), m.end()))), None)
+    if loop:
         found.append(("per-field-search-loop",
-                      f"{m.group(0)!r} reads as one search per field. Search once per record"))
+                      f"{loop.group(0)!r} reads as one search per field. Search once per record"))
     if FUZZY_SEARCH_RE.search(text) and not (
-        "read_resource" in text or "direct" in lower or "relative path" in lower
+        "read_resource" in text or DIRECT_LOOKUP_RE.search(text) or "relative path" in lower
     ):
         found.append(("fuzzy-search-only",
                       "documents a fuzzy search tool with no direct-path lookup beside it"))
@@ -154,19 +197,20 @@ def mcp_findings(text: str) -> list[tuple[str, str]]:
     return found
 
 
-def check_mcp(skill_dir: Path, repo_root: Path) -> list[str]:
-    text = "\n".join(f.read_text(encoding="utf-8") for f in skill_texts(skill_dir))
+def check_mcp(skill_dir: Path, files: list[tuple[Path, str]], repo_root: Path) -> list[str]:
+    text = "\n".join(t for _, t in files)
     return [f"{LABEL} {_rel(skill_dir, repo_root)}: {rule} -- {note}"
             for rule, note in mcp_findings(text)]
 
 
 def check_all(repo_root: Path) -> list[str]:
-    dirs = skill_dirs(repo_root)
+    dirs, failures = skill_dirs(repo_root)
     if not dirs:
         # A gate that scans nothing must not report a pass (GATE-FALSIFIABILITY-1).
-        return [f"{LABEL} no skills/<name>/SKILL.md found under {repo_root} -- nothing was checked"]
-    failures: list[str] = []
-    for d in dirs:
-        failures += check_monolith(d, repo_root)
-        failures += check_mcp(d, repo_root)
-    return failures + check_duplicates(dirs, repo_root)
+        return failures + [f"{LABEL} no skills/<name>/SKILL.md found under {repo_root} -- nothing was checked"]
+    texts, unreadable = read_skills(dirs, repo_root)
+    failures += unreadable
+    for d, files in texts.items():
+        failures += check_monolith(d, files, repo_root)
+        failures += check_mcp(d, files, repo_root)
+    return failures + check_duplicates(texts, repo_root)

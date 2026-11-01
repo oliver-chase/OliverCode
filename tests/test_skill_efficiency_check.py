@@ -93,6 +93,34 @@ class TestShippedTree(unittest.TestCase):
         self.assertIn("nothing was checked", found[0])
 
 
+class TestTreeShape(SkillEfficiencyTest):
+    def test_a_non_utf8_reference_is_a_finding_not_a_crash(self):
+        d = self.fx.skill("one", "A short skill.\n", {"ok.md": "Fine."})
+        (d / "references" / "bad.md").write_bytes(b"caf\xe9 latin-1 text\n")
+        found = self.fx.findings()
+        self.assertEqual(len(found), 1)
+        self.assertIn("skills/one/references/bad.md: not UTF-8", found[0])
+
+    def test_a_non_utf8_skill_md_is_a_finding_not_a_crash(self):
+        d = self.fx.skill("one", "A short skill.\n")
+        (d / "SKILL.md").write_bytes(b"caf\xe9\n")
+        found = self.fx.findings()
+        self.assertEqual(len(found), 1)
+        self.assertIn("skills/one/SKILL.md: not UTF-8", found[0])
+
+    def test_a_folder_with_no_skill_md_is_a_finding(self):
+        self.fx.skill("real", "A short skill.\n")
+        (self.fx.root / "skills" / "stray" / "references").mkdir(parents=True)
+        found = self.fx.findings()
+        self.assertEqual(len(found), 1)
+        self.assertIn("skills/stray: no SKILL.md", found[0])
+
+    def test_a_dot_folder_is_fleet_data_not_a_skill(self):
+        self.fx.skill("real", "A short skill.\n")
+        (self.fx.root / "skills" / ".fleet-audit").mkdir()
+        self.assertEqual(self.fx.findings(), [])
+
+
 class TestMonolith(SkillEfficiencyTest):
     def test_blocks_a_long_skill_with_no_references(self):
         self.fx.skill("big", filler(sec.MONOLITH_WORD_CAP + 50, "w"))
@@ -101,6 +129,12 @@ class TestMonolith(SkillEfficiencyTest):
     def test_passes_a_long_skill_with_a_references_split(self):
         self.fx.skill("big", filler(sec.MONOLITH_WORD_CAP + 50, "w"), {"branch.md": "One branch."})
         self.assertEqual(self.fx.findings(), [])
+
+    def test_blocks_a_long_skill_whose_references_folder_is_empty(self):
+        # An empty references/ splits nothing out, so it must not exempt the monolith.
+        d = self.fx.skill("big", filler(sec.MONOLITH_WORD_CAP + 50, "w"))
+        (d / "references").mkdir()
+        self.assertEqual(self.rules(), ["monolith-without-references"])
 
     def test_passes_a_skill_under_the_cap(self):
         self.fx.skill("small", filler(sec.MONOLITH_WORD_CAP - 50, "w"))
@@ -124,6 +158,13 @@ class TestDuplicateParagraph(SkillEfficiencyTest):
         self.fx.skill("one", RULE + "\n", {"detail.md": RULE + "\n"})
         found = self.fx.findings()
         self.assertEqual(len(found), 1)
+        self.assertIn("duplicate-paragraph (within-skill)", found[0])
+
+    def test_blocks_a_paragraph_repeated_inside_one_file(self):
+        self.fx.skill("one", RULE + "\n\n" + OTHER + "\n\n" + RULE_REWORDED + "\n")
+        found = self.fx.findings()
+        self.assertEqual(len(found), 1)
+        self.assertIn("skills/one/SKILL.md <-> skills/one/SKILL.md", found[0])
         self.assertIn("duplicate-paragraph (within-skill)", found[0])
 
     def test_passes_two_different_paragraphs(self):
@@ -193,6 +234,21 @@ class TestMcpPatterns(SkillEfficiencyTest):
         for rule, _bad, good in MCP_CASES:
             with self.subTest(rule=rule):
                 self.assertEqual(sec.mcp_findings(good), [])
+
+    def test_a_negation_in_another_sentence_does_not_clear_a_loop(self):
+        text = "This is not the one tool to use for exports. Run one search per field until the record is full."
+        self.assertEqual([r for r, _ in sec.mcp_findings(text)], ["per-field-search-loop"])
+
+    def test_a_negation_in_another_file_does_not_clear_a_loop(self):
+        self.fx.skill("crm", "Run one search per field until the record is full.\n",
+                      {"notes.md": "This is not the one place for exports.\n"})
+        self.assertEqual(self.rules(), ["per-field-search-loop"])
+
+    def test_directory_or_directions_is_not_a_direct_lookup(self):
+        for word in ("directory", "directions"):
+            with self.subTest(word=word):
+                text = f"Find the deck with sharepoint_search in the team {word}."
+                self.assertEqual([r for r, _ in sec.mcp_findings(text)], ["fuzzy-search-only"])
 
     def test_a_pattern_in_a_reference_file_blocks_the_skill(self):
         # The scan covers references/, the files an invocation loads after SKILL.md.
