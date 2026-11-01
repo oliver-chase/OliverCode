@@ -195,22 +195,35 @@ oc health >/dev/null 2>&1 && ok "variant does not fail health" s7 || bad "varian
 say "--- S8: the documented backout actually removes everything ---"
 new_case s8
 mk_oc "$WS/OliverCode"; mk_repo "$WS/app"
-printf 'original rules\n' > "$H/.claude-orig-marker"
-mkdir -p "$H/.claude"
+mkdir -p "$H/.claude/skills/vendor-skill" "$H/elsewhere/other-skill"
 printf 'original rules\n' > "$H/.claude/CLAUDE.md"
+ln -s "$H/elsewhere/other-skill" "$H/.claude/skills/other-skill"
+cat > "$H/.claude/settings.json" <<'JSON'
+{"model": "opus", "hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [{"type": "command", "command": "~/mine.sh"}]}]}}
+JSON
 oc install >/dev/null 2>&1
 register "$WS/OliverCode" app
 oc sync-hooks >/dev/null 2>&1
 probe_blocked "$WS/app" || bad "precondition: hooks active before backout" s8
+grep -q "scripts/hooks/" "$H/.claude/settings.json" || bad "precondition: install wrote its settings.json hooks" s8
+[ -L "$H/.claude/VOICE.md" ] || bad "precondition: install linked VOICE.md" s8
 # docs/ADOPTING.md "Backing out", verbatim steps
-( HOME="$H" bash -c '
-  mv ~/.claude/CLAUDE.md.pre-olivercode ~/.claude/CLAUDE.md
-  find ~/.claude/skills -maxdepth 1 -type l -lname "*/OliverCode/skills/*" -delete
-' ) 2>/dev/null
+oc uninstall >/dev/null 2>&1 && ok "uninstall exits 0" s8 || bad "uninstall exits 0" s8
 git -C "$WS/app" config --unset core.hooksPath
-grep -q "original rules" "$H/.claude/CLAUDE.md" && ok "backout restores original rules" s8 || bad "backout restores original rules" s8
-n_links="$(find "$H/.claude/skills" -maxdepth 1 -type l 2>/dev/null | wc -l | tr -d ' ')"
-[ "$n_links" = "0" ] && ok "backout removes all skill symlinks" s8 || bad "backout removes all skill symlinks ($n_links left)" s8
+grep -q "original rules" "$H/.claude/CLAUDE.md" && [ ! -L "$H/.claude/CLAUDE.md" ] \
+  && ok "backout restores original rules" s8 || bad "backout restores original rules" s8
+[ ! -e "$H/.claude/VOICE.md" ] && [ ! -L "$H/.claude/VOICE.md" ] \
+  && ok "backout removes the VOICE.md link" s8 || bad "backout removes the VOICE.md link" s8
+n_links="$(find "$H/.claude" -type l -lname "*/OliverCode/*" 2>/dev/null | wc -l | tr -d ' ')"
+[ "$n_links" = "0" ] && ok "backout leaves no link into OliverCode" s8 || bad "backout leaves no link into OliverCode ($n_links left)" s8
+grep -q "scripts/hooks/" "$H/.claude/settings.json" \
+  && bad "backout leaves OliverCode hook entries in settings.json" s8 || ok "backout removes the settings.json hook entries" s8
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d=={"model":"opus","hooks":{"PreToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"~/mine.sh"}]}]}}' \
+  "$H/.claude/settings.json" 2>/dev/null \
+  && ok "backout keeps the owner's own settings and hook" s8 || bad "backout keeps the owner's own settings and hook" s8
+[ -d "$H/.claude/skills/vendor-skill" ] && [ "$(readlink "$H/.claude/skills/other-skill")" = "$H/elsewhere/other-skill" ] \
+  && ok "backout keeps the owner's skill folder and foreign link" s8 || bad "backout keeps the owner's skill folder and foreign link" s8
+oc uninstall >/dev/null 2>&1 && ok "uninstall twice exits 0" s8 || bad "uninstall twice exits 0" s8
 probe_blocked "$WS/app" && bad "backout: hooks still firing after unset" s8 || ok "backout: hooks genuinely gone (secret commits again)" s8
 ( cd "$WS/app" && git log --oneline | grep -q probe && git reset -q --hard HEAD~1 )
 

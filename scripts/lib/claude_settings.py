@@ -3,7 +3,8 @@
 `~/.claude/settings.json` belongs to the operator: permissions, theme, model and any hook
 they wrote. OliverCode adds only the entries in MANAGED, recognised by the hook script's
 file name under a `scripts/hooks/` folder, so a re-install replaces its own entries (also
-after the checkout moves) and never edits or duplicates the operator's.
+after the checkout moves) and never edits or duplicates the operator's. `remove` takes
+out exactly those entries by the same rule, for `olivercode uninstall`.
 
 The hooks point at the scripts in this checkout, so an edit here takes effect in the next
 session with no reinstall.
@@ -45,19 +46,34 @@ def _check_shape(settings) -> None:
             raise ValueError(f'"hooks.{event}" is not a list of hook groups')
 
 
+def _strip_managed(hooks: dict) -> dict:
+    """Each event's hook groups with OliverCode's handlers taken out. A group left with no
+    handler is dropped, and an event left with no group maps to an empty list."""
+    out = {}
+    for event, groups in hooks.items():
+        out[event] = []
+        for group in groups:
+            kept = [h for h in group.get("hooks", []) if not _is_managed(h)]
+            if kept:
+                out[event].append({**group, "hooks": kept})
+    return out
+
+
+def _write(settings_path: Path, settings: dict) -> None:
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = settings_path.with_name(settings_path.name + ".tmp")
+    tmp.write_text(json.dumps(settings, indent=2) + "\n")
+    tmp.replace(settings_path)  # one rename, so a crash never leaves half a settings file
+
+
 def merge(settings: dict, hooks_dir: Path = HOOKS_DIR) -> dict:
     """Return settings with OliverCode's hooks current and every other key and hook unchanged.
     Raises ValueError for a settings shape it cannot merge into."""
     _check_shape(settings)
     out = json.loads(json.dumps(settings))  # deep copy; the caller's dict stays as read
     hooks = out.setdefault("hooks", {})
-    for event in dict.fromkeys([e for e, _, _ in MANAGED] + list(hooks)):  # a fixed order, so a re-install never churns the file
-        groups = []
-        for group in hooks.get(event, []):
-            kept = [h for h in group.get("hooks", []) if not _is_managed(h)]
-            if kept:
-                groups.append({**group, "hooks": kept})
-        hooks[event] = groups
+    # A fixed event order, so a re-install never churns the file.
+    hooks.update(_strip_managed({e: hooks.get(e, []) for e in dict.fromkeys([e for e, _, _ in MANAGED] + list(hooks))}))
     for event, matcher, script in MANAGED:
         group = {"hooks": [{"type": "command", "command": _command(script, hooks_dir), "timeout": TIMEOUT_S}]}
         if matcher:
@@ -89,8 +105,36 @@ def install(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> str:
     merged = merge(current, hooks_dir)
     if merged == current:
         return "already"
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = settings_path.with_name(settings_path.name + ".tmp")
-    tmp.write_text(json.dumps(merged, indent=2) + "\n")
-    tmp.replace(settings_path)  # one rename, so a crash never leaves half a settings file
+    _write(settings_path, merged)
     return "updated" if current.get("hooks") else "added"
+
+
+def without(settings: dict) -> dict:
+    """Return settings with every OliverCode hook entry taken out and everything else as it was.
+    An event, or the "hooks" key itself, that only OliverCode's entries filled is dropped.
+    Raises ValueError for a settings shape it cannot read safely."""
+    _check_shape(settings)
+    out = json.loads(json.dumps(settings))
+    if "hooks" not in out:
+        return out
+    stripped = _strip_managed(out["hooks"])
+    if stripped == out["hooks"]:
+        return out  # nothing of OliverCode's here, so the owner's layout stays byte for byte
+    out["hooks"] = {e: g for e, g in stripped.items() if g}
+    if not out["hooks"]:
+        del out["hooks"]
+    return out
+
+
+def remove(settings_path: Path) -> str:
+    """Take OliverCode's hook entries out of the settings file. Returns "removed" or "absent".
+    Raises ValueError, leaving the file untouched, when it is not JSON or has a shape it refuses."""
+    if not settings_path.is_file():
+        return "absent"
+    text = settings_path.read_text()
+    current = json.loads(text) if text.strip() else {}
+    cleaned = without(current)
+    if cleaned == current:
+        return "absent"
+    _write(settings_path, cleaned)
+    return "removed"

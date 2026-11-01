@@ -39,7 +39,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 
 | Surface | Source of Truth | Verification |
 |---|---|---|
-| Terminal launcher — `bootstrap`, `discover`, `install`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet`, `skills` | `docs/OLIVERCODE-LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
+| Terminal launcher — `bootstrap`, `discover`, `install`, `uninstall`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet`, `skills` | `docs/OLIVERCODE-LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
 | Local scheduler — unattended `audit-fleet`/`push-fleet` via `launchd`, mirroring a fleet product repo's own proven pattern | `scripts/local-scheduler/README.md`, `scripts/local-scheduler/install.sh`, `scripts/local-scheduler/tick.py`, `scripts/local-scheduler/uninstall.sh` | `bash scripts/local-scheduler/install.sh`, then `launchctl list \| grep olivercode` |
 
 Claude Code is this framework's sole runtime and Anthropic its sole model provider — there is
@@ -71,7 +71,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/hooks/early-stop-guard.py` | Claude Code `Stop` hook (`EARLY-STOP-1`). What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
 | `scripts/hooks/session_check.py` | Claude Code `SessionStart` hook. What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
 | `scripts/hooks/commit_guard.py` | Claude Code `PreToolUse` hook on Bash. What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
-| `scripts/lib/claude_settings.py` | Merges OliverCode's three hook entries into `~/.claude/settings.json` and leaves every other key alone. `olivercode install` writes them and `olivercode health` checks them |
+| `scripts/lib/claude_settings.py` | Merges OliverCode's three hook entries into `~/.claude/settings.json` and takes them out again, leaving every other key alone. `olivercode install` writes them, `olivercode health` checks them and `olivercode uninstall` removes them |
 | `scripts/lib/repo_gates.py` | Whether git will run a repo's commit gates. Shared by the session check and the commit guard |
 
 ## Shared Framework Assets

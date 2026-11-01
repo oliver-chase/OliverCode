@@ -148,6 +148,87 @@ class TestInstall(unittest.TestCase):
         self.assertEqual((claude_dir / "settings.json").read_text(), "{not json")
 
 
+class TestUninstall(unittest.TestCase):
+    """`uninstall` removes what install wrote in ~/.claude and nothing of the owner's."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-uninstall-"))
+        self._home = Path.home
+        Path.home = staticmethod(lambda: self.tmp)  # type: ignore[assignment]
+        self.claude = self.tmp / ".claude"
+
+    def tearDown(self):
+        Path.home = self._home  # type: ignore[assignment]
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _quiet(self, fn):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return fn(REPO_ROOT)
+
+    def _links_into_checkout(self):
+        root = REPO_ROOT.resolve()
+        return [p for p in self.claude.rglob("*") if p.is_symlink() and p.resolve().is_relative_to(root)]
+
+    def test_removes_every_link_and_hook_install_wrote(self):
+        self.claude.mkdir(parents=True)
+        (self.claude / "settings.json").write_text(json.dumps({"model": "opus"}))
+        self.assertEqual(self._quiet(launcher.command_install), 0)
+        self.assertTrue(self._links_into_checkout())
+        self.assertEqual(self._quiet(launcher.command_uninstall), 0)
+        self.assertEqual(self._links_into_checkout(), [])
+        self.assertFalse((self.claude / "CLAUDE.md").is_symlink())
+        self.assertFalse((self.claude / "VOICE.md").is_symlink())
+        self.assertEqual(json.loads((self.claude / "settings.json").read_text()), {"model": "opus"})
+
+    def test_restores_the_rules_install_backed_up(self):
+        self.claude.mkdir(parents=True)
+        (self.claude / "CLAUDE.md").write_text("my existing rules\n", encoding="utf-8")
+        self._quiet(launcher.command_install)
+        self._quiet(launcher.command_uninstall)
+        self.assertFalse((self.claude / "CLAUDE.md").is_symlink())
+        self.assertEqual((self.claude / "CLAUDE.md").read_text(), "my existing rules\n")
+        self.assertFalse((self.claude / "CLAUDE.md.pre-olivercode").exists())
+
+    def test_keeps_links_and_folders_that_are_not_this_checkouts(self):
+        elsewhere = self.tmp / "elsewhere"
+        (elsewhere / "their-skill").mkdir(parents=True)
+        (elsewhere / "rules.md").write_text("theirs")
+        (self.claude / "skills" / "vendor-skill").mkdir(parents=True)
+        (self.claude / "skills" / "their-skill").symlink_to(elsewhere / "their-skill")
+        self._quiet(launcher.command_install)
+        for name in ("CLAUDE.md", "VOICE.md"):  # the owner re-pointed both after install
+            (self.claude / name).unlink()
+            (self.claude / name).symlink_to(elsewhere / "rules.md")
+        self._quiet(launcher.command_uninstall)
+        for name in ("CLAUDE.md", "VOICE.md"):
+            self.assertEqual((self.claude / name).resolve(), (elsewhere / "rules.md").resolve(), name)
+        self.assertEqual((self.claude / "skills" / "their-skill").resolve(), (elsewhere / "their-skill").resolve())
+        self.assertTrue((self.claude / "skills" / "vendor-skill").is_dir())
+
+    def test_is_idempotent(self):
+        self._quiet(launcher.command_install)
+        self.assertEqual(self._quiet(launcher.command_uninstall), 0)
+        settings = (self.claude / "settings.json").read_text()
+        self.assertEqual(self._quiet(launcher.command_uninstall), 0)
+        self.assertEqual((self.claude / "settings.json").read_text(), settings)
+
+    def test_leaves_a_broken_settings_file_alone_and_fails(self):
+        self._quiet(launcher.command_install)
+        (self.claude / "settings.json").write_text("{not json")
+        self.assertEqual(self._quiet(launcher.command_uninstall), 1)
+        self.assertEqual((self.claude / "settings.json").read_text(), "{not json")
+        self.assertEqual(self._links_into_checkout(), [], "the links still come out")
+
+    def test_rejects_an_unknown_flag_without_touching_home(self):
+        env = {**os.environ, "HOME": str(self.tmp)}
+        self._quiet(launcher.command_install)
+        result = subprocess.run([sys.executable, str(LAUNCHER), "uninstall", "--bogus"],
+                                capture_output=True, text=True, cwd=str(self.tmp), env=env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unexpected argument", result.stdout)
+        self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
+
+
 class TestRootFlag(unittest.TestCase):
     def test_extracts_root_and_leaves_remaining_args(self):
         root, rest = launcher._take_root_flag(["--root", "/tmp", "extra"])

@@ -199,5 +199,41 @@ class TestSettingsMerge(unittest.TestCase):
         self.assertEqual(json.loads(path.read_text())["model"], "opus")
 
 
+class TestSettingsRemove(unittest.TestCase):
+    OWNER = TestSettingsMerge.OWNER
+
+    def setUp(self):
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-settings-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self.path = tmp / "settings.json"
+
+    def test_install_then_remove_gives_back_the_owners_settings(self):
+        self.path.write_text(json.dumps(self.OWNER))
+        claude_settings.install(self.path, Path("/oc/scripts/hooks"))
+        self.assertEqual(claude_settings.remove(self.path), "removed")
+        self.assertEqual(json.loads(self.path.read_text()), self.OWNER)
+
+    def test_an_owner_hook_sharing_a_group_with_oliver_codes_stays(self):
+        mine = {"type": "command", "command": "~/mine.sh"}
+        ours = {"type": "command", "command": 'python3 "/oc/scripts/hooks/commit_guard.py"'}
+        settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine, ours]}]}}
+        self.assertEqual(claude_settings.without(settings),
+                         {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine]}]}})
+
+    def test_a_file_with_none_of_oliver_codes_hooks_is_not_rewritten(self):
+        text = '{"model":"opus","hooks":{}}'
+        self.path.write_text(text)
+        self.assertEqual(claude_settings.remove(self.path), "absent")
+        self.assertEqual(self.path.read_text(), text)
+        self.assertEqual(claude_settings.remove(self.path.with_name("missing.json")), "absent")
+
+    def test_a_settings_shape_it_would_guess_at_is_refused_and_left_alone(self):
+        for bad in ({"hooks": None}, {"hooks": {"Stop": ["a string"]}}, ["not", "an", "object"]):
+            self.path.write_text(json.dumps(bad))
+            with self.assertRaises(ValueError):
+                claude_settings.remove(self.path)
+            self.assertEqual(json.loads(self.path.read_text()), bad)
+
+
 if __name__ == "__main__":
     unittest.main()
