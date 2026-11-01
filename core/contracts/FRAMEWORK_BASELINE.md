@@ -95,5 +95,5 @@ CI and why it is paused on the origin repo: `docs/GOVERNANCE.md` "Unified Valida
 Entrypoint". There is no type checker or schema validator beyond
 what the gates above cover -- this is acceptable for a framework repo whose primary change
 risk is secrets/PII leaks and drift, not compiled-language runtime correctness. Downstream
-project repos have their own validation commands declared in `shared/repo-profiles.json`
-(tracked, real fleet).
+project repos have their own validation commands declared in the fleet registry
+(`repo-profiles.json`; `docs/DECISIONS.md` `REGISTRY-PRIVATE-1` says where).

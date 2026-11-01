@@ -89,10 +89,10 @@ shared/repo-profiles.json                      # otherwise, in your fork
 `olivercode discover` prints the path this checkout reads. You can also find your repos automatically:
 
 ```bash
-scripts/olivercode discover
+scripts/olivercode discover --root <folder-holding-your-repos>
 ```
 
-This generates ready-to-paste entries. Repos can live anywhere on your machine.
+This generates ready-to-paste entries. Pass `--root` once for each folder to search. Repos can live anywhere on your machine.
 
 ### 2. Install the hooks
 
@@ -162,7 +162,7 @@ OliverCode checks itself. It verifies that:
 Run:
 
 ```bash
-scripts/olivercode bootstrap
+scripts/olivercode bootstrap <repo-path>
 ```
 
 This adds the standard project files to a new repo.
@@ -170,7 +170,7 @@ This adds the standard project files to a new repo.
 Use `--dry-run` first to see exactly which files would be changed:
 
 ```bash
-scripts/olivercode bootstrap --dry-run
+scripts/olivercode bootstrap <repo-path> --dry-run
 ```
 
 ---

@@ -41,9 +41,9 @@ COMMANDS = [
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
-    ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
-    ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
-    ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the private repos"),
+    ("olivercode health [--root DIR]", "Run health checks: dependencies, core entrypoints, placement drift"),
+    ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
+    ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against this machine's skills folder + OliverCode's own skills"),
     ("olivercode push-fleet [--dry-run]", "Push already-committed work for OliverCode, the private repos and this machine's pushRepos, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
@@ -869,7 +869,10 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                     print(f"  [FAIL] {name}: {'; '.join(fatal)}")
                     failed += 1
                 else:
-                    print(f"  [OK] {name}: declared hook variant ({variant})")
+                    # WARN, not OK: a variant no longer receives the template's fixes, so
+                    # each one has to be merged by hand and this line is the reminder.
+                    print(f"  [WARN] {name}: declared hook variant ({variant}) — "
+                          "template hook fixes must be merged into it by hand")
                     passed += 1
             elif problems:
                 print(f"  [FAIL] {name}: {'; '.join(problems)}")
@@ -1084,6 +1087,7 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
     for name in _push_repos():
         targets[name] = _resolve_repo_path(name, profiles.get(name, {}), oc_root.parent)
 
+    failed = 0
     for name, repo_path in targets.items():
         if not (repo_path / ".git").exists():
             print(f"  [SKIP] {name}: no .git found at {repo_path}")
@@ -1119,7 +1123,9 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
         else:
             err_lines = result.stderr.strip().splitlines()
             print(f"  [FAIL] {name}: push blocked -- {err_lines[-1] if err_lines else 'unknown error'}")
-    return 0
+            failed += 1
+    # Non-zero on any blocked push, so the scheduler leaves its marker and retries next tick.
+    return 1 if failed else 0
 
 
 def command_update() -> int:

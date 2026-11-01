@@ -601,3 +601,49 @@ class TestWaiverExpiryDateHandling(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPushFleetExitCode(unittest.TestCase):
+    """A blocked push must exit non-zero: the local scheduler touches its marker on exit 0,
+    so a push that failed and exited 0 was logged OK and not retried for hours."""
+
+    def _git(self, *args, cwd):
+        subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
+                       env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull})
+
+    def _repo_ahead_of(self, remote: Path) -> Path:
+        repo = self.tmp / "work"
+        self._git("clone", "-q", str(remote), str(repo), cwd=self.tmp)
+        self._git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+                  "--allow-empty", "-m", "next", cwd=repo)
+        return repo
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-pushfleet-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.remote = self.tmp / "remote.git"
+        self._git("init", "-q", "--bare", "-b", "main", str(self.remote), cwd=self.tmp)
+        seed = self.tmp / "seed"
+        self._git("init", "-q", "-b", "main", str(seed), cwd=self.tmp)
+        self._git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+                  "--allow-empty", "-m", "seed", cwd=seed)
+        self._git("push", "-q", str(self.remote), "main", cwd=seed)
+
+    def _run(self, repo: Path) -> int:
+        oc_root = self.tmp / "oc"
+        oc_root.mkdir()
+        with mock.patch.object(launcher, "_private_repos", return_value={"target": repo}), \
+             mock.patch.object(launcher, "_push_repos", return_value=[]), \
+             mock.patch.object(launcher, "load_repo_profiles", return_value=({}, None)), \
+             contextlib.redirect_stdout(io.StringIO()):
+            # OliverCode itself is a target too; an absent .git makes it a plain SKIP.
+            return launcher.command_push_fleet(oc_root, dry_run=False)
+
+    def test_blocked_push_exits_nonzero(self):
+        hook = self.remote / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+        self.assertEqual(self._run(self._repo_ahead_of(self.remote)), 1)
+
+    def test_successful_push_exits_zero(self):
+        self.assertEqual(self._run(self._repo_ahead_of(self.remote)), 0)

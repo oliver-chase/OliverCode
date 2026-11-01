@@ -55,7 +55,7 @@ CLAUDE.md or package.json to find which. Do not assume the filename.
 Follow the locked process in `$OC/core/contracts/EXECUTION_CONTRACT.md`.
 
 ## Enforcement
-`.githooks/pre-commit` is the only layer that blocks anything, and it fails open when a repo's
+`.githooks/pre-commit` is the only layer git itself enforces, and it fails open when a repo's
 `core.hooksPath` is unset. `$OC/docs/GOVERNANCE.md` lists the gates, and `$OC/scripts/olivercode health`
 finds a repo whose hooks stopped running.
 

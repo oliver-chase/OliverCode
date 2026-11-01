@@ -16,10 +16,10 @@ commit host-specific paths into this repo.
 
 ## Governance failure
 
-Run the full gate suite:
+Run the gates against every tracked file, not only staged ones:
 
 ```zsh
-.githooks/pre-commit
+bash scripts/validate.sh --tree
 ```
 
 ## Product commands are not here

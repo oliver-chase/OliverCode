@@ -8,7 +8,7 @@ file owns the gate and evidence mechanics that loop ends in: what runs, what blo
 the machine-readable policies behind it.
 
 **Backend policies (machine-readable, loaded per task):**
-- `shared/repo-profiles.json` (tracked, real fleet) -- per-repo validation and evidence requirements
+- the fleet registry (`repo-profiles.json`; `docs/DECISIONS.md` `REGISTRY-PRIVATE-1` says where) -- per-repo validation and evidence requirements
 - `shared/task-policies/task-types.json` -- per-task-type evidence requirements
 - `scripts/orchestration-gatekeeper.py` -- deterministic pass/fail validation
 

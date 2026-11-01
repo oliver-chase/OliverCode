@@ -40,7 +40,7 @@ map lives here and nowhere else), and keep the `~/.claude/CLAUDE.md` and `~/.cla
 
 ## What Lives Next To It (Not Inside It)
 
-The `runtime/control-plane/` directory lives inside the OliverCode repo tree but is gitignored. It contains the runtime orchestration state that makes the framework actionable — session handoff, provider health, validation manifests. This is private per-machine state, never pushed to GitHub. See its README for details.
+The `runtime/control-plane/` directory lives inside the OliverCode repo tree but is gitignored. It contains the runtime orchestration state that makes the framework actionable — session handoff, provider health, validation manifests. This is private per-machine state, never pushed to GitHub.
 
 ## What OliverCode Does NOT Contain
 
@@ -58,7 +58,7 @@ These belong in the runtime environment (`runtime/control-plane/`), not in the r
 
 Two more layers exist on any machine running OliverCode, neither of which is framework material and neither of which OliverCode manages:
 
-- **`~/.claude/` (user-global Claude Code settings, skills, agents).** Local and per-machine: permissions, theme, model and any hook the operator writes stay theirs. OliverCode writes exactly three things here through `olivercode install`: the `CLAUDE.md` and `VOICE.md` links, a link per skill in its own `skills/`, and its three hook entries in `settings.json`. `scripts/lib/claude_settings.py` merges those entries and leaves every other key as it was. The skill/agent layer within it (cross-repo work skills: marketing, GEO, hiring, meeting notes) is real, durable content, not throwaway config. Its placement rules and durability ledger live in `docs/SKILLS-PLACEMENT.md`, not here. OliverCode never edits anything else in `~/.claude/`.
+- **`~/.claude/` (user-global Claude Code settings, skills, agents).** Local and per-machine: permissions, theme, model and any hook the operator writes stay theirs. OliverCode writes these things here through `olivercode install`: the `CLAUDE.md` and `VOICE.md` links, a link per skill in its own `skills/`, its three hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, and a `.pre-olivercode` backup of anything it replaced. `scripts/lib/claude_settings.py` merges those entries and leaves every other key as it was. The skill/agent layer within it (cross-repo work skills: marketing, GEO, hiring, meeting notes) is real, durable content, not throwaway config. Its placement rules and durability ledger live in `docs/SKILLS-PLACEMENT.md`, not here. OliverCode never edits anything else in `~/.claude/`.
 - **Sibling agent state** (e.g. `.codex/`-class directories from other coding agents/tools). Out of scope for OliverCode entirely — not inventoried, not migrated, not a placement target. Delete on decommission of whatever tool created it. Do not fold its contents into any OliverCode-sanctioned location.
 
 For "where does a new skill/agent file go," see `docs/SKILLS-PLACEMENT.md`'s decision tree — it covers every sanctioned location including the two user-global layers above. This doc and that one together should answer any placement question without asking the owner.

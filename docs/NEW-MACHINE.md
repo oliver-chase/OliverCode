@@ -41,9 +41,6 @@ absent. The private repo's `olivercode/repo-profiles.json` lists what should be 
 **Marketplace plugins.** Third-party plugins are installed through Claude Code, not through this
 repo. `docs/EXTERNAL-TOOLING.md` lists each one and what it is for.
 
-**OliverCode's own session hooks.** `olivercode install` writes them into
-`~/.claude/settings.json`. `core/contracts/EXECUTION_CONTRACT.md` ("Session Hooks") says what each does.
-
 **Obsidian plugins.** The vault tracks each plugin's `data.json` and `manifest.json`, so
 settings come back with the clone. The compiled code does not. `.obsidian/community-plugins.json`
 lists what to reinstall from the community store.
@@ -55,7 +52,7 @@ lists what to reinstall from the community store.
 ## Verifying the restore
 
 ```bash
-scripts/olivercode health        # HEALTHY, and the four topology checks pass
+scripts/olivercode health        # HEALTHY, and the five topology checks pass
 bash scripts/validate.sh         # gates, doc consistency, references, tests
 bash scripts/qa/check-scenarios.sh   # the setup walkthroughs, in disposable sandboxes
 ```
