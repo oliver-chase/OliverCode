@@ -11,7 +11,9 @@ regression test.
 """
 
 import importlib.util
+import os
 import shutil
+import subprocess
 import stat
 import tempfile
 import unittest
@@ -119,6 +121,43 @@ class TestHookProblems(unittest.TestCase):
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
             launcher._install_hook_pair(repo, TEMPLATES, private_repo=private)
             self.assertEqual(launcher._hook_problems(repo / ".githooks", TEMPLATES), [])
+
+
+class TestInstallHookPair(unittest.TestCase):
+    """What sync-hooks deploys to each repo. Health accepts either pre-commit variant, so
+    these check the exact files: the wrong variant in a repo still looks healthy."""
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-hookpair-"))
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+
+    def hook(self, name):
+        return (self.repo / ".githooks" / name).read_bytes()
+
+    def test_a_private_repo_gets_the_private_variant_as_its_live_hook(self):
+        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=True)
+        self.assertEqual(self.hook("pre-commit"), (TEMPLATES / "pre-commit-private").read_bytes())
+        self.assertFalse((self.repo / ".githooks" / "pre-commit-private").exists())
+
+    def test_a_public_repo_gets_the_public_hook_and_the_private_reference_copy(self):
+        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
+        self.assertEqual(self.hook("pre-commit"), (TEMPLATES / "pre-commit").read_bytes())
+        self.assertEqual(self.hook("pre-commit-private"), (TEMPLATES / "pre-commit-private").read_bytes())
+
+    def test_both_variants_get_an_executable_pre_push(self):
+        for private in (True, False):
+            with self.subTest(private=private):
+                shutil.rmtree(self.repo / ".githooks", ignore_errors=True)
+                launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
+                self.assertEqual(self.hook("pre-push"), (TEMPLATES / "pre-push").read_bytes())
+                self.assertTrue(os.access(self.repo / ".githooks" / "pre-push", os.X_OK))
+
+    def test_git_is_pointed_at_the_installed_hooks(self):
+        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
+        got = subprocess.run(["git", "-C", str(self.repo), "config", "--get", "core.hooksPath"],
+                             capture_output=True, text=True).stdout.strip()
+        self.assertEqual(got, ".githooks")
 
 
 if __name__ == "__main__":
