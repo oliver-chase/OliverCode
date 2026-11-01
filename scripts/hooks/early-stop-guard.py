@@ -58,38 +58,59 @@ def _is_owner_message(obj: dict, msg: dict) -> bool:
     return isinstance(content, list) and any(isinstance(b, dict) and b.get("type") != "tool_result" for b in content)
 
 
+def _reversed_lines(f, block: int = 1 << 16):
+    """The file's lines, last first, read from the end in blocks."""
+    f.seek(0, os.SEEK_END)
+    pos, rest = f.tell(), b""
+    while pos > 0:
+        step = min(block, pos)
+        pos -= step
+        f.seek(pos)
+        lines = (f.read(step) + rest).split(b"\n")
+        rest = lines.pop(0)
+        yield from reversed(lines)
+    yield rest
+
+
 def _last_assistant_turn(transcript_path: Path) -> tuple[str, bool, bool] | None:
-    """Return (closing text, ended with a tool call, asked the owner this turn)."""
+    """Return (closing text, ended with a tool call, asked the owner this turn).
+
+    Only the current turn matters, so the transcript is read from the end back to the owner's
+    last message. Reading it from the start cost over a second on a long session."""
+    turn = []
+    try:
+        with transcript_path.open("rb") as f:
+            for raw in _reversed_lines(f):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    obj = json.loads(raw)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+                if not isinstance(obj, dict):
+                    continue
+                if _is_owner_message(obj, obj.get("message", obj)):
+                    break
+                turn.append(obj)
+    except OSError:
+        return None
     last_text = ""
     last_had_tool = False
     asked = False
-    try:
-        with transcript_path.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                msg = obj.get("message", obj)
-                if _is_owner_message(obj, msg):
-                    asked = False
-                    continue
-                if obj.get("type") != "assistant" and msg.get("role") != "assistant":
-                    continue
-                content = msg.get("content", [])
-                if not isinstance(content, list):
-                    continue
-                texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
-                tools = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
-                asked = asked or any(_asks_owner(b) for b in tools)
-                if texts or tools:
-                    last_text = "\n".join(texts).strip()
-                    last_had_tool = bool(tools)
-    except OSError:
-        return None
+    for obj in reversed(turn):
+        msg = obj.get("message", obj)
+        if obj.get("type") != "assistant" and msg.get("role") != "assistant":
+            continue
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+        tools = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
+        asked = asked or any(_asks_owner(b) for b in tools)
+        if texts or tools:
+            last_text = "\n".join(texts).strip()
+            last_had_tool = bool(tools)
     return last_text, last_had_tool, asked
 
 

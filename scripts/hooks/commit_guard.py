@@ -8,7 +8,8 @@ level up, in Claude Code, and refuses a commit in three cases:
 - the commit passes `--no-verify` or `-n`, which skips every hook
 - the command overrides `core.hooksPath`: `git -c`, `--config-env` or a `GIT_CONFIG_*` variable
 
-A repo with no gates of its own commits normally; the session-start check names that gap.
+A repo with no gates of its own commits normally, with any flags, since there is nothing to
+skip; the session-start check names that gap.
 Fails open on anything it cannot parse: a guard that blocks a legitimate commit because of
 its own bug costs more than the rare case it misses.
 """
@@ -30,6 +31,8 @@ import repo_gates  # noqa: E402
 OPERATOR_CHARS = ";&|()\n"
 WRAPPERS = {"env", "command", "builtin", "exec", "nohup", "sudo", "time"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# git's global options whose value is the next word; read as a subcommand, the value hid the commit.
+GLOBAL_VALUE_OPTIONS = {"--git-dir", "--work-tree", "--namespace", "--super-prefix"}
 
 
 def _segments(command: str):
@@ -50,11 +53,20 @@ def _segments(command: str):
         yield words
 
 
+def _located(where: Path, option: str, value: str) -> Path:
+    """The directory a commit runs against once `--git-dir` or `--work-tree` names one."""
+    path = (where / Path(value).expanduser()).resolve()
+    if option == "--git-dir":
+        return path.parent if path.name == ".git" else path
+    return path if option == "--work-tree" else where
+
+
 def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], list[str]]]:
     """Each `git ... commit ...` in the command: (directory it runs in, config keys it sets,
     environment assignments before it, commit args). Anything unparseable yields nothing."""
     found = []
     here = cwd
+    exported: list[str] = []  # `export NAME=value` reaches every later command in the line
     try:
         segments = list(_segments(command))
     except ValueError:
@@ -68,6 +80,9 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
             words = words[1:]
             while wrapper and words and words[0].startswith("-"):
                 words = words[1:]  # a wrapper's own flags, such as `env -i` or `sudo -E`
+        if words and words[0] == "export":
+            exported += [w for w in words[1:] if ASSIGNMENT.match(w)]
+            continue
         if len(words) >= 2 and words[0] == "cd":
             here = (here / Path(words[1]).expanduser()).resolve()
             continue
@@ -89,10 +104,18 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
             elif w.startswith("--config-env="):
                 keys.append(w.split("=", 1)[1].split("=", 1)[0].lower())
                 i += 1
+            elif w.split("=", 1)[0] in GLOBAL_VALUE_OPTIONS and ("=" in w or nxt):
+                option, value = w.split("=", 1) if "=" in w else (w, nxt)
+                where = _located(where, option, value)
+                i += 1 if "=" in w else 2
             else:
                 i += 1
         if i < len(words) and words[i] == "commit":
-            found.append((where, keys, env, words[i + 1:]))
+            for assignment in exported + env:
+                name, _, value = assignment.partition("=")
+                if name in ("GIT_DIR", "GIT_WORK_TREE") and value:
+                    where = _located(where, "--git-dir" if name == "GIT_DIR" else "--work-tree", value)
+            found.append((where, keys, exported + env, words[i + 1:]))
     return found
 
 
@@ -109,6 +132,7 @@ def _overrides_hooks_path(keys: list[str], env: list[str]) -> bool:
 
 
 VALUE_FLAGS = set("mFCct")  # commit's short flags that take a value; letters after one are that value
+ATTACHED_VALUE_FLAGS = set("uS")  # optional value, only ever attached: `-uno`, `-S<keyid>`
 
 
 def _skips_hooks(args: list[str]) -> bool:
@@ -126,21 +150,24 @@ def _skips_hooks(args: list[str]) -> bool:
                 if ch in VALUE_FLAGS:
                     skip_next = k == len(a) - 2  # the value is the next word only when the flag ends the cluster
                     break
+                if ch in ATTACHED_VALUE_FLAGS:
+                    break
     return False
 
 
 def reason(command: str, cwd: Path) -> str:
     for where, keys, env, args in _commits(command, cwd):
+        root = repo_gates.repo_root(where)
+        if not (root and repo_gates.has_gates(root)):
+            continue
         if _skips_hooks(args):
             return "This commit passes --no-verify, which skips the repo's commit gates. Commit without it and fix what the gates report."
         if _overrides_hooks_path(keys, env):
             return "This commit overrides core.hooksPath, which disables the repo's commit gates. Commit without the override."
-        root = repo_gates.repo_root(where)
-        if root and repo_gates.has_gates(root):
-            problem = repo_gates.gate_problem(root)
-            if problem:
-                return (f"Refused: {problem}. Run `git -C \"{root}\" config core.hooksPath .githooks`, "
-                        "then commit again so the gates run.")
+        problem = repo_gates.gate_problem(root)
+        if problem:
+            return (f"Refused: {problem}. Run `git -C \"{root}\" config core.hooksPath .githooks`, "
+                    "then commit again so the gates run.")
     return ""
 
 

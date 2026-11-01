@@ -707,49 +707,37 @@ def command_health(fleet_root: Path | None = None) -> int:
 STE_JOIN_WRAPPER = "ste-lint-joined.py"
 
 
-def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
-    """Return human-readable problems with a repo's live hook directory.
+def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> list[str]:
+    """Return human-readable problems with a repo's live hooks, or [] when they match.
 
-    Checks, in the order they can silently disable enforcement:
-
-    1. The directory core.hooksPath points at does not exist. Git treats this as
-       "no hooks" and runs NOTHING, without warning — a commit with secrets in it
-       sails straight through. This is the failure this function exists to catch:
-       an earlier version returned "no divergence" for a missing directory, which
-       the caller reported as [OK].
-    2. No `pre-commit` file in it. Same silent no-op; git only auto-invokes that
-       exact filename.
-    3. Present but not executable. Git skips a non-executable hook silently too.
-    4. Present, executable, but content matches neither canonical template.
-
-    A repo running the private variant still deploys it under the filename
-    `pre-commit`, so a live `pre-commit` is checked against BOTH template contents.
+    `repo_gates.gate_problem` first catches every state where git runs none of the repo's
+    gates: hooksPath unset or pointed away from `.githooks`, the folder or its pre-commit
+    missing, or a pre-commit that is not executable. The live pre-commit must then match
+    the one template this repo's variant names, so a public repo running the weaker private
+    hook fails. pre-push must match its template too, because sync-hooks deploys it.
     """
-    fail_open = _repo_gates.hooks_dir_problem(hooks_dir)
-    if fail_open:
-        return [fail_open]
+    gate = _repo_gates.gate_problem(repo_root)
+    if gate:
+        return [gate]
 
+    hooks_dir = repo_root / ".githooks"
     live = hooks_dir / "pre-commit"
-
-    canonical_contents = []
-    for template in ("pre-commit", "pre-commit-private"):
-        canonical = templates_dir / template
-        if canonical.exists():
-            canonical_contents.append(canonical.read_bytes())
+    expected = {"pre-commit": "pre-commit-private" if private_repo else "pre-commit", "pre-push": "pre-push"}
+    if not private_repo:
+        expected["pre-commit-private"] = "pre-commit-private"   # the inert reference copy
 
     problems = []
-    for filename in ("pre-commit", "pre-commit-private"):
-        candidate = hooks_dir / filename
-        if not candidate.exists():
+    for filename, template in expected.items():
+        installed = hooks_dir / filename
+        canonical = templates_dir / template
+        if filename == "pre-commit-private" and not installed.exists():
             continue
-        if candidate.read_bytes() not in canonical_contents:
-            # A byte-identical check, not a feature-by-feature one. A template
-            # change -- the references/*.md scope from GATE-SCOPE-1, the
-            # issue-citation check from GATE-CITATION-1, or the per-file
-            # hard-violation baseline from GATE-BASELINE-1 -- reaches every
-            # installed hook through this same divergence check. No separate
-            # check is needed per gate.
-            problems.append(f"{filename} diverges from the template")
+        if not installed.is_file():
+            problems.append(f"no {filename} in {hooks_dir}")
+        elif not os.access(installed, os.X_OK):
+            problems.append(f"{installed} is not executable, so git skips it")
+        elif installed.read_bytes() != canonical.read_bytes():
+            problems.append(f"{filename} diverges from the {template} template")
 
     # Without the wrapper the clarity gate blocks every commit that stages a
     # SKILL.md or CLAUDE.md (STE-JOIN-1). A declared variant hook that never calls
@@ -845,17 +833,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
         for name, profile, repo_path in fleet:
             if name in absent:
                 continue
-            result = subprocess.run(
-                ["git", "-C", str(repo_path), "config", "--get", "core.hooksPath"],
-                capture_output=True, text=True,
-            )
-            hooks_path = result.stdout.strip()
-            if result.returncode != 0 or not hooks_path:
-                print(f"  [FAIL] {name}: core.hooksPath unset")
-                failed += 1
-                continue
-            hooks_dir = repo_path / hooks_path
-            problems = _hook_problems(hooks_dir, templates_dir)
+            problems = _hook_problems(repo_path, templates_dir, bool(profile.get("private")))
             variant = profile.get("hookVariant")
             if problems and variant:
                 # A repo may legitimately need a hook the template cannot express (a
@@ -864,7 +842,8 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 # considered" -- it is reported, not failed, and sync-hooks leaves it
                 # alone. Divergence WITHOUT a declaration is still a failure, so this
                 # cannot be used to quietly opt out of enforcement.
-                fatal = [p for p in problems if "diverges" not in p]
+                # A variant only replaces pre-commit; sync-hooks still manages pre-push.
+                fatal = [p for p in problems if not p.startswith("pre-commit")]
                 if fatal:
                     print(f"  [FAIL] {name}: {'; '.join(fatal)}")
                     failed += 1
@@ -890,16 +869,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
             print(f"  [WARN] {name}: no .git at {root} — hook check skipped")
             skipped += 1
             continue
-        result = subprocess.run(
-            ["git", "-C", str(root), "config", "--get", "core.hooksPath"],
-            capture_output=True, text=True,
-        )
-        hooks_path = result.stdout.strip()
-        if result.returncode != 0 or not hooks_path:
-            print(f"  [FAIL] {name}: core.hooksPath unset")
-            failed += 1
-            continue
-        problems = _hook_problems(root / hooks_path, templates_dir)
+        problems = _hook_problems(root, templates_dir, private_repo=True)
         if problems:
             print(f"  [FAIL] {name}: {'; '.join(problems)}")
             failed += 1
@@ -908,6 +878,16 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
             passed += 1
 
     return passed, failed, skipped
+
+
+def _install_pre_push(repo_path: Path, templates_dir: Path) -> None:
+    """Deploy pre-push. A declared pre-commit variant still gets it, since what is safe to push
+    does not depend on which commit gates a repo runs."""
+    hooks_dir = repo_path / ".githooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    target = hooks_dir / "pre-push"
+    target.write_bytes((templates_dir / "pre-push").read_bytes())
+    target.chmod(0o755)
 
 
 def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
@@ -942,10 +922,7 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
         reference_target.write_bytes(reference_source.read_bytes())
         reference_target.chmod(0o755)
 
-    push_source = templates_dir / "pre-push"
-    push_target = hooks_dir / "pre-push"
-    push_target.write_bytes(push_source.read_bytes())
-    push_target.chmod(0o755)
+    _install_pre_push(repo_path, templates_dir)
 
     # The clarity gate runs the linter through this wrapper (STE-JOIN-1).
     join_source = templates_dir / STE_JOIN_WRAPPER
@@ -976,10 +953,11 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
             continue
         variant = profile.get("hookVariant")
         if variant:
-            # Declared variant: overwriting would destroy a considered customization.
+            # Declared variant: overwriting its pre-commit would destroy a considered customization.
             # `health` reports it as WARN rather than drift. Remove the profile field
             # to bring the repo back under the template.
-            print(f"  [SKIP] {name}: declared hook variant ({variant}) — left untouched")
+            _install_pre_push(repo_path, templates_dir)
+            print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push synced")
             skipped += 1
             continue
         # A private repo gets the private variant, which drops the PII gate (it holds

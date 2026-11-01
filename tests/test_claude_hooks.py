@@ -120,8 +120,30 @@ class TestCommitGuard(RepoCase):
 
     def test_a_message_or_value_that_looks_like_n_is_not_a_skip(self):
         self.gates(point_git_at_them=True)
-        for cmd in ('git commit -m -n', 'git commit -mnote', 'git commit -F notes.txt', 'echo "git commit -n" > notes.txt'):
+        for cmd in ('git commit -m -n', 'git commit -mnote', 'git commit -F notes.txt', 'echo "git commit -n" > notes.txt',
+                    'git commit -uno -m x', 'git commit -Snewkey -m x', 'git commit -auno -m x'):
             self.assertEqual(guard.reason(cmd, self.repo), "", cmd)
+
+    def test_skipping_hooks_in_a_repo_with_no_gates_skips_nothing_and_is_allowed(self):
+        self.assertEqual(guard.reason("git commit --no-verify -m x", self.repo), "")
+
+    def test_a_global_option_value_does_not_hide_the_commit(self):
+        self.gates(point_git_at_them=True)
+        self.assertIn("--no-verify", guard.reason(f'git --git-dir "{self.repo}/.git" commit -n -m x', self.tmp))
+        self.assertIn("--no-verify", guard.reason(f'git --work-tree "{self.repo}" commit -n -m x', self.tmp))
+        self.assertIn("--no-verify", guard.reason("git --namespace ns commit -n -m x", self.repo))
+        self.assertIn("--no-verify", guard.reason(f'git --git-dir="{self.repo}/.git" commit -n -m x', self.tmp))
+        self.assertIn("--no-verify", guard.reason(f'git --work-tree="{self.repo}" commit -n -m x', self.tmp))
+
+    def test_git_dir_in_the_environment_points_the_guard_at_that_repo(self):
+        self.gates(point_git_at_them=True)
+        self.assertIn("--no-verify", guard.reason(f'GIT_DIR="{self.repo}/.git" git commit -n -m x', self.tmp))
+        self.assertIn("--no-verify", guard.reason(f'export GIT_DIR="{self.repo}/.git"; git commit -n -m x', self.tmp))
+
+    def test_an_exported_override_reaches_a_later_commit(self):
+        self.gates(point_git_at_them=True)
+        cmd = "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null; git commit -m x"
+        self.assertIn("overrides core.hooksPath", guard.reason(cmd, self.repo))
 
     def test_the_hook_prints_a_deny_decision(self):
         self.gates(point_git_at_them=False)
