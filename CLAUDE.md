@@ -55,8 +55,8 @@ simplify) is `$OC/core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md`. These rules
   stays green without the code it protects reports confidence it has not earned.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Writing a README or repo doc: use the `writing-documentation` skill. One concept has one
-  home. Docs sync in the same commit as the change.
+- Writing a README or repo doc: follow `$OC/docs/DOCUMENTATION_STANDARD.md` for its structure and
+  `$OC/docs/VOICE.md` for its words. One concept has one home. Docs sync in the same commit as the change.
 - Prefer deterministic scripts over LLM calls, and short pointers over restated rules.
 - Fixing gate or lint violations: read the full list once, fix every violation in one pass,
   then re-verify once. Never fix one, re-run, and repeat.
