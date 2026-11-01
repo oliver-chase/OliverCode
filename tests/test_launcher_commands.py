@@ -40,9 +40,13 @@ class NoLocalConfig(unittest.TestCase):
     olivercode.local.json (a `repoPaths` entry named alpha, say) cannot change the result."""
 
     def setUp(self):
-        patcher = mock.patch.object(local_config, "LOCAL_FILE", Path(tempfile.gettempdir()) / "olivercode-no-such-local.json")
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        empty = tempfile.TemporaryDirectory()  # a private folder, so no other process can create the file
+        self.addCleanup(empty.cleanup)
+        for patcher in (mock.patch.object(local_config, "LOCAL_FILE", Path(empty.name) / "olivercode.local.json"),
+                        mock.patch.dict(os.environ, {k: v for k, v in os.environ.items()
+                                                     if k not in ("OLIVERCODE_VAULT_ROOT", "OLIVERCODE_SKILLS_ROOT")}, clear=True)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
 
 class TestInstall(unittest.TestCase):
