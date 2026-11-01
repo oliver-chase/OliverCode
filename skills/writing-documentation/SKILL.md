@@ -1,6 +1,6 @@
 ---
 name: writing-documentation
-description: Use whenever writing or rewriting a README, architecture doc, reference doc, or repo documentation — this repo, a governed repo, or a fork. Also use for a non-trivial CODE COMMENT. Applies the locked documentation standard: README outline, index README shape, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. Its Voice rules govern comment prose too. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
+description: Use whenever writing or rewriting a README, architecture doc, reference doc, or repo documentation — this repo, a governed repo, or a fork. Also use for a non-trivial CODE COMMENT. Applies the locked documentation standard: README outline, index README shape, CAPS-KEBAB naming, complete doc table, backlog policy, GitHub About. The standard itself lives in docs/DOCUMENTATION_STANDARD.md. This skill is how it gets applied.
 ---
 
 # Writing Documentation
@@ -12,9 +12,9 @@ contract instead of a generic house style.
 
 ## Procedure
 
-1. **Read the voice, then the contract.** Voice lives in `~/.claude/skills/clean-writing/voice/voice.md`.
-   `docs/DOCUMENTATION_STANDARD.md` is the single home for the README outline, formatting, file
-   naming, backlog policy and freshness rules (resolve `$OC` from the `~/.claude/CLAUDE.md` symlink
+1. **Read the voice, then the contract.** Voice lives in `~/.claude/skills/clean-writing/voice.md`.
+   `docs/DOCUMENTATION_STANDARD.md` is the single home for the README outline, file naming,
+   backlog policy and freshness rules (resolve `$OC` from the `~/.claude/CLAUDE.md` symlink
    when working outside OliverCode). Read both. Do not restate them from memory.
 2. **Read what exists.** The repo's current README, its `docs/`, its tests and entry points.
    Every claim you write must be checkable against the code as it is now. Numbers (test
@@ -25,13 +25,11 @@ contract instead of a generic house style.
    - The COMPLETE documentation table, hard-numbers status, license.
 
    For a non-README document, write `# Title`, one orientation sentence, then follow the
-   standard's voice and formatting rules throughout.
+   voice file throughout.
 
    A README that catalogs many things, such as a suite or a monorepo, follows the standard's
    "Index READMEs" section. Before you deliver one, compare every path, command, count and
-   table row it names against disk. Say what you compared. Then read it as a stranger. Rewrite
-   any paragraph over three sentences. Rewrite any internal term used before the text explains
-   it. Rewrite any matrix written as a sentence.
+   table row it names against disk. Say what you compared.
 4. **Name files to the convention.** CAPS-KEBAB names under `docs/`. Renaming an existing file means
    sweeping every reference in the same commit — the reference gate fails on stragglers.
 5. **Same-commit sync.** Anything the new text contradicts elsewhere gets fixed in the same

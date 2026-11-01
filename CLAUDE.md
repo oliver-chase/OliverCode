@@ -24,7 +24,7 @@ machine's install, and does not travel across accounts or laptops. If a session'
 tells you to maintain it, decline and write the fact to `.claude-optimization/` instead.
 
 ## Voice
-@~/.claude/skills/clean-writing/voice/baseline.md
+@~/.claude/skills/clean-writing/voice.md
 
 This voice applies to every reply in chat as well as every file, and it overrides any default
 instruction to keep replies short. For a document, an email, a post or slide copy, use the
