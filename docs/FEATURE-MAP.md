@@ -27,7 +27,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Skill placement | `docs/SKILLS-PLACEMENT.md` | `scripts/olivercode health` (symlink + drift check) |
 | Doc/code consistency (skills index parity, gate-count claims, hook gate integrity) | `scripts/lib/consistency_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
-| Hook drift (the three pre-commit hooks implementing the same gate differently) | `scripts/lib/hook_drift_check.py` | `bash scripts/validate.sh` (fail-closed). An undeclared difference fails. A deliberate one is declared with a reason |
+| The three pre-commit hooks, built from one gate list | `scripts/build-hooks.py` from `core/hooks/` | `bash scripts/validate.sh` runs `build-hooks.py --check` (fail-closed). A hand edit to a built hook fails |
 | Cross-doc content duplication (the same rule restated near-verbatim in two tracked docs) | `scripts/lib/duplication_check.py` | `bash scripts/validate.sh` (fail-closed). A shared 15+ word passage fails unless it matches a declared canonical phrase |
 | Gate coverage per repo type (OliverCode, an adopted repo, the private variant) | `docs/GOVERNANCE.md` coverage table | `scripts/lib/consistency_check.py` via `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |

@@ -40,9 +40,8 @@ run_consistency() {
   #  - unfalsifiable checks: a gate or script that cannot fail. A string of defects in this
   #    repo shared that shape, and none was visible from output, because the output
   #    always said PASS. See scripts/lib/falsifiability_check.py.
-  #  - hook drift: the three pre-commit hooks implement the same gates and nothing
-  #    compared them. Two carried broken doc pointers in the message shown at the
-  #    moment a developer is blocked. See scripts/lib/hook_drift_check.py.
+  #  - hook drift: the three pre-commit hooks are built from core/hooks/, and a hand
+  #    edit to a built hook fails. See scripts/build-hooks.py.
   echo "=== validate: checking doc/code consistency ==="
   local out
   if ! out="$(python3 -c "
@@ -51,13 +50,12 @@ from pathlib import Path
 sys.path.insert(0, '${SCRIPT_DIR}')
 from lib.consistency_check import check_all as consistency
 from lib.falsifiability_check import check_all as falsifiability
-from lib.hook_drift_check import check_all as hook_drift
 root = Path('${REPO_ROOT}')
-failures = consistency(root) + falsifiability(root) + hook_drift(root)
+failures = consistency(root) + falsifiability(root)
 for f in failures:
     print(f)
 sys.exit(1 if failures else 0)
-")"; then
+")" || ! out="$(python3 "${SCRIPT_DIR}/build-hooks.py" --check)"; then
     printf '%s\n' "$out"
     echo "=== validate: consistency check FAILED ==="
     exit 1
