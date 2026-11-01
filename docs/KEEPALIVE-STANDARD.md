@@ -1,9 +1,11 @@
 # Supabase & Cloudflare Keepalive Standard
 
-Indexed in `docs/FEATURE-MAP.md`. The four template files this standard installs ship from
-`core/templates/project/` via the `conditionalFiles` block of
-`shared/project-bootstrap-manifest.json` — synced only into repos whose `keepalive` profile
-block enables them, since a repo with no database has no use for a Supabase keepalive script:
+Indexed in `docs/FEATURE-MAP.md`. The three template files this standard uses ship from
+`core/templates/project/` and are listed in the `conditionalFiles` block of
+`shared/project-bootstrap-manifest.json`. `olivercode bootstrap` prints each one with its
+condition, and you copy it by hand into a repo whose `keepalive` profile block enables it,
+since a repo with no database has no use for a Supabase keepalive script. No command reads
+the `keepalive` block or copies these files for you:
 
 | Template | Installed as | When |
 |---|---|---|
@@ -87,12 +89,12 @@ CF Cron Trigger that hits every 5 minutes. Also serves as a health check.
 For repos that are intentionally inactive:
 - Keep the endpoint file present but returning a parked response
 - Keep `wrangler.toml` `[[crons]]` commented out with clear instructions
-- Set `keepalive.active: false` in `repo-profiles.json`
+- Set `keepalive.supabase.enabled` and `keepalive.cloudflare.enabled` to `false` in `repo-profiles.json`
 
 ## Per-Repo Status
 
-Each repo's actual keepalive configuration lives in its `keepalive` block in
-`shared/repo-profiles.json` (tracked, real fleet). That JSON
+Each repo's keepalive configuration lives in the `keepalive` block of its profile, and
+`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md` says which registry file holds the profiles. That JSON
 is the sole source of truth — no markdown table duplicates it here, since two copies
 of the same fact drift independently and the JSON is already machine-readable.
 

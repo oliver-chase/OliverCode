@@ -32,7 +32,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Skill efficiency for this repo's `skills/` (no monolith `SKILL.md`, no restated paragraph, the six named MCP-call patterns) | `core/contracts/SKILL_EFFICIENCY_STANDARD.md`, thresholds in `scripts/lib/skill_efficiency_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Gate coverage per repo type (OliverCode, an adopted repo, the private variant) | `docs/GOVERNANCE.md` coverage table | `scripts/lib/consistency_check.py` via `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
-| Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
+| Framework tests | `tests/` | `bash scripts/validate.sh` (skips the step silently if `tests/` is absent) |
 | Public CI | `.github/workflows/framework-ci.yml` | Ships health + validate.sh + `check-bloat.sh --strict` + fork-usability as gating steps. Paused on the origin repo — see `docs/GOVERNANCE.md`'s "Unified Validation Entrypoint" for why. Enable it in your own fork. |
 
 ## Runtime and Launcher
@@ -52,7 +52,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/validate.sh` | Unified validation entrypoint: pre-commit gates, doc/code consistency, reference integrity, tests, gatekeeper modes |
 | `scripts/lib/consistency_check.py` | Skills INDEX-vs-directory parity, frontmatter name match, gate-count claims across docs, and hook gate-integrity (a removed gate is caught) |
 | `scripts/lib/reference_check.py` | Backtick repo-path resolution (the half a markdown link checker cannot see) |
-| `scripts/lib/health_checks.py` | Governance-waiver expiry (an exception with no reason or a lapsed date fails health) and the GitHub About check (WARN-degrades offline). Launcher re-exports both |
+| `scripts/lib/health_checks.py` | Seven health checks: governance-waiver expiry (an exception with no reason or a lapsed date fails health), the GitHub About check (WARN-degrades offline), and the five topology checks: vault skill links, voice copies, scheduler, oversized tracked files and remotes. The launcher runs all seven |
 | `scripts/lib/skills_catalog.py` | SKILL.md frontmatter parsing behind `olivercode skills`. Launcher re-exports |
 | `scripts/lib/falsifiability_check.py` | Detects checks that CANNOT fail — dead counters, scripts reporting failure with no nonzero exit. Built after a run of defects here shared that one shape (`GATE-FALSIFIABILITY-1`) |
 | `scripts/lib/duplication_check.py` | Detects the same rule restated near-verbatim across two tracked docs with no cross-reference — a sliding-window substring match, declared-marker exceptions for deliberate reuse |
@@ -86,7 +86,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `shared/workflow-standards.md` | trigger routing, branch lifecycle, testing baseline |
 | `shared/repo-profiles.json` | the fleet registry: per-repo validation commands, evidence requirements and governance exceptions. It ships empty, and the real copy lives in a private repo (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`) |
 | `shared/task-policies/` | task-type policies and result schema |
-| `docs/KEEPALIVE-STANDARD.md` | Supabase/Cloudflare keepalive contract. Its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
+| `docs/KEEPALIVE-STANDARD.md` | Supabase/Cloudflare keepalive contract. Its three template files are listed in the manifest's `conditionalFiles`, and `bootstrap` prints them for a manual copy |
 
 ## Non-Drift Rule
 

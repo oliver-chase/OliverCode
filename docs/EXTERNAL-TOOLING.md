@@ -4,8 +4,8 @@ Status: Active
 Purpose: the third-party tools this framework's posture assumes, and what each one is for.
 None of them ship here and none are required. OliverCode runs standalone.
 
-They are listed because the token-optimization and verification rules in `CLAUDE.md` were
-written on a machine running these, and a few of the rules read as arbitrary without them.
+They are listed because OliverCode's verification rules were written on a machine running
+these, and a few of the rules read as arbitrary without them.
 
 ## Claude Code plugins
 

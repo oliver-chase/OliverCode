@@ -6,7 +6,7 @@ This document defines the current locked governance baseline for OliverCode.
 
 `bash scripts/validate.sh` runs all active gates from repo root:
 - `bash scripts/validate.sh` — pre-commit gates, doc/code consistency, reference integrity, tests
-- `bash scripts/validate.sh --evidence <file>` — pre-commit + orchestration gatekeeper. `scripts/orchestration-gatekeeper.py` validates WRITE MODE evidence against repo profiles (`shared/repo-profiles.json`, tracked real fleet) and `shared/task-policies/`.
+- `bash scripts/validate.sh --evidence <file>` — pre-commit + orchestration gatekeeper. `scripts/orchestration-gatekeeper.py` validates WRITE MODE evidence against the fleet registry (`repo-profiles.json`; `docs/DECISIONS.md` `REGISTRY-PRIVATE-1` says where) and `shared/task-policies/`.
 - `bash scripts/validate.sh --gatekeeper-only <file>` — gatekeeper only
 - `bash scripts/validate.sh --check-consistency` — doc/code consistency only
 
@@ -22,9 +22,10 @@ blocked. That is policy, not drift: `githubActionsPolicy` in
 `shared/project-bootstrap-manifest.json` is the canonical record, and the same pause applies
 to managed repos. Do not re-enable it as a "fix" — it spends the owner's billing.
 
-While it is paused, the local commands ARE the enforcement, which is why the fork-usability
-and strict-bloat checks also run from `scripts/qa/full-qa-pass.sh` rather than living only in
-CI. Enable the workflow in your own fork, where your billing applies. A separate
+While it is paused, the local commands ARE the enforcement. `scripts/qa/full-qa-pass.sh` runs
+the fork-usability check and the bloat check (without `--strict`) and exits non-zero when
+either finds a problem. Nothing runs it automatically, so it is advisory (`CI-STRICT-1`), and
+the strict bloat check runs only in CI. Enable the workflow in your own fork, where your billing applies. A separate
 governance CI workflow template for downstream repos exists at
 `core/templates/project/.github/workflows/olivercode-governance.yml`.)
 
@@ -71,11 +72,11 @@ runs four. This table is the one home for that. Anywhere else that names a count
 | Deleted repo refs | References to removed repos — an opt-in extension point. `DELETED_REPO_PATTERNS` in the hook is empty by default and the gate reports *skipped*, not passed, until you add names | 4 | 4 | — |
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential (checked via `gh api user -i`, not the remote URL scheme) | 5 | 5 | — |
 | Contract integrity | Hardcoded `/workspace/` container paths in staged code. `OLIVERCODE_DEPENDENCY.md` declaring paths that don't exist | 6 | — | — |
-| Planning doc governance | Contract violations in staged planning docs. Conditional: runs only where `scripts/check-planning-doc-governance.py` exists, and reports *skipped* where it does not | 7 | 6 | — |
+| Planning doc governance | Contract violations in staged planning docs. Conditional: runs only where `scripts/check-planning-doc-governance.py` exists, and reports *skipped* where it does not. OliverCode has no such checker, so in its own hook this gate always reports *skipped*. It stays in that hook because the gate tests run against it, and those tests cover the copy every adopted repo runs | 7 | 6 | — |
 | Token policy | Invalid token-policy declarations in repo profiles | 8 | — | — |
 | Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 9 | 7 | — |
 | Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Current-state-only, fleet-wide: git is the archive, so a superseded file is deleted or replaced, never parked | 10 | 8 | 3 |
-| Writing clarity (asd-ste100) | Warns, never blocks: a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` with strict-mode ASD-STE100 findings (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Long sentences are measured after `core/templates/project/ste-lint-joined.py` (installed beside each hook) joins hard-wrapped lines, so wrapping a paragraph cannot hide one. Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 11 | 9 | 4 |
+| Writing clarity (asd-ste100) | Warns on lint findings and blocks in two cases: `ste-lint-joined.py` is missing beside the hook, or a staged skill file cites an issue number that does not exist (`GATE-CITATION-1`). It checks a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` with strict-mode ASD-STE100 findings (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Long sentences are measured after `core/templates/project/ste-lint-joined.py` (installed beside each hook) joins hard-wrapped lines, so wrapping a paragraph cannot hide one. Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 11 | 9 | 4 |
 | **Total** | | **11** | **9** | **4** |
 
 Numbers are the gate's position in that hook's run order, so the same gate can carry a

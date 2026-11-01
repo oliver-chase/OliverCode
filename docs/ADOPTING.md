@@ -24,8 +24,8 @@ Two layers, and it matters which is which:
 | Your fleet's real config | a private repo's `olivercode/repo-profiles.json`, or your fork's `shared/repo-profiles.json` | yes, in that repo | you |
 | Activation | `~/.claude/CLAUDE.md` + `~/.claude/skills/*` symlinks | no, per machine | your machine |
 
-Your fleet's real names and config live directly in the tracked registry — there is no
-placeholder layer to keep in sync with it. `ARCHITECTURE.md`'s "The Two Layers" explains why.
+Your fleet's real names and config live in one registry file, and there is no placeholder
+layer to keep in sync with it. `ARCHITECTURE.md`'s "The Two Layers" explains where that file lives.
 
 ## Step 0 — Prove the clone is sound before changing anything
 
@@ -50,7 +50,7 @@ That check also walks this guide's own load-bearing steps against two throwaway 
 fleet registration, `sync-hooks`, the secret probe, and `health` -- so the
 instructions below are verified, not just written. If it passes, the fork is sound and every
 failure below is a setup problem, not a repo problem. Run it after any change to the
-framework's own plumbing. It is also Phase 4 of `scripts/qa/full-qa-pass.sh`.
+framework's own plumbing. It is also Phase 3 of `scripts/qa/full-qa-pass.sh`.
 
 **Enable CI in your fork.** `.github/workflows/framework-ci.yml` ships ready to run, but is
 paused on the origin repo — `docs/GOVERNANCE.md`'s "Unified Validation Entrypoint" section
@@ -75,7 +75,7 @@ scripts/olivercode discover --root ~/dev --root ~/work
 installed, and which repos are ungoverned. It then inventories `~/.claude` — separating
 skills symlinked into this checkout from ones symlinked elsewhere, real untracked
 directories, and broken links — and ends with a profile skeleton containing explicit `path`
-values, ready to paste into `shared/repo-profiles.json`.
+values, ready to paste into the registry file the command names.
 
 Three things it will likely surface in an existing setup:
 
@@ -167,8 +167,9 @@ comes first.
 
 Edit the registry's `repo-profiles.json` (a private repo's `olivercode/` copy when `olivercode.local.json` names one under `privateRepos`, else `shared/repo-profiles.json`) with your real repo names, validation commands,
 and token policy. `_<field>_note` keys beside a worked example document the schema in place.
-`scripts/olivercode discover` emits a paste-ready profile per repo, including the
-`token_policy` block. Each profile needs that block, with `ignore_globs` and
+`scripts/olivercode discover --root <dir>` emits a profile skeleton per repo with `name`, `path`
+and `canonicalValidationCommand`. Add a `token_policy` block to each profile yourself,
+because every profile needs one, with `ignore_globs` and
 `generated_artifact_dirs`, or Gate 8 fails the commit — `docs/TOKEN-POLICY.md` has the shape.
 
 Confirm the fleet really registered before continuing:
@@ -184,15 +185,15 @@ scripts/olivercode sync-hooks     # writes .githooks/ + sets core.hooksPath in e
 scripts/olivercode health         # confirms each repo's hooks are installed and current
 ```
 
-`sync-hooks` resolves your fleet from `shared/repo-profiles.json` and expects those repos as
+`sync-hooks` resolves your fleet from the registry file named in Step 5 and expects those repos as
 siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below.
 Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern.
 Read that list rather than the exit code.
 
-A repo whose existing `SKILL.md`, `CLAUDE.md` or `references/*.md` files already break the
-writing-clarity gate would block every commit that touches them. Freeze that existing debt
-once, right after `sync-hooks`, so only new violations block, then commit the
-`.githooks/ste-baseline` file it writes in that repo:
+The writing-clarity gate reports findings in `SKILL.md`, `CLAUDE.md` and `references/*.md`
+files without blocking, so existing debt never stops a commit. To have its warnings separate
+that old debt from new findings, freeze the current counts once, right after `sync-hooks`,
+and commit the `.githooks/ste-baseline` file it writes in that repo:
 
 ```bash
 python3 core/templates/project/write-ste-baseline.py /path/to/repo
@@ -323,7 +324,7 @@ Recommended:
 
 ```
 <workspace-root>/
-├── OliverCode/              the fork -- framework, skills, contracts, gates, your real fleet config
+├── OliverCode/              the fork -- framework, skills, contracts, gates
 │   └── runtime/control-plane/  (gitignored, optional) per-machine state
 ├── product-repo-a/          siblings of OliverCode
 ├── product-repo-b/
@@ -375,8 +376,8 @@ a fleet legible to an agent that has never seen it.
 
 ## What a fork gets, and what it does not
 
-Tracked and shared: contracts, templates, skills, gates, launcher, docs, tests, and the
-real fleet registries.
+Tracked and shared: contracts, templates, skills, gates, launcher, docs and tests. The
+fleet registry ships as an empty example, and your real one lives in a private repo.
 
 Never tracked, created per user: `runtime/control-plane/` (machine state),
 `.claude-optimization/memory/` and `state/` (your agent's memory), and the `~/.claude/`

@@ -2,7 +2,7 @@
 
 ## Where It Lives
 
-The cross-repo token policy is defined in `shared/repo-profiles.json` (tracked, real fleet).
+The cross-repo token policy is defined per repo profile. `REGISTRY-PRIVATE-1` in `docs/DECISIONS.md` says which `repo-profiles.json` is read.
 Each repo profile carries a
 `token_policy` object with three fields:
 
@@ -31,7 +31,8 @@ useful context. Excluded from agent file scans.
 
 Gate 8 of `.githooks/pre-commit` (`orchestration-gatekeeper.py --check-token-policy`) fails
 the commit unless, for every repo profile:
-- `ignore_globs` and `generated_artifact_dirs` are both present and non-empty
+- `ignore_globs` is present and non-empty
+- `generated_artifact_dirs` is present (an explicit `[]` is allowed)
 - no `ignore_globs` entry is the catch-all `**`, which would exclude everything
 
 

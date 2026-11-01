@@ -188,7 +188,7 @@ PY
 oc sync-hooks 2>&1 | grep -q "special: declared hook variant" && ok "variant skipped by sync-hooks" s7 || bad "variant skipped by sync-hooks" s7
 grep -q "custom-gate" "$WS/special/.githooks/pre-commit" && ok "variant hook not overwritten" s7 || bad "variant hook not overwritten" s7
 h7="$(oc health 2>&1)"
-echo "$h7" | grep -q "special.*WARN\|WARN.*special\|\[WARN\] special" && ok "health reports variant as WARN" s7 || bad "health reports variant as WARN" s7
+echo "$h7" | grep -q "\[WARN\] special: declared hook variant" && ok "health reports variant as WARN" s7 || bad "health reports variant as WARN" s7
 oc health >/dev/null 2>&1 && ok "variant does not fail health" s7 || bad "variant does not fail health" s7
 
 # --------------------------------------------------------------- S8 backout

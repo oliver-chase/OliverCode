@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""Write `.githooks/ste-baseline`: the hard-violation count Gate 4 accepts per file, frozen at
-adoption. GATE-BASELINE-1 in OliverCode's docs/DECISIONS.md.
+"""Write `.githooks/ste-baseline`: the hard-violation count per file, frozen at adoption.
+GATE-BASELINE-1 in OliverCode's docs/DECISIONS.md.
+
+The writing-clarity gate now warns and never blocks on lint findings, so this file changes
+only how a finding is reported: within the baseline it prints as old debt, above it as new.
+The history below is why the file exists.
 
 Gate 4 (writing clarity) only ever checked SKILL.md/CLAUDE.md before GATE-SCOPE-1 extended it
 to references/*.md. A repo's existing reference files can carry real pre-existing debt that
