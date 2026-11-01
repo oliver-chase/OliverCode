@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the three pre-commit hooks from one ordered gate list.
+"""Build the three pre-commit hooks from one ordered gate list, and the pre-push hook.
 
 OliverCode's own hook, the public template and the private template run the same
 gates. Kept by hand, they drifted: a fix reached one copy and missed another, and
@@ -7,7 +7,7 @@ two blocked-commit messages pointed at paths that did not exist. Each gate's bod
 now lives once in core/hooks/gates/, and this script assembles every variant.
 
 Usage:
-    scripts/build-hooks.py           write the three hooks
+    scripts/build-hooks.py           write the hooks
     scripts/build-hooks.py --check   exit 1 when a committed hook differs from the build
 """
 from __future__ import annotations
@@ -18,6 +18,10 @@ from pathlib import Path
 OC_ROOT = Path(__file__).resolve().parent.parent
 GATES_DIR = OC_ROOT / "core" / "hooks" / "gates"
 HEADER = OC_ROOT / "core" / "hooks" / "header.sh"
+# The secret patterns live once and fill both the commit gate and the push hook.
+SECRET_PATTERNS = OC_ROOT / "core" / "hooks" / "secret-patterns.sh"
+PRE_PUSH = OC_ROOT / "core" / "hooks" / "pre-push.sh"
+PRE_PUSH_TARGETS = (".githooks/pre-push", "core/templates/project/pre-push")
 
 TITLES = {
     "secrets": "Secrets",
@@ -80,6 +84,7 @@ def build(spec: dict) -> str:
             number += 1
             parts.append(banner(f"Gate {number}: {TITLES[gate]}"))
             body = body.replace("{{N}}", str(number)).replace("{{TOTAL}}", str(total))
+        body = body.replace("{{SECRET_PATTERNS}}", SECRET_PATTERNS.read_text(encoding="utf-8"))
         parts.append(body.replace("{{BACKLOG_CHECKER}}", spec["backlog_checker"]) + "\n")
     parts.append(banner("All gates passed"))
     parts.append('echo "[pre-commit] All gates passed."\nexit 0\n')
@@ -89,9 +94,12 @@ def build(spec: dict) -> str:
 def main() -> int:
     check = "--check" in sys.argv[1:]
     stale = []
-    for rel, spec in VARIANTS.items():
+    pre_push = PRE_PUSH.read_text(encoding="utf-8").replace(
+        "{{SECRET_PATTERNS}}", SECRET_PATTERNS.read_text(encoding="utf-8"))
+    builds = {rel: build(spec) for rel, spec in VARIANTS.items()}
+    builds.update({rel: pre_push for rel in PRE_PUSH_TARGETS})
+    for rel, text in builds.items():
         path = OC_ROOT / rel
-        text = build(spec)
         if check:
             if not path.is_file() or path.read_text(encoding="utf-8") != text:
                 stale.append(rel)

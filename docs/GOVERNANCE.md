@@ -109,6 +109,17 @@ OliverCode's own hook and the two templates and never a variant repo's hook. Whe
 repo declares a variant, give `build-hooks.py` an entry for each variant repo, the template's
 gate list plus that repo's own gates, so its hook is generated too.
 
+## Pre-push gates
+
+Every repo that `sync-hooks` manages also gets one pre-push hook, the same for every variant, because what is safe to push does not depend on which commit gates a repo runs. These are its gates:
+
+| Gate | What it blocks |
+|------|---------------|
+| History rewrite | A push that would rewrite an existing remote branch. `ALLOW_FORCE_PUSH=1` allows a deliberate one |
+| Secrets | A secret in any commit the push sends, including a merge resolution and a secret added and removed again inside the range. A new branch is checked against every commit the destination remote does not have yet |
+
+The secret patterns live once in `core/hooks/secret-patterns.sh`, and `scripts/build-hooks.py` builds them into both the commit gate and the push hook.
+
 ## Locked Baseline Rules
 
 - Active authority lives only in current-state docs and executable surfaces.
