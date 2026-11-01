@@ -20,7 +20,7 @@ Five things, and it is worth being precise about which are mechanical and which 
 
 The honest summary: **the hooks are the only things that block you.** Everything else is a rule an agent follows because it is loaded, not because it is enforced. `CONTRIBUTING.md`'s "Enforcement Reality" section is the one home for that distinction.
 
-And one property that surprises people: **hook enforcement fails open.** An unset or broken `core.hooksPath` means git runs no hooks and prints nothing — `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix. `olivercode health` detects it across the fleet, and the session check reports it for the repo a session opens.
+**Hook enforcement fails open.** `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix.
 
 ## The Two Layers
 

@@ -128,9 +128,8 @@ scripts/olivercode sync-hooks
 scripts/olivercode health
 ```
 
-Tell them plainly: **hook enforcement fails open.** Unset or broken `core.hooksPath` means git
-runs no hooks and prints nothing. `health` is the only detector. `validate.sh` now surfaces it
-too.
+Tell them plainly that **hook enforcement fails open**, and point them at `docs/TROUBLESHOOTING.md`'s
+"Commits are passing gates that should have blocked them". `health` detects it.
 
 ### 7. Prove it, do not assume it
 
