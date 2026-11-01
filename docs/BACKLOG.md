@@ -86,12 +86,13 @@ list of what to do next.
 
 ### Coverage
 
-Reviewed through: `c996e58` (2026-09-09, deep-review of `4c418ab..HEAD`)
+Reviewed through: `224b954` (2026-10-31, deep-review of the voice, skill-deletion and doc-rename commits `d9f2ef9`, `9085920`, `90f1276` and `224b954`. Other sessions' commits between `c996e58` and `224b954` were not part of this review)
 
 ---
 
 ### Deliberately kept / decided (do not redo)
 
+- **The voice has one home here and a copy in each self-contained suite.** `docs/VOICE.md` is the source. `ecommerce-system` and `automated-content-flow` ship their own `docs/VOICE.md` so they run without OliverCode, and `olivercode health` fails when a copy drifts. `CLAUDE.md` imports the fixed path `~/.claude/VOICE.md` because a relative import from the symlinked `~/.claude/CLAUDE.md` has no documented base directory. Keep both.
 - `core/templates/project/pre-commit` intentionally differs from `.githooks/pre-commit`: the
   OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy). The template
   carries the anon-key meta-tag allowlist. Both correct. Do not converge them.
