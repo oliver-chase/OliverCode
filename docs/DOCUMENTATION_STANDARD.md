@@ -2,7 +2,7 @@
 
 The structure, naming and upkeep rules for every README and document in this framework and in every repo it governs. How to write the words lives in one place, `docs/VOICE.md`, and this file does not restate it.
 
-`bash scripts/validate.sh` enforces the mechanical parts (reference integrity, doc/code consistency, the feature-map index). The `writing-documentation` skill loads this file and is the way to apply it.
+`bash scripts/validate.sh` enforces the mechanical parts (reference integrity, doc/code consistency, the feature-map index). Read it, with `docs/VOICE.md`, before writing any README or doc.
 
 ---
 
@@ -80,4 +80,4 @@ gh repo edit --description "..." --add-topic <topic>
 
 ## Scope
 
-This standard governs OliverCode, every repo the framework stamps or governs, and any fork. The `writing-documentation` skill is the way to apply it, and `core/templates/project/` carries it into newly bootstrapped repos.
+This standard governs OliverCode, every repo the framework stamps or governs, and any fork. `core/templates/project/` carries it into newly bootstrapped repos.

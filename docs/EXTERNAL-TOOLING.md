@@ -17,7 +17,7 @@ written on a machine running these, and a few of the rules read as arbitrary wit
 
 | Tool | What it does | Install |
 |---|---|---|
-| [asd-ste100](https://github.com/danyuchn/asd-ste100-skill) | Simplified Technical English rewrite skill — active voice, no phrasal verbs, no semicolons, one meaning per word. `docs/DOCUMENTATION_STANDARD.md`'s "Sentence clarity" section is the rule this framework runs it under. The `writing-documentation` skill applies it, and the pre-commit hook's Writing clarity gate (`docs/GOVERNANCE.md`) enforces it on every staged `SKILL.md`, `CLAUDE.md`, or `references/*.md`, skipping cleanly on a machine without it installed. | `npx skills add danyuchn/asd-ste100-skill` |
+| [asd-ste100](https://github.com/danyuchn/asd-ste100-skill) | Simplified Technical English rewrite skill — active voice, no phrasal verbs, no semicolons, one meaning per word. `docs/DOCUMENTATION_STANDARD.md`'s "Sentence clarity" section is the rule this framework runs it under. The pre-commit hook's Writing clarity gate (`docs/GOVERNANCE.md`) enforces it on every staged `SKILL.md`, `CLAUDE.md`, or `references/*.md`, skipping cleanly on a machine without it installed. | `npx skills add danyuchn/asd-ste100-skill` |
 
 ## Frontend and design references
 
