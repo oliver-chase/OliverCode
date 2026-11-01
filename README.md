@@ -29,6 +29,8 @@ There is one important failure mode: Git only runs the hooks when its `core.hook
 
 `scripts/olivercode health` checks that the hooks are active.
 
+OliverCode also installs three Claude Code hooks, which run in every session. At session start, Claude learns when the repo it opened has commit gates that git skips. Before a commit, Claude Code refuses one that would skip the gates. At the end of a turn, Claude goes back to work if it promised work it did not do. `core/contracts/EXECUTION_CONTRACT.md` describes each one.
+
 Setup also includes a rehearsal: put a fake password in a file and try to commit it. The hook should refuse the commit. That proves the protection is actually working before you rely on it.
 
 ---

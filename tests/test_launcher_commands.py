@@ -87,6 +87,22 @@ class TestInstall(unittest.TestCase):
             (claude_dir / "CLAUDE.md").resolve(), (REPO_ROOT / "CLAUDE.md").resolve()
         )
 
+    def test_installs_the_claude_code_hooks_and_keeps_the_owners_settings(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "settings.json").write_text(json.dumps({"model": "opus"}))
+        self.assertEqual(launcher.command_install(REPO_ROOT), 0)
+        settings = json.loads((claude_dir / "settings.json").read_text())
+        self.assertEqual(settings["model"], "opus")
+        self.assertEqual(launcher._claude_settings.missing(claude_dir / "settings.json"), [])
+
+    def test_leaves_a_broken_settings_file_alone_and_fails(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "settings.json").write_text("{not json")
+        self.assertEqual(launcher.command_install(REPO_ROOT), 1)
+        self.assertEqual((claude_dir / "settings.json").read_text(), "{not json")
+
 
 class TestRootFlag(unittest.TestCase):
     def test_extracts_root_and_leaves_remaining_args(self):
