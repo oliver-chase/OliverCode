@@ -89,7 +89,8 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
 
     # An exception with no written reason is unauditable: nobody can later judge
     # whether it still applies, so it can never be safely removed.
-    unreasoned = [label for label, _, reason in entries if not reason.strip()]
+    # `or ""`: a JSON null reason is still no reason, and must not crash the health run.
+    unreasoned = [label for label, _, reason in entries if not (reason or "").strip()]
     for label in unreasoned:
         print(f"  [FAIL] {label}: no reason recorded — an exception without a reason "
               f"can never be reviewed or retired")
@@ -104,7 +105,7 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     for label, raw in dated:
         try:
             when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
+        except (ValueError, AttributeError):  # AttributeError: a number or list, not a date string
             unparsable.append(label)
             continue
         if when.tzinfo is None:
