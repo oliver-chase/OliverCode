@@ -105,13 +105,69 @@ class TestInstall(unittest.TestCase):
         self.assertTrue(backup.is_symlink(), "the owner's link was deleted, not backed up")
         self.assertEqual(backup.resolve(), decoy.resolve())
 
-    def test_relinks_a_link_left_by_a_moved_checkout_without_a_backup(self):
+    def _skill(self):
+        return next(p.name for p in sorted((REPO_ROOT / "skills").iterdir()) if (p / "SKILL.md").is_file())
+
+    def _all_backups(self):
+        return [p for p in (self.tmp / ".claude").rglob("*") if ".pre-olivercode" in p.name]
+
+    def test_relinks_links_an_older_install_left_by_a_moved_checkout_without_a_backup(self):
         claude_dir = self.tmp / ".claude"
-        claude_dir.mkdir(parents=True)
-        (claude_dir / "CLAUDE.md").symlink_to(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
+        (claude_dir / "skills").mkdir(parents=True)
+        old = self.tmp / "old" / "OliverCode"
+        (claude_dir / "CLAUDE.md").symlink_to(old / "CLAUDE.md")
+        (claude_dir / "skills" / self._skill()).symlink_to(old / "skills" / self._skill())
         launcher.command_install(REPO_ROOT)
         self.assertEqual((claude_dir / "CLAUDE.md").resolve(), (REPO_ROOT / "CLAUDE.md").resolve())
-        self.assertEqual(launcher._backups(claude_dir / "CLAUDE.md"), [])
+        self.assertEqual(self._all_backups(), [])
+
+    def test_relinks_a_recorded_link_whose_checkout_moved_without_a_backup(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        old = str(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
+        (claude_dir / "CLAUDE.md").symlink_to(old)
+        launcher._write_record(claude_dir, {"CLAUDE.md": old})
+        launcher.command_install(REPO_ROOT)
+        self.assertEqual(self._all_backups(), [])
+
+    def test_records_every_link_it_wrote(self):
+        launcher.command_install(REPO_ROOT)
+        claude_dir = self.tmp / ".claude"
+        record = launcher._read_record(claude_dir)
+        links = [p for p in claude_dir.rglob("*") if p.is_symlink()]
+        self.assertEqual(record, {str(p.relative_to(claude_dir)): os.readlink(p) for p in links})
+
+    def test_backs_up_a_lone_dangling_link_of_the_owners(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "CLAUDE.md").symlink_to("/Volumes/Ext/dotfiles/CLAUDE.md")  # a drive not mounted
+        launcher.command_install(REPO_ROOT)
+        backup = claude_dir / "CLAUDE.md.pre-olivercode"
+        self.assertTrue(backup.is_symlink(), "the owner's dangling link was replaced with no backup")
+        self.assertEqual(os.readlink(backup), "/Volumes/Ext/dotfiles/CLAUDE.md")
+
+    def test_backs_up_a_dangling_link_the_record_does_not_name(self):
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        launcher._write_record(claude_dir, {"CLAUDE.md": "/somewhere/else/CLAUDE.md"})
+        (claude_dir / "CLAUDE.md").symlink_to(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
+        launcher.command_install(REPO_ROOT)
+        self.assertTrue((claude_dir / "CLAUDE.md.pre-olivercode").is_symlink())
+
+    def test_backs_up_a_live_link_into_another_checkout_and_reinstall_adds_none(self):
+        fork = self.tmp / "fork"
+        (fork / "docs").mkdir(parents=True)
+        (fork / "CLAUDE.md").write_text("fork rules")
+        claude_dir = self.tmp / ".claude"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "CLAUDE.md").symlink_to(fork / "CLAUDE.md")
+        launcher.command_install(REPO_ROOT)
+        self.assertEqual((claude_dir / "CLAUDE.md.pre-olivercode").resolve(), (fork / "CLAUDE.md").resolve())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            launcher.command_install(REPO_ROOT)
+        self.assertIn("[ALREADY] ~/.claude/CLAUDE.md", out.getvalue())
+        self.assertEqual(len(self._all_backups()), 1)
 
     def test_installs_the_claude_code_hooks_and_keeps_the_owners_settings(self):
         claude_dir = self.tmp / ".claude"
@@ -248,6 +304,37 @@ class TestUninstall(unittest.TestCase):
             self.assertFalse(path.is_symlink(), path)
         self.assertTrue((skills / "not-shipped").is_symlink())
         self.assertIn("1 of them dangling", out.getvalue())
+
+    def test_keeps_a_lone_dangling_link_on_a_machine_never_installed(self):
+        (self.claude / "skills").mkdir(parents=True)
+        (self.claude / "CLAUDE.md").symlink_to("/Volumes/Ext/dotfiles/CLAUDE.md")
+        skill = next(p.name for p in sorted((REPO_ROOT / "skills").iterdir()) if (p / "SKILL.md").is_file())
+        (self.claude / "skills" / skill).symlink_to(f"/Volumes/X/my-skills/skills/{skill}")
+        self._quiet(launcher.command_uninstall)
+        self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
+        self.assertTrue((self.claude / "skills" / skill).is_symlink())
+
+    def test_removes_a_recorded_dangling_link_and_keeps_an_unrecorded_one(self):
+        (self.claude / "skills").mkdir(parents=True)
+        old = str(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
+        (self.claude / "CLAUDE.md").symlink_to(old)
+        skill = next(p.name for p in sorted((REPO_ROOT / "skills").iterdir()) if (p / "SKILL.md").is_file())
+        (self.claude / "skills" / skill).symlink_to(self.tmp / "old" / "OliverCode" / "skills" / skill)
+        launcher._write_record(self.claude, {"CLAUDE.md": old})
+        self._quiet(launcher.command_uninstall)
+        self.assertFalse((self.claude / "CLAUDE.md").is_symlink())
+        self.assertTrue((self.claude / "skills" / skill).is_symlink(), "a link the record does not name was removed")
+        self.assertFalse((self.claude / launcher.INSTALL_RECORD).exists())
+
+    def test_restores_another_checkouts_links_it_backed_up(self):
+        fork = self.tmp / "fork"
+        fork.mkdir()
+        (fork / "CLAUDE.md").write_text("fork rules")
+        self.claude.mkdir(parents=True)
+        (self.claude / "CLAUDE.md").symlink_to(fork / "CLAUDE.md")
+        self._quiet(launcher.command_install)
+        self._quiet(launcher.command_uninstall)
+        self.assertEqual((self.claude / "CLAUDE.md").resolve(), (fork / "CLAUDE.md").resolve())
 
     def test_restores_the_newest_backup_and_lists_the_older_one(self):
         self.claude.mkdir(parents=True)

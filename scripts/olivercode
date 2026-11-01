@@ -300,19 +300,58 @@ def _backups(path: Path) -> list[Path]:
     return [b for _, b in sorted(found)]
 
 
-def _is_oliver_code_link(link: Path, rel: Path) -> bool:
-    """Whether a link is one some OliverCode checkout's install wrote for `rel` (such as
-    `CLAUDE.md` or `skills/<name>`): its stored target ends in rel, and either that target
-    is gone, as after the checkout moved, or the folder above rel is an OliverCode checkout."""
-    stored = Path(os.readlink(link))
-    if not stored.is_absolute():
-        stored = link.parent / stored
-    n = len(rel.parts)
-    if stored.parts[-n:] != rel.parts:
-        return False
-    if not link.exists():
-        return True
-    return (Path(*stored.parts[:-n]) / "core" / "contracts" / "FRAMEWORK_BASELINE.md").is_file()
+INSTALL_RECORD = ".olivercode-install.json"
+
+
+def _managed_links(oc_root: Path) -> dict[str, Path]:
+    """Each link install makes, as its path under ~/.claude -> its source relative to the checkout."""
+    links = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md"}
+    for skill in sorted(p for p in (oc_root / "skills").iterdir() if (p / "SKILL.md").is_file()):
+        links[f"skills/{skill.name}"] = Path("skills") / skill.name
+    return links
+
+
+def _read_record(claude_dir: Path) -> dict | None:
+    """The links the last install wrote, as path under ~/.claude -> stored target. None when
+    no install has written a record; an unreadable record counts as recording nothing."""
+    path = claude_dir / INSTALL_RECORD
+    if not path.is_file():
+        return None
+    try:
+        links = json.loads(path.read_text()).get("links", {})
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return links if isinstance(links, dict) else {}
+
+
+def _write_record(claude_dir: Path, links: dict[str, str]) -> None:
+    path = claude_dir / INSTALL_RECORD
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps({"links": links}, indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+
+
+def _dangling_from_install(claude_dir: Path, oc_root: Path) -> set[str]:
+    """The links under ~/.claude that dangle and that an OliverCode install wrote, as after the
+    checkout moved. A dangling link alone proves nothing: it may point at a drive that is not
+    mounted. The install record decides when there is one. For an install made before the
+    record existed, two or more of install's links must dangle into the same folder, laid out
+    the way a checkout is."""
+    record = _read_record(claude_dir)
+    managed = _managed_links(oc_root)
+    dangling = {k: claude_dir / k for k in managed
+                if (claude_dir / k).is_symlink() and not (claude_dir / k).exists()}
+    if record is not None:
+        return {k for k, link in dangling.items() if os.readlink(link) == record.get(k)}
+    bases = {}
+    for k, link in dangling.items():
+        rel = managed[k]
+        stored = Path(os.readlink(link))
+        stored = stored if stored.is_absolute() else link.parent / stored
+        if stored.parts[-len(rel.parts):] == rel.parts:
+            bases[k] = Path(*stored.parts[:-len(rel.parts)])
+    counts = {b: list(bases.values()).count(b) for b in bases.values()}
+    return {k for k, b in bases.items() if counts[b] >= 2}
 
 
 def command_install(oc_root: Path) -> int:
@@ -324,11 +363,13 @@ def command_install(oc_root: Path) -> int:
     replacing an existing real CLAUDE.md destroys rules the operator may not have
     copied anywhere yet.
 
-    Never destructive: a real file, or a link the operator made, at a target path is
-    moved aside to `<name>.pre-olivercode` and the path is reported, because that file is
-    usually the operator's entire accumulated ruleset and docs/ADOPTING.md Step 3 exists
-    to merge it back in deliberately. Only a link an OliverCode install wrote (one from a
-    checkout that moved, say) is replaced in place. `uninstall` restores the backup.
+    Never destructive: a real file or any other link at a target path, a dangling one or
+    one into another OliverCode checkout included, is moved aside to `<name>.pre-olivercode`
+    and the path is reported, because that file is usually the operator's entire
+    accumulated ruleset and docs/ADOPTING.md Step 3 exists to merge it back in
+    deliberately. Only a link an OliverCode install wrote that now dangles, because its
+    checkout moved, is replaced in place. `uninstall` restores the backup. Install records
+    the links it wrote in ~/.claude/.olivercode-install.json so uninstall need not guess.
     """
     claude_dir = Path.home() / ".claude"
     skills_dir = claude_dir / "skills"
@@ -345,13 +386,14 @@ def command_install(oc_root: Path) -> int:
             return 1
     skills_dir.mkdir(parents=True, exist_ok=True)
     backups: list[str] = []
+    moved_links = _dangling_from_install(claude_dir, oc_root)
 
     def _link(target: Path, source: Path) -> str:
         """Point target at source. Returns a one-word status."""
         if target.is_symlink():
             if target.resolve() == source.resolve():
                 return "already"
-            if _is_oliver_code_link(target, source.relative_to(oc_root)):
+            if str(target.relative_to(claude_dir)) in moved_links:
                 target.unlink()
                 target.symlink_to(source)
                 return "relinked"
@@ -387,6 +429,8 @@ def command_install(oc_root: Path) -> int:
         else:
             linked += 1
     print(f"  [OK] skills: {linked} linked, {already} already correct")
+    _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, rel in _managed_links(oc_root).items()
+                               if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == (oc_root / rel).resolve()})
 
     # The Claude Code hooks are what hold the rules in every session, so install owns
     # them like the links above; claude_settings leaves the operator's own keys alone.
@@ -426,8 +470,10 @@ def command_install(oc_root: Path) -> int:
 def command_uninstall(oc_root: Path) -> int:
     """Undo `install`: remove what it wrote in ~/.claude and nothing else.
 
-    A link is removed when it points into this checkout, or when it dangles and has the
-    shape install writes (a checkout that moved after install). Every other link stays.
+    A link is removed when it points into this checkout, or when it dangles and an
+    OliverCode install wrote it (a checkout that moved), by the install record or, for an
+    older install, by corroboration (see _dangling_from_install). Every other link stays,
+    and so does a link into another live checkout. The install record goes too.
     The newest `<name>.pre-olivercode` backup install made is moved back once its path is
     free, and any older one is listed. The hook entries come out of settings.json by the
     same rule install uses to replace them, and every other key stays. Idempotent.
@@ -438,7 +484,7 @@ def command_uninstall(oc_root: Path) -> int:
     claude_dir = Path.home() / ".claude"
     skills_dir = claude_dir / "skills"
     root = oc_root.resolve()
-    shipped = {p.name for p in (oc_root / "skills").iterdir() if (p / "SKILL.md").is_file()}
+    moved_links = _dangling_from_install(claude_dir, oc_root) if claude_dir.is_dir() else set()
     print("OliverCode uninstall — removing what install wrote in ~/.claude")
     print("=" * 40)
 
@@ -447,9 +493,6 @@ def command_uninstall(oc_root: Path) -> int:
         # deleted from the checkout after install still reads as this checkout's.
         target = link.resolve()
         return target == base or target.is_relative_to(base)
-
-    def _left_by_moved_checkout(link: Path, rel: Path) -> bool:
-        return not link.exists() and _is_oliver_code_link(link, rel)
 
     def _restore(path: Path) -> bool:
         backups = _backups(path)
@@ -460,7 +503,7 @@ def command_uninstall(oc_root: Path) -> int:
 
     for name, rel in (("CLAUDE.md", Path("CLAUDE.md")), ("VOICE.md", Path("docs") / "VOICE.md")):
         path, note = claude_dir / name, ""
-        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or _left_by_moved_checkout(path, rel)):
+        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or name in moved_links):
             if not path.exists():
                 note = f" (it pointed at {os.readlink(path)}, which is gone)"
             path.unlink()
@@ -479,7 +522,7 @@ def command_uninstall(oc_root: Path) -> int:
             if not entry.is_symlink():
                 continue
             ours = _points_into(entry, root / "skills")
-            moved = not ours and entry.name in shipped and _left_by_moved_checkout(entry, Path("skills") / entry.name)
+            moved = not ours and f"skills/{entry.name}" in moved_links
             if ours or moved:
                 entry.unlink()
                 removed += 1
@@ -500,6 +543,7 @@ def command_uninstall(oc_root: Path) -> int:
     leftovers = [b for name in ("CLAUDE.md", "VOICE.md") for b in _backups(claude_dir / name)]
     if skills_dir.is_dir():
         leftovers += sorted(b for b in skills_dir.iterdir() if BACKUP_SUFFIX in b.name)
+    (claude_dir / INSTALL_RECORD).unlink(missing_ok=True)
     print()
     if leftovers:
         print("Older backups left in place. An earlier install made each one, or something")

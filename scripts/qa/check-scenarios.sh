@@ -239,6 +239,9 @@ n_left="$(find "$H/.claude" -type l 2>/dev/null | wc -l | tr -d ' ')"
 [ "$n_left" = "0" ] && ok "no dangling link left after a move" s8b || bad "no dangling link left after a move ($n_left left)" s8b
 [ ! -e "$H/.claude/settings.json" ] && ok "settings.json that held only OliverCode's hooks is gone" s8b \
   || bad "settings.json that held only OliverCode's hooks is gone" s8b
+n_files="$(find "$H/.claude" -type f 2>/dev/null | wc -l | tr -d ' ')"
+[ "$n_files" = "0" ] && ok "no file of OliverCode's left in ~/.claude, install record included" s8b \
+  || bad "no file of OliverCode's left in ~/.claude ($n_files left)" s8b
 
 # --------------------------------------------------------------- S9 idempotency
 say "--- S9: every command safe to run twice ---"
