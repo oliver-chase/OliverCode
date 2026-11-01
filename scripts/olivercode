@@ -948,7 +948,11 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
 
 
 def command_update() -> int:
-    """Pull this checkout's tracking branch, then converge fleet hooks.
+    """Pull this checkout's tracking branch, re-run install, then converge fleet hooks.
+
+    Install runs on every update because a pull can add a skill or a Claude Code hook,
+    and only install links those into ~/.claude; without it a second device kept the
+    files of a new skill with no link to them.
 
     On a fork `origin` is the FORK, so this does not fetch upstream framework changes.
     Pulling those is a deliberate act with real merge consequences -- a fork carries local
@@ -958,8 +962,11 @@ def command_update() -> int:
     pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
     if pull_code != 0:
         return pull_code
+    print()
+    install_code = command_install(OC_ROOT)
     print("\nSyncing hooks across the fleet + private repos (SYS-3):")
-    return command_sync_hooks(OC_ROOT)
+    sync_code = command_sync_hooks(OC_ROOT)
+    return install_code or sync_code
 
 
 def _take_root_flag(argv: list[str]) -> tuple[Path | None, list[str]]:
