@@ -40,9 +40,9 @@ Required current-state authority docs:
 - `CONTRIBUTING.md`
 - `ARCHITECTURE.md`
 - `docs/GOVERNANCE.md`
-- `docs/OLIVERCODE_LAUNCHER.md`
-- `docs/FEATURE_MAP.md`
-- `docs/DOCUMENTATION_STANDARD.md`
+- `docs/OLIVERCODE-LAUNCHER.md`
+- `docs/FEATURE-MAP.md`
+- `docs/DOCUMENTATION-STANDARD.md`
 
 ## Removal Rules
 

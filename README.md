@@ -235,19 +235,19 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | Document | Purpose |
 | --- | --- |
 | [`ADOPTING.md`](docs/ADOPTING.md) | Complete setup and enforcement walkthrough |
-| [`NEW_MACHINE.md`](docs/NEW_MACHINE.md) | Restoring an existing setup on a blank machine, and what no script can do |
+| [`NEW-MACHINE.md`](docs/NEW-MACHINE.md) | Restoring an existing setup on a blank machine, and what no script can do |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the three layers fit together |
 | [`GOVERNANCE.md`](docs/GOVERNANCE.md) | Every gate, what it blocks, and which repos receive which gates |
-| [`FEATURE_MAP.md`](docs/FEATURE_MAP.md) | Every capability and its owning document |
-| [`OLIVERCODE_LAUNCHER.md`](docs/OLIVERCODE_LAUNCHER.md) | Every `olivercode` command |
-| [`DOCUMENTATION_STANDARD.md`](docs/DOCUMENTATION_STANDARD.md) | Required README outline, naming and repo-documentation rules |
+| [`FEATURE-MAP.md`](docs/FEATURE-MAP.md) | Every capability and its owning document |
+| [`OLIVERCODE-LAUNCHER.md`](docs/OLIVERCODE-LAUNCHER.md) | Every `olivercode` command |
+| [`DOCUMENTATION-STANDARD.md`](docs/DOCUMENTATION-STANDARD.md) | Required README outline, naming and repo-documentation rules |
 | [`VOICE.md`](docs/VOICE.md) | How everything a person reads is written, loaded in every session |
-| [`TOKEN_POLICY.md`](docs/TOKEN_POLICY.md) | Token-cost controls and validation |
+| [`TOKEN-POLICY.md`](docs/TOKEN-POLICY.md) | Token-cost controls and validation |
 | [`SKILLS-PLACEMENT.md`](docs/SKILLS-PLACEMENT.md) | Where new skill files belong |
-| [`FRAMEWORK_BOUNDARY.md`](docs/FRAMEWORK_BOUNDARY.md) | What OliverCode deliberately does not do |
+| [`FRAMEWORK-BOUNDARY.md`](docs/FRAMEWORK-BOUNDARY.md) | What OliverCode deliberately does not do |
 | [`TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Troubleshooting by symptom |
 | [`EXTERNAL-TOOLING.md`](docs/EXTERNAL-TOOLING.md) | Optional third-party tooling |
-| [`KEEPALIVE_STANDARD.md`](docs/KEEPALIVE_STANDARD.md) | Keeping free-tier cloud services from going dormant |
+| [`KEEPALIVE-STANDARD.md`](docs/KEEPALIVE-STANDARD.md) | Keeping free-tier cloud services from going dormant |
 | [`BACKLOG.md`](docs/BACKLOG.md) | Decision rationale and institutional memory — open work is the `OliverCode` GitHub Project |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Which rules block commits and which are guidance |
 | [`QUALITY_BASELINE.md`](QUALITY_BASELINE.md) | Quality standard for governed repos |

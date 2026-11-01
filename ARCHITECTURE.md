@@ -74,4 +74,4 @@ Anything that must always apply is enforced as a hook, not as an instruction an 
 
 ## Dependency Direction
 
-Product repos and local state depend on OliverCode. OliverCode depends on nothing — see `docs/FRAMEWORK_BOUNDARY.md`.
+Product repos and local state depend on OliverCode. OliverCode depends on nothing — see `docs/FRAMEWORK-BOUNDARY.md`.

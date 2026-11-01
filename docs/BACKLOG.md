@@ -96,7 +96,7 @@ Reviewed through: `c996e58` (2026-09-09, deep-review of `4c418ab..HEAD`)
   OliverCode copy adds Gate 6 (contract integrity) and Gate 8 (token policy). The template
   carries the anon-key meta-tag allowlist. Both correct. Do not converge them.
 - `core/contracts/AGENT_SYSTEM_MANIFEST.json` looks like a duplicate of
-  `docs/FRAMEWORK_BOUNDARY.md`'s path map but is the machine-readable mirror of it (tracked,
+  `docs/FRAMEWORK-BOUNDARY.md`'s path map but is the machine-readable mirror of it (tracked,
   real values, since G1's retirement). Keep both.
 - The keepalive surface — in scope by owner decision, synced via the manifest's
   `conditionalFiles`, not an orphan.

@@ -95,6 +95,6 @@ Standalone mode provides:
 
 ## Runtime Mode
 
-When the local control plane is installed (`runtime/control-plane/`, gitignored), it adds per-machine state on top of OliverCode: the dependency declaration `health` reads, session/handoff state, and a bash shim at `runtime/control-plane/olivercode` that delegates to `scripts/olivercode` and carries no additional commands (`docs/OLIVERCODE_LAUNCHER.md`).
+When the local control plane is installed (`runtime/control-plane/`, gitignored), it adds per-machine state on top of OliverCode: the dependency declaration `health` reads, session/handoff state, and a bash shim at `runtime/control-plane/olivercode` that delegates to `scripts/olivercode` and carries no additional commands (`docs/OLIVERCODE-LAUNCHER.md`).
 
 The control plane reads contracts, templates, skills, and workflow definitions from OliverCode. It does not maintain its own copies of these framework artifacts, and OliverCode stays fully usable without it.

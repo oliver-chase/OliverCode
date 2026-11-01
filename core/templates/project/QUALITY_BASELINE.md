@@ -49,5 +49,5 @@ After changing any baseline surface, run sync then audit before merge.
 Every README and document in this repo follows the framework's documentation standard —
 the locked README outline, voice, CAPS-KEBAB file naming, complete doc table, open-only
 backlog, same-commit sync, and a filled-in GitHub About. The standard is
-`docs/DOCUMENTATION_STANDARD.md` in the framework checkout, and `docs/VOICE.md` sets the words.
+`docs/DOCUMENTATION-STANDARD.md` in the framework checkout, and `docs/VOICE.md` sets the words.
 Ask an agent for a README here and that is the shape it produces.

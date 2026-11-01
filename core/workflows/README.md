@@ -13,5 +13,5 @@ Procedures in this directory:
   managed repos
 
 System-level references:
-- `docs/FRAMEWORK_BOUNDARY.md`
+- `docs/FRAMEWORK-BOUNDARY.md`
 - `core/contracts/PROJECT_STRUCTURE_STANDARD.md`

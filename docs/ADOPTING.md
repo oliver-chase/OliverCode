@@ -186,7 +186,7 @@ Edit `shared/repo-profiles.json` directly with your real repo names, validation 
 and token policy. `_<field>_note` keys beside a worked example document the schema in place.
 `scripts/olivercode discover` emits a paste-ready profile per repo, including the
 `token_policy` block. Each profile needs that block, with `ignore_globs` and
-`generated_artifact_dirs`, or Gate 8 fails the commit — `docs/TOKEN_POLICY.md` has the shape.
+`generated_artifact_dirs`, or Gate 8 fails the commit — `docs/TOKEN-POLICY.md` has the shape.
 
 Confirm the fleet really registered before continuing:
 

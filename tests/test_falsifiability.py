@@ -72,7 +72,7 @@ class TestLiveTree(unittest.TestCase):
 
 
 class TestFeatureMapCompleteness(unittest.TestCase):
-    """FEATURE_MAP.md asserts it indexes every capability. Five scripts were missing
+    """FEATURE-MAP.md asserts it indexes every capability. Five scripts were missing
     when that claim was first tested, three of them QA checkers CI itself runs."""
 
     def _mod(self):
@@ -90,7 +90,7 @@ class TestFeatureMapCompleteness(unittest.TestCase):
     def test_every_exemption_is_stated_in_the_doc_too(self):
         """The code's exempt list and the doc's stated scope must agree, or the
         exemption becomes a place to hide an undocumented capability."""
-        fm = (REPO_ROOT / "docs" / "FEATURE_MAP.md").read_text(encoding="utf-8")
+        fm = (REPO_ROOT / "docs" / "FEATURE-MAP.md").read_text(encoding="utf-8")
         for rel in self._mod().FEATURE_MAP_EXEMPT:
             if rel.endswith("__init__.py"):
                 continue

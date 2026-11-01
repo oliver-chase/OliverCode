@@ -15,7 +15,7 @@ from pathlib import Path
 def _check_github_about(oc_root: Path) -> tuple[int, int, int]:
     """WARN-degrading check that this repo's GitHub About is filled in.
 
-    docs/DOCUMENTATION_STANDARD.md requires every repo to carry a description and
+    docs/DOCUMENTATION-STANDARD.md requires every repo to carry a description and
     topics. No gate can see GitHub, so this is the one place the requirement is
     checked at all. Degrades to a skip without `gh`, without auth, or without a
     network -- a fork working offline must still report healthy.
