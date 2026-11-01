@@ -24,7 +24,7 @@ from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E
 from lib.health_checks import (  # noqa: E402,F401
     _check_waiver_expiry, _check_github_about,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
-    _check_voice_copies,
+    _check_voice_copies, _check_scheduler,
 )
 from lib import claude_settings as _claude_settings  # noqa: E402
 from lib.local_config import private_repos as _private_repos  # noqa: E402
@@ -507,6 +507,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     # four failures that ran undetected because nothing looked.
     t.add(*_check_vault_skill_links(_skills_root()))
     t.add(*_check_voice_copies(OC_ROOT, Path.home() / ".claude" / "skills"))
+    t.add(*_check_scheduler(Path.home()))
 
     # Repos to check for remote reachability and oversized files: the private repos,
     # this framework repo, and every fleet repo that exists on disk.
