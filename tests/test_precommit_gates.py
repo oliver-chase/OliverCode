@@ -88,6 +88,11 @@ class TestGate1Secrets(GateHarness):
         self.stage("id.txt", "-----REDACTED-----\n")
         self.assertBlocked("gate 1")
 
+    def test_a_secret_in_a_large_file_blocks(self):
+        # A pipeline that exits early fails open on big files under pipefail.
+        self.stage("big.py", ('KEY = "sk-' + "d" * 32 + '"\n') * 2000)
+        self.assertBlocked("gate 1")
+
     def test_env_example_is_exempt(self):
         # Placeholder-only tracked env templates must not trip the scan.
         self.stage(".env.example", 'API_KEY="sk-' + "c" * 32 + '"\n')

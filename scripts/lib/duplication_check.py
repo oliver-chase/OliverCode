@@ -25,13 +25,6 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 # that shares it instead of listing pairs combinatorially. An entry without a real
 # reason recreates the blind spot this check exists to close.
 DECLARED_MARKERS: dict[str, str] = {
-    "repo profiles json gitignored real fleet or shared repo profiles example "
-    "json tracked": (
-        "The canonical parenthetical naming where per-repo config lives. Reused as a "
-        "fixed term across every doc that mentions repo profiles, the way a glossary "
-        "term is reused -- not an independently-authored fact that could drift, "
-        "because there is only one real file path being named."
-    ),
     "dirname readlink claude claude md": (
         "The $OC-resolution snippet (docs/ADOPTING.md, CLAUDE.md, "
         "skills/olivercode-adoption/SKILL.md). Deliberately identical everywhere it "
