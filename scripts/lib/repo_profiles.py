@@ -29,6 +29,16 @@ def registry_file(repo_root: Path, filename: str) -> Path:
     return Path(repo_root) / "shared" / filename
 
 
+def registry_gap(repo_root: Path) -> str:
+    """Why this checkout reads no real registry although it names private repos, or ""."""
+    private = private_repos() if Path(repo_root).resolve() == OC_ROOT.resolve() else {}
+    if not private or registry_file(repo_root, "repo-profiles.json") != Path(repo_root) / "shared" / "repo-profiles.json":
+        return ""
+    names = ", ".join(f"{n} ({p})" for n, p in private.items())
+    return (f"no private repo holds {REGISTRY_DIR}/repo-profiles.json, so the fleet reads as empty. Checked: {names}. "
+            "Name the repo that holds it under privateRepos in olivercode.local.json")
+
+
 def load_repo_profiles(repo_root):
     """Return (profiles: dict, source_path: Path)."""
     path = registry_file(repo_root, "repo-profiles.json")

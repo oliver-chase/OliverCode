@@ -75,7 +75,9 @@ def find_unmatched_reversals(root, terms):
 
 def main():
     root = scan_root(sys.argv[1:])
-    terms = load_terms(LIST_FILE)
+    # A scanned fleet that keeps its own list uses it; otherwise the configured list applies
+    own = fleet_data("retired-terms.json", root=root)
+    terms = load_terms(own if own.is_file() else LIST_FILE)
     found = find_retired(root, terms)
     unmatched = find_unmatched_reversals(root, terms)
     for path, number, decision in unmatched:

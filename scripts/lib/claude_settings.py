@@ -33,8 +33,22 @@ def _is_managed(handler: dict) -> bool:
     return "/scripts/hooks/" in cmd and any(script in cmd for _, _, script in MANAGED)
 
 
+def _check_shape(settings) -> None:
+    """Refuse a settings file this merge could only rewrite by guessing what the owner meant."""
+    if not isinstance(settings, dict):
+        raise ValueError("the file is not a JSON object")
+    hooks = settings.get("hooks", {})
+    if not isinstance(hooks, dict):
+        raise ValueError('"hooks" is not an object')
+    for event, groups in hooks.items():
+        if not isinstance(groups, list) or not all(isinstance(g, dict) and isinstance(g.get("hooks", []), list) for g in groups):
+            raise ValueError(f'"hooks.{event}" is not a list of hook groups')
+
+
 def merge(settings: dict, hooks_dir: Path = HOOKS_DIR) -> dict:
-    """Return settings with OliverCode's hooks current and every other key and hook unchanged."""
+    """Return settings with OliverCode's hooks current and every other key and hook unchanged.
+    Raises ValueError for a settings shape it cannot merge into."""
+    _check_shape(settings)
     out = json.loads(json.dumps(settings))  # deep copy; the caller's dict stays as read
     hooks = out.setdefault("hooks", {})
     for event in dict.fromkeys([e for e, _, _ in MANAGED] + list(hooks)):  # a fixed order, so a re-install never churns the file
@@ -57,7 +71,8 @@ def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
     """The managed hook scripts this checkout's install would add and the settings lack."""
     try:
         current = json.loads(settings_path.read_text()) if settings_path.is_file() else {}
-    except (OSError, json.JSONDecodeError):
+        _check_shape(current)
+    except (OSError, ValueError):
         current = {}
     present = {h.get("command") for groups in (current.get("hooks") or {}).values()
                for g in groups for h in g.get("hooks", []) if isinstance(h, dict)}
@@ -65,7 +80,8 @@ def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
 
 
 def install(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> str:
-    """Write the merged settings. Returns "added", "updated" or "already"."""
+    """Write the merged settings. Returns "added", "updated" or "already".
+    Raises ValueError, leaving the file untouched, when it is not JSON or has a shape the merge refuses."""
     current = {}
     if settings_path.is_file():
         text = settings_path.read_text()

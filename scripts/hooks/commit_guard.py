@@ -6,7 +6,7 @@ level up, in Claude Code, and refuses a commit in three cases:
 
 - the repo ships `.githooks/pre-commit` but git is not pointed at it (see repo_gates)
 - the commit passes `--no-verify` or `-n`, which skips every hook
-- the command overrides `core.hooksPath` with `git -c`
+- the command overrides `core.hooksPath`: `git -c`, `--config-env` or a `GIT_CONFIG_*` variable
 
 A repo with no gates of its own commits normally; the session-start check names that gap.
 Fails open on anything it cannot parse: a guard that blocks a legitimate commit because of
@@ -24,38 +24,88 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import repo_gates  # noqa: E402
 
-SEGMENT_SPLIT = re.compile(r"&&|\|\||;|\|")
+# The whole command is tokenized once, so a separator inside a quoted message stays part of
+# that message; splitting on the raw text first dropped any commit whose message held a
+# `;`, `|` or `&&`, which is most of them.
+OPERATOR_CHARS = ";&|()\n"
+WRAPPERS = {"env", "command", "builtin", "exec", "nohup", "sudo", "time"}
+ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
-def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str]]]:
-    """Each `git ... commit ...` in the command: (directory it runs in, git options, commit args)."""
+def _segments(command: str):
+    """The simple commands in `command`, each as its list of words."""
+    lex = shlex.shlex(command, posix=True, punctuation_chars=OPERATOR_CHARS)
+    lex.whitespace = " \t\r"
+    lex.whitespace_split = True
+    lex.commenters = ""
+    words: list[str] = []
+    for token in lex:
+        if token and set(token) <= set(OPERATOR_CHARS):
+            if words:
+                yield words
+            words = []
+        else:
+            words.append(token)
+    if words:
+        yield words
+
+
+def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], list[str]]]:
+    """Each `git ... commit ...` in the command: (directory it runs in, config keys it sets,
+    environment assignments before it, commit args). Anything unparseable yields nothing."""
     found = []
     here = cwd
-    for segment in SEGMENT_SPLIT.split(command):
-        try:
-            words = shlex.split(segment)
-        except ValueError:
-            continue
-        while words and "=" in words[0] and not words[0].startswith("-"):
-            words = words[1:]  # leading VAR=value assignments
+    try:
+        segments = list(_segments(command))
+    except ValueError:
+        return found
+    for words in segments:
+        env = []
+        while words and (ASSIGNMENT.match(words[0]) or words[0] in WRAPPERS):
+            wrapper = words[0] in WRAPPERS
+            if not wrapper:
+                env.append(words[0])
+            words = words[1:]
+            while wrapper and words and words[0].startswith("-"):
+                words = words[1:]  # a wrapper's own flags, such as `env -i` or `sudo -E`
         if len(words) >= 2 and words[0] == "cd":
             here = (here / Path(words[1]).expanduser()).resolve()
             continue
         if not words or words[0] != "git":
             continue
-        opts, i, where = [], 1, here
+        keys, i, where = [], 1, here
         while i < len(words) and words[i].startswith("-"):
-            if words[i] in ("-C", "-c") and i + 1 < len(words):
-                if words[i] == "-C":
-                    where = (where / Path(words[i + 1]).expanduser()).resolve()
-                opts += words[i:i + 2]
+            w = words[i]
+            nxt = words[i + 1] if i + 1 < len(words) else ""
+            if w == "-C" and nxt:
+                where = (where / Path(nxt).expanduser()).resolve()
                 i += 2
+            elif w in ("-c", "--config-env") and nxt:
+                keys.append(nxt.split("=", 1)[0].lower())
+                i += 2
+            elif w.startswith("-c") and len(w) > 2:
+                keys.append(w[2:].split("=", 1)[0].lower())
+                i += 1
+            elif w.startswith("--config-env="):
+                keys.append(w.split("=", 1)[1].split("=", 1)[0].lower())
+                i += 1
             else:
-                opts.append(words[i])
                 i += 1
         if i < len(words) and words[i] == "commit":
-            found.append((where, opts, words[i + 1:]))
+            found.append((where, keys, env, words[i + 1:]))
     return found
+
+
+def _overrides_hooks_path(keys: list[str], env: list[str]) -> bool:
+    if "core.hookspath" in keys:
+        return True
+    for assignment in env:
+        name, _, value = assignment.partition("=")
+        if name.startswith("GIT_CONFIG_KEY_") and value.lower() == "core.hookspath":
+            return True
+        if name == "GIT_CONFIG_PARAMETERS" and "core.hookspath" in value.lower():
+            return True
+    return False
 
 
 VALUE_FLAGS = set("mFCct")  # commit's short flags that take a value; letters after one are that value
@@ -80,10 +130,10 @@ def _skips_hooks(args: list[str]) -> bool:
 
 
 def reason(command: str, cwd: Path) -> str:
-    for where, opts, args in _commits(command, cwd):
+    for where, keys, env, args in _commits(command, cwd):
         if _skips_hooks(args):
             return "This commit passes --no-verify, which skips the repo's commit gates. Commit without it and fix what the gates report."
-        if any(opts[k] == "-c" and opts[k + 1].lower().startswith("core.hookspath") for k in range(len(opts) - 1)):
+        if _overrides_hooks_path(keys, env):
             return "This commit overrides core.hooksPath, which disables the repo's commit gates. Commit without the override."
         root = repo_gates.repo_root(where)
         if root and repo_gates.has_gates(root):

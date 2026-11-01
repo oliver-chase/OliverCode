@@ -95,7 +95,8 @@ def main(argv=None):
         if target.is_file():
             skill_dirs = [target.parent]
         else:
-            skill_dirs = _fleet.find_skills(SKILLS_ROOT) if target == SKILLS_ROOT else [target]
+            # A folder with no SKILL.md of its own is a skills folder, such as the one audit-fleet passes
+            skill_dirs = [target] if (target / "SKILL.md").is_file() else _fleet.find_skills(target)
     else:
         skill_dirs = _fleet.find_skills(SKILLS_ROOT)
 

@@ -42,6 +42,18 @@ def write(root, rel, text):
     path.write_text(text, encoding="utf-8")
 
 
+class ScannedFleetData(unittest.TestCase):
+    def test_a_scanned_fleet_reads_its_own_term_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, ".fleet-audit/retired-terms.json", json.dumps(TERMS))
+            write(tmp, "fam/a/SKILL.md", f"Still says {OLD_LIST}.\n")
+            out = io.StringIO()
+            with mock.patch.object(sys, "argv", ["check_retired_terms.py", tmp]), contextlib.redirect_stdout(out):
+                code = rt.main()
+        self.assertEqual(code, 1, out.getvalue())
+        self.assertIn("old-list", out.getvalue())
+
+
 class Scan(unittest.TestCase):
     def test_term_in_a_skill_file_fails(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -42,6 +42,15 @@ class RegistryLocation(unittest.TestCase):
         self.assertEqual(repo_profiles.registry_file(local_config.OC_ROOT, "repo-profiles.json"),
                          local_config.OC_ROOT / "shared" / "repo-profiles.json")
 
+    def test_named_private_repos_with_no_registry_are_reported(self):
+        (self.private / "olivercode" / "repo-profiles.json").unlink()
+        gap = repo_profiles.registry_gap(local_config.OC_ROOT)
+        self.assertIn("notes", gap)
+        self.assertIn("privateRepos", gap)
+
+    def test_a_found_registry_reports_no_gap(self):
+        self.assertEqual(repo_profiles.registry_gap(local_config.OC_ROOT), "")
+
     def test_the_tracked_registry_ships_empty(self):
         tracked = json.loads((local_config.OC_ROOT / "shared" / "repo-profiles.json").read_text())
         self.assertEqual((tracked["profiles"], tracked["unmanagedRepoWaivers"]), ({}, []))

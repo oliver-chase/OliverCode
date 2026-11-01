@@ -93,6 +93,22 @@ class Main(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertNotIn("ok:", out)
 
+    def test_a_fleet_folder_passed_as_the_target_is_scanned_skill_by_skill(self):
+        # audit-fleet passes a skills folder that holds no SKILL.md of its own
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = Path(tmp) / "fam" / "bad"
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("Run one search per field.\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                try:
+                    mp.main([tmp])
+                    code = 0
+                except SystemExit as e:
+                    code = e.code
+        self.assertEqual(code, 1, out.getvalue())
+        self.assertIn("bad: 1 likely finding(s)", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
