@@ -56,7 +56,7 @@ When the range touches any UI, read `references/frontend-ux-angles.md` and add i
 
 ### 2c. Backlog-issue accuracy (only when the repo names a live GitHub Project)
 
-When the repo's `CLAUDE.md` names a `backlog-config.json`, read `references/backlog-issue-accuracy.md` and sample the closed issues it describes. Skip this step for any other repo.
+When the repo's `CLAUDE.md` names a `backlog-config.json` (or equivalent), read `references/backlog-issue-accuracy.md` and sample the closed issues it describes. Skip this step for any other repo.
 
 ### 3. Simplify pass (run it yourself, in parallel with the agent)
 
