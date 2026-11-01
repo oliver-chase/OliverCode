@@ -47,8 +47,8 @@ A generic skill and a repo-specific skill can both plausibly match the same task
 directly: a generic email-writing skill and a repo's own approval-gated outreach skill both
 matched "draft a cold email sequence." Skill-tool matching is task-phrasing-based and
 happens before any repo file has been touched, so the generic skill can fire first even
-inside the repo the specific one was built for — this is a real, verified failure mode (see
-`docs/BACKLOG.md`'s ACT-3), not a hypothetical.
+inside the repo the specific one was built for — this is a real, verified failure mode (`ACT-3` in
+`docs/DECISIONS.md`), not a hypothetical.
 
 There is no framework-level fix for the initial mis-fire — nothing currently gives a
 repo-specific skill priority over a generic one at match time. The mitigation that does

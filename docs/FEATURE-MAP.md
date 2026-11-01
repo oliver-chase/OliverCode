@@ -57,7 +57,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/lib/duplication_check.py` | Detects the same rule restated near-verbatim across two tracked docs with no cross-reference — a sliding-window substring match, declared-marker exceptions for deliberate reuse |
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation. `--check-token-policy` is Gate 8 |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
-| `scripts/find-spec.py` | Resolves a bare backlog ID (`SPEC-21`, `B20`) fleet-wide across every `*BACKLOG*.md` in the private repos and profiled fleet repos. A `SPEC-N` miss points at the GitHub Project where a retired backlog's entries may now live |
+| `scripts/find-spec.py` | Resolves a bare backlog ID (`SPEC-21`) fleet-wide across every `*BACKLOG*.md` in the private repos and profiled fleet repos. A `SPEC-N` miss points at the GitHub Project where a retired backlog's entries may now live |
 | `scripts/link-check.sh` | Internal reference integrity: markdown links plus backtick repo paths |
 | `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax. TypeScript-leaning, aimed at the fleet repos |
 | `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |
@@ -96,4 +96,4 @@ A capability change is incomplete until this map is updated in the same change s
 Only list a script/gate here if it exists and runs (verify with `ls`/`grep` before adding a
 row). The active enforcement surfaces are `.githooks/pre-commit` and, for downstream repos,
 whatever `scripts/validate-repo.sh` they declare (`scripts/validate.sh --target-repo` execs it
-if present, per D2 in `docs/BACKLOG.md`). Everything else is manually verified.
+if present, per `D2` in `docs/DECISIONS.md`). Everything else is manually verified.

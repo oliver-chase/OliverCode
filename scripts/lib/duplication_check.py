@@ -18,7 +18,7 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 # Fenced code blocks are not excluded: a short shared command (a few words) is already
 # below WINDOW, and a long duplicated snippet (a whole probe script, a whole gate list)
 # is exactly the kind of copy-paste drift this check exists to catch -- excluding code
-# fences would blind it to the B15 finding that motivated building it.
+# fences would blind it to the duplicated probe script that motivated building it.
 
 # Snippets that are deliberate reuse, not drift -- matched as a normalized (lowercase,
 # punctuation-stripped) substring of the finding, so one entry covers every file pair

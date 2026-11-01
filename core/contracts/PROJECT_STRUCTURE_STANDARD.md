@@ -7,8 +7,8 @@ OliverCode's own root for Epic/Commit Hygiene and Required Base Paths — the sa
 `PUBLIC_PRIVATE_REPO_STANDARD.md` states and explains, since OliverCode is a framework, not a
 product repo with epics. The GitHub Project backlog model below applies to OliverCode too:
 its open work lives in the `OliverCode` GitHub Project, named in its own `docs/backlog-config.json`.
-`docs/BACKLOG.md` and `docs/DECISIONS.md` hold rationale and institutional memory, not open
-items. `core/workflows/` is its equivalent of a per-repo procedure doc.
+`docs/DECISIONS.md` holds decision rationale, and `docs/BACKLOG.md` holds only the live
+tracker. `core/workflows/` is its equivalent of a per-repo procedure doc.
 
 ## Purpose
 

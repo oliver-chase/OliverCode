@@ -239,7 +239,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | [`EXTERNAL-TOOLING.md`](docs/EXTERNAL-TOOLING.md) | Optional third-party tooling |
 | [`KEEPALIVE-STANDARD.md`](docs/KEEPALIVE-STANDARD.md) | Keeping free-tier cloud services from going dormant |
 | [`DECISIONS.md`](docs/DECISIONS.md) | Design decisions whose reasoning is longer than a code comment should carry |
-| [`BACKLOG.md`](docs/BACKLOG.md) | Decision rationale and institutional memory — open work is the `OliverCode` GitHub Project |
+| [`BACKLOG.md`](docs/BACKLOG.md) | The live tracker and its review marker. Open work is the `OliverCode` GitHub Project |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Which rules block commits and which are guidance |
 | [`QUALITY_BASELINE.md`](QUALITY_BASELINE.md) | Quality standard for governed repos |
 | [`CLAUDE.md`](CLAUDE.md) | Rules Claude loads in every session |

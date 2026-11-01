@@ -189,7 +189,7 @@ main() {
       # Generic cross-repo validation: exec the target repo's own validation
       # hook if it declares one, by convention (<target-repo>/scripts/validate-repo.sh).
       # Skips gracefully if the target repo has no such hook — OliverCode carries
-      # no repo-specific enforcement itself (see docs/BACKLOG.md D2).
+      # no repo-specific enforcement itself (D2 in docs/DECISIONS.md).
       local repo_root="${2:-}"
       shift 2 || true
 
