@@ -39,8 +39,8 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 - Drift is blocking for strict files and required paths.
 
 4. Promotion and alignment:
-- Update project tracks via the same sync source. Branch roles are defined once in
-  `shared/workflow-standards.md` ("Branch Lifecycle Standard").
+- Update project tracks via the same sync source. `shared/workflow-standards.md` ("Branches")
+  says which branches a repo uses.
 - Verify branch status and ahead/behind after push.
 - Never promote without a passing hygiene audit.
 

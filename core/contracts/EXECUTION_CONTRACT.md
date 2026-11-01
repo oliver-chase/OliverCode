@@ -30,7 +30,7 @@ User says "yes" / approves change
     |
     v
 4.  QA -- verify the change end-to-end
-    |   Run repo's canonical validation command (from repo-profiles.json)
+    |   Run the repo's own validation command, which its CLAUDE.md names
     |
     v
 5.  GATE -- pre-commit enforcement runs automatically (see below; how many gates

@@ -43,13 +43,10 @@ Testing applies to all code work:
 - Implementation is not complete without test alignment, and a test-suite-only change still
   needs its own QA pass.
 
-## Branch Lifecycle Standard (All Projects)
+## Branches
 
-- `development`: unstarted and in-progress story housing.
-- `staging`: completed work that is ready for QA validation.
-- `main`: production-ready promotions only.
-- This lifecycle is mandatory across all project repos under `<fleet-root>/`.
-- Change-one/change-all rule: if any repo lifecycle wording changes, update this file and the managed template files in the same governance cycle.
+Repos work on `main`. A repo that needs a development or staging branch names it, and what
+moves through it, in its own `CLAUDE.md`.
 
 ## Cross-Repo Quality Baseline
 

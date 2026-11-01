@@ -26,14 +26,10 @@ in `docs/backlog-config.json`, read and written by the `backlog-management` skil
 2. Story catalog source: the GitHub Project's issue list
 3. Acceptance test matrix source: `N/A (each issue carries AC/test evidence directly)`
 
-## Branch Lifecycle Contract
+## Branches
 
-1. `development`: unstarted and in-progress story housing.
-2. `staging`: completed work ready for QA validation.
-3. `main`: production-ready promotions only.
-4. Source-of-truth link: `OliverCode/shared/workflow-standards.md`.
-5. Change-one/change-all:
-- If this lifecycle changes in a project repo, update this template and re-sync managed repos in the same governance cycle.
+This repo works on `main`. If it needs a development or staging branch, name it here with
+what moves through it.
 
 ## Enforcement
 
