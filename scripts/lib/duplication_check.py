@@ -22,9 +22,8 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 
 # Snippets that are deliberate reuse, not drift -- matched as a normalized (lowercase,
 # punctuation-stripped) substring of the finding, so one entry covers every file pair
-# that shares it instead of listing pairs combinatorially. Adding an entry here without
-# a real reason recreates the exact blind spot hook_drift_check.py's
-# DECLARED_DIFFERENCES pattern exists to close.
+# that shares it instead of listing pairs combinatorially. An entry without a real
+# reason recreates the blind spot this check exists to close.
 DECLARED_MARKERS: dict[str, str] = {
     "repo profiles json gitignored real fleet or shared repo profiles example "
     "json tracked": (

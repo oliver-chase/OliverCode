@@ -39,11 +39,10 @@ cannot fail, whatever the input. See `GATE-FALSIFIABILITY-1` in `docs/DECISIONS.
 defects that shape covered and why none was visible from the output. Detector:
 `scripts/lib/falsifiability_check.py`.
 
-It also fails closed on **hook drift**. OliverCode's hook, the public template, and the
-private template implement the same gates, and nothing compared them: two had drifted into
-printing documentation paths that do not exist, in the message shown at the moment a
-developer is blocked. Deliberate differences are declared with a reason in
-`scripts/lib/hook_drift_check.py`. Undeclared ones fail.
+It also fails closed on **hook drift**. OliverCode's hook, the public template and the
+private template run the same gates, and each gate's body lives once in `core/hooks/gates/`.
+`scripts/build-hooks.py` assembles the three hooks from one ordered gate list, and
+`validate.sh` fails when a committed hook differs from the build.
 
 Beyond the commit hook, `validate.sh` fails closed on two more classes that used to drift
 silently: doc/code consistency (`scripts/lib/consistency_check.py` — skills index parity,
