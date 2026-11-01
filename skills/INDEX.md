@@ -17,6 +17,9 @@
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
 | `backlog-management` | Config-driven GitHub Project backlog ops | Filing, closing, or triaging backlog work in a repo that names a backlog-config.json in its own CLAUDE.md |
+| `board-hygiene` | Live GitHub Project board check across 6 dimensions: required fields, status drift, duplicate cards, Ready occupancy, Area freshness, Ready candidates | After filing or closing backlog items, or "is the backlog properly organized" |
+| `plan-pressure-test` | Adversarial check of a plan doc against live system state before it runs | "Pressure test this plan", or before executing a plan doc from `plan` |
+| `skill-creation` | Intake for a new skill: overlap check first, then the baseline every new skill meets | "New skill", "build a skill for X", "should this be a new skill" |
 
 ## Rules
 
