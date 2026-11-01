@@ -20,8 +20,8 @@ jobs:
       # validate.sh covers the pre-commit gates, doc/code consistency,
       # reference integrity, and the smoke tests. link-check runs inside it,
       # so it is not repeated as its own step.
-      - name: Validate gates
-        run: bash scripts/validate.sh
+      - name: Validate gates over the whole tree
+        run: bash scripts/validate.sh --tree
 
       # Bloat is the one QA phase with a hard threshold, so it is the one that
       # can fail a build without false positives. --strict makes a finding

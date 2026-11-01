@@ -214,6 +214,7 @@ OliverCode ships its fleet registry (`shared/repo-profiles.json`, `shared/repo-m
 Run these checks when you want to verify the complete system:
 
 ```bash
+bash scripts/validate.sh --tree        # Every gate over every tracked file
 bash scripts/qa/check-fork-usable.sh   # Fresh clone + enforcement
 bash scripts/qa/check-scenarios.sh     # Complete setup scenarios
 bash scripts/qa/full-qa-pass.sh        # Code, docs, and size checks

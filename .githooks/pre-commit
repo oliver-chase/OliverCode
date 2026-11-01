@@ -6,7 +6,13 @@ set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(git -C "$HOOK_DIR" rev-parse --show-toplevel)"
-STAGED_FILES=$(git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=ACM)
+# A commit checks only what it stages, so a clean commit says nothing about the rest of the tree.
+# `validate.sh --tree` sets this to run every gate over every tracked file.
+if [ "${OLIVERCODE_SCAN_TREE:-}" = 1 ]; then
+  STAGED_FILES=$(git -C "$REPO_ROOT" ls-files)
+else
+  STAGED_FILES=$(git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=ACM)
+fi
 cd "$REPO_ROOT"
 
 VIOLATIONS=0
