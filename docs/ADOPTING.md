@@ -120,7 +120,7 @@ whole process is done and verified.
 Your old `~/.claude/CLAUDE.md` content does not disappear — it gets sorted:
 
 1. Rules that are genuinely machine-global → add to your fork's `CLAUDE.md`, in the existing
-   sections (`## Voice`, `## Development Practice`, `## Pre-Commit`, `## Enforcement`).
+   sections (`## Voice`, `## Development practice`, `## Pre-Commit`, `## Enforcement`).
 2. Rules that are really about one repo → move to that repo's own `CLAUDE.md`.
 3. Rules that are personal/business content → a skill, placed per `docs/SKILLS-PLACEMENT.md`.
 4. Anything you cannot classify → leave it in the global file and flag it for the human.

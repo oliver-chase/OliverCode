@@ -123,6 +123,19 @@ Where a repo deviates, the deviation is documented with its reason or removed.
 
 ---
 
+## Working rules
+
+These hold in every session, alongside the loop above:
+
+- A broken, failing or slow system gets the `diagnosing-bugs` loop before any code changes. A patch on a guess fixes only the symptom it guessed at
+- A comment says what defect the code prevents or why it has this shape. Keep it only when the code cannot say it
+- A number that changes, such as a test count, coverage or a timing, stays out of prose. State the command that produces it. A dated measurement goes in the backlog tracker once, with its date
+- Gate and lint findings get one pass: read the whole list, fix every finding, then re-run once
+- Read a file before its first edit, and again whenever another session, a hook or a generator could have changed it. Grep for callers before changing a function signature
+- A new top-level folder needs a reason in `PROJECT_STRUCTURE_STANDARD.md`
+
+---
+
 ## Token efficiency
 
 This standard is itself subject to it. Prefer:
@@ -140,7 +153,7 @@ This standard is itself subject to it. Prefer:
 | Contract | Owns |
 |---|---|
 | `PROJECT_STRUCTURE_STANDARD.md` | Folder layout, story and epic hygiene, commit format |
-| `EXECUTION_CONTRACT.md` | Gate mechanics, evidence schema, the pre-commit hook contract this loop ends in |
+| `EXECUTION_CONTRACT.md` | Gate mechanics, evidence fields, the pre-commit hook contract this loop ends in |
 | `../../docs/DOCUMENTATION-STANDARD.md` | README and doc shape, backlog policy |
 
 ## Enforcement reality

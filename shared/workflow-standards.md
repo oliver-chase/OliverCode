@@ -10,7 +10,7 @@ Workflow routing and standards.
 ## Trigger Routing
 
 Use these trigger terms as workflow selectors. This list is the complete one for procedures
-and scripts. `core/workflows/README.md` points here. `CLAUDE.md`'s Development Practice
+and scripts. `core/workflows/README.md` points here. `CLAUDE.md`'s Development practice
 section owns the skill triggers (broken/failing/slow, multi-commit session ending, review).
 
 - `backlog`, `story lifecycle` -> `core/workflows/story-lifecycle-sop.md`
