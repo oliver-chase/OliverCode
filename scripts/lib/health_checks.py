@@ -200,7 +200,7 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
         else:
             passed += 1
     if passed and not failed:
-        print(f"  [OK] all {passed} vault skills linked")
+        print(f"  [OK] all {passed} skills from skillsRoot linked")
     return passed, failed, 0
 
 

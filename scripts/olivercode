@@ -27,7 +27,7 @@ from lib.health_checks import (  # noqa: E402,F401
     _check_voice_copies,
 )
 from lib import claude_settings as _claude_settings  # noqa: E402
-from lib.local_config import vault_root as _vault_root  # noqa: E402
+from lib.local_config import private_repos as _private_repos  # noqa: E402
 from lib.local_config import skills_root as _skills_root  # noqa: E402
 from lib.local_config import push_repos as _push_repos  # noqa: E402
 
@@ -41,9 +41,9 @@ COMMANDS = [
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude (backs up anything it replaces)"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
-    ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the vault"),
+    ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run skill-fleet-audit's 3 static checks against this machine's skills folder + OliverCode's own skills"),
-    ("olivercode push-fleet [--dry-run]", "Push already-committed work for OliverCode, the vault and this machine's pushRepos, unattended"),
+    ("olivercode push-fleet [--dry-run]", "Push already-committed work for OliverCode, the private repos and this machine's pushRepos, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
 
@@ -390,7 +390,7 @@ class _HealthTally:
     """Accumulates health-check results.
 
     WARN does not fail the run, on purpose: a standalone clone missing local-only
-    context (control plane, vault) must still exit 0 (see docs/FRAMEWORK-BOUNDARY.md).
+    context (control plane, private repos) must still exit 0 (see docs/FRAMEWORK-BOUNDARY.md).
 
     It is counted SEPARATELY from OK all the same. Folding the two together printed
     "HEALTHY — 8/8 checks passed" on a run where five of the eight had been skipped
@@ -485,9 +485,9 @@ def command_health(fleet_root: Path | None = None) -> int:
                     t.fail(f"{rel} — not found")
 
     # 3. Placement drift (SYS-2, spec: docs/skills-placement.md "Drift check").
-    # Everything here reads OUTSIDE OC_ROOT (the vault, sibling fleet repos), so it
+    # Everything here reads OUTSIDE OC_ROOT (private repos, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
-    # clone with no surrounding vault is still a valid, healthy checkout.
+    # clone with no private repos around it is still a valid, healthy checkout.
     passed, failed, skipped = _check_placement_drift(OC_ROOT, fleet_root)
     t.add(passed, failed, skipped)
 
@@ -505,16 +505,12 @@ def command_health(fleet_root: Path | None = None) -> int:
     # 6. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # four failures that ran undetected because nothing looked.
-    vault_root = _vault_root()
-
     t.add(*_check_vault_skill_links(_skills_root()))
     t.add(*_check_voice_copies(OC_ROOT, Path.home() / ".claude" / "skills"))
 
-    # Repos to check for remote reachability and oversized files: the vault, this
-    # framework repo, and every fleet repo that exists on disk.
-    topo_repos: list[tuple[str, Path]] = []
-    if vault_root and (vault_root / ".git").exists():
-        topo_repos.append(("vault", vault_root))
+    # Repos to check for remote reachability and oversized files: the private repos,
+    # this framework repo, and every fleet repo that exists on disk.
+    topo_repos: list[tuple[str, Path]] = [(n, p) for n, p in _private_repos().items() if (p / ".git").exists()]
     topo_repos.append((OC_ROOT.name, OC_ROOT))
     _profiles, _ = load_repo_profiles(OC_ROOT)
     for name, _profile, repo_path in _iter_fleet(_profiles, fleet_root or OC_ROOT.parent):
@@ -605,8 +601,6 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     failed = 0
     skipped = 0
     templates_dir = oc_root / "core" / "templates" / "project"
-
-    vault_root = _vault_root()
 
     # (a)/(b) Every OliverCode skill must have a live, correctly-targeted symlink at
     # ~/.claude/skills/<name> -- that's the mechanism making it invocable from any repo.
@@ -706,29 +700,31 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 print(f"  [OK] {name}: hooksPath set, hooks match template")
                 passed += 1
 
-    # The vault itself is a managed hook target too (SYS-3), same private-variant check.
-    if vault_root is None:
-        print("  [INFO] no vault set for this machine (vaultRoot) — not checked")
-    elif not (vault_root / ".git").exists():
-        print(f"  [WARN] no .git at the vault path {vault_root} — skipping vault hook check")
-        skipped += 1
-    else:
+    # Private repos are managed hook targets too (SYS-3), checked against the private variant.
+    private = _private_repos()
+    if not private:
+        print("  [INFO] no private repos set for this machine (privateRepos) — not checked")
+    for name, root in private.items():
+        if not (root / ".git").exists():
+            print(f"  [WARN] {name}: no .git at {root} — hook check skipped")
+            skipped += 1
+            continue
         result = subprocess.run(
-            ["git", "-C", str(vault_root), "config", "--get", "core.hooksPath"],
+            ["git", "-C", str(root), "config", "--get", "core.hooksPath"],
             capture_output=True, text=True,
         )
         hooks_path = result.stdout.strip()
         if result.returncode != 0 or not hooks_path:
-            print("  [FAIL] vault: core.hooksPath unset")
+            print(f"  [FAIL] {name}: core.hooksPath unset")
+            failed += 1
+            continue
+        problems = _hook_problems(root / hooks_path, templates_dir)
+        if problems:
+            print(f"  [FAIL] {name}: {'; '.join(problems)}")
             failed += 1
         else:
-            problems = _hook_problems(vault_root / hooks_path, templates_dir)
-            if problems:
-                print(f"  [FAIL] vault: {'; '.join(problems)}")
-                failed += 1
-            else:
-                print("  [OK] vault: hooksPath set, hooks match template")
-                passed += 1
+            print(f"  [OK] {name}: hooksPath set, hooks match template")
+            passed += 1
 
     return passed, failed, skipped
 
@@ -785,7 +781,7 @@ Public repos get the 6-gate public template as the live `pre-commit` file
 
 
 def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
-    """SYS-3: converge hooks + core.hooksPath across every fleet repo and the vault.
+    """SYS-3: converge hooks + core.hooksPath across every fleet repo and every private repo.
 
     fleet_root defaults to OliverCode's parent (the sibling-repos layout). A fork whose
     repos live elsewhere passes --root; without that, every repo would silently SKIP as
@@ -793,7 +789,6 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
     """
     templates_dir = oc_root / "core" / "templates" / "project"
     fleet_root = fleet_root or oc_root.parent
-    vault_root = _vault_root()
     updated = 0
     skipped = 0
 
@@ -813,7 +808,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
             continue
         # A private repo gets the private variant, which drops the PII gate (it holds
         # personal data by design) and adds the archived-content gate. Declared per
-        # profile rather than hardcoded: the vault below was the only private target
+        # profile rather than hardcoded: one private repo was the only private target
         # for a while, so the second one had its hook installed by hand and would have
         # gone stale on the next template change, silently.
         is_private = bool(profile.get("private"))
@@ -822,13 +817,14 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
         print(f"  [OK] {name}: {variant_note}hooks synced, hooksPath set")
         updated += 1
 
-    if vault_root and (vault_root / ".git").exists():
-        _install_hook_pair(vault_root, templates_dir, private_repo=True)
-        print("  [OK] vault: private-variant hook synced, hooksPath set")
-        updated += 1
-    elif vault_root:
-        print(f"  [SKIP] vault: no .git at {vault_root}")
-        skipped += 1
+    for name, root in _private_repos().items():
+        if (root / ".git").exists():
+            _install_hook_pair(root, templates_dir, private_repo=True)
+            print(f"  [OK] {name}: private-variant hook synced, hooksPath set")
+            updated += 1
+        else:
+            print(f"  [SKIP] {name}: no .git at {root}")
+            skipped += 1
 
     print(f"\n{updated} target(s) synced, {skipped} skipped.")
     return 0
@@ -900,10 +896,10 @@ def command_audit_fleet(oc_root: Path) -> int:
 
 
 def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
-    """Push already-committed work for OliverCode, the vault and this machine's pushRepos.
+    """Push already-committed work for OliverCode, the private repos and this machine's pushRepos.
 
-    Scoped to repos named on purpose per the audit-fleet plan's Step 5 -- lowest
-    blast radius. The vault and pushRepos come from local_config. A wider rollout needs
+    Scoped to repos named on purpose, for the lowest blast radius. The private repos and
+    pushRepos come from local_config. A wider rollout needs
     its own opt-in (a per-repo repo-profiles.json flag), not a blanket expansion,
     and needs every target repo to actually carry the pre-push hook first (a repo
     with a declared hookVariant still has none -- see sync-hooks' own skip logic).
@@ -913,10 +909,7 @@ def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
     hook is the real safety gate here (secret scan, no force-push) -- this command
     only decides which repos to attempt, never overrides what that hook blocks.
     """
-    targets = {"olivercode": oc_root}
-    vault_root = _vault_root()
-    if vault_root:
-        targets["vault"] = vault_root
+    targets = {"olivercode": oc_root, **_private_repos()}
     profiles, _ = load_repo_profiles(oc_root)
     for name in _push_repos():
         targets[name] = _resolve_repo_path(name, profiles.get(name, {}), oc_root.parent)
@@ -970,7 +963,7 @@ def command_update() -> int:
     pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
     if pull_code != 0:
         return pull_code
-    print("\nSyncing hooks across the fleet + vault (SYS-3):")
+    print("\nSyncing hooks across the fleet + private repos (SYS-3):")
     return command_sync_hooks(OC_ROOT)
 
 

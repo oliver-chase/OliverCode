@@ -8,7 +8,7 @@ disruptive than the collision itself (every commit message and memory note that 
 cites the old number would go stale). This script fixes the actual cost instead:
 resolving a bare ID took a fleet-wide grep-and-read-both. One command replaces that.
 
-No hardcoded file list. Every `*BACKLOG*.md` under the vault and every profiled fleet
+No hardcoded file list. Every `*BACKLOG*.md` under a private repo and every profiled fleet
 repo is a candidate -- a new backlog file (a new repo, a renamed ledger) is found the
 next run, not after someone remembers to add it here.
 
@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.repo_profiles import load_repo_profiles, iter_fleet  # noqa: E402
-from lib.local_config import vault_root as local_vault_root  # noqa: E402
+from lib.local_config import private_repos  # noqa: E402
 
 SKIP_DIRS = {".git", "node_modules", ".obsidian"}
 CONTEXT_LINES = 2
@@ -35,11 +35,11 @@ CONTEXT_LINES = 2
 def _candidate_files(root: Path):
     """Walk `root`, but never descend into a nested git repo other than `root` itself.
 
-    The vault contains fleet repos as real subdirectories, and `iter_fleet` resolves
-    those same paths separately. Without this boundary, walking the vault root would
+    A private repo can hold fleet repos as real subdirectories, and `iter_fleet` resolves
+    those same paths separately. Without this boundary, walking the private repo would
     re-scan every fleet repo's backlog files a second time under a different label --
-    caught live: SPEC-21 printed twice, once under the vault label and once under the
-    same fleet repo's own label, for the exact same 4 lines in the exact same file.
+    caught live: SPEC-21 printed twice, once under the private repo's label and once under
+    the same fleet repo's own label, for the exact same 4 lines in the exact same file.
     """
     for dirpath, dirnames, filenames in os.walk(root):
         is_nested_repo = Path(dirpath) != root and (Path(dirpath) / ".git").exists()
@@ -74,7 +74,6 @@ def main() -> int:
     args = parser.parse_args()
 
     oc_root = Path(__file__).resolve().parent.parent
-    vault_root = local_vault_root()
     fleet_root = Path(args.root).resolve() if args.root else oc_root.parent
 
     pattern = re.compile(r"\b" + re.escape(args.spec_id) + r"\b")
@@ -84,8 +83,7 @@ def main() -> int:
     # own explicit root here or it silently never gets searched -- caught live: a
     # first pass found every SPEC-N but zero B-series IDs.
     roots: list[tuple[str, Path]] = [("olivercode", oc_root)]
-    if vault_root and vault_root.is_dir():
-        roots.append(("vault", vault_root))
+    roots += [(name, path) for name, path in private_repos().items() if path.is_dir()]
     profiles, _ = load_repo_profiles(oc_root)
     for name, _profile, repo_path in iter_fleet(profiles, fleet_root):
         if repo_path.is_dir():
@@ -105,7 +103,7 @@ def main() -> int:
                 print("---")
 
     if total == 0:
-        print(f"No match for {args.spec_id!r} in any *BACKLOG*.md under the vault or a fleet repo.")
+        print(f"No match for {args.spec_id!r} in any *BACKLOG*.md under a private repo or a fleet repo.")
         if re.match(r"^SPEC-\d+$", args.spec_id):
             print(
                 "If the backlog file that held this SPEC-N was retired, its entries may now "

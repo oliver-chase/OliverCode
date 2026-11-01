@@ -24,16 +24,16 @@ the Mac sleeps just means the next one catches up, instead of silently skipping 
 plain `cron` does.
 
 - `push-fleet` -- every ~3 hours (see `tick.py`'s `JOBS` list for the exact number).
-  Flushes already-committed work for the vault + OliverCode. Never commits.
+  Flushes already-committed work for OliverCode and the private repos. Never commits.
 - `audit-fleet` -- weekly. Runs `skill-governance/skill-fleet-audit`'s 3 static checks against the
-  vault's skills and OliverCode's own, writes findings to a log, never fixes anything.
+  skills folder (`skillsRoot`) and OliverCode's own, writes findings to a log, never fixes anything.
 
 A failed job's marker is deliberately left untouched, so it stays "due" and the next tick
 (15 minutes later) retries, instead of waiting a full interval.
 
 ## Moving to a new Mac
 
-1. Clone this repo (and the vault, if `push-fleet`/`audit-fleet` should cover it too).
+1. Clone this repo, and any private repo `push-fleet` should cover, and name them in `olivercode.local.json`.
 2. `bash scripts/local-scheduler/install.sh`.
 
 Nothing else -- no machine-specific state to migrate.

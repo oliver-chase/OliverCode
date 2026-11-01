@@ -30,21 +30,25 @@ class LocalConfig(unittest.TestCase):
         self.file.write_text(json.dumps(data))
 
     def test_unset_means_this_machine_has_none(self):
-        self.assertIsNone(local_config.vault_root())
+        self.assertEqual(local_config.private_repos(), {})
         self.assertIsNone(local_config.skills_root())
         self.assertEqual(local_config.repo_paths(), {})
         self.assertEqual(local_config.push_repos(), [])
 
     def test_the_file_supplies_paths_with_tilde_expanded(self):
-        self.write({"vaultRoot": "~/v", "skillsRoot": "/s", "pushRepos": ["a"]})
-        self.assertEqual(local_config.vault_root(), Path.home() / "v")
+        self.write({"privateRepos": {"notes": "~/v"}, "skillsRoot": "/s", "pushRepos": ["a"]})
+        self.assertEqual(local_config.private_repos(), {"notes": Path.home() / "v"})
         self.assertEqual(local_config.skills_root(), Path("/s"))
         self.assertEqual(local_config.push_repos(), ["a"])
 
     def test_environment_wins_over_the_file(self):
         self.write({"vaultRoot": "/from-file"})
         os.environ["OLIVERCODE_VAULT_ROOT"] = "/from-env"
-        self.assertEqual(local_config.vault_root(), Path("/from-env"))
+        self.assertEqual(local_config.private_repos(), {"vault": Path("/from-env")})
+
+    def test_a_machine_set_up_with_the_old_vault_setting_keeps_working(self):
+        self.write({"vaultRoot": "~/old", "privateRepos": {"notes": "/n"}})
+        self.assertEqual(local_config.private_repos(), {"notes": Path("/n"), "vault": Path.home() / "old"})
 
     def test_a_local_repo_path_wins_over_the_profile_and_the_sibling_default(self):
         self.write({"repoPaths": {"alpha": "/this/machine/alpha"}})
