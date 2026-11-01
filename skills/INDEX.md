@@ -17,7 +17,7 @@
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
 | `backlog-management` | Config-driven GitHub Project backlog ops | Filing, closing, or triaging backlog work in a repo that names a backlog-config.json in its own CLAUDE.md |
-| `writing-documentation` | Write any README/doc to the locked documentation standard (outline, voice, naming, About) | Writing a README, documenting X, or a non-trivial code comment — `docs/DOCUMENTATION_STANDARD.md` is the one home |
+| `writing-documentation` | Write any README/doc to the locked documentation standard (outline, naming, About) | Writing a README or documenting X — `docs/DOCUMENTATION_STANDARD.md` is the one home |
 
 ## Rules
 

@@ -1,6 +1,6 @@
 # Documentation Standard
 
-The structure, naming and upkeep rules for every README and document in this framework and in every repo it governs. How to write the words lives in one place, `~/.claude/skills/clean-writing/voice.md`, and this file does not restate it.
+The structure, naming and upkeep rules for every README and document in this framework and in every repo it governs. How to write the words lives in one place, `docs/VOICE.md`, and this file does not restate it.
 
 `bash scripts/validate.sh` enforces the mechanical parts (reference integrity, doc/code consistency, the feature-map index). The `writing-documentation` skill loads this file and is the way to apply it.
 
@@ -10,7 +10,7 @@ The structure, naming and upkeep rules for every README and document in this fra
 
 A README is written for a reader on their first day, who knows the business context and none of the internals. It follows this order:
 
-1. **`# repo-name`**, then one plain sentence stating what this is and what a reader can do with it.
+1. **`# repo-name`**, then one sentence stating what this is and what a reader can do with it.
 2. **The driving problems.** One to three short paragraphs, each a real problem with a concrete consequence and the design choice that answers it.
 3. **Install and first use.** Runnable immediately, with real-looking values.
 4. **How it works**, named in the reader's terms.
@@ -38,7 +38,7 @@ Every named path, command, count and row is checked against the repo before deli
 
 ## Sentence clarity
 
-`SKILL.md`, `CLAUDE.md`, skill and tool descriptions, error strings and CLI help text are read by an agent with no human to resolve ambiguity, so they get the `asd-ste100` skill in strict mode. A commit-time gate warns on every staged `SKILL.md`, `CLAUDE.md` and `references/*.md` (`docs/GOVERNANCE.md`'s coverage table). Text inside a skill that a person reads follows the voice file, within the gate's 25-word cap.
+`SKILL.md`, `CLAUDE.md`, skill and tool descriptions, error strings and CLI help text are read by an agent with no human to resolve ambiguity, so they get the `asd-ste100` skill in strict mode. A commit-time gate warns on every staged `SKILL.md`, `CLAUDE.md` and `references/*.md` (`docs/GOVERNANCE.md`'s coverage table). Text inside a skill that a person reads follows `docs/VOICE.md`, within the gate's 25-word cap.
 
 ## File naming and the document set
 
