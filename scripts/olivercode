@@ -38,7 +38,7 @@ OC_ROOT = Path(__file__).resolve().parent.parent
 COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
-    ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude (backs up anything it replaces)"),
+    ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode health", "Run health checks: dependencies, core entrypoints, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, then sync fleet hooks"),
     ("olivercode sync-hooks", "Converge hooks + core.hooksPath across the fleet and the private repos"),
@@ -137,7 +137,7 @@ def _report_claude_dir(oc_root: Path) -> None:
           f"{len(real)} real dirs, {len(broken)} broken")
     if foreign:
         print("\n  Symlinked outside this checkout — fine if deliberate (personal/business")
-        print("  skills belong in your own area per docs/skills-placement.md):")
+        print("  skills belong in your own area per docs/SKILLS-PLACEMENT.md):")
         for name, target in foreign:
             print(f"    {name} -> {target}")
     if real:
@@ -484,7 +484,7 @@ def command_health(fleet_root: Path | None = None) -> int:
                 for rel in missing:
                     t.fail(f"{rel} — not found")
 
-    # 3. Placement drift (SYS-2, spec: docs/skills-placement.md "Drift check").
+    # 3. Placement drift (SYS-2, spec: docs/SKILLS-PLACEMENT.md "Drift check").
     # Everything here reads OUTSIDE OC_ROOT (private repos, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no private repos around it is still a valid, healthy checkout.
@@ -596,7 +596,7 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
 
 
 def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int, int]:
-    print("\nPlacement drift (skills-placement.md):")
+    print("\nPlacement drift (SKILLS-PLACEMENT.md):")
     passed = 0
     failed = 0
     skipped = 0
@@ -631,7 +631,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
             # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
             # drift -- G4 requires a stranger clone to report HEALTHY.
             print(f"  [WARN] this checkout is not the machine's installed OliverCode "
-                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/skills-placement.md")
+                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/SKILLS-PLACEMENT.md")
             skipped += 1
         elif missing:
             print(f"  [FAIL] not symlinked at ~/.claude/skills/: {', '.join(missing)}")
@@ -732,25 +732,20 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
 def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
     """Idempotently deploy the hook template(s) + hooksPath config to one repo.
 
-Public repos get the 6-gate public template as the live `pre-commit` file
-    (plus the private variant alongside as a reference copy, matching the
-    existing manifest convention). The vault (private_repo=True) gets the
-    private 2-gate template's content deployed AS `pre-commit` — git only
-    auto-invokes that exact filename, there's no such thing as a repo
-    literally running a file named `pre-commit-private`.
+    A public repo gets the public template as its live `pre-commit`, plus the private
+    variant beside it as an inert reference copy. A private repo (private_repo=True)
+    gets the private template's content deployed AS `pre-commit`, because git only
+    auto-invokes that exact filename.
 
-    Also deploys `pre-push` (force-push/history-rewrite block, secret scan on the
-    push range) -- one template, no public/private variant, since nothing about
-    what's safe to push differs by repo visibility the way commit-time PII/token
-    policy does. Added 2026-09-15 so `olivercode push-fleet` has a real mechanical
-    gate on every repo it might touch, not just the vault (which got pre-push by
-    hand before this templating existed).
+    Also deploys `pre-push` (force-push/history-rewrite block, secret scan on the push
+    range). It has no public/private variant: what is safe to push does not differ by
+    repo visibility the way commit-time PII/token policy does, and `push-fleet` needs
+    the same mechanical gate on every repo it touches.
 
     A repo's own `.githooks/pre-commit.local` is never written here. The private
     hook runs it when it exists (GATE-LOCAL-1).
 
-    Counts are verified against the hook files themselves by
-    scripts/lib/consistency_check.py; see docs/governance.md for the table.
+    docs/GOVERNANCE.md holds the per-variant gate table.
     """
     hooks_dir = repo_path / ".githooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)

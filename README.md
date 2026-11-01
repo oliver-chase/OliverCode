@@ -137,7 +137,7 @@ Every governed repo runs nine checks on every commit:
 6. **Planning-document rules**
 7. **Backlog hygiene** — including finished items incorrectly marked `DONE`
 8. **Archived content** — a staged path under an `Archive`/`legacy`/`deprecated`/`old` directory, or a `.bak`/`-old`/`-backup`-suffixed file. Current state only; git is the archive
-9. **Writing clarity (asd-ste100)** — SKILL.md/CLAUDE.md files with strict-mode ASD-STE100 findings (a warning). Skips cleanly if the linter is not installed on the machine
+9. **Writing clarity (asd-ste100)** — SKILL.md, CLAUDE.md and references/*.md files with strict-mode ASD-STE100 findings (a warning). Skips cleanly if the linter is not installed on the machine
 
 OliverCode itself runs a further pair of gates that validate the framework's own configuration files.
 
@@ -214,11 +214,11 @@ Run these checks when you want to verify the complete system:
 
 ```bash
 bash scripts/qa/check-fork-usable.sh   # Fresh clone + enforcement
-bash scripts/qa/check-scenarios.sh     # 12 complete setup scenarios
+bash scripts/qa/check-scenarios.sh     # Complete setup scenarios
 bash scripts/qa/full-qa-pass.sh        # Code, docs, and size checks
 ```
 
-The 12 scenarios run in disposable sandboxes that cannot touch your real files.
+The scenarios run in disposable sandboxes that cannot touch your real files.
 
 They cover:
 
@@ -238,7 +238,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | --- | --- |
 | [`ADOPTING.md`](docs/ADOPTING.md) | Complete setup and enforcement walkthrough |
 | [`NEW-MACHINE.md`](docs/NEW-MACHINE.md) | Restoring an existing setup on a blank machine, and what no script can do |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the three layers fit together |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the two layers fit together |
 | [`GOVERNANCE.md`](docs/GOVERNANCE.md) | Every gate, what it blocks, and which repos receive which gates |
 | [`FEATURE-MAP.md`](docs/FEATURE-MAP.md) | Every capability and its owning document |
 | [`OLIVERCODE-LAUNCHER.md`](docs/OLIVERCODE-LAUNCHER.md) | Every `olivercode` command |
@@ -280,6 +280,4 @@ Run the complete setup scenarios with:
 bash scripts/qa/check-scenarios.sh
 ```
 
-The command reports its own scenario count.
-
-OliverCode uses only `python3`, `bash`, and `perl`. No packages are required. It is built and verified on macOS. CI is included and can be enabled per fork.
+The command reports its own scenario count. CI is included and can be enabled per fork.

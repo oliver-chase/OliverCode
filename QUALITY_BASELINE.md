@@ -21,5 +21,5 @@ If a managed quality file changes in any project, the canonical file in **this r
 
 The commit sequence, the gate list, doc voice, and public-repo redaction are each owned
 elsewhere — `core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md` + `core/contracts/EXECUTION_CONTRACT.md`,
-`docs/GOVERNANCE.md`, `docs/DOCUMENTATION-STANDARD.md`, `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md`
+`docs/GOVERNANCE.md`, `docs/VOICE.md`, `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md`
 respectively — and are not restated here.

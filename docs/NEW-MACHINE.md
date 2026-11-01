@@ -29,7 +29,7 @@ bash scripts/validate.sh          # the clone is sound before anything is change
 cp olivercode.local.example.json olivercode.local.json   # then edit it
 
 # 3. Activate OliverCode: rules and skills into ~/.claude
-scripts/olivercode install        # symlinks CLAUDE.md + skills, backs up what it replaces
+scripts/olivercode install        # links CLAUDE.md, VOICE.md + skills, adds the hooks, backs up what it replaces
 
 # 4. Confirm the fleet, then install enforcement
 scripts/olivercode discover --root ../          # confirms what's present vs. the registry
@@ -53,8 +53,7 @@ The keys `olivercode.local.json` takes are listed in `docs/ADOPTING.md`.
 
 Each of these needs a person. They are listed so the list is finite rather than remembered.
 
-**The other repos.** The vault deliberately holds only what is not already its own repo, so
-the rest are separate clones under `<fleet-root>/`.
+**The other repos.** Each fleet repo is its own clone under `<fleet-root>/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
 absent. `shared/repo-map.json` is the tracked list of what should be there.
 

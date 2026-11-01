@@ -8,18 +8,19 @@ Working across many repos without a shared layer fails in consistent ways: the s
 
 ## What You Actually Get
 
-Four things, and it is worth being precise about which are mechanical and which are not:
+Five things, and it is worth being precise about which are mechanical and which are not:
 
 | You get | How it reaches you | Actually enforced? |
 |---|---|---|
-| Pre-commit gates — nine in an adopted repo, eleven in OliverCode itself (`docs/GOVERNANCE.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes** — fires on every `git commit`, cannot be skipped without `--no-verify` |
+| Pre-commit gates — nine in an adopted repo, eleven in OliverCode itself (`docs/GOVERNANCE.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes** — fires on every `git commit`. Only `--no-verify` skips it, and the commit guard below refuses that inside Claude Code |
 | Local validation | `bash scripts/validate.sh` — gates, doc/code consistency, reference integrity, tests | **Yes**, when run. Nothing auto-runs it |
 | Contracts, templates, workflows | `core/` — inherited by every repo via the bootstrap manifest | No — instruction text an agent follows |
+| Claude Code hooks (session check, commit guard, early-stop guard) | `~/.claude/settings.json`, written by `olivercode install` | **Yes**, inside Claude Code sessions. `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
 | Skills | `~/.claude/skills/` symlinks, installed by `olivercode install` | No — the agent chooses to load them |
 
-The honest summary: **the hook is the only thing that blocks you.** Everything else is a rule an agent follows because it is loaded, not because it is enforced. `CONTRIBUTING.md`'s "Enforcement Reality" section is the one home for that distinction.
+The honest summary: **the hooks are the only things that block you.** Everything else is a rule an agent follows because it is loaded, not because it is enforced. `CONTRIBUTING.md`'s "Enforcement Reality" section is the one home for that distinction.
 
-And one property that surprises people: **hook enforcement fails open.** An unset or broken `core.hooksPath` means git runs no hooks and prints nothing — `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix. `olivercode health` is the only thing that detects it.
+And one property that surprises people: **hook enforcement fails open.** An unset or broken `core.hooksPath` means git runs no hooks and prints nothing — `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix. `olivercode health` detects it across the fleet, and the session check reports it for the repo a session opens.
 
 ## The Two Layers
 
@@ -38,11 +39,10 @@ OliverCode
 │   └── workflows/     repeatable procedures
 ├── skills/            engineering-method + framework tooling skills (symlinked into ~/.claude/skills/)
 ├── shared/            bootstrap manifest, task policies, the real fleet registries
-├── scripts/           launcher (olivercode) + validation gates + qa checkers
+├── scripts/           launcher (olivercode), validation, qa checkers, Claude Code hooks
 ├── docs/              current-state authority docs (one concept, one home)
-├── tests/             the enforcement surfaces: pre-commit gates, evidence gatekeeper,
-│                      hook-install health, launcher commands
-├── .githooks/         pre-commit governance (secrets, emoji, PII, contracts)
+├── tests/             tests for the gates, checkers, hooks and launcher
+├── .githooks/         pre-commit and pre-push gates (docs/GOVERNANCE.md)
 ├── .claude-optimization/  standalone Claude OS memory/state (local layer)
 └── runtime/control-plane/  (gitignored) private machine state
 ```
@@ -62,7 +62,7 @@ Anything that must always apply is enforced as a hook, not as an instruction an 
 
 ## Getting Started
 
-`docs/ADOPTING.md` is the onboarding path — clone, `install`, `init`, register your fleet, `sync-hooks`, verify with a probe that proves the gates actually block. The `olivercode-adoption` skill runs it as a guided, non-destructive audit.
+`docs/ADOPTING.md` is the onboarding path — clone, `install`, register your fleet, `sync-hooks`, verify with a probe that proves the gates actually block. The `olivercode-adoption` skill runs it as a guided, non-destructive audit.
 
 ## Operating Principles
 

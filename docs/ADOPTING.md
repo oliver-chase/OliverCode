@@ -76,7 +76,7 @@ skills symlinked into this checkout from ones symlinked elsewhere, real untracke
 directories, and broken links — and ends with a profile skeleton containing explicit `path`
 values, ready to paste into `shared/repo-profiles.json`.
 
-Two things it will likely surface in an existing setup:
+Three things it will likely surface in an existing setup:
 
 - **Rules files that are not named `CLAUDE.md`** — `AGENTS.md`, `.cursorrules`, and friends do
   not auto-load in Claude Code. They are invisible in practice, however good their content.
@@ -212,8 +212,9 @@ integrity and token policy check framework-only things, so the template does not
 
 Know what you just installed: **hook enforcement fails open.** See
 `docs/TROUBLESHOOTING.md`'s "Commits are passing gates that should have blocked them" for
-why and how to fix it. `scripts/olivercode health` is the only detector — run it on a
-schedule, not just at setup.
+why and how to fix it. `scripts/olivercode health` detects it fleet-wide — run it on a
+schedule, not just at setup. The Claude Code session check also reports it for the repo a
+session opens.
 
 ## Step 6b — Stamp the project template into a repo (optional)
 
@@ -304,6 +305,9 @@ mv ~/.claude/CLAUDE.md.pre-olivercode ~/.claude/CLAUDE.md    # if you had one
 
 # 2. Drop the symlinks this checkout owns. Real directories are NOT ours -- leave them.
 find ~/.claude/skills -maxdepth 1 -type l -lname '*/OliverCode/skills/*' -delete
+rm ~/.claude/VOICE.md                                        # the voice link install made
+# Then remove the hook entries whose command runs a script under OliverCode/scripts/hooks/
+# from ~/.claude/settings.json. Every other key in that file is yours.
 
 # 3. Stop the hooks in each governed repo
 git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can stay or go
@@ -311,9 +315,9 @@ git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can 
 # 4. The checkout itself is just a directory -- delete it.
 ```
 
-Nothing outside those four places is touched: OliverCode writes no system config, no shell
-profile, no launchd/cron entry, and nothing under any product repo except `.githooks/` and
-that one git config key.
+Nothing outside those four places is touched: OliverCode writes nothing in `~/.claude`
+beyond those links and hook entries, no system config, no shell profile, no launchd/cron
+entry, and nothing under any product repo except `.githooks/` and that one git config key.
 
 ## Folder structure
 

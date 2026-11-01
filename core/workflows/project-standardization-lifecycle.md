@@ -25,10 +25,9 @@ Define one standard lifecycle for project bootstrap, governance sync, drift audi
 
 2. Sync existing projects:
 - Hooks: `scripts/olivercode sync-hooks` (run from OliverCode). This is the automated part.
-- Everything else: manually re-copy the managed files listed in
-  `shared/project-bootstrap-manifest.json` from `core/templates/project/` into the target
-  repo -- `strict` files get overwritten unconditionally. `presence` files are only copied
-  in if missing (never overwrite existing repo-specific content).
+- Everything else: `scripts/olivercode bootstrap <repo-path> --dry-run`, then without
+  `--dry-run`. `strict` files are overwritten, `presence` files are only created when
+  missing, so repo-specific content is never overwritten.
 - Workflow fail-safe is policy-driven: `shared/project-bootstrap-manifest.json`'s
   `githubActionsPolicy.mode` field controls whether managed repos are in `normal` mode or
   `manual_only` suspension.

@@ -17,7 +17,7 @@ full stop, regardless of what it is or where it should actually live instead.
 
 1. `skills/<name>/SKILL.md` — real content, tracked.
 2. Add a row to `skills/INDEX.md` in the same change.
-3. Symlink it into the live skills directory: `ln -s <path-to-OliverCode>/skills/<name> ~/.claude/skills/<name>` — this is what makes it invocable from any repo on the machine. All three steps in the same session. An unsymlinked skill is invisible, an un-indexed one is undiscoverable.
+3. Run `scripts/olivercode install`, which links every skill in `skills/` into `~/.claude/skills/` — this is what makes it invocable from any repo on the machine. All three steps in the same session. An unsymlinked skill is invisible, an un-indexed one is undiscoverable.
 
 ## The one project-level pointer
 
@@ -37,8 +37,8 @@ through `~/.claude/skills/`.
 - **OliverCode stays orchestration-only.** If anything that isn't engineering method or framework tooling shows up inside `skills/`, that's drift — remove it.
 - **Every new skill pairs with its `INDEX.md` row and its symlink** in the same session.
 - **Never store skills in the vault's note folders**. A skill's one home is a skill directory.
-- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo and every private repo gets its copy via the bootstrap manifest or `sync-hooks`, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos use the 4-gate private variant.
-- **Every `SKILL.md` and `CLAUDE.md`, in this repo or any fleet repo, be checked by the asd-ste100 writing-clarity gate at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate. It warns on findings so the author sees them without running the skill by hand.
+- **Hooks are not skills** but follow the same pattern: canonical templates live in `OliverCode/core/templates/project/` (the single template home). Every fleet repo and every private repo gets its copy via the bootstrap manifest or `sync-hooks`, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos use the private variant (`docs/GOVERNANCE.md`).
+- **Every staged `SKILL.md`, `CLAUDE.md` and `references/*.md`, in this repo or any fleet repo, is checked by the asd-ste100 writing-clarity gate at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate. It warns on findings so the author sees them without running the skill by hand.
 - **Every skill's structure and MCP-tool usage, not just its prose, is held to a token-cost bar.** No monolith `SKILL.md`, no duplicated paragraph, gap-filling automated instead of asked for, MCP calls following the named efficiency patterns — `core/contracts/SKILL_EFFICIENCY_STANDARD.md` is the full rule set. Checked mechanically today only for the personal skills folder, by hand everywhere else.
 
 ## When a repo-specific skill must win over a generic one
@@ -70,5 +70,6 @@ a hooks directory with no `pre-commit` file, a `pre-commit` that isn't executabl
 whose content diverges from the template.
 
 The first four of those are fail-OPEN: git skips hooks silently, so a commit carrying
-secrets succeeds with no error. Nothing else on the machine detects it. Repair with
+secrets succeeds with no error. The Claude Code session check also reports it for the repo a
+session opens. Repair with
 `scripts/olivercode sync-hooks`.

@@ -208,7 +208,7 @@ def check_gate_coverage_table(repo_root: Path) -> list[str]:
     That table is the single home for gate coverage and every other doc points at it,
     so a stale row propagates everywhere by design.
     """
-    doc = repo_root / "docs" / "governance.md"
+    doc = repo_root / "docs" / "GOVERNANCE.md"
     if not doc.is_file():
         return ["  [GATES] docs/GOVERNANCE.md is missing — it holds the gate coverage table"]
 
@@ -280,7 +280,7 @@ def check_gate_integrity(repo_root: Path) -> list[str]:
     return failures
 
 
-# Data loaders with no entry point. FEATURE_MAP states this exclusion explicitly, so
+# Data loaders with no entry point. FEATURE-MAP.md states this exclusion explicitly, so
 # the list here and the sentence there must agree -- that is the whole point of the check.
 FEATURE_MAP_EXEMPT = {
     "scripts/lib/__init__.py",
