@@ -143,6 +143,11 @@ class TestCommitHash(unittest.TestCase):
         # The pattern is lowercase-hex only; git emits lowercase.
         self.assertFalse(validate({"commit_hash_on_success": "ABCDEF1"}, self.FIELD)["pass"])
 
+    def test_trailing_text_after_a_valid_prefix_blocks(self):
+        # The pattern must be anchored at the end, or any hex prefix passes.
+        for value in ("abc1234zzz", "a" * 41, "abc1234\n"):
+            self.assertFalse(validate({"commit_hash_on_success": value}, self.FIELD)["pass"], repr(value))
+
     def test_short_sha_passes(self):
         self.assertTrue(validate({"commit_hash_on_success": "ed1e4d1"}, self.FIELD)["pass"])
 

@@ -135,7 +135,7 @@ def validate_evidence(evidence: dict, required_fields: list, repo_name: str, tas
                 return fail(f"validation_failed:{fail_stage}", f"Validation failed at stage '{fail_stage}': {fail_msg}")
 
         elif field == "commit_hash_on_success":
-            if not isinstance(value, str) or not re.match(r'^[a-f0-9]{7,40}$', value):
+            if not isinstance(value, str) or not re.match(r'^[a-f0-9]{7,40}\Z', value):
                 return fail("commit_hash_on_success", "commit_hash_on_success must be a valid git commit SHA (7-40 hex chars).")
 
         elif field == "failure_object_on_non_pass":
