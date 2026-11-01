@@ -28,8 +28,8 @@ a sound checkout.
 
 ## The four decisions only a human can make
 
-Everything else is mechanical. Bring the user exactly these, with your recommendation and the
-evidence for it — do not decide them silently, and do not dump the whole inventory on them.
+Everything else is mechanical. Bring the user exactly these four, each with your recommendation and
+its evidence. Never decide one silently, and keep the full inventory out of the question.
 
 **1. For each existing rules file: global, repo-specific, or personal?**
 The whole adoption. Most setups tangle all three in one file.
@@ -40,110 +40,28 @@ The whole adoption. Most setups tangle all three in one file.
 Present as a table with your proposed bucket per item. Get agreement before moving anything.
 
 **2. Which repos are in the fleet?**
-`discover` lists what exists. Only the user knows which are live, which are archived, and
+`discover` lists what exists. Only the user knows which repos are live, which they retired, and
 which they do not want governed. Do not register a repo they did not confirm.
 
 **3. Any repo that genuinely needs a different hook?**
-If one has a real reason to diverge (its own governance path, a gate whose checker only lives
-there), that is legitimate — set `hookVariant` in its profile rather than forcing the
-template. Ask before assuming either way.
+A repo can have a real reason to diverge, such as its own governance path or a gate whose checker
+lives only there. Set `hookVariant` in its profile for that repo. Ask before assuming either way.
 
 **4. What is each repo's canonical validation command?**
 Only they know. `npm run build`, `pytest`, a repo script. This lands in the profile.
 
 ## Procedure
 
-### 1. Discover — never assume you know where anything is
+Follow `docs/ADOPTING.md` Steps 0 to 8 in order, from the OliverCode checkout. It holds every command. At each step, an agent also does this:
 
-```bash
-scripts/olivercode discover --root <each directory their code lives under>
-```
-
-Read-only. Pass every root. They do not have to share a parent. It reports per repo: the
-agent-rules filename, hook state, ungoverned repos. Then inventories `~/.claude`. Then emits a
-profile skeleton with `path` pre-filled.
-
-Two things it surfaces that the user usually does not know:
-- **Rules files not named `CLAUDE.md`** (`AGENTS.md`, `.cursorrules`) do not auto-load in
-  Claude Code. Invisible in practice, however good the content. These get merged in step 4.
-- **Real directories in `~/.claude/skills/`** are untracked content with no backup anywhere.
-
-Mention once, as optional, not required: `docs/EXTERNAL-TOOLING.md` lists third-party plugins
-(codeburn) some of this framework's own rules assume without saying so. Point
-to the doc. Do not install anything without the user asking.
-
-Then read what exists — `~/.claude/CLAUDE.md`, each repo's rules file — and build the
-classification for decision 1.
-
-### 2. Back up, then activate
-
-```bash
-scripts/olivercode install
-```
-
-That is the whole step. `install` does the backup itself: a real `~/.claude/CLAUDE.md` is
-moved to `.pre-olivercode` and the path printed, foreign symlinks and real directories are
-left alone and reported. Do not `cp` a backup first — you get two backups with confusing
-names (`.pre-olivercode` and `.pre-olivercode.bak`) and no extra safety.
-
-Do NOT run it before the user has seen decision 1 — that file is often their entire ruleset.
-
-### 3. Merge the global rules in
-
-Additive into the fork's `CLAUDE.md`, into its existing sections. The one hard constraint:
-that file loads in sessions whose working directory is almost never OliverCode, so **every
-path in it must resolve from anywhere**. Use `$OC/...` for OliverCode's own files:
-
-```bash
-OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
-[ -f "$OC/core/contracts/FRAMEWORK_BASELINE.md" ] || echo "OliverCode not installed"
-```
-
-A bare path means the user's *current* repo. If you mean that, write that you mean it.
-
-### 4. Rewrite each repo's CLAUDE.md
-
-Framework rules out, repo truth stays. Header block and rules are in ADOPTING.md Step 4.
-Merge any `AGENTS.md` INTO `CLAUDE.md` — only that filename auto-loads.
-
-**`ls` every path you leave in the file.** A pointer that does not resolve from the reader's
-cwd is dead text, and an agent will silently proceed when it 404s.
-
-Never invent repo content. If a file ends up with no repo-specific content, say so and ask
-what belongs there.
-
-### 5. Register the fleet
-
-Paste `discover`'s skeleton into `shared/repo-profiles.json`, keeping the `path` values for
-any repo that is not a sibling. Add each repo's `canonicalValidationCommand` (decision 4) and
-a `token_policy` block — without the latter, Gate 8 blocks their commits.
-
-### 6. Install enforcement
-
-Mechanical form of this same step, for a repo whose onboarding is already decided (no
-discovery or human decisions left): `core/workflows/project-standardization-lifecycle.md`.
-
-```bash
-scripts/olivercode sync-hooks
-scripts/olivercode health
-```
-
-Tell them plainly that **hook enforcement fails open**, and point them at `docs/TROUBLESHOOTING.md`'s
-"Commits are passing gates that should have blocked them". `health` detects it.
-
-### 7. Prove it, do not assume it
-
-```bash
-cd <one of their repos>
-bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
-```
-
-If that commit succeeds, the hooks are not installed. Quote the actual output — "should be
-blocked" is not a result.
-
-### 8. Reconcile
-
-Report what moved where, what stayed, what is still ambiguous. Ask before deleting backups.
+- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. Mention `docs/EXTERNAL-TOOLING.md` once as optional, and install nothing unasked
+- **Step 2, install.** Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
+- **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
+- **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
+- **Step 5, register.** Add each repo's validation command (decision 4) and a `token_policy` block, because Gate 8 blocks a repo without one
+- **Step 6, enforcement.** Tell the user plainly that hook enforcement fails open, and point at `docs/TROUBLESHOOTING.md`
+- **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
+- **Step 8, reconcile.** Ask before deleting any backup
 
 ## Output
 
