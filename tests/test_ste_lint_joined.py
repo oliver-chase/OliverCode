@@ -28,7 +28,8 @@ class TestJoinSoftWraps(unittest.TestCase):
         self.assertEqual(out, ["- a b c d.", "", "- e."])
 
     def test_heading_fence_rule_and_html_never_join(self):
-        for text in ("# Title\nbody.\n", "body\n```\ncode\n```\n", "body\n---\nmore\n", "body\n<div>\n"):
+        for text in ("# Title\nbody.\n", "body\n```\ncode\n```\n", "```\na\nb\n```\n",
+                     "body\n---\nmore\n", "body\n<div>\n"):
             self.assertEqual(join(text), text, text)
 
     def test_table_rows_never_join(self):

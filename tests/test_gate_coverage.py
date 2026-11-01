@@ -1,9 +1,8 @@
 """Tests for per-repo gate-coverage consistency.
 
-Gate coverage is not uniform -- 11 gates in OliverCode, 9 in a repo that adopts the
-framework, 4 in the private variant -- and five tracked documents once stated
-OliverCode's own total as though it were universal, promising forkers two gates the
-template does not ship.
+Gate coverage is not uniform across OliverCode, an adopted repo and the private
+variant, and tracked documents once stated OliverCode's own total as though it were
+universal, promising forkers two gates the template does not ship.
 GATE-COUNT-1 in docs/DECISIONS.md records why the checker passed through all of it.
 
 Each test is a mutation: it breaks one thing and asserts the checker fails. A
@@ -100,25 +99,28 @@ class TestMutations(unittest.TestCase):
         """The original false claim, in the shape the old pattern could not match.
 
         Exercises all three mechanisms at once: the modifier-tolerant claim pattern
-        ("8 pre-commit gates"), the cue sitting on the PRECEDING line, and comparison
-        against the template's count rather than OliverCode's.
+        ("N pre-commit gates"), the cue sitting on the PRECEDING line, and comparison
+        against the template's count rather than OliverCode's. The planted number is
+        OliverCode's own total, so only the cue makes it wrong.
         """
         self.assertTrue(self._fails_after(
             "README.md", "## What happens automatically\n",
             "## What happens automatically\n\n**On every commit, in every adopted repo**\n"
-            "12 pre-commit gates run.\n"))
+            f"{cc._hook_totals(REPO_ROOT)[0]['olivercode']} pre-commit gates run.\n"))
 
     def test_a_cue_in_an_earlier_paragraph_does_not_reattribute(self):
         """Context stops at a blank line.
 
         Widening it past the paragraph boundary made the checker MISS a planted wrong
         claim: an unrelated "template" two paragraphs up re-attributed an OliverCode
-        claim to the template hook, where the wrong number happened to be right.
+        claim to the template hook, where the wrong number happened to be right. The
+        planted number is the template's total, so reattribution would hide it.
         """
         self.assertTrue(self._fails_after(
             "docs/TROUBLESHOOTING.md", "## Commits are passing gates",
             "The template is unrelated to what follows.\n\n"
-            "All six gates run in this repo.\n\n## Commits are passing gates"))
+            f"All {cc._hook_totals(REPO_ROOT)[0]['template']} gates run in this repo.\n\n"
+            "## Commits are passing gates"))
 
     def test_catches_the_word_form_of_a_wrong_claim(self):
         self.assertTrue(self._fails_after(
@@ -139,6 +141,33 @@ class TestMutations(unittest.TestCase):
         would 'pass' without testing anything."""
         with tempfile.TemporaryDirectory(prefix="olivercode-gates-") as tmp:
             self.assertEqual(cc.check_all(_sandbox(Path(tmp) / "oc")), [])
+
+
+class TestFeatureMapCompleteness(unittest.TestCase):
+    """FEATURE-MAP.md asserts it indexes every capability under scripts/."""
+
+    def test_an_unlisted_script_is_caught(self):
+        with tempfile.TemporaryDirectory(prefix="olivercode-fm-") as tmp:
+            root = Path(tmp)
+            (root / "docs").mkdir()
+            (root / "scripts").mkdir()
+            (root / "docs" / "FEATURE-MAP.md").write_text("| scripts/listed.sh | x |\n")
+            (root / "scripts" / "listed.sh").write_text("exit 0\n")
+            (root / "scripts" / "unlisted.sh").write_text("exit 0\n")
+            subprocess.run(["git", "init", "-q", "."], cwd=root, check=True)
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+            failures = cc.check_feature_map_completeness(root)
+            self.assertEqual(len(failures), 1)
+            self.assertIn("scripts/unlisted.sh", failures[0])
+
+    def test_every_exemption_is_stated_in_the_doc_too(self):
+        """The code's exempt list and the doc's stated scope must agree, or the
+        exemption becomes a place to hide an undocumented capability."""
+        fm = (REPO_ROOT / "docs" / "FEATURE-MAP.md").read_text(encoding="utf-8")
+        for rel in cc.FEATURE_MAP_EXEMPT:
+            if rel.endswith("__init__.py"):
+                continue
+            self.assertIn(rel, fm, f"{rel} is exempt in code but not explained in the doc")
 
 
 if __name__ == "__main__":

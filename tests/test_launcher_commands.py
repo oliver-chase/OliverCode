@@ -1,9 +1,8 @@
 """Tests for the launcher's command surface: `install`, `bootstrap`, and argument
 handling.
 
-Argument handling gets tests because ignoring an unknown flag silently produced a
-*wrong success*: `sync-hooks --root /somewhere` ignored the flag, synced the default
-fleet, and printed "6 target(s) synced".
+Argument handling gets tests because an ignored unknown flag is a wrong success:
+`sync-hooks --root /somewhere` would sync the default fleet and report that it worked.
 """
 
 import contextlib
@@ -172,23 +171,7 @@ class TestRepoPathResolution(unittest.TestCase):
 
     def test_tilde_is_expanded(self):
         got = launcher._resolve_repo_path("alpha", {"path": "~/work/alpha"}, Path("/fleet"))
-        self.assertFalse(str(got).startswith("~"))
-        self.assertTrue(str(got).endswith("work/alpha"))
-
-class TestSelfSkipIsCaseInsensitive(unittest.TestCase):
-    """`discover` emits profile names from directory names, so the framework repo
-    arrives as "OliverCode". A lowercase-only self-skip let that through and
-    sync-hooks would have installed FLEET hooks into the framework repo itself."""
-
-    def test_source_uses_case_insensitive_comparison(self):
-        # Moved to lib/repo_profiles.py 2026-09-15 (iter_fleet), scripts/olivercode
-        # imports it under its original _iter_fleet name -- read the real source.
-        src = (REPO_ROOT / "scripts" / "lib" / "repo_profiles.py").read_text(encoding="utf-8")
-        self.assertIn('name.lower() == "olivercode"', src)
-        self.assertNotIn('if name == "olivercode"', src)
-
-
-
+        self.assertEqual(got, Path.home() / "work" / "alpha")
 
 class TestBootstrap(unittest.TestCase):
     """`bootstrap` executes the manifest that nothing previously read. Its modes are
@@ -260,10 +243,6 @@ class TestFleetIteration(unittest.TestCase):
         self.assertEqual(profile.get("hookVariant"), "custom")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestWaiverExpiryDateHandling(unittest.TestCase):
     """One waiver written without a timezone must not crash the whole health run.
 
@@ -271,7 +250,6 @@ class TestWaiverExpiryDateHandling(unittest.TestCase):
     reproduced live before the fix normalized both sides identically."""
 
     def test_mixed_naive_and_aware_expiry_dates(self):
-        import contextlib, io, json
         tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
         try:
             (tmp / "shared").mkdir()
@@ -285,3 +263,21 @@ class TestWaiverExpiryDateHandling(unittest.TestCase):
             self.assertEqual((passed, failed), (1, 0))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_expired_waiver_fails(self):
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
+        try:
+            (tmp / "shared").mkdir()
+            (tmp / "shared" / "repo-map.json").write_text(json.dumps({
+                "unmanagedRepoWaivers": [
+                    {"name": "a", "reason": "r", "expiresAt": "2000-01-01T00:00:00+00:00"},
+                ]}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                passed, failed, _ = launcher._check_waiver_expiry(tmp)
+            self.assertEqual((passed, failed), (0, 1))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

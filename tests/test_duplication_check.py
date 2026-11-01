@@ -1,12 +1,8 @@
 """Tests for the cross-doc duplication check. GATE-DUPLICATION-1 in docs/DECISIONS.md.
 
-This gate landed in the same session that reviewed it and was found to have zero
-regression tests -- exactly the falsifiability gap its own sibling checkers
-(falsifiability_check.py, hook_drift_check.py) were each built with tests to avoid.
-These replay the real behavior: a genuine cross-file duplicate is caught, a declared
-marker suppresses it, a short overlap under the window is not noise, and ablating a
-declared marker re-exposes the duplicate it was masking -- the same check done by hand
-against the live repo when the gate was built, now pinned.
+A genuine cross-file duplicate is caught, a declared marker suppresses it, a short
+overlap under the window is not noise, and ablating a declared marker re-exposes the
+duplicate it was masking.
 """
 
 from __future__ import annotations
