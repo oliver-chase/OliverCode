@@ -44,8 +44,6 @@ PLACEHOLDER_CHARS = set("<>*|$")
 DOWNSTREAM_RELATIVE = frozenset(
     {
         "docs/repo-structure-contract.md",
-        "docs/SETUP_MODES.md",
-        "docs/MANUAL_SETUP.md",
         # OliverCode keeps its own at the repo root; `docs/ARCHITECTURE.md` only ever
         # names a downstream repo's copy (e.g. in docs/ADOPTING.md's rewrite template).
         "docs/ARCHITECTURE.md",
@@ -55,9 +53,7 @@ DOWNSTREAM_RELATIVE = frozenset(
         "scripts/check-structure-contract.mjs",
         "scripts/check-planning-doc-governance.py",
         "scripts/check-backlog-hygiene.mjs",
-        "scripts/oc-supabase-keepalive.sh",
         ".githooks/pre-commit-private",
-        "supabase/keepalive.sql",
     }
 )
 

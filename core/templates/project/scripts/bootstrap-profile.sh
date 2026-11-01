@@ -4,12 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROFILE="local-runtime"
-MODE="repo-local"
 RUN_VALIDATE=0
 
 usage() {
   cat <<EOF
-Usage: $0 [--profile repo-contract-only|local-runtime|private-overlay] [--mode repo-local|vault-integrated] [--validate]
+Usage: $0 [--profile repo-contract-only|local-runtime|private-overlay] [--validate]
 EOF
 }
 
@@ -18,7 +17,6 @@ while [[ $# -gt 0 ]]; do
     # `shift 2` on a value-taking flag dies bare under set -e if the flag is
     # the last argument (nothing left to shift); check first for a clean FAIL.
     --profile) [[ $# -ge 2 ]] || { echo "FAIL --profile requires a value" >&2; exit 1; }; PROFILE="$2"; shift 2 ;;
-    --mode) [[ $# -ge 2 ]] || { echo "FAIL --mode requires a value" >&2; exit 1; }; MODE="$2"; shift 2 ;;
     --validate) RUN_VALIDATE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "FAIL unknown argument: $1" >&2; usage >&2; exit 1 ;;
@@ -28,11 +26,6 @@ done
 case "$PROFILE" in
   repo-contract-only|local-runtime|private-overlay) ;;
   *) echo "FAIL invalid profile: $PROFILE" >&2; exit 1 ;;
-esac
-
-case "$MODE" in
-  repo-local|vault-integrated) ;;
-  *) echo "FAIL invalid mode: $MODE" >&2; exit 1 ;;
 esac
 
 mkdir -p "$REPO_ROOT/.secrets"
@@ -55,7 +48,7 @@ if [[ "$PROFILE" == "local-runtime" || "$PROFILE" == "private-overlay" ]]; then
 fi
 
 if [[ "$RUN_VALIDATE" -eq 1 ]]; then
-  bash "$REPO_ROOT/scripts/run-profile-checks.sh" --profile "$PROFILE" --mode "$MODE"
+  bash "$REPO_ROOT/scripts/run-profile-checks.sh" --profile "$PROFILE"
 else
-  echo "bootstrap complete: profile=$PROFILE mode=$MODE"
+  echo "bootstrap complete: profile=$PROFILE"
 fi

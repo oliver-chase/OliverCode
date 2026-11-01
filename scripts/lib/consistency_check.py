@@ -266,40 +266,6 @@ def check_gate_integrity(repo_root: Path) -> list[str]:
     return failures
 
 
-# Data loaders with no entry point. FEATURE-MAP.md states this exclusion explicitly, so
-# the list here and the sentence there must agree -- that is the whole point of the check.
-FEATURE_MAP_EXEMPT = {
-    "scripts/lib/__init__.py",
-    "scripts/lib/repo_profiles.py",
-    "scripts/lib/token_policy.py",
-    "scripts/lib/local_config.py",
-}
-
-
-def check_feature_map_completeness(repo_root: Path) -> list[str]:
-    """FEATURE-MAP.md claims to index every capability. Hold it to that.
-
-    The file says "If a capability exists and is not listed here, this map is wrong" --
-    a testable invariant that nothing tested. Five scripts were missing when this was
-    first run, three of them user-invocable QA checkers that CI itself calls.
-    """
-    fm_path = repo_root / "docs" / "FEATURE-MAP.md"
-    if not fm_path.is_file():
-        return ["  [FEATURE MAP] docs/FEATURE-MAP.md is missing"]
-    fm = fm_path.read_text(encoding="utf-8")
-
-    missing = [
-        rel for rel in _tracked(repo_root, "scripts/")
-        if rel not in FEATURE_MAP_EXEMPT and rel not in fm
-    ]
-    return [
-        f"  [FEATURE MAP] {rel} is not listed in docs/FEATURE-MAP.md, which claims to index "
-        f"every capability. Add a row, or add it to FEATURE_MAP_EXEMPT with the exclusion "
-        f"stated in the doc too."
-        for rel in sorted(missing)
-    ]
-
-
 def check_contract_reachability(repo_root: Path) -> list[str]:
     """Every contract is pointed AT by something. A contract nothing references is
     worse than a deleted one: it stays in the tree, drifts because no reader arrives,
@@ -339,14 +305,10 @@ def check_contract_reachability(repo_root: Path) -> list[str]:
 
     return [
         f"  [CONTRACT ORPHAN] {rel} is referenced by no other tracked file. Point at it "
-        f"from docs/FEATURE-MAP.md, or delete it -- an unreferenced contract is one the "
+        f"from a doc, or delete it -- an unreferenced contract is one the "
         f"next reader will treat as current without knowing whether it is."
         for rel in orphans
     ]
-
-
-# Skill names this repo ships that read like prose, so a bare mention is not a reference.
-_NOT_A_CROSS_REF = {"plan"}
 
 
 def check_skill_cross_references(repo_root: Path) -> list[str]:
@@ -383,7 +345,6 @@ def check_all(repo_root: Path) -> list[str]:
         + check_gate_count(repo_root)
         + check_gate_integrity(repo_root)
         + check_gate_coverage_table(repo_root)
-        + check_feature_map_completeness(repo_root)
         + check_contract_reachability(repo_root)
         + check_skill_cross_references(repo_root)
     )

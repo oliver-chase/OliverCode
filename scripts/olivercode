@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.repo_profiles import load_repo_profiles, registry_file, registry_gap  # noqa: E402
 from lib.repo_profiles import resolve_repo_path as _resolve_repo_path  # noqa: E402
 from lib.repo_profiles import iter_fleet as _iter_fleet  # noqa: E402
-from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E402,F401
+from lib.skills_catalog import _load_skills  # noqa: E402
 from lib.health_checks import (  # noqa: E402,F401
     _check_waiver_expiry, _check_github_about,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
@@ -41,7 +41,7 @@ COMMANDS = [
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
-    ("olivercode health [--root DIR]", "Run health checks: dependencies, core entrypoints, placement drift"),
+    ("olivercode health [--root DIR]", "Run health checks: Claude Code hooks, placement drift"),
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run the audit skill's 3 static checks against this machine's skills folder + OliverCode's own skills"),
@@ -195,7 +195,7 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
 
     _report_claude_dir(oc_root)
     print(f"\nProfile skeleton — paste into {registry_file(oc_root, 'repo-profiles.json')} under \"profiles\",")
-    print("then add each repo's token_policy (see docs/TOKEN-POLICY.md):\n")
+    print("and replace <command> with each repo's validation command:\n")
     skeleton = {
         name: {"name": name, "path": str(repo), "canonicalValidationCommand": "<command>"}
         for name, repo, _, _ in found
@@ -213,8 +213,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
 
     Honours the manifest's modes: `strict` files are overwritten (their contract is
     byte-identity with the template), `presence` files are only created when missing so
-    repo-specific content is never clobbered. `conditionalFiles` are reported, not copied
-    -- they depend on profile flags the target repo may not set.
+    repo-specific content is never clobbered.
     """
     manifest_path = oc_root / "shared" / "project-bootstrap-manifest.json"
     if not manifest_path.is_file():
@@ -268,12 +267,6 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     print(f"\n  {new} new, {overwritten} overwritten (strict), {kept} kept (presence, already present)")
     for rel in missing_src:
         print(f"  [FAIL] template source missing from this checkout: {rel}")
-
-    conditional = manifest.get("conditionalFiles", [])
-    if conditional:
-        print("\n  Not copied — these depend on profile flags (see docs/KEEPALIVE-STANDARD.md):")
-        for entry in conditional:
-            print(f"    {entry['source']}  when {entry.get('condition', '?')}")
 
     if dry_run:
         print("\nRe-run without --dry-run to apply.")
@@ -613,19 +606,10 @@ class _HealthTally:
 
 
 def command_health(fleet_root: Path | None = None) -> int:
-    """Run health checks: dependency doc, core entrypoints, placement drift."""
+    """Run health checks: Claude Code hooks, control plane, placement drift."""
     print("OliverCode Health Check")
     print("=" * 40)
     t = _HealthTally()
-
-    # 1. Core entrypoints
-    print("\nCore entrypoints:")
-    checks = [
-        ("scripts/olivercode (CLI)", OC_ROOT / "scripts" / "olivercode"),
-        ("docs/FRAMEWORK-BOUNDARY.md", OC_ROOT / "docs" / "FRAMEWORK-BOUNDARY.md"),
-    ]
-    for name, fpath in checks:
-        t.ok(name) if fpath.exists() else t.fail(f"{name} — missing")
 
     # Claude Code hooks. Only a machine where install linked this checkout is expected
     # to carry them; a fresh clone or CI runner has not installed, which is a skip.
@@ -908,7 +892,7 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
 
     Also deploys `pre-push` (force-push/history-rewrite block, secret scan on the push
     range). It has no public/private variant: what is safe to push does not differ by
-    repo visibility the way commit-time PII/token policy does, and `push-fleet` needs
+    repo visibility the way commit-time PII checks do, and `push-fleet` needs
     the same mechanical gate on every repo it touches.
 
     A repo's own `.githooks/pre-commit.local` is never written here. The private

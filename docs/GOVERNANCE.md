@@ -6,12 +6,7 @@ This document defines the current locked governance baseline for OliverCode.
 
 `bash scripts/validate.sh` runs all active gates from repo root:
 - `bash scripts/validate.sh` — pre-commit gates, doc/code consistency, reference integrity, tests
-- `bash scripts/validate.sh --evidence <file>` — pre-commit + orchestration gatekeeper. `scripts/orchestration-gatekeeper.py` validates WRITE MODE evidence against the fleet registry (`repo-profiles.json`; `docs/DECISIONS.md` `REGISTRY-PRIVATE-1` says where) and `shared/task-policies/`.
-- `bash scripts/validate.sh --gatekeeper-only <file>` — gatekeeper only
 - `bash scripts/validate.sh --check-consistency` — doc/code consistency only
-
-The gatekeeper's `--check-token-policy` mode is already wired into the commit hook (Gate 8);
-`--evidence <file>` runs the fuller check on demand, for WRITE MODE completion verification.
 
 Fail-closed: any failed gate blocks the commit. There is no bypass mode.
 (OliverCode ships `.github/workflows/framework-ci.yml` — health, validate.sh,
@@ -50,18 +45,11 @@ silently: doc/code consistency (`scripts/lib/consistency_check.py` — skills in
 gate-count claims) and internal reference integrity (`scripts/link-check.sh` — markdown links
 plus backtick repo paths).
 
-It also fails closed on **skill efficiency** for this repo's own `skills/`
-(`scripts/lib/skill_efficiency_check.py`, `GATE-SKILL-EFFICIENCY-1` in `docs/DECISIONS.md`).
-A `SKILL.md` over the word cap with no `references/` split, a paragraph restated across
-skills or inside one, and any of the six named MCP-call anti-patterns each fail the run.
-`core/contracts/SKILL_EFFICIENCY_STANDARD.md` holds the rules and the module holds the
-thresholds.
-
 ## Gate Classes
 
 **Gate coverage is not uniform across repos, and the difference matters.** OliverCode runs
-eleven gates on itself. A repo your fleet adopts runs nine, because two of the eleven
-check things that only exist in the framework repo. A repo deployed with the private variant
+nine gates on itself. A repo your fleet adopts also runs nine, but swaps the framework's
+contract-integrity gate for planning doc governance. A repo deployed with the private variant
 runs four. This table is the one home for that. Anywhere else that names a count points here.
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
@@ -72,21 +60,19 @@ runs four. This table is the one home for that. Anywhere else that names a count
 | Deleted repo refs | References to removed repos — an opt-in extension point. `DELETED_REPO_PATTERNS` in the hook is empty by default and the gate reports *skipped*, not passed, until you add names | 4 | 4 | — |
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential (checked via `gh api user -i`, not the remote URL scheme) | 5 | 5 | — |
 | Contract integrity | Hardcoded `/workspace/` container paths in staged code. `OLIVERCODE_DEPENDENCY.md` declaring paths that don't exist | 6 | — | — |
-| Planning doc governance | Contract violations in staged planning docs. Conditional: runs only where `scripts/check-planning-doc-governance.py` exists, and reports *skipped* where it does not. OliverCode has no such checker, so in its own hook this gate always reports *skipped*. It stays in that hook because the gate tests run against it, and those tests cover the copy every adopted repo runs | 7 | 6 | — |
-| Token policy | Invalid token-policy declarations in repo profiles | 8 | — | — |
-| Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 9 | 7 | — |
-| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Current-state-only, fleet-wide: git is the archive, so a superseded file is deleted or replaced, never parked | 10 | 8 | 3 |
-| Writing clarity (asd-ste100) | Warns on lint findings and blocks in two cases: `ste-lint-joined.py` is missing beside the hook, or a staged skill file cites an issue number that does not exist (`GATE-CITATION-1`). It checks a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` with strict-mode ASD-STE100 findings (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Long sentences are measured after `core/templates/project/ste-lint-joined.py` (installed beside each hook) joins hard-wrapped lines, so wrapping a paragraph cannot hide one. Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 11 | 9 | 4 |
-| **Total** | | **11** | **9** | **4** |
+| Planning doc governance | Contract violations in staged planning docs. Conditional: runs only where `scripts/check-planning-doc-governance.py` exists, and reports *skipped* where it does not | — | 6 | — |
+| Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 7 | 7 | — |
+| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Current-state-only, fleet-wide: git is the archive, so a superseded file is deleted or replaced, never parked | 8 | 8 | 3 |
+| Writing clarity (asd-ste100) | Warns on lint findings and blocks in two cases: `ste-lint-joined.py` is missing beside the hook, or a staged skill file cites an issue number that does not exist (`GATE-CITATION-1`). It checks a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` with strict-mode ASD-STE100 findings (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Long sentences are measured after `core/templates/project/ste-lint-joined.py` (installed beside each hook) joins hard-wrapped lines, so wrapping a paragraph cannot hide one. Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 9 | 9 | 4 |
+| **Total** | | **9** | **9** | **4** |
 
 Numbers are the gate's position in that hook's run order, so the same gate can carry a
-different number in different hooks — planning-doc governance is Gate 7 in OliverCode and
-Gate 6 in an adopted repo. Read the column, not the number.
+different number in different hooks. Read the column, not the number.
 
-The last two rows are OliverCode-only by design, not by oversight. **Contract integrity** validates
-`OLIVERCODE_DEPENDENCY.md` and the framework's own container-path rules. **Token policy**
-validates `repo-profiles.json`, which only the framework repo holds. Neither has anything to
-check in a product repo, so neither ships in the template.
+**Contract integrity** is OliverCode-only. It validates `OLIVERCODE_DEPENDENCY.md` and the
+framework's own container-path rules, which a product repo does not have, so it does not ship
+in the template. **Planning doc governance** ships in the template only, because OliverCode
+carries no planning-doc checker.
 
 Which hook a repo receives:
 

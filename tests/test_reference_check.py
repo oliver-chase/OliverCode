@@ -91,7 +91,7 @@ class TestWhatCounts(unittest.TestCase):
     def test_exempt_paths_are_neither_counted_nor_failed(self):
         self.write(
             "docs/GUIDE.md",
-            f"{BT}docs/<name>.md{BT} {BT}docs/SETUP_MODES.md{BT} {BT}.claude-optimization/memory/MEMORY.md{BT}\n",
+            f"{BT}docs/<name>.md{BT} {BT}docs/repo-structure-contract.md{BT} {BT}.claude-optimization/memory/MEMORY.md{BT}\n",
         )
         self.assertEqual((0, []), check_references(self.repo))
 

@@ -12,9 +12,9 @@ Five things, and it is worth being precise about which are mechanical and which 
 
 | You get | How it reaches you | Actually enforced? |
 |---|---|---|
-| Pre-commit gates — nine in an adopted repo, eleven in OliverCode itself (`docs/GOVERNANCE.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes** — fires on every `git commit`. Only `--no-verify` skips it, and the commit guard below refuses that inside Claude Code |
+| Pre-commit gates — nine in an adopted repo and in OliverCode itself (`docs/GOVERNANCE.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes** — fires on every `git commit`. Only `--no-verify` skips it, and the commit guard below refuses that inside Claude Code |
 | Local validation | `bash scripts/validate.sh` — gates, doc/code consistency, reference integrity, tests | **Yes**, when run. Nothing auto-runs it |
-| Contracts, templates, workflows | `core/` — inherited by every repo via the bootstrap manifest | No — instruction text an agent follows |
+| Contracts and templates | `core/` — inherited by every repo via the bootstrap manifest | No — instruction text an agent follows |
 | Claude Code hooks (session check, commit guard, early-stop guard) | `~/.claude/settings.json`, written by `olivercode install` | **Yes**, inside Claude Code sessions. `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
 | Skills | `~/.claude/skills/` symlinks, installed by `olivercode install` | No — the agent chooses to load them |
 
@@ -36,10 +36,9 @@ OliverCode
 ├── core/
 │   ├── contracts/     structural standards all repos follow
 │   ├── hooks/         the pre-commit gates, built into each hook by scripts/build-hooks.py
-│   ├── templates/     project template — the single template home
-│   └── workflows/     repeatable procedures
+│   └── templates/     project template — the single template home
 ├── skills/            engineering-method + framework tooling skills (symlinked into ~/.claude/skills/)
-├── shared/            bootstrap manifest, task policies, the empty example registry
+├── shared/            bootstrap manifest, the empty example registry
 ├── scripts/           launcher (olivercode), validation, qa checkers, Claude Code hooks
 ├── docs/              current-state authority docs (one concept, one home)
 ├── tests/             tests for the gates, checkers, hooks and launcher
