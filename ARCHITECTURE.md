@@ -2,11 +2,11 @@
 
 > One shared, git-tracked orchestration layer for Claude Code — skills, contracts, templates, and governance gates that load automatically in every session and every repo, so no agent ever works without the rules.
 
-## Why This Exists
+## Why this exists
 
-Working across many repos without a shared layer fails in consistent ways: the same engineering-method knowledge gets reinvented per repo, agent-rules files that aren't named exactly `CLAUDE.md` silently never load, skills accumulate in scattered unsynced locations, and docs drift from what code does. OliverCode fixes this by making the shared layer load automatically instead of requiring discovery.
+Working across many repos without a shared layer fails in consistent ways: the same engineering-method knowledge gets reinvented per repo, agent-rules files that aren't named exactly `CLAUDE.md` silently never load, skills accumulate in scattered unsynced locations, and docs drift from what code does. OliverCode fixes this by loading the shared layer automatically, so no session has to discover it.
 
-## What You Actually Get
+## What you actually get
 
 Five things, and it is worth being precise about which are mechanical and which are not:
 
@@ -18,11 +18,11 @@ Five things, and it is worth being precise about which are mechanical and which 
 | Claude Code hooks (session check, commit guard, early-stop guard) | `~/.claude/settings.json`, written by `olivercode install` | **Yes**, inside Claude Code sessions. `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
 | Skills | `~/.claude/skills/` symlinks, installed by `olivercode install` | No — the agent chooses to load them |
 
-The honest summary: **the hooks are the only things that block you.** Everything else is a rule an agent follows because it is loaded, not because it is enforced. `CONTRIBUTING.md`'s "Enforcement Reality" section is the one home for that distinction.
+The honest summary: **the hooks are the only things that block you.** Everything else is a rule an agent follows because it is loaded, not because it is enforced. `CONTRIBUTING.md`'s "Enforcement reality" section is the one home for that distinction.
 
 **Hook enforcement fails open.** `docs/TROUBLESHOOTING.md` ("Commits are passing gates that should have blocked them") has the mechanism and the fix.
 
-## The Two Layers
+## The two layers
 
 **1. OliverCode (this repo).** Contracts, skills, templates, launcher and governance hooks. The fleet registry (`shared/repo-profiles.json`) ships as an empty example. An operator's real registry lives in a private repo under `olivercode/`, named through `privateRepos` in `olivercode.local.json`, so a fork carries none of it.
 
@@ -47,7 +47,7 @@ OliverCode
 └── runtime/control-plane/  (gitignored) private machine state
 ```
 
-## How Activation Works
+## How activation works
 
 Nothing here depends on an agent choosing to look:
 
@@ -60,11 +60,11 @@ Because the global `CLAUDE.md` loads in sessions whose working directory is almo
 
 Anything that must always apply is enforced as a hook, not as an instruction an agent might not read.
 
-## Getting Started
+## Getting started
 
 `docs/ADOPTING.md` is the onboarding path — clone, `install`, register your fleet, `sync-hooks`, verify with a probe that proves the gates actually block. The `olivercode-adoption` skill runs it as a guided, non-destructive audit.
 
-## Operating Principles
+## Operating principles
 
 - Claude Code is the sole runtime. Anthropic is the sole model provider. By design, not as an interim state.
 - Fail-closed before fail-open. No capability claim without a runnable verification.
@@ -72,6 +72,6 @@ Anything that must always apply is enforced as a hook, not as an instruction an 
 - Project-specific behavior lives in the owning project repo, never here.
 - A rule without a gate regresses. When a finding class keeps recurring, it becomes a check.
 
-## Dependency Direction
+## Dependency direction
 
 Product repos and local state depend on OliverCode. OliverCode depends on nothing — see `docs/FRAMEWORK-BOUNDARY.md`.

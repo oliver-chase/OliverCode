@@ -10,13 +10,13 @@ description: >
   Also trigger when a skill's own routing names "real new scope" that needs tracking before it gets built.
 ---
 
-# Backlog Management
+# Backlog management
 
 ## Which repo, which config
 
-**Find the config, every time, before running anything**. Read the current repo's own `CLAUDE.md` for a line naming where `backlog-config.json` lives. This matches `plan`'s own "Plan File Location" convention for the same problem. A repo's own `CLAUDE.md` may name no config file — that means it hasn't adopted this skill yet. Ask the user where one should live, write it there, and name it in that repo's `CLAUDE.md` in the same session. Never guess a path or silently skip this skill.
+**Find the config, every time, before running anything**. Read the current repo's own `CLAUDE.md` for a line naming where `backlog-config.json` lives. This matches `plan`'s own "Plan file location" convention for the same problem. A repo's own `CLAUDE.md` may name no config file — that means it hasn't adopted this skill yet. Ask the user where one should live, write it there, and name it in that repo's `CLAUDE.md` in the same session. Never guess a path or silently skip this skill.
 
-## File a Story or Epic
+## File a story or epic
 
 1. **Search first**. Use `references/project-fields.md`'s search command, loading the repo's config first. An existing open item wins. Extend it with a comment. Never create a duplicate.
 2. **Classify the work**. A quick fix — a missing fallback, a stale word, a small config change with an obvious safe default — gets fixed inline. No Project item. Real new scope — a schema change, a new mechanism, a cross-family contract — gets filed before it gets built. Follow the repo's own quick-wins-only convention if it states one. Assume the same split if it doesn't.
@@ -35,11 +35,11 @@ description: >
 XL or L almost always means the item touches N things across the fleet. That is the size where a memory-based "got them all" claim is most likely wrong. Seen live 2026-09-22: its own stated audit command was `.md`-only. It missed 2 real `.py` citations of the exact same string it meant to enumerate. The issue read as thorough because it named a real command. It still had a gap, because nobody re-ran that command against a wider net before filing.
 
 1. **Audit first, as its own Story, before any fix Story exists**. The audit's output is a real, re-runnable command (a grep, a script) stated in the issue body — not a remembered list. Anyone should be able to run that exact command fresh and get the same count.
-2. **Split the fix by the real boundary** — family, file type, whatever the actual seams are — one Story per boundary. Never one Story doing all N edits in a single unverified pass. This is the same Epic/Story split this skill already uses, applied inside one big change instead of across a whole initiative.
+2. **Split the fix by the real boundary** — family, file type, whatever the actual seams are — one Story per boundary. Never one Story doing all N edits in a single unverified pass. This is the same Epic/Story split this skill already uses, applied inside one big change.
 3. **Before-count and after-count, same command, every time**. Run the audit command and record N. Fix. Re-run the identical command and read the real number left. That number is 0 or a real, expected residual, named explicitly, never silent. The close-out evidence comment states both numbers. "Fixed them all" with no number attached is not evidence.
 4. **A wider-than-expected audit result is itself a finding**. The real command may turn up a file type, a family, or a count the drafting session didn't expect. Comment that the same way you comment a correction. Don't quietly narrow scope to match what the draft assumed.
 
-## Close a Story or Epic
+## Close a story or epic
 
 1. Move Status to `Complete`.
 2. Comment the evidence — files touched, what actually shipped. One comment per real change. Never rewrite the issue body to reflect the final state. The comment trail is the record.
@@ -59,7 +59,7 @@ Report one grouped digest. Say "Nothing due" if genuinely clean.
 
 ## The gap-analysis reflex
 
-A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism for gap-analysis-before-build. Real new scope gets filed here before it gets built, not on request. A calling skill states this once in its own text ("file via `backlog-management`") rather than repeating this skill's procedure inline.
+A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism for gap-analysis-before-build. Real new scope gets filed here before it gets built, not on request. A calling skill states this once in its own text ("file via `backlog-management`") and does not repeat this skill's procedure inline.
 
 ## Boundaries
 

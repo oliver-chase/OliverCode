@@ -1,4 +1,4 @@
-# OliverCode Launcher Contract
+# OliverCode launcher contract
 
 Current lightweight launcher surface:
 - `olivercode bootstrap <repo-path> [--dry-run]` — stamps the project template into a repo per `shared/project-bootstrap-manifest.json`, creating its required directories. Honours the manifest's modes: `strict` files are overwritten (byte-identity is their contract), `presence` files only created when missing, so repo-specific content is never clobbered. `--dry-run` shows the plan and writes nothing.
@@ -16,7 +16,7 @@ Current lightweight launcher surface:
 OliverCode checkout (the sibling layout). A fork whose repos live elsewhere needs it, and
 without it every repo silently reports as "not present on this machine".
 
-Unknown arguments are rejected with a nonzero exit rather than ignored. Silently ignoring
+Unknown arguments are rejected with a nonzero exit. Silently ignoring
 one is a wrong success: `sync-hooks --root /elsewhere` used to ignore the flag, sync the
 default fleet, and report that it had worked.
 

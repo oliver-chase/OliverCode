@@ -1,4 +1,4 @@
-# Public / Private Repository Standard
+# Public / private repository standard
 
 Status: Active
 Effective Date: 2026-05-23

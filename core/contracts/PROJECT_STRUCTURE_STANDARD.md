@@ -1,4 +1,4 @@
-# Project Structure and Hygiene Standard
+# Project structure and hygiene standard
 
 Status: Active
 Effective Date: 2026-05-01
@@ -19,26 +19,26 @@ Every repo's backlog lives in a GitHub Project named by a `backlog-config.json` 
 own `CLAUDE.md` points to — `skills/backlog-management/SKILL.md` governs it. No repo keeps a
 file-based story registry under .github.
 
-## Core Invariants
+## Core invariants
 
 1. Every repo has exactly one active backlog source.
 2. Each repo must keep `docs/repo-structure-contract.md` current.
 
-## Epic and Commit Hygiene
+## Epic and commit hygiene
 
 1. Every commit maps to exactly one owning epic.
 2. Commit message format: `<type>(epic-<name>): <summary>`.
 3. Commit body must include `Tickets:` and `Scope:` lines.
 4. Mixed-epic work must be split into separate commits.
 
-## Test Hygiene
+## Test hygiene
 
 1. Every behavior change updates or adds automated tests in the correct lane (contract, regression, visual, integration).
 2. Every story needs at least one negative-path assertion.
 3. `Verified: true` is blocked unless fresh evidence is present in git.
 4. Archived (not removed) features must retain non-regression tests for data/telemetry paths.
 
-## Secret Hygiene
+## Secret hygiene
 
 Where a secret, credential, or runtime artifact goes is `core/contracts/FILE_LOCATION_STANDARD.md`'s rule, not restated here. `.env.local` is the local holding area during rotation, and tracked examples show variable names and placeholders only.
 
@@ -47,19 +47,19 @@ Where a secret, credential, or runtime artifact goes is `core/contracts/FILE_LOC
 1. Each repo's GitHub Project is the one place to list open stories, epics, and unassigned entries — `backlog-management`'s triage check covers this.
 2. Keep archive indexes for deferred functionality with clear re-enable instructions.
 
-## Shared Quality Baseline Hygiene
+## Shared quality baseline hygiene
 
 1. Managed files must stay byte-identical across all repos where they are marked strict in `shared/project-bootstrap-manifest.json`.
 2. What the managed files are, and the change-canonical-first rule: `QUALITY_BASELINE.md`.
 
-## Required Base Paths (All Repos)
+## Required base paths (all repos)
 
 1. `README.md`
 2. `CLAUDE.md` — the only agent-rules file. Claude Code is this framework's sole runtime, so there's no separate AGENTS.md to keep in sync
 3. `docs/repo-structure-contract.md`
 4. A `backlog-config.json` file under `docs/` — names the repo's GitHub Project
 
-## Agent Read Order
+## Agent read order
 
 1. `README.md`
 2. `CLAUDE.md`

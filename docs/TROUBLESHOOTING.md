@@ -1,4 +1,4 @@
-# OliverCode Troubleshooting Guide
+# OliverCode troubleshooting guide
 
 Purpose: short current-state fixes for common operator failures.
 

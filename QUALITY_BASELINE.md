@@ -1,8 +1,8 @@
-# Quality Baseline Standard
+# Quality baseline standard
 
 This repository is the **canonical framework repo** -- it defines the quality standards that all OliverCode projects follow.
 
-## Source of Truth
+## Source of truth
 
 All managed quality files originate here and are synced to consuming projects:
 

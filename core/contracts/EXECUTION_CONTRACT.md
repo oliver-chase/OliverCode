@@ -1,4 +1,4 @@
-# Execution Contract
+# Execution contract
 
 Every change, in any project, follows this locked process. No gate is skippable.
 
@@ -8,7 +8,7 @@ file owns the gate and evidence mechanics that loop ends in: what runs, what blo
 the fleet registry behind it (`repo-profiles.json`; `docs/DECISIONS.md` `REGISTRY-PRIVATE-1`
 says where).
 
-## The Process
+## The process
 
 ```
 User says "yes" / approves change
@@ -45,7 +45,7 @@ User says "yes" / approves change
 before commit. There is no bypass mode. The gate list and what each one blocks lives in
 `docs/GOVERNANCE.md` — one home, so a hook change updates exactly one table.
 
-## Session Hooks (Claude Code, not git)
+## Session hooks (Claude Code, not git)
 
 `.githooks/pre-commit` runs inside git. Three Claude Code hooks run inside every
 session, and `olivercode install` writes them into `~/.claude/settings.json`, each
@@ -66,8 +66,8 @@ linked this checkout.
 
 ## Completion
 
-Run the repo's canonical validation before committing, and stop on failure rather than
-claiming completion. The mechanically enforced requirement is the pre-commit hook plus the
+Run the repo's canonical validation before committing, and stop on failure.
+A failing run never counts as completion. The mechanically enforced requirement is the pre-commit hook plus the
 repo's own `scripts/validate.sh`.
 
 ### Authority hierarchy
@@ -79,7 +79,7 @@ build, not a lint pass) as the thing that decides whether the change is sound. P
 gates catch secrets, structure, and hygiene. They do not catch a block-scoped `const`
 referenced before declaration, which only a full type-checking build surfaces.
 
-## Secrets vs Git Boundary
+## Secrets vs Git boundary
 
 ```
 project/

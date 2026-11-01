@@ -25,7 +25,7 @@ Two layers, and it matters which is which:
 | Activation | `~/.claude/CLAUDE.md` + `~/.claude/skills/*` symlinks | no, per machine | your machine |
 
 Your fleet's real names and config live in one registry file, and there is no placeholder
-layer to keep in sync with it. `ARCHITECTURE.md`'s "The Two Layers" explains where that file lives.
+layer to keep in sync with it. `ARCHITECTURE.md`'s "The two layers" explains where that file lives.
 
 ## Step 0 — Prove the clone is sound before changing anything
 
@@ -48,14 +48,14 @@ bash scripts/qa/check-fork-usable.sh
 
 That check also walks this guide's own load-bearing steps against two throwaway repos --
 fleet registration, `sync-hooks`, the secret probe, and `health` -- so the
-instructions below are verified, not just written. If it passes, the fork is sound and every
+instructions below are verified by running them. If it passes, the fork is sound and every
 failure below is a setup problem, not a repo problem. Run it after any change to the
 framework's own plumbing. It is also Phase 3 of `scripts/qa/full-qa-pass.sh`.
 
 **Enable CI in your fork.** `.github/workflows/framework-ci.yml` ships ready to run, but is
-paused on the origin repo — `docs/GOVERNANCE.md`'s "Unified Validation Entrypoint" section
+paused on the origin repo — `docs/GOVERNANCE.md`'s "Unified validation entrypoint" section
 is the one home for why. Where CI is off, the local commands are the entire enforcement
-layer — run `full-qa-pass.sh` before you push rather than assuming a build will catch it.
+layer — run `full-qa-pass.sh` before you push, because no build will catch it.
 
 ## Step 1 — Inventory before you touch anything
 
@@ -184,16 +184,7 @@ scripts/olivercode health         # confirms each repo's hooks are installed and
 `sync-hooks` resolves your fleet from the registry file named in Step 5 and expects those repos as
 siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below.
 Every repo reported as `[SKIP] not present on this machine` is one it did **not** govern.
-Read that list rather than the exit code.
-
-The writing-clarity gate reports findings in `SKILL.md`, `CLAUDE.md` and `references/*.md`
-files without blocking, so existing debt never stops a commit. To have its warnings separate
-that old debt from new findings, freeze the current counts once, right after `sync-hooks`,
-and commit the `.githooks/ste-baseline` file it writes in that repo:
-
-```bash
-python3 core/templates/project/write-ste-baseline.py /path/to/repo
-```
+Read that list, because the exit code does not show them.
 
 An adopted repo runs every gate except contract integrity, which checks
 things only OliverCode has. `docs/GOVERNANCE.md` has the coverage table.
@@ -201,7 +192,7 @@ things only OliverCode has. `docs/GOVERNANCE.md` has the coverage table.
 Know what you just installed: **hook enforcement fails open.** See
 `docs/TROUBLESHOOTING.md`'s "Commits are passing gates that should have blocked them" for
 why and how to fix it. `scripts/olivercode health` detects it fleet-wide — run it on a
-schedule, not just at setup. The Claude Code session check also reports it for the repo a
+schedule as well as at setup. The Claude Code session check also reports it for the repo a
 session opens.
 
 ## Step 6b — Stamp the project template into a repo (optional)
@@ -237,7 +228,7 @@ scripts/olivercode health         # symlinks + per-repo hook install state
 scripts/olivercode skills         # every skill discoverable
 ```
 
-Then prove enforcement actually fires, rather than assuming it:
+Then prove enforcement fires:
 
 ```bash
 cd <one of your repos>
@@ -245,7 +236,7 @@ bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, e
 ```
 
 `scripts/qa/probe-secret-gate.sh` is the one home for this probe — see its own header for why
-it writes straight into the repo instead of staging through `/tmp`.
+it writes straight into the repo and never stages through `/tmp`.
 
 If that commit succeeds, your hooks are not installed. Go back to Step 6.
 
@@ -335,7 +326,7 @@ existing setup — give each profile an explicit `path` in the registry file nam
 
 `path` accepts absolute, `~`-relative, or fleet-root-relative values, and `discover` emits it
 for you. Without it a repo is only findable at `<fleet-root>/<name>`, which is what makes a
-tidy sibling layout the easy path rather than the required one.
+tidy sibling layout the easy path and leaves it optional.
 
 If your repos DO share a parent that simply is not OliverCode's, pass `--root` instead:
 

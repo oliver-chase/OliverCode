@@ -33,7 +33,7 @@ TITLES = {
     "planning-docs": "Planning doc governance",
     "backlog-hygiene": "Backlog hygiene",
     "archived-content": "Archived content",
-    "writing-clarity": "Writing clarity (asd-ste100)",
+    "skill-citations": "Skill citations",
     "repo-local": "Repo-local gates",
 }
 # Runs after the numbered gates and prints no "Gate N/M" banner, so it is not counted.
@@ -48,19 +48,19 @@ VARIANTS = {
         "backlog_checker": "core/templates/project/scripts/check-backlog-hygiene.mjs",
         "gates": ["secrets", "emojis", "pii", "deleted-repos", "workflow-auth",
                   "contract-integrity", "backlog-hygiene", "archived-content",
-                  "writing-clarity"],
+                  "skill-citations"],
     },
     "core/templates/project/pre-commit": {
         "variant": "public repos",
         "backlog_checker": "scripts/check-backlog-hygiene.mjs",
         "gates": ["secrets", "emojis", "pii", "deleted-repos", "workflow-auth",
                   "planning-docs", "backlog-hygiene", "archived-content",
-                  "writing-clarity"],
+                  "skill-citations"],
     },
     "core/templates/project/pre-commit-private": {
         "variant": "private repos",
         "backlog_checker": "scripts/check-backlog-hygiene.mjs",
-        "gates": ["secrets", "emojis", "archived-content", "writing-clarity",
+        "gates": ["secrets", "emojis", "archived-content", "skill-citations",
                   "repo-local"],
     },
 }

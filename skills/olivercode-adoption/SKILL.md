@@ -3,7 +3,7 @@ name: olivercode-adoption
 description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode', 'audit my Claude config'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
 ---
 
-# OliverCode Adoption
+# OliverCode adoption
 
 Drive the whole setup so the user does not have to read the documentation first. You read it.
 They answer questions. `$OC/docs/ADOPTING.md` is the reference contract — consult it when you

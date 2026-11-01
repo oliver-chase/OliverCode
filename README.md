@@ -191,7 +191,7 @@ OliverCode tests for this failure mode in its own code. The test suite also deli
 
 ### Your data stays out of the harness
 
-OliverCode ships its fleet registry (`shared/repo-profiles.json`) as an empty example. Your real registry lives in a private repo under `olivercode/`, named in `olivercode.local.json` under `privateRepos`, so every device that clones that private repo gets it and a fork of OliverCode gets none of it. `ARCHITECTURE.md`'s "The Two Layers" has the detail.
+OliverCode ships its fleet registry (`shared/repo-profiles.json`) as an empty example. Your real registry lives in a private repo under `olivercode/`, named in `olivercode.local.json` under `privateRepos`, so every device that clones that private repo gets it and a fork of OliverCode gets none of it. `ARCHITECTURE.md`'s "The two layers" has the detail.
 
 ---
 

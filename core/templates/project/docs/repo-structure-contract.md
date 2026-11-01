@@ -1,8 +1,8 @@
-# Repo Structure Contract
+# Repo structure contract
 
 Status: Active
 
-## Canonical Contract Sources
+## Canonical contract sources
 
 1. `OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md`
 
@@ -11,7 +11,7 @@ Status: Active
 This repo uses the GitHub Project backlog profile. Its backlog is the GitHub Project named
 in `docs/backlog-config.json`, read and written by the `backlog-management` skill.
 
-## Required Structure
+## Required structure
 
 1. Root docs:
 - `README.md`
@@ -20,7 +20,7 @@ in `docs/backlog-config.json`, read and written by the `backlog-management` skil
 2. Backlog:
 - `docs/backlog-config.json` — the `backlog-management` skill's config for this repo's Project
 
-## Backlog and Evidence Paths
+## Backlog and evidence paths
 
 1. Active backlog source: the GitHub Project named in `docs/backlog-config.json`
 2. Story catalog source: the GitHub Project's issue list

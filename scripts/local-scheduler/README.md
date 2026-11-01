@@ -20,8 +20,7 @@ works, this works.
 One `launchd` agent fires `tick.py` every 15 minutes, plus once immediately on load (which
 also covers "the Mac just woke up"). `tick.py` itself decides what's actually due by
 checking marker files' elapsed time, not by exact-minute alignment -- a tick missed while
-the Mac sleeps just means the next one catches up, instead of silently skipping the way
-plain `cron` does.
+the Mac sleeps just means the next one catches up, where plain `cron` silently skips.
 
 - `push-fleet` -- every ~3 hours (see `tick.py`'s `JOBS` list for the exact number).
   Flushes already-committed work for OliverCode and the private repos. Never commits.
@@ -29,7 +28,7 @@ plain `cron` does.
   skills folder (`skillsRoot`) and OliverCode's own, writes findings to a log, never fixes anything.
 
 A failed job's marker is deliberately left untouched, so it stays "due" and the next tick
-(15 minutes later) retries, instead of waiting a full interval.
+(15 minutes later) retries without waiting a full interval.
 
 ## Moving to a new Mac
 

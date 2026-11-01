@@ -1,4 +1,4 @@
-# Quality Baseline Standard
+# Quality baseline standard
 
 This repository uses **shared, strict-managed quality files**.
 
@@ -15,7 +15,7 @@ Canonical source-of-truth (outside project docs):
 
 If one managed quality file changes in any project, the canonical file in `OliverCode` must be changed first and then synced to all projects. Runtime-minimal baseline lock is mandatory across managed repos. Local divergence is not the default path.
 
-## Sync Command
+## Sync command
 
 Run from OliverCode to deploy the current managed files and hooks to this repo:
 
@@ -23,7 +23,7 @@ Run from OliverCode to deploy the current managed files and hooks to this repo:
 scripts/olivercode sync-hooks
 ```
 
-## Audit Command
+## Audit command
 
 Run from OliverCode to check this repo's hook state against the shipped template:
 
@@ -34,7 +34,7 @@ scripts/olivercode health
 Pre-commit gates (`.githooks/pre-commit`) must also pass before merging quality/workflow
 policy edits.
 
-## Lock Enforcement
+## Lock enforcement
 
 Managed repos must keep these shared enforcement surfaces wired exactly as shipped:
 - `QUALITY_BASELINE.md` from the shared template

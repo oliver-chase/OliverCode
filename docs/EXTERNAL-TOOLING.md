@@ -1,4 +1,4 @@
-# External Tooling
+# External tooling
 
 Status: Active
 Purpose: the third-party tools this framework's posture assumes, and what each one is for.
@@ -17,7 +17,6 @@ these, and a few of the rules read as arbitrary without them.
 
 | Tool | What it does | Install |
 |---|---|---|
-| [asd-ste100](https://github.com/danyuchn/asd-ste100-skill) | Simplified Technical English rewrite skill — active voice, no phrasal verbs, no semicolons, one meaning per word. `docs/DOCUMENTATION-STANDARD.md`'s "Text an agent reads" section is the rule this framework runs it under. The pre-commit hook's Writing clarity gate (`docs/GOVERNANCE.md`) enforces it on every staged `SKILL.md`, `CLAUDE.md`, or `references/*.md`, skipping cleanly on a machine without it installed. | `npx skills add danyuchn/asd-ste100-skill` |
 
 ## Frontend and design references
 

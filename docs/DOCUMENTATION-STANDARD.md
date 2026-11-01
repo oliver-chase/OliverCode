@@ -68,11 +68,7 @@ A change to behavior, options, structure or file layout updates every document t
 
 `CLAUDE.md` loads into every session, so every word in it is paid on every turn of every session. It holds only the rules a session must follow from any folder, each as a short paragraph or bullet that says what to do and when. The detail behind a rule lives in the document it names, which loads only when that rule fires. A new rule earns its place when a session would act wrongly without it, and it goes under the heading that already covers its kind of work. A repo's own `CLAUDE.md` holds only what is true of that repo.
 
-## Text an agent reads
-
-`SKILL.md`, `CLAUDE.md`, tool descriptions, error messages and CLI help reach an agent with no person to resolve an ambiguity. The `asd-ste100` gate checks every staged `SKILL.md`, `CLAUDE.md` and `references/*.md` file, and `docs/GOVERNANCE.md` says where it warns and where it blocks. Text in a skill that a person reads follows `docs/VOICE.md`, with every sentence at 25 words or fewer.
-
-## The GitHub About
+## The GitHub about
 
 Every repo has a filled-in About, with a one-sentence description and topics that name its real technologies and problem areas. An empty About counts as missing documentation, and `olivercode health` reports it wherever the `gh` CLI is available.
 

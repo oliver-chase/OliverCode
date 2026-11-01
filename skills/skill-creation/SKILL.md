@@ -3,7 +3,7 @@ name: skill-creation
 description: "Intake walkthrough for a new skill in the skills folder. Checks for overlap with an existing skill first. Holds the baseline every new skill meets, so each skill is personal and portable. Trigger on 'new skill', 'build a skill for X', 'should this be a new skill', or 'I need a skill that does Y'."
 ---
 
-# Skill Creation
+# Skill creation
 
 ## Opening message
 
@@ -72,7 +72,6 @@ The new skill's `SKILL.md` exists by now, with its symlink created and its `READ
 
 1. The fleet audit's doc-sync check on the family folder. Clean means a README row and a working symlink.
 2. The fleet audit's portability check on the family folder. Clean means no read outside the skill folder and no path into the fleet-tooling folder.
-3. The ASD-STE100 lint on `SKILL.md` and every `references/*.md`. A hard violation is a finding.
-4. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see.
+3. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see.
 
 Fix the exact gap each check names, then run it again. Never finish with a named gap open.

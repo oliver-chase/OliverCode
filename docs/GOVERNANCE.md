@@ -1,8 +1,8 @@
-# Workspace Governance
+# Workspace governance
 
 This document defines the current locked governance baseline for OliverCode.
 
-## Unified Validation Entrypoint
+## Unified validation entrypoint
 
 `bash scripts/validate.sh` runs all active gates from repo root:
 - `bash scripts/validate.sh` — pre-commit gates, doc/code consistency, reference integrity, tests
@@ -26,8 +26,8 @@ governance CI workflow template for downstream repos exists at
 
 `bash scripts/validate.sh` also reports fleet hook state on every run (advisory, never
 fatal). Hook enforcement fails open, so a repo with an unset or broken `core.hooksPath` is
-silently ungoverned. Surfacing it here puts the signal where agents already look rather than
-in a weekly log. A repo that must diverge from the template declares `hookVariant` in its
+silently ungoverned. Surfacing it here puts the signal where agents already look,
+which a weekly log never did. A repo that must diverge from the template declares `hookVariant` in its
 profile -- see `shared/repo-profiles.json`.
 
 `validate.sh` also fails closed on **unfalsifiable checks** — a gate or script that
@@ -45,7 +45,7 @@ silently: doc/code consistency (`scripts/lib/consistency_check.py` — skills in
 gate-count claims) and internal reference integrity (`scripts/link-check.sh` — markdown links
 plus backtick repo paths).
 
-## Gate Classes
+## Gate classes
 
 **Gate coverage is not uniform across repos, and the difference matters.** OliverCode runs
 nine gates on itself. A repo your fleet adopts also runs nine, but swaps the framework's
@@ -61,9 +61,9 @@ runs four. This table is the one home for that. Anywhere else that names a count
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential (checked via `gh api user -i`, not the remote URL scheme) | 5 | 5 | — |
 | Contract integrity | Hardcoded `/workspace/` container paths in staged code. `OLIVERCODE_DEPENDENCY.md` declaring paths that don't exist | 6 | — | — |
 | Planning doc governance | Contract violations in staged planning docs. Conditional: runs only where `scripts/check-planning-doc-governance.py` exists, and reports *skipped* where it does not | — | 6 | — |
-| Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE instead of removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 7 | 7 | — |
+| Backlog hygiene | A `docs/BACKLOG.md` (or root `BACKLOG.md`) heading marked DONE that should have been removed. Conditional: runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing, or where no backlog file exists | 7 | 7 | — |
 | Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup`, or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated`, `-superseded`. Current-state-only, fleet-wide: git is the archive, so a superseded file is deleted or replaced, never parked | 8 | 8 | 3 |
-| Writing clarity (asd-ste100) | Warns on lint findings and blocks in two cases: `ste-lint-joined.py` is missing beside the hook, or a staged skill file cites an issue number that does not exist (`GATE-CITATION-1`). It checks a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` with strict-mode ASD-STE100 findings (semicolons, phrasal verbs, marketing adjectives, nominalization, long sentences, synonym rotation). Long sentences are measured after `core/templates/project/ste-lint-joined.py` (installed beside each hook) joins hard-wrapped lines, so wrapping a paragraph cannot hide one. Conditional: runs where `ste-lint.py` (a personal vendor install, `npx skills add danyuchn/asd-ste100-skill`) and `python3` are both found, and reports *skipped* where either is missing | 9 | 9 | 4 |
+| Skill citations | Blocks a staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1`). Conditional: runs where `gh` is installed and authenticated, and reports no finding where either is missing | 9 | 9 | 4 |
 | **Total** | | **9** | **9** | **4** |
 
 Numbers are the gate's position in that hook's run order, so the same gate can carry a
@@ -106,16 +106,16 @@ Every repo that `sync-hooks` manages also gets one pre-push hook, the same for e
 
 The secret patterns live once in `core/hooks/secret-patterns.sh`, and `scripts/build-hooks.py` builds them into both the commit gate and the push hook.
 
-## Locked Baseline Rules
+## Locked baseline rules
 
 - Active authority lives only in current-state docs and executable surfaces.
 - Roadmaps/migrations/status-history are not active authority — see
-  `core/contracts/FRAMEWORK_BASELINE.md` "Removal Rules".
+  `core/contracts/FRAMEWORK_BASELINE.md` "Removal rules".
 - Project-specific automation and new-vs-merged docs — see `CONTRIBUTING.md`
-  "Mandatory Rules" (2 and 5).
+  "Mandatory rules" (2 and 5).
 - The governance runner must stay small enough to understand in one read.
 
-## Cross-Project Standardization
+## Cross-project standardization
 
 OliverCode is the source baseline for downstream repos.
 The reusable baseline lives in:

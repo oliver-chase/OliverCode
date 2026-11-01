@@ -3,7 +3,7 @@
 > path with `dirname "$(readlink ~/.claude/CLAUDE.md)"`. This file holds only what is specific
 > to this repo.
 
-# <Repo> — Agent Rules
+# <Repo> — Agent rules
 
 Read before working here:
 - <each document that is authoritative for this repo. List only files that exist. The convention is `docs/repo-structure-contract.md`, and `docs/backlog-config.json` when the repo has a GitHub Project.>

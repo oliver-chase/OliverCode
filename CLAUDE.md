@@ -1,4 +1,4 @@
-# OliverCode Agent Rules
+# OliverCode agent rules
 
 This file loads in every session on this machine, from any directory, via the
 `~/.claude/CLAUDE.md` symlink. **Your working directory is usually NOT OliverCode**, so every

@@ -39,7 +39,7 @@ if [ -n "$STAGED_FILES" ]; then
     # A filename marked as a superseded copy.
     if printf '%s\n' "${file##*/}" | grep -qE "$ARCHIVE_SUFFIX"; then
       echo "  BLOCKED: $file is named as a superseded copy."
-      echo "  Replace the file it supersedes instead of committing both; git keeps"
+      echo "  Replace the file it supersedes and never commit both; git keeps"
       echo "  the previous version."
       exit 1
     fi

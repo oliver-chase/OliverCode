@@ -31,22 +31,22 @@ This applies to everything written for a person: chat replies, emails, notes, do
 
 | Rejected | Model |
 |---|---|
-| 2 accounts, 101 followers, 1,049 posts booked, each card opens that account. How the system works is in its own tab. | Two accounts are active, each with a different content strategy and growth opportunity. Track performance across both accounts and see where attention will have the greatest impact. |
-| Eight stages run every night with no person involved. The tag under each stage names who does the work. | The system handles everything from source discovery to publishing and performance analysis. |
+| 3 services, 41 open tickets, 212 requests handled, each card opens that service. How the system works is in its own tab. | Three services are live, and checkout has the most open tickets. Track queue size across all three and see where attention will have the greatest impact. |
+| Seven jobs run every night with no person involved. The tag under each job names who owns it. | The pipeline handles everything from data intake to the weekly report. |
 | See what changed, what it means and what to do about it. | Remove it. The heading already establishes the purpose. |
 | Check what runs today. Each line gives the fact behind its status. | The table shows which capabilities are operational and where gaps remain. |
-| See the one test running now. A winner must beat the rest by 10% on posts at least 3 days old. | Experiments are measured against existing performance, and a winner needs at least a 10% improvement. |
-| This is the same text flow.py brief prints. | Remove it. It is an implementation detail. |
-| Everything else runs on its own. | Routine content production and publishing run automatically. |
+| See the one test running now. A winner must beat the rest by 10% on orders at least 3 days old. | Experiments are measured against current performance, and a winner needs at least a 10% improvement. |
+| This is the same text report.py brief prints. | Remove it. It is an implementation detail. |
+| Everything else runs on its own. | Routine deployments and backups run automatically. |
 
 A finding names what happened, what it means and what comes next, at the length it deserves:
 
-> **The publishing queue depends heavily on one source.** 68 of 76 booked clips come from one channel. Any change in access or licensing could sharply reduce the available inventory.
+> **The release queue depends heavily on one reviewer.** 68 of 76 open pull requests wait on the same person. Any absence could stall most releases.
 >
-> Next: Expand the source mix. There are 224 uncut sources from other official channels.
+> Next: Add two more reviewers. Twelve engineers already know the codebase.
 
 A finding the data cannot support yet says so plainly:
 
-> **Follower growth is not yet measurable.** The account has stayed at 101 followers over the last two days, which is too little history for a trend.
+> **Conversion growth is not yet measurable.** The checkout page has converted at 3.1% over the last two days, which is too little history for a trend.
 >
 > For now: Reassess after seven days of tracking.
