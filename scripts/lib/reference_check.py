@@ -155,7 +155,9 @@ def check_references(repo_root: Path) -> tuple[int, list[str]]:
             if _is_exempt(token):
                 continue
             checked += 1
-            if not (repo_root / token).exists():
+            # pathlib drops a trailing slash, so `exists()` alone let a file pass as a directory.
+            target = repo_root / token
+            if not (target.is_dir() if token.endswith("/") else target.exists()):
                 failures.append(f"  [BROKEN REF] {rel} -> `{token}` (not found on disk)")
 
     return checked, failures

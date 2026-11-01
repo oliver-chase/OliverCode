@@ -1,12 +1,20 @@
-"""A `$OC/...` path names a file in this repo, so a broken one must fail the reference check."""
+"""Tests for scripts/lib/reference_check.py: a backtick repo path that names nothing must fail.
+
+A `$OC/...` path names a file in this repo, so a broken one must fail too.
+"""
+import importlib.util
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from lib.reference_check import check_references  # noqa: E402
+REPO_ROOT = Path(__file__).resolve().parent.parent
+spec = importlib.util.spec_from_file_location(
+    "reference_check", REPO_ROOT / "scripts" / "lib" / "reference_check.py"
+)
+reference_check = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reference_check)
+check_references = reference_check.check_references
 
 # Built at runtime so this file holds no backtick-quoted path for the checker to read.
 BT = chr(96)
@@ -43,6 +51,67 @@ class TestOcPaths(unittest.TestCase):
 
     def test_another_variable_stays_a_placeholder(self):
         self.assertEqual([], self.check(f"Set {BT}$HOME/docs/anything.md{BT} yourself.\n"))
+
+
+class TestWhatCounts(unittest.TestCase):
+    """Which tokens are references, which files are read, and which paths are exempt."""
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="reference-check-"))
+        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "REAL.md").write_text("# Real\n")
+
+    def write(self, rel, text):
+        path = self.repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def test_counts_every_checked_reference_and_names_the_broken_one(self):
+        self.write("docs/GUIDE.md", f"See {BT}docs/REAL.md{BT} and {BT}scripts/gone.sh{BT}.\n")
+        checked, failures = check_references(self.repo)
+        self.assertEqual(2, checked)
+        self.assertEqual([f"  [BROKEN REF] docs/GUIDE.md -> {BT}scripts/gone.sh{BT} (not found on disk)"], failures)
+
+    def test_tokens_outside_the_tracked_roots_are_not_references(self):
+        self.write("docs/GUIDE.md", f"Run {BT}npm test{BT} on {BT}lib/missing.ts{BT} and {BT}README.md{BT}.\n")
+        self.assertEqual((0, []), check_references(self.repo))
+
+    def test_trailing_punctuation_and_arguments_are_dropped(self):
+        self.write("docs/GUIDE.md", f"{BT}docs/REAL.md,{BT} {BT}docs/REAL.md --flag{BT} {BT}docs/REAL.md(1){BT}\n")
+        self.assertEqual((3, []), check_references(self.repo))
+
+    def test_a_directory_reference_must_name_a_directory(self):
+        self.write("docs/GUIDE.md", f"Look in {BT}docs/{BT}, not {BT}docs/REAL.md/{BT}.\n")
+        checked, failures = check_references(self.repo)
+        self.assertEqual(2, checked)
+        self.assertEqual(1, len(failures))
+        self.assertIn("docs/REAL.md/", failures[0])
+
+    def test_exempt_paths_are_neither_counted_nor_failed(self):
+        self.write(
+            "docs/GUIDE.md",
+            f"{BT}docs/<name>.md{BT} {BT}docs/SETUP_MODES.md{BT} {BT}.claude-optimization/memory/MEMORY.md{BT}\n",
+        )
+        self.assertEqual((0, []), check_references(self.repo))
+
+    def test_templates_plans_and_anti_pattern_files_are_not_read(self):
+        broken = f"{BT}docs/MISSING.md{BT}\n"
+        self.write("core/templates/CLAUDE.md", broken)
+        self.write("docs/plans/next.md", broken)
+        self.write("core/contracts/FILE_LOCATION_STANDARD.md", broken)
+        self.assertEqual((0, []), check_references(self.repo))
+
+    def test_only_source_and_doc_files_are_read(self):
+        self.write("docs/notes.txt", f"{BT}docs/MISSING.md{BT}\n")
+        self.assertEqual((0, []), check_references(self.repo))
+
+    def test_a_gitignored_file_is_not_read_but_an_untracked_one_is(self):
+        self.write(".gitignore", "local.md\n")
+        self.write("local.md", f"{BT}docs/MISSING.md{BT}\n")
+        self.assertEqual((0, []), check_references(self.repo))
+        self.write("new.md", f"{BT}docs/MISSING.md{BT}\n")
+        self.assertEqual(1, len(check_references(self.repo)[1]))
 
 
 if __name__ == "__main__":
