@@ -19,6 +19,7 @@ The target runs on a clean machine with no owner paths, no other repo and no own
 - Grep shipped files for absolute paths, `$HOME`, `../` out of the target, and names of other repos
 - Build the owner's identifiers from the target's own evidence, with no list required: the git remote owner and authors (`git log --format='%an %ae' | sort -u`), names and IDs in config, data and example files, brand colors and fonts, and the product or niche the examples assume. Grep every shipped file for each. A hit outside an example file is a finding
 - A default that is one owner's choice, such as a niche, a color, a city or a store name, is owner data even with no name attached
+- Every example value in prose, code and tests is an obvious placeholder, such as `my-shop`, `123` or `#000000`, or it is a finding. A real-looking name, ID or color named once as "such as" is the leak a name list never catches
 - Copy the target alone into an empty folder and run its main entry. A missing file or unset key is a finding
 
 ## 3. Accuracy

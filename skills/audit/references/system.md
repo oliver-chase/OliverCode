@@ -32,6 +32,7 @@ Give each reviewer exactly this, filled in. One reviewer per area, all started a
 
 - Re-check the biggest claims yourself, as the procedure says, and drop any that do not reproduce
 - Merge duplicates across reviewers, and add the findings that only show across areas: the same rule in two areas, and a feature whose code, docs and tests sit in three areas and are all unused
+- Judge the shape, which no reviewer sees from one slice. List every skill with its size and trigger, then name each small skill that its nearest neighbor could absorb, and what a core with add-ons switched off by default would hold
 - Size the cut. For each proposed removal, measure its lines and files, and total them against today's size
 
 ## Filing
