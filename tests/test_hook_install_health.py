@@ -3,7 +3,7 @@
 This guards a fail-OPEN. When core.hooksPath is unset, points at a missing directory,
 holds no pre-commit file, or holds a non-executable one, git runs no hooks and says
 nothing: a commit containing secrets goes straight through. `olivercode health` is
-the only thing that detects it, so health must not report OK in any of those states.
+the fleet-wide detector, so it must not report OK in any of those states.
 
 An earlier version returned "no divergence" for a missing directory, which the caller
 printed as [OK] -- the detector itself failed open. Each case below is that bug's
@@ -11,7 +11,6 @@ regression test.
 """
 
 import importlib.util
-import os
 import shutil
 import stat
 import tempfile
@@ -85,7 +84,7 @@ class TestHookProblems(unittest.TestCase):
         self.assertEqual(launcher._hook_problems(hooks, TEMPLATES), [])
 
     def test_private_variant_deployed_as_pre_commit_is_clean(self):
-        """The vault runs the 2-gate variant under the filename `pre-commit`."""
+        """A private repo runs the private variant under the filename `pre-commit`."""
         hooks = self._install("pre-commit-private")
         self.assertEqual(launcher._hook_problems(hooks, TEMPLATES), [])
 

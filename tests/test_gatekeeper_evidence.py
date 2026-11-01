@@ -8,7 +8,9 @@ scripts/orchestration-gatekeeper.py has a hyphen in its name, so it is loaded vi
 SourceFileLoader rather than a normal import (same approach as the launcher test).
 """
 
+import contextlib
 import importlib.util
+import tempfile
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -68,8 +70,9 @@ class TestFilesChangedOnDisk(unittest.TestCase):
         self.assertIn("None of the claimed changed files exist", result["message"])
 
     def test_real_repo_relative_path_passes(self):
-        # README.md exists relative to the repo root the gatekeeper resolved.
-        self.assertTrue(validate({"files_changed_on_disk": ["README.md"]}, self.FIELD)["pass"])
+        # Run from elsewhere, so only the gatekeeper's repo-root resolution can find README.md.
+        with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp):
+            self.assertTrue(validate({"files_changed_on_disk": ["README.md"]}, self.FIELD)["pass"])
 
 
 class TestValidationCommand(unittest.TestCase):
@@ -222,7 +225,8 @@ class TestFullWriteCodeEvidence(unittest.TestCase):
             "validation_result_captured": {"exitCode": 0, "pass": True},
             "commit_hash_on_success": "ed1e4d1",
         }
-        self.assertTrue(validate(evidence, fields)["pass"])
+        with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp):
+            self.assertTrue(validate(evidence, fields)["pass"])
 
 
 
