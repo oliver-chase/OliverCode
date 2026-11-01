@@ -291,15 +291,15 @@ FEATURE_MAP_EXEMPT = {
 
 
 def check_feature_map_completeness(repo_root: Path) -> list[str]:
-    """FEATURE_MAP.md claims to index every capability. Hold it to that.
+    """FEATURE-MAP.md claims to index every capability. Hold it to that.
 
     The file says "If a capability exists and is not listed here, this map is wrong" --
     a testable invariant that nothing tested. Five scripts were missing when this was
     first run, three of them user-invocable QA checkers that CI itself calls.
     """
-    fm_path = repo_root / "docs" / "FEATURE_MAP.md"
+    fm_path = repo_root / "docs" / "FEATURE-MAP.md"
     if not fm_path.is_file():
-        return ["  [FEATURE MAP] docs/FEATURE_MAP.md is missing"]
+        return ["  [FEATURE MAP] docs/FEATURE-MAP.md is missing"]
     fm = fm_path.read_text(encoding="utf-8")
 
     missing = [
@@ -307,7 +307,7 @@ def check_feature_map_completeness(repo_root: Path) -> list[str]:
         if rel not in FEATURE_MAP_EXEMPT and rel not in fm
     ]
     return [
-        f"  [FEATURE MAP] {rel} is not listed in docs/FEATURE_MAP.md, which claims to index "
+        f"  [FEATURE MAP] {rel} is not listed in docs/FEATURE-MAP.md, which claims to index "
         f"every capability. Add a row, or add it to FEATURE_MAP_EXEMPT with the exclusion "
         f"stated in the doc too."
         for rel in sorted(missing)
@@ -353,7 +353,7 @@ def check_contract_reachability(repo_root: Path) -> list[str]:
 
     return [
         f"  [CONTRACT ORPHAN] {rel} is referenced by no other tracked file. Point at it "
-        f"from docs/FEATURE_MAP.md, or delete it -- an unreferenced contract is one the "
+        f"from docs/FEATURE-MAP.md, or delete it -- an unreferenced contract is one the "
         f"next reader will treat as current without knowing whether it is."
         for rel in orphans
     ]

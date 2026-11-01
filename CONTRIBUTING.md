@@ -20,7 +20,7 @@ If a file does none of those, delete it, merge it, or move it to the repo that o
 
 1. Claude Code is OliverCode's sole runtime and Anthropic its sole model provider — do not reintroduce multi-runtime or multi-provider framing without a real implementation behind it.
 2. Keep project-specific runtime logic in the owning project repo.
-3. Documentation sync is required in the same change set — see `docs/DOCUMENTATION_STANDARD.md` "Always current — the sync rule" for what triggers it and what to update.
+3. Documentation sync is required in the same change set — see `docs/DOCUMENTATION-STANDARD.md` "Always current — the sync rule" for what triggers it and what to update.
 4. Run `bash scripts/validate.sh` before every commit.
 5. New docs should replace or merge older docs instead of creating parallel authority.
 6. No roadmap, migration, or status markdown is active authority unless explicitly promoted into current-state docs — see `core/contracts/FRAMEWORK_BASELINE.md` "Removal Rules".
@@ -36,7 +36,7 @@ push-auth, contract integrity (incl. `OLIVERCODE_DEPENDENCY.md` path existence),
 governance (if present), token policy (Gate 8).
 
 **Soft — instruction only, relies on the agent actually following it, same reliability class
-as any other unenforced convention:** "read `docs/FRAMEWORK_BOUNDARY.md` before structural
+as any other unenforced convention:** "read `docs/FRAMEWORK-BOUNDARY.md` before structural
 changes," the skills-placement ledger-write requirement, the CODE→DOCS→AUDIT→QA→GATE→
 COMMIT→PUSH ordering, and running the QA scripts at all (`full-qa-pass.sh`/`run-on-repo.sh`
 are never auto-triggered). These are real rules worth following, but nothing blocks a commit
@@ -51,7 +51,7 @@ evidence mechanics the loop ends in) — one home each, not restated here.
 
 ## Documentation Sync Requirement
 
-See `docs/DOCUMENTATION_STANDARD.md` "Always current — the sync rule" — one home for the trigger paths and
+See `docs/DOCUMENTATION-STANDARD.md` "Always current — the sync rule" — one home for the trigger paths and
 what to update. Enforced by manual review (no active automated validator).
 
 ## Source-of-Truth Documents

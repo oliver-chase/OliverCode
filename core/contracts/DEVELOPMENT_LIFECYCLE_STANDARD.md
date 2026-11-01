@@ -141,7 +141,7 @@ This standard is itself subject to it. Prefer:
 |---|---|
 | `PROJECT_STRUCTURE_STANDARD.md` | Folder layout, story and epic hygiene, commit format |
 | `EXECUTION_CONTRACT.md` | Gate mechanics, evidence schema, the pre-commit hook contract this loop ends in |
-| `../../docs/DOCUMENTATION_STANDARD.md` | README and doc shape, backlog policy |
+| `../../docs/DOCUMENTATION-STANDARD.md` | README and doc shape, backlog policy |
 
 ## Enforcement reality
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """OliverCode terminal launcher.
 
-The Python CLI behind `olivercode <command>` (see docs/OLIVERCODE_LAUNCHER.md).
+The Python CLI behind `olivercode <command>` (see docs/OLIVERCODE-LAUNCHER.md).
 Self-locating from __file__: every path derives from this file's location, so there
 are no hardcoded vault/home/container paths and it runs identically from cron, a
 container, or any working directory.
@@ -192,7 +192,7 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
 
     _report_claude_dir(oc_root)
     print("\nProfile skeleton — paste into shared/repo-profiles.json under \"profiles\",")
-    print("then add each repo's token_policy (see docs/TOKEN_POLICY.md):\n")
+    print("then add each repo's token_policy (see docs/TOKEN-POLICY.md):\n")
     skeleton = {
         name: {"name": name, "path": str(repo), "canonicalValidationCommand": "<command>"}
         for name, repo, _, _ in found
@@ -268,7 +268,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
 
     conditional = manifest.get("conditionalFiles", [])
     if conditional:
-        print("\n  Not copied — these depend on profile flags (see docs/KEEPALIVE_STANDARD.md):")
+        print("\n  Not copied — these depend on profile flags (see docs/KEEPALIVE-STANDARD.md):")
         for entry in conditional:
             print(f"    {entry['source']}  when {entry.get('condition', '?')}")
 
@@ -379,7 +379,7 @@ class _HealthTally:
     """Accumulates health-check results.
 
     WARN does not fail the run, on purpose: a standalone clone missing local-only
-    context (control plane, vault) must still exit 0 (see docs/FRAMEWORK_BOUNDARY.md).
+    context (control plane, vault) must still exit 0 (see docs/FRAMEWORK-BOUNDARY.md).
 
     It is counted SEPARATELY from OK all the same. Folding the two together printed
     "HEALTHY — 8/8 checks passed" on a run where five of the eight had been skipped
@@ -431,7 +431,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     print("\nCore entrypoints:")
     checks = [
         ("scripts/olivercode (CLI)", OC_ROOT / "scripts" / "olivercode"),
-        ("docs/FRAMEWORK_BOUNDARY.md", OC_ROOT / "docs" / "FRAMEWORK_BOUNDARY.md"),
+        ("docs/FRAMEWORK-BOUNDARY.md", OC_ROOT / "docs" / "FRAMEWORK-BOUNDARY.md"),
     ]
     for name, fpath in checks:
         t.ok(name) if fpath.exists() else t.fail(f"{name} — missing")

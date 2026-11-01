@@ -53,8 +53,8 @@ DECLARED_MARKERS: dict[str, str] = {
     ),
     "scripts qa probe secret gate sh writes a fake secret commits expects a block": (
         "The one canonical invocation line for scripts/qa/probe-secret-gate.sh "
-        "(docs/ADOPTING.md, docs/NEW_MACHINE.md, skills/olivercode-adoption/SKILL.md) "
-        "-- a runnable example DOCUMENTATION_STANDARD.md wants shown identically "
+        "(docs/ADOPTING.md, docs/NEW-MACHINE.md, skills/olivercode-adoption/SKILL.md) "
+        "-- a runnable example DOCUMENTATION-STANDARD.md wants shown identically "
         "everywhere it appears, not three independently-worded ones."
     ),
 }

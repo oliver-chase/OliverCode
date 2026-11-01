@@ -37,17 +37,17 @@ instead of a drive-by fix, each checked against live state first, not assumed.
      `US-*.md` becomes which issue) per repo, get a yes, then execute. Never batch all
      three into one unreviewed pass.
 
-2. **Merge `AGENT_SHARED_STRUCTURE.md` into `docs/FRAMEWORK_BOUNDARY.md`.** — *why:*
+2. **Merge `AGENT_SHARED_STRUCTURE.md` into `docs/FRAMEWORK-BOUNDARY.md`.** — *why:*
    Read both in full. `AGENT_SHARED_STRUCTURE.md` (217 words, the smallest contract) is a
-   path map and ownership list — "where do shared things live." `FRAMEWORK_BOUNDARY.md`
+   path map and ownership list — "where do shared things live." `FRAMEWORK-BOUNDARY.md`
    (582 words) answers the same question from the opposite direction — "what does
    OliverCode contain, and where's the line against the runtime environment and sibling
    agent state." They're two halves of one map, maintained separately: today's session
-   found and fixed a stale claim in `FRAMEWORK_BOUNDARY.md` (leftover "personas" mentions
+   found and fixed a stale claim in `FRAMEWORK-BOUNDARY.md` (leftover "personas" mentions
    from an earlier, unrelated deletion) that a single merged file would have made easier
    to catch, since there'd be one path map instead of two drifting against each other.
    *Outcome:* fold `AGENT_SHARED_STRUCTURE.md`'s Canonical Paths / Ownership / Sync
-   Contract sections into `FRAMEWORK_BOUNDARY.md`, delete the file, repoint its real
+   Contract sections into `FRAMEWORK-BOUNDARY.md`, delete the file, repoint its real
    referrers (confirmed by grep, not assumed: `AGENT_SYSTEM_MANIFEST.json`'s
    `shared_contract.structure` key in both the tracked and gitignored copy,
    `core/workflows/README.md`, `shared/workflow-standards.md`, and a historical note in
@@ -56,7 +56,7 @@ instead of a drive-by fix, each checked against live state first, not assumed.
      with `grep -rl "AGENT_SHARED_STRUCTURE"` before and after, run `scripts/validate.sh`.
    - **DONE 2026-10-22.**
 
-3. **Trim `docs/DOCUMENTATION_STANDARD.md`'s `## Voice` section.** — *why:* Already
+3. **Trim `docs/DOCUMENTATION-STANDARD.md`'s `## Voice` section.** — *why:* Already
    identified and flagged to the operator this session, not yet executed. The section
    mostly restates principles the file already explains at length, with reasoning and
    examples, in `## The shape of a README` above it — which violates the file's own
@@ -83,12 +83,12 @@ instead of a drive-by fix, each checked against live state first, not assumed.
    change. This step exists in the plan so the revamp doesn't silently skip the gate
    layer — it was checked, not ignored.
 
-5. **Leave `docs/OLIVERCODE_LAUNCHER.md` + `docs/FEATURE_MAP.md` as two files.** — *why:*
+5. **Leave `docs/OLIVERCODE-LAUNCHER.md` + `docs/FEATURE-MAP.md` as two files.** — *why:*
    this plan's original brief named them as a merge candidate ("both describe what's in
-   the box"). Checked both in full before accepting that premise: `FEATURE_MAP.md` is the
+   the box"). Checked both in full before accepting that premise: `FEATURE-MAP.md` is the
    index — one row per capability, each pointing to its one owning doc — and
-   `OLIVERCODE_LAUNCHER.md` is the detailed per-command reference one of those rows
-   points to. `docs/DOCUMENTATION_STANDARD.md` itself names this exact pairing as the
+   `OLIVERCODE-LAUNCHER.md` is the detailed per-command reference one of those rows
+   points to. `docs/DOCUMENTATION-STANDARD.md` itself names this exact pairing as the
    correct pattern for a reference doc split by surface. The premise didn't hold up on
    verification. *Outcome:* no change.
 
@@ -114,8 +114,8 @@ instead of a drive-by fix, each checked against live state first, not assumed.
       `.github/user-stories/` contract and template scaffold removed from OliverCode;
       B42 closed.
 - [x] Step 2: `AGENT_SHARED_STRUCTURE.md` deleted, content merged into
-      `FRAMEWORK_BOUNDARY.md`, all referrers repointed, `validate.sh` passes.
-- [x] Step 3: `DOCUMENTATION_STANDARD.md`'s Voice section trimmed from 8 bullets to the
+      `FRAMEWORK-BOUNDARY.md`, all referrers repointed, `validate.sh` passes.
+- [x] Step 3: `DOCUMENTATION-STANDARD.md`'s Voice section trimmed from 8 bullets to the
       2 that weren't already said, with reasoning, above it. `validate.sh` passes.
 - [x] Steps 4-5: recorded as checked, no action needed — not left silently unconsidered.
 

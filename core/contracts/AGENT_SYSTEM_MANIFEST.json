@@ -1,7 +1,7 @@
 {
   "version": 1,
   "shared_contract": {
-    "structure": "OliverCode/docs/FRAMEWORK_BOUNDARY.md",
+    "structure": "OliverCode/docs/FRAMEWORK-BOUNDARY.md",
     "project_hygiene": "OliverCode/core/contracts/PROJECT_STRUCTURE_STANDARD.md"
   },
   "runtime_entries": {

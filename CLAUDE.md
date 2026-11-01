@@ -34,7 +34,7 @@ Text a person reads as written (a skill's questions, options and messages, any d
 goes out word for word as the skill gives it.
 
 ## Before you change structure or move a skill
-- Structural change to a repo: read `$OC/docs/FRAMEWORK_BOUNDARY.md` first.
+- Structural change to a repo: read `$OC/docs/FRAMEWORK-BOUNDARY.md` first.
 - Installing, creating, or moving ANY skill or agent file (in OliverCode, `~/.claude/`, or any
   repo): read `$OC/docs/SKILLS-PLACEMENT.md` first — one home per layer, ledger write in the
   same session.
@@ -55,7 +55,7 @@ simplify) is `$OC/core/contracts/DEVELOPMENT_LIFECYCLE_STANDARD.md`. These rules
   stays green without the code it protects reports confidence it has not earned.
 - Folder structure stays clean and minimal — no new top-level dirs without a contract reason
   (`$OC/core/contracts/PROJECT_STRUCTURE_STANDARD.md`).
-- Writing a README or repo doc: follow `$OC/docs/DOCUMENTATION_STANDARD.md` for its structure and
+- Writing a README or repo doc: follow `$OC/docs/DOCUMENTATION-STANDARD.md` for its structure and
   `$OC/docs/VOICE.md` for its words. One concept has one home. Docs sync in the same commit as the change.
 - Prefer deterministic scripts over LLM calls, and short pointers over restated rules.
 - Fixing gate or lint violations: read the full list once, fix every violation in one pass,
@@ -92,4 +92,4 @@ Everything else in this file and in `CONTRIBUTING.md` is instruction text — se
   own backlog independently, so the same ID can name unrelated work in two different files
   — grep-and-read-both is the wrong instinct, run this instead. Does not resolve a GitHub
   Issue number; use `gh issue view N --repo <repo>` for a repo on that model.
-- Every other script, layout and config path: `docs/FEATURE_MAP.md`
+- Every other script, layout and config path: `docs/FEATURE-MAP.md`

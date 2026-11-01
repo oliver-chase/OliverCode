@@ -19,9 +19,9 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Framework baseline lock | `core/contracts/FRAMEWORK_BASELINE.md` | `.githooks/pre-commit` Gate 6 (contract integrity) |
 | Governance policy and the gate list | `docs/GOVERNANCE.md` | `.githooks/pre-commit` |
 | Execution order (CODE -> ... -> PUSH) and the WRITE MODE completion gate | `core/contracts/EXECUTION_CONTRACT.md` | `scripts/orchestration-gatekeeper.py --evidence-file` (on demand) |
-| Token policy | `docs/TOKEN_POLICY.md` | `.githooks/pre-commit` Gate 8 |
+| Token policy | `docs/TOKEN-POLICY.md` | `.githooks/pre-commit` Gate 8 |
 | Public / local / private-overlay split every adopted repo must keep | `core/contracts/PUBLIC_PRIVATE_REPO_STANDARD.md` | `.githooks/pre-commit` Gates 1 and 3 block the leak. The split itself is agent-applied at adoption |
-| Documentation standard (locked README outline, naming, About) | `docs/DOCUMENTATION_STANDARD.md` | `validate.sh` covers references/consistency/index. `olivercode health` checks the GitHub About. How the words sound lives in `docs/VOICE.md` |
+| Documentation standard (locked README outline, naming, About) | `docs/DOCUMENTATION-STANDARD.md` | `validate.sh` covers references/consistency/index. `olivercode health` checks the GitHub About. How the words sound lives in `docs/VOICE.md` |
 | Fork onboarding / adoption | `docs/ADOPTING.md` + the `olivercode-adoption` skill | `bash scripts/validate.sh` on a clean clone |
 | Third-party tools the posture assumes (none shipped, none required) | `docs/EXTERNAL-TOOLING.md` | Manual (nothing here depends on them) |
 | Skill placement | `docs/SKILLS-PLACEMENT.md` | `scripts/olivercode health` (symlink + drift check) |
@@ -38,7 +38,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 
 | Surface | Source of Truth | Verification |
 |---|---|---|
-| Terminal launcher — `bootstrap`, `discover`, `install`, `init`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet`, `skills` | `docs/OLIVERCODE_LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
+| Terminal launcher — `bootstrap`, `discover`, `install`, `init`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet`, `skills` | `docs/OLIVERCODE-LAUNCHER.md`, `scripts/olivercode` | `scripts/olivercode --help` |
 | Local scheduler — unattended `audit-fleet`/`push-fleet` via `launchd`, mirroring a fleet product repo's own proven pattern | `scripts/local-scheduler/README.md`, `scripts/local-scheduler/install.sh`, `scripts/local-scheduler/tick.py`, `scripts/local-scheduler/uninstall.sh` | `bash scripts/local-scheduler/install.sh`, then `launchctl list \| grep olivercode` |
 
 Claude Code is this framework's sole runtime and Anthropic its sole model provider — there is
@@ -63,7 +63,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/qa/check-code-quality.sh` | Oversized files, per-module test coverage, Python syntax. TypeScript-leaning, aimed at the fleet repos |
 | `scripts/qa/check-bloat.sh` | Archive dirs, docs-to-code ratio, self-marked-historical files. `--strict` exits nonzero |
 | `scripts/qa/check-fork-usable.sh` | Proves a fresh clone's commands run without crashing AND that the documented adoption path produces a fleet whose gates actually block, in a sandbox with a virgin HOME |
-| `scripts/qa/probe-secret-gate.sh` | Writes a fake secret into the current repo, commits, and confirms Gate 1 blocks it. The one home for the probe `docs/ADOPTING.md`, `docs/NEW_MACHINE.md`, and `olivercode-adoption` all invoke by name |
+| `scripts/qa/probe-secret-gate.sh` | Writes a fake secret into the current repo, commits, and confirms Gate 1 blocks it. The one home for the probe `docs/ADOPTING.md`, `docs/NEW-MACHINE.md`, and `olivercode-adoption` all invoke by name |
 | `scripts/qa/check-scenarios.sh` | The exhaustive complement to the fork check: 12 sandboxed setup/walkthrough scenarios (existing ~/.claude, scattered fleet, --root, discover, bootstrap, hookVariant, backout, idempotency, update, no-commit probe). Run after changing the launcher, hooks, or `docs/ADOPTING.md` |
 | `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
 | `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |
@@ -83,11 +83,11 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `shared/repo-map.json` | cross-project repo registry |
 | `shared/repo-profiles.json` (tracked, real fleet) | per-repo validation commands and evidence requirements |
 | `shared/task-policies/` | task-type policies and result schema |
-| `docs/KEEPALIVE_STANDARD.md` | Supabase/Cloudflare keepalive contract. Its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
+| `docs/KEEPALIVE-STANDARD.md` | Supabase/Cloudflare keepalive contract. Its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
 
 ## Non-Drift Rule
 
-A capability change is incomplete until this map and `docs/DOCUMENTATION_STANDARD.md` are
+A capability change is incomplete until this map and `docs/DOCUMENTATION-STANDARD.md` are
 updated in the same change set.
 
 ## Enforcement Surfaces Rule

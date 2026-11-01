@@ -1,6 +1,6 @@
 # Supabase & Cloudflare Keepalive Standard
 
-Indexed in `docs/FEATURE_MAP.md`. The four template files this standard installs ship from
+Indexed in `docs/FEATURE-MAP.md`. The four template files this standard installs ship from
 `core/templates/project/` via the `conditionalFiles` block of
 `shared/project-bootstrap-manifest.json` — synced only into repos whose `keepalive` profile
 block enables them, since a repo with no database has no use for a Supabase keepalive script:
