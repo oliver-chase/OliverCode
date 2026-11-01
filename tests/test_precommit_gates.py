@@ -4,13 +4,13 @@ Each gate gets a case that MUST block and a case that MUST pass. The hook reads
 staged files from git, so every test builds a throwaway repo, copies the hook in,
 stages a fixture, and runs the hook against it. Nothing touches this checkout.
 
-Gates 5 (workflow push auth) and 7 (planning-doc governance) are environment- and
-presence-dependent: 5 consults the machine's live `gh` credential, 7 only fires when
-the target repo ships the checker. Both are asserted at the level that is actually
-deterministic here -- that a commit with no workflow files and no checker is not
-blocked by them.
+Gates that consult the machine run against stand-ins: gate 5 and gate 11's citation
+check get a stub `gh` on PATH, gate 11 a stub ste-lint.py under a scratch HOME, and
+gates 7, 8 and 9 their checkers copied or stubbed into the scratch repo. Every
+`exit 1` in a gate has a test that fails when it becomes `true`.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -49,9 +49,23 @@ class GateHarness(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         subprocess.run(["git", "-C", str(self.tmp), "add", relpath], check=True)
 
-    def run_hook(self):
-        # validate.sh --tree exports OLIVERCODE_SCAN_TREE, and a test must check staged files only.
-        env = {k: v for k, v in os.environ.items() if k != "OLIVERCODE_SCAN_TREE"}
+    def write(self, relpath, content):
+        path = self.tmp / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def stub_gh(self, script):
+        """A `gh` that runs `script` (bash, args in "$@") ahead of any real one on PATH."""
+        gh = self.write("stub-bin/gh", "#!/usr/bin/env bash\n" + script)
+        gh.chmod(0o755)
+        return {"PATH": f"{gh.parent}{os.pathsep}{os.environ['PATH']}"}
+
+    def run_hook(self, **env_overrides):
+        # validate.sh --tree exports OLIVERCODE_SCAN_TREE, and a test must check staged
+        # files only. OLIVERCODE_VAULT_ROOT would point gate 8 at a real registry.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("OLIVERCODE_")}
+        env.update(env_overrides)
         return subprocess.run(
             ["bash", str(self.tmp / ".githooks" / "pre-commit")],
             cwd=self.tmp,
@@ -60,15 +74,15 @@ class GateHarness(unittest.TestCase):
             env=env,
         )
 
-    def assertBlocked(self, gate_hint=""):
-        result = self.run_hook()
+    def assertBlocked(self, gate_hint="", **env):
+        result = self.run_hook(**env)
         self.assertNotEqual(
             result.returncode, 0, f"hook should have blocked ({gate_hint}); output:\n{result.stdout}"
         )
         return result
 
-    def assertAllowed(self):
-        result = self.run_hook()
+    def assertAllowed(self, **env):
+        result = self.run_hook(**env)
         self.assertEqual(
             result.returncode, 0, f"hook should have passed; output:\n{result.stdout}{result.stderr}"
         )
@@ -119,6 +133,25 @@ class TestGate2Emoji(GateHarness):
         self.stage("banner.sh", "echo \"" + "╔" + "═" * 5 + "╗\"\n")
         self.assertAllowed()
 
+    def test_missing_perl_blocks_before_any_later_gate(self):
+        # Without perl the scan finds nothing, so the gate must stop the commit itself.
+        # PATH keeps every other tool, so only the guard can make this run fail.
+        bin_dir = self.tmp / "no-perl-bin"
+        bin_dir.mkdir()
+        for entry in os.environ["PATH"].split(os.pathsep):
+            if not os.path.isdir(entry):
+                continue
+            for name in os.listdir(entry):
+                target = Path(entry) / name
+                if name.startswith("perl") or (bin_dir / name).exists():
+                    continue
+                if os.access(target, os.X_OK) and not target.is_dir():
+                    (bin_dir / name).symlink_to(target)
+        self.stage("readme.md", "Status: done.\n")
+        result = self.assertBlocked("gate 2", PATH=str(bin_dir))
+        self.assertIn("perl not found", result.stdout)
+        self.assertNotIn("Gate 3/", result.stdout)
+
 
 class TestGate3PII(GateHarness):
     def test_macos_home_path_blocks(self):
@@ -161,12 +194,174 @@ class TestGate6ContractIntegrity(GateHarness):
         self.assertAllowed()
 
 
-class TestGates5And7NonFiring(GateHarness):
-    def test_no_workflow_files_and_no_checker_still_passes(self):
-        """Gate 5 needs staged workflow YAML; gate 7 needs the checker present."""
+class TestGate4DeletedRepos(GateHarness):
+    """Patterns come from the gitignored .private-patterns, since the tracked list is empty."""
+
+    def setUp(self):
+        super().setUp()
+        self.write(".private-patterns", "# retired repos\nretired-project\n")
+
+    def test_a_reference_to_a_deleted_repo_blocks(self):
+        self.stage("src/app.py", "URL = 'github.com/me/retired-project'\n")
+        result = self.assertBlocked("gate 4")
+        self.assertIn("references deleted path: retired-project", result.stdout)
+
+    def test_a_file_without_the_name_passes(self):
+        self.stage("src/app.py", "URL = 'github.com/me/live-project'\n")
+        self.assertIn("Gate 4 passed.", self.assertAllowed().stdout)
+
+
+class TestGate5WorkflowAuth(GateHarness):
+    SCOPES = 'case "$1 $2" in "auth status") exit 0 ;; "api user") echo "x-oauth-scopes: {}" ;; esac\n'
+
+    def setUp(self):
+        super().setUp()
+        self.stage(".github/workflows/ci.yml", "on: push\n")
+
+    def test_a_credential_without_workflow_scope_blocks(self):
+        result = self.assertBlocked("gate 5", **self.stub_gh(self.SCOPES.format("repo, gist")))
+        self.assertIn("no workflow-scoped credential", result.stdout)
+
+    def test_no_signed_in_gh_blocks(self):
+        result = self.assertBlocked("gate 5", **self.stub_gh("exit 1\n"))
+        self.assertIn("no workflow-scoped credential", result.stdout)
+
+    def test_a_credential_with_workflow_scope_passes(self):
+        result = self.assertAllowed(**self.stub_gh(self.SCOPES.format("repo, workflow")))
+        self.assertIn("gh credential has workflow scope", result.stdout)
+        self.assertIn("Gate 5 passed.", result.stdout)
+
+
+class TestGate7PlanningDocs(GateHarness):
+    def test_no_checker_skips(self):
         self.stage("src/app.py", "print('hello')\n")
-        result = self.assertAllowed()
-        self.assertIn("Planning doc governance... skipped", result.stdout)
+        self.assertIn("Planning doc governance... skipped", self.assertAllowed().stdout)
+
+    def test_a_failing_checker_blocks(self):
+        self.write("scripts/check-planning-doc-governance.py", "raise SystemExit(1)\n")
+        self.stage("src/app.py", "print('hello')\n")
+        self.assertIn("BLOCKED: Planning doc governance failed.", self.assertBlocked("gate 7").stdout)
+
+    def test_a_passing_checker_passes(self):
+        self.write("scripts/check-planning-doc-governance.py", "raise SystemExit(0)\n")
+        self.stage("src/app.py", "print('hello')\n")
+        self.assertIn("Gate 7 passed.", self.assertAllowed().stdout)
+
+
+class TestGate8TokenPolicy(GateHarness):
+    """The real gatekeeper and its lib, run against a scratch registry."""
+
+    def setUp(self):
+        super().setUp()
+        (self.tmp / "scripts").mkdir()
+        shutil.copy2(REPO_ROOT / "scripts" / "orchestration-gatekeeper.py", self.tmp / "scripts")
+        shutil.copytree(REPO_ROOT / "scripts" / "lib", self.tmp / "scripts" / "lib",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        self.stage("src/app.py", "print('hello')\n")
+
+    def profiles(self, token_policy):
+        self.write("shared/repo-profiles.json",
+                   json.dumps({"profiles": {"repo-x": {"token_policy": token_policy}}}))
+
+    def test_a_profile_without_a_policy_blocks(self):
+        self.profiles(None)
+        result = self.assertBlocked("gate 8")
+        self.assertIn("repo-x: token_policy.ignore_globs is missing or empty", result.stdout)
+        self.assertIn("BLOCKED: Token policy check failed.", result.stdout)
+
+    def test_a_complete_policy_passes(self):
+        self.profiles({"ignore_globs": ["*.log"], "generated_artifact_dirs": []})
+        self.assertIn("Gate 8 passed.", self.assertAllowed().stdout)
+
+
+@unittest.skipUnless(shutil.which("node"), "gate 9 needs node")
+class TestGate9BacklogHygiene(GateHarness):
+    def setUp(self):
+        super().setUp()
+        self.write("core/templates/project/scripts/check-backlog-hygiene.mjs",
+                   (REPO_ROOT / "core/templates/project/scripts/check-backlog-hygiene.mjs")
+                   .read_text(encoding="utf-8"))
+
+    def test_a_done_heading_blocks(self):
+        self.stage("docs/BACKLOG.md", "# Backlog\n\n## Search rewrite DONE\n\n- item\n")
+        self.assertIn("BLOCKED: Backlog hygiene failed.", self.assertBlocked("gate 9").stdout)
+
+    def test_an_open_backlog_passes(self):
+        self.stage("docs/BACKLOG.md", "# Backlog\n\n## Not done yet\n\n- item\n")
+        self.assertIn("Gate 9 passed.", self.assertAllowed().stdout)
+
+
+class TestGate10ArchivedContent(GateHarness):
+    def test_an_archive_directory_blocks(self):
+        self.stage("docs/Archive/plan.md", "Old plan.\n")
+        self.assertIn("names an archive", self.assertBlocked("gate 10").stdout)
+
+    def test_a_superseded_copy_name_blocks(self):
+        self.stage("docs/plan-old.md", "Old plan.\n")
+        self.assertIn("named as a superseded copy", self.assertBlocked("gate 10").stdout)
+
+    def test_prose_about_legacy_systems_passes(self):
+        self.stage("docs/Legacy Modernization.md", "How we replace legacy systems.\n")
+        self.assertIn("Gate 10 passed.", self.assertAllowed().stdout)
+
+
+class TestGate11WritingClarity(GateHarness):
+    """Offline: a stub ste-lint.py under a scratch HOME and a stub `gh` that knows issues 1 and 2."""
+
+    STUB_LINT = (
+        "import json\n"
+        "def lint(text, filename='<stdin>'):\n    return [], None\n"
+        "def _markdown_table_cells(lines):\n    return []\n"
+        "def main(args):\n    print(json.dumps({'count': 0, 'hard_count': 0}))\n    return 0\n"
+    )
+    GH = 'case "$1 $2" in "auth status") exit 0 ;; "issue list") printf "1\\n2\\n" ;; esac\n'
+
+    def setUp(self):
+        super().setUp()
+        home = self.tmp / "home"
+        lint = home / ".claude/skills/asd-ste100/scripts/ste-lint.py"
+        lint.parent.mkdir(parents=True)
+        lint.write_text(self.STUB_LINT, encoding="utf-8")
+        self.env = {"HOME": str(home), **self.stub_gh(self.GH)}
+        shutil.copy2(REPO_ROOT / "core/templates/project/ste-lint-joined.py",
+                     self.tmp / ".githooks" / "ste-lint-joined.py")
+
+    def test_a_citation_to_no_real_issue_blocks(self):
+        self.stage("skills/x/SKILL.md", "Fixes the parser, see #99.\n")
+        result = self.assertBlocked("gate 11", **self.env)
+        self.assertIn("#99 is cited in a staged skill file but resolves to no real issue", result.stdout)
+
+    def test_a_citation_to_a_real_issue_passes(self):
+        self.stage("skills/x/SKILL.md", "Fixes the parser, see #2.\n")
+        self.assertIn("Gate 11 passed.", self.assertAllowed(**self.env).stdout)
+
+    def test_a_missing_joiner_blocks(self):
+        (self.tmp / ".githooks" / "ste-lint-joined.py").unlink()
+        self.stage("skills/x/SKILL.md", "Fixes the parser.\n")
+        result = self.assertBlocked("gate 11", **self.env)
+        self.assertIn("needs ste-lint-joined.py", result.stdout)
+
+
+class TestPrivateRepoLocalGate(GateHarness):
+    """The private variant runs a repo's own .githooks/pre-commit.local after its gates."""
+
+    def setUp(self):
+        super().setUp()
+        shutil.copy2(REPO_ROOT / "core/templates/project/pre-commit-private",
+                     self.tmp / ".githooks" / "pre-commit")
+
+    def local_gate(self, code):
+        local = self.write(".githooks/pre-commit.local", f"#!/usr/bin/env bash\nexit {code}\n")
+        local.chmod(0o755)
+        self.stage("notes.txt", "Plain notes.\n")
+
+    def test_a_failing_local_gate_blocks(self):
+        self.local_gate(1)
+        self.assertNotIn("All gates passed", self.assertBlocked("repo-local").stdout)
+
+    def test_a_passing_local_gate_passes(self):
+        self.local_gate(0)
+        self.assertIn("All gates passed", self.assertAllowed().stdout)
 
 
 class TestCleanCommitPasses(GateHarness):
