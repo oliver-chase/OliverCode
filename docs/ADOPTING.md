@@ -310,7 +310,8 @@ restore, so merge those back by hand. `docs/OLIVERCODE-LAUNCHER.md` says exactly
 Those four steps cover everything OliverCode writes on a machine: the `~/.claude` entries
 `install` makes, the `.githooks/` folder and `core.hooksPath` key `sync-hooks` sets in each
 governed repo, and the `launchd` agent the opt-in scheduler installs. It writes no system
-config and no shell profile. The scheduler's state and logs stay under
+config and no shell profile. Files `bootstrap` stamped into a repo belong to that repo once
+stamped, so they stay. The scheduler's state and logs stay under
 `~/Library/Application Support/olivercode-scheduler` until you delete that folder.
 
 ## Folder structure
