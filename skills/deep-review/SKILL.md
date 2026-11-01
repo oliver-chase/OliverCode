@@ -52,29 +52,11 @@ Output: ranked findings, each with file/function, one-sentence defect, concrete 
 
 ### 2b. Frontend/UX angles (mandatory when the range touches any UI)
 
-Cover EVERY user-facing surface — admin/operator UI and public pages alike, not just the screens the session worked on:
-
-- **Design-system lock-in / no hardcoding:** zero inline styles, and zero hardcoded colors, sizes, or spacing outside the token sheet. One radius system, one accent, and every JS-generated class exists in the stylesheet. If the repo lacks a mechanical gate for this, ADD one in the same session. The proven pattern is an inline-style scan wired into the validate aggregator, and it removes the finding class for good.
-- **Component reuse:** repeated markup patterns must go through the shared component/renderer, never copy-pasted per page. Duplicated render functions across pages are a finding.
-- **User flow:** walk each primary journey end to end as the user would. Every step must be reachable from the previous one, with no dead ends. Real example: an approval step whose output had no next action anywhere in the UI. Empty states funnel forward. Post-action feedback tells the user what actually happened.
-- **User journey docs:** the repo's journey/flow doc must match the shipped UI page-for-page. Stale page names or steps are findings.
-- **Accessibility:**
-  - Keyboard path: a focus-visible ring on every interactive element, no keyboard traps, logical tab order.
-  - Labels: every input labeled, no placeholder-as-label, and buttons that self-describe or carry an accessible name.
-  - Contrast at WCAG AA for text and controls.
-  - Touch targets usable on coarse pointers. Hover-only affordances need a touch path.
-  - Media elements carry captions/alt or a documented reason.
-- **Responsiveness:** at ~360/768/1024/1440/1920 — no horizontal page overflow, nothing overlaps, wide content scrolls inside its own container.
+When the range touches any UI, read `references/frontend-ux-angles.md` and add its angles to the review prompt.
 
 ### 2c. Backlog-issue accuracy (only when the repo names a live GitHub Project)
 
-Not every repo tracks work this way. Skip this phase entirely if the repo's own `CLAUDE.md` names no `backlog-config.json` (or equivalent). Where one exists, the session likely closed some issues with an evidence comment during the range under review. Sample a few of those closes against the real repo state:
-
-- The file paths and line numbers the comment cites still exist and say what it claims.
-- The commit SHA it names is real and in this range.
-- The claimed fix is actually present in the code today, not just in the commit message.
-
-A close with unverifiable or wrong evidence is a finding. Reopen it or fix the comment, same as any other defect. `docs-reality-audit`'s own Truth Hierarchy phase applies the same discipline for a configured Project. Here it covers one review pass instead of a whole-repo audit.
+When the repo's `CLAUDE.md` names a `backlog-config.json`, read `references/backlog-issue-accuracy.md` and sample the closed issues it describes. Skip this step for any other repo.
 
 ### 3. Simplify pass (run it yourself, in parallel with the agent)
 
