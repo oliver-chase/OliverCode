@@ -241,6 +241,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | [`FEATURE_MAP.md`](docs/FEATURE_MAP.md) | Every capability and its owning document |
 | [`OLIVERCODE_LAUNCHER.md`](docs/OLIVERCODE_LAUNCHER.md) | Every `olivercode` command |
 | [`DOCUMENTATION_STANDARD.md`](docs/DOCUMENTATION_STANDARD.md) | Required README outline, naming and repo-documentation rules |
+| [`VOICE.md`](docs/VOICE.md) | How everything a person reads is written, loaded in every session |
 | [`TOKEN_POLICY.md`](docs/TOKEN_POLICY.md) | Token-cost controls and validation |
 | [`SKILLS-PLACEMENT.md`](docs/SKILLS-PLACEMENT.md) | Where new skill files belong |
 | [`FRAMEWORK_BOUNDARY.md`](docs/FRAMEWORK_BOUNDARY.md) | What OliverCode deliberately does not do |

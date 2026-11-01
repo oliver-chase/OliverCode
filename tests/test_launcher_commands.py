@@ -52,6 +52,8 @@ class TestInstall(unittest.TestCase):
         claude_md = self.tmp / ".claude" / "CLAUDE.md"
         self.assertTrue(claude_md.is_symlink())
         self.assertEqual(claude_md.resolve(), (REPO_ROOT / "CLAUDE.md").resolve())
+        voice = self.tmp / ".claude" / "VOICE.md"
+        self.assertEqual(voice.resolve(), (REPO_ROOT / "docs" / "VOICE.md").resolve())
         linked = [p for p in (self.tmp / ".claude" / "skills").iterdir() if p.is_symlink()]
         self.assertGreater(len(linked), 0, "no skills were linked")
 

@@ -106,7 +106,7 @@ yourself if you want a restore point:
 ```bash
 cp -R ~/.claude/skills ~/.claude/skills.pre-olivercode 2>/dev/null || true
 
-scripts/olivercode install     # symlinks CLAUDE.md + skills, backing up what it replaces
+scripts/olivercode install     # symlinks CLAUDE.md, VOICE.md + skills, backing up what it replaces
 scripts/olivercode health
 ```
 
