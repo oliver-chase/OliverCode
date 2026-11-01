@@ -19,33 +19,14 @@ go in one local file, so nothing tracked has to match this machine's folders.
 - the private repos, the skills folder and any repo outside the fleet folder are per machine, so they
   are named in `olivercode.local.json` before `sync-hooks` and `health` run
 
-```bash
-# 1. OliverCode and the fleet repos, side by side in one folder (the fleet root)
-git clone https://github.com/<owner>/OliverCode.git && cd OliverCode
-OC="$(pwd)"                       # kept for step 5, run after cd-ing away
-bash scripts/validate.sh          # the clone is sound before anything is changed
+Clone OliverCode and each fleet repo side by side in one folder, then copy
+`olivercode.local.example.json` to `olivercode.local.json` and fill in this machine's paths.
+The rest follows `docs/ADOPTING.md`: Step 0 proves the clone, Step 2 runs `install`, Step 6
+installs enforcement and Step 7 proves a gate blocks. Steps 1, 3, 4 and 5 are already done,
+because the rules and the registry come back with the clones.
 
-# 2. This machine's paths. Leave out what this machine does not have.
-cp olivercode.local.example.json olivercode.local.json   # then edit it
-
-# 3. Activate OliverCode: rules and skills into ~/.claude
-scripts/olivercode install        # links CLAUDE.md, VOICE.md + skills, adds the hooks, backs up what it replaces
-
-# 4. Confirm the fleet, then install enforcement
-scripts/olivercode discover --root ../          # confirms what's present vs. the registry
-scripts/olivercode sync-hooks
-scripts/olivercode health                       # must end HEALTHY
-
-# 5. Prove a gate blocks, rather than assuming it
-cd <any governed repo>
-bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
-```
-
-`health` at step 4 is the checkpoint. It verifies the skill links, that every remote actually
-resolves and that no tracked file exceeds GitHub's 100MB limit. A registered repo that is not
-cloned here is listed once and is not a failure.
-
-The keys `olivercode.local.json` takes are listed in `docs/ADOPTING.md`.
+`health` is the checkpoint, and it must end HEALTHY. A registered repo that is not cloned here
+is listed once and is not a failure.
 
 ---
 
@@ -55,7 +36,7 @@ Each of these needs a person. They are listed so the list is finite rather than 
 
 **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is
-absent. `shared/repo-map.json` is the tracked list of what should be there.
+absent. The private repo's `olivercode/repo-map.json` lists what should be there.
 
 **Marketplace plugins.** Third-party plugins are installed through Claude Code, not through this
 repo. `docs/EXTERNAL-TOOLING.md` lists each one and what it is for.
