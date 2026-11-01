@@ -29,9 +29,9 @@ Send this first, in one turn, exactly as written, with no other opening line and
 | Required fields | Every open item has Priority and Size, plus Work Type and Area where the config defines them |
 | Status drift | Board Status matches the issue state: the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board |
 | Duplicate cards | No issue has more than one card on the board, counted per repo and number (the same number in two repos is two issues) |
-| Ready occupancy | The `Ready` column holds at least one item |
+| Ready occupancy | The `Ready` column holds at least one item whenever Backlog holds one |
 | Area freshness | Every Area option matches a folder directly under the skills root you pass, a reviewed retired label, a parked family, or the `fleet-wide` catch-all. Every such folder has a matching option |
-| Ready candidates | Fires only with an empty Ready column. Ranks Backlog items by Priority then Size, skips any that a keyword scan reads as blocked, and lists up to 5. |
+| Ready candidates | Fires only with an empty Ready column and a non-empty Backlog. Ranks Backlog items by Priority then Size, skips any that a keyword scan reads as blocked, and lists up to 5. |
 
 Run `python3 scripts/check_board_hygiene.py --config path/to/backlog-config.json` from this skill's folder. The config is `docs/backlog-config.json` in the repo whose board you check. It holds the project and repo identity and the field IDs. Without `--config`, or with a path that holds no file, the script stops with one line that says so. Add `--dimension fields|drift|duplicates|ready|area|suggest` to run one. Add `--skills-root path/to/skills` to run Area freshness against that folder's direct sub-folders. Without it, Area reports a skip and the other five run. The script needs `gh` on the path, signed in.
 

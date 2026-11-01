@@ -90,6 +90,19 @@ class DuplicateCards(unittest.TestCase):
         self.assertEqual([], bh.check_duplicate_cards([item(1, "Ready"), item(2, "Ready")]))
 
 
+class ReadyChecks(unittest.TestCase):
+    def test_a_board_with_no_backlog_items_is_clean(self):
+        items = [{"status": "Complete", "content": {"body": ""}}]
+        self.assertEqual(bh.check_ready_occupancy(items), [])
+        self.assertEqual(bh.check_ready_candidates(items), [])
+
+    def test_backlog_items_with_an_empty_ready_column_are_flagged(self):
+        items = [{"status": "Backlog", "priority": "P1", "size": "S",
+                  "content": {"number": 1, "title": "Next", "body": ""}}]
+        self.assertEqual(len(bh.check_ready_occupancy(items)), 1)
+        self.assertTrue(bh.check_ready_candidates(items))
+
+
 class FamilyDiscovery(unittest.TestCase):
     def test_every_top_level_folder_is_a_family_except_docs_and_dot_folders(self):
         with tempfile.TemporaryDirectory() as tmp:
