@@ -1,7 +1,11 @@
-# Project Agent Rules (template)
+> Framework rules (voice, practice, gates and skill placement) load on their own from
+> `~/.claude/CLAUDE.md`, which links into OliverCode. To read a file in OliverCode, resolve its
+> path with `dirname "$(readlink ~/.claude/CLAUDE.md)"`. This file holds only what is specific
+> to this repo.
 
-> Template. The global rules already load in every session from `~/.claude/CLAUDE.md`.
-> This file holds only this repo's own facts: what it is, how to validate it and where it deploys.
-> If the repo already keeps agent rules under another name, such as `AGENTS.md`, merge that
-> content into this file. CLAUDE.md is the only filename Claude Code loads on its own.
+# <Repo> — Agent Rules
 
+Read before working here:
+- <each document that is authoritative for this repo. List only files that exist. The convention is `docs/repo-structure-contract.md`, and `docs/backlog-config.json` when the repo has a GitHub Project.>
+
+Run `bash scripts/validate.sh` before every commit. It is this repo's canonical validation.

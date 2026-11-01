@@ -140,26 +140,8 @@ assumes it means OliverCode's.
 
 ## Step 4 — Rewrite each repo's CLAUDE.md
 
-For every repo, the file should carry **only what is specific to that repo**, headed by a
-short block saying where the shared rules come from:
-
-```markdown
-> Framework rules (voice, practice, gates, skill placement) load automatically from
-> `~/.claude/CLAUDE.md`, which symlinks into OliverCode. Resolve OliverCode's own path with
-> `dirname "$(readlink ~/.claude/CLAUDE.md)"` when you need a file from it. This file carries
-> only what is specific to this repo.
-
-# <Repo> — Agent Rules
-
-Read before working here:
-- <the docs that are actually authoritative for this repo — list the files that exist,
-  not the ones the template suggests. `docs/repo-structure-contract.md` and
-  `docs/backlog-config.json` (naming the repo's GitHub Project) are the convention in
-  `core/contracts/PROJECT_STRUCTURE_STANDARD.md`, but pointing at a file the repo does
-  not have is worse than pointing at nothing>
-
-Run `bash scripts/validate.sh` before commit (this repo's canonical validation).
-```
+For every repo, start from `core/templates/project/CLAUDE.md`. The file carries **only what is
+specific to that repo**, under a short block that says where the shared rules come from.
 
 Rules for this rewrite:
 
