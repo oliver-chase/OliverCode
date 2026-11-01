@@ -56,7 +56,7 @@ register() { # $1 = oc dir, $2.. = "name[:path]" entries
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
-tmpl = next(iter(d["profiles"].values()))
+tmpl = next(iter(d["profiles"].values()), None) or d["_exampleProfile"]
 d["profiles"] = {}
 for spec in sys.argv[2:]:
     name, _, path = spec.partition(":")

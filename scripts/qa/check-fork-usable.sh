@@ -142,7 +142,8 @@ HOME="$FAKE_HOME" python3 - "$WS/OliverCode/shared/repo-profiles.json" <<'PY' >/
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
-tmpl = next(iter(d["profiles"].values()))
+# The tracked registry ships empty with one example entry; a fork that filled it has profiles.
+tmpl = next(iter(d["profiles"].values()), None) or d["_exampleProfile"]
 d["profiles"] = {}
 for name in ("probe-web", "probe-api"):
     entry = json.loads(json.dumps(tmpl))
