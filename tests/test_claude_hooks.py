@@ -73,6 +73,40 @@ class TestCommitGuard(RepoCase):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertIn("overrides core.hooksPath", guard.reason("git -c core.hooksPath=/dev/null commit -m x", self.repo))
 
+    def test_separators_inside_a_message_do_not_hide_the_commit(self):
+        self.gates(point_git_at_them=True)
+        heredoc = "git commit --no-verify -m \"$(cat <<'EOF'\nsubject; body | more && done\nEOF\n)\""
+        for cmd in ('git commit -m "a; b" --no-verify', "git commit -m 'x | y' -n", heredoc):
+            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
+
+    def test_newlines_subshells_and_wrappers_do_not_hide_the_commit(self):
+        self.gates(point_git_at_them=True)
+        for cmd in ("git add .\ngit commit --no-verify -m x", "(git commit --no-verify -m x)",
+                    "env git commit --no-verify -m x", "true & git commit --no-verify -m x",
+                    "command git commit -n -m x"):
+            self.assertIn("--no-verify", guard.reason(cmd, self.repo), repr(cmd))
+
+    def test_every_way_of_overriding_core_hookspath_is_refused(self):
+        self.gates(point_git_at_them=True)
+        for cmd in ("git -ccore.hooksPath=/dev/null commit -m x", "git --config-env=core.hooksPath=X commit -m x",
+                    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x"):
+            self.assertIn("overrides core.hooksPath", guard.reason(cmd, self.repo), cmd)
+
+    def test_a_message_with_separators_still_reaches_the_unset_hooks_check(self):
+        self.gates(point_git_at_them=False)
+        for cmd in ('git commit -am "msg; with semicolon"', 'git commit -m "a && b"'):
+            self.assertIn("core.hooksPath is unset", guard.reason(cmd, self.repo), cmd)
+
+    def test_git_pointed_at_another_hooks_folder_does_not_run_the_repos_gates(self):
+        self.gates(point_git_at_them=False)
+        other = self.repo / ".git" / "hooks"
+        other.mkdir(parents=True, exist_ok=True)
+        stub = other / "pre-commit"
+        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+        subprocess.run(["git", "-C", str(self.repo), "config", "core.hooksPath", ".git/hooks"], check=True)
+        self.assertIn(".githooks", guard.reason('git commit -m "x"', self.repo))
+
     def test_a_message_or_value_that_looks_like_n_is_not_a_skip(self):
         self.gates(point_git_at_them=True)
         for cmd in ('git commit -m -n', 'git commit -mnote', 'git commit -F notes.txt', 'echo "git commit -n" > notes.txt'):
@@ -133,6 +167,16 @@ class TestSettingsMerge(unittest.TestCase):
         commands = [h["command"] for groups in moved["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertFalse([c for c in commands if "/old/place/" in c])
         self.assertEqual(claude_settings.merge(moved, Path("/new/place/scripts/hooks")), moved)
+
+    def test_a_settings_shape_the_merge_would_guess_at_is_refused_and_left_alone(self):
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-settings-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        path = tmp / "settings.json"
+        for bad in ({"hooks": None}, {"hooks": []}, {"hooks": {"Stop": ["a string"]}}, ["not", "an", "object"]):
+            path.write_text(json.dumps(bad))
+            with self.assertRaises(ValueError):
+                claude_settings.install(path)
+            self.assertEqual(json.loads(path.read_text()), bad)
 
     def test_install_writes_once_and_then_reports_already(self):
         tmp = Path(tempfile.mkdtemp(prefix="olivercode-settings-"))

@@ -47,11 +47,21 @@ def gate_problem(root: Path) -> str:
     hooks_dir = Path(configured).expanduser()
     if not hooks_dir.is_absolute():
         hooks_dir = root / hooks_dir
+    if hooks_dir.resolve() != (root / ".githooks").resolve():
+        # Any other folder with an executable pre-commit, such as .git/hooks or a global
+        # hooks path, passes git's check while the repo's own gates never run.
+        return f"core.hooksPath points at {configured}, so this repo's .githooks gates never run"
+    return hooks_dir_problem(hooks_dir)
+
+
+def hooks_dir_problem(hooks_dir: Path) -> str:
+    """Why git would run no hook from this directory, or "" when its pre-commit runs.
+    The one home of these three checks: health and the Claude Code hooks both call it."""
     if not hooks_dir.is_dir():
-        return f"core.hooksPath points at {configured}, which does not exist, so git runs no hooks"
+        return f"core.hooksPath points at {hooks_dir}, which does not exist, so git runs no hooks"
     live = hooks_dir / "pre-commit"
     if not live.is_file():
-        return f"{configured} holds no pre-commit file, so git runs no hooks"
+        return f"{hooks_dir} holds no pre-commit file, so git runs no hooks"
     if not os.access(live, os.X_OK):
-        return f"{configured}/pre-commit is not executable, so git skips it"
+        return f"{live} is not executable, so git skips it"
     return ""

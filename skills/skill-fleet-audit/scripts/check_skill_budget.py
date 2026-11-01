@@ -62,7 +62,10 @@ def main():
         rows = {folder.name: suggested(shipped_words(folder)) for folder in _fleet.find_skills(_fleet.FLEET_ROOT)}
         print(json.dumps({"skills": dict(sorted(rows.items()))}, indent=2))
         return 0
-    problems = find_problems(_fleet.FLEET_ROOT, load_budgets())
+    root = _fleet.scan_root([a for a in sys.argv[1:] if a != "--measure"])
+    own = _fleet.fleet_data("skill-budgets.json", root=root)
+    budgets = load_budgets(own if own.is_file() else BUDGET_FILE)
+    problems = find_problems(root, budgets)
     for line in problems:
         print(" -", line)
     print(f"{len(problems)} skill budget finding(s)." if problems else "Every budgeted skill is within its word budget.")

@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.repo_profiles import load_repo_profiles, registry_file  # noqa: E402
+from lib.repo_profiles import load_repo_profiles, registry_file, registry_gap  # noqa: E402
 from lib.repo_profiles import resolve_repo_path as _resolve_repo_path  # noqa: E402
 from lib.repo_profiles import iter_fleet as _iter_fleet  # noqa: E402
 from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E402,F401
@@ -27,6 +27,7 @@ from lib.health_checks import (  # noqa: E402,F401
     _check_voice_copies, _check_scheduler,
 )
 from lib import claude_settings as _claude_settings  # noqa: E402
+from lib import repo_gates as _repo_gates  # noqa: E402
 from lib.local_config import private_repos as _private_repos  # noqa: E402
 from lib.local_config import skills_root as _skills_root  # noqa: E402
 from lib.local_config import push_repos as _push_repos  # noqa: E402
@@ -357,8 +358,8 @@ def command_install(oc_root: Path) -> int:
     try:
         result = _claude_settings.install(claude_dir / "settings.json")
         print(f"  [{result.upper()}] Claude Code hooks in ~/.claude/settings.json")
-    except json.JSONDecodeError as exc:
-        print(f"  [FAIL] ~/.claude/settings.json is not valid JSON ({exc}); left as it is, hooks not installed")
+    except ValueError as exc:  # invalid JSON, or a shape the merge would have to guess at
+        print(f"  [FAIL] ~/.claude/settings.json could not be merged ({exc}); left as it is, hooks not installed")
         broken_settings = True
 
     broken = sorted(p.name for p in skills_dir.iterdir() if p.is_symlink() and not p.exists())
@@ -553,14 +554,11 @@ def _hook_problems(hooks_dir: Path, templates_dir: Path) -> list[str]:
     A repo running the private variant still deploys it under the filename
     `pre-commit`, so a live `pre-commit` is checked against BOTH template contents.
     """
-    if not hooks_dir.is_dir():
-        return [f"core.hooksPath points at {hooks_dir}, which does not exist — git runs NO hooks"]
+    fail_open = _repo_gates.hooks_dir_problem(hooks_dir)
+    if fail_open:
+        return [fail_open]
 
     live = hooks_dir / "pre-commit"
-    if not live.is_file():
-        return [f"no pre-commit file in {hooks_dir} — git runs NO hooks"]
-    if not os.access(live, os.X_OK):
-        return [f"{live} is not executable — git skips it silently"]
 
     canonical_contents = []
     for template in ("pre-commit", "pre-commit-private"):
@@ -656,7 +654,13 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     # (c) Fleet repos: unset core.hooksPath, or a hook file diverging from the template.
     profiles, _ = load_repo_profiles(oc_root)
     fleet = list(_iter_fleet(profiles, fleet_root or oc_root.parent))
-    if not fleet:
+    gap = registry_gap(oc_root)
+    if gap:
+        # Private repos are named but none holds the registry, so every fleet check below would
+        # pass on an empty fleet; a machine set up before the registry moved hits exactly this.
+        print(f"  [FAIL] {gap}")
+        failed += 1
+    elif not fleet:
         print(f"  [WARN] no fleet registered in {registry_file(oc_root, 'repo-profiles.json')} — skipping hook-drift check")
         print("         If your registry lives in a private repo, name that repo under privateRepos in")
         print("         olivercode.local.json; OliverCode reads <repo>/olivercode/repo-profiles.json from it.")
@@ -952,7 +956,9 @@ def command_update() -> int:
 
     Install runs on every update because a pull can add a skill or a Claude Code hook,
     and only install links those into ~/.claude; without it a second device kept the
-    files of a new skill with no link to them.
+    files of a new skill with no link to them. Install and sync-hooks run as new
+    processes, so they use the code the pull just brought in, never the copy this
+    process loaded before it.
 
     On a fork `origin` is the FORK, so this does not fetch upstream framework changes.
     Pulling those is a deliberate act with real merge consequences -- a fork carries local
@@ -962,10 +968,11 @@ def command_update() -> int:
     pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
     if pull_code != 0:
         return pull_code
+    launcher = [sys.executable, str(OC_ROOT / "scripts" / "olivercode")]
     print()
-    install_code = command_install(OC_ROOT)
-    print("\nSyncing hooks across the fleet + private repos (SYS-3):")
-    sync_code = command_sync_hooks(OC_ROOT)
+    install_code = subprocess.run([*launcher, "install"]).returncode
+    print()
+    sync_code = subprocess.run([*launcher, "sync-hooks"]).returncode
     return install_code or sync_code
 
 
