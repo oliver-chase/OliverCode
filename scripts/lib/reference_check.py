@@ -28,7 +28,12 @@ TRACKED_ROOTS = (
     ".githooks/",
     ".github/",
     ".claude-optimization/",
+    "runtime/",
 )
+
+# `$OC/...` is how CLAUDE.md names a path inside this repo from any working directory, so it
+# is a real reference once the prefix comes off. Any other `$` still marks a placeholder.
+OC_PREFIX = "$OC/"
 
 # Placeholder syntax — the token names a shape, not a file that exists.
 PLACEHOLDER_CHARS = set("<>*|$")
@@ -51,9 +56,6 @@ DOWNSTREAM_RELATIVE = frozenset(
         "scripts/check-planning-doc-governance.py",
         "scripts/check-backlog-hygiene.mjs",
         "scripts/oc-supabase-keepalive.sh",
-        ".github/user-stories/",
-        ".github/user-stories/README.md",
-        ".github/user-stories/_index.md",
         ".githooks/pre-commit-private",
         "supabase/keepalive.sql",
     }
@@ -71,6 +73,10 @@ TEMPLATE_PREFIX = "core/templates/"
 # plan doc correctly describing a not-yet-built scripts/local-scheduler/ failed this
 # check the same way a real broken reference would, with no way to tell the two apart.
 PLANS_PREFIX = "docs/plans/"
+
+# A skill's own tests build fake skills in a temporary folder and name paths inside them,
+# so their paths describe that fixture, never this repo's tree.
+SKILL_TEST = re.compile(r"^skills/[^/]+/scripts/test_[^/]+\.py$")
 
 # Gitignored local layers. Documenting them is correct, and a fresh clone lacks them --
 # these must stay exempt or `validate.sh` fails for everyone who forks this repo
@@ -118,6 +124,8 @@ def _candidates(text: str) -> list[str]:
     for raw in BACKTICK.findall(text):
         token = raw.strip().split()[0] if raw.strip() else ""
         token = token.rstrip(".,;:)").split("(")[0]
+        if token.startswith(OC_PREFIX):
+            token = token[len(OC_PREFIX):]
         if token.startswith(TRACKED_ROOTS):
             found.append(token)
     return found
@@ -134,7 +142,7 @@ def check_references(repo_root: Path) -> tuple[int, list[str]]:
     checked = 0
 
     for rel in _tracked_files(repo_root):
-        if rel.startswith(TEMPLATE_PREFIX) or rel.startswith(PLANS_PREFIX) or rel in ANTI_PATTERN_FILES:
+        if rel.startswith(TEMPLATE_PREFIX) or rel.startswith(PLANS_PREFIX) or rel in ANTI_PATTERN_FILES or SKILL_TEST.match(rel):
             continue
         if not rel.endswith((".md", ".json", ".sh", ".py", ".yml", ".yaml", ".mjs")):
             continue

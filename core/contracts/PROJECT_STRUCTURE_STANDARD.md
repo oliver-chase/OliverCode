@@ -16,10 +16,8 @@ Define the hygiene rules every repo's backlog, commits, and tests follow, regard
 which backlog paradigm the repo uses, so every agent follows the same read/write flow.
 
 Every repo's backlog lives in a GitHub Project named by a `backlog-config.json` the repo's
-own `CLAUDE.md` points to — `skills/backlog-management/SKILL.md` governs it. A file-based
-`.github/user-stories/` story registry predates this default and was retired fleet-wide once
-every repo that had adopted it migrated its open stories to a GitHub Project; nothing in the
-fleet uses it as of this standard's current revision.
+own `CLAUDE.md` points to — `skills/backlog-management/SKILL.md` governs it. No repo keeps a
+file-based story registry under .github.
 
 ## Core Invariants
 

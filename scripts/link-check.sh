@@ -37,7 +37,8 @@ $QUIET || echo ""
 # Scan docs/ plus the other tracked homes of plain [text](path.md) links. Measured
 # Scanning only docs/ missed most real occurrences — scanning only
 # docs/ made the checker a near no-op. (Exclude docs/archive/ — archived links may break.)
-SCAN_ROOTS=("$REPO_ROOT/docs" "$REPO_ROOT/core" "$REPO_ROOT/shared" "$REPO_ROOT/README.md" "$REPO_ROOT/ARCHITECTURE.md")
+SCAN_ROOTS=("$REPO_ROOT/docs" "$REPO_ROOT/core" "$REPO_ROOT/shared" "$REPO_ROOT/skills" "$REPO_ROOT/runtime/README.md"
+  "$REPO_ROOT/README.md" "$REPO_ROOT/ARCHITECTURE.md" "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/CONTRIBUTING.md")
 while IFS= read -r -d '' file; do
   rel_path="${file#$REPO_ROOT/}"
   dir="$(dirname "$file")"

@@ -10,7 +10,6 @@ the machine-readable policies behind it.
 **Backend policies (machine-readable, loaded per task):**
 - `shared/repo-profiles.json` (tracked, real fleet) -- per-repo validation and evidence requirements
 - `shared/task-policies/task-types.json` -- per-task-type evidence requirements
-- `shared/task-policies/result-schema.json` -- evidence record shape
 - `scripts/orchestration-gatekeeper.py` -- deterministic pass/fail validation
 
 ## The Process
@@ -40,7 +39,7 @@ User says "yes" / approves change
     |
     v
 6.  COMMIT -- only on pass, with descriptive message
-    |   Populate evidence record matching result-schema.json
+    |   Record the evidence fields task-types.json requires for this task type
     |
     v
 7.  PUSH -- to the correct repo
@@ -82,9 +81,8 @@ The gatekeeper can validate a completion claim against a machine-readable eviden
 python3 scripts/orchestration-gatekeeper.py --repo <name> --task-type <type> --evidence-file <path>
 ```
 
-It checks the fields `shared/task-policies/task-types.json` requires for that task type, in
-the shape `shared/task-policies/result-schema.json` declares, and exits nonzero naming the
-exact failing stage. Use it when a completion claim needs to be auditable by something other
+It checks that every field `shared/task-policies/task-types.json` requires for that task type
+is present and well formed, and exits nonzero naming the exact failing stage. Use it when a completion claim needs to be auditable by something other
 than trust — a long autonomous run, a handoff, a task where "I ran the tests" needs proof.
 
 **It is opt-in, not a precondition for every commit.** Stating it as a universal requirement
