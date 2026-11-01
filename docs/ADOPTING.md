@@ -332,7 +332,7 @@ Recommended:
 ```
 
 **If your repos do not share a parent at all** — the normal case when adopting into an
-existing setup — give each profile an explicit `path` in `shared/repo-profiles.json`:
+existing setup — give each profile an explicit `path` in the registry file named in Step 5:
 
 ```json
 "acme-api": { "name": "acme-api", "path": "~/work/clients/acme/api", ... }

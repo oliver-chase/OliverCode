@@ -353,6 +353,17 @@ class TestGate11WritingClarity(GateHarness):
         result = self.assertBlocked("gate 11", **self.env)
         self.assertIn("needs ste-lint-joined.py", result.stdout)
 
+    @unittest.skipUnless(shutil.which("jq"), "the --json summary path needs jq")
+    def test_a_lint_warning_on_stderr_still_passes(self):
+        # A warning on stderr used to land in the captured JSON, jq failed on it, and
+        # `set -e` ended the hook with no BLOCKED line.
+        lint = Path(self.env["HOME"]) / ".claude/skills/asd-ste100/scripts/ste-lint.py"
+        lint.write_text(self.STUB_LINT.replace(
+            "def main(args):\n", "def main(args):\n    import sys; print('DeprecationWarning: x', file=sys.stderr)\n"),
+            encoding="utf-8")
+        self.stage("skills/x/SKILL.md", "Fixes the parser.\n")
+        self.assertIn("Gate 11 passed.", self.assertAllowed(**self.env).stdout)
+
 
 class TestPrivateRepoLocalGate(GateHarness):
     """The private variant runs a repo's own .githooks/pre-commit.local after its gates."""

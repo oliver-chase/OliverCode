@@ -599,10 +599,6 @@ class TestWaiverExpiryDateHandling(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestPushFleetExitCode(unittest.TestCase):
     """A blocked push must exit non-zero: the local scheduler touches its marker on exit 0,
     so a push that failed and exited 0 was logged OK and not retried for hours."""
@@ -635,6 +631,7 @@ class TestPushFleetExitCode(unittest.TestCase):
         with mock.patch.object(launcher, "_private_repos", return_value={"target": repo}), \
              mock.patch.object(launcher, "_push_repos", return_value=[]), \
              mock.patch.object(launcher, "load_repo_profiles", return_value=({}, None)), \
+             mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": os.devnull}), \
              contextlib.redirect_stdout(io.StringIO()):
             # OliverCode itself is a target too; an absent .git makes it a plain SKIP.
             return launcher.command_push_fleet(oc_root, dry_run=False)
@@ -647,3 +644,8 @@ class TestPushFleetExitCode(unittest.TestCase):
 
     def test_successful_push_exits_zero(self):
         self.assertEqual(self._run(self._repo_ahead_of(self.remote)), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
