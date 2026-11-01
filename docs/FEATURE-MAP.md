@@ -82,8 +82,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `skills/` | engineering-method and framework-tooling skills. `skills/INDEX.md` is the catalog |
 | `shared/project-bootstrap-manifest.json` | managed-file list and strictness for downstream repos |
 | `shared/workflow-standards.md` | trigger routing, branch lifecycle, testing baseline |
-| `shared/repo-map.json` | cross-project repo registry |
-| `shared/repo-profiles.json` (tracked, real fleet) | per-repo validation commands and evidence requirements |
+| `shared/repo-profiles.json` | the fleet registry: per-repo validation commands, evidence requirements and governance exceptions. It ships empty, and the real copy lives in a private repo (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`) |
 | `shared/task-policies/` | task-type policies and result schema |
 | `docs/KEEPALIVE-STANDARD.md` | Supabase/Cloudflare keepalive contract. Its four template files sync via the manifest's `conditionalFiles`, gated on each repo's `keepalive` profile block |
 

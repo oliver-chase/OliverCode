@@ -24,7 +24,7 @@ Run the full gate suite:
 
 ## Product commands are not here
 
-Product runtime authority lives in the owning project repo (see `shared/repo-map.json`).
+Product runtime authority lives in the owning project repo (see the registry's `repo-profiles.json`).
 OliverCode ships standards, not product implementations — use that repo's own
 scripts and docs.
 

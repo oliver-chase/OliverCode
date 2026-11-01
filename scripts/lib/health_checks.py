@@ -52,9 +52,9 @@ def _check_github_about(oc_root: Path) -> tuple[int, int, int]:
     return 1, 0, 0
 
 def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
-    """Flag governance exceptions in repo-map.json whose `expiresAt` has passed.
+    """Flag governance exceptions in repo-profiles.json whose `expiresAt` has passed.
 
-    repo-map.json records deliberate exceptions -- repos waived out of the governance
+    The registry records deliberate exceptions -- repos waived out of the governance
     contract, complexity variances approved with a reason -- and every entry carries an
     `expiresAt`. Nothing read the file. An expiry date that no code checks is not a
     deadline, it is a comment: the waiver simply became permanent on the day it was
@@ -63,9 +63,9 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     Reported, never fatal. The point is to make the date mean something at the moment
     someone looks at fleet health, not to block a commit in an unrelated repo.
     """
-    path = registry_file(oc_root, "repo-map.json")
+    path = registry_file(oc_root, "repo-profiles.json")
     if not path.is_file():
-        print("  [WARN] no repo-map.json — skipping waiver expiry check")
+        print("  [WARN] no repo-profiles.json — skipping waiver expiry check")
         return 0, 0, 1
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -78,12 +78,12 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     for waiver in data.get("unmanagedRepoWaivers", []):
         entries.append((f"unmanaged-repo waiver for {waiver.get('name', '?')}",
                         waiver.get("expiresAt", ""), waiver.get("reason", "")))
-    for repo in data.get("repos", []):
+    for name, profile in data.get("profiles", {}).items():
         # Both variance kinds carry the same contract: target + reason + expiry.
         for key in ("approvedMaintainabilityVariances", "approvedStrictVariances"):
-            for variance in repo.get(key, []):
+            for variance in profile.get(key, []):
                 entries.append(
-                    (f"{repo.get('name', '?')}: {variance.get('target', 'variance')} variance",
+                    (f"{name}: {variance.get('target', 'variance')} variance",
                      variance.get("expiresAt", ""), variance.get("reason", ""))
                 )
 

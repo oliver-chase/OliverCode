@@ -62,4 +62,4 @@ A public/shared repo describes the PATTERN, not your implementation. Never commi
 - Personal identifiers, shell aliases, machine-specific configs
 - Enumeration matching your actual project count
 
-`repo-map.json` shows project PROFILES (governance templates), not actual projects — max two examples.
+`repo-profiles.json` ships one `_exampleProfile` and no real projects. The real fleet lives in a private repo.
