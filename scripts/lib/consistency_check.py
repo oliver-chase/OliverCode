@@ -1,7 +1,7 @@
 """Doc-vs-code consistency checks.
 
 One failure class: a tracked doc asserts something the code contradicts. Collapsed
-into a single checker per FRAMEWORK_BASELINE.md's removal rule -- a validator that
+into a single checker per docs/RULES.md's removal rule -- a validator that
 duplicates another's failure class gets merged, not added alongside.
 
 Each `check_*` below states what drifts and why nothing else catches it. Gate counts
@@ -98,7 +98,7 @@ def check_skill_index(repo_root: Path) -> list[str]:
 
 
 # Every hook variant, and how a doc line signals which one it is talking about.
-# Gate coverage is NOT uniform per repo type. docs/GOVERNANCE.md holds the table, and
+# Gate coverage is NOT uniform per repo type. docs/GATES.md holds the table, and
 # the tests pin the totals — restating numbers here would just be a third copy to drift.
 HOOKS = {
     "olivercode": Path(".githooks/pre-commit"),
@@ -203,14 +203,14 @@ def check_gate_count(repo_root: Path) -> list[str]:
 
 
 def check_gate_coverage_table(repo_root: Path) -> list[str]:
-    """docs/GOVERNANCE.md's per-repo Total row must match the real hooks.
+    """docs/GATES.md's per-repo Total row must match the real hooks.
 
     That table is the single home for gate coverage and every other doc points at it,
     so a stale row propagates everywhere by design.
     """
-    doc = repo_root / "docs" / "GOVERNANCE.md"
+    doc = repo_root / "docs" / "GATES.md"
     if not doc.is_file():
-        return ["  [GATES] docs/GOVERNANCE.md is missing — it holds the gate coverage table"]
+        return ["  [GATES] docs/GATES.md is missing — it holds the gate coverage table"]
 
     row = next(
         (l for l in doc.read_text(encoding="utf-8").splitlines()
@@ -219,7 +219,7 @@ def check_gate_coverage_table(repo_root: Path) -> list[str]:
     )
     if row is None:
         return [
-            "  [GATES] docs/GOVERNANCE.md has no '| **Total** |' row in its gate coverage "
+            "  [GATES] docs/GATES.md has no '| **Total** |' row in its gate coverage "
             "table — that row is what pins the per-repo counts to the hooks"
         ]
 
@@ -229,7 +229,7 @@ def check_gate_coverage_table(repo_root: Path) -> list[str]:
     expected = [e for e in expected if e is not None]
     if stated != expected:
         failures.append(
-            f"  [GATES] docs/GOVERNANCE.md's coverage table totals {stated} but the hooks "
+            f"  [GATES] docs/GATES.md's coverage table totals {stated} but the hooks "
             f"have {expected} (OliverCode, adopted repo, private variant)"
         )
     return failures

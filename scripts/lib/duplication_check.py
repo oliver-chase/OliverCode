@@ -26,27 +26,27 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 # reason recreates the blind spot this check exists to close.
 DECLARED_MARKERS: dict[str, str] = {
     "dirname readlink claude claude md": (
-        "The $OC-resolution snippet (docs/ADOPTING.md, CLAUDE.md, "
+        "The $OC-resolution snippet (docs/SETUP.md, CLAUDE.md, "
         "skills/olivercode-adoption/SKILL.md). Deliberately identical everywhere it "
-        "appears -- ADOPTING.md itself calls this 'the one hard constraint' and every "
+        "appears -- SETUP.md itself calls this 'the one hard constraint' and every "
         "doc teaching it should show the exact same pattern so it is recognizable."
     ),
     "optimize do not amputate you are pointing existing rules at a shared home not "
     "deleting them": (
-        "docs/ADOPTING.md's governing rule, restated identically in "
+        "docs/SETUP.md's governing rule, restated identically in "
         "skills/olivercode-adoption/SKILL.md because the skill exists to drive that "
         "exact rule during a live session -- see the skill's own 'the rule that "
         "governs everything here' section."
     ),
     "in sessions whose working directory is almost never olivercode so every path in "
     "it must resolve from anywhere": (
-        "Same $OC-constraint explanation, ADOPTING.md and its own driving skill. "
+        "Same $OC-constraint explanation, SETUP.md and its own driving skill. "
         "Declared alongside the $OC-resolution snippet above for the same reason."
     ),
     "scripts qa probe secret gate sh writes a fake secret commits expects a block": (
         "The one canonical invocation line for scripts/qa/probe-secret-gate.sh "
-        "(docs/ADOPTING.md, docs/NEW-MACHINE.md, skills/olivercode-adoption/SKILL.md) "
-        "-- a runnable example DOCUMENTATION-STANDARD.md wants shown identically "
+        "(README.md, docs/SETUP.md, skills/olivercode-adoption/SKILL.md) "
+        "-- a runnable example docs/RULES.md wants shown identically "
         "everywhere it appears, not three independently-worded ones."
     ),
     "send this first in one turn exactly as written with no other opening line and no "

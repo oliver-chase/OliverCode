@@ -37,8 +37,8 @@ $QUIET || echo ""
 # Scan docs/ plus the other tracked homes of plain [text](path.md) links. Measured
 # Scanning only docs/ missed most real occurrences — scanning only
 # docs/ made the checker a near no-op. (Exclude docs/archive/ — archived links may break.)
-SCAN_ROOTS=("$REPO_ROOT/docs" "$REPO_ROOT/core" "$REPO_ROOT/shared" "$REPO_ROOT/skills" "$REPO_ROOT/runtime/README.md"
-  "$REPO_ROOT/README.md" "$REPO_ROOT/ARCHITECTURE.md" "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/CONTRIBUTING.md")
+SCAN_ROOTS=("$REPO_ROOT/docs" "$REPO_ROOT/core" "$REPO_ROOT/shared" "$REPO_ROOT/skills"
+  "$REPO_ROOT/README.md" "$REPO_ROOT/CLAUDE.md")
 while IFS= read -r -d '' file; do
   rel_path="${file#$REPO_ROOT/}"
   dir="$(dirname "$file")"
@@ -55,7 +55,7 @@ while IFS= read -r -d '' file; do
     # `target` for those, hiding genuinely broken links as "valid".
     target="$(python3 -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$dir/$link")"
 
-    # runtime/control-plane/ is gitignored, local-only state (FRAMEWORK-BOUNDARY.md) —
+    # runtime/control-plane/ is gitignored, local-only state (docs/RULES.md) —
     # links into it (e.g. README.md -> runtime/control-plane/README.md) are valid
     # documentation of an optional local layer, not broken references. A fresh/
     # standalone clone genuinely won't have this directory (G4 stranger-clone test).

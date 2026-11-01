@@ -55,7 +55,7 @@ class TestShippedTree(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(
             totals, {"olivercode": 9, "template": 9, "template-private": 4},
-            "gate coverage changed -- update the table in docs/GOVERNANCE.md, which is "
+            "gate coverage changed -- update the table in docs/GATES.md, which is "
             "its single home, and every doc that points there",
         )
 
@@ -117,24 +117,24 @@ class TestMutations(unittest.TestCase):
         planted number is the private variant's total, so reattribution would hide it.
         """
         self.assertTrue(self._fails_after(
-            "docs/TROUBLESHOOTING.md", "## Commits are passing gates",
+            "docs/SETUP.md", "### Commits are passing gates",
             "The private variant is unrelated to what follows.\n\n"
             f"All {cc._hook_totals(REPO_ROOT)[0]['template-private']} gates run in this repo.\n\n"
-            "## Commits are passing gates"))
+            "### Commits are passing gates"))
 
     def test_catches_the_word_form_of_a_wrong_claim(self):
         self.assertTrue(self._fails_after(
-            "docs/TROUBLESHOOTING.md", "## Commits are passing gates",
-            "All six gates run here.\n\n## Commits are passing gates"))
+            "docs/SETUP.md", "### Commits are passing gates",
+            "All six gates run here.\n\n### Commits are passing gates"))
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/GOVERNANCE.md", "| **9** | **9** | **4** |", "| **9** | **11** | **4** |"))
+            "docs/GATES.md", "| **9** | **9** | **4** |", "| **9** | **11** | **4** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""
         self.assertTrue(self._fails_after(
-            "docs/GOVERNANCE.md", "| **Total** |", "| Total |"))
+            "docs/GATES.md", "| **Total** |", "| Total |"))
 
     def test_unmutated_sandbox_passes(self):
         """Guards the harness: if the sandbox failed on its own, every test above

@@ -95,11 +95,10 @@ class TestWhatCounts(unittest.TestCase):
         )
         self.assertEqual((0, []), check_references(self.repo))
 
-    def test_templates_plans_and_anti_pattern_files_are_not_read(self):
+    def test_templates_and_plans_are_not_read(self):
         broken = f"{BT}docs/MISSING.md{BT}\n"
         self.write("core/templates/CLAUDE.md", broken)
         self.write("docs/plans/next.md", broken)
-        self.write("core/contracts/FILE_LOCATION_STANDARD.md", broken)
         self.assertEqual((0, []), check_references(self.repo))
 
     def test_only_source_and_doc_files_are_read(self):

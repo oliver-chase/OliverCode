@@ -112,7 +112,7 @@ if (cd "$CHECKOUT" && HOME="$FAKE_HOME" bash -c '
       ln -sfn "$(pwd)/docs/VOICE.md" ~/.claude/VOICE.md
       for s in skills/*/; do ln -sfn "$(pwd)/$s" ~/.claude/skills/"$(basename "$s")"; done
       OC="$(dirname "$(readlink ~/.claude/CLAUDE.md)")"
-      test -f "$OC/core/contracts/FRAMEWORK_BASELINE.md" && test -f ~/.claude/VOICE.md' >/dev/null 2>&1); then
+      test -f "$OC/docs/RULES.md" && test -f ~/.claude/VOICE.md' >/dev/null 2>&1); then
   echo "  [OK]   README install works and \$OC resolves from a virgin HOME"
 else
   echo "  [FAIL] README install path is broken on a fresh machine"
@@ -121,7 +121,7 @@ fi
 
 echo ""
 echo "--- The documented adoption path must actually govern a fleet ---"
-# Walks the load-bearing claims of docs/ADOPTING.md against two throwaway repos.
+# Walks the load-bearing claims of docs/SETUP.md against two throwaway repos.
 # The guide is the primary onboarding artifact; an untested guide rots exactly the
 # way the --root instruction did (it told forkers to pass a flag that was ignored).
 WS="$SANDBOX/ws"

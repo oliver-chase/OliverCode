@@ -6,7 +6,7 @@ description: "Use when adopting OliverCode into a machine the user forked or clo
 # OliverCode adoption
 
 Drive the whole setup so the user does not have to read the documentation first. You read it.
-They answer questions. `$OC/docs/ADOPTING.md` is the reference contract — consult it when you
+They answer questions. `$OC/docs/SETUP.md` is the reference contract — consult it when you
 need detail, but do not make the user read it.
 
 ## The rule that governs everything here
@@ -52,14 +52,14 @@ Only they know. `npm run build`, `pytest`, a repo script. This lands in the prof
 
 ## Procedure
 
-Follow `docs/ADOPTING.md` Steps 0 to 8 in order, from the OliverCode checkout. It holds every command. At each step, an agent also does this:
+Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It holds every command. At each step, an agent also does this:
 
-- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. Mention `docs/EXTERNAL-TOOLING.md` once as optional, and install nothing unasked
+- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. Mention the README's "Optional tooling" section once as optional, and install nothing unasked
 - **Step 2, install.** Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
 - **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
 - **Step 5, register.** Add each repo's validation command (decision 4)
-- **Step 6, enforcement.** Tell the user plainly that hook enforcement fails open, and point at `docs/TROUBLESHOOTING.md`
+- **Step 6, enforcement.** Tell the user plainly that hook enforcement fails open, and point at `docs/SETUP.md` ("Troubleshooting")
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
 - **Step 8, reconcile.** Ask before deleting any backup
 

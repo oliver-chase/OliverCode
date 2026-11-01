@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """OliverCode terminal launcher.
 
-The Python CLI behind `olivercode <command>` (see docs/OLIVERCODE-LAUNCHER.md).
+The Python CLI behind `olivercode <command>` (see docs/SETUP.md, "Launcher commands").
 Self-locating from __file__: every path derives from this file's location, so there
 are no hardcoded vault/home/container paths and it runs identically from cron, a
 container, or any working directory.
@@ -139,7 +139,7 @@ def _report_claude_dir(oc_root: Path) -> None:
           f"{len(real)} real dirs, {len(broken)} broken")
     if foreign:
         print("\n  Symlinked outside this checkout — fine if deliberate (personal/business")
-        print("  skills belong in your own area per docs/SKILLS-PLACEMENT.md):")
+        print("  skills belong in your own area per docs/RULES.md):")
         for name, target in foreign:
             print(f"    {name} -> {target}")
     if real:
@@ -191,7 +191,7 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
         print(f"  {name:<{width}}  rules={rules:<12} hooksPath={hooks}{flag}")
 
     print(f"\n{len(found)} repo(s). Rules files named anything other than CLAUDE.md do not")
-    print("auto-load in Claude Code — merge them into CLAUDE.md (docs/ADOPTING.md Step 4).")
+    print("auto-load in Claude Code — merge them into CLAUDE.md (docs/SETUP.md Step 4).")
 
     _report_claude_dir(oc_root)
     print(f"\nProfile skeleton — paste into {registry_file(oc_root, 'repo-profiles.json')} under \"profiles\",")
@@ -359,7 +359,7 @@ def command_install(oc_root: Path) -> int:
     Never destructive: a real file or any other link at a target path, a dangling one or
     one into another OliverCode checkout included, is moved aside to `<name>.pre-olivercode`
     and the path is reported, because that file is usually the operator's entire
-    accumulated ruleset and docs/ADOPTING.md Step 3 exists to merge it back in
+    accumulated ruleset and docs/SETUP.md Step 3 exists to merge it back in
     deliberately. Only a link an OliverCode install wrote that now dangles, because its
     checkout moved, is replaced in place. `uninstall` restores the backup. Install records
     the links it wrote in ~/.claude/.olivercode-install.json so uninstall need not guess.
@@ -460,7 +460,7 @@ def command_install(oc_root: Path) -> int:
     print()
     if backups:
         print("Backed up, NOT deleted — merge these in deliberately, they are usually")
-        print("the rules you already had (docs/ADOPTING.md Step 3):")
+        print("the rules you already had (docs/SETUP.md Step 3):")
         for b in backups:
             print(f"  {b}")
         print()
@@ -480,7 +480,7 @@ def command_uninstall(oc_root: Path) -> int:
     same rule install uses to replace them, and every other key stays. Idempotent.
 
     `core.hooksPath` and each repo's `.githooks/` come from `sync-hooks`, not install,
-    so they stay; docs/ADOPTING.md "Backing out" covers them.
+    so they stay; docs/SETUP.md "Backing out" covers them.
     """
     claude_dir = Path.home() / ".claude"
     skills_dir = claude_dir / "skills"
@@ -553,9 +553,9 @@ def command_uninstall(oc_root: Path) -> int:
             print(f"  {b}")
         print()
     if (claude_dir / f"skills{BACKUP_SUFFIX}").exists():
-        print(f"~/.claude/skills{BACKUP_SUFFIX} is your own copy from docs/ADOPTING.md Step 2; uninstall leaves it.")
+        print(f"~/.claude/skills{BACKUP_SUFFIX} is your own copy from docs/SETUP.md Step 2; uninstall leaves it.")
         print()
-    print("Next: unset core.hooksPath in each governed repo (docs/ADOPTING.md \"Backing out\").")
+    print("Next: unset core.hooksPath in each governed repo (docs/SETUP.md \"Backing out\").")
     return 1 if broken_settings else 0
 
 
@@ -563,7 +563,7 @@ class _HealthTally:
     """Accumulates health-check results.
 
     WARN does not fail the run, on purpose: a standalone clone missing local-only
-    context (control plane, private repos) must still exit 0 (see docs/FRAMEWORK-BOUNDARY.md).
+    context (control plane, private repos) must still exit 0 (see docs/RULES.md).
 
     It is counted SEPARATELY from OK all the same. Folding the two together printed
     "HEALTHY — 8/8 checks passed" on a run where five of the eight had been skipped
@@ -648,7 +648,7 @@ def command_health(fleet_root: Path | None = None) -> int:
                 for rel in missing:
                     t.fail(f"{rel} — not found")
 
-    # 3. Placement drift (SYS-2, spec: docs/SKILLS-PLACEMENT.md "Drift check").
+    # 3. Placement drift (spec: docs/RULES.md "Skill placement").
     # Everything here reads OUTSIDE OC_ROOT (private repos, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no private repos around it is still a valid, healthy checkout.
@@ -731,7 +731,7 @@ def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> 
 
 
 def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int, int]:
-    print("\nPlacement drift (SKILLS-PLACEMENT.md):")
+    print("\nPlacement drift (docs/RULES.md):")
     passed = 0
     failed = 0
     skipped = 0
@@ -766,7 +766,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
             # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
             # drift -- G4 requires a stranger clone to report HEALTHY.
             print(f"  [WARN] this checkout is not the machine's installed OliverCode "
-                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/SKILLS-PLACEMENT.md")
+                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/RULES.md")
             skipped += 1
         elif missing:
             print(f"  [FAIL] not symlinked at ~/.claude/skills/: {', '.join(missing)}")
@@ -837,7 +837,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 print(f"  [OK] {name}: hooksPath set, hooks match template")
                 passed += 1
 
-    # Private repos are managed hook targets too (SYS-3), checked against the private variant.
+    # Private repos are managed hook targets too, checked against the private variant.
     private = _private_repos()
     if not private:
         print("  [INFO] no private repos set for this machine (privateRepos) — not checked")
@@ -883,7 +883,7 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
     A repo's own `.githooks/pre-commit.local` is never written here. The private
     hook runs it when it exists (GATE-LOCAL-1).
 
-    docs/GOVERNANCE.md holds the per-variant gate table.
+    docs/GATES.md holds the per-variant gate table.
     """
     hooks_dir = repo_path / ".githooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -905,7 +905,7 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
 
 
 def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
-    """SYS-3: converge hooks + core.hooksPath across every fleet repo and every private repo.
+    """Converge hooks + core.hooksPath across every fleet repo and every private repo.
 
     fleet_root defaults to OliverCode's parent (the sibling-repos layout). A fork whose
     repos live elsewhere passes --root; without that, every repo would silently SKIP as
@@ -1089,7 +1089,7 @@ def command_update() -> int:
     On a fork `origin` is the FORK, so this does not fetch upstream framework changes.
     Pulling those is a deliberate act with real merge consequences -- a fork carries local
     edits to CLAUDE.md, contracts, and templates, which is the whole point of forking -- so
-    it is documented in docs/ADOPTING.md ("Staying current") rather than automated here.
+    it is documented in docs/SETUP.md ("Staying current") rather than automated here.
     """
     pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
     if pull_code != 0:
