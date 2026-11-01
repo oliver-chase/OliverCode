@@ -68,7 +68,11 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/qa/full-qa-pass.sh` | Code quality, docs cohesion, bloat — plus fork usability when run against OliverCode itself |
 | `scripts/qa/run-on-repo.sh` | Runs full-qa-pass against the invoking repo, tees to `.qa-results/` |
 | `scripts/run-governance-target.sh` | CI entrypoint that points the QA stack at a downstream repo |
-| `scripts/hooks/early-stop-guard.py` | Claude Code `Stop` hook (`EARLY-STOP-1`) — blocks a turn that ends by promising work instead of doing it. Registered manually in `~/.claude/settings.json`, not by `olivercode install` |
+| `scripts/hooks/early-stop-guard.py` | Claude Code `Stop` hook (`EARLY-STOP-1`). What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
+| `scripts/hooks/session_check.py` | Claude Code `SessionStart` hook. What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
+| `scripts/hooks/commit_guard.py` | Claude Code `PreToolUse` hook on Bash. What it does: `core/contracts/EXECUTION_CONTRACT.md` "Session Hooks" |
+| `scripts/lib/claude_settings.py` | Merges OliverCode's three hook entries into `~/.claude/settings.json` and leaves every other key alone. `olivercode install` writes them and `olivercode health` checks them |
+| `scripts/lib/repo_gates.py` | Whether git will run a repo's commit gates. Shared by the session check and the commit guard |
 
 ## Shared Framework Assets
 

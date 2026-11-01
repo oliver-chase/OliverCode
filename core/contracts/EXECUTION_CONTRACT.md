@@ -57,19 +57,22 @@ Separately, on demand (not a pre-commit gate): `orchestration-gatekeeper.py
 
 ## Session Hooks (Claude Code, not git)
 
-`.githooks/pre-commit` is commit-time. `scripts/hooks/early-stop-guard.py`
-(`EARLY-STOP-1` in `docs/DECISIONS.md`) is turn-time — a Claude Code `Stop` hook,
-a different mechanism the framework did not ship before this. It catches a turn
-that ends by stating an intent to act ("I'll implement this now") with no tool
-call and no question to the user, and blocks the stop so the work actually
-happens instead of being promised. Deterministic regex, not a model call. Fails
-open on anything it cannot parse.
+`.githooks/pre-commit` runs inside git. Three Claude Code hooks run inside every
+session, and `olivercode install` writes them into `~/.claude/settings.json`, each
+pointing at this checkout's script:
 
-Not wired into `olivercode install` yet — it is registered manually in the
-consuming machine's `~/.claude/settings.json` under `hooks.Stop`, pointing at
-this script's absolute path. A future capability, not covered here: teaching
-`install` to register it automatically the way it registers the `CLAUDE.md` and
-skill symlinks.
+- `scripts/hooks/session_check.py` (`SessionStart`) tells the session once what
+  would fail silently in the folder it opened: a repo whose gates git skips, a git
+  repo with no gates, or a broken rules link. It prints nothing when all is well.
+- `scripts/hooks/commit_guard.py` (`PreToolUse` on Bash) refuses a `git commit` that
+  would skip the repo's gates: gates present while `core.hooksPath` does not run
+  them, `--no-verify`, or a `core.hooksPath` override.
+- `scripts/hooks/early-stop-guard.py` (`Stop`, `EARLY-STOP-1` in `docs/DECISIONS.md`)
+  sends a turn back to work when it ends by promising work it did not do.
+
+All three are deterministic and fail open: a hook's own bug never blocks a commit or
+a session. `olivercode health` fails when one is missing on a machine where install
+linked this checkout.
 
 ## Completion Gate (opt-in, on demand)
 

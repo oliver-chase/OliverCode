@@ -61,9 +61,8 @@ absent. `shared/repo-map.json` is the tracked list of what should be there.
 **Marketplace plugins.** Third-party plugins are installed through Claude Code, not through this
 repo. `docs/EXTERNAL-TOOLING.md` lists each one and what it is for.
 
-**OliverCode's own session hook.** `core/contracts/EXECUTION_CONTRACT.md` ("Session Hooks")
-has the manual registration step for `scripts/hooks/early-stop-guard.py` — not a marketplace
-plugin, and `olivercode install` does not wire it yet.
+**OliverCode's own session hooks.** `olivercode install` writes them into
+`~/.claude/settings.json`. `core/contracts/EXECUTION_CONTRACT.md` ("Session Hooks") says what each does.
 
 **Obsidian plugins.** The vault tracks each plugin's `data.json` and `manifest.json`, so
 settings come back with the clone. The compiled code does not. `.obsidian/community-plugins.json`
