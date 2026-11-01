@@ -59,9 +59,8 @@ wherever correctness does not require judgment.
 ## 5. MCP-call efficiency, by name
 
 A skill that documents an MCP-backed workflow is judged on the same named anti-patterns
-`skill-governance/skill-fleet-audit`'s `check_mcp_patterns.py` checks for — full detection logic and
-real precedent for each lives in that skill's `references/mcp-checks.md`, not restated
-here:
+`skills/skill-fleet-audit/scripts/check_mcp_patterns.py` checks for. The detection logic
+for each lives in that script, not restated here:
 
 - `no-concise-mode` — a documented search tool with no mention of concise/response-format
 - `no-pagination` — a documented search tool with no mention of cursor/pagination
@@ -75,8 +74,8 @@ Each is grounded in a real, previously-shipped defect, not a hypothetical.
 
 ## Enforcement reality
 
-Mechanical today, for the personal skills folder only: `skill-governance/skill-fleet-audit` runs all
-three checkers named above (structure/duplication, MCP-efficiency, ASD-STE100 clarity)
+Mechanical through `olivercode audit-fleet`, for OliverCode's own skills and the personal skills
+folder: `skills/skill-fleet-audit` runs all three checkers named above (structure/duplication, MCP-efficiency, ASD-STE100 clarity)
 and its `SKILL.md` states the pattern each finding must clear before being treated as a
 real defect. ASD-STE100 alone is also checked fleet-wide at commit time per
 `docs/SKILLS-PLACEMENT.md` and `docs/GOVERNANCE.md`'s coverage table.

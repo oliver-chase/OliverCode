@@ -19,6 +19,7 @@
 | `backlog-management` | Config-driven GitHub Project backlog ops | Filing, closing, or triaging backlog work in a repo that names a backlog-config.json in its own CLAUDE.md |
 | `board-hygiene` | Live GitHub Project board check across 6 dimensions: required fields, status drift, duplicate cards, Ready occupancy, Area freshness, Ready candidates | After filing or closing backlog items, or "is the backlog properly organized" |
 | `plan-pressure-test` | Adversarial check of a plan doc against live system state before it runs | "Pressure test this plan", or before executing a plan doc from `plan` |
+| `skill-fleet-audit` | Audit of a skills folder: structure, MCP patterns, clarity, portability, wording, word budgets and more. Gates a fleet's commits; reads that fleet's own data from its `.fleet-audit/` folder | "Audit my skills", `olivercode audit-fleet`, or a fleet's pre-commit hook |
 | `skill-creation` | Intake for a new skill: overlap check first, then the baseline every new skill meets | "New skill", "build a skill for X", "should this be a new skill" |
 
 ## Rules

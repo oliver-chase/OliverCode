@@ -57,6 +57,13 @@ DECLARED_MARKERS: dict[str, str] = {
         "-- a runnable example DOCUMENTATION-STANDARD.md wants shown identically "
         "everywhere it appears, not three independently-worded ones."
     ),
+    "send this first in one turn exactly as written with no other opening line and no "
+    "closing recap": (
+        "The fixed instruction that opens every skill's Opening message section "
+        "(skill-creation's baseline rule 13). Every skill a person triggers cold carries "
+        "the same words, so the agent recognises the section; it is a convention line, "
+        "not a rule restated."
+    ),
 }
 
 
