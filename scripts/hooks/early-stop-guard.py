@@ -28,16 +28,41 @@ PROMISE_RE = re.compile(
 )
 ASKS_USER_RE = re.compile(
     r"(\?|shall i|would you like|do you want|want me to|let me know|which option|"
-    r"say (go|yes|the word)|tell me|your call|if you want|once you confirm|waiting on you)",
+    r"say (go|yes|the word)|tell me|your call|if you want|waiting on you|"
+    r"(once|when|after|if) you (approve|confirm|say|decide|answer|choose|pick|reply)|"
+    r"on your (go|yes|approval|answer))",
     re.IGNORECASE,
 )
 TAIL_CHARS = 400
+# A question can leave the turn through a tool call: the desktop app's next-step box
+# (its `ask` field) or the question tool. The closing text then holds no question mark,
+# so a turn that ended waiting on the owner read as an unkept promise.
+ASK_TOOLS = ("AskUserQuestion",)
+NEXT_STEP_TOOL_SUFFIX = "__wrap_up"
 
 
-def _last_assistant_turn(transcript_path: Path) -> tuple[str, bool] | None:
-    """Return (closing text, ended with a tool call) for the last assistant turn."""
+def _asks_owner(block: dict) -> bool:
+    name = block.get("name", "")
+    if name in ASK_TOOLS:
+        return True
+    return name.endswith(NEXT_STEP_TOOL_SUFFIX) and bool((block.get("input") or {}).get("ask"))
+
+
+def _is_owner_message(obj: dict, msg: dict) -> bool:
+    """A user entry the owner wrote, which starts a new turn; a tool result does not."""
+    if obj.get("type") != "user" and msg.get("role") != "user":
+        return False
+    content = msg.get("content")
+    if isinstance(content, str):
+        return bool(content.strip())
+    return isinstance(content, list) and any(isinstance(b, dict) and b.get("type") != "tool_result" for b in content)
+
+
+def _last_assistant_turn(transcript_path: Path) -> tuple[str, bool, bool] | None:
+    """Return (closing text, ended with a tool call, asked the owner this turn)."""
     last_text = ""
     last_had_tool = False
+    asked = False
     try:
         with transcript_path.open(encoding="utf-8") as f:
             for line in f:
@@ -49,6 +74,9 @@ def _last_assistant_turn(transcript_path: Path) -> tuple[str, bool] | None:
                 except json.JSONDecodeError:
                     continue
                 msg = obj.get("message", obj)
+                if _is_owner_message(obj, msg):
+                    asked = False
+                    continue
                 if obj.get("type") != "assistant" and msg.get("role") != "assistant":
                     continue
                 content = msg.get("content", [])
@@ -56,12 +84,13 @@ def _last_assistant_turn(transcript_path: Path) -> tuple[str, bool] | None:
                     continue
                 texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
                 tools = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
+                asked = asked or any(_asks_owner(b) for b in tools)
                 if texts or tools:
                     last_text = "\n".join(texts).strip()
                     last_had_tool = bool(tools)
     except OSError:
         return None
-    return last_text, last_had_tool
+    return last_text, last_had_tool, asked
 
 
 def _is_safe_path(path_str: str) -> bool:
@@ -97,7 +126,7 @@ def main() -> int:
     if turn is None:
         print(json.dumps({}))
         return 0
-    last_text, last_had_tool = turn
+    last_text, last_had_tool, asked_owner = turn
 
     # Ended with a tool call (still working) or produced no text -> not an early stop.
     if last_had_tool or not last_text:
@@ -106,7 +135,7 @@ def main() -> int:
 
     tail = last_text[-TAIL_CHARS:]
     promise = PROMISE_RE.search(tail)
-    asks_user = ASKS_USER_RE.search(tail)
+    asks_user = asked_owner or ASKS_USER_RE.search(tail)
 
     if promise and not asks_user:
         print(json.dumps({
