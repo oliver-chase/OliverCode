@@ -102,10 +102,9 @@ A repo adds its own blocking checks in a `pre-commit.local` file beside the hook
 Fleet repos also receive `pre-commit-private` alongside their live hook as an inert reference
 copy. Git never runs it.
 
-`hookVariant` carries a real cost. `scripts/build-hooks.py` generates OliverCode's own hook
-and the two templates, and a variant repo's hook sits outside it, so every template gate fix,
-security fixes included, reaches that repo only by a hand merge. See `_hookVariant_note` in
-`shared/repo-profiles.json` for the trade-off and the incident that proved it. When a third
+`hookVariant` carries a real cost, set out with the incident that proved it in
+`_hookVariant_note` in `shared/repo-profiles.json`. `scripts/build-hooks.py` generates
+OliverCode's own hook and the two templates and never a variant repo's hook. When a third
 repo declares a variant, give `build-hooks.py` an entry for each variant repo, the template's
 gate list plus that repo's own gates, so its hook is generated too.
 
