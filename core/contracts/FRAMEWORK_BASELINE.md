@@ -1,4 +1,4 @@
-# Framework Baseline
+# Framework baseline
 
 Status: Locked
 Scope: OliverCode core and all downstream project baselines moving forward
@@ -15,7 +15,7 @@ Every tracked file in framework core must justify itself as one of:
 
 If it does none of those, it does not belong in OliverCode core.
 
-## Core Baseline
+## Core baseline
 
 ### Run
 Required active runtime surfaces:
@@ -42,7 +42,7 @@ Required current-state authority docs:
 - `docs/OLIVERCODE-LAUNCHER.md`
 - `docs/DOCUMENTATION-STANDARD.md`
 
-## Removal Rules
+## Removal rules
 
 Default action for non-runtime files:
 - duplicate explainer -> merge
@@ -51,7 +51,7 @@ Default action for non-runtime files:
 - generated report/cache -> ignore, never track
 - validator that duplicates another validator's failure class -> collapse
 
-## Future Framework Rule
+## Future framework rule
 
 New files are allowed only when they do at least one of:
 - reduce runtime complexity
@@ -61,7 +61,7 @@ New files are allowed only when they do at least one of:
 
 Otherwise reject them.
 
-## Cross-Project Lock
+## Cross-project lock
 
 Downstream managed repos must inherit this runtime-minimal baseline through the shared template/bootstrap path, not by repo-local reinterpretation.
 
@@ -71,19 +71,19 @@ Required lock points:
 
 Any variance must be explicit, temporary, and recorded in the repo's profile in `repo-profiles.json`.
 
-## Design Decisions
+## Design decisions
 
-### Template Directory Architecture
+### Template directory architecture
 - `core/templates/project/` -- the single template home. CI workflows, docs, governance scripts and the built hooks all ship to downstream repos from here, through the bootstrap manifest and `sync-hooks`. A second template directory drifts from the masters.
 - The hooks are written in `core/hooks/` and built into `core/templates/project/` and `.githooks/` by `scripts/build-hooks.py`. Edit the gate files there, never a built hook.
 
-### Runtime Manifests
+### Runtime manifests
 `runtime/manifests/` does not exist as a tracked path. `.gitignore` reserves the path
 (generated observability reports, inventory scans, status snapshots) so any future
 manifest generation writes to an untracked location by default -- no active validator
 consumes manifests.
 
-### Validation Surface
+### Validation surface
 Run `bash scripts/validate.sh` from repo root for unified validation. It wraps:
 - `.githooks/pre-commit` (primary gate — `docs/GOVERNANCE.md` has the current per-repo gate count and table)
 - Optional smoke tests in `tests/` (WARN-skip if absent)

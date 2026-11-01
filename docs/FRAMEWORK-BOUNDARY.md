@@ -1,6 +1,6 @@
-# Framework Boundary
+# Framework boundary
 
-## What OliverCode Is
+## What OliverCode is
 
 OliverCode is the **shared orchestration framework**. It contains:
 - Reusable contracts, policies, and standards (`core/contracts/`)
@@ -12,7 +12,7 @@ OliverCode is the **shared orchestration framework**. It contains:
 
 OliverCode can be cloned, inspected, and used standalone to read contracts, templates, and documentation without any runtime being installed.
 
-## Canonical Paths and Ownership
+## Canonical paths and ownership
 
 Claude Code is this machine's sole agent runtime.
 
@@ -35,11 +35,11 @@ When workspace structure or cross-project standards change: update this section 
 map lives here and nowhere else), and keep the `~/.claude/CLAUDE.md` and `~/.claude/VOICE.md` symlinks pointing at this repo's `CLAUDE.md` and `docs/VOICE.md`
 (verified by `scripts/olivercode health`).
 
-## What Lives Next To It (Not Inside It)
+## What lives next to it (not inside it)
 
 The `runtime/control-plane/` directory lives inside the OliverCode repo tree but is gitignored. It contains the runtime orchestration state that makes the framework actionable — session handoff, provider health, validation manifests. This is private per-machine state, never pushed to GitHub.
 
-## What OliverCode Does NOT Contain
+## What OliverCode does NOT contain
 
 OliverCode deliberately does not include:
 - Runtime-environment launcher and automation (the thin `scripts/olivercode` CLI is the only launcher surface the framework ships)
@@ -51,7 +51,7 @@ OliverCode deliberately does not include:
 
 These belong in the runtime environment (`runtime/control-plane/`), not in the reusable framework.
 
-## User-Global and Sibling-Agent State (Outside the Framework Entirely)
+## User-global and sibling-agent state (outside the framework entirely)
 
 Two more layers exist on any machine running OliverCode, neither of which is framework material and neither of which OliverCode manages:
 
@@ -60,7 +60,7 @@ Two more layers exist on any machine running OliverCode, neither of which is fra
 
 For "where does a new skill/agent file go," see `docs/SKILLS-PLACEMENT.md`'s decision tree — it covers every sanctioned location including the two user-global layers above. This doc and that one together should answer any placement question without asking the owner.
 
-## One-Directional Dependency Rule
+## One-directional dependency rule
 
 The dependency between OliverCode and the runtime environment is one-directional:
 
@@ -69,7 +69,7 @@ The dependency between OliverCode and the runtime environment is one-directional
 
 Architectural descriptions may mention the runtime environment as a deployment concept, but must not depend on it for correctness or functionality.
 
-## Standalone Mode
+## Standalone mode
 
 To use OliverCode without a runtime environment:
 
@@ -86,7 +86,7 @@ Standalone mode provides:
 - Governance gates (`.githooks/pre-commit`)
 - Reusable project templates and manifests
 
-## Runtime Mode
+## Runtime mode
 
 When the local control plane is installed (`runtime/control-plane/`, gitignored), it adds per-machine state on top of OliverCode: the dependency declaration `health` reads, session/handoff state, and a bash shim at `runtime/control-plane/olivercode` that delegates to `scripts/olivercode` and carries no additional commands (`docs/OLIVERCODE-LAUNCHER.md`).
 

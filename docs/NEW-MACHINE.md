@@ -1,4 +1,4 @@
-# Rebuilding on a New Machine
+# Rebuilding on a new machine
 
 Status: Active
 Purpose: the order to restore this setup from nothing, and which steps no script can do.
@@ -32,7 +32,7 @@ is listed once and is not a failure.
 
 ## What no script restores
 
-Each of these needs a person. They are listed so the list is finite rather than remembered.
+Each of these needs a person. They are listed so the list is finite and nobody has to remember it.
 
 **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`.
 `scripts/olivercode discover --root <dir>` finds whatever is present. It cannot clone what is

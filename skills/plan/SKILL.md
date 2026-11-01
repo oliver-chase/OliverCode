@@ -3,7 +3,7 @@ name: plan
 description: "Use when the user says 'make a plan', 'write this up as a plan first', or 'don't start coding yet, just plan'. Writes a structured plan (Goal/Steps/Risks/Definition-of-Done) as a markdown file to <repo>/docs/plans/. Does not execute. Distinct from Claude Code's built-in ephemeral Plan Mode, which writes no file."
 ---
 
-# Plan — Markdown Planning Protocol
+# Plan — Markdown planning protocol
 
 ## Process
 
@@ -12,7 +12,7 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 3. For each step: what, why, expected outcome, risk level
 4. Write to file (markdown), NOT executed
 
-## Claims Discipline
+## Claims discipline
 
 A plan is a set of assertions about live state — "this file exists," "this skill has no
 probe," "3 of 8 items already do X." Every assertion of that shape names a set of N items.
@@ -25,11 +25,11 @@ a reason to sample. When reading all N costs too much before drafting, the plan 
 "checked 3 of 8, the rest assumed from their names". The `audit` skill's plan check then
 tests the rest. That check is the safety net for a wrong inference from real evidence.
 
-## Plan File Location
+## Plan file location
 
 Repo: `<repo>/docs/plans/`. Some work spans the vault or multiple product repos, not one repo. There is currently no dedicated vault-level plans directory for that case. Write the plan into whichever single repo the work centers on. If the work is genuinely cross-repo, ask the user where they want it instead.
 
-## Plan Headers
+## Plan headers
 
 Every plan file needs:
 
@@ -53,7 +53,7 @@ What we're trying to accomplish.
 - [ ] Condition 2
 ```
 
-## Execution Protocol
+## Execution protocol
 
 1. Write plan → present to user
 2. User approves → execute step by step

@@ -3,7 +3,7 @@ name: board-hygiene
 description: "Checks the live GitHub Project board across 6 hygiene dimensions together. The six are required-field gaps, Status that disagrees with issue state and more than one card for an issue. They also cover an empty Ready column, stale Area options and ranked Ready candidates. Trigger on \"board hygiene\", \"is the backlog properly prioritized\", \"check the project board\" or \"what should go in Ready\". Name one dimension to scope to it."
 ---
 
-# Board Hygiene
+# Board hygiene
 
 "Is the backlog properly organized" means all 6 dimensions below, run together. This skill sweeps every open item at once. `backlog-management` sets the fields on the one item it files or closes.
 
@@ -22,7 +22,7 @@ Send this first, in one turn, exactly as written, with no other opening line and
 > 2. Send that path with one dimension by name: fields, drift, duplicates, ready, area or suggest. I will check only that one.
 > 3. Send that path with a skills folder, and I will compare the Area options with its folders.
 
-## The 6 Dimensions
+## The 6 dimensions
 
 | Dimension | Checks |
 |---|---|

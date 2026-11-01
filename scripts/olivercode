@@ -696,9 +696,6 @@ def command_health(fleet_root: Path | None = None) -> int:
 # existing callers and tests.
 
 
-STE_JOIN_WRAPPER = "ste-lint-joined.py"
-
-
 def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> list[str]:
     """Return human-readable problems with a repo's live hooks, or [] when they match.
 
@@ -713,7 +710,6 @@ def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> 
         return [gate]
 
     hooks_dir = repo_root / ".githooks"
-    live = hooks_dir / "pre-commit"
     expected = {"pre-commit": "pre-commit-private" if private_repo else "pre-commit", "pre-push": "pre-push"}
     if not private_repo:
         expected["pre-commit-private"] = "pre-commit-private"   # the inert reference copy
@@ -731,17 +727,6 @@ def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> 
         elif installed.read_bytes() != canonical.read_bytes():
             problems.append(f"{filename} diverges from the {template} template")
 
-    # Without the wrapper the clarity gate blocks every commit that stages a
-    # SKILL.md or CLAUDE.md (STE-JOIN-1). A declared variant hook that never calls
-    # it has no clarity gate to block, so the wrapper is not required there.
-    if STE_JOIN_WRAPPER.encode() not in live.read_bytes():
-        return problems
-    wrapper = hooks_dir / STE_JOIN_WRAPPER
-    canonical_wrapper = templates_dir / STE_JOIN_WRAPPER
-    if not wrapper.is_file():
-        problems.append(f"no {STE_JOIN_WRAPPER} in {hooks_dir} — the clarity gate blocks SKILL.md/CLAUDE.md commits")
-    elif canonical_wrapper.exists() and wrapper.read_bytes() != canonical_wrapper.read_bytes():
-        problems.append(f"{STE_JOIN_WRAPPER} diverges from the template")
     return problems
 
 
@@ -915,12 +900,6 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
         reference_target.chmod(0o755)
 
     _install_pre_push(repo_path, templates_dir)
-
-    # The clarity gate runs the linter through this wrapper (STE-JOIN-1).
-    join_source = templates_dir / STE_JOIN_WRAPPER
-    join_target = hooks_dir / STE_JOIN_WRAPPER
-    join_target.write_bytes(join_source.read_bytes())
-    join_target.chmod(0o755)
 
     subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
 

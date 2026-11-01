@@ -1,4 +1,4 @@
-# No Icons Standard
+# No icons standard
 
 Status: Active
 Effective Date: 2026-05-22

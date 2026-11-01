@@ -1,4 +1,4 @@
-# skills/ — OliverCode Skill Index
+# skills/ — OliverCode skill index
 
 > OliverCode ships orchestration/security/optimization skills only — engineering method and
 > the framework's own tooling. Load by name when you encounter the domain. This is the
@@ -27,7 +27,7 @@
   (`skillsRoot` in `olivercode.local.json`).
 - Update this table in the same change when a skill is added or removed. This index is the
   only catalog — do not create a second copy of the skill list anywhere.
-- Remove references to retired skills instead of keeping dead aliases alive.
+- Remove references to retired skills, and keep no dead aliases.
 - Adding one: `docs/SKILLS-PLACEMENT.md` has the full contract (real content, index row, and
   the `~/.claude/skills/<name>` symlink — all three in the same session).
 

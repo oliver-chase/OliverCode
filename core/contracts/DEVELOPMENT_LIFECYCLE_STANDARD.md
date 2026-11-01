@@ -1,4 +1,4 @@
-# Development Lifecycle Standard
+# Development lifecycle standard
 
 Status: Active
 Effective Date: 2026-07-27
@@ -160,5 +160,5 @@ This standard is itself subject to it. Prefer:
 
 Steps 4 and 5 are partly gated by each repo's `check`/`validate` and its
 pre-commit hooks. The sequencing itself is instruction text — see
-CONTRIBUTING's "Enforcement Reality" before assuming a written rule is
+CONTRIBUTING's "Enforcement reality" before assuming a written rule is
 unbreakable.

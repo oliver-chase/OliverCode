@@ -5,8 +5,8 @@ staged files from git, so every test builds a throwaway repo, copies the hook in
 stages a fixture, and runs the hook against it. Nothing touches this checkout.
 
 Gates that consult the machine run against stand-ins: gate 5 and gate 9's citation
-check get a stub `gh` on PATH, gate 9 a stub ste-lint.py under a scratch HOME, and
-gates 6 and 7 their checkers copied or stubbed into the scratch repo. Every
+check get a stub `gh` on PATH, and gates 6 and 7 their checkers copied or stubbed into the
+scratch repo. Every
 `exit 1` in a gate has a test that fails when it becomes `true`.
 """
 
@@ -297,26 +297,14 @@ class TestGate8ArchivedContent(GateHarness):
         self.assertIn("Gate 8 passed.", self.assertAllowed().stdout)
 
 
-class TestGate9WritingClarity(GateHarness):
-    """Offline: a stub ste-lint.py under a scratch HOME and a stub `gh` that knows issues 1 and 2."""
+class TestGate9SkillCitations(GateHarness):
+    """Offline: a stub `gh` that knows issues 1 and 2."""
 
-    STUB_LINT = (
-        "import json\n"
-        "def lint(text, filename='<stdin>'):\n    return [], None\n"
-        "def _markdown_table_cells(lines):\n    return []\n"
-        "def main(args):\n    print(json.dumps({'count': 0, 'hard_count': 0}))\n    return 0\n"
-    )
     GH = 'case "$1 $2" in "auth status") exit 0 ;; "issue list") printf "1\\n2\\n" ;; esac\n'
 
     def setUp(self):
         super().setUp()
-        home = self.tmp / "home"
-        lint = home / ".claude/skills/asd-ste100/scripts/ste-lint.py"
-        lint.parent.mkdir(parents=True)
-        lint.write_text(self.STUB_LINT, encoding="utf-8")
-        self.env = {"HOME": str(home), **self.stub_gh(self.GH)}
-        shutil.copy2(REPO_ROOT / "core/templates/project/ste-lint-joined.py",
-                     self.tmp / ".githooks" / "ste-lint-joined.py")
+        self.env = {**self.stub_gh(self.GH)}
 
     def test_a_citation_to_no_real_issue_blocks(self):
         self.stage("skills/x/SKILL.md", "Fixes the parser, see #99.\n")
@@ -325,23 +313,6 @@ class TestGate9WritingClarity(GateHarness):
 
     def test_a_citation_to_a_real_issue_passes(self):
         self.stage("skills/x/SKILL.md", "Fixes the parser, see #2.\n")
-        self.assertIn("Gate 9 passed.", self.assertAllowed(**self.env).stdout)
-
-    def test_a_missing_joiner_blocks(self):
-        (self.tmp / ".githooks" / "ste-lint-joined.py").unlink()
-        self.stage("skills/x/SKILL.md", "Fixes the parser.\n")
-        result = self.assertBlocked("gate 9", **self.env)
-        self.assertIn("needs ste-lint-joined.py", result.stdout)
-
-    @unittest.skipUnless(shutil.which("jq"), "the --json summary path needs jq")
-    def test_a_lint_warning_on_stderr_still_passes(self):
-        # A warning on stderr used to land in the captured JSON, jq failed on it, and
-        # `set -e` ended the hook with no BLOCKED line.
-        lint = Path(self.env["HOME"]) / ".claude/skills/asd-ste100/scripts/ste-lint.py"
-        lint.write_text(self.STUB_LINT.replace(
-            "def main(args):\n", "def main(args):\n    import sys; print('DeprecationWarning: x', file=sys.stderr)\n"),
-            encoding="utf-8")
-        self.stage("skills/x/SKILL.md", "Fixes the parser.\n")
         self.assertIn("Gate 9 passed.", self.assertAllowed(**self.env).stdout)
 
 

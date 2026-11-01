@@ -93,19 +93,6 @@ class TestHookProblems(unittest.TestCase):
         (self.hooks / "pre-push").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
         self.assertIn("pre-push diverges", "; ".join(self.problems()))
 
-    def test_missing_ste_join_wrapper_is_reported(self):
-        """The clarity gate blocks without it (STE-JOIN-1), so health must say so."""
-        self.install()
-        (self.hooks / launcher.STE_JOIN_WRAPPER).unlink()
-        self.assertTrue(any(launcher.STE_JOIN_WRAPPER in p for p in self.problems()))
-
-    def test_hook_without_clarity_gate_does_not_need_wrapper(self):
-        """A declared variant hook that never lints must not fail health for the wrapper."""
-        self.install()
-        (self.hooks / "pre-commit").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-        (self.hooks / launcher.STE_JOIN_WRAPPER).unlink()
-        self.assertFalse(any(launcher.STE_JOIN_WRAPPER in p for p in self.problems()))
-
     def test_install_hook_pair_output_is_clean_for_both_variants(self):
         """What sync-hooks writes must pass health, for the variant it wrote."""
         for private in (True, False):

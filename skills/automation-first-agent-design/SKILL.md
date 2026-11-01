@@ -3,9 +3,9 @@ name: automation-first-agent-design
 description: "Use when designing or reviewing a cron job, scheduled pipeline, or agent workflow, or when the user asks 'should this be automated', 'can we make this deterministic instead of LLM-based', 'reduce LLM calls in this pipeline', or 'add a fail-closed guard'. Prefers deterministic flows and zero-LLM paths over agent calls. Enforces fail-closed behavior on any gate."
 ---
 
-# Automation-First Agent Design
+# Automation-first agent design
 
-## Core Principles
+## Core principles
 
 1. **Automation first.** Before adding an LLM call, ask: can a deterministic rule handle this?
 2. **Fail closed.** When a check fails, deny access / skip action. Silent failures are worse than false positives.
@@ -13,7 +13,7 @@ description: "Use when designing or reviewing a cron job, scheduled pipeline, or
 4. **Cost transparency.** Every action logs its cost. If it's not logged, it doesn't exist.
 5. **One source of truth.** Data flows in one direction. No circular dependencies between stores.
 
-## Design Pattern
+## Design pattern
 
 ```
 User Input
@@ -23,7 +23,7 @@ User Input
         → LLM Call (only when above fails, cost tracked)
 ```
 
-## Flow Design Rules
+## Flow design rules
 
 | Aspect | Rule |
 |--------|------|
@@ -33,7 +33,7 @@ User Input
 | State transitions | Explicit state machine, not free-form text |
 | Logging | Every action logged with timestamp, user, cost |
 
-## Cron Pipeline Design
+## Cron pipeline design
 
 - **No LLM in cron jobs.** Cron runs deterministic scripts that produce output. The LLM is optional for summarizing that output.
 - **Scripts exit 0 on success, non-zero on error.** Exit codes are the health signal.

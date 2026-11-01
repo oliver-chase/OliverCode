@@ -1,4 +1,4 @@
-# Skill Placement Contract — OliverCode
+# Skill placement contract — OliverCode
 
 > **Status: active — canonical.** Any agent installing, creating, or moving a skill file
 > inside this repo MUST consult this first. OliverCode is orchestration/security/
@@ -38,7 +38,7 @@ through `~/.claude/skills/`.
 - **Every new skill pairs with its `INDEX.md` row and its symlink** in the same session.
 - **Never store skills in the vault's note folders**. A skill's one home is a skill directory.
 - **Hooks are not skills** but follow the same pattern: the gates are written in `OliverCode/core/hooks/` and built into `OliverCode/core/templates/project/` by `scripts/build-hooks.py`. Every fleet repo and every private repo gets its copy via the bootstrap manifest or `sync-hooks`, `core.hooksPath = .githooks`. Public repos use `pre-commit`, private repos use the private variant (`docs/GOVERNANCE.md`).
-- **Every staged `SKILL.md`, `CLAUDE.md` and `references/*.md`, in this repo or any fleet repo, is checked by the asd-ste100 writing-clarity gate at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate. It warns on findings so the author sees them without running the skill by hand.
+- **Every staged `SKILL.md`, `CLAUDE.md` and `references/*.md`, in this repo or any fleet repo, is checked for dead issue citations at commit time.** `docs/GOVERNANCE.md`'s coverage table has the gate.
 
 ## When a repo-specific skill must win over a generic one
 
