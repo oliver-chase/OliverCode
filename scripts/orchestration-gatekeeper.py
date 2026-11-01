@@ -82,7 +82,7 @@ def validate_token_policy(profiles: dict) -> list:
         # this reads the raw profile rather than get_token_policy's accessor, which
         # collapses "absent" and "explicitly empty" into the same [] and cannot tell
         # them apart.
-        raw_tp = get_repo_profile(name, profiles).get("token_policy", {})
+        raw_tp = get_repo_profile(name, profiles).get("token_policy") or {}
         if "generated_artifact_dirs" not in raw_tp:
             errors.append(
                 f"  {name}: token_policy.generated_artifact_dirs is not declared "
