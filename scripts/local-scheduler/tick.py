@@ -32,7 +32,7 @@ LOG_DIR = STATE_DIR / "logs"
 
 # Early-fire margins, same discipline as the sibling scheduler this mirrors: a
 # little short of the true interval so a tick never drifts to just-barely-late.
-PUSH_FLEET_INTERVAL_S = 3 * 60 * 60 - 10 * 60   # ~3h, matching cadence confirmed with Kiana
+PUSH_FLEET_INTERVAL_S = 3 * 60 * 60 - 10 * 60   # ~3h, the owner's chosen push cadence
 AUDIT_FLEET_INTERVAL_S = (6 * 24 + 20) * 60 * 60  # ~6.83 days, matching the sibling scheduler's weekly margin
 
 JOBS = [

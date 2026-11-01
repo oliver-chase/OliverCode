@@ -141,9 +141,9 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
 #   - a 423MB blob sat in one of those histories, over GitHub's 100MB per-file
 #     hard limit, so that repo could never have pushed even with a live remote
 #   - four plugins were symlinked into ~/.claude/plugins by hand, and nothing
-#     would have recreated them on another machine (the check this added, since
-#     retired 2026-09-15 when 01 - Plugins merged into 01 - Skills -- see
-#     `_check_vault_skill_links` for the same risk at the skill layer instead)
+#     would have recreated them on another machine (the check this added was
+#     retired when plugins moved into the skills folder -- see
+#     `_check_vault_skill_links` for the same risk at the skill layer)
 # All of them read outside the framework repo, so all of them degrade to WARN
 # rather than FAIL when that context is absent: a standalone clone stays HEALTHY.
 

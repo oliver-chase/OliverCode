@@ -23,9 +23,8 @@ and `vtwo-sow-proposal` are the reference pattern: a short `SKILL.md` that route
 ## 2. No duplicate paragraphs
 
 The same paragraph restated across two skills, or twice inside one skill, is loaded
-twice for no added information. Extract it to one file and have every consumer cite it —
-the pattern `personal/_shared/asd-ste100-requirement.md` and
-`vtwo-hr/_shared/tracker-conventions.md` already use. A restated paragraph that a fleet
+twice for no added information. Extract it to one file and have every consumer cite it, such as
+a `_shared/` file in the skill family's folder. A restated paragraph that a fleet
 audit did not yet catch is still a defect; catching it earlier does not change the fix.
 
 **A vendored copy needs a hash check, not just an extraction.** Splitting content out
@@ -72,8 +71,7 @@ here:
 - `no-pick-one-rule` — two alternative methods for one operation with no rule to finish
   one before starting the other
 
-Each is grounded in a real, previously-shipped defect (SPEC-9, SPEC-16 in the vault's
-`01 - Skills/_BACKLOG.md`), not a hypothetical.
+Each is grounded in a real, previously-shipped defect, not a hypothetical.
 
 ## Enforcement reality
 

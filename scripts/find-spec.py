@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Find every backlog entry matching an ID, fleet-wide, in one command.
 
-Nothing namespaces `SPEC-N`/`B-N`-style backlog IDs across repos -- the vault's own
-`01 - Skills/_BACKLOG.md` and a fleet product repo's own spec backlog both used
+Nothing namespaces `SPEC-N`/`B-N`-style backlog IDs across repos -- a private skills
+repo's backlog and a fleet product repo's own spec backlog both used
 `SPEC-21` for two entirely unrelated pieces of work. Renumbering either history is more
 disruptive than the collision itself (every commit message and memory note that already
 cites the old number would go stale). This script fixes the actual cost instead:
@@ -108,10 +108,8 @@ def main() -> int:
         print(f"No match for {args.spec_id!r} in any *BACKLOG*.md under the vault or a fleet repo.")
         if re.match(r"^SPEC-\d+$", args.spec_id):
             print(
-                "If this was a vault SPEC-N: the vault's own 01 - Skills/_BACKLOG.md was "
-                "retired (vault issue #186) -- every entry it held now lives as a real "
-                "GitHub issue in oliver-chase/vault's Project instead. Search that Project "
-                "for the same ID text, it's likely in an issue's own title or body."
+                "If the backlog file that held this SPEC-N was retired, its entries may now "
+                "live as GitHub issues. Search that repo's GitHub Project for the same ID text."
             )
         return 1
     print(f"{total} match(es) for {args.spec_id!r}.")

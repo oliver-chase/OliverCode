@@ -1,7 +1,7 @@
 # Project Standardization Lifecycle
 
 ## Purpose
-Define one standard lifecycle for project bootstrap, governance sync, drift audit, and promotion across all Oliver repos.
+Define one standard lifecycle for project bootstrap, governance sync, drift audit, and promotion across all governed repos.
 
 ## Source of Truth
 1. `core/templates/project/**` for the master scaffold templates (the single template home).
