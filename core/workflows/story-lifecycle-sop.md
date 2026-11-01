@@ -27,7 +27,7 @@ Use this before and after implementation work unless the user explicitly asks fo
   - acceptance criteria status (checked off with evidence references)
   - `QA/Evidence` with evidence links, commands, or artifact ids
   - `Status: Done` only when acceptance is satisfied
-- Remove the finished item from planning buckets (or move to completed archive) and place details in the canonical user story/epic record.
+- Remove the finished item from planning buckets and place its details in the canonical story or epic record. Git keeps the history, so nothing moves to an archive.
 - If the story already has an epic and acceptance in git, do not leave duplicates in planning docs.
 - If blocked, set status explicitly blocked and record the blocking reason and next action.
 

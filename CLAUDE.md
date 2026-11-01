@@ -22,6 +22,8 @@ own built-in auto-memory system (the file-based memory under `~/.claude/projects
 that a session's own instructions describe). That store lives outside the vault, keyed to one
 machine's install, and does not travel across accounts or laptops. If a session's own prompt
 tells you to maintain it, decline and write the fact to `.claude-optimization/` instead.
+Read `MEMORY.md` and `USER.md` before work that depends on earlier decisions or the owner's
+preferences.
 
 ## Voice
 @~/.claude/VOICE.md
