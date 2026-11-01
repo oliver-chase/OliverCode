@@ -50,11 +50,14 @@ class GateHarness(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.tmp), "add", relpath], check=True)
 
     def run_hook(self):
+        # validate.sh --tree exports OLIVERCODE_SCAN_TREE, and a test must check staged files only.
+        env = {k: v for k, v in os.environ.items() if k != "OLIVERCODE_SCAN_TREE"}
         return subprocess.run(
             ["bash", str(self.tmp / ".githooks" / "pre-commit")],
             cwd=self.tmp,
             capture_output=True,
             text=True,
+            env=env,
         )
 
     def assertBlocked(self, gate_hint=""):
