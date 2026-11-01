@@ -8,7 +8,6 @@ Procedures in this directory:
 
 - `story-lifecycle-sop.md` — intake gate, execution/completion gate, pre-push readiness, and
   how to work the backlog item by item
-- `olivercode-sync.md` — reconciling OliverCode's own metadata and docs against live state
 - `project-standardization-lifecycle.md` — bootstrap, sync, drift audit, and promotion for
   managed repos
 

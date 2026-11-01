@@ -16,7 +16,6 @@ and scripts. `core/workflows/README.md` points here. `CLAUDE.md`'s Development P
 section owns the skill triggers (broken/failing/slow, multi-commit session ending, review).
 
 - `backlog`, `story lifecycle` -> `core/workflows/story-lifecycle-sop.md`
-- `OliverCode sync` -> `core/workflows/olivercode-sync.md`
 - `project standardization` -> `core/workflows/project-standardization-lifecycle.md`
 - `qa`, `full qa` -> `scripts/qa/full-qa-pass.sh` (deterministic checkers)
 

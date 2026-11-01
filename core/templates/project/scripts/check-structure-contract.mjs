@@ -50,67 +50,8 @@ function requireScriptReferenceTracked(ref, message) {
 const githubDir = join(ROOT, '.github')
 if (!existsSync(githubDir)) failures.push('missing .github directory')
 
-const userStoriesRoot = join(ROOT, '.github', 'user-stories')
-if (!existsSync(userStoriesRoot)) {
-  failures.push('missing .github/user-stories directory')
-} else {
-  requireTrackedFile(join(userStoriesRoot, 'README.md'), 'missing user-stories root guide')
-  requireTrackedFile(join(userStoriesRoot, '_index.md'), 'missing user-stories root index')
-
-  const groupDirs = readdirSync(userStoriesRoot).filter((entry) => {
-    if (entry === 'README.md' || entry === '_index.md') return false
-    const abs = join(userStoriesRoot, entry)
-    try { return statSync(abs).isDirectory() } catch { return false }
-  })
-
-  if (groupDirs.length === 0) {
-    failures.push('missing story-group directory under .github/user-stories')
-  }
-
-  for (const group of groupDirs) {
-    const storyGroupDir = join(userStoriesRoot, group)
-    requireTrackedFile(join(storyGroupDir, 'README.md'), `missing story-group guide (${group})`)
-    requireTrackedFile(join(storyGroupDir, '_index.md'), `missing story-group index (${group})`)
-
-    const storyFiles = readdirSync(storyGroupDir).filter((entry) => /^US-[A-Z0-9]+-\d{3,4}-.*\.md$/i.test(entry))
-    const planningBacklogReadmes = listFilesRecursive(join(storyGroupDir, 'backlog')).filter((file) => {
-      if (basename(file) !== 'README.md') return false
-      const rel = relative(storyGroupDir, file).replaceAll('\\', '/')
-      return /^backlog\/[^/]+\/README\.md$/i.test(rel)
-    })
-
-    if (storyFiles.length === 0 && planningBacklogReadmes.length === 0) {
-      failures.push(`missing story artifacts in .github/user-stories/${group}: expected US-* files or backlog/<module>/README.md`)
-    }
-  }
-
-  const rootMarkdown = readdirSync(userStoriesRoot).filter((entry) => {
-    if (!entry.endsWith('.md')) return false
-    if (entry === 'README.md' || entry === '_index.md') return false
-    if (/^[a-z0-9][a-z0-9-]*-(?:governance|structure)-audit-\d{4}-\d{2}-\d{2}\.md$/i.test(entry)) return false
-    return true
-  })
-  if (rootMarkdown.length > 0) failures.push(`user-stories root should not contain ad-hoc markdown docs: ${rootMarkdown.join(', ')}`)
-}
-
 if (existsSync(githubDir)) {
   const allMarkdown = listFilesRecursive(githubDir).filter((f) => f.endsWith('.md'))
-  const storyIdToFiles = new Map()
-  for (const file of allMarkdown) {
-    // [A-Z0-9]+ matches the story-file naming regex above (US-[A-Z0-9]+-\d{3,4}-...) —
-    // a letters-only group here would let alphanumeric group IDs (e.g. US-AB12-001-*)
-    // silently escape duplicate-ID detection.
-    const m = basename(file).match(/^(US-[A-Z0-9]+-\d+)\b/i)
-    if (!m) continue
-    const id = m[1].toUpperCase()
-    const list = storyIdToFiles.get(id) ?? []
-    list.push(file)
-    storyIdToFiles.set(id, list)
-  }
-  for (const [id, files] of storyIdToFiles.entries()) {
-    if (files.length > 1) failures.push(`duplicate story id ${id} found in multiple files: ${files.map((f) => relative(ROOT, f)).join(', ')}`)
-  }
-
   const legacyBacklogs = allMarkdown.filter((file) => {
     if (basename(file).toLowerCase() !== 'backlog.md') return false
     return true
