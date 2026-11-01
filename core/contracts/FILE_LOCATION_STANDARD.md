@@ -2,11 +2,11 @@
 
 Status: Active
 Effective Date: 2026-05-22
-Scope: All Oliver projects, public and private
+Scope: every governed project, public and private
 
 ## Purpose
 
-Define exactly where every file type belongs across ALL Oliver projects. This eliminates ambiguity about where to save plans, docs, credentials, personal files, and runtime artifacts. Every agent and every human contributor follows the same location rules.
+Define exactly where every file type belongs across every governed project. This eliminates ambiguity about where to save plans, docs, credentials, personal files, and runtime artifacts. Every agent and every human contributor follows the same location rules.
 
 ## Canonical Location Map
 

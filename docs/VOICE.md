@@ -41,7 +41,7 @@ This applies to everything written for a person: chat replies, emails, notes, do
 
 A finding names what happened, what it means and what comes next, at the length it deserves:
 
-> **The publishing queue depends heavily on one source.** 68 of 76 booked clips come from Red Bull Snow. Any change in access or licensing could sharply reduce the available inventory.
+> **The publishing queue depends heavily on one source.** 68 of 76 booked clips come from one channel. Any change in access or licensing could sharply reduce the available inventory.
 >
 > Next: Expand the source mix. There are 224 uncut sources from other official channels.
 

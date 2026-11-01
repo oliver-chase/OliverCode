@@ -16,7 +16,7 @@ block enables them, since a repo with no database has no use for a Supabase keep
 
 Serverless Postgres providers (Neon, Supabase) and free-tier Cloudflare resources
 may pause or hibernate after periods of inactivity (typically 7+ days). This
-standard codifies a lightweight keepalive mechanism for every Oliver repo that
+standard codifies a lightweight keepalive mechanism for every governed repo that
 uses Supabase or deploys to Cloudflare.
 
 ## Two Keepalive Patterns
