@@ -128,6 +128,30 @@ sys.exit(1 if failures else 0)
   echo "=== validate: duplication check passed ==="
 }
 
+run_skill_efficiency_check() {
+  # The mechanical rules of core/contracts/SKILL_EFFICIENCY_STANDARD.md for this repo's own
+  # skills/ (scripts/lib/skill_efficiency_check.py): no monolith SKILL.md, no restated
+  # paragraph, and the six named MCP-call patterns. The standard bound these skills with
+  # nothing checking them until this gate.
+  echo "=== validate: checking skill efficiency ==="
+  local out
+  if ! out="$(python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '${SCRIPT_DIR}')
+from lib.skill_efficiency_check import check_all
+failures = check_all(Path('${REPO_ROOT}'))
+for f in failures:
+    print(f)
+sys.exit(1 if failures else 0)
+")"; then
+    printf '%s\n' "$out"
+    echo "=== validate: skill efficiency check FAILED ==="
+    exit 1
+  fi
+  echo "=== validate: skill efficiency passed ==="
+}
+
 run_smoke_tests() {
   # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read the one
   # tracked shared/repo-profiles.json, so they pass identically everywhere.
@@ -234,7 +258,8 @@ main() {
       echo ""
       echo "Options:"
       echo "  (no args)              Run pre-commit gates (Gate 8 incl.), doc/code consistency,"
-      echo "                         reference integrity, and smoke tests (tests/, if present)"
+      echo "                         reference integrity, doc duplication, skill efficiency,"
+      echo "                         and smoke tests (tests/, if present)"
       echo "  --evidence <file>      Run pre-commit + gatekeeper"
       echo "  --gatekeeper-only <file>  Run gatekeeper only"
       echo "  --target-repo <repo-root> [args...]"
@@ -253,6 +278,7 @@ main() {
       run_consistency
       run_reference_check
       run_duplication_check
+      run_skill_efficiency_check
       run_smoke_tests
       run_hook_state
       ;;

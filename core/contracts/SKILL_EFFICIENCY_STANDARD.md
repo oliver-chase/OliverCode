@@ -15,8 +15,8 @@ it makes an agent do — to one bar.
 
 A `SKILL.md` past the word cap with no `references/` split forces every invocation to
 load content most calls never touch. Split a self-contained section out once the file
-crosses the cap the fleet's structure checker enforces (`MONOLITH_WORD_CAP` in
-`check_skill_structure.py`, not restated here — see rule 5 below on why). `meeting-notes`
+crosses the cap the efficiency gate enforces (`MONOLITH_WORD_CAP` in
+`scripts/lib/skill_efficiency_check.py`, not restated here — see rule 5 below on why). `meeting-notes`
 and `vtwo-sow-proposal` are the reference pattern: a short `SKILL.md` that routes, and
 `references/*.md` loaded only for the branch actually taken.
 
@@ -58,9 +58,9 @@ wherever correctness does not require judgment.
 
 ## 5. MCP-call efficiency, by name
 
-A skill that documents an MCP-backed workflow is judged on the same named anti-patterns
-`skills/skill-fleet-audit/scripts/check_mcp_patterns.py` checks for. The detection logic
-for each lives in that script, not restated here:
+A skill that documents an MCP-backed workflow is judged on the named anti-patterns
+`scripts/lib/skill_efficiency_check.py` checks for. The detection logic and the
+duplicate-paragraph thresholds for rule 2 live in that module, not restated here:
 
 - `no-concise-mode` — a documented search tool with no mention of concise/response-format
 - `no-pagination` — a documented search tool with no mention of cursor/pagination
@@ -74,14 +74,13 @@ Each is grounded in a real, previously-shipped defect, not a hypothetical.
 
 ## Enforcement reality
 
-Mechanical through `olivercode audit-fleet`, for OliverCode's own skills and the personal skills
-folder: `skills/skill-fleet-audit` runs all three checkers named above (structure/duplication, MCP-efficiency, ASD-STE100 clarity)
-and its `SKILL.md` states the pattern each finding must clear before being treated as a
-real defect. ASD-STE100 alone is also checked fleet-wide at commit time per
-`docs/SKILLS-PLACEMENT.md` and `docs/GOVERNANCE.md`'s coverage table.
+Rules 1, 2 and 5 are checked mechanically for OliverCode's own `skills/` by
+`scripts/lib/skill_efficiency_check.py`, which `bash scripts/validate.sh` runs as a failing
+gate. It reads every `skills/<name>/SKILL.md` and its `references/*.md`. Text declared as
+deliberate reuse in `scripts/lib/duplication_check.py` is not counted as a duplicate.
+ASD-STE100 (rule 3) is the commit hook's writing-clarity gate per `docs/SKILLS-PLACEMENT.md`
+and `docs/GOVERNANCE.md`'s coverage table. Rule 4 needs judgment and is checked by hand.
 
-OliverCode's own `skills/` directory has no equivalent structure or MCP-efficiency gate
-yet — rules 1, 2, 4, and 5 apply to it by this standard but are checked only by hand
-until that gate exists (tracked in the `OliverCode` GitHub Project, issue #5). Until then, treat this file as the bar a
-skill is written and reviewed against, not as something a hook currently blocks a commit
-on outside the vault.
+The personal skills folder runs through `olivercode audit-fleet` and the
+`skills/skill-fleet-audit` checkers, which no longer carry rules 1, 2 and 5. Those rules
+apply to that folder by this standard and are checked there by hand.

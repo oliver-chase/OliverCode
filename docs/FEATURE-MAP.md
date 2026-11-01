@@ -29,6 +29,7 @@ modules ARE listed, because each is a distinct enforcement capability.
 | Unfalsifiable checks (a gate that cannot fail) | `scripts/lib/falsifiability_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | The three pre-commit hooks, built from one gate list | `scripts/build-hooks.py` from `core/hooks/` | `bash scripts/validate.sh` runs `build-hooks.py --check` (fail-closed). A hand edit to a built hook fails |
 | Cross-doc content duplication (the same rule restated near-verbatim in two tracked docs) | `scripts/lib/duplication_check.py` | `bash scripts/validate.sh` (fail-closed). A shared 15+ word passage fails unless it matches a declared canonical phrase |
+| Skill efficiency for this repo's `skills/` (no monolith `SKILL.md`, no restated paragraph, the six named MCP-call patterns) | `core/contracts/SKILL_EFFICIENCY_STANDARD.md`, thresholds in `scripts/lib/skill_efficiency_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Gate coverage per repo type (OliverCode, an adopted repo, the private variant) | `docs/GOVERNANCE.md` coverage table | `scripts/lib/consistency_check.py` via `bash scripts/validate.sh` (fail-closed) |
 | Internal reference integrity (markdown links + backtick repo paths) | `scripts/link-check.sh`, `scripts/lib/reference_check.py` | `bash scripts/validate.sh` (fail-closed) |
 | Framework tests | `tests/` | `bash scripts/validate.sh` (WARN-skips if `tests/` absent) |
@@ -55,6 +56,7 @@ no multi-provider routing, multi-runtime adapter system, or launcher beyond `scr
 | `scripts/lib/skills_catalog.py` | SKILL.md frontmatter parsing behind `olivercode skills`. Launcher re-exports |
 | `scripts/lib/falsifiability_check.py` | Detects checks that CANNOT fail — dead counters, scripts reporting failure with no nonzero exit. Built after a run of defects here shared that one shape (`GATE-FALSIFIABILITY-1`) |
 | `scripts/lib/duplication_check.py` | Detects the same rule restated near-verbatim across two tracked docs with no cross-reference — a sliding-window substring match, declared-marker exceptions for deliberate reuse |
+| `scripts/lib/skill_efficiency_check.py` | Holds every `skills/<name>/SKILL.md` and its `references/*.md` to rules 1, 2 and 5 of the skill efficiency standard: the monolith word cap, the duplicate-paragraph similarity threshold and the six named MCP-call patterns. The one home for those thresholds |
 | `scripts/orchestration-gatekeeper.py` | WRITE MODE evidence validation. `--check-token-policy` is Gate 8 |
 | `scripts/audit-staleness.py` | Flags fleet repos past the review threshold, read from each repo's "Reviewed through" marker |
 | `scripts/find-spec.py` | Resolves a bare backlog ID (`SPEC-21`) fleet-wide across every `*BACKLOG*.md` in the private repos and profiled fleet repos. A `SPEC-N` miss points at the GitHub Project where a retired backlog's entries may now live |

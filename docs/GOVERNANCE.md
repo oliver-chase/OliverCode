@@ -49,6 +49,13 @@ silently: doc/code consistency (`scripts/lib/consistency_check.py` — skills in
 gate-count claims) and internal reference integrity (`scripts/link-check.sh` — markdown links
 plus backtick repo paths).
 
+It also fails closed on **skill efficiency** for this repo's own `skills/`
+(`scripts/lib/skill_efficiency_check.py`, `GATE-SKILL-EFFICIENCY-1` in `docs/DECISIONS.md`).
+A `SKILL.md` over the word cap with no `references/` split, a paragraph restated across
+skills or inside one, and any of the six named MCP-call anti-patterns each fail the run.
+`core/contracts/SKILL_EFFICIENCY_STANDARD.md` holds the rules and the module holds the
+thresholds.
+
 ## Gate Classes
 
 **Gate coverage is not uniform across repos, and the difference matters.** OliverCode runs
