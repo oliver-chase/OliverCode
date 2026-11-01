@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.repo_profiles import load_repo_profiles  # noqa: E402
+from lib.repo_profiles import load_repo_profiles, registry_file  # noqa: E402
 from lib.repo_profiles import resolve_repo_path as _resolve_repo_path  # noqa: E402
 from lib.repo_profiles import iter_fleet as _iter_fleet  # noqa: E402
 from lib.skills_catalog import _parse_skill_frontmatter, _load_skills  # noqa: E402,F401
@@ -192,7 +192,7 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
     print("auto-load in Claude Code — merge them into CLAUDE.md (docs/ADOPTING.md Step 4).")
 
     _report_claude_dir(oc_root)
-    print("\nProfile skeleton — paste into shared/repo-profiles.json under \"profiles\",")
+    print(f"\nProfile skeleton — paste into {registry_file(oc_root, 'repo-profiles.json')} under \"profiles\",")
     print("then add each repo's token_policy (see docs/TOKEN-POLICY.md):\n")
     skeleton = {
         name: {"name": name, "path": str(repo), "canonicalValidationCommand": "<command>"}
@@ -382,7 +382,7 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    print("Next: register the repo in shared/repo-profiles.json, then `olivercode health` to verify.")
+    print(f"Next: register the repo in {registry_file(oc_root, 'repo-profiles.json')}, then `olivercode health` to verify.")
     return 1 if broken or broken_settings else 0
 
 
@@ -656,7 +656,9 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
     profiles, _ = load_repo_profiles(oc_root)
     fleet = list(_iter_fleet(profiles, fleet_root or oc_root.parent))
     if not fleet:
-        print("  [WARN] no fleet registered in shared/repo-profiles.json — skipping hook-drift check")
+        print(f"  [WARN] no fleet registered in {registry_file(oc_root, 'repo-profiles.json')} — skipping hook-drift check")
+        print("         If your registry lives in a private repo, name that repo under privateRepos in")
+        print("         olivercode.local.json; OliverCode reads <repo>/olivercode/repo-profiles.json from it.")
         skipped += 1
     else:
         # A registered repo that is not cloned on this machine is not a defect here, so it

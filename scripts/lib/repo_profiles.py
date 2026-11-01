@@ -1,20 +1,37 @@
-"""Repo-profiles loader.
+"""Repo-profiles loader, and where the fleet registry lives on this machine.
 
-`shared/repo-profiles.json` is tracked and holds the real fleet (repo names,
-validation commands, keepalive config). One file, real data, no local overlay --
-this is a single-operator framework across this operator's own accounts, not a
-project shared with strangers who'd need a placeholder to start from.
+The registry (`repo-profiles.json`, `repo-map.json`) names the operator's repos, waivers
+and services, so a fork must not inherit it. The real files live in a private repo at
+`olivercode/<file>`, found through `privateRepos` in olivercode.local.json. A checkout with
+none falls back to the tracked `shared/<file>`, which ships as an empty example and is
+where a fork registers its own repos.
 """
 
 import json
 from pathlib import Path
 
-from lib.local_config import repo_paths
+from lib.local_config import OC_ROOT, private_repos, repo_paths
+
+REGISTRY_DIR = "olivercode"
+
+
+def registry_file(repo_root: Path, filename: str) -> Path:
+    """The registry file this checkout reads: a private repo's copy, else the tracked one.
+
+    Only the checkout whose olivercode.local.json names the private repos looks there, so a
+    test or a fork run against another root reads that root's own `shared/` file.
+    """
+    if Path(repo_root).resolve() == OC_ROOT.resolve():
+        for repo in private_repos().values():
+            candidate = repo / REGISTRY_DIR / filename
+            if candidate.is_file():
+                return candidate
+    return Path(repo_root) / "shared" / filename
 
 
 def load_repo_profiles(repo_root):
     """Return (profiles: dict, source_path: Path)."""
-    path = repo_root / "shared" / "repo-profiles.json"
+    path = registry_file(repo_root, "repo-profiles.json")
     with open(path) as f:
         data = json.load(f)
     return data.get("profiles", {}), path

@@ -14,8 +14,8 @@ go in one local file, so nothing tracked has to match this machine's folders.
 ## Order
 
 - OliverCode comes first, because its `CLAUDE.md` holds the rules every session loads
-- the fleet config (`shared/repo-profiles.json` and friends) is tracked, so it comes back
-  with the clone
+- the fleet registry lives in a private repo under `olivercode/`, so it comes back with that
+  repo's clone once `olivercode.local.json` names the repo under `privateRepos`
 - the private repos, the skills folder and any repo outside the fleet folder are per machine, so they
   are named in `olivercode.local.json` before `sync-hooks` and `health` run
 

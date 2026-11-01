@@ -24,9 +24,9 @@ And one property that surprises people: **hook enforcement fails open.** An unse
 
 ## The Two Layers
 
-**1. OliverCode (this repo).** Contracts, skills, templates, launcher, governance hooks, and the real fleet registries (`shared/repo-profiles.json`, `shared/repo-map.json`, `shared/project-structure-rules.json`, `core/contracts/AGENT_SYSTEM_MANIFEST.json`) — tracked, not gitignored. This is a single operator's framework across that operator's own accounts, not a project shared with strangers.
+**1. OliverCode (this repo).** Contracts, skills, templates, launcher and governance hooks. The fleet registries (`shared/repo-profiles.json`, `shared/repo-map.json`) ship as empty examples. An operator's real registry lives in a private repo under `olivercode/`, named through `privateRepos` in `olivercode.local.json`, so a fork carries none of it.
 
-**2. Product repos (yours).** Sibling repos that inherit hooks, templates, and standards from OliverCode. Declared in `shared/repo-profiles.json`. OliverCode is never a runtime dependency of a product repo — it defines standards, not implementations.
+**2. Product repos (yours).** Sibling repos that inherit hooks, templates, and standards from OliverCode. Declared in the registry's `repo-profiles.json`. OliverCode is never a runtime dependency of a product repo — it defines standards, not implementations.
 
 `runtime/control-plane/` (gitignored, optional) holds private per-machine runtime state. OliverCode works without it.
 

@@ -12,6 +12,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from lib.repo_profiles import registry_file
+
 def _check_github_about(oc_root: Path) -> tuple[int, int, int]:
     """WARN-degrading check that this repo's GitHub About is filled in.
 
@@ -61,7 +63,7 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     Reported, never fatal. The point is to make the date mean something at the moment
     someone looks at fleet health, not to block a commit in an unrelated repo.
     """
-    path = oc_root / "shared" / "repo-map.json"
+    path = registry_file(oc_root, "repo-map.json")
     if not path.is_file():
         print("  [WARN] no repo-map.json — skipping waiver expiry check")
         return 0, 0, 1

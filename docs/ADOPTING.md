@@ -20,7 +20,8 @@ Two layers, and it matters which is which:
 
 | Layer | Where | Tracked? | Who owns it |
 |---|---|---|---|
-| The framework + your fleet's real config | your OliverCode fork (`shared/repo-profiles.json` and friends) | yes, tracked | you |
+| The framework | your OliverCode fork | yes, tracked | you |
+| Your fleet's real config | a private repo's `olivercode/repo-profiles.json` and `repo-map.json`, or your fork's `shared/` copies | yes, in that repo | you |
 | Activation | `~/.claude/CLAUDE.md` + `~/.claude/skills/*` symlinks | no, per machine | your machine |
 
 Your fleet's real names and config live directly in the tracked registry — there is no
@@ -182,7 +183,7 @@ Rules for this rewrite:
 Enforcement has to know which repos it governs before it can reach them, so registration
 comes first.
 
-Edit `shared/repo-profiles.json` directly with your real repo names, validation commands,
+Edit the registry's `repo-profiles.json` (a private repo's `olivercode/` copy when `olivercode.local.json` names one under `privateRepos`, else `shared/repo-profiles.json`) with your real repo names, validation commands,
 and token policy. `_<field>_note` keys beside a worked example document the schema in place.
 `scripts/olivercode discover` emits a paste-ready profile per repo, including the
 `token_policy` block. Each profile needs that block, with `ignore_globs` and
