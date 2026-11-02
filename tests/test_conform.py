@@ -14,6 +14,7 @@ from unittest import mock
 from _support import REPO_ROOT, load_script, scratch_repo
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
+from lib import cmd_fleet  # noqa: E402  (load_script put scripts/ on the path)
 from lib import conform  # noqa: E402  (load_script put scripts/ on the path)
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
@@ -37,7 +38,7 @@ class ConformBase(unittest.TestCase):
         (self.repo / "scripts" / "validate.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
         (self.repo / "README.md").write_text("# widgets\n")
         (self.repo / "CLAUDE.md").write_text("Run `bash scripts/validate.sh` before committing.\n")
-        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
+        cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
         quiet(launcher.command_size, REPO_ROOT, self.repo, True)
 
     def rows(self, **kwargs):
@@ -85,7 +86,7 @@ class TestRequirements(ConformBase):
         self.assertIn("declared hook variant", row.detail)
 
     def test_a_private_repo_is_not_failed_for_running_the_private_pre_commit(self):
-        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=True)
+        cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=True)
         self.assertEqual("pass", self.rows(private=True)["managed-files"].status)
 
     def test_an_edited_strict_managed_file_fails(self):
@@ -182,8 +183,8 @@ class TestCommand(ConformBase):
 
     def test_with_no_directory_it_prints_one_block_per_registered_repo(self):
         profiles = {"widgets": {}, "absent": {}}
-        with mock.patch.object(launcher, "load_repo_profiles", return_value=(profiles, None)), \
-                mock.patch.object(launcher, "registry_gap", return_value=""):
+        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(profiles, None)), \
+                mock.patch.object(cmd_fleet, "registry_gap", return_value=""):
             code, out = quiet(launcher.command_conform, REPO_ROOT, None, self.tmp, True)
         self.assertEqual(0, code, out)
         self.assertIn("widgets\n", out)
@@ -201,14 +202,14 @@ class TestCommand(ConformBase):
         code, _ = quiet(launcher.command_conform, REPO_ROOT, self.repo, self.tmp, True)
         self.assertEqual(1, code)
         profiles = {"widgets": {"hookVariant": "custom gate"}}
-        with mock.patch.object(launcher, "load_repo_profiles", return_value=(profiles, None)):
+        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(profiles, None)):
             code, out = quiet(launcher.command_conform, REPO_ROOT, self.repo, self.tmp, True)
         self.assertEqual(0, code, out)
         self.assertIn("declared hook variant", out)
 
     def test_an_empty_fleet_reports_nothing_registered(self):
-        with mock.patch.object(launcher, "load_repo_profiles", return_value=({}, None)), \
-                mock.patch.object(launcher, "registry_gap", return_value=""):
+        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=({}, None)), \
+                mock.patch.object(cmd_fleet, "registry_gap", return_value=""):
             code, out = quiet(launcher.command_conform, REPO_ROOT, None, self.tmp, True)
         self.assertEqual(0, code)
         self.assertIn("no fleet registered", out)

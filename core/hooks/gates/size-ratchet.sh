@@ -3,14 +3,16 @@
 # is skills/audit/scripts/size.sh --total over the staged tree, the same counter `olivercode size`
 # uses. A baseline with "lines": null, or no baseline file, skips the gate.
 #
-# A story that must grow the repo raises "lines" in the same commit. This gate reads the staged
-# baseline and trusts the value it finds. The commit-msg hook is what requires a story reference,
-# and no gate can check that the raise is justified, so the rule is procedure plus a reference.
+# A story that must grow the repo raises "lines" in the same commit, by at most raiseCapPercent
+# of the committed baseline (default 2). This gate prints the raise and passes it. A pre-commit
+# gate cannot read the commit message, so the commit-msg hook refuses a raise over the cap unless
+# the message carries a "Size: L" or "Size: XL" line copied from the story.
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Size ratchet..."
 SIZE_JSON="$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)"
-size_field() {
-  printf '%s\n' "$SIZE_JSON" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
+size_field_of() {
+  printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
 }
+size_field() { size_field_of "$1" "$SIZE_JSON"; }
 SIZE_BASE="$(size_field lines)"
 SIZE_PCT="$(size_field allowancePercent)"
 SIZE_COUNTER=""
@@ -31,6 +33,12 @@ else
   SIZE_EXTRA=$(( SIZE_BASE * SIZE_PCT / 100 ))
   if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
     echo "  docs/SIZE-BASELINE.json is part of this commit, so its baseline of $SIZE_BASE lines is trusted."
+    SIZE_HEAD_BASE="$(size_field_of lines "$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
+    if [ -n "$SIZE_HEAD_BASE" ] && [ "$SIZE_BASE" -gt "$SIZE_HEAD_BASE" ]; then
+      SIZE_CAP_PCT="$(size_field raiseCapPercent)"
+      SIZE_CAP=$(( SIZE_HEAD_BASE * ${SIZE_CAP_PCT:-2} / 100 ))
+      echo "  This commit raises the baseline by $(( SIZE_BASE - SIZE_HEAD_BASE )) lines (cap $SIZE_CAP without an L or XL story)."
+    fi
   fi
   if [ $(( (SIZE_TOTAL - SIZE_BASE) * 100 )) -gt $(( SIZE_BASE * SIZE_PCT )) ]; then
     echo "  BLOCKED: the repo would hold $SIZE_TOTAL lines, over its baseline of $SIZE_BASE by more than the $SIZE_PCT% allowance ($SIZE_EXTRA lines)."
@@ -38,7 +46,7 @@ else
     git diff --cached --numstat --no-renames --diff-filter=ACM \
       | awk -F'\t' '$1 != "-" && $1 - $2 > 0 { print $1 - $2 "\t" $3 }' | sort -rn | sed -n 1,3p \
       | while IFS="$(printf '\t')" read -r grown path; do echo "    +$grown  $path"; done
-    echo "  Remove lines, or raise \"lines\" in docs/SIZE-BASELINE.json in this commit with the story number in the message."
+    echo "  Remove lines, or raise \"lines\" in docs/SIZE-BASELINE.json in this commit with the story number in the message. A raise over the cap also needs a \"Size: L\" or \"Size: XL\" line."
     exit 1
   fi
   echo "  Gate {{N}} passed ($SIZE_TOTAL lines, baseline $SIZE_BASE)."

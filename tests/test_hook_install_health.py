@@ -18,6 +18,7 @@ from _support import REPO_ROOT, git, load_script, scratch_repo
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
+from lib import cmd_fleet  # noqa: E402  (load_script put scripts/ on the path)
 repo_gates = load_script("scripts/lib/repo_gates.py")
 
 
@@ -29,7 +30,7 @@ class TestHookProblems(unittest.TestCase):
         self.hooks = self.repo / ".githooks"
 
     def install(self, private=False):
-        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
+        cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
 
     def problems(self, private=False):
         return repo_gates.hook_problems(self.repo, TEMPLATES, private)
@@ -97,12 +98,12 @@ class TestInstallHookPair(unittest.TestCase):
         return (self.repo / ".githooks" / name).read_bytes()
 
     def test_a_private_repo_gets_the_private_variant_as_its_live_hook(self):
-        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=True)
+        cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=True)
         self.assertEqual(self.hook("pre-commit"), (TEMPLATES / "pre-commit-private").read_bytes())
         self.assertFalse((self.repo / ".githooks" / "pre-commit-private").exists())
 
     def test_a_public_repo_gets_the_public_hook_and_no_private_copy(self):
-        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
+        cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
         self.assertEqual(self.hook("pre-commit"), (TEMPLATES / "pre-commit").read_bytes())
         self.assertFalse((self.repo / ".githooks" / "pre-commit-private").exists())
 
@@ -111,14 +112,14 @@ class TestInstallHookPair(unittest.TestCase):
             with self.subTest(private=private):
                 (self.repo / ".githooks").mkdir(exist_ok=True)
                 (self.repo / ".githooks" / "pre-commit-private").write_text("old\n")
-                launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
+                cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
                 self.assertFalse((self.repo / ".githooks" / "pre-commit-private").exists())
 
     def test_both_variants_get_an_executable_pre_push(self):
         for private in (True, False):
             with self.subTest(private=private):
                 shutil.rmtree(self.repo / ".githooks", ignore_errors=True)
-                launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
+                cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
                 self.assertEqual(self.hook("pre-push"), (TEMPLATES / "pre-push").read_bytes())
                 self.assertTrue(os.access(self.repo / ".githooks" / "pre-push", os.X_OK))
 
@@ -126,13 +127,13 @@ class TestInstallHookPair(unittest.TestCase):
         for private in (True, False):
             with self.subTest(private=private):
                 shutil.rmtree(self.repo / ".githooks", ignore_errors=True)
-                launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
+                cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
                 self.assertEqual(self.hook("commit-msg"), (TEMPLATES / "commit-msg").read_bytes())
                 self.assertTrue(os.access(self.repo / ".githooks" / "commit-msg", os.X_OK))
 
     def test_gate_problem_names_an_unset_hooks_path_and_clears_after_install(self):
         self.assertIn("core.hooksPath is unset", repo_gates.gate_problem(self.repo))
-        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
+        cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
         self.assertEqual("", repo_gates.gate_problem(self.repo))
 
 if __name__ == "__main__":

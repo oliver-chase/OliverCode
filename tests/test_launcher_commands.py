@@ -21,6 +21,7 @@ from _support import REPO_ROOT, git, load_script, scratch_repo
 
 LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
+from lib import claude_settings, cli, cmd_fleet, cmd_health, cmd_install  # noqa: E402  (load_script put scripts/ on the path)
 
 
 class TestInstall(unittest.TestCase):
@@ -132,7 +133,7 @@ class TestInstall(unittest.TestCase):
         self.assertEqual(launcher.command_install(REPO_ROOT), 0)
         settings = json.loads((claude_dir / "settings.json").read_text())
         self.assertEqual(settings["model"], "opus")
-        self.assertEqual(launcher._claude_settings.missing(claude_dir / "settings.json"), [])
+        self.assertEqual(claude_settings.missing(claude_dir / "settings.json"), [])
 
     def _install(self, root=REPO_ROOT):
         with contextlib.redirect_stdout(io.StringIO()) as out:
@@ -545,7 +546,7 @@ class TestAuditFleetExit(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         (tmp / "skills" / "audit" / "scripts").mkdir(parents=True)
         done = subprocess.CompletedProcess([], returncode, stdout="a finding\n", stderr=stderr)
-        with mock.patch.object(launcher, "_skills_root", return_value=None), \
+        with mock.patch.object(cmd_fleet, "_skills_root", return_value=None), \
                 mock.patch.object(launcher.subprocess, "run", return_value=done), \
                 contextlib.redirect_stdout(io.StringIO()):
             return launcher.command_audit_fleet(tmp)
@@ -554,6 +555,27 @@ class TestAuditFleetExit(unittest.TestCase):
         self.assertEqual(self.run_with(2), 1)
         self.assertEqual(self.run_with(1, stderr="Traceback (most recent call last):"), 1)
 
+
+
+class TestThinLauncher(unittest.TestCase):
+    """The launcher parses arguments and dispatches. Command bodies live in scripts/lib (#89)."""
+
+    def test_the_launcher_holds_no_command_body(self):
+        self.assertLess(len(LAUNCHER.read_text().splitlines()), 300)
+
+    def test_every_listed_command_dispatches_to_a_module_function(self):
+        names = {entry.split()[1] for entry, _ in cli.COMMANDS}
+        self.assertEqual({"bootstrap", "size", "backlog-setup", "discover", "install", "uninstall", "conform",
+                          "health", "update", "sync-hooks", "audit-fleet", "skills"}, names)
+        for fn in (cmd_install.command_install, cmd_install.command_uninstall, cmd_health.command_health,
+                   cmd_fleet.command_sync_hooks, cmd_fleet.command_audit_fleet):
+            self.assertIn("scripts.lib.cmd_", f"scripts.{fn.__module__}")
+
+    def test_an_unknown_command_prints_usage_and_fails(self):
+        result = subprocess.run([sys.executable, str(LAUNCHER), "nonsense"], capture_output=True, text=True)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("not a valid command", result.stdout)
+        self.assertIn("OliverCode Terminal Launcher", result.stdout)
 
 
 if __name__ == "__main__":

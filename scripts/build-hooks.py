@@ -41,7 +41,6 @@ TITLES = {
     "emojis": "Icons / Emojis",
     "pii": "PII",
     "workflow-auth": "Workflow push auth safety",
-    "planning-docs": "Planning doc governance",
     "archived-content": "Archived content",
     "skill-citations": "Skill citations",
     "size-ratchet": "Size ratchet",
@@ -53,7 +52,7 @@ TITLES = {
 UNNUMBERED = {"repo-local"}
 
 # The one gate list. Private repos hold personal data by design, so they skip PII and
-# the public-repo checks. Planning doc governance needs a checker only adopted repos carry.
+# the public-repo checks.
 VARIANTS = {
     ".githooks/pre-commit": {
         "variant": "OliverCode itself",
@@ -62,7 +61,7 @@ VARIANTS = {
     },
     "core/templates/project/pre-commit": {
         "variant": "public repos",
-        "gates": ["secrets", "emojis", "pii", "workflow-auth", "planning-docs",
+        "gates": ["secrets", "emojis", "pii", "workflow-auth",
                   "archived-content", "skill-citations", "size-ratchet",
                   "owner-identifiers", "duplication"],
     },
