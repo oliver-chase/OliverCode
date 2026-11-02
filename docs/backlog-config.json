@@ -57,10 +57,6 @@
   },
   "qaRequiredFromIssue": 50,
   "areaPolicy": {
-    "retired": [
-      "document-skills",
-      "deliverable-builder"
-    ],
     "parked": [
       "growth"
     ],

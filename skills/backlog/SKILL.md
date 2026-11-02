@@ -2,8 +2,8 @@
 name: backlog
 description: >
   Owns a repo's GitHub Project as its live backlog, for any repo whose CLAUDE.md names a backlog-config.json.
-  Files a Story or Epic (search first, never duplicate) with Status, Priority and Size set, closes an item with evidence, and sweeps the board for field gaps, status drift, duplicates, stale items and missing QA sign-off.
-  Trigger on "file this", "add a story", "add an epic", "close this out", "backlog status", "what needs triage", "groom the backlog", "board hygiene" or "what should go in Ready".
+  Files a Story or Epic (search first, never duplicate) with Status, Priority and Size set, closes an item with evidence, and sweeps the board for field gaps, status drift, duplicates and missing QA sign-off.
+  Trigger on "file this", "add a story", "add an epic", "close this out", "backlog status", "what needs triage", "groom the backlog", or "board hygiene".
   Also trigger when a skill names real new scope that needs tracking before it gets built.
 ---
 
@@ -60,37 +60,31 @@ After each commit or finished piece of work, and before a lead reports a helper'
 
 The sweep is read-only and changes nothing until the owner approves a fix. A stopped read (a reached limit, a failed call, a GraphQL rate limit) means it did not run, so say so and never report clean.
 
-**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full 8-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene"), and weekly.
+**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full four-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene"), and weekly.
 
 When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md` and open with this message, word for word, with no other opening line and no closing recap. A named dimension skips it.
 
 > A tidy board shows at a glance what to work on next and where each item stands.
 >
-> I read your live GitHub Project board and report anything out of order across 8 dimensions. We go through each finding together, and I change nothing until you approve a fix.
+> I read your live GitHub Project board and report anything out of order across four dimensions. We go through each finding together, and I change nothing until you approve a fix.
 >
-> Which dimension should I check? Name one of fields, drift, duplicates, ready, area, suggest, stale or qa-signoff, or say "all" and I will check all 8. I also need `gh` installed and signed in.
+> Which dimension should I check? Name one of fields, drift, duplicates or qa-signoff, or say "all" and I will check all four. I also need `gh` installed and signed in.
 
 | Dimension | Checks |
 |---|---|
 | Required fields (`fields`) | Priority and Size on every open item, plus Work Type and Area where defined |
 | Status drift (`drift`) | Board Status matches issue state, and every open issue is on the board |
 | Duplicate cards (`duplicates`) | One card per issue |
-| Ready occupancy (`ready`) | `Ready` is not empty while Backlog holds an item |
-| Area freshness (`area`) | Area options match the folders under `--skills-root` |
-| Ready candidates (`suggest`) | With an empty Ready, the top 5 unblocked Backlog items |
-| Stale (`stale`) | P0 or P1 in Backlog quiet 14 days, In Progress 7, `deferred` 30 |
 | QA sign-off (`qa-signoff`) | Every Complete item from `qaRequiredFromIssue` has an independent sign-off |
 
 `references/project-fields.md` ("Sweep dimensions") holds each rule in full.
 
-The script is `python3 scripts/check_board_hygiene.py --config CONFIG`, with `--dimension` (repeatable) and `--skills-root path/to/skills`.
+The script is `python3 scripts/check_board_hygiene.py --config CONFIG`, with `--dimension` (repeatable).
 
-Fields, drift, duplicates, area and QA sign-off findings are mechanical. Ready occupancy, ready candidates and stale are advisory, because an empty Ready can be right and a quiet item can be waiting on something real. Read advisory findings in context and report one grouped digest, or "Nothing due" when clean.
+Every finding is mechanical. Report them as one grouped list, or "Nothing due" when clean.
 
 ### Clear the findings
 
-1. Clear each required-fields, status-drift and area-freshness finding with `gh project item-edit` or `gh api graphql`. A closed issue that shows open means the board and the issue were edited separately: close the issue and set Status `Complete` together, then re-run `drift`.
-2. For ready-occupancy, take the top unblocked ready-candidate under that repo's prioritization doc and read its body before promoting it. An item with an open design question, or design calls left to the builder, needs a `plan` pass first.
-3. For stale, ask the owner per item whether to comment, reprioritize or close it. Never move one silently.
+Clear each required-fields and status-drift finding with `gh project item-edit` or `gh api graphql`. A closed issue that shows open means the board and the issue were edited separately: close the issue and set Status `Complete` together, then re-run `drift`.
 
 A calling skill says "file via `backlog`" once and does not repeat this procedure.
