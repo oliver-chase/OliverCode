@@ -45,6 +45,11 @@ mk_oc() { # $1 = dest
   local dest="$1"
   if [ "$MODE" = "clone" ]; then
     git clone -q "$REPO" "$dest" || { say "FAIL: clone failed"; exit 1; }
+    # The clone's origin is a local path. Point it at the source's real origin URL, in the clone only
+    # and without fetching, so health and validate.sh see the identity a real clone has.
+    local origin_url
+    origin_url="$(git -C "$REPO" remote get-url origin 2>/dev/null)" \
+      && git -C "$dest" remote set-url origin "$origin_url"
     return
   fi
   mkdir -p "$dest"
