@@ -139,6 +139,7 @@ The rehearsal runs in disposable sandboxes that cannot touch your real files. Ev
 | --- | --- |
 | [`docs/SETUP.md`](docs/SETUP.md) | Cloning, the setup steps, restoring a machine, backing out, how each launcher command behaves and troubleshooting by symptom |
 | [`docs/RULES.md`](docs/RULES.md) | Every standing rule: baseline and managed files, lifecycle, execution, structure, file locations, boundary, skill placement and documents |
+| [`docs/CONTRACT.md`](docs/CONTRACT.md) | What every repo must match, what may differ, and how an exception is recorded |
 | [`docs/GATES.md`](docs/GATES.md) | Every gate, what it blocks, and which repos receive which gates |
 | [`CLAUDE.md`](CLAUDE.md) | Rules Claude loads in every session |
 | [`docs/VOICE.md`](docs/VOICE.md) | How everything a person reads is written, loaded in every session |
