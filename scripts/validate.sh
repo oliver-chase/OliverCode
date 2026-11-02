@@ -242,6 +242,16 @@ run_smoke_tests() {
     trap "rm -rf '$log_dir'" RETURN
     (cd "$tests_dir" && ls test_*.py | sed 's/\.py$//' | xargs -P "$jobs" -I{} \
       sh -c 'python3 -m unittest -b "$1" > "$2/$1.log" 2>&1 || echo "$1" >> "$2/failed"' _ {} "$log_dir")
+    # Skill script tests that tests/ does not wrap. tests/test_backlog_skill.py already runs
+    # skills/backlog/scripts, so that folder is left out to avoid running it twice.
+    local skill_test dir_of name_of
+    for skill_test in "$REPO_ROOT"/skills/*/scripts/test_*.py; do
+      [[ -e "$skill_test" ]] || continue
+      dir_of="$(dirname "$skill_test")"
+      [[ "$dir_of" == "$REPO_ROOT/skills/backlog/scripts" ]] && continue
+      printf '%s\n' "$skill_test"
+    done | xargs -P "$jobs" -I{} \
+      sh -c 'd="$(dirname "$1")"; m="$(basename "$1" .py)"; n="$(basename "$(dirname "$d")")-$m"; (cd "$d" && python3 -m unittest -b "$m") > "$2/$n.log" 2>&1 || echo "$n" >> "$2/failed"' _ {} "$log_dir"
     for module in "$log_dir"/*.log; do
       n="$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' "$module")"
       ran=$((ran + ${n:-0}))
@@ -301,7 +311,8 @@ main() {
       echo "Options:"
       echo "  (no args)              Run pre-commit gates, doc/code consistency,"
       echo "                         reference integrity, bloat, code quality, doc duplication,"
-      echo "                         smoke tests (tests/, if present) and fleet hook state"
+      echo "                         smoke tests (tests/ and the skills' own script tests, if present)
+                         and fleet hook state"
       echo "  --target-repo <repo-root> [args...]"
       echo "                         Run <repo-root>/scripts/validate-repo.sh if it exists"
       echo "                         (repo-local validation hook convention), else skip"

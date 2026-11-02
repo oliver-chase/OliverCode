@@ -21,9 +21,12 @@ this shape:
     "size": {"id": "...", "options": {"XS": "...", "S": "...", "M": "...", "L": "...", "XL": "..."}},
     "workType": {"id": "...", "options": {"Epic": "...", "Story": "..."}}
   },
+  "qaRequiredFromIssue": null,
   "areaPolicy": {"retired": [], "parked": [], "catchAll": []}
 }
 ```
+
+`qaRequiredFromIssue` is optional: set it to an issue number and the `qa-signoff` sweep flags every Complete item at or above that number that lacks an accepted independent QA sign-off, while null or an absent key switches the check off.
 
 `areaPolicy` is optional. It lists the Area options that match no skill folder: `retired` for frozen labels on Complete items, `parked` for a family with no folder in the repo, `catchAll` for cross-family work.
 

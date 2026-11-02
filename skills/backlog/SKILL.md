@@ -4,7 +4,7 @@ description: >
   Owns a repo's GitHub Project as its live backlog, for any repo that names a backlog-config.json path in its own CLAUDE.md.
   Files a new Story or Epic (search first, never duplicate) and sets Status/Priority/Size every time.
   Closes an item with evidence.
-  Sweeps the whole board across 7 dimensions: required-field gaps, Status that disagrees with issue state, duplicate cards, an empty Ready column, stale Area options, ranked Ready candidates and stale items.
+  Sweeps the whole board across 8 dimensions: required-field gaps, Status that disagrees with issue state, duplicate cards, an empty Ready column, stale Area options, ranked Ready candidates, stale items and Complete items with no QA sign-off.
   Reads that repo's own config for the repo/Project/field IDs -- never hardcodes one repo's values, and refuses a fork that carries the owner's config.
   Trigger on "file this", "add a story", "add an epic", "close this out", "backlog status", "what needs triage", "groom the backlog", "board hygiene", "is the backlog properly prioritized", "check the project board" or "what should go in Ready".
   Also trigger when a skill's own routing names "real new scope" that needs tracking before it gets built.
@@ -64,7 +64,7 @@ XL or L almost always means the item touches N things across the fleet. That is 
 
 ## Close a story or epic
 
-0. **QA comes first**. The builder moves the story to `QA` and stops. A different agent, one that is a builder on no part of the story, re-reads the files and runs the checks against each Gherkin scenario without being shown the builder's conclusion. It logs its verdict with `log_action.py --role qa`, and its `--result` starts with `PASS` or `FAIL` and names every scenario it confirmed, as in `PASS; confirmed: Work is finished; Work fails`. Run `python3 scripts/check_qa_signoff.py --story N --config CONFIG` from this skill's folder. It exits 0 on an independent PASS that confirms every scenario, and the story moves on. On `FAIL`, or when the checker refuses, the story returns to `In Progress` with the findings in a comment.
+0. **QA comes first**. The builder moves the story to `QA` and stops. A different agent, one that is a builder on no part of the story, re-reads the files and runs the checks against each Gherkin scenario without being shown the builder's conclusion. It logs its verdict with `log_action.py --role qa`, and its `--result` starts with `PASS` or `FAIL` and names every scenario it confirmed, as in `PASS; confirmed: Work is finished; Work fails`. Run `python3 scripts/check_qa_signoff.py --story N --config CONFIG` from this skill's folder. It exits 0 on an independent PASS that confirms every scenario by its whole name, when the story also has a builder comment, and the story moves on. On `FAIL`, or when the checker refuses, the story returns to `In Progress` with the findings in a comment.
 1. Move Status to `Complete`.
 2. Comment the evidence — files touched, what actually shipped. One comment per real change. Never rewrite the issue body to reflect the final state. The comment trail is the record.
 3. **Check for a parent Epic. If one exists, update it too — this is not optional**. GitHub's `Status` field never updates on its own from sub-issue completion. `Sub-issues progress` tracks the count automatically. `Status` does not follow it. Query `subIssuesSummary` (GraphQL) for the parent's real completed/total count. All complete: move the parent to `Complete`, unless a sub-issue was deliberately deferred and stays open on purpose. Then the parent stays `In Progress`, never `Complete`, and the comment says why. Some complete, none deferred: move the parent to `In Progress` if it was still `Backlog` or `Ready`. Comment the parent with the real count either way.
@@ -77,13 +77,13 @@ A request that names its config path skips the opening message. Otherwise send t
 
 > A tidy board shows at a glance what to work on next and where each item stands.
 >
-> I read your live GitHub Project board and report anything out of order across 7 dimensions. We go through each finding together, and I change nothing until you approve a fix.
+> I read your live GitHub Project board and report anything out of order across 8 dimensions. We go through each finding together, and I change nothing until you approve a fix.
 >
 > The config path is all I need to start, and naming a dimension you already suspect lets me go straight to it. I also need `gh` installed and signed in.
 >
 > You can answer in any of these ways:
-> 1. Send the path to the repo's `docs/backlog-config.json`, and I will check all 7 dimensions.
-> 2. Send that path with one dimension by name: fields, drift, duplicates, ready, area, suggest or stale. I will check only that one.
+> 1. Send the path to the repo's `docs/backlog-config.json`, and I will check all 8 dimensions.
+> 2. Send that path with one dimension by name: fields, drift, duplicates, ready, area, suggest, stale or qa-signoff. I will check only that one.
 > 3. Send that path with a skills folder, and I will compare the Area options with its folders.
 
 | Dimension | Checks |
@@ -95,12 +95,13 @@ A request that names its config path skips the opening message. Otherwise send t
 | Area freshness | Every Area option matches a folder directly under the skills root you pass, or one of the retired, parked or catch-all options the config's `areaPolicy` lists. Every such folder has a matching option |
 | Ready candidates | Fires only with an empty Ready column and a non-empty Backlog. Ranks Backlog items by Priority then Size, skips any that a keyword scan reads as blocked, and lists up to 5 |
 | Stale | A `P0` or `P1` item in `Backlog` with no comment in 14 days, an item in `In Progress` with none in 7, and an item labelled `deferred` with none in 30. An item with no comment counts from its filing date. The 14-day threshold has no real data behind it yet. Revise it once a real complaint says it is wrong |
+| QA sign-off | Every Complete item numbered at or above the config's `qaRequiredFromIssue` has an accepted independent QA sign-off, as `check_qa_signoff.py` defines it. A null or absent key switches the dimension off |
 
-Run `python3 scripts/check_board_hygiene.py --config path/to/backlog-config.json` from this skill's folder. Add `--dimension fields|drift|duplicates|ready|area|suggest|stale` to run one. Add `--skills-root path/to/skills` to run Area freshness against that folder's direct sub-folders. Without it, Area reports a skip and the other six run. The script needs `gh` on the path, signed in. Without `--config`, or with a path that holds no file, it stops with one line that says so and names the example config a fork starts from.
+Run `python3 scripts/check_board_hygiene.py --config path/to/backlog-config.json` from this skill's folder. Add `--dimension fields|drift|duplicates|ready|area|suggest|stale|qa-signoff` to run one. Add `--skills-root path/to/skills` to run Area freshness against that folder's direct sub-folders. Without it, Area reports a skip and the other seven run. The script needs `gh` on the path, signed in. Without `--config`, or with a path that holds no file, it stops with one line that says so and names the example config a fork starts from.
 
 The board list, the issue lists and the comment history are read with explicit limits and pagination. A read that reaches its limit or fails stops the run with a message. A stop means the sweep did not run, so say so and never report clean. A GraphQL rate-limit error is the same case.
 
-Required fields, status drift, duplicate cards and Area freshness are mechanical. A missing field, a status that contradicts the issue, or an orphaned option is never a judgment call. Ready occupancy, Ready candidates and stale are advisory. An empty Ready column can be right when nothing is unblocked, a suggested candidate can still be blocked in a way no keyword names, and a quiet item can be waiting on something real. Read each advisory finding in context before you act, and report one grouped digest. Say "Nothing due" when every dimension is clean.
+Required fields, status drift, duplicate cards, Area freshness and QA sign-off are mechanical. A missing field, a status that contradicts the issue, or an orphaned option is never a judgment call. Ready occupancy, Ready candidates and stale are advisory. An empty Ready column can be right when nothing is unblocked, a suggested candidate can still be blocked in a way no keyword names, and a quiet item can be waiting on something real. Read each advisory finding in context before you act, and report one grouped digest. Say "Nothing due" when every dimension is clean.
 
 ### Clear the findings
 

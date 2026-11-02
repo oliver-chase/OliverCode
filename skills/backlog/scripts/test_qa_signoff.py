@@ -47,6 +47,32 @@ class QaSignoff(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("scenario unconfirmed by qa-1: Work fails", text)
 
+    def test_a_lone_qa_comment_with_no_builder_comment_is_refused(self):
+        code, text = run("qa-only.json")
+        self.assertEqual(code, 1)
+        self.assertIn("no builder comment", text)
+
+    def test_a_scenario_name_must_match_whole_not_as_a_substring(self):
+        code, text = run("qa-substring.json")
+        self.assertEqual(code, 1)
+        self.assertIn("scenario unconfirmed by qa-1: Work is finished", text)
+
+    def test_matching_ignores_case_and_surrounding_space(self):
+        body = "Scenario: Work is finished\n"
+        comments = [
+            "Agent action\n- Agent: b\n- Role: builder\n- Result: x",
+            "Agent action\n- Agent: q\n- Role: qa\n- Result: PASS; Confirmed:  WORK IS FINISHED ",
+        ]
+        self.assertTrue(qa.check(comments, body)[0])
+
+    def test_a_pass_with_no_confirmed_list_confirms_nothing(self):
+        body = "Scenario: Work is finished\n"
+        comments = [
+            "Agent action\n- Agent: b\n- Role: builder\n- Result: x",
+            "Agent action\n- Agent: q\n- Role: qa\n- Result: PASS; Work is finished",
+        ]
+        self.assertFalse(qa.check(comments, body)[0])
+
     def test_a_later_fail_overrides_an_earlier_pass(self):
         pages = json.loads((FIX / "qa-pass.json").read_text())
         pages.append(json.loads((FIX / "qa-fail.json").read_text())[1])

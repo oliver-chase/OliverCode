@@ -14,7 +14,7 @@
 | `automation-first-agent-design` | Agent workflow design | Designing agent workflows |
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
-| `backlog` | Config-driven GitHub Project backlog: files, closes and sweeps the board across 7 dimensions (required fields, status drift, duplicate cards, Ready occupancy, Area freshness, Ready candidates, stale items) | Filing, closing or sweeping backlog work in a repo that names a backlog-config.json in its own CLAUDE.md; "board hygiene", "is the backlog properly organized" |
+| `backlog` | Config-driven GitHub Project backlog: files, closes and sweeps the board across 8 dimensions (required fields, status drift, duplicate cards, Ready occupancy, Area freshness, Ready candidates, stale items, QA sign-off) | Filing, closing or sweeping backlog work in a repo that names a backlog-config.json in its own CLAUDE.md; "board hygiene", "is the backlog properly organized" |
 | `skill-creation` | Intake for a new skill: overlap check first, then the baseline every new skill meets | "New skill", "build a skill for X", "should this be a new skill" |
 
 ## Rules

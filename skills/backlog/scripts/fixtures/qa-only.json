@@ -1,0 +1,5 @@
+[
+ {
+  "body": "Agent action\n- Agent: A\n- Role: qa\n- Commit: abc1234\n- Files changed: 2\n- Result: PASS; confirmed: Work is finished; Work fails"
+ }
+]
