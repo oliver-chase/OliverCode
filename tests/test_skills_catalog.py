@@ -1,20 +1,16 @@
 """Tests for scripts/lib/skills_catalog.py: the list `olivercode skills` prints.
 
-tests/test_frontmatter_parser.py covers the three common frontmatter shapes. This file
-covers the catalog itself and the frontmatter that must not crash or mislabel a skill.
+It covers the catalog itself and every frontmatter shape, including the ones that must not
+crash or mislabel a skill.
 """
 
-import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location(
-    "skills_catalog", REPO_ROOT / "scripts" / "lib" / "skills_catalog.py"
-)
-catalog = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(catalog)
+from _support import REPO_ROOT, load_script
+
+catalog = load_script("scripts/lib/skills_catalog.py", "skills_catalog")
 
 
 class SkillsCatalogBase(unittest.TestCase):
@@ -34,6 +30,14 @@ class ParseFrontmatter(SkillsCatalogBase):
     def test_quoted_values_lose_their_quotes(self):
         path = self.skill("a", "---\nname: \"alpha\"\ndescription: 'Does A: and more.'\n---\n")
         self.assertEqual(("alpha", "Does A: and more."), catalog._parse_skill_frontmatter(path))
+
+    def test_no_frontmatter_at_all_keeps_the_folder_name(self):
+        path = self.skill("some-skill", "# Some Skill\n\nNo frontmatter here.\n")
+        self.assertEqual(("some-skill", ""), catalog._parse_skill_frontmatter(path))
+
+    def test_a_folded_block_joins_its_lines(self):
+        path = self.skill("folded", "---\nname: folded\ndescription: >\n  Line one.\n  Line two.\n---\n")
+        self.assertEqual(("folded", "Line one. Line two."), catalog._parse_skill_frontmatter(path))
 
     def test_an_empty_name_keeps_the_folder_name(self):
         path = self.skill("folder-name", "---\nname:\ndescription: x\n---\n")

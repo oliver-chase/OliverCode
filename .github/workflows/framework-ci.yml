@@ -17,21 +17,14 @@ jobs:
       - name: Health check
         run: python3 scripts/olivercode health
 
-      # validate.sh covers the pre-commit gates, doc/code consistency,
-      # reference integrity, and the smoke tests. link-check runs inside it,
-      # so it is not repeated as its own step.
+      # validate.sh covers the pre-commit gates, doc/code consistency, reference
+      # integrity, bloat, code quality and the smoke tests.
       - name: Validate gates over the whole tree
         run: bash scripts/validate.sh --tree
-
-      # Bloat is the one QA phase with a hard threshold, so it is the one that
-      # can fail a build without false positives. --strict makes a finding
-      # nonzero; the other phases stay advisory and are surfaced below.
-      - name: Bloat and legacy check (strict)
-        run: bash scripts/qa/check-bloat.sh --strict
 
       # The property this repo exists to have: a stranger can clone it and it
       # works with no configuration. It broke silently more than once, so it is
       # a gating step, not a nicety.
-      - name: Fork usability (clean checkout, no config, virgin HOME)
-        run: bash scripts/qa/check-fork-usable.sh
+      - name: Install rehearsal (clean checkout, no config, virgin HOME)
+        run: bash scripts/qa/rehearse-install.sh
 

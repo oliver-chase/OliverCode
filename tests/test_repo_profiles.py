@@ -5,22 +5,15 @@ file covers what the loader returns, where each fleet repo resolves to, and whic
 count as the fleet.
 """
 
-import importlib.util
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-# The module imports `lib.local_config`, so scripts/ must be importable first.
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-spec = importlib.util.spec_from_file_location(
-    "repo_profiles", REPO_ROOT / "scripts" / "lib" / "repo_profiles.py"
-)
-repo_profiles = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(repo_profiles)
+from _support import load_script
+
+repo_profiles = load_script("scripts/lib/repo_profiles.py", "repo_profiles")
 
 
 class RepoProfilesBase(unittest.TestCase):

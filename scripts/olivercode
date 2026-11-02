@@ -41,7 +41,7 @@ COMMANDS = [
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
-    ("olivercode health [--root DIR]", "Run health checks: Claude Code hooks, placement drift"),
+    ("olivercode health [--root DIR] [--hooks-only]", "Run health checks: Claude Code hooks, placement drift. --hooks-only checks just the fleet hooks and makes no network call"),
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run the audit skill's 3 static checks against this machine's skills folder + OliverCode's own skills"),
@@ -605,8 +605,18 @@ class _HealthTally:
         return f"HEALTHY — {self.passed} checks passed"
 
 
-def command_health(fleet_root: Path | None = None) -> int:
-    """Run health checks: Claude Code hooks, control plane, placement drift."""
+def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> int:
+    """Run health checks: Claude Code hooks, control plane, placement drift.
+
+    hooks_only checks just whether each fleet repo and private repo runs the right hooks. It
+    reads local files, so it makes no network call and suits `validate.sh`.
+    """
+    if hooks_only:
+        print("OliverCode fleet hooks")
+        print("=" * 40)
+        passed, failed, skipped = _check_fleet_hooks(OC_ROOT, fleet_root)
+        print(f"\n{passed} passed, {failed} failed, {skipped} skipped")
+        return 1 if failed else 0
     print("OliverCode Health Check")
     print("=" * 40)
     t = _HealthTally()
@@ -787,6 +797,21 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
         else:
             passed += 1
 
+    p, f, s = _check_fleet_hooks(oc_root, fleet_root)
+    return passed + p, failed + f, skipped + s
+
+
+def _check_fleet_hooks(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int, int]:
+    """Check that every fleet repo and private repo runs the right hooks. Reads local files only.
+
+    A repo that is both registered in the fleet and named in privateRepos is checked once, as a
+    private repo, because sync-hooks deploys it that way.
+    """
+    passed = failed = skipped = 0
+    templates_dir = oc_root / "core" / "templates" / "project"
+    private = _private_repos()
+    private_paths = {root.resolve() for root in private.values()}
+    checked: set[Path] = set()
     # (c) Fleet repos: unset core.hooksPath, or a hook file diverging from the template.
     profiles, _ = load_repo_profiles(oc_root)
     fleet = list(_iter_fleet(profiles, fleet_root or oc_root.parent))
@@ -810,7 +835,9 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
         for name, profile, repo_path in fleet:
             if name in absent:
                 continue
-            problems = _hook_problems(repo_path, templates_dir, bool(profile.get("private")))
+            checked.add(repo_path.resolve())
+            is_private = bool(profile.get("private")) or repo_path.resolve() in private_paths
+            problems = _hook_problems(repo_path, templates_dir, is_private)
             variant = profile.get("hookVariant")
             if problems and variant:
                 # A repo may legitimately need a hook the template cannot express (a
@@ -838,10 +865,11 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
                 passed += 1
 
     # Private repos are managed hook targets too, checked against the private variant.
-    private = _private_repos()
     if not private:
         print("  [INFO] no private repos set for this machine (privateRepos) — not checked")
     for name, root in private.items():
+        if root.resolve() in checked:
+            continue
         if not (root / ".git").exists():
             print(f"  [WARN] {name}: no .git at {root} — hook check skipped")
             skipped += 1
@@ -1168,9 +1196,10 @@ def main() -> int:
         return command_uninstall(OC_ROOT)
 
     if cmd == "health":
-        root, rest = _take_root_flag(argv)
+        hooks_only = "--hooks-only" in argv
+        root, rest = _take_root_flag([a for a in argv if a != "--hooks-only"])
         _reject_extra(cmd, rest)
-        return command_health(root)
+        return command_health(root, hooks_only)
     if cmd == "update":
         _reject_extra(cmd, argv)
         return command_update()

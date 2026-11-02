@@ -5,7 +5,6 @@ not pointed at them, and a commit that skips the gates on purpose. Each case run
 real temporary git repo.
 """
 
-import importlib.util
 import json
 import os
 import shutil
@@ -16,29 +15,20 @@ import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _support import REPO_ROOT, git, load_script, scratch_repo
+
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 import claude_settings  # noqa: E402
 
-
-def _load(name: str):
-    path = REPO_ROOT / "scripts" / "hooks" / name
-    spec = importlib.util.spec_from_file_location(name.replace(".py", ""), path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-guard = _load("commit_guard.py")
-session = _load("session_check.py")
+guard = load_script("scripts/hooks/commit_guard.py")
+session = load_script("scripts/hooks/session_check.py")
 
 
 class RepoCase(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-claudehooks-")).resolve()
         self.repo = self.tmp / "repo"
-        self.repo.mkdir()
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        scratch_repo(self.repo)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -50,7 +40,7 @@ class RepoCase(unittest.TestCase):
         pre.write_text("#!/bin/sh\nexit 0\n")
         pre.chmod(pre.stat().st_mode | stat.S_IXUSR)
         if point_git_at_them:
-            subprocess.run(["git", "-C", str(self.repo), "config", "core.hooksPath", ".githooks"], check=True)
+            git(self.repo, "config", "core.hooksPath", ".githooks")
 
 
 class TestCommitGuard(RepoCase):
@@ -115,7 +105,7 @@ class TestCommitGuard(RepoCase):
         stub = other / "pre-commit"
         stub.write_text("#!/bin/sh\nexit 0\n")
         stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
-        subprocess.run(["git", "-C", str(self.repo), "config", "core.hooksPath", ".git/hooks"], check=True)
+        git(self.repo, "config", "core.hooksPath", ".git/hooks")
         self.assertIn(".githooks", guard.reason('git commit -m "x"', self.repo))
 
     def test_a_message_or_value_that_looks_like_n_is_not_a_skip(self):

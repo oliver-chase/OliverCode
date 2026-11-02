@@ -20,7 +20,7 @@ Back up before the first mutation. Do not delete a backup until the user confirm
 ## Run this before anything else
 
 ```bash
-bash scripts/qa/check-fork-usable.sh
+bash scripts/qa/rehearse-install.sh
 ```
 
 If it fails, stop and report: the fork is broken, not their machine. Everything below assumes

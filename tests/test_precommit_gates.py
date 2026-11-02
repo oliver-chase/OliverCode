@@ -1,8 +1,9 @@
 """Tests for .githooks/pre-commit — the only mechanically-enforced layer.
 
 Each gate gets a case that MUST block and a case that MUST pass. The hook reads
-staged files from git, so every test builds a throwaway repo, copies the hook in,
-stages a fixture, and runs the hook against it. Nothing touches this checkout.
+staged files from git, so every test copies a template repo that already holds the hook,
+stages a fixture, and runs the hook against it. Each class builds its template once.
+Nothing touches this checkout.
 
 Gates that consult the machine run against stand-ins: gate 5 and gate 9's citation
 check get a stub `gh` on PATH, and gates 6 and 7 their checkers copied or stubbed into the
@@ -17,7 +18,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _support import ISOLATION, REPO_ROOT, git, git_env, scratch_repo
+
 HOOK = REPO_ROOT / ".githooks" / "pre-commit"
 TEMPLATE_HOOK = REPO_ROOT / "core" / "templates" / "project" / "pre-commit"
 _SAVED_GIT_ENV = {}
@@ -28,6 +30,7 @@ def setUpModule():
     # git call (config, add, commit) at the real checkout. Drop them for the whole module.
     for key in [k for k in os.environ if k.startswith("GIT_")]:
         _SAVED_GIT_ENV[key] = os.environ.pop(key)
+    os.environ.update(ISOLATION)
 
 
 def tearDownModule():
@@ -39,20 +42,24 @@ class GateHarness(unittest.TestCase):
 
     HOOK_SOURCE = HOOK
 
+    @classmethod
+    def setUpClass(cls):
+        cls._template_dir = Path(tempfile.mkdtemp(prefix="olivercode-gates-template-"))
+        template = scratch_repo(cls._template_dir / "repo")
+        hooks = template / ".githooks"
+        hooks.mkdir()
+        shutil.copy2(cls.HOOK_SOURCE, hooks / "pre-commit")
+        (hooks / "pre-commit").chmod(0o755)
+        cls._template = template
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls._template_dir, ignore_errors=True)
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-gates-"))
-        subprocess.run(["git", "init", "-q", str(self.tmp)], check=True)
-        subprocess.run(
-            ["git", "-C", str(self.tmp), "config", "user.email", "test@example.invalid"],
-            check=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(self.tmp), "config", "user.name", "Gate Test"], check=True
-        )
-        hooks = self.tmp / ".githooks"
-        hooks.mkdir()
-        shutil.copy2(self.HOOK_SOURCE, hooks / "pre-commit")
-        (hooks / "pre-commit").chmod(0o755)
+        shutil.rmtree(self.tmp)
+        shutil.copytree(self._template, self.tmp, symlinks=True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -61,7 +68,7 @@ class GateHarness(unittest.TestCase):
         path = self.tmp / relpath
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-        subprocess.run(["git", "-C", str(self.tmp), "add", relpath], check=True)
+        git(self.tmp, "add", relpath)
 
     def write(self, relpath, content):
         path = self.tmp / relpath
@@ -377,7 +384,7 @@ class TestTreeScan(GateHarness):
     def setUp(self):
         super().setUp()
         self.stage("config.py", 'KEY = "sk-' + "d" * 32 + '"\n')
-        subprocess.run(["git", "-C", str(self.tmp), "commit", "-q", "--no-verify", "-m", "x"], check=True)
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "x")
 
     def test_a_normal_run_sees_nothing_staged(self):
         self.assertEqual(0, self.run_hook().returncode)
@@ -392,13 +399,6 @@ class TestTreeScan(GateHarness):
         self.assertIn("secret pattern", result.stdout)
 
 
-def git_env():
-    """The environment for a real `git commit` in a scratch repo. A suite that itself runs
-    inside a hook inherits GIT_DIR and GIT_INDEX_FILE, which would aim git at this checkout."""
-    return {k: v for k, v in os.environ.items()
-            if not k.startswith("GIT_") and k != "OLIVERCODE_SCAN_TREE"}
-
-
 @unittest.skipUnless(shutil.which("node"), "gate 7 needs node")
 class TestLinkedWorktree(unittest.TestCase):
     """A commit from a linked worktree runs every gate. Git sets GIT_DIR for a hook there,
@@ -411,27 +411,34 @@ class TestLinkedWorktree(unittest.TestCase):
             "console.log('backlog checker ran');\n",
     }
 
+    @classmethod
+    def setUpClass(cls):
+        """One main repo and one linked worktree for the class; each test resets the worktree."""
+        cls.tmp = Path(tempfile.mkdtemp(prefix="olivercode-worktree-"))
+        cls.main = cls.tmp / "main"
+        cls.wt = cls.tmp / "wt"
+        scratch_repo(cls.main)
+        cls.git("-C", str(cls.main), "config", "core.hooksPath", ".githooks")
+        (cls.main / ".githooks").mkdir()
+        shutil.copy2(HOOK, cls.main / ".githooks" / "pre-commit")
+        (cls.main / ".githooks" / "pre-commit").chmod(0o755)
+        for rel, body in cls.CHECKERS.items():
+            cls.write(cls.main / rel, body)
+        cls.git("-C", str(cls.main), "add", "-A")
+        cls.git("-C", str(cls.main), "commit", "-q", "--no-verify", "-m", "base")
+        cls.git("-C", str(cls.main), "worktree", "add", "-q", str(cls.wt))
+        cls.base = cls.git("-C", str(cls.main), "rev-parse", "HEAD").stdout.strip()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-worktree-"))
-        self.main = self.tmp / "main"
-        self.wt = self.tmp / "wt"
-        self.git("init", "-q", str(self.main))
-        self.git("-C", str(self.main), "config", "user.email", "test@example.invalid")
-        self.git("-C", str(self.main), "config", "user.name", "Gate Test")
-        self.git("-C", str(self.main), "config", "core.hooksPath", ".githooks")
-        (self.main / ".githooks").mkdir()
-        shutil.copy2(HOOK, self.main / ".githooks" / "pre-commit")
-        (self.main / ".githooks" / "pre-commit").chmod(0o755)
-        for rel, body in self.CHECKERS.items():
-            self.write(self.main / rel, body)
-        self.git("-C", str(self.main), "add", "-A")
-        self.git("-C", str(self.main), "commit", "-q", "--no-verify", "-m", "base")
-        self.git("-C", str(self.main), "worktree", "add", "-q", str(self.wt))
+        self.git("-C", str(self.wt), "reset", "-q", "--hard", self.base)
+        self.git("-C", str(self.wt), "clean", "-fdq")
 
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def git(self, *args, **kw):
+    @classmethod
+    def git(cls, *args, **kw):
         return subprocess.run(["git", *args], check=kw.pop("check", True),
                               capture_output=True, text=True, env=git_env(), **kw)
 

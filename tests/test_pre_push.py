@@ -1,36 +1,46 @@
 """The pre-push hook blocks a history rewrite and a secret in any commit the push sends."""
-import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _support import REPO_ROOT, git_env, scratch_repo
+
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "pre-push"
 # Built at runtime so this file never holds a value the secret gates would match.
 TOKEN = "ghp_" + "a" * 36
 
 
 class PrePush(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        """One remote and one clone, built once and copied for each test."""
+        cls._template = Path(tempfile.mkdtemp(prefix="pre-push-template-"))
+        cls.env = git_env(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
+                          GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
+        remote = scratch_repo(cls._template / "remote.git", bare=True)
+        work = scratch_repo(cls._template / "work", branch="main", identity=False)
+        (work / "a.txt").write_text("a\n")
+        for args in (("add", "a.txt"), ("commit", "-q", "-m", "a.txt"),
+                     ("remote", "add", "origin", str(remote)), ("push", "-q", "origin", "main")):
+            subprocess.run(["git", *args], cwd=work, env=cls.env, check=True, capture_output=True)
+        hook = work / ".git" / "hooks" / "pre-push"
+        shutil.copy(HOOK, hook)
+        hook.chmod(0o755)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls._template, ignore_errors=True)
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="pre-push-"))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        # A machine's global git config (a hooks path, commit signing) must not reach these repos.
-        self.env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-        self.env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
-                        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
-                        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
+        shutil.copytree(self._template / "remote.git", self.tmp / "remote.git", symlinks=True)
+        shutil.copytree(self._template / "work", self.tmp / "work", symlinks=True)
         self.remote = self.tmp / "remote.git"
         self.work = self.tmp / "work"
-        self.git("init", "-q", "--bare", str(self.remote), cwd=self.tmp)
-        self.git("init", "-q", "-b", "main", str(self.work), cwd=self.tmp)
-        self.commit("a.txt", "a\n")
-        self.git("remote", "add", "origin", str(self.remote))
-        self.git("push", "-q", "origin", "main")
-        hook = self.work / ".git" / "hooks" / "pre-push"
-        shutil.copy(HOOK, hook)
-        hook.chmod(0o755)
+        self.git("remote", "set-url", "origin", str(self.remote))
 
     def git(self, *args, cwd=None):
         return subprocess.run(["git", *args], cwd=cwd or self.work, env=self.env,

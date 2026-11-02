@@ -8,7 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _support import REPO_ROOT, scratch_repo
+
 CHECKER = REPO_ROOT / "core" / "templates" / "project" / "scripts" / "check-structure-contract.mjs"
 
 
@@ -16,7 +17,7 @@ CHECKER = REPO_ROOT / "core" / "templates" / "project" / "scripts" / "check-stru
 class TestStructureContract(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="structure-contract-"))
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        scratch_repo(self.repo)
         (self.repo / ".github" / "workflows").mkdir(parents=True)
         (self.repo / ".github" / "workflows" / "ci.yml").write_text("name: ci\n")
 
