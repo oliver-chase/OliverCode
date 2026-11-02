@@ -54,7 +54,7 @@ Only they know. `npm run build`, `pytest`, a repo script. This lands in the prof
 
 Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It holds every command. At each step, an agent also does this:
 
-- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. Mention the README's "Optional tooling" section once as optional, and install nothing unasked
+- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. Install nothing unasked
 - **Step 2, install.** Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
 - **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask

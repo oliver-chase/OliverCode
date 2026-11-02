@@ -5,8 +5,6 @@ import re
 from pathlib import Path
 
 ROOT_ENV = "SKILL_FLEET_ROOT"
-DATA_ENV = "SKILL_FLEET_DATA"
-DATA_DIR = ".fleet-audit"
 NON_SKILL_DIRS = {"docs"}
 
 
@@ -18,25 +16,6 @@ def fleet_root(environ=None):
 
 
 FLEET_ROOT = fleet_root()
-
-
-def fleet_data(name, environ=None, root=None):
-    """A file that describes one fleet, such as its word budgets or its retired terms. It lives
-    with the fleet it describes, in `.fleet-audit/` at the fleet root, so the audit code can run
-    against any fleet and an edit to one fleet's data stays in that fleet's repo.
-    `$SKILL_FLEET_DATA` names another folder."""
-    environ = os.environ if environ is None else environ
-    folder = Path(environ[DATA_ENV]).expanduser() if environ.get(DATA_ENV) else Path(root or FLEET_ROOT) / DATA_DIR
-    return folder / name
-
-
-def read_fleet_data(path):
-    """The file's text, or exit with the path that was missing: a fleet gate never passes on
-    data it could not read."""
-    path = Path(path)
-    if not path.is_file():
-        raise SystemExit(f"{path} not found. It holds this fleet's audit data; set {DATA_ENV} or create it.")
-    return path.read_text(encoding="utf-8")
 
 
 def scan_root(argv, default=FLEET_ROOT):

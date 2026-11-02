@@ -20,7 +20,7 @@ Beyond the commit hook, `validate.sh` fails closed on these classes, each of whi
 
 `validate.sh` also reports fleet hook state on every run, through `olivercode health --hooks-only`, which reads local files and makes no network call. That report is advisory and never fatal, because hook enforcement fails open: a repo with an unset or broken `core.hooksPath` is silently ungoverned. Surfacing it where agents already look replaced a weekly log nobody read. A repo that must diverge from the template declares `hookVariant` in its profile, which `shared/repo-profiles.json` documents.
 
-OliverCode ships `.github/workflows/framework-ci.yml`, which runs health, `validate.sh` and the install rehearsal as gating steps on push and pull request. The workflow is paused on the origin repo while GitHub Actions billing is blocked. That is policy and not drift, `githubActionsPolicy` in `shared/project-bootstrap-manifest.json` is the canonical record, and the same pause applies to managed repos. Do not re-enable it as a fix. Enable it in your own fork, where your billing applies.
+OliverCode ships `.github/workflows/framework-ci.yml`, which runs health, `validate.sh` and the install rehearsal as gating steps on push and pull request. The workflow is paused on the origin repo while GitHub Actions billing is blocked. That is policy and not drift, and the same pause applies to managed repos. Do not re-enable it as a fix. Enable it in your own fork, where your billing applies.
 
 While CI is paused the local commands are the enforcement. `bash scripts/validate.sh` is the one entry point and also runs the bloat and code quality checks (`CI-STRICT-1` in `docs/DECISIONS.md`). `bash scripts/qa/rehearse-install.sh` rehearses the install in sandboxes, and `validate.sh --rehearse` runs it. Nothing runs the rehearsal automatically, so it is advisory. A governance CI workflow template for downstream repos exists at `core/templates/project/.github/workflows/olivercode-governance.yml`.
 
@@ -36,7 +36,7 @@ Gate coverage differs by repo. This table is the one home for that, and anywhere
 |------|---------------|:---:|:---:|:---:|
 | Secrets | API keys, tokens, JWTs and private keys in staged files | 1 | 1 | 1 |
 | Icons and emoji | Unicode emoji and icon characters | 2 | 2 | 2 |
-| PII | Host paths, email addresses and personal data | 3 | 3 | — |
+| PII | Host paths, email addresses and personal data in staged code and config. Markdown, tests, mocks and hook sources are skipped | 3 | 3 | — |
 | Deleted repo refs | References to removed repos. This is an opt-in extension point: `DELETED_REPO_PATTERNS` in the hook is empty by default, and the gate reports *skipped*, not passed, until you add names | 4 | 4 | — |
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential, checked through `gh api user -i` and not the remote URL scheme | 5 | 5 | — |
 | Contract integrity | Hardcoded `/workspace/` container paths in staged code, and an `OLIVERCODE_DEPENDENCY.md` that declares paths that do not exist | 6 | — | — |

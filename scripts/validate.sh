@@ -23,7 +23,7 @@ run_precommit() {
 
 run_consistency() {
   # Two classes, both fail-closed, both learned from real defects here:
-  #  - doc-vs-code drift (skills index parity, gate-count claims, gate integrity)
+  #  - doc-vs-code drift (skills index parity, gate-count claims)
   #  - unfalsifiable checks: a gate or script that cannot fail. A string of defects in this
   #    repo shared that shape, and none was visible from output, because the output
   #    always said PASS. See scripts/lib/falsifiability_check.py.
@@ -279,32 +279,6 @@ main() {
   fi
 
   case "$mode" in
-    --target-repo)
-      # Generic cross-repo validation: exec the target repo's own validation
-      # hook if it declares one, by convention (<target-repo>/scripts/validate-repo.sh).
-      # Skips gracefully if the target repo has no such hook — OliverCode carries
-      # no repo-specific enforcement itself (D2 in docs/DECISIONS.md).
-      local repo_root="${2:-}"
-      shift 2 || true
-
-      if [[ -z "$repo_root" ]]; then
-        echo "Usage: bash scripts/validate.sh --target-repo <repo-root> [args passed through to validate-repo.sh]"
-        exit 1
-      fi
-      if [[ ! -d "$repo_root" ]]; then
-        echo "=== validate: target repo not found: $repo_root ==="
-        exit 1
-      fi
-
-      local hook="$repo_root/scripts/validate-repo.sh"
-      if [[ -x "$hook" ]]; then
-        echo "=== validate: running $repo_root/scripts/validate-repo.sh ==="
-        bash "$hook" "$@"
-      else
-        echo "=== validate: no scripts/validate-repo.sh in $repo_root — skipping (nothing to check) ==="
-      fi
-      ;;
-
     --help|-h)
       echo "Usage: bash scripts/validate.sh [OPTIONS]"
       echo ""
@@ -313,9 +287,6 @@ main() {
       echo "                         reference integrity, bloat, code quality, doc duplication,"
       echo "                         smoke tests (tests/ and the skills' own script tests, if present)
                          and fleet hook state"
-      echo "  --target-repo <repo-root> [args...]"
-      echo "                         Run <repo-root>/scripts/validate-repo.sh if it exists"
-      echo "                         (repo-local validation hook convention), else skip"
       echo "  --tree                 Run everything above, with the gates over every tracked file"
       echo "  --check-consistency    Run doc/code consistency checks only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"

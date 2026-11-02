@@ -240,7 +240,7 @@ scripts/olivercode health     --root /path/to/where/your/repos/live
 
 Machine paths go in `olivercode.local.json` at the OliverCode root, which is gitignored. Copy `olivercode.local.example.json` and fill in:
 
-- `privateRepos`: private repos that get the private hook variant, a hook check and a push (a `vaultRoot` set before that list existed still counts as one entry named `vault`)
+- `privateRepos`: private repos that get the private hook variant, a hook check and a push
 - `skillsRoot`: the skill checks
 - `repoPaths`: a repo outside the fleet folder
 - `pushRepos`: extra `push-fleet` targets
@@ -282,7 +282,7 @@ Clone OliverCode and each fleet repo side by side in one folder, then copy `oliv
 Four things need a person, because no script restores them:
 
 - **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`. `scripts/olivercode discover --root <dir>` finds whatever is present and cannot clone what is absent. The private repo's `olivercode/repo-profiles.json` lists what should be there
-- **Marketplace plugins.** Third-party plugins install through Claude Code and never through this repo. The README's "Optional tooling" section lists the ones this framework's rules assume
+- **Marketplace plugins.** Third-party plugins install through Claude Code and never through this repo.
 - **Application plugins.** An editor or notes app that tracks plugin settings in git gets those settings back with the clone, and the compiled plugin code does not return. Reinstall each plugin from its store
 - **MCP server authorization.** This is interactive OAuth per server, in a Claude Code session
 

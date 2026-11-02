@@ -3,7 +3,6 @@
 > Canonical template (OliverCode `core/templates/project/docs/`). Copy this
 > section into the target repo's BACKLOG (or equivalent open-work ledger) as
 > its head or tail section. The `audit` skill maintains it.
-> `scripts/audit-staleness.py` reads the "Reviewed through" marker fleet-wide.
 
 ---
 

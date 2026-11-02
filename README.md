@@ -257,16 +257,6 @@ This repository is the canonical framework repo, so it defines the quality stand
 
 If a managed quality file changes in any project, the canonical file in this repo is changed first and then synced to all projects. OliverCode is the single source of truth. The commit sequence, the gate list, document voice and public-repo redaction each have one owner, and this section does not restate them: `docs/RULES.md`, `docs/GATES.md` and `docs/VOICE.md`.
 
-### Optional tooling
-
-None of these third-party tools ship here, and none are required, because OliverCode runs standalone. They are listed because OliverCode's verification rules were written on a machine that ran them, and a few of the rules read as arbitrary without that context.
-
-| Tool | What it does | Install |
-|---|---|---|
-| [codeburn](https://github.com/getagentseal/codeburn) | Local token-usage, cost and health dashboard across AI coding tools. It reads session data from disk, with no proxy and no API keys | Per its repo README |
-| [claude-code-ui-agents](https://github.com/mustafakendiguzel/claude-code-ui-agents) | Frontend prompt library in plain markdown, fetched per task when a UI request needs it | Reference only |
-| [Ant Design](https://github.com/ant-design/ant-design) | Component-API and design-token sanity reference | Reference only |
-
 ---
 
 ## Verify the whole system
@@ -308,7 +298,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | `scripts/hooks/` | The three Claude Code hooks: session check, commit guard and early-stop guard |
 | `scripts/qa/` | The install rehearsal and the secret-gate probe |
 | `scripts/local-scheduler/` | Unattended `audit-fleet` and `push-fleet` runs through `launchd` (`docs/SETUP.md`, "Scheduled runs") |
-| `scripts/audit-staleness.py`, `scripts/find-spec.py`, `scripts/link-check.sh`, `scripts/run-governance-target.sh` | Staleness report, backlog ID lookup, reference check and the CI entrypoint for a downstream repo |
+| `scripts/link-check.sh`, `scripts/run-governance-target.sh` | The reference check and the CI entrypoint for a downstream repo |
 | `docs/` | One document per concept, listed below |
 | `tests/` | Tests for the gates, checkers, hooks and launcher |
 | `.claude-optimization/memory/` and `.claude-optimization/state/` | Optional memory and state files that `CLAUDE.md` reads when they exist. Memory holds the user profile and durable facts, state holds current targets and the decision log, and both are gitignored and created locally per user |
