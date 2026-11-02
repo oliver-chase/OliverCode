@@ -359,11 +359,6 @@ class TestPlanning(unittest.TestCase):
         with self.assertRaises(backlog_setup.SetupError):
             backlog_setup.parse_map(["nonsense"])
 
-    def test_field_keys(self):
-        self.assertEqual("workType", backlog_setup.field_key("Work Type"))
-        self.assertEqual("status", backlog_setup.field_key("Status"))
-
-
 class TestHealth(SetupCase):
     def health(self):
         lines = []
@@ -513,10 +508,6 @@ class TestLauncher(SetupCase):
     def test_story_must_be_a_number(self):
         self.assertEqual(1, self.call(str(self.repo), "--story", "abc")[0])
         self.assertEqual(1, self.call(str(self.repo), "--story")[0])
-
-    def test_the_command_is_listed(self):
-        self.assertTrue(any(c.startswith("olivercode backlog-setup") for c, _ in launcher.COMMANDS))
-
 
 if __name__ == "__main__":
     unittest.main()

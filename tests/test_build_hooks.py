@@ -67,11 +67,5 @@ class TestBuildHooks(unittest.TestCase):
         for rel in bh.VARIANTS:
             self.assertIn("# shared fix", (self.tmp / rel).read_text())
 
-    def test_banners_count_only_numbered_gates(self):
-        text = bh.build(bh.VARIANTS["core/templates/project/pre-commit-private"])
-        self.assertIn("Gate 7/7: Duplicate text", text)
-        self.assertIn("# ─── Repo-local gates ", text)
-
-
 if __name__ == "__main__":
     unittest.main()

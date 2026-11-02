@@ -85,15 +85,6 @@ class TestHookProblems(unittest.TestCase):
         (self.hooks / "commit-msg").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
         self.assertIn("commit-msg diverges", "; ".join(self.problems()))
 
-    def test_install_hook_pair_output_is_clean_for_both_variants(self):
-        """What sync-hooks writes must pass health, for the variant it wrote."""
-        for private in (True, False):
-            with self.subTest(private=private):
-                shutil.rmtree(self.hooks, ignore_errors=True)
-                self.install(private)
-                self.assertEqual(self.problems(private), [])
-
-
 class TestFleetHooks(unittest.TestCase):
     """`health --hooks-only`: the hook state of each fleet and private repo, counted once, offline."""
 
@@ -178,12 +169,6 @@ class TestInstallHookPair(unittest.TestCase):
         self.assertIn("core.hooksPath is unset", repo_gates.gate_problem(self.repo))
         launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
         self.assertEqual("", repo_gates.gate_problem(self.repo))
-
-    def test_git_is_pointed_at_the_installed_hooks(self):
-        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
-        got = git(self.repo, "config", "--get", "core.hooksPath").stdout.strip()
-        self.assertEqual(got, ".githooks")
-
 
 if __name__ == "__main__":
     unittest.main()

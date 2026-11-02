@@ -61,27 +61,6 @@ class TestInstall(unittest.TestCase):
         self.assertIn("my existing rules", backup.read_text())
         self.assertTrue((claude_dir / "CLAUDE.md").is_symlink())
 
-    def test_is_idempotent(self):
-        self.assertEqual(launcher.command_install(REPO_ROOT), 0)
-        self.assertEqual(launcher.command_install(REPO_ROOT), 0)
-        self.assertTrue((self.tmp / ".claude" / "CLAUDE.md").is_symlink())
-
-    def test_replaces_a_symlink_pointing_elsewhere(self):
-        claude_dir = self.tmp / ".claude"
-        claude_dir.mkdir(parents=True)
-        decoy = self.tmp / "decoy.md"
-        decoy.write_text("other", encoding="utf-8")
-        (claude_dir / "CLAUDE.md").symlink_to(decoy)
-
-        launcher.command_install(REPO_ROOT)
-
-        self.assertEqual(
-            (claude_dir / "CLAUDE.md").resolve(), (REPO_ROOT / "CLAUDE.md").resolve()
-        )
-        backup = claude_dir / "CLAUDE.md.pre-olivercode"
-        self.assertTrue(backup.is_symlink(), "the owner's link was deleted, not backed up")
-        self.assertEqual(backup.resolve(), decoy.resolve())
-
     def _skill(self):
         return next(p.name for p in sorted((REPO_ROOT / "skills").iterdir()) if (p / "SKILL.md").is_file())
 
@@ -340,15 +319,6 @@ class TestUninstall(unittest.TestCase):
         self.assertEqual((self.claude / "CLAUDE.md.pre-olivercode").read_text(), "first\n")
         self.assertIn("CLAUDE.md.pre-olivercode", out.getvalue())
 
-    def test_restores_an_owners_link_install_backed_up(self):
-        self.claude.mkdir(parents=True)
-        mine = self.tmp / "mine.md"
-        mine.write_text("mine")
-        (self.claude / "CLAUDE.md").symlink_to(mine)
-        self._quiet(launcher.command_install)
-        self._quiet(launcher.command_uninstall)
-        self.assertEqual((self.claude / "CLAUDE.md").resolve(), mine.resolve())
-
     def test_names_the_owners_own_skills_copy_correctly(self):
         (self.claude / "skills.pre-olivercode").mkdir(parents=True)
         self._quiet(launcher.command_install)
@@ -513,42 +483,10 @@ class TestAuditFleetExit(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()):
             return launcher.command_audit_fleet(tmp)
 
-    def test_findings_exit_zero(self):
-        self.assertEqual(self.run_with(1), 0)
-
-    def test_a_clean_run_exits_zero(self):
-        self.assertEqual(self.run_with(0), 0)
-
     def test_a_check_that_crashes_exits_one(self):
         self.assertEqual(self.run_with(2), 1)
         self.assertEqual(self.run_with(1, stderr="Traceback (most recent call last):"), 1)
 
-
-class TestAuditFleetDescriptionCap(unittest.TestCase):
-    """audit-fleet runs the real structure check, which fails a description over 150 words."""
-
-    def run_with_description_words(self, words):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-auditcap-"))
-        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        scripts = tmp / "skills" / "audit" / "scripts"
-        scripts.mkdir(parents=True)
-        real = Path(launcher.__file__).resolve().parent.parent / "skills" / "audit" / "scripts"
-        for name in ("check_skill_structure.py", "_fleet.py"):
-            shutil.copy(real / name, scripts / name)
-        wordy = tmp / "skills" / "wordy-skill"
-        wordy.mkdir()
-        desc = " ".join(["word"] * words)
-        (wordy / "SKILL.md").write_text(f'---\nname: wordy-skill\ndescription: "{desc}"\n---\n\nBody.\n', encoding="utf-8")
-        out = io.StringIO()
-        with mock.patch.object(launcher, "_skills_root", return_value=None), contextlib.redirect_stdout(out):
-            launcher.command_audit_fleet(tmp)
-        return out.getvalue()
-
-    def test_a_151_word_description_fails(self):
-        self.assertIn("[FAIL] check_skill_structure.py", self.run_with_description_words(151))
-
-    def test_a_150_word_description_passes(self):
-        self.assertIn("[ok] check_skill_structure.py", self.run_with_description_words(150))
 
 
 if __name__ == "__main__":

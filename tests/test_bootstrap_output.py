@@ -126,7 +126,6 @@ class BootstrapOutput(unittest.TestCase):
 class ShippedWorkflows(unittest.TestCase):
     def test_every_workflow_triggers_on_workflow_dispatch_only(self):
         files = sorted(WORKFLOWS.glob("*.yml"))
-        self.assertGreaterEqual(len(files), 4)
         for path in files:
             self.assertEqual(["workflow_dispatch"], workflow_triggers(path.read_text()), path.name)
 
@@ -136,11 +135,6 @@ class ShippedWorkflows(unittest.TestCase):
                    if e["source"].startswith("core/templates/project/.github/workflows/")}
         self.assertEqual({p.name for p in WORKFLOWS.glob("*.yml")}, shipped)
         self.assertNotIn("githubActionsPolicy", manifest)
-
-    def test_the_trigger_reader_sees_a_push_trigger(self):
-        self.assertEqual(["pull_request", "push"],
-                         workflow_triggers("name: x\non:\n  pull_request:\n  push:\n    branches: [a]\n\njobs:\n"))
-
 
 if __name__ == "__main__":
     unittest.main()

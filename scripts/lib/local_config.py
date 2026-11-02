@@ -20,9 +20,12 @@ LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 
 
 def load_local() -> dict:
-    if not LOCAL_FILE.is_file():
+    """The local file's contents. OLIVERCODE_LOCAL_CONFIG names another file; the test harness
+    points it at /dev/null so no test reads this machine's real repo paths."""
+    path = Path(os.environ["OLIVERCODE_LOCAL_CONFIG"]) if "OLIVERCODE_LOCAL_CONFIG" in os.environ else LOCAL_FILE
+    if not path.is_file():
         return {}
-    with open(LOCAL_FILE) as f:
+    with open(path) as f:
         return json.load(f)
 
 
