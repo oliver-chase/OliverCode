@@ -21,7 +21,7 @@ Removal rules decide what happens to a file that does none of those:
 
 A new file is allowed only when it reduces runtime complexity, replaces duplicated authority, tightens baseline verification or improves what downstream repos receive. Any other new file is rejected, and a new document replaces or merges with an older one so authority stays in one place.
 
-Downstream managed repos inherit this baseline through the shared template and bootstrap path (`core/templates/project/QUALITY_BASELINE.md` and `shared/project-bootstrap-manifest.json`). They never reinterpret it locally. Any variance is explicit, temporary and recorded in the repo's profile in `repo-profiles.json`.
+Downstream managed repos inherit this baseline through the shared template and bootstrap path (`core/templates/project/QUALITY_BASELINE.md` and `shared/project-bootstrap-manifest.json`). They never reinterpret it locally. The requirements and the allowed differences are listed once in `docs/CONTRACT.md`, and any variance is explicit, temporary and recorded in the repo as that file describes.
 
 Other framework rules:
 
