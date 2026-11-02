@@ -1,12 +1,10 @@
 name: QA Hygiene
 
+# Manual only: GitHub Actions is paused for managed repos (docs/GATES.md), so every shipped
+# workflow triggers on workflow_dispatch alone. Add pull_request or push in your own repo
+# once its billing allows.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - staging
-      - development
+  workflow_dispatch:
 
 # Least privilege: these jobs only read the repo and run checks. Without an explicit
 # grant GITHUB_TOKEN inherits the repository default, which on many repos is
@@ -22,22 +20,35 @@ jobs:
   qa-hygiene:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
-      WORKER_URL: https://example.invalid/worker
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Look for package.json
+        id: pkg
+        run: |
+          if [ -f package.json ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json in this repo, so the npm steps are skipped."
+          fi
+
       - name: Setup Node
+        if: steps.pkg.outputs.found == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
 
       - name: Install Dependencies
+        if: steps.pkg.outputs.found == 'true'
         run: npm ci
 
       - name: Run QA Hygiene Gate
+        if: steps.pkg.outputs.found == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          WORKER_URL: https://example.invalid/worker
         run: npm run -s qa:hygiene
