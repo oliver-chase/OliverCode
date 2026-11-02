@@ -1,6 +1,6 @@
 {
-  "_comment": "The budgets skills/audit/scripts/fleet_check.py reports against. testSeconds is the wall time of every tests/test_*.py module run in parallel. docWords counts tracked markdown outside skills/, and skillWords counts tracked markdown under skills/. Raise a number only with the story that needs the room.",
-  "testCount": 539,
+  "_comment": "The budgets skills/audit/scripts/fleet_check.py reports against. testSeconds is the wall time of every tests/test_*.py module run in parallel. docWords counts tracked markdown outside skills/, and skillWords counts tracked markdown under skills/. Raise a number only with the story that needs the room. The testCount of 543 is the measured count after the raise-cap, run-tests snapshot and isolation stories (#81, #115, #110, #112) added tests.",
+  "testCount": 543,
   "testSeconds": 25,
   "docWords": 20500,
   "skillWords": 12500
