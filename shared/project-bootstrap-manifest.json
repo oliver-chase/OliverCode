@@ -108,7 +108,7 @@
       "mode": "presence"
     },
     {
-      "source": "core/templates/project/docs/backlog-config.json",
+      "source": "shared/backlog-config.example.json",
       "target": "docs/backlog-config.json",
       "mode": "presence"
     },
