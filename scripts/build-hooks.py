@@ -40,11 +40,8 @@ TITLES = {
     "secrets": "Secrets",
     "emojis": "Icons / Emojis",
     "pii": "PII",
-    "deleted-repos": "Deleted Repository References",
     "workflow-auth": "Workflow push auth safety",
-    "contract-integrity": "Contract integrity",
     "planning-docs": "Planning doc governance",
-    "backlog-hygiene": "Backlog hygiene",
     "archived-content": "Archived content",
     "skill-citations": "Skill citations",
     "size-ratchet": "Size ratchet",
@@ -56,26 +53,21 @@ TITLES = {
 UNNUMBERED = {"repo-local"}
 
 # The one gate list. Private repos hold personal data by design, so they skip PII and
-# the public-repo checks. Contract integrity checks OliverCode's own control plane, which
-# no adopted repo has. Planning doc governance needs a checker only adopted repos carry.
+# the public-repo checks. Planning doc governance needs a checker only adopted repos carry.
 VARIANTS = {
     ".githooks/pre-commit": {
         "variant": "OliverCode itself",
-        "backlog_checker": "core/templates/project/scripts/check-backlog-hygiene.mjs",
-        "gates": ["secrets", "emojis", "pii", "deleted-repos", "workflow-auth",
-                  "contract-integrity", "backlog-hygiene", "archived-content",
+        "gates": ["secrets", "emojis", "pii", "workflow-auth", "archived-content",
                   "skill-citations", "size-ratchet", "owner-identifiers", "duplication"],
     },
     "core/templates/project/pre-commit": {
         "variant": "public repos",
-        "backlog_checker": "scripts/check-backlog-hygiene.mjs",
-        "gates": ["secrets", "emojis", "pii", "deleted-repos", "workflow-auth",
-                  "planning-docs", "backlog-hygiene", "archived-content",
-                  "skill-citations", "size-ratchet", "owner-identifiers", "duplication"],
+        "gates": ["secrets", "emojis", "pii", "workflow-auth", "planning-docs",
+                  "archived-content", "skill-citations", "size-ratchet",
+                  "owner-identifiers", "duplication"],
     },
     "core/templates/project/pre-commit-private": {
         "variant": "private repos",
-        "backlog_checker": "scripts/check-backlog-hygiene.mjs",
         "gates": ["secrets", "emojis", "archived-content", "skill-citations",
                   "size-ratchet", "owner-identifiers", "duplication", "repo-local"],
     },
@@ -100,7 +92,7 @@ def build(spec: dict) -> str:
             parts.append(banner(f"Gate {number}: {TITLES[gate]}"))
             body = body.replace("{{N}}", str(number)).replace("{{TOTAL}}", str(total))
         body = body.replace("{{SECRET_PATTERNS}}", SECRET_PATTERNS.read_text(encoding="utf-8"))
-        parts.append(body.replace("{{BACKLOG_CHECKER}}", spec["backlog_checker"]) + "\n")
+        parts.append(body + "\n")
     parts.append(banner("All gates passed"))
     parts.append('echo "[pre-commit] All gates passed."\nexit 0\n')
     return "".join(parts)

@@ -129,7 +129,7 @@ scripts/olivercode health         # confirms each repo's hooks are installed and
 
 `sync-hooks` resolves your fleet from the registry file named in Step 5 and expects those repos as siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below. Every repo reported as `[SKIP] not present on this machine` is one it did not govern, and the exit code does not show them, so read that list.
 
-An adopted repo runs every gate except contract integrity, which checks things only OliverCode has. `docs/GATES.md` has the coverage table.
+`docs/GATES.md` has the table of which gates each kind of repo runs.
 
 Hook enforcement fails open. The troubleshooting entry "Commits are passing gates that should have blocked them" below explains why and how to fix it. `scripts/olivercode health` detects it fleet-wide, so run it on a schedule as well as at setup. The Claude Code session check also reports it for the repo a session opens.
 

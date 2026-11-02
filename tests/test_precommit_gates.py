@@ -5,10 +5,10 @@ staged files from git, so every test copies a template repo that already holds t
 stages a fixture, and runs the hook against it. Each class builds its template once.
 Nothing touches this checkout.
 
-Gates that consult the machine run against stand-ins: gate 5 and gate 9's citation
-check get a stub `gh` on PATH, and gates 6 and 7 their checkers copied or stubbed into the
-scratch repo. Every
-`exit 1` in a gate has a test that fails when it becomes `true`.
+Gates that consult the machine run against stand-ins: the workflow-auth gate and the
+skill-citation check get a stub `gh` on PATH, and the planning-doc gate gets its checker
+stubbed into the scratch repo. Every `exit 1` in a gate has a test that fails when it
+becomes `true`.
 """
 
 import os
@@ -223,41 +223,7 @@ class TestGate3PII(GateHarness):
         self.assertAllowed()
 
 
-class TestGate6ContractIntegrity(GateHarness):
-    """Guards the container-path class: a workspace path in a committed file blocks."""
-
-    def test_workspace_path_blocks(self):
-        self.stage("tool.sh", "cd /workspace/project\n")
-        self.assertBlocked("gate 6")
-
-    def test_markdown_is_exempt(self):
-        self.stage("doc.md", "Never hardcode /workspace/ in code.\n")
-        self.assertAllowed()
-
-    def test_tests_dir_is_exempt(self):
-        """A test proving the gate blocks a path must be able to contain that path."""
-        self.stage("tests/t.py", 'p = "/workspace/x"\n')
-        self.assertAllowed()
-
-
-class TestGate4DeletedRepos(GateHarness):
-    """Patterns come from the gitignored .private-patterns, since the tracked list is empty."""
-
-    def setUp(self):
-        super().setUp()
-        self.write(".private-patterns", "# retired repos\nretired-project\n")
-
-    def test_a_reference_to_a_deleted_repo_blocks(self):
-        self.stage("src/app.py", "URL = 'github.com/me/retired-project'\n")
-        result = self.assertBlocked("gate 4")
-        self.assertIn("references deleted path: retired-project", result.stdout)
-
-    def test_a_file_without_the_name_passes(self):
-        self.stage("src/app.py", "URL = 'github.com/me/live-project'\n")
-        self.assertIn("Gate 4 passed.", self.assertAllowed().stdout)
-
-
-class TestGate5WorkflowAuth(GateHarness):
+class TestGateWorkflowAuth(GateHarness):
     SCOPES = 'case "$1 $2" in "auth status") exit 0 ;; "api user") echo "x-oauth-scopes: {}" ;; esac\n'
 
     def setUp(self):
@@ -265,20 +231,20 @@ class TestGate5WorkflowAuth(GateHarness):
         self.stage(".github/workflows/ci.yml", "on: push\n")
 
     def test_a_credential_without_workflow_scope_blocks(self):
-        result = self.assertBlocked("gate 5", **self.stub_gh(self.SCOPES.format("repo, gist")))
+        result = self.assertBlocked("gate 4", **self.stub_gh(self.SCOPES.format("repo, gist")))
         self.assertIn("no workflow-scoped credential", result.stdout)
 
     def test_no_signed_in_gh_blocks(self):
-        result = self.assertBlocked("gate 5", **self.stub_gh("exit 1\n"))
+        result = self.assertBlocked("gate 4", **self.stub_gh("exit 1\n"))
         self.assertIn("no workflow-scoped credential", result.stdout)
 
     def test_a_credential_with_workflow_scope_passes(self):
         result = self.assertAllowed(**self.stub_gh(self.SCOPES.format("repo, workflow")))
         self.assertIn("gh credential has workflow scope", result.stdout)
-        self.assertIn("Gate 5 passed.", result.stdout)
+        self.assertIn("Gate 4 passed.", result.stdout)
 
 
-class TestGate6PlanningDocs(GateHarness):
+class TestGatePlanningDocs(GateHarness):
     """Planning doc governance ships in the template hook, not OliverCode's own."""
 
     HOOK_SOURCE = TEMPLATE_HOOK
@@ -290,43 +256,26 @@ class TestGate6PlanningDocs(GateHarness):
     def test_a_failing_checker_blocks(self):
         self.write("scripts/check-planning-doc-governance.py", "raise SystemExit(1)\n")
         self.stage("src/app.py", "print('hello')\n")
-        self.assertIn("BLOCKED: Planning doc governance failed.", self.assertBlocked("gate 6").stdout)
+        self.assertIn("BLOCKED: Planning doc governance failed.", self.assertBlocked("gate 5").stdout)
 
     def test_a_passing_checker_passes(self):
         self.write("scripts/check-planning-doc-governance.py", "raise SystemExit(0)\n")
         self.stage("src/app.py", "print('hello')\n")
-        self.assertIn("Gate 6 passed.", self.assertAllowed().stdout)
+        self.assertIn("Gate 5 passed.", self.assertAllowed().stdout)
 
 
-@unittest.skipUnless(shutil.which("node"), "gate 7 needs node")
-class TestGate7BacklogHygiene(GateHarness):
-    def setUp(self):
-        super().setUp()
-        self.write("core/templates/project/scripts/check-backlog-hygiene.mjs",
-                   (REPO_ROOT / "core/templates/project/scripts/check-backlog-hygiene.mjs")
-                   .read_text(encoding="utf-8"))
-
-    def test_a_done_heading_blocks(self):
-        self.stage("docs/BACKLOG.md", "# Backlog\n\n## Search rewrite DONE\n\n- item\n")
-        self.assertIn("BLOCKED: Backlog hygiene failed.", self.assertBlocked("gate 7").stdout)
-
-    def test_an_open_backlog_passes(self):
-        self.stage("docs/BACKLOG.md", "# Backlog\n\n## Not done yet\n\n- item\n")
-        self.assertIn("Gate 7 passed.", self.assertAllowed().stdout)
-
-
-class TestGate8ArchivedContent(GateHarness):
+class TestGateArchivedContent(GateHarness):
     def test_an_archive_directory_blocks(self):
         self.stage("docs/Archive/plan.md", "Old plan.\n")
-        self.assertIn("names an archive", self.assertBlocked("gate 8").stdout)
+        self.assertIn("names an archive", self.assertBlocked("gate 5").stdout)
 
     def test_a_superseded_copy_name_blocks(self):
         self.stage("docs/plan-old.md", "Old plan.\n")
-        self.assertIn("named as a superseded copy", self.assertBlocked("gate 8").stdout)
+        self.assertIn("named as a superseded copy", self.assertBlocked("gate 5").stdout)
 
     def test_prose_about_legacy_systems_passes(self):
         self.stage("docs/Legacy Modernization.md", "How we replace legacy systems.\n")
-        self.assertIn("Gate 8 passed.", self.assertAllowed().stdout)
+        self.assertIn("Gate 5 passed.", self.assertAllowed().stdout)
 
     def local_hook(self, body):
         local = self.write(".githooks/pre-commit.local", "#!/usr/bin/env bash\n" + body)
@@ -336,24 +285,24 @@ class TestGate8ArchivedContent(GateHarness):
         """The framework carries no repo-specific exemption; the repo declares its own."""
         self.local_hook('[ "${1:-}" = archive-exempt ] && case "$2" in "records/Archive/"*) exit 10 ;; esac\nexit 0\n')
         self.stage("records/Archive/week-1.md", "Done.\n")
-        self.assertIn("Gate 8 passed.", self.assertAllowed().stdout)
+        self.assertIn("Gate 5 passed.", self.assertAllowed().stdout)
 
     def test_the_exemption_covers_only_the_path_the_hook_names(self):
         self.local_hook('[ "${1:-}" = archive-exempt ] && case "$2" in "records/Archive/"*) exit 10 ;; esac\nexit 0\n')
         self.stage("docs/Archive/plan.md", "Old plan.\n")
-        self.assertIn("names an archive", self.assertBlocked("gate 8").stdout)
+        self.assertIn("names an archive", self.assertBlocked("gate 5").stdout)
 
     def test_a_local_hook_that_exits_zero_for_everything_exempts_nothing(self):
         self.local_hook("exit 0\n")
         self.stage("docs/plan-old.md", "Old plan.\n")
-        self.assertIn("named as a superseded copy", self.assertBlocked("gate 8").stdout)
+        self.assertIn("named as a superseded copy", self.assertBlocked("gate 5").stdout)
 
     def test_without_a_local_hook_the_same_path_blocks(self):
         self.stage("records/Archive/week-1.md", "Done.\n")
-        self.assertBlocked("gate 8")
+        self.assertBlocked("gate 5")
 
 
-class TestGate9SkillCitations(GateHarness):
+class TestGateSkillCitations(GateHarness):
     """Offline: a stub `gh` that knows issues 1 and 2."""
 
     GH = 'case "$1 $2" in "auth status") exit 0 ;; "issue list") printf "1\\n2\\n" ;; esac\n'
@@ -364,12 +313,12 @@ class TestGate9SkillCitations(GateHarness):
 
     def test_a_citation_to_no_real_issue_blocks(self):
         self.stage("skills/x/SKILL.md", "Fixes the parser, see #99.\n")
-        result = self.assertBlocked("gate 9", **self.env)
+        result = self.assertBlocked("gate 6", **self.env)
         self.assertIn("#99 is cited in a staged skill file but resolves to no real issue", result.stdout)
 
     def test_a_citation_to_a_real_issue_passes(self):
         self.stage("skills/x/SKILL.md", "Fixes the parser, see #2.\n")
-        self.assertIn("Gate 9 passed.", self.assertAllowed(**self.env).stdout)
+        self.assertIn("Gate 6 passed.", self.assertAllowed(**self.env).stdout)
 
 
 class TestPrivateRepoLocalGate(GateHarness):
@@ -424,17 +373,10 @@ class TestTreeScan(GateHarness):
         self.assertIn("secret pattern", result.stdout)
 
 
-@unittest.skipUnless(shutil.which("node"), "gate 7 needs node")
 class TestLinkedWorktree(unittest.TestCase):
     """A commit from a linked worktree runs every gate. Git sets GIT_DIR for a hook there,
     and `git -C .githooks rev-parse --show-toplevel` then answers with the .githooks folder,
-    so gate 7 reported its checker missing and skipped, and the secret scan
-    read no file at all."""
-
-    CHECKERS = {
-        "core/templates/project/scripts/check-backlog-hygiene.mjs":
-            "console.log('backlog checker ran');\n",
-    }
+    so the secret scan read no file at all."""
 
     @classmethod
     def setUpClass(cls):
@@ -447,8 +389,6 @@ class TestLinkedWorktree(unittest.TestCase):
         (cls.main / ".githooks").mkdir()
         shutil.copy2(HOOK, cls.main / ".githooks" / "pre-commit")
         (cls.main / ".githooks" / "pre-commit").chmod(0o755)
-        for rel, body in cls.CHECKERS.items():
-            cls.write(cls.main / rel, body)
         cls.git("-C", str(cls.main), "add", "-A")
         cls.git("-C", str(cls.main), "commit", "-q", "--no-verify", "-m", "base")
         cls.git("-C", str(cls.main), "worktree", "add", "-q", str(cls.wt))
@@ -476,21 +416,6 @@ class TestLinkedWorktree(unittest.TestCase):
         self.write(self.wt / rel, body)
         self.git("-C", str(self.wt), "add", rel)
         return self.git("-C", str(self.wt), "commit", "-m", "change", check=False)
-
-    def test_gate_7_runs(self):
-        result = self.commit_in_worktree("src/app.py", "print('hello')\n")
-        out = result.stdout + result.stderr
-        self.assertEqual(0, result.returncode, out)
-        self.assertIn("backlog checker ran", out)
-        self.assertIn("Gate 7 passed.", out)
-
-    def test_a_failing_checker_blocks(self):
-        self.write(self.wt / "core/templates/project/scripts/check-backlog-hygiene.mjs",
-                   "process.exit(1);\n")
-        result = self.commit_in_worktree("src/app.py", "print('hello')\n")
-        out = result.stdout + result.stderr
-        self.assertNotEqual(0, result.returncode, out)
-        self.assertIn("BLOCKED: Backlog hygiene failed.", out)
 
     def test_a_secret_blocks(self):
         result = self.commit_in_worktree("config.py", 'KEY = "sk-' + "e" * 32 + '"\n')

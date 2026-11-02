@@ -28,8 +28,8 @@ While CI is paused the local commands are the enforcement. `bash scripts/validat
 
 Gate coverage differs by repo. This table is the one home for that, and anywhere else that names a count points here (`GATE-COUNT-1` in `docs/DECISIONS.md`).
 
-* OliverCode runs twelve gates on itself.
-* A repo your fleet adopts runs twelve gates too, with planning doc governance in place of the framework's contract-integrity gate.
+* OliverCode runs nine gates on itself.
+* An adopted repo runs ten gates, which adds planning doc governance.
 * A repo deployed with the private variant runs seven.
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
@@ -37,21 +37,18 @@ Gate coverage differs by repo. This table is the one home for that, and anywhere
 | Secrets | API keys, tokens, JWTs and private keys in staged files | 1 | 1 | 1 |
 | Icons and emoji | Unicode emoji and icon characters | 2 | 2 | 2 |
 | PII | Host paths, email addresses and personal data in staged code and config. Markdown, tests, mocks and hook sources are skipped | 3 | 3 | — |
-| Deleted repo refs | References to removed repos. This is an opt-in extension point: `DELETED_REPO_PATTERNS` in the hook is empty by default, and the gate reports *skipped*, not passed, until you add names | 4 | 4 | — |
-| Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential, checked through `gh api user -i` and not the remote URL scheme | 5 | 5 | — |
-| Contract integrity | Hardcoded `/workspace/` container paths in staged code, and an `OLIVERCODE_DEPENDENCY.md` that declares paths that do not exist | 6 | — | — |
-| Planning doc governance | Contract violations in staged planning docs. Conditional: it runs only where `scripts/check-planning-doc-governance.py` exists and reports *skipped* where it does not | — | 6 | — |
-| Backlog hygiene | A `docs/BACKLOG.md` or root `BACKLOG.md` heading marked DONE that should have been removed (`BACKLOG-HYGIENE-1` in `docs/DECISIONS.md`). Conditional: it runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing or where no backlog file exists | 7 | 7 | — |
-| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 8 | 8 | 3 |
-| Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 9 | 9 | 4 |
-| Size ratchet | A commit that leaves the repo's total lines more than the allowance above `lines` in `docs/SIZE-BASELINE.json`. It counts through `skills/audit/scripts/size.sh --total --staged`, names the three files that grew most, and skips where the baseline file is missing or its `lines` is `null`. See "Size ratchet" below | 10 | 10 | 5 |
-| Owner identifiers | A staged file that names an identifier the gate derives from git: the names and email local parts of `git log` authors, the owner of the origin remote, and the account and shop values in the config files that `configGlobs` lists in `docs/IDENTIFIER-GATE.json`. Matching is lowercase on whole words, for identifiers of 4 characters or more. Markdown and tests are scanned. It names the file and line, and skips where nothing can be derived. See "Owner identifiers" below | 11 | 11 | 6 |
-| Duplicate text | A staged markdown file that shares a passage of 15 words or more with another tracked markdown file, in docs, skills, references, core templates or the repo root. It runs the shared check over the staged markdown files against the tracked tree, names both files, and skips where the script or python3 is missing. See "Duplicate text" below | 12 | 12 | 7 |
-| **Total** | | **12** | **12** | **7** |
+| Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential, checked through `gh api user -i` and not the remote URL scheme | 4 | 4 | — |
+| Planning doc governance | Contract violations in staged planning docs. Conditional: it runs only where `scripts/check-planning-doc-governance.py` exists and reports *skipped* where it does not | — | 5 | — |
+| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 5 | 6 | 3 |
+| Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 6 | 7 | 4 |
+| Size ratchet | A commit that leaves the repo's total lines more than the allowance above `lines` in `docs/SIZE-BASELINE.json`. It counts through `skills/audit/scripts/size.sh --total --staged`, names the three files that grew most, and skips where the baseline file is missing or its `lines` is `null`. See "Size ratchet" below | 7 | 8 | 5 |
+| Owner identifiers | A staged file that names an identifier the gate derives from git: the names and email local parts of `git log` authors, the owner of the origin remote, and the account and shop values in the config files that `configGlobs` lists in `docs/IDENTIFIER-GATE.json`. Matching is lowercase on whole words, for identifiers of 4 characters or more. Markdown and tests are scanned. It names the file and line, and skips where nothing can be derived. See "Owner identifiers" below | 8 | 9 | 6 |
+| Duplicate text | A staged markdown file that shares a passage of 15 words or more with another tracked markdown file, in docs, skills, references, core templates or the repo root. It runs the shared check over the staged markdown files against the tracked tree, names both files, and skips where the script or python3 is missing. See "Duplicate text" below | 9 | 10 | 7 |
+| **Total** | | **9** | **10** | **7** |
 
 The numbers are each gate's position in that hook's run order, so the same gate can carry a different number in different hooks. Read the column and not the number.
 
-**Contract integrity** is OliverCode-only. It validates `OLIVERCODE_DEPENDENCY.md` and the framework's own container-path rules, which a product repo does not have, so it does not ship in the template. **Planning doc governance** ships in the template only, because OliverCode carries no planning-doc checker.
+**Planning doc governance** ships in the template only, because OliverCode carries no planning-doc checker.
 
 Which hook a repo receives:
 

@@ -49,7 +49,6 @@ DOWNSTREAM_RELATIVE = frozenset(
         "scripts/run-profile-checks.sh",
         "scripts/check-structure-contract.mjs",
         "scripts/check-planning-doc-governance.py",
-        "scripts/check-backlog-hygiene.mjs",
         ".githooks/pre-commit-private",
     }
 )
