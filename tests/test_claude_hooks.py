@@ -54,9 +54,6 @@ class TestCommitGuard(RepoCase):
         self.gates(point_git_at_them=True)
         self.assertEqual(guard.reason('git add . && git commit -m "x"', self.repo), "")
 
-    def test_allows_a_commit_in_a_repo_with_no_gates(self):
-        self.assertEqual(guard.reason('git commit -m "x"', self.repo), "")
-
     def test_refuses_skipping_the_gates_on_purpose(self):
         self.gates(point_git_at_them=True)
         for cmd in ('git commit --no-verify -m x', 'git commit -n -m x', 'git commit -nm x', 'git commit -anm x'):

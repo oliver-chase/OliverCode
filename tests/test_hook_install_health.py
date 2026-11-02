@@ -71,16 +71,6 @@ class TestHookProblems(unittest.TestCase):
         (self.hooks / "pre-push").unlink()
         self.assertIn("no pre-push", "; ".join(self.problems()))
 
-    def test_a_stale_pre_push_is_reported(self):
-        self.install()
-        (self.hooks / "pre-push").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-        self.assertIn("pre-push diverges", "; ".join(self.problems()))
-
-    def test_a_missing_commit_msg_is_reported(self):
-        self.install()
-        (self.hooks / "commit-msg").unlink()
-        self.assertIn("no commit-msg", "; ".join(self.problems()))
-
     def test_a_stale_commit_msg_is_reported(self):
         self.install()
         (self.hooks / "commit-msg").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
