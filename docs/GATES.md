@@ -30,7 +30,7 @@ While CI is paused the local commands are the enforcement. `bash scripts/validat
 Gate coverage differs by repo. This table is the one home for that, and anywhere else that names a count points here (`GATE-COUNT-1` in `docs/DECISIONS.md`).
 
 * OliverCode runs nine gates on itself
-* An adopted repo runs ten gates, which adds planning doc governance
+* An adopted repo runs the same nine
 * A repo deployed with the private variant runs seven
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
@@ -39,17 +39,26 @@ Gate coverage differs by repo. This table is the one home for that, and anywhere
 | Icons and emoji | Unicode emoji and icon characters | 2 | 2 | 2 |
 | PII | Host paths, email addresses and personal data in staged code and config. Markdown, tests, mocks and hook sources are skipped | 3 | 3 | — |
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential, checked through `gh api user -i` and not the remote URL scheme | 4 | 4 | — |
-| Planning doc governance | Contract violations in staged planning docs. Conditional: it runs only where `scripts/check-planning-doc-governance.py` exists and reports *skipped* where it does not | — | 5 | — |
-| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 5 | 6 | 3 |
-| Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 6 | 7 | 4 |
-| Size ratchet | A commit that leaves the repo's total lines more than the allowance above `lines` in `docs/SIZE-BASELINE.json`. It counts through `skills/audit/scripts/size.sh --total --staged`, names the three files that grew most, and skips where the baseline file is missing or its `lines` is `null`. See "Size ratchet" below | 7 | 8 | 5 |
-| Owner identifiers | A staged file that names an identifier the gate derives from git: the names and email local parts of `git log` authors, the owner of the origin remote, and the account and shop values in the config files that `configGlobs` lists in `docs/IDENTIFIER-GATE.json`. Matching is lowercase on whole words, for identifiers of 4 characters or more. Markdown and tests are scanned. It names the file and line, and skips where nothing can be derived. See "Owner identifiers" below | 8 | 9 | 6 |
-| Duplicate text | A staged markdown file that shares a passage of 15 words or more with another tracked markdown file, in docs, skills, references, core templates or the repo root. It runs the shared check over the staged markdown files against the tracked tree, names both files, and skips where the script or python3 is missing. See "Duplicate text" below | 9 | 10 | 7 |
-| **Total** | | **9** | **10** | **7** |
+| Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 5 | 5 | 3 |
+| Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 6 | 6 | 4 |
+| Size ratchet | A commit that leaves the repo's total lines more than the allowance above `lines` in `docs/SIZE-BASELINE.json`. It counts through `skills/audit/scripts/size.sh --total --staged`, names the three files that grew most, and skips where the baseline file is missing or its `lines` is `null`. See "Size ratchet" below | 7 | 7 | 5 |
+| Owner identifiers | A staged file that names an identifier the gate derives from git: the names and email local parts of `git log` authors, the owner of the origin remote, and the account and shop values in the config files that `configGlobs` lists in `docs/IDENTIFIER-GATE.json`. Matching is lowercase on whole words, for identifiers of 4 characters or more. Markdown and tests are scanned. It names the file and line, and skips where nothing can be derived. See "Owner identifiers" below | 8 | 8 | 6 |
+| Duplicate text | A staged markdown file that shares a passage of 15 words or more with another tracked markdown file, in docs, skills, references, core templates or the repo root. It runs the shared check over the staged markdown files against the tracked tree, names both files, and skips where the script or python3 is missing. See "Duplicate text" below | 9 | 9 | 7 |
+| **Total** | | **9** | **9** | **7** |
 
 The numbers are each gate's position in that hook's run order, so the same gate can carry a different number in different hooks. Read the column and not the number.
 
-**Planning doc governance** ships in the template only, because OliverCode carries no planning-doc checker.
+### Verdicts on judged gates
+
+Each gate stays only while it names a defect it blocks and a test that triggers it (`GATE-PRUNE-1` in `docs/DECISIONS.md`).
+
+| Gate | Verdict | Defect it blocks | Test that triggers it |
+|------|---------|------------------|-----------------------|
+| Icons and emoji | Stays | An emoji or icon character committed into a file, which `docs/RULES.md` ("No icons") forbids | `TestGate2Emoji.test_emoji_blocks` in `tests/test_precommit_gates.py` |
+| Archived content | Stays | A superseded file parked under an archive-named folder or beside its replacement as `-old`, so the reader cannot tell which copy is live. Its first run flagged more than 30 live files, which is why the suffix list leaves out `copy` | `TestGateArchivedContent` in `tests/test_precommit_gates.py` stages an `Archive/` path and an `-old` file and expects a block |
+| Planning doc governance | Removed | None it still prevents. It ran only where `scripts/check-planning-doc-governance.py` exists, and only two repos carry that file (`gh issue view 111`), each of which calls the checker from its own `package.json`. The file-based backlog it governed moved to GitHub Projects | None. The tests went with the gate |
+
+The checker and its contract file still ship in the bootstrap manifest until story #111 confirms with the two repos that carry them, so a repo that uses them keeps working.
 
 Which hook a repo receives:
 
@@ -71,7 +80,7 @@ The private variant drops the PII gate on purpose. A private repo holds personal
 * `olivercode size --lower` rewrites `lines` to the current total after a cleanup. It sets a `null` baseline and accepts an equal total, and exits non-zero without writing when the total is higher
 * A story that must grow the repo raises `lines` by editing the file in the same commit, with the story number in the message
 
-The raise rule is procedure plus a reference and not a hard limit. A pre-commit gate cannot read the commit message, so when `docs/SIZE-BASELINE.json` is staged the gate trusts the `lines` it holds, and the commit-msg gate below is what requires a story number on that commit. Nothing checks that the raise belongs to the story named.
+A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how far one commit may raise `lines` above the committed value. The hook reads the cap from the committed file, so the same commit cannot change it, and merge, revert and fixup messages get the same check. The size gate prints the raise and passes it, because a pre-commit gate cannot read the commit message. The commit-msg hook then refuses a raise over the cap unless the message carries a line `Size: L` or `Size: XL`, copied from the Size field of the story that needs the growth. A story of size M or smaller splits its work so each commit stays inside the cap, or lowers the total elsewhere in the same commit. The hook checks the declaration and nothing checks that the raise belongs to the story named, so the reviewer confirms that when the Size line appears. A repo that opts out of the commit-msg hook loses this check with it.
 
 ### Owner identifiers
 
@@ -91,15 +100,16 @@ Every variant's archived-content gate also asks this file about a path it is abo
 
 ## Commit-message gate
 
-Git shows a commit message only to the `commit-msg` hook, so this check is a hook of its own and the commit gate tables above leave it out. Every repo that `sync-hooks`, `olivercode bootstrap` or `olivercode backlog-setup` manages gets the same one, and `conform` fails a repo whose board or `commit-msg` copy is missing or differs from the template and lists the `backlog-setup` command that fixes it.
+Git shows a commit message only to the `commit-msg` hook, so these checks are a hook of their own and the commit gate tables above leave it out. Every repo that `sync-hooks`, `olivercode bootstrap` or `olivercode backlog-setup` manages gets the same one, and `conform` fails a repo whose board or `commit-msg` copy is missing or differs from the template and lists the `backlog-setup` command that fixes it.
 
 | Gate | What it blocks |
 |------|---------------|
 | Story reference | A commit whose message has no `#<number>`, such as `(#53)` or `Story: #53`. Merge, revert and `fixup!`, `squash!` and `amend!` messages are exempt, and so is a repo's first commit. A reference inside a `#` comment line does not count, and the hook blocks when it cannot read the message file |
+| Size raise | A commit that raises `lines` in `docs/SIZE-BASELINE.json` by more than `raiseCapPercent` (default 2) of the committed value, without a `Size: L` or `Size: XL` line in the message. See "Size ratchet" above |
 
 A repo opts out only when its owner creates a file named `commit-msg.optout` in the repo's `.githooks` folder. The hook and `sync-hooks` never create or remove that file, and every commit it lets through prints that the check is off.
 
-The hook enforces the reference and nothing more. Posting the log comment on the story (`skills/backlog/scripts/log_action.py`) is a procedure that the `backlog` skill and `docs/RULES.md` assign to each agent, and no hook can force a comment on GitHub.
+The hook enforces the reference and the size-raise declaration and nothing more. Posting the log comment on the story (`skills/backlog/scripts/log_action.py`) is a procedure that the `backlog` skill and `docs/RULES.md` assign to each agent, and no hook can force a comment on GitHub.
 
 ## Pre-push gates
 
