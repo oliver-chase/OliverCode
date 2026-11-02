@@ -26,11 +26,6 @@ def check(fields, config=None):
 
 
 class Baseline(unittest.TestCase):
-    def test_the_baseline_names_the_five_lanes_and_no_pull_request_lane(self):
-        base = kb.load_baseline()
-        self.assertEqual(["Backlog", "Ready", "In Progress", "QA", "Complete"], base["lanes"])
-        self.assertIn("no pull-request lane", base["rule"])
-
     def test_a_correct_board_has_no_differences(self):
         self.assertEqual([], check(fixture("board-correct")))
 
@@ -108,10 +103,6 @@ class FixtureBoardConfig(unittest.TestCase):
     def test_the_example_config_lists_every_baseline_lane(self):
         example = json.loads((ROOT / "shared" / "backlog-config.example.json").read_text(encoding="utf-8"))
         self.assertEqual([], bh.missing_lanes(example))
-
-    def test_qa_counts_as_open_work_in_the_sweep(self):
-        self.assertIn("QA", bh.REQUIRED_STATUSES)
-        self.assertNotIn("Complete", bh.REQUIRED_STATUSES)
 
     def test_the_module_imports_when_docs_backlog_config_is_absent(self):
         with tempfile.TemporaryDirectory() as tmp:

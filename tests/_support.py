@@ -1,6 +1,6 @@
 """Helpers the tests share: loading a script as a module and building scratch git repos.
 
-Importing this module sets GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1 for the whole
+Importing this module sets GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1 and OLIVERCODE_LOCAL_CONFIG=/dev/null for the whole
 test process. A machine's global git config (a signing key, a commit template, a `core.hooksPath`,
 a different default branch) would otherwise change what a scratch repo does, and a test could pass
 or fail because of the machine and not the code.
@@ -15,6 +15,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+# olivercode.local.json lists this machine's real repos, and a command that reaches them
+# (sync-hooks, health) would write there. Pointing the config at /dev/null keeps every test on scratch paths.
+os.environ["OLIVERCODE_LOCAL_CONFIG"] = os.devnull
 
 os.environ.update(ISOLATION)
 

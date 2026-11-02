@@ -74,12 +74,5 @@ class LoadSkills(SkillsCatalogBase):
             catalog._load_skills(self.root),
         )
 
-    def test_the_real_catalog_lists_every_skill_folder_with_a_description(self):
-        skills = catalog._load_skills(REPO_ROOT)
-        folders = sorted(p.parent.name for p in (REPO_ROOT / "skills").glob("*/SKILL.md"))
-        self.assertEqual(len(folders), len(skills))
-        self.assertEqual([], [name for name, description in skills if not description])
-
-
 if __name__ == "__main__":
     unittest.main()

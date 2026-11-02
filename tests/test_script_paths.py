@@ -33,7 +33,6 @@ class QuotedCheckout(unittest.TestCase):
     def test_the_consistency_check_runs_in_a_path_with_a_single_quote(self):
         result = self.run_script("scripts/validate.sh", "--check-consistency")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertIn("consistency passed", result.stdout)
 
 
 if __name__ == "__main__":

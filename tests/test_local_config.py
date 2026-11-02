@@ -22,7 +22,7 @@ class LocalConfig(unittest.TestCase):
         env = mock.patch.dict(os.environ, {}, clear=False)
         env.start()
         self.addCleanup(env.stop)
-        for key in ("OLIVERCODE_SKILLS_ROOT",):
+        for key in ("OLIVERCODE_SKILLS_ROOT", "OLIVERCODE_LOCAL_CONFIG"):
             os.environ.pop(key, None)
 
     def write(self, data):
@@ -42,6 +42,15 @@ class LocalConfig(unittest.TestCase):
         self.write({"skillsRoot": "/from-file"})
         os.environ["OLIVERCODE_SKILLS_ROOT"] = "/from-env"
         self.assertEqual(local_config.skills_root(), Path("/from-env"))
+
+    def test_the_config_variable_names_another_file_and_devnull_reads_nothing(self):
+        self.write({"privateRepos": {"notes": "/real/notes"}})
+        other = Path(self.tmp.name) / "other.json"
+        other.write_text(json.dumps({"skillsRoot": "/s2"}))
+        os.environ["OLIVERCODE_LOCAL_CONFIG"] = str(other)
+        self.assertEqual((local_config.skills_root(), local_config.private_repos()), (Path("/s2"), {}))
+        os.environ["OLIVERCODE_LOCAL_CONFIG"] = os.devnull
+        self.assertEqual((local_config.skills_root(), local_config.private_repos()), (None, {}))
 
     def test_repo_paths_expand_a_tilde(self):
         self.write({"repoPaths": {"alpha": "~/work/alpha"}})

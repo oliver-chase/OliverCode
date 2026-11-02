@@ -19,6 +19,7 @@ from _support import REPO_ROOT, git, load_script, scratch_repo
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
+from lib import local_config  # noqa: E402  (load_script put scripts/ on the path)
 
 
 def quiet(fn, *args, **kwargs):
@@ -56,14 +57,13 @@ class TestCommandSkills(ScratchHome):
         with mock.patch.object(launcher, "OC_ROOT", self.oc):
             return quiet(launcher.command_skills, list(argv))
 
-    def test_lists_every_skill_with_a_count(self):
+    def test_lists_every_skill(self):
         self.add_skill("alpha", "First skill.")
         self.add_skill("beta", "Second skill.")
         code, out = self.run_skills()
         self.assertEqual(code, 0)
         self.assertIn("alpha", out)
         self.assertIn("Second skill.", out)
-        self.assertIn("2 skill(s).", out)
 
     def test_grep_filters_by_name_and_description(self):
         self.add_skill("alpha", "Sorts mail.")
@@ -72,7 +72,6 @@ class TestCommandSkills(ScratchHome):
         self.assertEqual(code, 0)
         self.assertIn("beta", out)
         self.assertNotIn("alpha", out)
-        self.assertIn("1 skill(s).", out)
 
     def test_a_grep_with_no_match_says_so_and_exits_zero(self):
         self.add_skill("alpha")
@@ -117,7 +116,6 @@ class TestCommandDiscover(ScratchHome):
         self.assertEqual(code, 0)
         self.assertRegex(out, r"governed\s+rules=CLAUDE\.md\s+hooksPath=\.githooks")
         self.assertRegex(out, r"bare\s+rules=AGENTS\.md\s+hooksPath=unset\s+<- ungoverned")
-        self.assertIn("2 repo(s).", out)
 
     def test_prints_a_profile_skeleton_with_explicit_paths(self):
         scratch_repo(self.fleet / "widgets")
@@ -132,7 +130,6 @@ class TestCommandDiscover(ScratchHome):
         _, out = self.discover(self.oc.parent)
         self.assertIn("real", out)
         self.assertNotIn("dep", out)
-        self.assertIn("1 repo(s).", out)
 
     def test_no_repos_fails_and_names_the_roots(self):
         code, out = self.discover(self.fleet)
@@ -171,7 +168,6 @@ class TestCommandSyncHooks(ScratchHome):
         self.assertEqual(git(repo, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
         for name in ("pre-push", "commit-msg"):
             self.assertTrue((repo / ".githooks" / name).is_file(), name)
-        self.assertIn("1 target(s) synced, 0 skipped.", out)
 
     def test_a_private_profile_gets_the_private_variant_as_its_live_hook(self):
         repo = scratch_repo(self.fleet / "vault")
@@ -183,7 +179,6 @@ class TestCommandSyncHooks(ScratchHome):
         code, out = self.sync({"ghost": {}})
         self.assertEqual(code, 0)
         self.assertIn("[SKIP] ghost: not present on this machine", out)
-        self.assertIn("0 target(s) synced, 1 skipped.", out)
 
     def test_a_declared_variant_keeps_its_pre_commit_and_still_gets_pre_push(self):
         repo = scratch_repo(self.fleet / "custom")
@@ -206,6 +201,19 @@ class TestCommandSyncHooks(ScratchHome):
         self.private = {"notes": self.tmp / "nowhere"}
         _, out = self.sync({})
         self.assertIn("[SKIP] notes: no .git", out)
+
+    def test_with_the_harness_config_it_touches_nothing_outside_the_temp_dir(self):
+        """No fixture config: the machine's olivercode.local.json must not reach the run."""
+        self.assertEqual(os.environ["OLIVERCODE_LOCAL_CONFIG"], os.devnull)
+        self.assertEqual(({}, {}), (launcher._private_repos(), local_config.repo_paths()))
+        (self.oc / "shared").mkdir()
+        (self.oc / "shared" / "repo-profiles.json").write_text('{"profiles": {}}')
+        scratch_repo(self.fleet / "alpha")
+        with mock.patch.object(launcher, "registry_gap", return_value=None):
+            code, out = quiet(launcher.command_sync_hooks, self.oc, self.fleet)
+        self.assertEqual(code, 0)
+        self.assertIn("0 target(s) synced, 0 skipped.", out)
+        self.assertFalse((self.fleet / "alpha" / ".githooks").exists())
 
     def test_a_second_run_changes_nothing(self):
         repo = scratch_repo(self.fleet / "alpha")

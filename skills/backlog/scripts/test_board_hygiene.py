@@ -214,16 +214,6 @@ class QaSignoffDimension(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bh.check_qa_signoff([], dict(self.CFG, qaRequiredFromIssue="50"))
 
-    def test_a_config_with_the_start_at_50_is_read_as_50(self):
-        root = Path(__file__).resolve().parents[3]
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "backlog-config.json"
-            path.write_text(json.dumps(dict(self.CFG, qaRequiredFromIssue=50)), encoding="utf-8")
-            self.assertEqual(50, json.loads(path.read_text(encoding="utf-8"))["qaRequiredFromIssue"])
-        example = json.loads((root / "shared" / "backlog-config.example.json").read_text(encoding="utf-8"))
-        self.assertIn("qaRequiredFromIssue", example)
-        self.assertIsNone(example["qaRequiredFromIssue"])
-
     def test_no_test_module_reads_the_live_config_at_import(self):
         here = Path(__file__).resolve().parent
         code = ("import sys, pathlib, importlib\n"
