@@ -9,7 +9,9 @@ def load_tests(loader, tests, pattern):
     import sys
     sys.path.insert(0, str(SCRIPTS))
     suite = unittest.TestSuite()
-    suite.addTests(loader.discover(str(SCRIPTS), pattern="test_*.py", top_level_dir=str(SCRIPTS)))
+    # A fresh loader: discovering on the caller's loader overwrites its top-level directory, and
+    # Python 3.9 then fails every test module `discover -s tests` finds after this one.
+    suite.addTests(unittest.TestLoader().discover(str(SCRIPTS), pattern="test_*.py", top_level_dir=str(SCRIPTS)))
     return suite
 
 

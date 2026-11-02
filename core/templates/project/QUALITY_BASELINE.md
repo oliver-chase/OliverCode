@@ -38,7 +38,7 @@ policy edits.
 
 Managed repos must keep these shared enforcement surfaces wired exactly as shipped:
 - `QUALITY_BASELINE.md` from the shared template
-- `.githooks/pre-commit` and `.githooks/pre-commit-private` from shared templates
+- `.githooks/pre-commit` from the shared template
 - `git config core.hooksPath .githooks`
 - workflow/template assets rendered from `shared/project-bootstrap-manifest.json`
 

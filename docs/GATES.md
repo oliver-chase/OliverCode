@@ -9,6 +9,7 @@ Every check that can block a commit or a push, what it blocks and which repos ru
 - `bash scripts/validate.sh` runs the pre-commit gates, doc and code consistency, reference integrity, documentation duplication and the tests
 - `bash scripts/validate.sh --tree` runs the same checks with the gates over every tracked file, since a commit otherwise checks only what it stages
 - `bash scripts/validate.sh --check-consistency` runs doc and code consistency only
+- `bash scripts/run-tests.sh` runs the test suite from a clean clone of HEAD under a temporary HOME and prints the commit it tested, so uncommitted edits in another session cannot change the result
 
 Beyond the commit hook, `validate.sh` fails closed on these classes, each of which used to drift silently:
 
@@ -58,7 +59,7 @@ Which hook a repo receives:
 | `core/templates/project/pre-commit-private` | Every repo in `privateRepos` in `olivercode.local.json`, plus any fleet repo whose profile sets `"private": true` | Each repo declares itself, so `sync-hooks` maintains it like any other target |
 | A repo's own hook | That repo | The profile declares `hookVariant: "<reason>"`, which makes `sync-hooks` skip it and `conform` pass it with a note |
 
-The private variant drops the PII gate on purpose. A private repo holds personal data by design, and a gate that blocks host paths and email addresses would block every legitimate commit in it. It is deployed as a file literally named `pre-commit`, because git invokes that name and no other. Fleet repos also receive `pre-commit-private` beside their live hook as an inert reference copy that git never runs.
+The private variant drops the PII gate on purpose. A private repo holds personal data by design, and a gate that blocks host paths and email addresses would block every legitimate commit in it. It is deployed as a file literally named `pre-commit`, because git invokes that name and no other. `sync-hooks` writes no second copy beside it and deletes a leftover `pre-commit-private` from an earlier sync.
 
 `hookVariant` carries a real cost, set out with the incident that proved it in `_hookVariant_note` in `shared/repo-profiles.json`. `scripts/build-hooks.py` generates OliverCode's own hook and the two templates and never a variant repo's hook. When a third repo declares a variant, give `build-hooks.py` an entry for each variant repo, using the template's gate list plus that repo's own gates, so its hook is generated too.
 

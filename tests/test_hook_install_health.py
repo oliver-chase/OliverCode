@@ -101,10 +101,18 @@ class TestInstallHookPair(unittest.TestCase):
         self.assertEqual(self.hook("pre-commit"), (TEMPLATES / "pre-commit-private").read_bytes())
         self.assertFalse((self.repo / ".githooks" / "pre-commit-private").exists())
 
-    def test_a_public_repo_gets_the_public_hook_and_the_private_reference_copy(self):
+    def test_a_public_repo_gets_the_public_hook_and_no_private_copy(self):
         launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
         self.assertEqual(self.hook("pre-commit"), (TEMPLATES / "pre-commit").read_bytes())
-        self.assertEqual(self.hook("pre-commit-private"), (TEMPLATES / "pre-commit-private").read_bytes())
+        self.assertFalse((self.repo / ".githooks" / "pre-commit-private").exists())
+
+    def test_a_leftover_private_copy_is_deleted_on_either_variant(self):
+        for private in (True, False):
+            with self.subTest(private=private):
+                (self.repo / ".githooks").mkdir(exist_ok=True)
+                (self.repo / ".githooks" / "pre-commit-private").write_text("old\n")
+                launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
+                self.assertFalse((self.repo / ".githooks" / "pre-commit-private").exists())
 
     def test_both_variants_get_an_executable_pre_push(self):
         for private in (True, False):

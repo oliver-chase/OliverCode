@@ -83,15 +83,11 @@ def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> l
     hooks_dir = repo_root / ".githooks"
     expected = {"pre-commit": "pre-commit-private" if private_repo else "pre-commit",
                 "pre-push": "pre-push", "commit-msg": "commit-msg"}
-    if not private_repo:
-        expected["pre-commit-private"] = "pre-commit-private"   # the inert reference copy
 
     problems = []
     for filename, template in expected.items():
         installed = hooks_dir / filename
         canonical = templates_dir / template
-        if filename == "pre-commit-private" and not installed.exists():
-            continue
         if not installed.is_file():
             problems.append(f"no {filename} in {hooks_dir}")
         elif not os.access(installed, os.X_OK):
