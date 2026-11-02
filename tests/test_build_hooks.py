@@ -69,7 +69,7 @@ class TestBuildHooks(unittest.TestCase):
 
     def test_banners_count_only_numbered_gates(self):
         text = bh.build(bh.VARIANTS["core/templates/project/pre-commit-private"])
-        self.assertIn("Gate 4/4: Skill citations", text)
+        self.assertIn("Gate 5/5: Size ratchet", text)
         self.assertIn("# ─── Repo-local gates ", text)
 
 

@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
 # Size and remaining work for an audit target: a git repo, or a folder of skills.
-# Usage: size.sh [target-dir]   (default: current directory)
+# Usage: size.sh [--total [--staged]] [target-dir]   (default: current directory)
+# --total prints only the total line count, one integer, with no backlog lookup. The size-ratchet
+# gate and `olivercode size` read it, so the repo has one counter. --staged counts each tracked
+# file as the index holds it, which is the tree a commit would record.
 # Prints files, lines and bytes by kind (code, tests, docs, skills, config, other),
 # the ratios the audit report cites, and open backlog items when the repo names a backlog-config.json.
 set -euo pipefail
 
-target="${1:-.}"
+mode=report
+staged=0
+target=.
+for arg in "$@"; do
+  case "$arg" in
+    --total) mode=total ;;
+    --staged) staged=1 ;;
+    *) target="$arg" ;;
+  esac
+done
 cd "$target"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -13,6 +25,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 else
   list() { find . -type f -not -path '*/.git/*' -not -name '.DS_Store' -not -path '*/__pycache__/*' | sed 's|^\./||'; }
 fi
+
+# The line count of one tracked file: the working copy, or the index copy under --staged.
+count_lines() {
+  if [ "$staged" = 1 ]; then git show ":$1" | wc -l | tr -d ' '; else wc -l <"$1" | tr -d ' '; fi
+}
 
 kind() {
   case "$1" in
@@ -29,10 +46,15 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 while IFS= read -r f; do
   [ -f "$f" ] || continue
-  lines=$(wc -l <"$f" | tr -d ' ')
+  lines=$(count_lines "$f")
   bytes=$(wc -c <"$f" | tr -d ' ')
   printf '%s\t%s\t%s\n' "$(kind "$f")" "$lines" "$bytes" >>"$tmp"
 done < <(list)
+
+if [ "$mode" = total ]; then
+  awk -F'\t' '{ L += $2 } END { print L + 0 }' "$tmp"
+  exit 0
+fi
 
 echo "== Size of $(basename "$(pwd)")"
 awk -F'\t' '

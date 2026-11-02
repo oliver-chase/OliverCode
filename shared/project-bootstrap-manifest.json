@@ -121,6 +121,16 @@
       "source": "core/templates/project/docs/backlog-config.json",
       "target": "docs/backlog-config.json",
       "mode": "presence"
+    },
+    {
+      "source": "core/templates/project/docs/SIZE-BASELINE.json",
+      "target": "docs/SIZE-BASELINE.json",
+      "mode": "presence"
+    },
+    {
+      "source": "skills/audit/scripts/size.sh",
+      "target": "scripts/size.sh",
+      "mode": "strict"
     }
   ]
 }
