@@ -1,13 +1,10 @@
 ---
 name: backlog
 description: >
-  Owns a repo's GitHub Project as its live backlog, for any repo that names a backlog-config.json path in its own CLAUDE.md.
-  Files a new Story or Epic (search first, never duplicate) and sets Status/Priority/Size every time.
-  Closes an item with evidence.
-  Sweeps the whole board across 8 dimensions: required-field gaps, Status that disagrees with issue state, duplicate cards, an empty Ready column, stale Area options, ranked Ready candidates, stale items and Complete items with no QA sign-off.
-  Reads that repo's own config for the repo/Project/field IDs -- never hardcodes one repo's values, and refuses a fork that carries the owner's config.
-  Trigger on "file this", "add a story", "add an epic", "close this out", "backlog status", "what needs triage", "groom the backlog", "board hygiene", "is the backlog properly prioritized", "check the project board" or "what should go in Ready".
-  Also trigger when a skill's own routing names "real new scope" that needs tracking before it gets built.
+  Owns a repo's GitHub Project as its live backlog, for any repo whose CLAUDE.md names a backlog-config.json.
+  Files a Story or Epic (search first, never duplicate) with Status, Priority and Size set, closes an item with evidence, and sweeps the board for field gaps, status drift, duplicates, stale items and missing QA sign-off.
+  Trigger on "file this", "add a story", "add an epic", "close this out", "backlog status", "what needs triage", "groom the backlog", "board hygiene" or "what should go in Ready".
+  Also trigger when a skill names real new scope that needs tracking before it gets built.
 ---
 
 # Backlog
@@ -52,15 +49,15 @@ Run `python3 scripts/log_action.py --config CONFIG --story N --agent NAME --role
 ## File a story or epic
 
 1. **Search first**. Use `references/project-fields.md`'s search command, loading the repo's config first. An existing open item wins. Extend it with a comment. Never create a duplicate.
-2. **Classify the work**. An owner request is never a quick fix to skip filing: it follows "Save every ask" above. A quick fix — a missing fallback, a stale word, a small config change with an obvious safe default — gets fixed inline. No Project item. Real new scope — a schema change, a new mechanism, a cross-family contract — gets filed before it gets built. Follow the repo's own quick-wins-only convention if it states one. Assume the same split if it doesn't.
+2. **Classify the work**. An owner request follows "Save every ask" above and is always filed. A quick fix the session finds on its own — a missing fallback, a stale word, a small config change with an obvious safe default — is fixed inline with no Project item. Real new scope — a schema change, a new mechanism, a cross-family contract — gets filed before it gets built. Follow the repo's own quick-wins-only convention if it states one. Assume the same split if it doesn't.
 3. **Check the fit, in the issue body**. Adding to what exists is the default, so the body answers:
    - What existing skill, reference, script or config this extends. A new skill or file states why no existing home fits
    - Whether it belongs to the target's core or to an add-on, where the target names that split
    - What it replaces or removes, and its expected effect on size and on always-loaded tokens
    - Whether it still passes the lenses in `$OC/skills/audit/references/lenses.md`: a user reaches it by talking, it runs on its own, each concept keeps one home, and it adds no unused part
 4. **Create it**. `references/project-fields.md`'s exact create-and-add command shape.
-5. **Set all 3 fields, every time**. Status: `Backlog` if something blocks the item or it needs a decision, `Ready` if the next action is already clear and unblocked. Priority and Size: per that repo's own prioritization doc, if it names one. Never leave a field blank because the judgment feels obvious — state it explicitly instead.
-6. **Work Type**: `Epic` if the item spans multiple skills or families. `Story` otherwise.
+5. **Set Status, Priority and Size, every time**. Status: `Backlog` if something blocks the item or it needs a decision, `Ready` if the next action is already clear and unblocked. Priority and Size: per that repo's own prioritization doc, if it names one. Never leave a field blank because the judgment feels obvious — state it explicitly instead.
+6. **Work Type**: `Epic` for the container whose body lists its stories. `Story` otherwise.
 7. **Filed from a plan doc? Delete the plan file once every Step/Story in it has a filed issue**. A plan doc (the `plan` skill's output file) is a drafting tool, not a second home for the same content. Once you transcribe its Steps into Epics/Stories with real Status/Priority/Size, the issue is the source of truth. Delete it in the same pass that files the last issue from it. Git holds the history. Copy real reasoning (the "why," evidence, tradeoffs) into the issue body once, concisely. A plan may cover ground beyond what got filed, such as an open question or a deliberately deferred step. Keep that file until you file the rest too. Never delete a plan doc for a still-open Story, or one nobody has read yet just because a Story exists. Check the actual Status field, not the filename's date. See `references/plan-doc-deletion.md` for why this rule exists.
 
 ### Sizing an XL or L item for real completeness
@@ -145,5 +142,5 @@ A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism
 - Start work on an owner request before its story exists.
 - Create a duplicate item without first searching for an existing one.
 - Decide Priority or Size from a template — each one is a real per-item judgment call.
-- File a quick fix as a Story.
+- File a quick fix the session found itself as a Story.
 - Rewrite an issue's body to hide its history. Evidence goes in comments, appended, not overwritten.

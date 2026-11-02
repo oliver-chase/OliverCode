@@ -2,10 +2,11 @@
 """Claude Code PreToolUse hook (Bash): refuses a `git commit` that would skip the repo's gates.
 
 Git's own pre-commit hook cannot catch the case where it never runs. This hook sits one
-level up, in Claude Code, and refuses a commit in three cases:
+level up, in Claude Code, and refuses a commit in four cases:
 
 - the repo ships `.githooks/pre-commit` but git is not pointed at it (see repo_gates)
 - the commit passes `--no-verify` or `-n`, which skips every hook
+- the commit is wrapped in `bash -c`, `sh -c`, `zsh -c` or `eval`; the wrapped string is read as a command line
 - the command overrides `core.hooksPath`: `git -c`, `--config-env` or a `GIT_CONFIG_*` variable
 
 A repo with no gates of its own commits normally, with any flags, since there is nothing to
@@ -33,6 +34,7 @@ WRAPPERS = {"env", "command", "builtin", "exec", "nohup", "sudo", "time"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # git's global options whose value is the next word; read as a subcommand, the value hid the commit.
 GLOBAL_VALUE_OPTIONS = {"--git-dir", "--work-tree", "--namespace", "--super-prefix"}
+SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 
 
 def _segments(command: str):
@@ -85,6 +87,15 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
             continue
         if len(words) >= 2 and words[0] == "cd":
             here = (here / Path(words[1]).expanduser()).resolve()
+            continue
+        if words and Path(words[0]).name in SHELLS:
+            # `bash -c "git commit ..."` hides the commit inside a string; read that string as a command line.
+            flags = [k for k, w in enumerate(words[1:], 1) if w.startswith("-") and not w.startswith("--") and "c" in w]
+            if flags and flags[0] + 1 < len(words):
+                found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here)]
+            continue
+        if words and words[0] == "eval":
+            found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here)]
             continue
         if not words or words[0] != "git":
             continue
