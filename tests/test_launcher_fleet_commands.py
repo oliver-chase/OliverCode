@@ -160,9 +160,12 @@ class TestCommandSyncHooks(ScratchHome):
 
     def test_a_fleet_repo_gets_the_public_hooks_and_a_hooks_path(self):
         repo = scratch_repo(self.fleet / "alpha")
+        (repo / ".githooks").mkdir()
+        (repo / ".githooks" / "pre-commit-private").write_text("stale\n")
         code, out = self.sync({"alpha": {}})
         self.assertEqual(code, 0)
         self.assertIn("[OK] alpha: hooks synced", out)
+        self.assertEqual(["commit-msg", "pre-commit", "pre-push"], sorted(p.name for p in (repo / ".githooks").iterdir()))
         self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), (TEMPLATES / "pre-commit").read_bytes())
         self.assertTrue(os.access(repo / ".githooks" / "pre-commit", os.X_OK))
         self.assertEqual(git(repo, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
@@ -171,9 +174,12 @@ class TestCommandSyncHooks(ScratchHome):
 
     def test_a_private_profile_gets_the_private_variant_as_its_live_hook(self):
         repo = scratch_repo(self.fleet / "vault")
+        (repo / ".githooks").mkdir()
+        (repo / ".githooks" / "pre-commit-private").write_text("stale\n")
         self.sync({"vault": {"private": True}})
         self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(),
                          (TEMPLATES / "pre-commit-private").read_bytes())
+        self.assertFalse((repo / ".githooks" / "pre-commit-private").exists())
 
     def test_a_repo_missing_from_this_machine_is_skipped(self):
         code, out = self.sync({"ghost": {}})
