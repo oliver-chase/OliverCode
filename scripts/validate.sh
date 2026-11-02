@@ -133,7 +133,8 @@ run_bloat_check() {
   local hits=0 f n archive="" marked="" doc_loc=0 total_loc=0 ratio over
   while IFS= read -r f; do
     [[ -z "$f" ]] && continue
-    n=$(wc -l < "$dir/$f" 2>/dev/null || echo 0)
+    n=0
+    [[ -f "$dir/$f" ]] && n=$(wc -l < "$dir/$f")
     total_loc=$((total_loc + n))
     case "$f" in *.md) doc_loc=$((doc_loc + n)) ;; esac
     if printf '%s\n' "$f" | grep -qiE '(^|/)(archive|archived|old|legacy)/'; then
