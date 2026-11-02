@@ -1,4 +1,4 @@
-"""`olivercode backlog-setup` and the board part of `olivercode health`, offline.
+"""`olivercode backlog-setup` and the board part of `olivercode conform`, offline.
 
 A fake GitHub answers the GraphQL calls `lib/backlog_setup.py` makes, so no test reaches the network. The fake
 can behave like the real API (an option sent with its id keeps its item values) or like the destructive case

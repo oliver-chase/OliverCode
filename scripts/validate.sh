@@ -52,8 +52,8 @@ sys.exit(1 if failures else 0)
 
 run_hook_state() {
   # Hook enforcement fails OPEN -- an unset or broken core.hooksPath means git
-  # runs no hooks and prints nothing. `olivercode health` detects it, but health ran
-  # only from a weekly cron into a log nobody read, so a repo could sit ungoverned
+  # runs no hooks and prints nothing. `olivercode conform` detects it, but nobody ran it
+  # from a log anyone read, so a repo could sit ungoverned
   # for a week. Surfacing it here puts the signal where agents already look: CLAUDE.md
   # tells them to run validate.sh before every commit.
   #
@@ -61,27 +61,22 @@ run_hook_state() {
   # registered has nothing to check and must still pass -- that property is what
   # rehearse-install.sh guards.
   #
-  # --hooks-only reads local files and makes no network call. The full health run also
-  # asks every fleet remote whether it resolves, which validation has no need to do.
-  echo "=== validate: checking fleet hook state ==="
-  local out registered
-  out="$(python3 "${SCRIPT_DIR}/olivercode" health --hooks-only 2>&1)" && local rc=0 || local rc=$?
+  # --offline skips the board and About checks, which call GitHub and which validation has no need to run.
+  echo "=== validate: checking fleet conformance ==="
+  local out checked
+  out="$(python3 "${SCRIPT_DIR}/olivercode" conform --offline 2>&1)" && local rc=0 || local rc=$?
 
-  # "every registered repo has working hooks" was printed even when the number of
-  # registered repos was ZERO -- a fork with no fleet got a green line asserting a
-  # fleet was verified. Say which case it is.
-  # --hooks-only prints one line per repo and checks each repo once, so the count is the
-  # number of repos.
-  registered="$(printf '%s\n' "$out" | grep -cE '^\s+\[(OK|FAIL|WARN)\] [^ ]+: ' || true)"
-  if [[ "$rc" -eq 0 && "$registered" -eq 0 ]]; then
+  # Say which case it is: a fork with no fleet must not get a green line asserting a fleet was verified.
+  checked="$(printf '%s\n' "$out" | sed -n 's/^Checked \([0-9]*\) repo.*/\1/p')"
+  if [[ "$rc" -eq 0 && "${checked:-0}" -eq 0 ]]; then
     echo "  [SKIP] no fleet repos registered — nothing to check."
     echo "         Register repos in the registry's repo-profiles.json (see docs/SETUP.md)."
   elif [[ "$rc" -eq 0 ]]; then
-    echo "  [OK] all $registered registered repo(s) have working hooks"
+    echo "  [OK] all $checked registered repo(s) conform to docs/CONTRACT.md"
   else
-    printf '%s\n' "$out" | grep -E '^\s+\[FAIL\]' || true
-    echo "  [WARN] a repo above is not fully governed — 'olivercode sync-hooks' repairs it."
-    echo "         Enforcement fails open: git runs no hooks and says nothing."
+    printf '%s\n' "$out" | grep -E '^\s+\[FAIL\]|^         Fix:' || true
+    echo "  [WARN] a repo above does not conform — the Fix line under each failure repairs it."
+    echo "         A repo with stopped hooks is ungoverned: git runs no hooks and says nothing."
     echo "         Advisory here by design: a fork with no fleet must still pass."
   fi
 }
@@ -285,7 +280,7 @@ main() {
       echo "  (no args)              Run pre-commit gates, doc/code consistency,"
       echo "                         reference integrity, bloat, code quality, doc duplication,"
       echo "                         smoke tests (tests/ and the skills' own script tests, if present)
-                         and fleet hook state"
+                         and fleet conformance"
       echo "  --tree                 Run everything above, with the gates over every tracked file"
       echo "  --check-consistency    Run doc/code consistency checks only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"

@@ -35,36 +35,6 @@ class HealthBase(unittest.TestCase):
         self.root = Path(self.tmp.name).resolve()
 
 
-class GithubAbout(HealthBase):
-    def about(self, returncode=0, stdout="", raises=None):
-        def fake_run(*_args, **_kwargs):
-            if raises:
-                raise raises
-            return subprocess.CompletedProcess([], returncode, stdout=stdout, stderr="")
-        with mock.patch.object(health.subprocess, "run", fake_run):
-            return quiet(health._check_github_about, self.root)[0]
-
-    def test_description_and_topics_pass(self):
-        data = {"description": "A framework", "repositoryTopics": [{"name": "claude"}]}
-        self.assertEqual((1, 0, 0), self.about(stdout=json.dumps(data)))
-
-    def test_an_empty_description_fails(self):
-        data = {"description": "  ", "repositoryTopics": [{"name": "claude"}]}
-        self.assertEqual((0, 1, 0), self.about(stdout=json.dumps(data)))
-
-    def test_a_null_description_fails(self):
-        self.assertEqual((0, 1, 0), self.about(stdout=json.dumps({"description": None})))
-
-    def test_no_topics_only_warns(self):
-        self.assertEqual((0, 0, 1), self.about(stdout=json.dumps({"description": "x", "repositoryTopics": []})))
-
-    def test_no_gh_no_auth_or_odd_output_skips(self):
-        self.assertEqual((0, 0, 1), self.about(raises=FileNotFoundError("gh")))
-        self.assertEqual((0, 0, 1), self.about(raises=subprocess.TimeoutExpired("gh", 15)))
-        self.assertEqual((0, 0, 1), self.about(returncode=1))
-        self.assertEqual((0, 0, 1), self.about(stdout="not json"))
-
-
 class WaiverExpiry(HealthBase):
     def run_check(self, data):
         path = self.root / "repo-profiles.json"

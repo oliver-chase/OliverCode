@@ -25,10 +25,10 @@ scripts/olivercode sync-hooks
 
 ## Audit command
 
-Run from OliverCode to check this repo's hook state against the shipped template:
+Run from OliverCode to check this repo against the contract:
 
 ```bash
-scripts/olivercode health
+scripts/olivercode conform <this repo's path>
 ```
 
 Pre-commit gates (`.githooks/pre-commit`) must also pass before merging quality/workflow

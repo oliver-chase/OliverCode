@@ -124,8 +124,7 @@ register "$WS/OliverCode" app-a app-b
 oc sync-hooks 2>&1 | grep -q "app-a: hooks synced" && ok "sync-hooks reaches fleet" s1 || bad "sync-hooks reaches fleet" s1
 probe_blocked "$WS/app-a" && ok "secret blocked in app-a (Gate 1 line seen)" s1 || bad "secret blocked in app-a" s1
 probe_blocked "$WS/app-b" && ok "secret blocked in app-b (Gate 1 line seen)" s1 || bad "secret blocked in app-b" s1
-oc health 2>&1 | grep -q "app-a: hooksPath set" && ok "health confirms the adopted fleet's hooks" s1 || bad "health confirms the adopted fleet's hooks" s1
-oc health --hooks-only >/dev/null 2>&1 && ok "health --hooks-only exits 0" s1 || bad "health --hooks-only exits 0" s1
+oc conform --offline 2>&1 | grep -A8 "^app-a" | grep -q "\[OK\] hooks" && ok "conform confirms the adopted fleet's hooks" s1 || bad "conform confirms the adopted fleet's hooks" s1
 
 # ------------------------------------------------- S2 existing ~/.claude preserved
 say "--- S2: existing ~/.claude (real rules + vendor skill + foreign symlink) ---"
@@ -153,7 +152,7 @@ mk_repo "$WS/deep/work/clients/api"; mk_repo "$WS/side/tool"
 register "$WS/OliverCode" "api:$WS/deep/work/clients/api" "tool:$WS/side/tool"
 oc sync-hooks 2>&1 | grep -q "api: hooks synced" && ok "path field resolves absolute" s3 || bad "path field resolves absolute" s3
 probe_blocked "$WS/deep/work/clients/api" && ok "secret blocked in scattered repo" s3 || bad "secret blocked in scattered repo" s3
-oc health 2>&1 | grep -q "api: hooksPath set" && ok "health finds scattered repo" s3 || bad "health finds scattered repo" s3
+oc conform --offline 2>&1 | grep -q "^api$" && ok "conform finds scattered repo" s3 || bad "conform finds scattered repo" s3
 
 # ------------------------------------------------------------- S4 --root layout
 say "--- S4: fleet shares a parent that is not OliverCode's parent ---"
@@ -164,7 +163,7 @@ oc4() { (cd "$WS/tools/OliverCode" && HOME="$H" python3 scripts/olivercode "$@")
 register "$WS/tools/OliverCode" web api
 oc4 sync-hooks --root "$WS/code" 2>&1 | grep -q "web: hooks synced" && ok "--root honored by sync-hooks" s4 || bad "--root honored by sync-hooks" s4
 probe_blocked "$WS/code/web" && ok "secret blocked under --root" s4 || bad "secret blocked under --root" s4
-oc4 health --root "$WS/code" 2>&1 | grep -q "web: hooksPath set" && ok "--root honored by health" s4 || bad "--root honored by health" s4
+oc4 conform --offline --root "$WS/code" 2>&1 | grep -q "^web$" && ok "--root honored by conform" s4 || bad "--root honored by conform" s4
 # A wrong --root must not read as success.
 oc4 sync-hooks --root "$WS/nowhere" >/dev/null 2>&1 \
   && bad "nonexistent --root should hard-error" s4 || ok "nonexistent --root hard-errors" s4
@@ -217,9 +216,9 @@ json.dump(d, open(p, "w"), indent=2)
 PY
 oc sync-hooks 2>&1 | grep -q "special: declared hook variant" && ok "variant skipped by sync-hooks" s7 || bad "variant skipped by sync-hooks" s7
 grep -q "custom-gate" "$WS/special/.githooks/pre-commit" && ok "variant hook not overwritten" s7 || bad "variant hook not overwritten" s7
-h7="$(oc health 2>&1)"
-echo "$h7" | grep -q "\[WARN\] special: declared hook variant" && ok "health reports variant as WARN" s7 || bad "health reports variant as WARN" s7
-oc health --hooks-only >/dev/null 2>&1 && ok "variant does not fail health" s7 || bad "variant does not fail health" s7
+h7="$(oc conform --offline 2>&1)"
+echo "$h7" | grep -A8 "^special" | grep -q "declared hook variant" && ok "conform reports the variant with a note" s7 || bad "conform reports the variant with a note" s7
+echo "$h7" | grep -A8 "^special" | grep -q "\[FAIL\] hooks" && bad "variant does not fail the hooks check" s7 || ok "variant does not fail the hooks check" s7
 
 # --------------------------------------------------------------- S8 backout
 say "--- S8: the documented backout removes everything ---"
