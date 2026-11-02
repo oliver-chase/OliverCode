@@ -22,13 +22,13 @@ this shape:
     "workType": {"id": "...", "options": {"Epic": "...", "Story": "..."}}
   },
   "qaRequiredFromIssue": null,
-  "areaPolicy": {"retired": [], "parked": [], "catchAll": []}
+  "areaPolicy": {"parked": [], "catchAll": []}
 }
 ```
 
 `qaRequiredFromIssue` is optional: set it to an issue number and the `qa-signoff` sweep flags every Complete item at or above that number that lacks an accepted independent QA sign-off, while null or an absent key switches the check off.
 
-`areaPolicy` is optional. It lists the Area options that match no skill folder: `retired` for frozen labels on Complete items, `parked` for a family with no folder in the repo, `catchAll` for cross-family work.
+`areaPolicy` is optional. It lists the Area options that match no skill folder: `parked` for a family with no folder in the repo, `catchAll` for cross-family work.
 
 If a field or option is missing, re-fetch with `gh project field-list <number> --owner <owner> --format json` and update that repo's own config in the same session. Never guess an ID or skip setting a field because the ID isn't there yet.
 
@@ -97,10 +97,6 @@ Pick the node whose `project.number` equals `projectNumber` in the config. Read 
 - **Required fields**: every open item has Priority and Size, plus Work Type and Area where the config defines them.
 - **Status drift**: the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board.
 - **Duplicate cards**: no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues.
-- **Ready occupancy**: the `Ready` column holds at least one item whenever Backlog holds one.
-- **Area freshness**: every Area option matches a folder directly under the `--skills-root` folder or one of the retired, parked or catch-all options in `areaPolicy`, and every such folder has an option. Without `--skills-root` the dimension reports a skip and the other seven run.
-- **Ready candidates**: fires only with an empty Ready column and a non-empty Backlog. Ranks Backlog items by Priority then Size, skips any that a keyword scan reads as blocked, and lists up to 5.
-- **Stale**: a `P0` or `P1` item in `Backlog` with no comment in 14 days, an item in `In Progress` with none in 7, and an item labelled `deferred` with none in 30. An item with no comment counts from its filing date. The 14-day threshold has no real data behind it, so revise it once a real complaint says it is wrong.
 - **QA sign-off**: every Complete item numbered at or above the config's `qaRequiredFromIssue` has an accepted independent sign-off, as `check_qa_signoff.py` defines it. A null or absent key switches the dimension off.
 
 The board list, issue lists and comment history are read with explicit limits and pagination. Without `--config`, or with a path that holds no file, the script stops with one line that names the example config a fork starts from.

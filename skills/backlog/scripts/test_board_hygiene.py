@@ -1,7 +1,6 @@
-"""Test the sweep checks (status drift, required fields, duplicate cards, stale, Area policy), the REST reads and the config guards.
+"""Test the sweep checks (status drift, required fields, duplicate cards, QA sign-off), the REST reads and the config guards.
 Run: python3 -m unittest discover -p "test_*.py"   (from this folder)
 """
-import datetime
 import json
 import subprocess
 import sys
@@ -34,13 +33,9 @@ class DimensionScoping(unittest.TestCase):
             mock.patch.object(bh, "load_config", return_value=self.CFG),
             mock.patch.object(bh, "load_items", return_value=[]),
             mock.patch.object(bh, "live_status_names", return_value={}),
-            mock.patch.object(bh, "fetch_issue_details", spy("details")),
             mock.patch.object(bh, "check_required_fields", spy("fields")),
             mock.patch.object(bh, "check_status_drift", spy("drift")),
             mock.patch.object(bh, "check_duplicate_cards", spy("duplicates")),
-            mock.patch.object(bh, "check_ready_occupancy", spy("ready")),
-            mock.patch.object(bh, "check_ready_candidates", spy("suggest")),
-            mock.patch.object(bh, "check_stale", spy("stale")),
             mock.patch.object(bh, "check_qa_signoff", spy("qa-signoff")),
             mock.patch("sys.argv", ["check_board_hygiene.py", "--config", "x.json", *flags]),
         ]
@@ -55,10 +50,10 @@ class DimensionScoping(unittest.TestCase):
         return calls
 
     def test_no_flag_runs_every_dimension(self):
-        self.assertEqual({"fields", "drift", "duplicates", "ready", "suggest", "stale", "qa-signoff", "details"},
+        self.assertEqual({"fields", "drift", "duplicates", "qa-signoff"},
                          set(self.run_main()))
 
-    def test_one_dimension_runs_alone_and_reads_no_issue_details(self):
+    def test_one_dimension_runs_alone(self):
         self.assertEqual(["fields"], self.run_main("--dimension", "fields"))
 
     def test_the_post_filing_pair_runs_only_fields_and_duplicates(self):
@@ -140,28 +135,6 @@ class DuplicateCards(unittest.TestCase):
         self.assertEqual([], bh.check_duplicate_cards([item(1, "Ready"), item(2, "Ready")]))
 
 
-class ReadyChecks(unittest.TestCase):
-    def test_a_board_with_no_backlog_items_is_clean(self):
-        items = [{"status": "Complete", "content": {"body": ""}}]
-        self.assertEqual(bh.check_ready_occupancy(items), [])
-        self.assertEqual(bh.check_ready_candidates(items), [])
-
-    def test_backlog_items_with_an_empty_ready_column_are_flagged(self):
-        items = [{"status": "Backlog", "priority": "P1", "size": "S",
-                  "content": {"number": 1, "title": "Next", "body": ""}}]
-        self.assertEqual(len(bh.check_ready_occupancy(items)), 1)
-        self.assertTrue(bh.check_ready_candidates(items))
-
-
-class FamilyDiscovery(unittest.TestCase):
-    def test_every_top_level_folder_is_a_family_except_docs_and_dot_folders(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            for name in ("alpha", "beta", "docs", ".git"):
-                (Path(tmp) / name).mkdir()
-            (Path(tmp) / "README.md").write_text("x")
-            self.assertEqual({"alpha", "beta"}, bh.discover_families(tmp))
-
-
 class ConfigLoading(unittest.TestCase):
     def test_no_path_or_a_missing_file_exits_with_a_message_naming_the_flag(self):
         for path in (None, Path("/nonexistent/backlog-config.json")):
@@ -176,103 +149,15 @@ class ConfigLoading(unittest.TestCase):
             self.assertEqual(CONFIG, bh.load_config(path))
 
 
-NOW = datetime.datetime(2026, 11, 1, tzinfo=datetime.timezone.utc)
-
-
-def aged(status, days, priority="P1", labels=(), commented=True):
-    when = (NOW - datetime.timedelta(days=days)).isoformat()
-    it = item(1, status)
-    it["priority"] = priority
-    it["content"].update({"labels": list(labels), "created_at": when,
-                          "last_comment_at": when if commented else None})
-    return it
-
-
-class Stale(unittest.TestCase):
-    def test_backlog_p1_over_14_days_is_stale_and_p2_is_not(self):
-        self.assertEqual(1, len(bh.check_stale([aged("Backlog", 15)], NOW)))
-        self.assertEqual([], bh.check_stale([aged("Backlog", 13)], NOW))
-        self.assertEqual([], bh.check_stale([aged("Backlog", 99, priority="P2")], NOW))
-
-    def test_in_progress_over_7_days_is_stale_under_either_spelling(self):
-        for name in ("In Progress", "In progress"):
-            self.assertEqual(1, len(bh.check_stale([aged(name, 8)], NOW)))
-        self.assertEqual([], bh.check_stale([aged("In Progress", 6)], NOW))
-
-    def test_deferred_over_30_days_is_stale(self):
-        self.assertEqual(1, len(bh.check_stale([aged("Ready", 31, labels=["deferred"])], NOW)))
-        self.assertEqual([], bh.check_stale([aged("Ready", 29, labels=["deferred"])], NOW))
-
-    def test_an_item_with_no_comment_counts_from_its_filing_date(self):
-        self.assertEqual(1, len(bh.check_stale([aged("Backlog", 20, commented=False)], NOW)))
-
-    def test_finished_items_are_never_stale(self):
-        self.assertEqual([], bh.check_stale([aged("Complete", 200)], NOW))
-
-
-class AreaPolicy(unittest.TestCase):
-    def setUp(self):
-        self.real = bh.run_gh
-        graphql = {"data": {"node": {"options": [{"name": n} for n in ("alpha", "old", "parked", "any", "stray")]}}}
-        bh.run_gh = lambda args: json.dumps(graphql)
-
-    def tearDown(self):
-        bh.run_gh = self.real
-
-    def test_retired_parked_and_catch_all_come_from_the_config(self):
-        cfg = {"fields": {"area": {"id": "A"}},
-               "areaPolicy": {"retired": ["old"], "parked": ["parked"], "catchAll": ["any"]}}
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "alpha").mkdir()
-            found = bh.check_area_freshness(cfg, tmp)
-        self.assertEqual(1, len(found))
-        self.assertIn("'stray'", found[0])
-
-    def test_a_config_without_a_policy_treats_every_extra_option_as_stale(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "alpha").mkdir()
-            found = bh.check_area_freshness({"fields": {"area": {"id": "A"}}}, tmp)
-        self.assertEqual(4, len(found))
-
-
-class IssueDetails(unittest.TestCase):
-    def setUp(self):
-        self.real = bh.run_gh
-        self.calls = []
-
-    def tearDown(self):
-        bh.run_gh = self.real
-
-    def test_reads_every_board_repo_with_pagination_and_fills_details(self):
-        def fake(args):
-            self.calls.append(args)
-            if "issues/comments" in args[2]:
-                return ('{"issue": 1, "at": "2026-10-01T00:00:00Z"}\n'
-                        '{"issue": 1, "at": "2026-10-05T00:00:00Z"}\n')
-            return '{"number": 1, "body": "b", "created_at": "2026-09-01T00:00:00Z", "labels": ["deferred"]}\n'
-        bh.run_gh = fake
-        it = item(1, "Backlog")
-        bh.fetch_issue_details({"repoOwner": "o", "repoName": "r"}, [it])
-        self.assertTrue(all(c[:2] == ["api", "--paginate"] for c in self.calls))
-        c = it["content"]
-        self.assertEqual(("b", ["deferred"], "2026-10-05T00:00:00Z"), (c["body"], c["labels"], c["last_comment_at"]))
-
-    def test_the_same_issue_number_in_two_repos_keeps_its_own_body(self):
-        def fake(args):
-            if "issues/comments" in args[2]:
-                return ""
-            body = "mine" if "/o/r/" in args[2] or "repos/o/r/" in args[2] else "other"
-            return '{"number": 1, "body": "%s", "created_at": "2026-09-01T00:00:00Z", "labels": []}\n' % body
-        bh.run_gh = fake
-        mine, other = item(1, "Backlog"), item(1, "Backlog")
-        other["content"]["repository"] = "x/y"
-        bh.fetch_issue_details({"repoOwner": "o", "repoName": "r"}, [mine, other])
-        self.assertEqual(("mine", "other"), (mine["content"]["body"], other["content"]["body"]))
-
+class ListLimit(unittest.TestCase):
     def test_a_board_at_the_list_limit_stops_the_run(self):
+        real = bh.run_gh
         bh.run_gh = lambda args: json.dumps({"items": [{}] * bh.ITEM_LIMIT})
-        with self.assertRaises(SystemExit) as raised:
-            bh.load_items({"projectNumber": 1, "projectOwner": "o"})
+        try:
+            with self.assertRaises(SystemExit) as raised:
+                bh.load_items({"projectNumber": 1, "projectOwner": "o"})
+        finally:
+            bh.run_gh = real
         self.assertIn("limit", str(raised.exception))
 
 

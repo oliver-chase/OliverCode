@@ -3,9 +3,8 @@
 `backlog/SKILL.md` states what each dimension checks.
 
 Usage:
-    check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension but area
-    check_board_hygiene.py --config CFG --skills-root DIR                             # adds area-freshness against DIR's folders
-    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, ready, area, suggest, stale, qa-signoff
+    check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension
+    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, qa-signoff
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
     check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
@@ -13,7 +12,6 @@ The config is the `docs/backlog-config.json` of the repo whose board you check. 
 
 import argparse
 import json
-import datetime
 import re
 import subprocess
 import sys
@@ -22,31 +20,12 @@ from pathlib import Path
 import check_kanban_baseline as kanban
 import check_qa_signoff as qa
 
-# The config's `areaPolicy` names the Area options that match no folder:
-#   retired   - frozen labels on Complete items, for families that no longer exist
-#   parked    - a family with no folder here whose open items keep the label
-#   catchAll  - not a folder: the value for cross-family work
-# A config without `areaPolicy` has none of them.
-AREA_POLICY_KEYS = ("retired", "parked", "catchAll")
-
-# How long an item may sit without a comment before the stale dimension reports it.
-STALE_BACKLOG_DAYS = 14        # P0 and P1 items in Backlog
-STALE_IN_PROGRESS_DAYS = 7     # items in In Progress
-STALE_DEFERRED_DAYS = 30       # items labelled "deferred"
 ITEM_LIMIT = 2000
 
 # Every baseline lane except the finished one holds open work (shared/kanban-baseline.json).
 REQUIRED_STATUSES = {lane for lane in kanban.load_baseline()["lanes"] if lane.lower() not in {"complete", "done"}}
 # The finished column's config key. Every other column, such as Todo or In review, holds open work.
 FINISHED_STATUS_KEYS = {"complete", "done"}
-
-# A keyword scan for "reads as blocked". It misses any phrasing not listed, so a human reads each candidate.
-BLOCKED_PHRASES = (
-    "not decided", "open design question", "design decision", "owner's call", "deferred",
-    "needs a real decision", "ask before", "flag for whenever",
-)
-PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
-SIZE_ORDER = {"XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4}
 
 
 def run_gh(args):
@@ -163,152 +142,6 @@ def check_duplicate_cards(items):
     return problems
 
 
-def check_ready_occupancy(items):
-    # An empty Ready column is correct when no Backlog item is waiting to be queued.
-    ready = [i for i in items if i.get("status") == "Ready"]
-    if not ready and any(i.get("status") == "Backlog" for i in items):
-        return ["Ready column is empty -- nothing queued as next-up work"]
-    return []
-
-
-def discover_families(root):
-    # A family is any folder directly under the fleet root. Skills sit inside it, so no deeper walk is needed.
-    return {
-        d.name for d in Path(root).iterdir()
-        if d.is_dir() and not d.name.startswith(".") and d.name != "docs"
-    }
-
-
-def area_policy(config):
-    """(retired, parked, catch-all) Area option names from the config's `areaPolicy`."""
-    policy = config.get("areaPolicy", {})
-    return tuple(set(policy.get(k, [])) for k in AREA_POLICY_KEYS)
-
-
-def check_area_freshness(config, skills_root):
-    live_families = discover_families(skills_root)
-    # The config holds only IDs. An option can be renamed in the GitHub UI, so read the live names.
-    out = run_gh([
-        "api", "graphql", "-f",
-        f'query={{ node(id: "{config["fields"]["area"]["id"]}") '
-        f'{{ ... on ProjectV2SingleSelectField {{ options {{ name }} }} }} }}',
-    ])
-    live_options = {
-        o["name"] for o in json.loads(out)["data"]["node"]["options"]
-    }
-    retired, parked, catch_all = area_policy(config)
-    known_good = live_families | retired | parked | catch_all
-    problems = []
-    for opt in sorted(live_options - known_good):
-        problems.append(
-            f"Area option '{opt}' matches no live family folder and is not among the config's "
-            f"retired, parked or catch-all options -- possibly stale"
-        )
-    for fam in sorted(live_families - live_options):
-        problems.append(f"Live family folder '{fam}' has no matching Area option")
-    return problems
-
-
-def check_ready_candidates(items):
-    """Fires only when Ready is empty. Needs bodies fetched onto `items` first. Whitespace is
-    collapsed before matching, so a phrase that spans a wrapped line still matches."""
-    if any(i.get("status") == "Ready" for i in items):
-        return []
-    if not any(i.get("status") == "Backlog" for i in items):
-        return []
-    candidates = []
-    for i in items:
-        if i.get("status") != "Backlog":
-            continue
-        c = i.get("content", {})
-        body = re.sub(r"\s+", " ", (c.get("body") or "")).lower()
-        if any(phrase in body for phrase in BLOCKED_PHRASES):
-            continue
-        candidates.append(i)
-    if not candidates:
-        return ["Ready is empty and no unblocked Backlog candidate was found -- "
-                "every Backlog item reads as blocked by this heuristic, or the heuristic missed a real one"]
-    candidates.sort(key=lambda i: (
-        PRIORITY_ORDER.get(i.get("priority"), 9),
-        SIZE_ORDER.get(i.get("size"), 9),
-    ))
-    problems = []
-    for i in candidates[:5]:
-        c = i.get("content", {})
-        problems.append(
-            f"suggest #{c.get('number')} \"{c.get('title', '')[:60]}\" "
-            f"({i.get('priority')}, {i.get('size')}) -- read it, then promote if genuinely unblocked"
-        )
-    return problems
-
-
-def fetch_issue_details(config, items, finished="Complete"):
-    """item-list's own JSON has no body, label or date. Read every open issue of each repo on the board
-    through the paginated REST API, and fill body, created_at, labels and last_comment_at onto the items.
-    A failed call exits, so a cut-short read can never pass as a clean sweep."""
-    open_items = [i for i in items if i.get("status") != finished]
-    if not open_items:
-        return
-    repos = {i.get("content", {}).get("repository") for i in open_items}
-    repos.discard(None)
-    repos.add(f"{config['repoOwner']}/{config['repoName']}")
-    details = {}
-    for repo in sorted(repos):
-        rows = gh_pages(f"repos/{repo}/issues?state=open&per_page=100",
-                        '.[] | select(.pull_request == null) | '
-                        '{number, body, created_at, labels: [.labels[].name]}')
-        for row in rows:
-            row["last_comment_at"] = None
-            details[(repo, row["number"])] = row
-        for row in gh_pages(f"repos/{repo}/issues/comments?per_page=100",
-                            ".[] | {issue: (.issue_url | split(\"/\") | last | tonumber), at: .created_at}"):
-            d = details.get((repo, row["issue"]))
-            if d and (d["last_comment_at"] is None or row["at"] > d["last_comment_at"]):
-                d["last_comment_at"] = row["at"]
-    for i in open_items:
-        c = i.get("content", {})
-        d = details.get((c.get("repository") or f"{config['repoOwner']}/{config['repoName']}", c.get("number")))
-        if d:
-            c["body"] = d["body"]
-            c["created_at"] = d["created_at"]
-            c["labels"] = d["labels"]
-            c["last_comment_at"] = d["last_comment_at"]
-
-
-def gh_pages(endpoint, jq):
-    """Every row of a paginated REST list, one JSON object per line from `jq`."""
-    out = run_gh(["api", "--paginate", endpoint, "--jq", jq])
-    return [json.loads(line) for line in out.splitlines() if line.strip()]
-
-
-def parse_time(text):
-    return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
-
-
-def check_stale(items, now=None, finished="Complete"):
-    """Backlog P0/P1 items quiet for 14 days, In Progress items quiet for 7, deferred items quiet for 30.
-    Needs details fetched onto `items` first. Quiet means no comment, or no filing date when none exists."""
-    now = now or datetime.datetime.now(datetime.timezone.utc)
-    problems = []
-    for i in items:
-        status = (i.get("status") or "")
-        if status == finished:
-            continue
-        c = i.get("content", {})
-        last = c.get("last_comment_at") or c.get("created_at")
-        if not last:
-            continue
-        days = (now - parse_time(last)).days
-        label = f"#{c.get('number')} \"{c.get('title', '')[:50]}\" ({status}): no comment in {days} days"
-        if status == "Backlog" and i.get("priority") in ("P0", "P1") and days >= STALE_BACKLOG_DAYS:
-            problems.append(f"{label}, limit {STALE_BACKLOG_DAYS} for a {i.get('priority')} in Backlog")
-        elif status.lower() == "in progress" and days >= STALE_IN_PROGRESS_DAYS:
-            problems.append(f"{label}, limit {STALE_IN_PROGRESS_DAYS} for In Progress")
-        elif "deferred" in c.get("labels", []) and days >= STALE_DEFERRED_DAYS:
-            problems.append(f"{label}, limit {STALE_DEFERRED_DAYS} for a deferred item")
-    return problems
-
-
 def check_qa_signoff(items, config, finished="Complete", runner=qa.gh_api):
     """Every finished item of the config's own repo numbered at or above `qaRequiredFromIssue` needs an
     accepted independent QA sign-off (check_qa_signoff.check). A null or absent key switches the
@@ -391,7 +224,7 @@ def load_config(path):
     return config
 
 
-DIMENSIONS = ["fields", "drift", "duplicates", "ready", "area", "suggest", "stale", "qa-signoff"]
+DIMENSIONS = ["fields", "drift", "duplicates", "qa-signoff"]
 
 
 def wanted(selected, name):
@@ -404,10 +237,6 @@ def main():
     parser.add_argument("--dimension", action="append", choices=DIMENSIONS,
                         help="run only this dimension; repeat the flag to run several")
     parser.add_argument("--config", type=Path, help="path to the repo's docs/backlog-config.json (required)")
-    parser.add_argument(
-        "--skills-root", type=Path,
-        help="folder whose direct sub-folders are the Area options' families; area-freshness runs only with it",
-    )
     parser.add_argument("--verify-baseline", action="store_true",
                         help="compare the board's field list with shared/kanban-baseline.json, then stop")
     parser.add_argument("--fields-file", type=Path,
@@ -431,35 +260,14 @@ def main():
     finished, open_statuses = resolve_statuses(config, live_status_names(config))
 
     checks = []
-    skipped = []
     if wanted(args.dimension, "fields"):
         checks.append(("required-fields", lambda: check_required_fields(items, config, open_statuses)))
     if wanted(args.dimension, "drift"):
         checks.append(("status-drift", lambda: check_status_drift(items, config, finished)))
     if wanted(args.dimension, "duplicates"):
         checks.append(("duplicate-cards", lambda: check_duplicate_cards(items)))
-    if wanted(args.dimension, "ready"):
-        checks.append(("ready-occupancy", lambda: check_ready_occupancy(items)))
-    if wanted(args.dimension, "area"):
-        if args.skills_root and "area" in config["fields"]:
-            checks.append(("area-freshness", lambda: check_area_freshness(config, args.skills_root)))
-        else:
-            skipped.append(
-                "area-freshness: skipped. It compares Area options with the folders of a skills root, "
-                "so it needs --skills-root and an `area` field in the config"
-            )
-    if wanted(args.dimension, "suggest") or wanted(args.dimension, "stale"):
-        fetch_issue_details(config, items, finished)
-    if wanted(args.dimension, "suggest"):
-        checks.append(("ready-candidates", lambda: check_ready_candidates(items)))
-    if wanted(args.dimension, "stale"):
-        checks.append(("stale", lambda: check_stale(items, finished=finished)))
-
     if wanted(args.dimension, "qa-signoff"):
         checks.append(("qa-signoff", lambda: check_qa_signoff(items, config, finished)))
-
-    for s in skipped:
-        print(f"{s}")
 
     all_problems = []
     for name, fn in checks:
