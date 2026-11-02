@@ -25,14 +25,13 @@ from lib.skill_links import broken_links as _broken_links, link_states as _link_
 from lib.health_checks import (  # noqa: E402,F401
     _check_waiver_expiry, _check_github_about,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
-    _check_voice_copies, _check_scheduler,
+    _check_voice_copies,
 )
 from lib import backlog_setup as _backlog_setup  # noqa: E402
 from lib import claude_settings as _claude_settings  # noqa: E402
 from lib import repo_gates as _repo_gates  # noqa: E402
 from lib.local_config import private_repos as _private_repos  # noqa: E402
 from lib.local_config import skills_root as _skills_root  # noqa: E402
-from lib.local_config import push_repos as _push_repos  # noqa: E402
 
 # This file lives at <OliverCode>/scripts/olivercode, so the repo root is two up.
 # Nothing else is hardcoded.
@@ -49,7 +48,6 @@ COMMANDS = [
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run the audit skill's structure check, which includes the description cap, against this machine's skills folder + OliverCode's own skills"),
-    ("olivercode push-fleet [--dry-run]", "Push already-committed work for OliverCode, the private repos and this machine's pushRepos, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
 
@@ -730,7 +728,6 @@ def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> 
     # failure classes.
     t.add(*_check_vault_skill_links(_skills_root()))
     t.add(*_check_voice_copies(OC_ROOT, Path.home() / ".claude" / "skills"))
-    t.add(*_check_scheduler(Path.home()))
 
     # Repos to check for remote reachability and oversized files: the private repos,
     # this framework repo, and every fleet repo that exists on disk.
@@ -984,8 +981,7 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
 
     Also deploys `commit-msg` (story reference on every commit) and `pre-push` (force-push/history-rewrite block, secret scan on the push
     range). It has no public/private variant: what is safe to push does not differ by
-    repo visibility the way commit-time PII checks do, and `push-fleet` needs
-    the same mechanical gate on every repo it touches.
+    repo visibility the way commit-time PII checks do.
 
     A repo's own `.githooks/pre-commit.local` is never written here. The private
     hook runs it when it exists (GATE-LOCAL-1).
@@ -1121,68 +1117,8 @@ def command_audit_fleet(oc_root: Path) -> int:
     print(f"\nFull output: {log_path}")
     print("Findings are heuristic. Read the flagged locations before treating any as a real "
           "defect -- this command never fixes anything on its own.")
-    # Findings exit 0 so the scheduler waits its interval; only a check that could not run exits 1.
+    # Findings exit 0; only a check that could not run exits 1.
     return 1 if broken else 0
-
-
-def command_push_fleet(oc_root: Path, dry_run: bool) -> int:
-    """Push already-committed work for OliverCode, the private repos and this machine's pushRepos.
-
-    Scoped to repos named on purpose, for the lowest blast radius. The private repos and
-    pushRepos come from local_config. A wider rollout needs
-    its own opt-in (a per-repo repo-profiles.json flag), not a blanket expansion,
-    and needs every target repo to actually carry the pre-push hook first (a repo
-    with a declared hookVariant still has none -- see sync-hooks' own skip logic).
-
-    Never commits anything. Skips, reports, and moves on for a repo with
-    uncommitted changes or no upstream tracking branch. Each repo's own pre-push
-    hook is the real safety gate here (secret scan, no force-push) -- this command
-    only decides which repos to attempt, never overrides what that hook blocks.
-    """
-    targets = {"olivercode": oc_root, **_private_repos()}
-    profiles, _ = load_repo_profiles(oc_root)
-    for name in _push_repos():
-        targets[name] = _resolve_repo_path(name, profiles.get(name, {}), oc_root.parent)
-
-    failed = 0
-    for name, repo_path in targets.items():
-        if not (repo_path / ".git").exists():
-            print(f"  [SKIP] {name}: no .git found at {repo_path}")
-            continue
-        status = subprocess.run(
-            ["git", "-C", str(repo_path), "status", "--porcelain"],
-            capture_output=True, text=True,
-        )
-        if status.stdout.strip():
-            print(f"  [SKIP] {name}: uncommitted changes present -- never auto-committed")
-            continue
-        upstream = subprocess.run(
-            ["git", "-C", str(repo_path), "rev-parse", "--abbrev-ref", "@{u}"],
-            capture_output=True, text=True,
-        )
-        if upstream.returncode != 0:
-            print(f"  [SKIP] {name}: no upstream tracking branch")
-            continue
-        ahead = subprocess.run(
-            ["git", "-C", str(repo_path), "rev-list", "--count", "@{u}..HEAD"],
-            capture_output=True, text=True,
-        )
-        count = int(ahead.stdout.strip() or "0")
-        if count == 0:
-            print(f"  [OK] {name}: up to date, nothing to push")
-            continue
-        if dry_run:
-            print(f"  [DRY-RUN] {name}: would push {count} commit(s)")
-            continue
-        result = subprocess.run(["git", "-C", str(repo_path), "push"], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"  [OK] {name}: pushed {count} commit(s)")
-        else:
-            err_lines = result.stderr.strip().splitlines()
-            print(f"  [FAIL] {name}: push blocked -- {err_lines[-1] if err_lines else 'unknown error'}")
-            failed += 1
-    # Non-zero on any blocked push, so the scheduler leaves its marker and retries next tick.
-    return 1 if failed else 0
 
 
 def command_update() -> int:
@@ -1302,11 +1238,6 @@ def main() -> int:
     if cmd == "audit-fleet":
         _reject_extra(cmd, argv)
         return command_audit_fleet(OC_ROOT)
-    if cmd == "push-fleet":
-        dry = "--dry-run" in argv
-        rest = [a for a in argv if a != "--dry-run"]
-        _reject_extra(cmd, rest)
-        return command_push_fleet(OC_ROOT, dry_run=dry)
     if cmd == "skills":
         return command_skills(argv)
 

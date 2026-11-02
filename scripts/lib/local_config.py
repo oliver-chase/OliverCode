@@ -45,8 +45,3 @@ def skills_root() -> Path | None:
 def repo_paths() -> dict[str, Path]:
     """Fleet repos that do not sit beside OliverCode on this machine, by profile name."""
     return {name: Path(p).expanduser() for name, p in load_local().get("repoPaths", {}).items()}
-
-
-def push_repos() -> list[str]:
-    """Profile names push-fleet pushes in addition to OliverCode and the private repos."""
-    return list(load_local().get("pushRepos", []))

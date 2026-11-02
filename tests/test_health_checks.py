@@ -2,7 +2,6 @@
 
 Every check returns (passed, failed, skipped). A check that reads outside this repo must
 degrade to a skip when that context is missing, and must fail only on a real problem.
-The scheduler check has its own file, tests/test_scheduler_health.py.
 """
 
 import contextlib

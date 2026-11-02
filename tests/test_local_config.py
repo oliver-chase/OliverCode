@@ -32,13 +32,11 @@ class LocalConfig(unittest.TestCase):
         self.assertEqual(local_config.private_repos(), {})
         self.assertIsNone(local_config.skills_root())
         self.assertEqual(local_config.repo_paths(), {})
-        self.assertEqual(local_config.push_repos(), [])
 
     def test_the_file_supplies_paths_with_tilde_expanded(self):
-        self.write({"privateRepos": {"notes": "~/v"}, "skillsRoot": "/s", "pushRepos": ["a"]})
+        self.write({"privateRepos": {"notes": "~/v"}, "skillsRoot": "/s"})
         self.assertEqual(local_config.private_repos(), {"notes": Path.home() / "v"})
         self.assertEqual(local_config.skills_root(), Path("/s"))
-        self.assertEqual(local_config.push_repos(), ["a"])
 
     def test_the_skills_root_environment_variable_wins_over_the_file(self):
         self.write({"skillsRoot": "/from-file"})
