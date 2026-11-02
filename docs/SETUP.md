@@ -117,21 +117,21 @@ Edit the registry's `repo-profiles.json` with your real repo names and validatio
 Confirm the fleet registered before continuing:
 
 ```bash
-scripts/olivercode health     # must list your repos by name, not "no fleet registered"
+scripts/olivercode conform --offline     # must list your repos by name, not "no fleet registered"
 ```
 
 ## Step 6: install enforcement
 
 ```bash
 scripts/olivercode sync-hooks     # writes .githooks/ + sets core.hooksPath in every fleet repo
-scripts/olivercode health         # confirms each repo's hooks are installed and current
+scripts/olivercode conform --offline         # confirms each repo's hooks are installed and current
 ```
 
 `sync-hooks` resolves your fleet from the registry file named in Step 5 and expects those repos as siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below. Every repo reported as `[SKIP] not present on this machine` is one it did not govern, and the exit code does not show them, so read that list.
 
 `docs/GATES.md` has the table of which gates each kind of repo runs.
 
-Hook enforcement fails open. The troubleshooting entry "Commits are passing gates that should have blocked them" below explains why and how to fix it. `scripts/olivercode health` detects it fleet-wide, so run it on a schedule as well as at setup. The Claude Code session check also reports it for the repo a session opens.
+Hook enforcement fails open. The troubleshooting entry "Commits are passing gates that should have blocked them" below explains why and how to fix it. `scripts/olivercode conform` detects it fleet-wide, so run it on a schedule as well as at setup. The Claude Code session check also reports it for the repo a session opens.
 
 ### Step 6b: stamp the project template into a repo (optional)
 
@@ -155,7 +155,7 @@ Always run `--dry-run` against an existing repo first and read the OVERWRITE lin
 
 ```bash
 bash scripts/validate.sh          # gates, consistency, references, tests
-scripts/olivercode health         # symlinks + per-repo hook install state
+scripts/olivercode conform --offline         # per-repo hook install state and the rest of the contract
 scripts/olivercode skills         # every skill discoverable
 ```
 
@@ -301,7 +301,8 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 - `discover` is a read-only scan for git repos under the given roots. It reports each one's agent-rules filename and hook state, inventories `~/.claude` (skills linked here, linked elsewhere, real directories and broken links) and emits a `repo-profiles.json` skeleton with explicit `path` values. It excludes the OliverCode checkout itself, because the framework governs the fleet and is not part of it. It is the mechanical form of Step 1
 - `install` symlinks this checkout's `CLAUDE.md`, its `docs/VOICE.md` (as `~/.claude/VOICE.md`, which `CLAUDE.md` imports) and every skill into `~/.claude`, creating `~/.claude/` and `~/.claude/skills/` if absent. It also merges OliverCode's three Claude Code hooks into `~/.claude/settings.json`, creating the file if absent and leaving every other key alone (`docs/RULES.md`, "Execution"). It also sets `core.hooksPath` to `.githooks` in this checkout when the setting is unset, and warns without changing it when the setting points elsewhere. It is never destructive. A real file or any other link at a target path, including a dangling one or one into another OliverCode checkout, is moved to `<name>.pre-olivercode` (then `.2`, `.3` on later collisions) and the path is printed, because that file is usually the operator's whole existing ruleset (`BACKUP-COLLISION-1` in `docs/DECISIONS.md`). Only a link an OliverCode install wrote that now dangles because its checkout moved is replaced in place. It records the links it wrote in `~/.claude/.olivercode-install.json`, and a re-install of the same checkout reports ALREADY and makes no backup
 - `uninstall` is the reverse of `install` and step 1 of "Backing out". It removes each link in `~/.claude` that points into this checkout, and each dangling one an OliverCode install wrote, which the install record names. For an install made before the record existed, two or more of install's links must dangle into the same checkout-shaped folder, so a lone link to a drive that is not mounted stays, and a link into another live checkout stays too. It removes the record itself. It moves the newest `<name>.pre-olivercode` backup back once its path is free and lists older ones. It takes out only hook entries whose command is exactly the form install writes, so an operator hook that runs a script of the same name stays. A `settings.json` left empty is deleted, since Claude Code reads that the same as no file, unless it is a symlink, in which case it stays a link and keeps its file mode. Links pointing anywhere else, real skill folders, `~/.claude/` and `skills/` themselves and every other settings key stay. It leaves `core.hooksPath` alone, since `install` and `sync-hooks` set it, and it is idempotent
-- `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. Its Backlog boards section reads each registered repo's Project once, compares it with the baseline, checks the `commit-msg` hook and lists `olivercode backlog-setup <repo> --apply` as the fix for any repo that differs. It falls back to the repo's config when GitHub is unreachable. A repo, private repo or control plane that is not on this machine is noted once and not counted
+- `conform [DIR]` checks one repo, or every registered repo when it gets no directory, against `docs/CONTRACT.md`, which lists each requirement, its fix and how a repo records an allowed difference. `--offline` skips the board and GitHub About checks, which are the only ones that call GitHub. It replaced the fleet hook, board and baseline checks that `health` used to run
+- `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. It checks this machine only. What each repo must match is `conform`'s job. A repo, private repo or control plane that is not on this machine is noted once and not counted
 - `update` runs `git pull`, then `install` (so a new skill or Claude Code hook reaches this machine), then `sync-hooks`. Run it on each device to bring it current
 - `sync-hooks` converges pre-commit hooks and `core.hooksPath` across the fleet and the private repos. It also runs at the end of `update`
 - `audit-fleet` runs the `audit` skill's structure check (dangling references and description length) against OliverCode's own `skills/` and, when this machine names one, the skills folder (`skillsRoot`). It is non-interactive, writes findings to a log and never fixes anything
@@ -360,7 +361,7 @@ Git runs hooks only when `core.hooksPath` resolves to a directory holding an exe
 
 ```bash
 git config --get core.hooksPath      # expect: .githooks
-scripts/olivercode health            # FAILs with the exact reason if any repo is in that state
+scripts/olivercode conform --offline            # FAILs with the exact reason if any repo is in that state
 scripts/olivercode sync-hooks        # repairs it across the fleet and the private repos
 ```
 
@@ -368,7 +369,7 @@ Use the relative `.githooks` and never an absolute path, because an absolute one
 
 ### Fleet hooks report drift after a gate edit
 
-The placement-drift check in `scripts/olivercode health` compares each fleet repo's live hook against `core/templates/project/pre-commit` and `core/templates/project/pre-commit-private`. Those templates are built from `core/hooks/`, so a gate change is an edit there followed by a rebuild, and every fleet repo diverges until it is re-synced:
+The hooks check in `scripts/olivercode conform` compares each fleet repo's live hook against `core/templates/project/pre-commit` and `core/templates/project/pre-commit-private`. Those templates are built from `core/hooks/`, so a gate change is an edit there followed by a rebuild, and every fleet repo diverges until it is re-synced:
 
 ```bash
 python3 scripts/build-hooks.py

@@ -32,7 +32,7 @@ class TestHookProblems(unittest.TestCase):
         launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
 
     def problems(self, private=False):
-        return launcher._hook_problems(self.repo, TEMPLATES, private)
+        return repo_gates.hook_problems(self.repo, TEMPLATES, private)
 
     def test_unset_hooks_path_is_reported(self):
         self.assertIn("unset", self.problems()[0])
@@ -84,49 +84,6 @@ class TestHookProblems(unittest.TestCase):
         self.install()
         (self.hooks / "commit-msg").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
         self.assertIn("commit-msg diverges", "; ".join(self.problems()))
-
-class TestFleetHooks(unittest.TestCase):
-    """`health --hooks-only`: the hook state of each fleet and private repo, counted once, offline."""
-
-    def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix="olivercode-fleethooks-"))
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
-        self.public = scratch_repo(self.root / "public")
-        self.private = scratch_repo(self.root / "private")
-        self.bare = scratch_repo(self.root / "bare")
-        launcher._install_hook_pair(self.public, TEMPLATES, private_repo=False)
-        launcher._install_hook_pair(self.private, TEMPLATES, private_repo=True)
-        profiles = {"public": {}, "private": {}, "bare": {}}
-        for name, patcher in (
-            ("profiles", mock.patch.object(launcher, "load_repo_profiles", return_value=(profiles, None))),
-            ("gap", mock.patch.object(launcher, "registry_gap", return_value=None)),
-            ("private", mock.patch.object(launcher, "_private_repos", return_value={"private": self.private})),
-        ):
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    def run_check(self):
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            return launcher._check_fleet_hooks(launcher.OC_ROOT, self.root), out.getvalue()
-
-    def test_a_repo_in_the_fleet_and_in_private_repos_is_checked_once_as_private(self):
-        (passed, failed, _), out = self.run_check()
-        self.assertEqual(1, out.count("private: hooksPath set"))
-        self.assertEqual((2, 1), (passed, failed))  # public and private pass, bare fails
-
-    def test_a_repo_with_no_hooks_fails_by_name(self):
-        _, out = self.run_check()
-        self.assertIn("[FAIL] bare:", out)
-
-    def test_hooks_only_exits_nonzero_for_a_failing_repo_and_checks_nothing_over_the_network(self):
-        with mock.patch.object(launcher, "_check_remotes_resolve", side_effect=AssertionError("network")), \
-                mock.patch.object(launcher, "_check_github_about", side_effect=AssertionError("network")), \
-                contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(1, launcher.command_health(self.root, hooks_only=True))
-            shutil.rmtree(self.bare)
-            self.assertEqual(0, launcher.command_health(self.root, hooks_only=True))
-
 
 class TestInstallHookPair(unittest.TestCase):
     """What sync-hooks deploys to each repo, file by file."""

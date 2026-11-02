@@ -29,7 +29,7 @@ Claude Code only loads instructions from specific locations, including `CLAUDE.m
 
 Documentation can explain what should happen and cannot stop a commit that breaks the rules. OliverCode uses **Git pre-commit hooks** for rules that must be enforced, and a failing check refuses the commit.
 
-Git runs those hooks only when its `core.hooksPath` setting points to them. If that setting is missing or broken, Git gives no warning and a bad commit can pass, so `scripts/olivercode health` checks that the hooks are active. Setup also rehearses the protection by trying to commit a fake API key, which the hook must refuse.
+Git runs those hooks only when its `core.hooksPath` setting points to them. If that setting is missing or broken, Git gives no warning and a bad commit can pass, so `scripts/olivercode conform` checks that the hooks are active. Setup also rehearses the protection by trying to commit a fake API key, which the hook must refuse.
 
 OliverCode also installs three Claude Code hooks that run in every session. The session check tells Claude when the repo it opened has commit gates that git skips. The commit guard refuses a commit that would skip the gates. The early-stop guard sends Claude back to work when it promised work it did not do. `docs/RULES.md` ("Execution") describes each one.
 
@@ -61,7 +61,7 @@ Nothing here depends on an agent choosing to look:
 * `~/.claude/CLAUDE.md` symlinks to this repo's `CLAUDE.md`, so its rules are present in every Claude Code session on the machine, from any working directory
 * `~/.claude/skills/<name>` symlinks to `skills/<name>`, so every skill is discoverable from any repo
 * `.githooks/pre-commit` runs on every commit in every fleet repo, which enforces rules even when context does not
-* `olivercode install` creates both sets of symlinks, and `olivercode health` verifies them along with the hooks and placement drift
+* `olivercode install` creates both sets of symlinks, and `olivercode health` verifies them, and `olivercode conform` checks each repo against `docs/CONTRACT.md`
 
 Anything that must always apply is enforced as a hook and never left to an instruction an agent might not read.
 

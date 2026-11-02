@@ -24,12 +24,13 @@ from lib.repo_profiles import iter_fleet as _iter_fleet  # noqa: E402
 from lib.skills_catalog import _load_skills  # noqa: E402
 from lib.skill_links import broken_links as _broken_links, link_states as _link_states  # noqa: E402
 from lib.health_checks import (  # noqa: E402,F401
-    _check_waiver_expiry, _check_github_about,
+    _check_waiver_expiry,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
     _check_voice_copies,
 )
 from lib import backlog_setup as _backlog_setup  # noqa: E402
 from lib import claude_settings as _claude_settings  # noqa: E402
+from lib import conform as _conform  # noqa: E402
 from lib import repo_gates as _repo_gates  # noqa: E402
 from lib.local_config import private_repos as _private_repos  # noqa: E402
 from lib.local_config import skills_root as _skills_root  # noqa: E402
@@ -45,7 +46,8 @@ COMMANDS = [
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
-    ("olivercode health [--root DIR] [--hooks-only]", "Run health checks: Claude Code hooks, placement drift. --hooks-only checks just the fleet hooks and makes no network call"),
+    ("olivercode conform [DIR] [--root DIR] [--offline]", "Check a repo, or every registered repo, against docs/CONTRACT.md. Prints pass, fail, exception, manual or skip per requirement with the fix command, and exits non-zero on any fail. --offline skips the checks that call GitHub"),
+    ("olivercode health [--root DIR]", "Run health checks on this machine: Claude Code hooks, skill links, voice copies, remotes and file sizes"),
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run the audit skill's structure check, which includes the description cap, against this machine's skills folder + OliverCode's own skills"),
@@ -671,18 +673,11 @@ class _HealthTally:
         return f"HEALTHY — {self.passed} checks passed"
 
 
-def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> int:
-    """Run health checks: Claude Code hooks, control plane, placement drift.
+def command_health(fleet_root: Path | None = None) -> int:
+    """Run health checks on this machine's setup: Claude Code hooks, control plane, skill links, remotes.
 
-    hooks_only checks just whether each fleet repo and private repo runs the right hooks. It
-    reads local files, so it makes no network call and suits `validate.sh`.
+    What a repo must match is `command_conform`'s job (docs/CONTRACT.md).
     """
-    if hooks_only:
-        print("OliverCode fleet hooks")
-        print("=" * 40)
-        passed, failed, skipped = _check_fleet_hooks(OC_ROOT, fleet_root)
-        print(f"\n{passed} passed, {failed} failed, {skipped} skipped")
-        return 1 if failed else 0
     print("OliverCode Health Check")
     print("=" * 40)
     t = _HealthTally()
@@ -728,7 +723,7 @@ def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> 
     # Everything here reads OUTSIDE OC_ROOT (private repos, sibling fleet repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no private repos around it is still a valid, healthy checkout.
-    passed, failed, skipped = _check_placement_drift(OC_ROOT, fleet_root)
+    passed, failed, skipped = _check_placement_drift(OC_ROOT)
     t.add(passed, failed, skipped)
 
     # 4. Governance exceptions that have run out.
@@ -736,13 +731,7 @@ def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> 
     passed, failed, skipped = _check_waiver_expiry(OC_ROOT)
     t.add(passed, failed, skipped)
 
-    # 5. GitHub About. The documentation standard treats an empty About as missing
-    # documentation; nothing else ever looks at it, so it rots invisibly.
-    print("\nGitHub About:")
-    passed, failed, skipped = _check_github_about(OC_ROOT)
-    t.add(passed, failed, skipped)
-
-    # 6. Topology. The gates cover what goes INTO a commit; these cover whether the
+    # 5. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # failure classes.
     t.add(*_check_vault_skill_links(_skills_root()))
@@ -760,13 +749,37 @@ def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> 
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
 
-    # 7. Each repo's board against shared/kanban-baseline.json, and its commit-msg hook.
-    print("\nBacklog boards:")
-    t.add(*_backlog_setup.boards_health(topo_repos, _backlog_setup.Api()))
-
     print(f"\n{'=' * 40}")
     print(t.summary())
     return 1 if t.failed else 0
+
+
+def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None, offline: bool) -> int:
+    """`olivercode conform [DIR]`: one repo, or the registered fleet, against docs/CONTRACT.md."""
+    print("OliverCode conformance")
+    print("=" * 40)
+    if target:
+        repos = [(target.name, target, target.resolve() in {p.resolve() for p in _private_repos().values()}, "")]
+    else:
+        repos = []
+        profiles, _ = load_repo_profiles(oc_root)
+        private = {p.resolve() for p in _private_repos().values()}
+        for name, profile, path in _iter_fleet(profiles, fleet_root or oc_root.parent):
+            if not (path / ".git").exists():
+                print(f"  [INFO] {name} is not cloned on this machine")
+                continue
+            repos.append((name, path, bool(profile.get("private")) or path.resolve() in private, profile.get("hookVariant", "")))
+        gap = registry_gap(oc_root)
+        if gap:
+            print(f"  [FAIL] {gap}")
+            return 1
+        if not repos:
+            print(f"  [SKIP] no fleet registered in {registry_file(oc_root, 'repo-profiles.json')}")
+    failed = 0
+    for name, path, private_repo, variant in repos:
+        failed += _conform.render(name, _conform.check_repo(path, oc_root=oc_root, offline=offline, private=private_repo, variant=variant))
+    print(f"\nChecked {len(repos)} repo(s): {failed} requirement(s) failed")
+    return 1 if failed else 0
 
 
 def command_backlog_setup(argv: list[str]) -> int:
@@ -810,42 +823,7 @@ def command_backlog_setup(argv: list[str]) -> int:
 # `launcher._iter_fleet` and the rest keep working for callers and tests.
 
 
-def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> list[str]:
-    """Return human-readable problems with a repo's live hooks, or [] when they match.
-
-    `repo_gates.gate_problem` first catches every state where git runs none of the repo's
-    gates: hooksPath unset or pointed away from `.githooks`, the folder or its pre-commit
-    missing, or a pre-commit that is not executable. The live pre-commit must then match
-    the one template this repo's variant names, so a public repo running the weaker private
-    hook fails. pre-push and commit-msg must match their templates too, because sync-hooks deploys them.
-    """
-    gate = _repo_gates.gate_problem(repo_root)
-    if gate:
-        return [gate]
-
-    hooks_dir = repo_root / ".githooks"
-    expected = {"pre-commit": "pre-commit-private" if private_repo else "pre-commit",
-                "pre-push": "pre-push", "commit-msg": "commit-msg"}
-    if not private_repo:
-        expected["pre-commit-private"] = "pre-commit-private"   # the inert reference copy
-
-    problems = []
-    for filename, template in expected.items():
-        installed = hooks_dir / filename
-        canonical = templates_dir / template
-        if filename == "pre-commit-private" and not installed.exists():
-            continue
-        if not installed.is_file():
-            problems.append(f"no {filename} in {hooks_dir}")
-        elif not os.access(installed, os.X_OK):
-            problems.append(f"{installed} is not executable, so git skips it")
-        elif installed.read_bytes() != canonical.read_bytes():
-            problems.append(f"{filename} diverges from the {template} template")
-
-    return problems
-
-
-def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int, int]:
+def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
     print("\nPlacement drift (docs/RULES.md):")
     passed = 0
     failed = 0
@@ -892,91 +870,6 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
             print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
             failed += 1
         else:
-            passed += 1
-
-    p, f, s = _check_fleet_hooks(oc_root, fleet_root)
-    return passed + p, failed + f, skipped + s
-
-
-def _check_fleet_hooks(oc_root: Path, fleet_root: Path | None = None) -> tuple[int, int, int]:
-    """Check that every fleet repo and private repo runs the right hooks. Reads local files only.
-
-    A repo that is both registered in the fleet and named in privateRepos is checked once, as a
-    private repo, because sync-hooks deploys it that way.
-    """
-    passed = failed = skipped = 0
-    templates_dir = oc_root / "core" / "templates" / "project"
-    private = _private_repos()
-    private_paths = {root.resolve() for root in private.values()}
-    checked: set[Path] = set()
-    # (c) Fleet repos: unset core.hooksPath, or a hook file diverging from the template.
-    profiles, _ = load_repo_profiles(oc_root)
-    fleet = list(_iter_fleet(profiles, fleet_root or oc_root.parent))
-    gap = registry_gap(oc_root)
-    if gap:
-        # Private repos are named but none holds the registry, so every fleet check below would
-        # pass on an empty fleet; a machine set up before the registry moved hits exactly this.
-        print(f"  [FAIL] {gap}")
-        failed += 1
-    elif not fleet:
-        print(f"  [WARN] no fleet registered in {registry_file(oc_root, 'repo-profiles.json')} — skipping hook-drift check")
-        print("         If your registry lives in a private repo, name that repo under privateRepos in")
-        print("         olivercode.local.json; OliverCode reads <repo>/olivercode/repo-profiles.json from it.")
-        skipped += 1
-    else:
-        # A registered repo that is not cloned on this machine is not a defect here, so it
-        # is listed once and not counted as a skipped check.
-        absent = [name for name, _profile, repo_path in fleet if not (repo_path / ".git").exists()]
-        if absent:
-            print(f"  [INFO] not cloned on this machine: {', '.join(absent)}")
-        for name, profile, repo_path in fleet:
-            if name in absent:
-                continue
-            checked.add(repo_path.resolve())
-            is_private = bool(profile.get("private")) or repo_path.resolve() in private_paths
-            problems = _hook_problems(repo_path, templates_dir, is_private)
-            variant = profile.get("hookVariant")
-            if problems and variant:
-                # A repo may legitimately need a hook the template cannot express (a
-                # repo-specific governance path, a gate whose checker only exists there).
-                # Declaring `hookVariant` in the profile says "this divergence is
-                # considered" -- it is reported, not failed, and sync-hooks leaves it
-                # alone. Divergence WITHOUT a declaration is still a failure, so this
-                # cannot be used to quietly opt out of enforcement.
-                # A variant only replaces pre-commit; sync-hooks still manages pre-push and commit-msg.
-                fatal = [p for p in problems if not p.startswith("pre-commit")]
-                if fatal:
-                    print(f"  [FAIL] {name}: {'; '.join(fatal)}")
-                    failed += 1
-                else:
-                    # WARN, not OK: a variant no longer receives the template's fixes, so
-                    # each one has to be merged by hand and this line is the reminder.
-                    print(f"  [WARN] {name}: declared hook variant ({variant}) — "
-                          "template hook fixes must be merged into it by hand")
-                    passed += 1
-            elif problems:
-                print(f"  [FAIL] {name}: {'; '.join(problems)}")
-                failed += 1
-            else:
-                print(f"  [OK] {name}: hooksPath set, hooks match template")
-                passed += 1
-
-    # Private repos are managed hook targets too, checked against the private variant.
-    if not private:
-        print("  [INFO] no private repos set for this machine (privateRepos) — not checked")
-    for name, root in private.items():
-        if root.resolve() in checked:
-            continue
-        if not (root / ".git").exists():
-            print(f"  [WARN] {name}: no .git at {root} — hook check skipped")
-            skipped += 1
-            continue
-        problems = _hook_problems(root, templates_dir, private_repo=True)
-        if problems:
-            print(f"  [FAIL] {name}: {'; '.join(problems)}")
-            failed += 1
-        else:
-            print(f"  [OK] {name}: hooksPath set, hooks match template")
             passed += 1
 
     return passed, failed, skipped
@@ -1243,10 +1136,15 @@ def main() -> int:
         return command_uninstall(OC_ROOT)
 
     if cmd == "health":
-        hooks_only = "--hooks-only" in argv
-        root, rest = _take_root_flag([a for a in argv if a != "--hooks-only"])
+        root, rest = _take_root_flag(argv)
         _reject_extra(cmd, rest)
-        return command_health(root, hooks_only)
+        return command_health(root)
+    if cmd == "conform":
+        offline = "--offline" in argv
+        root, rest = _take_root_flag([a for a in argv if a != "--offline"])
+        if len(rest) > 1:
+            _reject_extra(cmd, rest[1:])
+        return command_conform(OC_ROOT, Path(rest[0]).resolve() if rest else None, root, offline)
     if cmd == "update":
         _reject_extra(cmd, argv)
         return command_update()
