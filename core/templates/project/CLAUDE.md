@@ -11,4 +11,4 @@ Read before working here:
 Run `bash scripts/validate.sh` before every commit. It is this repo's canonical validation.
 
 Rules:
-- Every owner request, however small, is filed as a story with Gherkin criteria under an epic before work starts, per the `backlog` skill
+- Every owner request, however small, is filed as a story with Gherkin criteria under an epic before work starts, per the `backlog` skill, and a different agent QAs each story before Complete
