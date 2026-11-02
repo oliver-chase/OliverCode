@@ -61,17 +61,22 @@ def measure(repo, files):
     return {"testCount": tests, "docWords": docs, "skillWords": skills}
 
 
-def run_tests(repo):
+def run_tests(repo, per_module=None):
     """Wall seconds to run every `tests/test_*.py` module, each in its own process as validate.sh does,
-    or None when the repo has no such module."""
+    or None when the repo has no such module. A dict passed as `per_module` gets each module's seconds."""
     tests_dir = Path(repo) / "tests"
     modules = sorted(p.stem for p in tests_dir.glob("test_*.py")) if tests_dir.is_dir() else []
     if not modules:
         return None
+    def run_one(module):
+        began = time.monotonic()
+        subprocess.run([sys.executable, "-m", "unittest", "-b", module], cwd=tests_dir, capture_output=True)
+        if per_module is not None:
+            per_module[module] = time.monotonic() - began
+
     start = time.monotonic()
     with ThreadPoolExecutor(max_workers=6) as pool:
-        list(pool.map(lambda m: subprocess.run([sys.executable, "-m", "unittest", "-b", m],
-                                               cwd=tests_dir, capture_output=True), modules))
+        list(pool.map(run_one, modules))
     return round(time.monotonic() - start, 1)
 
 
@@ -151,10 +156,14 @@ def main(argv=None):
     budget_path = repo / BUDGET_FILE
     budget = json.loads(budget_path.read_text(encoding="utf-8")) if budget_path.is_file() else {}
     measured = measure(repo, files)
-    measured["testSeconds"] = run_tests(repo) if args.time else None
+    per_module = {}
+    measured["testSeconds"] = run_tests(repo, per_module) if args.time else None
     print(f"== Budgets ({BUDGET_FILE if budget else 'no budget file'})")
     lines, over = budget_lines(measured, budget)
     print("\n".join(lines))
+    if per_module:
+        slowest = sorted(per_module.items(), key=lambda kv: kv[1], reverse=True)[:3]
+        print("slowest test files: " + ", ".join(f"{m} {t:.1f}s" for m, t in slowest))
     problems += over
 
     print("== Voice")

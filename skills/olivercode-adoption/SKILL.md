@@ -65,18 +65,18 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 
 ## Output
 
-- **Moved:** each rule, from where, to where, verified present at the destination.
-- **Kept in place:** what stayed and why.
-- **Ambiguous:** what you could not classify, with the question they need to answer.
-- **Enforcement:** the probe result, quoted.
-- **Backups:** where they are, and that they are still there.
+- **Moved:** each rule, from where, to where, verified present at the destination
+- **Kept in place:** what stayed and why
+- **Ambiguous:** what you could not classify, with the question they need to answer
+- **Enforcement:** the probe result, quoted
+- **Backups:** where they are, and that they are still there
 
 ## Known traps
 
 - A repo `CLAUDE.md` pointing at a workspace-root-relative path. Reads fine, resolves to
   nothing from inside the repo.
-- `~/.claude/skills/` absent on a fresh machine — `install` handles it. A bare `ln -s` does not.
+- `~/.claude/skills/` absent on a fresh machine — `install` handles it. A bare `ln -s` does not
 - An uninstalled symlink makes `dirname "$(readlink ~/.claude/CLAUDE.md)"` return `.`, silently
   resolving to whatever repo the agent is standing in. Always guard the resolution.
 - A layout the scripts cannot resolve degrades to WARN and skips. **WARN is not coverage.**
-- Registering a repo by name alone when it is not a sibling — it will never be found. Use `path`.
+- Registering a repo by name alone when it is not a sibling — it will never be found. Use `path`

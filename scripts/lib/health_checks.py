@@ -11,7 +11,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib.repo_profiles import registry_file
+from lib.repo_profiles import configured_location, iter_fleet, registry_file
 from lib.skill_links import link_states
 
 def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
@@ -205,6 +205,27 @@ def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]
         else:
             print(f"  [FAIL] {root.name}/docs/VOICE.md differs — copy it from {canonical}")
             failed += 1
+    return passed, failed, 0
+
+
+def _check_fleet_locations(profiles: dict, fleet_root: Path) -> tuple[int, int, int]:
+    """A registered repo that has a configured location but no repo there has moved, and that is a FAIL.
+
+    Without this a moved repo dropped out of every later check and the report still read healthy.
+    A repo with no configured location was never cloned on this machine, which is only a note.
+    """
+    print("\nFleet repo locations:")
+    passed = failed = 0
+    for name, profile, path in iter_fleet(profiles, fleet_root):
+        if (path / ".git").exists():
+            passed += 1
+            continue
+        where = configured_location(name, profile)
+        if where is None:
+            print(f"  [INFO] {name} is not cloned on this machine")
+            continue
+        print(f"  [FAIL] {name}: no repo at {path}. Update {where}")
+        failed += 1
     return passed, failed, 0
 
 

@@ -57,6 +57,7 @@ class Budgets(unittest.TestCase):
             self.assertIn("skillWords: 7 is over the budget of 1", out)
             seconds = [line for line in out.splitlines() if line.startswith("testSeconds:")][0]
             self.assertIn("within the budget of 60", seconds)
+            self.assertRegex(out, r"slowest test files: test_a \d+\.\ds")
 
     def test_runtime_is_not_measured_without_the_flag(self):
         with tempfile.TemporaryDirectory() as tmp:

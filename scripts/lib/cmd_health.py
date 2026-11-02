@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lib import claude_settings as _claude_settings
 from lib.health_checks import (
-    _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies, _check_waiver_expiry,
+    _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies, _check_waiver_expiry,
     _check_vault_skill_links,
 )
 from lib.local_config import OC_ROOT
@@ -137,6 +137,7 @@ def command_health(fleet_root: Path | None = None) -> int:
         if repo_path.is_dir():
             topo_repos.append((name, repo_path))
 
+    t.add(*_check_fleet_locations(_profiles, fleet_root or OC_ROOT.parent))
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
 

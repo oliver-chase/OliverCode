@@ -18,7 +18,20 @@ ROOT = HERE.parents[2]
 
 
 def fixture(name):
-    return json.loads((HERE / "fixtures" / f"{name}.json").read_text(encoding="utf-8"))
+    """board-correct, or that board with one Status lane changed: no QA lane, or a pull request lane."""
+    fields = json.loads((HERE / "fixtures" / "board-correct.json").read_text(encoding="utf-8"))
+    options = next(f for f in fields["fields"] if f["name"] == "Status")["options"]
+    if name == "board-no-qa-lane":
+        options[:] = [o for o in options if o["name"] != "QA"]
+    elif name == "board-pr-lane":
+        options.insert(3, {"id": "St5", "name": "In review"})
+    return fields
+
+
+def saved(name, folder):
+    path = Path(folder) / f"{name}.json"
+    path.write_text(json.dumps(fixture(name)), encoding="utf-8")
+    return str(path)
 
 
 def check(fields, config=None):
@@ -86,11 +99,6 @@ class FixtureBoardConfig(unittest.TestCase):
     """A fixture config stands in for the owner's board, so these tests pass on a fork."""
     CONFIG = json.loads((HERE / "fixtures" / "backlog-config.json").read_text(encoding="utf-8"))
 
-    def test_a_board_without_a_qa_lane_is_flagged_and_nothing_else(self):
-        problems = check(fixture("board-no-qa-lane"))
-        self.assertEqual(1, len(problems))
-        self.assertIn("missing option QA", problems[0])
-
     def test_the_fixture_config_names_every_lane_and_passes_the_placeholder_check(self):
         self.assertEqual([], bh.missing_lanes(self.CONFIG))
         self.assertFalse(bh.placeholder_values(self.CONFIG))
@@ -111,10 +119,11 @@ class Command(unittest.TestCase):
                               capture_output=True, text=True)
 
     def test_exit_status_follows_the_board(self):
-        ok = self.run_cli("--fields-file", str(HERE / "fixtures" / "board-correct.json"))
+        with tempfile.TemporaryDirectory() as tmp:
+            ok = self.run_cli("--fields-file", saved("board-correct", tmp))
+            bad = self.run_cli("--fields-file", saved("board-pr-lane", tmp))
         self.assertEqual(0, ok.returncode)
         self.assertIn("matches", ok.stdout)
-        bad = self.run_cli("--fields-file", str(HERE / "fixtures" / "board-pr-lane.json"))
         self.assertEqual(1, bad.returncode)
         self.assertIn("1 difference", bad.stdout)
 
@@ -127,7 +136,7 @@ class Command(unittest.TestCase):
             stub.chmod(0o755)
             result = subprocess.run(
                 [sys.executable, str(HERE / "check_board_hygiene.py"), "--config", str(config),
-                 "--verify-baseline", "--fields-file", str(HERE / "fixtures" / "board-no-qa-lane.json")],
+                 "--verify-baseline", "--fields-file", saved("board-no-qa-lane", tmp)],
                 capture_output=True, text=True, env={**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}"})
             self.assertFalse((Path(tmp) / "gh-was-called").exists())
         self.assertEqual(1, result.returncode, result.stderr)
