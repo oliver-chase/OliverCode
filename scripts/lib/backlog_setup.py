@@ -19,13 +19,16 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 OC_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 import check_kanban_baseline as kanban  # noqa: E402
+import log_action  # noqa: E402
 
 COLORS = ["GRAY", "BLUE", "GREEN", "YELLOW", "ORANGE", "RED", "PINK", "PURPLE"]
 LANE_COLORS = {"backlog": "GRAY", "ready": "BLUE", "in progress": "YELLOW", "qa": "ORANGE", "complete": "GREEN"}
@@ -509,16 +512,16 @@ def deploy_hook(hooks_dir: Path, templates_dir: Path, name: str) -> None:
 
 def run_setup(target: Path, apply: bool, api: Api, oc_root: Path = OC_ROOT, out=print, title: str | None = None,
               areas: list[str] | None = None, maps: list[str] | None = None, link: bool = True,
-              now: datetime.datetime | None = None) -> int:
+              now: datetime.datetime | None = None, story: int | None = None, agent: str = "backlog-setup") -> int:
     """Plan, and with `apply` carry out, one repo's board setup. Returns the exit status."""
     try:
-        return _run_setup(target, apply, api, oc_root, out, title, areas, maps, link, now)
+        return _run_setup(target, apply, api, oc_root, out, title, areas, maps, link, now, story, agent)
     except SetupError as exc:
         out(f"backlog-setup stopped: {exc}")
         return 1
 
 
-def _run_setup(target, apply, api, oc_root, out, title, areas, maps, link, now) -> int:
+def _run_setup(target, apply, api, oc_root, out, title, areas, maps, link, now, story=None, agent="backlog-setup") -> int:
     target = Path(target).resolve()
     if not (target / ".git").exists():
         raise SetupError(f"{target} is not a git repository. Run git init and add an origin remote first.")
@@ -646,7 +649,51 @@ def _run_setup(target, apply, api, oc_root, out, title, areas, maps, link, now) 
     out(kanban.NOT_VISIBLE)
     if not apply and (changes or unresolved):
         out(f"Next: run `olivercode backlog-setup {target} --apply` to make these changes.")
-    return 1 if (verdict or (apply and unresolved)) else 0
+    code = 1 if (verdict or (apply and unresolved)) else 0
+    if apply and changes and code == 0:
+        code = _log_repair(api, target, f"{owner}/{repo}", cfg_path, changes, board, story, agent, out)
+    return code
+
+
+def _repair_summary(changes: list[str], board: dict | None) -> str:
+    """The one-line result for the story comment."""
+    kept = len((board or {}).get("items", []))
+    head = f"Repaired board: {len(changes)} change(s), {kept} items kept. "
+    detail = "; ".join(" ".join(c.split()) for c in changes)
+    room = 300 - len(head)
+    return head + (detail if len(detail) <= room else detail[:room - 3] + "...")
+
+
+def _log_repair(api, target, slug, cfg_path, changes, board, story, agent, out) -> int:
+    """Post the repair on its story, or print the log_action.py line that does. Returns the exit status."""
+    done = subprocess.run(["git", "-C", str(target), "rev-parse", "--short=7", "HEAD"], capture_output=True, text=True)
+    commit = done.stdout.strip() if done.returncode == 0 else ""
+    if not log_action.HASH.match(commit):
+        out("The repair was not logged on a story because the repo has no commit to name. "
+            "Commit once, then run log_action.py with that hash.")
+        return 0
+    result = _repair_summary(changes, board)
+    line = ("python3 skills/backlog/scripts/log_action.py --config " + shlex.quote(str(cfg_path))
+            + f" --story {story if story else 'N'} --agent {shlex.quote(agent)} --role builder --commit {commit}"
+            + f" --files {len(changes)} --result {shlex.quote(result)}")
+    if story is None:
+        out("Log this repair on its story from the OliverCode repo (replace N with the story number), or rerun with --story N:")
+        out(line)
+        return 0
+
+    def runner(args):
+        code, stdout, stderr = api.runner(["api"] + args, None)
+        return SimpleNamespace(returncode=code, stdout=stdout, stderr=stderr)
+
+    body = log_action.build_comment(agent, "builder", commit, len(changes), result)
+    try:
+        url = log_action.post_comment(slug, story, body, runner)
+    except RuntimeError as exc:
+        out(f"The repair is done, but the comment on {slug}#{story} was not posted: {exc}. Run:")
+        out(line)
+        return 1
+    out(f"Logged on {slug}#{story}: {url}")
+    return 0
 
 
 def _create_project(api, owner, repo, title, link, cfg_path, config, out) -> dict:

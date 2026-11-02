@@ -406,6 +406,78 @@ class TestHealth(SetupCase):
         self.assertIn("config alone matches", "\n".join(lines))
 
 
+class TestRepairLog(SetupCase):
+    """A repair that changed something is logged on its story, or the command prints the line that does."""
+
+    def setUp(self):
+        super().setUp()
+        git(self.repo, "commit", "--allow-empty", "-q", "-m", "base")
+        self.head = git(self.repo, "rev-parse", "--short=7", "HEAD").stdout.strip()
+        self.posted = []
+        self.seed_existing_board()
+
+    def runner(self, args, stdin=None):
+        if args[1].startswith("repos/"):
+            self.posted.append(args)
+            return 0, "https://github.com/acme/widgets/issues/7#issuecomment-1\n", ""
+        return self.fake.runner(args, stdin)
+
+    def apply(self, **kw):
+        self.lines = []
+        return backlog_setup.run_setup(self.repo, True, backlog_setup.Api(self.runner), out=self.lines.append, **kw)
+
+    def test_story_flag_posts_the_comment(self):
+        self.assertEqual(0, self.apply(story=7, agent="fixer"))
+        self.assertEqual(1, len(self.posted))
+        args = self.posted[0]
+        self.assertEqual("api", args[0])
+        self.assertEqual("repos/acme/widgets/issues/7/comments", args[1])
+        body = next(a for a in args if a.startswith("body="))
+        self.assertIn("- Agent: fixer", body)
+        self.assertIn("- Role: builder", body)
+        self.assertIn(f"- Commit: {self.head}", body)
+        self.assertIn("Repaired board:", body)
+        self.assertIn("4 items kept", body)
+        self.assertEqual(1, len(body.splitlines()[-1:]))
+        self.assertIn("Logged on acme/widgets#7", self.text)
+
+    def test_default_agent_name(self):
+        self.apply(story=7)
+        self.assertIn("- Agent: backlog-setup", next(a for a in self.posted[0] if a.startswith("body=")))
+
+    def test_without_story_the_line_is_printed(self):
+        self.assertEqual(0, self.apply())
+        self.assertEqual([], self.posted)
+        line = next(l for l in self.lines if l.startswith("python3 skills/backlog/scripts/log_action.py"))
+        self.assertIn("--role builder", line)
+        self.assertIn(f"--commit {self.head}", line)
+        self.assertIn("--agent backlog-setup", line)
+
+    def test_nothing_is_posted_or_printed_on_a_no_op(self):
+        self.apply()
+        self.posted.clear()
+        self.assertEqual(0, self.apply(story=7))
+        self.assertEqual([], self.posted)
+        self.assertIn("Nothing to change", self.text)
+        self.assertNotIn("log_action.py", self.text)
+
+    def test_a_dry_run_posts_nothing(self):
+        self.lines = []
+        code = backlog_setup.run_setup(self.repo, False, backlog_setup.Api(self.runner), out=self.lines.append, story=7)
+        self.assertEqual(0, code)
+        self.assertEqual([], self.posted)
+        self.assertNotIn("log_action.py", self.text)
+
+    def test_a_failed_post_exits_non_zero_and_prints_the_line(self):
+        def failing(args, stdin=None):
+            return (1, "", "HTTP 404") if args[1].startswith("repos/") else self.fake.runner(args, stdin)
+        self.lines = []
+        code = backlog_setup.run_setup(self.repo, True, backlog_setup.Api(failing), out=self.lines.append, story=7)
+        self.assertEqual(1, code)
+        self.assertIn("was not posted", self.text)
+        self.assertIn("log_action.py", self.text)
+
+
 class TestLauncher(SetupCase):
     def call(self, *argv):
         buf = io.StringIO()
@@ -417,6 +489,10 @@ class TestLauncher(SetupCase):
         self.assertEqual(1, self.call(str(self.tmp / "nope"))[0])
         self.assertEqual(1, self.call(str(self.repo), "--map")[0])
         self.assertEqual(1, self.call(str(self.repo), "--bogus")[0])
+
+    def test_story_must_be_a_number(self):
+        self.assertEqual(1, self.call(str(self.repo), "--story", "abc")[0])
+        self.assertEqual(1, self.call(str(self.repo), "--story")[0])
 
     def test_the_command_is_listed(self):
         self.assertTrue(any(c.startswith("olivercode backlog-setup") for c, _ in launcher.COMMANDS))
