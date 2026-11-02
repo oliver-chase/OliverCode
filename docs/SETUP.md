@@ -282,7 +282,7 @@ Clone OliverCode and each fleet repo side by side in one folder, then copy `oliv
 Four things need a person, because no script restores them:
 
 - **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`. `scripts/olivercode discover --root <dir>` finds whatever is present and cannot clone what is absent. The registry lists what should be there
-- **Marketplace plugins.** Third-party plugins install through Claude Code and never through this repo.
+- **Marketplace plugins.** Third-party plugins install through Claude Code and never through this repo
 - **Application plugins.** An editor or notes app that tracks plugin settings in git gets those settings back with the clone, and the compiled plugin code does not return. Reinstall each plugin from its store
 - **MCP server authorization.** This is interactive OAuth per server, in a Claude Code session
 
@@ -366,7 +366,7 @@ Fixes for the failures a user hits, listed by symptom.
 
 ### Governance failure
 
-Run the gates against every tracked file, and not only the staged ones:
+Run the gates against every tracked file, staged or not:
 
 ```bash
 bash scripts/validate.sh --tree

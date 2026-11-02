@@ -23,8 +23,8 @@ cc = load_script("scripts/lib/consistency_check.py", "cc")
 def _sandbox(dest: Path) -> Path:
     """Copy the WORKING TREE's tracked files into a throwaway git repo.
 
-    Deliberately not `git clone`: the checker reads git ls-files, and a clone would
-    test HEAD rather than the tree under test -- silently green on uncommitted work.
+    A `git clone` would test HEAD, so the sandbox copies files directly. The checker reads
+    git ls-files, and a clone would stay green on uncommitted work.
     """
     dest.mkdir(parents=True, exist_ok=True)
     listing = git(REPO_ROOT, "ls-files", "-z").stdout.split("\0")
@@ -83,11 +83,11 @@ class TestMutations(unittest.TestCase):
             "core/templates/project/pre-commit", "Gate 1/9", "Gate 1/5"))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
-        """The original false claim, in the shape the old pattern could not match.
+        """A false claim in the shape a number-adjacent pattern cannot match.
 
         Exercises all three mechanisms at once: the modifier-tolerant claim pattern
         ("N pre-commit gates"), the cue sitting on the PRECEDING line, and comparison
-        against the template's count rather than OliverCode's. The planted number is
+        against the template's count, which differs from OliverCode's. The planted number is
         the private variant's total, which matches neither, so the claim is wrong
         whichever hook it resolves to.
         """

@@ -22,7 +22,7 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 
 # Snippets that are deliberate reuse, not drift -- matched as a normalized (lowercase,
 # punctuation-stripped) substring of the finding, so one entry covers every file pair
-# that shares it instead of listing pairs combinatorially. An entry without a real
+# that shares it, so pairs need no listing. An entry without a real
 # reason recreates the blind spot this check exists to close.
 DECLARED_MARKERS: dict[str, str] = {
     "dirname readlink claude claude md": (
@@ -52,7 +52,7 @@ DECLARED_MARKERS: dict[str, str] = {
     "send this first in one turn exactly as written with no other opening line and no "
     "closing recap": (
         "The fixed instruction that opens every skill's Opening message section "
-        "(skill-creation's baseline rule 13). Every skill a person triggers cold carries "
+        "(skill-creation's baseline rule 12). Every skill a person triggers cold carries "
         "the same words, so the agent recognises the section; it is a convention line, "
         "not a rule restated."
     ),

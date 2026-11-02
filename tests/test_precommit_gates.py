@@ -224,8 +224,7 @@ class TestGate3PII(GateHarness):
 
 
 class TestGate6ContractIntegrity(GateHarness):
-    """Guards the container-path class. A `_Management/` pattern was removed after it
-    was found to have zero hits across all six repos and no trace in git history."""
+    """Guards the container-path class: a workspace path in a committed file blocks."""
 
     def test_workspace_path_blocks(self):
         self.stage("tool.sh", "cd /workspace/project\n")

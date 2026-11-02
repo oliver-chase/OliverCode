@@ -1,4 +1,4 @@
-"""One repeatable setup and repair for a repo's GitHub Project board (story #55).
+"""One repeatable setup and repair for a repo's GitHub Project board .
 
 `olivercode backlog-setup [DIR] [--apply]` calls `run_setup`, and `olivercode health` calls
 `boards_health`. The baseline itself lives once in `shared/kanban-baseline.json`, and the
@@ -8,8 +8,7 @@ Every GitHub call goes through an injectable `Api`, so the unit tests run with a
 
 Why the repair is safe: GitHub's `updateProjectV2Field` rewrites a single-select field's options. An option
 sent with its `id` keeps that id and every item value that points at it. An option sent without one is
-created new, and the items that pointed at the old option lose their value. A test against a live Project
-showed both behaviors. The command therefore sends every existing option with its id, and still snapshots
+created new, and the items that pointed at the old option lose their value. Both behaviors are verified against a live Project. The command therefore sends every existing option with its id, and still snapshots
 every item first and verifies the per-option counts afterward, because that is the only protection against
 a change in GitHub's behavior.
 """

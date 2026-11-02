@@ -1,9 +1,8 @@
 """Tests for scripts/hooks/early-stop-guard.py, the Claude Code Stop hook.
 
 The guard sends a turn back to work when it ends by promising work it did not do. It must
-not block a turn that ends waiting on the owner: on its first night live it blocked a
-finished turn whose question sat in the turn's next-step tool call, which the guard never
-read (#31). Each case writes a real-shaped transcript and runs the hook as Claude Code does.
+not block a turn that ends waiting on the owner, including a finished turn whose question
+sits in the turn's next-step tool call. Each case writes a real-shaped transcript and runs the hook as Claude Code does.
 """
 
 import json

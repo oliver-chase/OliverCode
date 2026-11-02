@@ -1,7 +1,6 @@
 """Health checks: governance-waiver expiry, the GitHub About, and fleet topology.
 
-Extracted from the launcher; it re-exports these names, so callers and tests are
-unchanged. Every check returns (passed, failed, skipped) for the launcher's tally.
+The launcher re-exports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
 """
 
 from __future__ import annotations
@@ -138,19 +137,16 @@ def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
 
 # ── Topology checks ──────────────────────────────────────────────────────────
 # The gates cover CONTENT: no secret, no emoji, no archived copy in a commit.
-# Nothing covered TOPOLOGY -- where things live, whether they are still wired
-# together, whether they could be recovered. Every failure below ran undetected
-# for weeks because no check looked:
+# The checks below cover TOPOLOGY -- where things live, whether they are still wired
+# together, whether they could be recovered. Each failure class is silent without a check:
 #   - two folder repos pointed at a GitHub repo that had been deleted, so
 #     neither was backed up anywhere and pushing was impossible
 #   - a 423MB blob sat in one of those histories, over GitHub's 100MB per-file
 #     hard limit, so that repo could never have pushed even with a live remote
-#   - four plugins were symlinked into ~/.claude/plugins by hand, and nothing
-#     would have recreated them on another machine (the check this added was
-#     retired when plugins moved into the skills folder -- see
-#     `_check_vault_skill_links` for the same risk at the skill layer)
+#   - a hand-made symlink that nothing would recreate on another machine (see
+#     `_check_vault_skill_links` for the skill layer)
 # All of them read outside the framework repo, so all of them degrade to WARN
-# rather than FAIL when that context is absent: a standalone clone stays HEALTHY.
+# when that context is absent, and a standalone clone stays HEALTHY.
 
 GITHUB_FILE_LIMIT = 100 * 1024 * 1024
 
@@ -295,7 +291,7 @@ def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int
 
     A deleted or renamed remote is the failure mode with no local symptom at all:
     committing keeps working, `git status` stays clean, and the work is simply not
-    backed up anywhere. Two folder repos sat that way for weeks.
+    backed up anywhere.
 
     Only a host that answers and DENIES the repo counts as a FAIL. Two cases that
     look similar are deliberately warnings instead:

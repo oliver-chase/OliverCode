@@ -51,8 +51,8 @@ while IFS= read -r -d '' file; do
     [[ "$link" =~ ^# ]] && continue  # anchor-only links are fine
     
     # Resolve + normalize relative to the source file's dir. python normpath works even
-    # when an intermediate dir is missing — the old `cd`-based normalize silently emptied
-    # `target` for those, hiding genuinely broken links as "valid".
+    # when an intermediate dir is missing. A `cd`-based normalize would empty
+    # `target` for those and hide genuinely broken links as "valid".
     target="$(python3 -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$dir/$link")"
 
     # runtime/control-plane/ is gitignored, local-only state (docs/RULES.md) —

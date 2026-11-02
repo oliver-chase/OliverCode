@@ -1,12 +1,11 @@
 """Detect checks that cannot fail.
 
-Ten defects in this repo were one shape: a check that reported success it had not
-earned. Each was scaffolding left behind after real usage diverged, and reading the
-output could never catch any of them, because the output always said PASS.
-GATE-FALSIFIABILITY-1 in docs/DECISIONS.md lists all ten.
+A check that reports success it has not earned is the defect this module looks for.
+Reading the output cannot catch it, because the output always says PASS.
+GATE-FALSIFIABILITY-1 in docs/DECISIONS.md lists the known cases.
 
-Two detectors, precise rather than clever -- a noisy meta-check gets ignored, which
-is the failure it exists to prevent.
+Two detectors, kept precise because a noisy meta-check gets ignored, which is the
+failure it exists to prevent.
 """
 
 from __future__ import annotations

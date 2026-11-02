@@ -71,11 +71,9 @@ def resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
 def iter_fleet(profiles: dict, fleet_root: Path):
     """Yield (name, profile, repo_path) for every fleet repo, framework repo excluded.
 
-    Single definition on purpose. health and sync-hooks previously each carried their
-    own copy of this filter and had already drifted apart: one compared the self-skip
-    case-sensitively and the other did not, so a profile named "OliverCode" -- the
-    casing `discover` emits from a directory name -- was skipped by sync-hooks and
-    treated as a governed repo by health. It lives here so the two callers share one copy.
+    Health and sync-hooks share this one filter. It compares the self-skip
+    case-insensitively, so a profile named "OliverCode" -- the casing `discover` emits
+    from a directory name -- is skipped by both.
     """
     for name, profile in profiles.items():
         if name.lower() == "olivercode":

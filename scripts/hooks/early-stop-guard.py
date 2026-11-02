@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook: catches a turn that promises work instead of doing it.
+"""Claude Code Stop hook: catches a turn that promises work without doing it.
 
-EARLY-STOP-1 in docs/DECISIONS.md. OliverCode's own implementation of the
-verified-effect idea in the third-party fablize plugin's finish-the-work.sh --
-written fresh against this repo's own conventions (stdlib Python, no bash/python
-hybrid), not vendored. Deterministic regex, not a model call: it looks at only
+EARLY-STOP-1 in docs/DECISIONS.md has the reasoning. The hook is stdlib Python
+and uses a deterministic regex with no model call: it looks at only
 the closing paragraph of the last assistant turn for future-intent language
 ("I'll implement X", "let me build Y") with no tool call and no question to the
-user, and asks the session to continue instead of stopping.
+user, and asks the session to continue.
 
 Fails open on anything it cannot parse -- a hook that blocks a legitimate stop
 because of its own bug is worse than a missed catch.

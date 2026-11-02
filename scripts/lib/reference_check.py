@@ -2,8 +2,8 @@
 
 The markdown-link half of link-check.sh only sees inline `[text](path.md)` links.
 This repo's real cross-references are backtick-quoted repo paths, and there are two
-orders of magnitude more of them — every stale path the full-file audit found lived
-in a backtick, invisible to a link checker that only reads markdown link syntax.
+orders of magnitude more of them. A link checker that only reads markdown link
+syntax cannot see a stale path in a backtick.
 
 A "reference" here is a backtick-quoted token whose first path segment is a tracked
 top-level directory. Anything else (prose, commands, identifiers) is ignored.
@@ -59,9 +59,8 @@ TEMPLATE_PREFIX = "core/templates/"
 
 # A plan's whole job is describing paths that don't exist yet (what Step N will build)
 # or that exist in a different repo the plan is centered on (the vault, a fleet repo) --
-# neither case is a real claim about this repo's current tree. Added 2026-09-15 after a
-# plan doc correctly describing a not-yet-built scripts/local-scheduler/ failed this
-# check the same way a real broken reference would, with no way to tell the two apart.
+# neither case is a real claim about this repo's current tree. A plan doc describing a
+# not-yet-built path would otherwise fail like a real broken reference.
 PLANS_PREFIX = "docs/plans/"
 
 # A skill's own tests build fake skills in a temporary folder and name paths inside them,

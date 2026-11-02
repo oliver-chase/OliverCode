@@ -12,13 +12,13 @@
 including review/audit subagents — finishing a unit of work APPENDS a
 one-line status entry under "Activity log" in the same commit as the
 work, so an agent picking up mid-stream (or working in parallel) sees
-reality, not a stale snapshot. One line per entry. Detail lives in the
+current reality. One line per entry. Detail lives in the
 commit message or the spec it points to.**
 
 ### Where things stand (<date>)
 
 <3-8 bullets: what is built/verified, what changed most recently.
-Rewrite this block to stay current — it is a summary, not a log.>
+Rewrite this block to stay current. It is a summary of now.>
 
 ### Coverage
 

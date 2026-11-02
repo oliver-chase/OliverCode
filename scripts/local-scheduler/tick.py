@@ -1,22 +1,17 @@
 #!/usr/bin/env python3
 """OliverCode local scheduler -- tick.
 
-Mirrors the fleet's proven pattern (a product repo's own scripts/local-scheduler/
-tick.mjs): one launchd agent fires this every 15 minutes, plus once on load (which
-also covers "the Mac just woke up"). This script decides what is actually due by
-elapsed time against marker files, not exact-minute alignment -- a missed tick
-while the Mac sleeps just means the next tick catches up, instead of the job
-silently skipping the way plain cron does.
+One launchd agent fires this every 15 minutes, plus once on load (which
+also covers "the Mac just woke up"). This script decides what is due by
+elapsed time against marker files, so a tick missed while the Mac sleeps is
+caught up by the next tick, where plain cron would skip the job silently.
 
-Python, not bash, invoked directly (not via a shebang'd bash wrapper): a bare
-bash spawned by launchd from under ~/Documents has no Full Disk Access of its
-own on this machine and fails "Operation not permitted" just cd-ing in -- a real,
-previously-hit failure mode in the sibling scheduler this one mirrors.
-Invoking the python3 binary directly in the plist's ProgramArguments sidesteps it
-the same way that one invokes node directly instead of a bash entry point.
+The plist's ProgramArguments invoke the python3 binary directly. A bash
+script spawned by launchd from under ~/Documents has no Full Disk Access
+and fails "Operation not permitted" on its first cd.
 
-Deliberately does NOT touch a job's marker on failure -- the job stays "due" so
-the next tick (15 minutes later) retries, instead of waiting a full interval.
+A job's marker stays untouched on failure, so the job stays "due" and the
+next tick (15 minutes later) retries without waiting a full interval.
 """
 from __future__ import annotations
 

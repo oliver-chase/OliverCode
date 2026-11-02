@@ -1,7 +1,6 @@
 """Skill discovery: read every skills/*/SKILL.md's frontmatter.
 
-Extracted from the launcher so the catalog logic is importable and testable on its
-own; the launcher re-exports both names, so callers and tests are unchanged.
+The launcher re-exports both names, so the catalog logic is importable and testable on its own.
 """
 
 from __future__ import annotations
@@ -11,10 +10,9 @@ from pathlib import Path
 def _parse_skill_frontmatter(skill_md: Path) -> tuple[str, str]:
     """Extract (name, description) from a SKILL.md's YAML frontmatter.
 
-    Hand-rolled rather than a PyYAML dependency: this repo's frontmatter is a
+    A small hand-rolled parser avoids a PyYAML dependency: this repo's frontmatter is a
     narrow subset (flat `key: value` pairs, optional `>`/`>-` folded block
-    scalars for `description`) and stays that way by convention, so a small
-    parser here is less than the cost of a new dependency.
+    scalars for `description`) and stays that way by convention.
     """
     name = skill_md.parent.name
     description = ""
@@ -56,9 +54,9 @@ def _parse_skill_frontmatter(skill_md: Path) -> tuple[str, str]:
 def _load_skills(oc_root: Path) -> list[tuple[str, str]]:
     """Every skill in skills/: (name, description), sorted by name.
 
-    Reads SKILL.md frontmatter directly rather than skills/INDEX.md's prose
-    tables — INDEX.md is for humans browsing by category; this is the
-    always-accurate source since it can't drift from the skills it describes.
+    Reads SKILL.md frontmatter directly. INDEX.md is for humans browsing by
+    category, and the frontmatter is the always-accurate source because it
+    cannot drift from the skills it describes.
     """
     skills_dir = oc_root / "skills"
     entries: list[tuple[str, str]] = []

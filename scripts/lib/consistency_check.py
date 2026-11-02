@@ -27,9 +27,9 @@ _NUMBER_WORDS = {
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
 }
 # Up to three modifier words may sit between the number and "gates". Without this the
-# pattern missed README's own headline claim -- "8 pre-commit gates" -- because the
-# number was not adjacent to the noun. Modifiers must be alphabetic, so "6 of the 8
-# gates" still binds to the 8 rather than reading the 6 as a total.
+# pattern would miss a headline claim such as "8 pre-commit gates", where the
+# number is not adjacent to the noun. Modifiers must be alphabetic, so "6 of the 8
+# gates" binds to the 8 and the 6 is not read as a total.
 GATE_CLAIM = re.compile(
     r"\b(\d+|" + "|".join(_NUMBER_WORDS) + r")\s+(?:[a-z][a-z-]*\s+){0,3}gates\b",
     re.IGNORECASE,
@@ -171,12 +171,9 @@ def _hook_for_line(rel: str, line: str, preceding: tuple[str, ...] = ()) -> str:
 def check_gate_count(repo_root: Path) -> list[str]:
     """No tracked doc may claim a gate count the corresponding hook contradicts.
 
-    Resolves each claim to the hook it is ABOUT, rather than comparing everything to
-    OliverCode's own hook. That earlier shortcut is why this check passed for months
-    while five documents told forkers their repos would get eight gates: the docs said
-    "8", OliverCode's hook had 8, and the template's 6 was never consulted -- the old
-    body skipped core/templates/ outright with the comment "the template hook has its
-    own, smaller gate count". The discrepancy was known to the checker and unchecked.
+    Resolves each claim to the hook it is ABOUT, so a doc that tells forkers their repos
+    get eight gates is compared with the template's six and not with OliverCode's own
+    eight. GATE-COUNT-1 in docs/DECISIONS.md has the reasoning.
     """
     totals, failures = _hook_totals(repo_root)
     if not totals:
