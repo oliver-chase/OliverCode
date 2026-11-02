@@ -427,7 +427,7 @@ class TestUnknownArgsRejected(unittest.TestCase):
 
 
 class TestBootstrap(unittest.TestCase):
-    """`bootstrap` executes the manifest that nothing previously read. Its modes are
+    """`bootstrap` executes the project bootstrap manifest. Its modes are
     the correctness property: strict overwrites, presence must never clobber."""
 
     def setUp(self):

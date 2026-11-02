@@ -62,9 +62,9 @@ Priority: P1. Size: M. Work type: Epic.
 
 ## Sizing an XL or L item
 
-An XL or L item usually touches N things across the fleet, which is where a remembered "got them all" is most likely wrong. On 2026-09-22 an issue's own audit command searched `.md` files only and missed two `.py` citations of the string it meant to count.
+An XL or L item usually touches N things across the fleet, which is where a remembered "got them all" is most likely wrong. An audit command that searches `.md` files only misses `.py` citations of the string it counts.
 
-1. File the audit as its own Story before any fix Story exists. Its output is a re-runnable command (a grep or a script) stated in the issue body, so anyone running it fresh gets the same count.
-2. Split the fix by the real boundary, such as family or file type, with one Story per boundary and never one Story making all N edits in one unverified pass.
-3. Run the identical command before and after. The close-out comment states both numbers, and the after number is 0 or a named, expected residual. "Fixed them all" with no number is not evidence.
-4. A wider result than the draft expected is a finding. Comment it as a correction and never narrow the scope to match the draft.
+1. File the audit as its own Story before any fix Story exists. Its output is a re-runnable command (a grep or a script) stated in the issue body, so anyone running it fresh gets the same count
+2. Split the fix by the real boundary, such as family or file type, with one Story per boundary and never one Story making all N edits in one unverified pass
+3. Run the identical command before and after. The close-out comment states both numbers, and the after number is 0 or a named, expected residual. "Fixed them all" with no number is not evidence
+4. A wider result than the draft expected is a finding. Comment it as a correction and never narrow the scope to match the draft

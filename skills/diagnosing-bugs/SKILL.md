@@ -17,16 +17,16 @@ Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give
 
 ### Ways to construct one — try them in roughly this order
 
-1. **Failing test** at whatever seam reaches the bug — unit, integration, e2e.
-2. **Curl / HTTP script** against a running dev server.
-3. **CLI invocation** with a fixture input, diffing stdout against a known-good snapshot.
-4. **Headless browser script** (Playwright / Puppeteer) — drives the UI, asserts on DOM/console/network.
-5. **Replay a captured trace.** Save a real network request / payload / event log to disk. Replay it through the code path in isolation.
-6. **Throwaway harness.** Build a minimal subset of the system (one service, mocked deps) that exercises the bug code path with a single function call.
-7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode.
-8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it.
-9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
-10. **HITL bash script.** Last resort. If a human must click, drive _them_ with a structured script so the loop is still structured.
+1. **Failing test** at whatever seam reaches the bug — unit, integration, e2e
+2. **Curl / HTTP script** against a running dev server
+3. **CLI invocation** with a fixture input, diffing stdout against a known-good snapshot
+4. **Headless browser script** (Playwright / Puppeteer) — drives the UI, asserts on DOM/console/network
+5. **Replay a captured trace.** Save a real network request / payload / event log to disk. Replay it through the code path in isolation
+6. **Throwaway harness.** Build a minimal subset of the system (one service, mocked deps) that exercises the bug code path with a single function call
+7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode
+8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it
+9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs
+10. **HITL bash script.** Last resort. If a human must click, drive _them_ with a structured script so the loop is still structured
 
 Build the right feedback loop, and the bug is 90% fixed.
 
@@ -52,10 +52,10 @@ Stop and say so explicitly. List what you tried. Ask the user for: (a) access to
 
 Phase 1 is done when the loop is **tight** and **red-capable**: you can name **one command** that you have **already run at least once**, and that is:
 
-- [ ] **Red-capable** — it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed.
-- [ ] **Deterministic** — same verdict every run.
-- [ ] **Fast** — seconds, not minutes.
-- [ ] **Agent-runnable** — you can run it unattended.
+- [ ] **Red-capable** — it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed
+- [ ] **Deterministic** — same verdict every run
+- [ ] **Fast** — seconds, not minutes
+- [ ] **Agent-runnable** — you can run it unattended
 
 If you catch yourself reading code to build a theory before this command exists, **stop.** No red-capable command, no Phase 2.
 
@@ -65,9 +65,9 @@ Run the loop. Watch it go red.
 
 Confirm:
 
-- [ ] The loop produces the failure mode the **user** described — not a different failure nearby.
-- [ ] The failure is reproducible across multiple runs.
-- [ ] You have captured the exact symptom so later phases can verify the fix.
+- [ ] The loop produces the failure mode the **user** described — not a different failure nearby
+- [ ] The failure is reproducible across multiple runs
+- [ ] You have captured the exact symptom so later phases can verify the fix
 
 ### Minimise
 
@@ -77,7 +77,7 @@ Do not proceed until you have reproduced **and** minimised.
 
 ## Phase 3 — Hypothesise
 
-Check the obvious shortcut first: if Phase 1/2 shows the code path itself is correct, the data source (file, Sheet, API, mailbox) is wrong — fix the data, not the code. Don't spend a hypothesis round on code that already checks out.
+Check the obvious shortcut first: if Phase 1/2 shows the code path itself is correct, the data source (file, Sheet, API, mailbox) is wrong — fix the data. Don't spend a hypothesis round on code that already checks out.
 
 Generate **3–5 ranked hypotheses** before testing any of them.
 
@@ -93,9 +93,9 @@ Each probe must map to a specific prediction from Phase 3. **Change one variable
 
 Tool preference:
 
-1. **Debugger / REPL inspection** if the env supports it.
-2. **Targeted logs** at the boundaries that distinguish hypotheses.
-3. Never "log everything and grep".
+1. **Debugger / REPL inspection** if the env supports it
+2. **Targeted logs** at the boundaries that distinguish hypotheses
+3. Never "log everything and grep"
 
 **Tag every debug log** with a unique prefix, e.g. `[DEBUG-a4f2]`. Cleanup at the end becomes a single grep.
 
@@ -111,11 +111,11 @@ A correct seam is one where the test exercises the **real bug pattern** as it oc
 
 If a correct seam exists:
 
-1. Turn the minimised repro into a failing test at that seam.
-2. Watch it fail.
-3. Apply the fix.
-4. Watch it pass.
-5. Re-run the Phase 1 feedback loop against the original scenario.
+1. Turn the minimised repro into a failing test at that seam
+2. Watch it fail
+3. Apply the fix
+4. Watch it pass
+5. Re-run the Phase 1 feedback loop against the original scenario
 
 ## Phase 6 — Cleanup + post-mortem
 

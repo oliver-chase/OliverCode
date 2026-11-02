@@ -2,17 +2,14 @@
 # ─── OliverCode local scheduler — install ────────────────────────────────────
 #
 # One command: `bash scripts/local-scheduler/install.sh` from inside this
-# checkout. Mirrors a product repo's own proven scripts/local-scheduler/
-# pattern exactly -- see tick.py's own header for why.
+# checkout. See tick.py's header for why launchd runs python directly.
 #
 # Registers a launchd agent running tick.py every 15 minutes, plus once on
 # load (also covers "the Mac just woke up"). tick.py decides what is due --
 # push-fleet and audit-fleet each run on their own interval, checked against
-# marker files, not fixed launchd schedules. This is deliberate: a second,
-# independent scheduling mechanism (a crontab entry, say) running the same
-# jobs with no lock between the two is exactly the failure mode a sibling
-# scheduler in this fleet already hit and fixed -- one real scheduler here,
-# not two.
+# marker files, not fixed launchd schedules. A second scheduling mechanism
+# (a crontab entry, say) running the same jobs would have no lock against this
+# one, so this is the only scheduler.
 #
 # Every path below resolves fresh at install time -- nothing hardcoded to one
 # machine.

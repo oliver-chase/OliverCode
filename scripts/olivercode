@@ -680,7 +680,7 @@ def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> 
 
     # 6. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
-    # four failures that ran undetected because nothing looked.
+    # failure classes.
     t.add(*_check_vault_skill_links(_skills_root()))
     t.add(*_check_voice_copies(OC_ROOT, Path.home() / ".claude" / "skills"))
     t.add(*_check_scheduler(Path.home()))
@@ -742,10 +742,9 @@ def command_backlog_setup(argv: list[str]) -> int:
                                     agent=(opts["--agent"] or ["backlog-setup"])[-1])
 
 
-# _resolve_repo_path / _iter_fleet moved to lib/repo_profiles.py 2026-09-15 so
-# other scripts reuse fleet-repo resolution instead of keeping a copy. Imported
-# under their original names below so `launcher._iter_fleet` etc. keep working for
-# existing callers and tests.
+# _resolve_repo_path and _iter_fleet live in lib/repo_profiles.py so other scripts share
+# fleet-repo resolution. They are imported under their original names below, so
+# `launcher._iter_fleet` and the rest keep working for callers and tests.
 
 
 def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> list[str]:
@@ -986,7 +985,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
         variant = profile.get("hookVariant")
         if variant:
             # Declared variant: overwriting its pre-commit would destroy a considered customization.
-            # `health` reports it as WARN rather than drift. Remove the profile field
+            # `health` reports it as WARN, not drift. Remove the profile field
             # to bring the repo back under the template.
             _install_pre_push(repo_path, templates_dir)
             print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced")
@@ -994,9 +993,8 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
             continue
         # A private repo gets the private variant, which drops the PII gate (it holds
         # personal data by design) and adds the archived-content gate. Declared per
-        # profile rather than hardcoded: one private repo was the only private target
-        # for a while, so the second one had its hook installed by hand and would have
-        # gone stale on the next template change, silently.
+        # profile, so every private repo gets its hook from sync-hooks and none is
+        # installed by hand and left to go stale on the next template change.
         is_private = bool(profile.get("private"))
         _install_hook_pair(repo_path, templates_dir, private_repo=is_private)
         variant_note = "private-variant " if is_private else ""
@@ -1152,7 +1150,7 @@ def command_update() -> int:
     On a fork `origin` is the FORK, so this does not fetch upstream framework changes.
     Pulling those is a deliberate act with real merge consequences -- a fork carries local
     edits to CLAUDE.md, contracts, and templates, which is the whole point of forking -- so
-    it is documented in docs/SETUP.md ("Staying current") rather than automated here.
+    it is documented in docs/SETUP.md ("Staying current") and not automated here.
     """
     pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
     if pull_code != 0:
@@ -1183,9 +1181,9 @@ def _take_root_flag(argv: list[str]) -> tuple[Path | None, list[str]]:
 def _reject_extra(cmd: str, rest: list[str]) -> None:
     """Unknown arguments must fail loudly.
 
-    Silently ignoring them is worse than rejecting them: `sync-hooks --root /somewhere`
-    used to ignore the flag, sync the DEFAULT fleet, and print "6 targets synced" -- so a
-    fork with a different layout got a success message for work done on the wrong repos.
+    Rejecting them beats ignoring them: `sync-hooks --root /somewhere` would otherwise
+    sync the DEFAULT fleet and print "6 targets synced", giving a fork with a different
+    layout a success message for work done on the wrong repos.
     """
     if rest:
         print(f"Error: unexpected argument(s) for '{cmd}': {' '.join(rest)}")

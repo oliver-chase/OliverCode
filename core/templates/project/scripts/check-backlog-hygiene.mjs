@@ -30,13 +30,11 @@ const relPath = CANDIDATES[[join(ROOT, CANDIDATES[0]), join(ROOT, CANDIDATES[1])
 
 // Heading lines only — "DONE" in a paragraph can be describing the work still
 // needed to reach it, not announcing that a section is finished. A heading
-// announcing it is the one place this fleet's own convention consistently
-// used to mark a section safe to delete instead of deleting it.
+// announcing it is the fleet's convention for marking a section safe to delete.
 //
-// "not ... done" (in that order) negates the marker rather than setting it —
-// "### Not done — genuine follow-on" is the opposite of finished, and a plain
-// \bDONE\b test flagged it as a false positive on the repo this gate was
-// written against.
+// "not ... done" (in that order) negates the marker.
+// "### Not done — genuine follow-on" is the opposite of finished, so a plain
+// \bDONE\b test would flag it falsely.
 const doneHeadings = [];
 lines.forEach((line, i) => {
   if (!/^#{1,6}\s/.test(line)) return;

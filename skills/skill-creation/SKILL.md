@@ -28,24 +28,23 @@ These rules apply to skills in a personal skills folder. A skill that ships insi
 
 `python3 skills/audit/scripts/check_skill_structure.py` enforces the rules a script can check, including the 150-word description cap. The rest are judgment calls the audit skill reads.
 
-1. **Generic at creation.** The skill's own files hold no personal fact in code or prose: no name, address, account ID, token or local path. A value the skill needs comes from one config file in the skill folder or from a question in the chat.
-2. **No read outside the folder.** No `../`, no `$HOME/.claude/skills/<other>/...`, no vault path, no sibling skill's script or config. The skill carries any rule it needs as its own text.
-3. **Person setup.** The skill asks the person in the chat for what it needs, such as a file, a name or an ID. It asks once per chat and asks the fewest questions. It saves only what nothing else can hold.
-   - A value may go in `.env.local` when it must last between sessions: a tracker path, a Slack ID, an avoid-list. Other state lives in a file the person names, or in a Slack message or draft. The skill says which at the top.
-   - A skill that ships an `.env.local.example` has a setup mode that walks a person with no `.env.local` through each value.
-4. **One connector-missing line.** The skill checks a connector with one call. If the connector is missing, it says what to enable and the fallback in one line, then continues.
-5. **Describe what the skill does, nothing else.** A skill file holds no decision ID, date, issue number or person. It holds no history, ledger, change log, archive note, Known gaps section or maintainer section. It names no vault or fleet-tooling place. A comment says what the code does, never how it came to be. The reason for a rule goes in the family `DECISIONS.md`, the commit message or the issue.
-6. **Placeholder names.** Exactly three names are fictional-safe: `Jane Doe`, `John Smith`, `Sally May`. Any example person name is one of them.
-7. **Portable-zip limits.** The `name` field equals the folder name, in lowercase letters, digits and hyphens, at most 64 characters. The `description` field is at most 1024 characters and under 150 words. It leads with the trigger phrases a person says.
-8. **One line per paragraph.** Write each paragraph and each list item on one source line. A hard-wrapped line shows as short uneven rows.
-9. **Name no other skill and no outside place.** The skill's text never names a sibling skill, the owner's vault, a vault folder, or an earlier name of the skill. A description says what the skill is not for and names no alternative.
-10. **The skill folder holds only what the skill uses.** Put the family `DECISIONS.md` and `README.md` in the family folder, beside the skill. Put tests in `<family>/tests/<skill>/`. A zip of the folder then carries no developer file.
-11. **Names a person would say.** A skill, folder or file name uses the word a person says aloud. No number suffix, ticket id or decision id appears in a name or in text the person reads. A decision id may stay in a code comment and in `DECISIONS.md`.
-12. **Count the files before you finish.** Run `find <skill> -type f | wc -l`. For each file, name what the skill does not need and cut it.
-13. **Open with a message that says what to send.** A skill a person triggers cold has a `## Opening message` section in `SKILL.md`. The section starts with one line: send this first, in one turn, exactly as written. The message says why the result matters, what the skill does and when the person approves. Then it says what input helps and lists the ways to answer. It holds no personal fact, and an answer given to it is never asked again.
-14. **A step a command can do is a command.** Opening a file, counting rows, comparing two structures or finding a marker is a script that prints the answer. The text tells the model to run it and to act on the output. A model reading a file by hand on every run costs tokens and gets it wrong in a new way each time.
-15. **A script has a test that goes red without its guard.** Build the test, remove the guard once, check that the test fails, then restore it. `check_skill_structure.py --weight` lists the scripts no test names.
-16. **A skill with several tasks loads one reference per task.** A route row names one file. A setup file loads only when a one-line `check` command says setup is not done.
+1. **Generic at creation.** The skill's own files hold no personal fact in code or prose: no name, address, account ID, token or local path. A value the skill needs comes from one config file in the skill folder or from a question in the chat
+2. **No read outside the folder.** No `../`, no `$HOME/.claude/skills/<other>/...`, no vault path, no sibling skill's script or config. The skill carries any rule it needs as its own text
+3. **Person setup.** The skill asks the person in the chat for what it needs, such as a file, a name or an ID. It asks once per chat and asks the fewest questions. It saves only what nothing else can hold
+   - A value may go in `.env.local` when it must last between sessions: a tracker path, a Slack ID, an avoid-list. Other state lives in a file the person names, or in a Slack message or draft. The skill says which at the top
+   - A skill that ships an `.env.local.example` has a setup mode that walks a person with no `.env.local` through each value
+4. **One connector-missing line.** The skill checks a connector with one call. If the connector is missing, it says what to enable and the fallback in one line, then continues
+5. **Describe what the skill does, nothing else.** A skill file holds no decision ID, date, issue number or person. It holds no history, ledger, change log, archive note, Known gaps section or maintainer section. It names no vault or fleet-tooling place. A comment says what the code does, never how it came to be. The reason for a rule goes in the family `DECISIONS.md`, the commit message or the issue
+6. **Placeholder names.** Exactly three names are fictional-safe: `Jane Doe`, `John Smith`, `Sally May`. Any example person name is one of them
+7. **Portable-zip limits.** The `name` field equals the folder name, in lowercase letters, digits and hyphens, at most 64 characters. The `description` field is at most 1024 characters and under 150 words. It leads with the trigger phrases a person says
+8. **Name no other skill and no outside place.** The skill's text never names a sibling skill, the owner's vault, a vault folder, or an earlier name of the skill. A description says what the skill is not for and names no alternative
+9. **The skill folder holds only what the skill uses.** Put the family `DECISIONS.md` and `README.md` in the family folder, beside the skill. Put tests in `<family>/tests/<skill>/`. A zip of the folder then carries no developer file
+10. **Names a person would say.** A skill, folder or file name uses the word a person says aloud. No number suffix, ticket id or decision id appears in a name or in text the person reads. A decision id may stay in a code comment and in `DECISIONS.md`
+11. **Count the files before you finish.** Run `find <skill> -type f | wc -l`. For each file, name what the skill does not need and cut it
+12. **Open with a message that says what to send.** A skill a person triggers cold has a `## Opening message` section in `SKILL.md`. The section starts with one line: send this first, in one turn, exactly as written. The message says why the result matters, what the skill does and when the person approves. Then it says what input helps and lists the ways to answer. It holds no personal fact, and an answer given to it is never asked again
+13. **A step a command can do is a command.** Opening a file, counting rows, comparing two structures or finding a marker is a script that prints the answer. The text tells the model to run it and to act on the output. A model reading a file by hand on every run costs tokens and gets it wrong in a new way each time
+14. **A script has a test that goes red without its guard.** Build the test, remove the guard once, check that the test fails, then restore it. `check_skill_structure.py --weight` lists the scripts no test names
+15. **A skill with several tasks loads one reference per task.** A route row names one file. A setup file loads only when a one-line `check` command says setup is not done
 
 ## 0. Write the target in four lines
 
@@ -63,12 +62,12 @@ A tracker, a record store or a growing list needs a home that the connectors and
 
 The job may be repeatable automation, or it may need judgment each time. Default to automation, and add a model call only where a deterministic rule cannot do the step. These rules apply:
 
-- **Route and query without a model.** Intent routing uses keyword or pattern matching. Data queries read the store directly. The order is intent router, data query, static fallback, and a model call last, only when the earlier steps fail.
-- **Every model call has a non-model fallback.** An error returns a helpful message and never crashes. State changes follow an explicit state machine.
-- **Fail closed.** When a check fails, deny access or skip the action. A silent failure is worse than a false positive.
-- **Log every action** with its timestamp, user and cost. An action without a log line did not happen.
-- **Data flows one way.** Each fact has one source of truth, and stores do not depend on each other in a circle.
-- **A scheduled job runs a deterministic script.** The model may summarize its output. The script exits 0 on success and non-zero on error, and the exit code is the health signal. A `mkdir` lock with a stale threshold stops concurrent runs. Each job has one responsibility, so a sync, a draft and a send are three jobs.
+- **Route and query without a model.** Intent routing uses keyword or pattern matching. Data queries read the store directly. The order is intent router, data query, static fallback, and a model call last, only when the earlier steps fail
+- **Every model call has a non-model fallback.** An error returns a helpful message and never crashes. State changes follow an explicit state machine
+- **Fail closed.** When a check fails, deny access or skip the action. A silent failure is worse than a false positive
+- **Log every action** with its timestamp, user and cost. An action without a log line did not happen
+- **Data flows one way.** Each fact has one source of truth, and stores do not depend on each other in a circle
+- **A scheduled job runs a deterministic script.** The model may summarize its output. The script exits 0 on success and non-zero on error, and the exit code is the health signal. A `mkdir` lock with a stale threshold stops concurrent runs. Each job has one responsibility, so a sync, a draft and a send are three jobs
 
 ## 4. Which connectors?
 
@@ -78,7 +77,7 @@ List each connector the skill uses and what the skill does without it. Write the
 
 The new skill's `SKILL.md` exists by now, with its symlink created and its `README.md` row written. Run, in order:
 
-1. `python3 skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, no file goes unused and every description is within the word cap.
-2. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see.
+1. `python3 skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, no file goes unused and every description is within the word cap
+2. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see
 
 Fix the exact gap each check names, then run it again. Never finish with a named gap open.

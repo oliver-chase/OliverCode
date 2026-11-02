@@ -98,9 +98,8 @@ run_reference_check() {
 
 run_duplication_check() {
   # Cross-doc content duplication (scripts/lib/duplication_check.py) -- the same rule
-  # restated near-verbatim in two docs with no cross-reference between them. A full
-  # manual read found this four times in a repo already through one dedup audit; this
-  # is what watches for it regrowing between reads.
+  # restated near-verbatim in two docs with no cross-reference between them. This
+  # watches for duplication regrowing between manual reads.
   echo "=== validate: checking documentation duplication ==="
   local out
   if ! out="$(python3 -c '
@@ -219,9 +218,8 @@ run_smoke_tests() {
   # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read the one
   # tracked shared/repo-profiles.json, so they pass identically everywhere.
   #
-  # Python-only by design. A `node --test <dir>/*.mjs` block used to run here; with no
-  # .mjs test present the unmatched glob makes node exit 0, so it reported success on
-  # zero tests -- a false green. The one .mjs this repo ships
+  # Python-only by design. A `node --test <dir>/*.mjs` block with no .mjs test present
+  # exits 0 on the unmatched glob and reports success on zero tests. The one .mjs this repo ships
   # (core/templates/project/scripts/check-structure-contract.mjs) is a template that runs
   # in downstream repos, not here. Re-add a runner deliberately if JS tests ever land.
   local tests_dir="${REPO_ROOT}/tests"
