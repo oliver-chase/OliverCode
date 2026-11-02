@@ -46,6 +46,22 @@ Every claim is checked against the code, and the code wins.
 - Workarounds for a problem that no longer exists. Rerun the problem to check
 - A skill that does not earn its trigger: its job is done by another, or it fires on nothing a person says
 
+**Usage evidence.** For each command, scheduler, gate or flag, ask "has it ever run?" and record evidence a person could check:
+- An installed job (`ls ~/Library/LaunchAgents`, `crontab -l`), a state or log file, a registered repo, a commit or release that used it, or a nonzero count in a log
+- A part referenced only by docs, by its own tests or by a registry entry that was never filled in counts as unused
+
+**Test necessity.** For each test module, report:
+- Tests of counts, totals and exact message wording, which fail on a harmless change
+- One behavior covered at two levels, and tests of process tooling rather than product behavior
+- The tests a mutation of the code would not fail. Make the mutation in a scratch copy, never in the repo
+- A verdict on tests per 100 lines of code, and a cut list in lines
+
+**Existing tools.** For each mechanism that distributes or enforces rules, name the standard tool that does the same job, such as the pre-commit framework, lefthook, a global `core.hooksPath`, GitHub rulesets or a package manager, and say why it is or is not used.
+
+Worked example, from this repo:
+- The local scheduler has no LaunchAgent in `~/Library/LaunchAgents` and no `olivercode-scheduler` state folder, so it has never run and counts as unused
+- `test_banners_count_only_numbered_gates` asserts the text "Gate 7/7", so it fails whenever a gate is added and guards no product behavior. It belongs on the cut list
+
 ## 6. Token cost in use
 
 - Always-loaded text: every `CLAUDE.md` in the chain, its imports, and every skill description. Count characters, and estimate tokens at four characters each
