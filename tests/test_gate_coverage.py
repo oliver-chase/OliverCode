@@ -10,6 +10,7 @@ consistency check that cannot fail is the class this repo keeps rediscovering (s
 scripts/lib/falsifiability_check.py), so these are written to prove it can.
 """
 
+import re
 import shutil
 import tempfile
 import unittest
@@ -68,8 +69,9 @@ class TestMutations(unittest.TestCase):
     def test_catches_template_disagreeing_with_itself(self):
         # The real bug: a run of banners counting to one total, then a later one
         # counting to another.
-        self.assertTrue(self._fails_after(
-            "core/templates/project/pre-commit", "Gate 1/9", "Gate 1/5"))
+        template = "core/templates/project/pre-commit"
+        total = int(re.search(r"Gate 1/(\d+)", (self.sandbox / template).read_text()).group(1))
+        self.assertTrue(self._fails_after(template, f"Gate 1/{total}", f"Gate 1/{total + 1}"))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
         """A false claim in the shape a number-adjacent pattern cannot match.
@@ -105,8 +107,10 @@ class TestMutations(unittest.TestCase):
             "All six gates run here.\n\n### Commits are passing gates"))
 
     def test_catches_a_stale_coverage_table(self):
-        self.assertTrue(self._fails_after(
-            "docs/GATES.md", "| **9** | **9** | **7** |", "| **9** | **11** | **7** |"))
+        row = re.search(r"\| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|",
+                        (self.sandbox / "docs/GATES.md").read_text())
+        a, b, c = row.groups()
+        self.assertTrue(self._fails_after("docs/GATES.md", row.group(0), f"| **{a}** | **{int(b) + 2}** | **{c}** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""

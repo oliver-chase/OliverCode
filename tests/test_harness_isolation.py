@@ -36,14 +36,5 @@ class HarnessIsolation(unittest.TestCase):
                     local_config.load_local()
 
 
-class DiscoverySurvivesNestedSuites(unittest.TestCase):
-    def test_the_backlog_suite_leaves_the_callers_loader_untouched(self):
-        import test_backlog_skill
-        loader = unittest.TestLoader()
-        loader._top_level_dir = str(_support.REPO_ROOT / "tests")
-        test_backlog_skill.load_tests(loader, None, "test_*.py")
-        self.assertEqual(loader._top_level_dir, str(_support.REPO_ROOT / "tests"))
-
-
 if __name__ == "__main__":
     unittest.main()

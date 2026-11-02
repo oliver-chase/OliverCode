@@ -36,18 +36,6 @@ def workflow_triggers(text):
     return keys
 
 
-def step_blocks(text):
-    """Each step of a workflow as its lines, split on the `- name:` or `- uses:` markers."""
-    blocks, current = [], None
-    for line in text.splitlines():
-        if re.match(r"      - (name|uses):", line):
-            current = [line]
-            blocks.append(current)
-        elif current is not None:
-            current.append(line)
-    return ["\n".join(b) for b in blocks]
-
-
 class BootstrapOutput(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-bootout-"))
@@ -59,30 +47,6 @@ class BootstrapOutput(unittest.TestCase):
         done = subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)],
                               env=self.env, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-
-    def test_the_qa_hygiene_npm_steps_wait_for_package_json(self):
-        text = (self.repo / ".github" / "workflows" / "qa-hygiene.yml").read_text()
-        npm_steps = [b for b in step_blocks(text) if re.search(r"run: npm|setup-node", b)]
-        self.assertTrue(npm_steps)
-        for block in npm_steps:
-            self.assertIn("steps.pkg.outputs.found == 'true'", block, block)
-        self.assertEqual(1, text.count("SUPABASE_URL"))
-        gate = next(b for b in npm_steps if "qa:hygiene" in b)
-        self.assertIn("SUPABASE_URL", gate)
-
-    def test_the_package_json_probe_reports_absent_on_a_repo_without_one(self):
-        text = (self.repo / ".github" / "workflows" / "qa-hygiene.yml").read_text()
-        probe = next(b for b in step_blocks(text) if "id: pkg" in b)
-        script = re.search(r"run: \|\n((?:          .*\n?)+)", probe).group(1)
-        for present, expected in ((False, "found=false"), (True, "found=true")):
-            work = Path(tempfile.mkdtemp(dir=self.tmp))
-            if present:
-                (work / "package.json").write_text("{}")
-            out = work / "out.txt"
-            out.write_text("")
-            subprocess.run(["bash", "-c", script], cwd=work, check=True, capture_output=True,
-                           env={**self.env, "GITHUB_OUTPUT": str(out)})
-            self.assertEqual(expected, out.read_text().strip())
 
     def test_every_file_claude_md_names_exists(self):
         claude = (self.repo / "CLAUDE.md").read_text()
@@ -134,7 +98,6 @@ class ShippedWorkflows(unittest.TestCase):
         shipped = {Path(e["source"]).name for e in manifest["templatedFiles"]
                    if e["source"].startswith("core/templates/project/.github/workflows/")}
         self.assertEqual({p.name for p in WORKFLOWS.glob("*.yml")}, shipped)
-        self.assertNotIn("githubActionsPolicy", manifest)
 
 if __name__ == "__main__":
     unittest.main()

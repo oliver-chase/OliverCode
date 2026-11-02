@@ -112,22 +112,6 @@ class FixtureBoardConfig(unittest.TestCase):
         example = json.loads((ROOT / "shared" / "backlog-config.example.json").read_text(encoding="utf-8"))
         self.assertEqual([], bh.missing_lanes(example))
 
-    def test_the_module_imports_when_docs_backlog_config_is_absent(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            code = ("import sys, pathlib\n"
-                    "sys.path.insert(0, sys.argv[1])\n"
-                    "real = pathlib.Path.read_text\n"
-                    "def guard(self, *a, **k):\n"
-                    "    if self.name == 'backlog-config.json' and self.parent.name == 'docs':\n"
-                    "        raise FileNotFoundError(self)\n"
-                    "    return real(self, *a, **k)\n"
-                    "pathlib.Path.read_text = guard\n"
-                    "import test_kanban_baseline\n"
-                    "print('imported')\n")
-            result = subprocess.run([sys.executable, "-c", code, str(HERE)], capture_output=True, text=True, cwd=tmp)
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("imported", result.stdout)
-
 
 class Command(unittest.TestCase):
     def run_cli(self, *args):

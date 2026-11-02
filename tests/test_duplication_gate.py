@@ -15,7 +15,7 @@ PASSAGE = ("the release owner signs the checklist before any tag is pushed and r
            "date beside the signature so the audit trail stays complete")
 
 
-class DuplicationGate:
+class DuplicationSetup:
     HOOK_FILE = None
 
     @classmethod
@@ -29,6 +29,11 @@ class DuplicationGate:
         self.stage("skills/one/references/a.md", f"# A\n\n{PASSAGE}.\n")
         git(self.tmp, "add", "scripts/duplication_check.py")
         git(self.tmp, "commit", "-q", "--no-verify", "-m", "seed")
+
+
+class DuplicationGate(DuplicationSetup):
+    """Every rule of the gate, run against OliverCode's own hook. The two templates are built from the same gate
+    source (build-hooks --check fails on drift), so they get one wiring test."""
 
     def test_a_staged_file_repeating_a_paragraph_blocks_and_names_both(self):
         self.stage("skills/two/references/b.md", f"# B\n\n{PASSAGE}.\n")
@@ -65,11 +70,17 @@ class TestDuplicationOliverCodeHook(DuplicationGate, GateHarness):
     HOOK_FILE = ".githooks/pre-commit"
 
 
-class TestDuplicationPublicTemplateHook(DuplicationGate, GateHarness):
+class DuplicationWired(DuplicationSetup):
+    def test_a_staged_file_repeating_a_paragraph_blocks(self):
+        self.stage("skills/two/references/b.md", f"# B\n\n{PASSAGE}.\n")
+        self.assertBlocked("another file already holds")
+
+
+class TestDuplicationPublicTemplateHook(DuplicationWired, GateHarness):
     HOOK_FILE = "core/templates/project/pre-commit"
 
 
-class TestDuplicationPrivateTemplateHook(DuplicationGate, GateHarness):
+class TestDuplicationPrivateTemplateHook(DuplicationWired, GateHarness):
     HOOK_FILE = "core/templates/project/pre-commit-private"
 
 

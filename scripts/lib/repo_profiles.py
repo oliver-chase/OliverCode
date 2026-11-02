@@ -7,6 +7,8 @@ none falls back to the tracked `shared/<file>`, which ships as an empty example 
 where a fork registers its own repos.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 

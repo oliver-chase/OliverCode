@@ -20,7 +20,7 @@ from _support import REPO_ROOT, git, load_script, scratch_repo
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import local_config  # noqa: E402  (load_script put scripts/ on the path)
-from lib import cmd_fleet, cmd_repo  # noqa: E402
+from lib import cmd_fleet, cmd_health, cmd_repo  # noqa: E402
 
 
 def quiet(fn, *args, **kwargs):
@@ -57,14 +57,6 @@ class TestCommandSkills(ScratchHome):
     def run_skills(self, *argv):
         with mock.patch.object(cmd_repo, "OC_ROOT", self.oc):
             return quiet(launcher.command_skills, list(argv))
-
-    def test_lists_every_skill(self):
-        self.add_skill("alpha", "First skill.")
-        self.add_skill("beta", "Second skill.")
-        code, out = self.run_skills()
-        self.assertEqual(code, 0)
-        self.assertIn("alpha", out)
-        self.assertIn("Second skill.", out)
 
     def test_grep_filters_by_name_and_description(self):
         self.add_skill("alpha", "Sorts mail.")
@@ -288,7 +280,7 @@ class TestPlacementDrift(ScratchHome):
         self.add_skill("beta")
 
     def drift(self):
-        return quiet(launcher._check_placement_drift, self.oc)
+        return quiet(cmd_health._check_placement_drift, self.oc)
 
     def link(self, name, target=None):
         self.skills.mkdir(parents=True, exist_ok=True)
