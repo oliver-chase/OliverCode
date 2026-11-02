@@ -18,6 +18,7 @@ It applies to every reply and file and overrides any default to keep replies sho
 ## Rules
 - Before a structural change, or before installing, creating or moving any skill or agent file, read `$OC/docs/RULES.md`. Each layer has one home
 - A new owner request mid-task joins the to-do list. Switch only on "stop", "do this first" or "drop that"
+- Work goes to a helper agent on the smallest model that fits: Haiku for lookups and mechanical edits, Sonnet for building, research and review. The lead checks the helper's result against the files before reporting or committing. A session cannot change its own model, so when the owner asks for another, say so and point to the app's model menu
 - Something broken, failing or slow: run the `diagnosing-bugs` skill loop before changing code
 - A multi-commit session ending: run the `audit` skill on its commits
 - Writing a README, doc or `CLAUDE.md`: follow RULES.md "Documents" for structure
