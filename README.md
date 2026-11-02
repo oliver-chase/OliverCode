@@ -127,7 +127,6 @@ The rehearsal runs in disposable sandboxes that cannot touch your real files. Ev
 | `scripts/lib/` | The checkers and helpers behind the launcher and `validate.sh` |
 | `scripts/hooks/` | The three Claude Code hooks: session check, commit guard and early-stop guard |
 | `scripts/qa/` | The install rehearsal and the secret-gate probe |
-| `scripts/local-scheduler/` | Unattended `audit-fleet` and `push-fleet` runs through `launchd` (`docs/SETUP.md`, "Scheduled runs") |
 | `scripts/link-check.sh`, `scripts/run-governance-target.sh` | The reference check and the CI entrypoint for a downstream repo |
 | `docs/` | One document per concept, listed below |
 | `tests/` | Tests for the gates, checkers, hooks and launcher |

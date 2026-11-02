@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.repo_profiles import registry_file
-from lib.scheduler_constants import AUDIT_FLEET_CADENCE_S, PUSH_FLEET_CADENCE_S
 from lib.skill_links import link_states
 
 def _check_github_about(oc_root: Path) -> tuple[int, int, int]:
@@ -205,46 +204,6 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
     if passed and not failed:
         print(f"  [OK] all {passed} skills from skillsRoot linked")
     return passed, failed, 0
-
-
-SCHEDULER_LABEL = "com.olivercode.local-scheduler"
-# Job name, marker file and interval, as scripts/local-scheduler/tick.py writes them.
-SCHEDULER_JOBS = (("push-fleet", "last-push-fleet", PUSH_FLEET_CADENCE_S),
-                  ("audit-fleet", "last-audit-fleet", AUDIT_FLEET_CADENCE_S))
-
-
-def _check_scheduler(home: Path) -> tuple[int, int, int]:
-    """Report whether the local scheduler is installed and when each job last ran.
-
-    Uninstalled, audit-fleet and push-fleet never run and nothing says so: the fleet audit
-    once sat six weeks stale with failures in its last log. A WARN, because the scheduler
-    is optional and macOS-only.
-    """
-    print("\nScheduler:")
-    agents = home / "Library" / "LaunchAgents"
-    if not agents.is_dir():
-        print("  [INFO] no launchd on this machine — not checked")
-        return 0, 0, 0
-    if not (agents / f"{SCHEDULER_LABEL}.plist").is_file():
-        print("  [WARN] not installed, so audit-fleet and push-fleet never run — "
-              "bash scripts/local-scheduler/install.sh")
-        return 0, 0, 1
-    state = home / "Library" / "Application Support" / "olivercode-scheduler"
-    passed = skipped = 0
-    for name, marker, interval in SCHEDULER_JOBS:
-        path = state / marker
-        if not path.is_file():
-            print(f"  [WARN] {name} has never run")
-            skipped += 1
-            continue
-        age = datetime.now(timezone.utc).timestamp() - path.stat().st_mtime
-        if age > 2 * interval:
-            print(f"  [WARN] {name} last ran {age / 86400:.1f} days ago — read its log in {state / 'logs'}")
-            skipped += 1
-        else:
-            print(f"  [OK] {name} ran {age / 3600:.1f} hours ago")
-            passed += 1
-    return passed, 0, skipped
 
 
 def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]:

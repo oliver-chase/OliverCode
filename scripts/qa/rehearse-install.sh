@@ -239,7 +239,6 @@ grep -q "scripts/hooks/" "$H/.claude/settings.json" || bad "precondition: instal
 [ -L "$H/.claude/VOICE.md" ] || bad "precondition: install linked VOICE.md" s8
 oc uninstall >/dev/null 2>&1 && ok "uninstall exits 0" s8 || bad "uninstall exits 0" s8
 git -C "$WS/app" config --unset core.hooksPath
-HOME="$H" bash "$WS/OliverCode/scripts/local-scheduler/uninstall.sh" >/dev/null 2>&1
 grep -q "original rules" "$H/.claude/CLAUDE.md" && [ ! -L "$H/.claude/CLAUDE.md" ] \
   && ok "backout restores original rules" s8 || bad "backout restores original rules" s8
 [ ! -e "$H/.claude/VOICE.md" ] && [ ! -L "$H/.claude/VOICE.md" ] \

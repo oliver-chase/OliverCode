@@ -1,5 +1,5 @@
 """Direct tests for the launcher commands that had none: skills, discover, sync-hooks,
-audit-fleet, placement drift, and the scheduler tick.
+audit-fleet and placement drift.
 
 Every test runs against a scratch checkout and a scratch HOME. Nothing reaches the network, and
 git reads no machine config (tests/_support.py).
@@ -19,7 +19,6 @@ from _support import REPO_ROOT, git, load_script, scratch_repo
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-tick = load_script("scripts/local-scheduler/tick.py", "scheduler_tick_commands")
 
 
 def quiet(fn, *args, **kwargs):
@@ -331,71 +330,6 @@ class TestPlacementDrift(ScratchHome):
         with mock.patch.object(launcher, "_check_fleet_hooks", return_value=(3, 2, 1)):
             (passed, failed, skipped), _ = self.drift()
         self.assertEqual((passed, failed, skipped), (5, 2, 1))
-
-
-class TestTickJobs(unittest.TestCase):
-    """The scheduler decides what is due from marker files, runs jobs in order, and touches a
-    marker only after a job succeeds. tests/test_scheduler_tick.py covers a hang and a failure."""
-
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-tickjobs-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        patcher = mock.patch.object(tick, "LOG_DIR", self.tmp / "logs")
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.ok = subprocess.CompletedProcess([], 0, stdout="done", stderr="")
-
-    def run_main(self, jobs, runner):
-        with mock.patch.object(tick, "JOBS", jobs), mock.patch.object(tick.subprocess, "run", runner):
-            return tick.main()
-
-    def test_a_successful_job_touches_its_marker_and_logs_ok(self):
-        marker = self.tmp / "marker"
-        tick.ensure_dirs()
-        with mock.patch.object(tick.subprocess, "run", return_value=self.ok):
-            tick.run_job("push-fleet", marker, ["push-fleet"])
-        self.assertTrue(marker.exists())
-        self.assertIn("push-fleet: OK", (self.tmp / "logs" / "scheduler.log").read_text())
-        self.assertIn("done", (self.tmp / "logs" / "push-fleet.log").read_text())
-
-    def test_the_job_runs_the_launcher_with_its_arguments_and_the_timeout(self):
-        tick.ensure_dirs()
-        runner = mock.Mock(return_value=self.ok)
-        with mock.patch.object(tick.subprocess, "run", runner):
-            tick.run_job("audit-fleet", self.tmp / "m", ["audit-fleet"])
-        argv = runner.call_args.args[0]
-        self.assertEqual(argv[1:], [str(tick.OC_ROOT / "scripts" / "olivercode"), "audit-fleet"])
-        self.assertEqual(runner.call_args.kwargs["timeout"], tick.JOB_TIMEOUT_S)
-
-    def test_jobs_run_in_listed_order(self):
-        first, second = self.tmp / "first", self.tmp / "second"
-        runner = mock.Mock(return_value=self.ok)
-        self.run_main([("one", first, 0, ["one"]), ("two", second, 0, ["two"])], runner)
-        self.assertEqual([call.args[0][-1] for call in runner.call_args_list], ["one", "two"])
-
-    def test_a_job_that_is_not_due_is_left_alone(self):
-        recent, stale = self.tmp / "recent", self.tmp / "stale"
-        recent.touch()
-        runner = mock.Mock(return_value=self.ok)
-        self.run_main([("recent", recent, 3600, ["recent"]), ("stale", stale, 3600, ["stale"])], runner)
-        self.assertEqual([call.args[0][-1] for call in runner.call_args_list], ["stale"])
-
-    def test_a_marker_older_than_the_interval_makes_the_job_due(self):
-        marker = self.tmp / "marker"
-        marker.touch()
-        old = marker.stat().st_mtime - 7200
-        os.utime(marker, (old, old))
-        runner = mock.Mock(return_value=self.ok)
-        self.run_main([("late", marker, 3600, ["late"])], runner)
-        self.assertEqual(runner.call_count, 1)
-        self.assertLess(tick.seconds_since(marker), 60)
-
-    def test_a_missing_marker_counts_as_infinitely_old(self):
-        self.assertEqual(tick.seconds_since(self.tmp / "none"), float("inf"))
-
-    def test_the_shipped_jobs_run_push_fleet_then_audit_fleet(self):
-        self.assertEqual([job[0] for job in tick.JOBS], ["push-fleet", "audit-fleet"])
-        self.assertEqual([job[3] for job in tick.JOBS], [["push-fleet"], ["audit-fleet"]])
 
 
 if __name__ == "__main__":

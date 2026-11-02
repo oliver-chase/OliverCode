@@ -204,13 +204,10 @@ scripts/olivercode uninstall
 # 2. Stop the hooks in each governed repo
 git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can stay or go
 
-# 3. Remove the local scheduler, if you turned it on
-bash scripts/local-scheduler/uninstall.sh
-
-# 4. The checkout itself is just a directory; delete it.
+# 3. The checkout itself is just a directory; delete it.
 ```
 
-`uninstall` keeps everything of yours in `~/.claude` and lists any backup it could not restore, so merge those back by hand. These four steps cover everything OliverCode writes on a machine: the `~/.claude` entries `install` makes, the `.githooks/` folder and `core.hooksPath` key `sync-hooks` sets in each governed repo, and the `launchd` agent the opt-in scheduler installs. OliverCode writes no system config and no shell profile. Files `bootstrap` stamped into a repo belong to that repo once stamped, so they stay. The scheduler's state and logs stay under `~/Library/Application Support/olivercode-scheduler` until you delete that folder.
+`uninstall` keeps everything of yours in `~/.claude` and lists any backup it could not restore, so merge those back by hand. These three steps cover everything OliverCode writes on a machine: the `~/.claude` entries `install` makes, the `.githooks/` folder and `core.hooksPath` key `sync-hooks` sets in each governed repo. OliverCode writes no system config and no shell profile. Files `bootstrap` stamped into a repo belong to that repo once stamped, so they stay.
 
 ## Folder structure
 
@@ -240,10 +237,9 @@ scripts/olivercode health     --root /path/to/where/your/repos/live
 
 Machine paths go in `olivercode.local.json` at the OliverCode root, which is gitignored. Copy `olivercode.local.example.json` and fill in:
 
-- `privateRepos`: private repos that get the private hook variant, a hook check and a push
+- `privateRepos`: private repos that get the private hook variant and a hook check
 - `skillsRoot`: the skill checks
 - `repoPaths`: a repo outside the fleet folder
-- `pushRepos`: extra `push-fleet` targets
 
 `OLIVERCODE_SKILLS_ROOT` overrides the file. An unset value means this machine has none, and nothing guesses it from the folder layout.
 
@@ -305,11 +301,10 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 - `discover` is a read-only scan for git repos under the given roots. It reports each one's agent-rules filename and hook state, inventories `~/.claude` (skills linked here, linked elsewhere, real directories and broken links) and emits a `repo-profiles.json` skeleton with explicit `path` values. It excludes the OliverCode checkout itself, because the framework governs the fleet and is not part of it. It is the mechanical form of Step 1
 - `install` symlinks this checkout's `CLAUDE.md`, its `docs/VOICE.md` (as `~/.claude/VOICE.md`, which `CLAUDE.md` imports) and every skill into `~/.claude`, creating `~/.claude/` and `~/.claude/skills/` if absent. It also merges OliverCode's three Claude Code hooks into `~/.claude/settings.json`, creating the file if absent and leaving every other key alone (`docs/RULES.md`, "Execution"). It is never destructive. A real file or any other link at a target path, including a dangling one or one into another OliverCode checkout, is moved to `<name>.pre-olivercode` (then `.2`, `.3` on later collisions) and the path is printed, because that file is usually the operator's whole existing ruleset (`BACKUP-COLLISION-1` in `docs/DECISIONS.md`). Only a link an OliverCode install wrote that now dangles because its checkout moved is replaced in place. It records the links it wrote in `~/.claude/.olivercode-install.json`, and a re-install of the same checkout reports ALREADY and makes no backup
 - `uninstall` is the reverse of `install` and step 1 of "Backing out". It removes each link in `~/.claude` that points into this checkout, and each dangling one an OliverCode install wrote, which the install record names. For an install made before the record existed, two or more of install's links must dangle into the same checkout-shaped folder, so a lone link to a drive that is not mounted stays, and a link into another live checkout stays too. It removes the record itself. It moves the newest `<name>.pre-olivercode` backup back once its path is free and lists older ones. It takes out only hook entries whose command is exactly the form install writes, so an operator hook that runs a script of the same name stays. A `settings.json` left empty is deleted, since Claude Code reads that the same as no file, unless it is a symlink, in which case it stays a link and keeps its file mode. Links pointing anywhere else, real skill folders, `~/.claude/` and `skills/` themselves and every other settings key stay. It leaves `core.hooksPath` alone, since `sync-hooks` sets that, and it is idempotent
-- `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, the local scheduler's install and last runs, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. Its Backlog boards section reads each registered repo's Project once, compares it with the baseline, checks the `commit-msg` hook and lists `olivercode backlog-setup <repo> --apply` as the fix for any repo that differs. It falls back to the repo's config when GitHub is unreachable. A repo, private repo or control plane that is not on this machine is noted once and not counted
+- `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. Its Backlog boards section reads each registered repo's Project once, compares it with the baseline, checks the `commit-msg` hook and lists `olivercode backlog-setup <repo> --apply` as the fix for any repo that differs. It falls back to the repo's config when GitHub is unreachable. A repo, private repo or control plane that is not on this machine is noted once and not counted
 - `update` runs `git pull`, then `install` (so a new skill or Claude Code hook reaches this machine), then `sync-hooks`. Run it on each device to bring it current
 - `sync-hooks` converges pre-commit hooks and `core.hooksPath` across the fleet and the private repos. It also runs at the end of `update`
 - `audit-fleet` runs the `audit` skill's structure check (dangling references and description length) against OliverCode's own `skills/` and, when this machine names one, the skills folder (`skillsRoot`). It is non-interactive, writes findings to a log and never fixes anything
-- `push-fleet` pushes already-committed work, unattended, for OliverCode, each repo in `privateRepos` and each repo named in `pushRepos`. It never commits, and it skips and reports a repo with uncommitted changes or no upstream tracking branch. Each repo's own pre-push hook is the real safety gate
 - `skills` lists OliverCode's skills under `skills/` with name and description, read from each `SKILL.md`'s frontmatter and never from a hand-maintained copy. `--grep` filters by name or description
 
 `--root DIR` overrides where fleet repos are looked for. The default is the parent of the OliverCode checkout, which is the sibling layout. A fork whose repos live elsewhere needs it, and without it every repo silently reports as "not present on this machine". Unknown arguments are rejected with a nonzero exit, because silently ignoring one is a wrong success: `sync-hooks --root /elsewhere` once ignored the flag, synced the default fleet and reported that it had worked.
@@ -334,27 +329,6 @@ The unit tests use a fake GitHub, so the real API gets a manual check whenever `
 4. Delete the throwaway Project with `gh project delete <number> --owner <owner>`
 
 GitHub keeps an option's item values only when `updateProjectV2Field` receives that option's `id`. An update that omits the ids creates new options and clears every item value, which is why the command sends the ids and still verifies the counts. Run the command on a real Project only after this check passes.
-
-### Scheduled runs
-
-`scripts/local-scheduler/` runs `olivercode audit-fleet` and `olivercode push-fleet` unattended on a Mac through `launchd`. It is opt-in, and nothing installs it automatically. It uses one real scheduler, because two independent schedulers (`launchd` plus a separate `crontab` job) once ran the same work with no lock between them.
-
-```bash
-bash scripts/local-scheduler/install.sh
-```
-
-It needs `python3` on your `PATH`, so if `python3 scripts/olivercode --help` already works, this works. One `launchd` agent fires `tick.py` every 15 minutes and once immediately on load, which also covers a Mac that just woke up. `tick.py` decides what is due by checking marker files' elapsed time, so a tick missed during sleep means the next one catches up, where plain `cron` silently skips.
-
-- `push-fleet` runs about every three hours (the `JOBS` list in `scripts/local-scheduler/tick.py` has the exact interval). It flushes already-committed work for OliverCode and the private repos and never commits
-- `audit-fleet` runs weekly. It runs the `audit` skill's structure check against the skills folder (`skillsRoot`) and OliverCode's own, and writes findings to a log
-
-A failed job's marker is left untouched, so it stays due and the next tick retries without waiting a full interval. To move to a new Mac, clone this repo and any private repo `push-fleet` should cover, name them in `olivercode.local.json` and run `install.sh`. No machine-specific state migrates. To retire it, run `bash scripts/local-scheduler/uninstall.sh`, which removes the agent and leaves the state and logs under `~/Library/Application Support/olivercode-scheduler/` for you to delete. To check on it:
-
-```bash
-launchctl list | grep olivercode
-tail -f ~/Library/Application\ Support/olivercode-scheduler/logs/scheduler.log
-python3 scripts/local-scheduler/tick.py   # force a tick right now
-```
 
 ## Troubleshooting
 
