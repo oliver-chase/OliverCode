@@ -29,8 +29,8 @@ def total_of(repo, *flags):
                               capture_output=True, text=True, check=True).stdout)
 
 
-class RatchetGate:
-    """The gate's four rules, run against each shipped hook (mixed into a GateHarness)."""
+class RatchetSetup:
+    """A scratch repo holding a hook, the counter and a baseline equal to its total (mixed into a GateHarness)."""
 
     HOOK_FILE = None
 
@@ -49,6 +49,11 @@ class RatchetGate:
         git(self.tmp, "commit", "-q", "--no-verify", "-m", "base")
         # The 200-line file gives the 5% allowance room for the cases below.
         self.allowance = self.recorded * 5 // 100
+
+
+class RatchetGate(RatchetSetup):
+    """Every rule of the gate, run against OliverCode's own hook. The two templates are built from the same gate
+    source (build-hooks --check fails on drift), so they get one wiring test."""
 
     def test_a_commit_inside_the_allowance_passes(self):
         self.stage("small.txt", "x\n" * (self.allowance - 1))
@@ -108,11 +113,17 @@ class TestRatchetOliverCodeHook(RatchetGate, GateHarness):
     HOOK_FILE = ".githooks/pre-commit"
 
 
-class TestRatchetPublicTemplateHook(RatchetGate, GateHarness):
+class RatchetWired(RatchetSetup):
+    def test_growth_past_the_allowance_blocks(self):
+        self.stage("big.txt", "x\n" * (self.allowance + 5))
+        self.assertBlocked("size ratchet")
+
+
+class TestRatchetPublicTemplateHook(RatchetWired, GateHarness):
     HOOK_FILE = "core/templates/project/pre-commit"
 
 
-class TestRatchetPrivateTemplateHook(RatchetGate, GateHarness):
+class TestRatchetPrivateTemplateHook(RatchetWired, GateHarness):
     HOOK_FILE = "core/templates/project/pre-commit-private"
 
 

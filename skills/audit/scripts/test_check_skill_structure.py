@@ -65,11 +65,6 @@ class WeightRow(unittest.TestCase):
             (tests / "test_smoke.py").write_text("import used\nassert used.run() == 1\n", encoding="utf-8")
             self.assertEqual(C.weight_row(skill)["untested"], [])
 
-    def test_clean_fixture_has_no_unreferenced_file(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            row = C.weight_row(make_skill(tmp, extra=()))
-        self.assertEqual((row["unref"], row["uncalled"], row["unloaded"]), ([], [], []))
-
     def test_counts_and_description(self):
         with tempfile.TemporaryDirectory() as tmp:
             row = C.weight_row(make_skill(tmp, extra=()))

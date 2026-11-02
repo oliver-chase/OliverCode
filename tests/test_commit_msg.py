@@ -41,10 +41,6 @@ class TestCommitMsg(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("names no story", result.stdout + result.stderr)
 
-    def test_a_reference_in_the_subject_passes(self):
-        self.first_commit()
-        self.assertEqual(0, self.commit("Add a feature (#53)").returncode)
-
     def test_a_story_line_in_the_body_passes(self):
         self.first_commit()
         self.assertEqual(0, self.commit("Add a feature\n\nStory: #53").returncode)

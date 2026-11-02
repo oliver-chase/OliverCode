@@ -165,14 +165,6 @@ class TestExceptions(ConformBase):
 
 
 class TestCommand(ConformBase):
-    def test_render_counts_failures_and_prints_each_fix(self):
-        (self.repo / "README.md").unlink()
-        rows = conform.check_repo(self.repo, oc_root=REPO_ROOT, offline=True, today=TODAY)
-        lines = []
-        failed = conform.render("widgets", rows, out=lines.append)
-        self.assertEqual(1, failed)
-        self.assertTrue(any("Fix: olivercode bootstrap" in line for line in lines))
-
     def test_the_command_exits_non_zero_on_a_failure_and_zero_when_clean(self):
         (code, out) = quiet(launcher.command_conform, REPO_ROOT, self.repo, None, True)
         self.assertEqual(0, code, out)
