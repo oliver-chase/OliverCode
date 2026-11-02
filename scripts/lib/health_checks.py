@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.repo_profiles import registry_file
+from lib.scheduler_constants import AUDIT_FLEET_CADENCE_S, PUSH_FLEET_CADENCE_S
+from lib.skill_links import link_states
 
 def _check_github_about(oc_root: Path) -> tuple[int, int, int]:
     """WARN-degrading check that this repo's GitHub About is filled in.
@@ -188,16 +190,18 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
         return 0, 0, 1
 
     passed = failed = 0
+    states = link_states({d.name: d for d in declared}, target_dir)
     for skill_dir in declared:
         name = skill_dir.name
         link = target_dir / name
-        if not link.exists() and not link.is_symlink():
+        state = states[name]
+        if state == "absent":
             print(f"  [FAIL] {name}: not linked into ~/.claude/skills/ — invisible to the Skill tool")
             failed += 1
-        elif link.is_symlink() and not link.exists():
+        elif state == "broken":
             print(f"  [FAIL] {name}: symlink is broken (points at {link.readlink()})")
             failed += 1
-        elif link.is_symlink() and link.resolve() != skill_dir.resolve():
+        elif state == "elsewhere":
             print(f"  [FAIL] {name}: linked to {link.resolve()}, not {skill_dir}")
             failed += 1
         else:
@@ -209,7 +213,8 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
 
 SCHEDULER_LABEL = "com.olivercode.local-scheduler"
 # Job name, marker file and interval, as scripts/local-scheduler/tick.py writes them.
-SCHEDULER_JOBS = (("push-fleet", "last-push-fleet", 3 * 3600), ("audit-fleet", "last-audit-fleet", 7 * 86400))
+SCHEDULER_JOBS = (("push-fleet", "last-push-fleet", PUSH_FLEET_CADENCE_S),
+                  ("audit-fleet", "last-audit-fleet", AUDIT_FLEET_CADENCE_S))
 
 
 def _check_scheduler(home: Path) -> tuple[int, int, int]:

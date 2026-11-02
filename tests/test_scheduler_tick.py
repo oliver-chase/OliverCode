@@ -54,3 +54,14 @@ class TestRunJob(TickCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSharedCadence(unittest.TestCase):
+    def test_tick_and_the_health_check_read_the_same_constants(self):
+        from lib import health_checks, scheduler_constants as c
+        self.assertEqual(c.PUSH_FLEET_INTERVAL_S, tick.PUSH_FLEET_INTERVAL_S)
+        self.assertEqual(c.AUDIT_FLEET_INTERVAL_S, tick.AUDIT_FLEET_INTERVAL_S)
+        self.assertEqual({"push-fleet": c.PUSH_FLEET_CADENCE_S, "audit-fleet": c.AUDIT_FLEET_CADENCE_S},
+                         {name: interval for name, _, interval in health_checks.SCHEDULER_JOBS})
+        self.assertLess(c.PUSH_FLEET_INTERVAL_S, c.PUSH_FLEET_CADENCE_S)
+        self.assertLess(c.AUDIT_FLEET_INTERVAL_S, c.AUDIT_FLEET_CADENCE_S)

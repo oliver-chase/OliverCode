@@ -27,13 +27,10 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 OC_ROOT = SCRIPT_DIR.parent.parent
+sys.path.insert(0, str(OC_ROOT / "scripts"))
+from lib.scheduler_constants import AUDIT_FLEET_INTERVAL_S, PUSH_FLEET_INTERVAL_S  # noqa: E402
 STATE_DIR = Path.home() / "Library" / "Application Support" / "olivercode-scheduler"
 LOG_DIR = STATE_DIR / "logs"
-
-# Early-fire margins, same discipline as the sibling scheduler this mirrors: a
-# little short of the true interval so a tick never drifts to just-barely-late.
-PUSH_FLEET_INTERVAL_S = 3 * 60 * 60 - 10 * 60   # ~3h, the owner's chosen push cadence
-AUDIT_FLEET_INTERVAL_S = (6 * 24 + 20) * 60 * 60  # ~6.83 days, matching the sibling scheduler's weekly margin
 
 JOB_TIMEOUT_S = 30 * 60
 

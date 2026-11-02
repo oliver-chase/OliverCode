@@ -74,16 +74,16 @@ while IFS= read -r -d '' file; do
 done < <(find "${SCAN_ROOTS[@]}" -name "*.md" -not -path "*/archive/*" -print0)
 
 # ─── Pass 2: backtick-quoted repo paths ──────────────────────────────────────
-ref_out="$(python3 -c "
+ref_out="$(python3 -c '
 import sys
 from pathlib import Path
-sys.path.insert(0, '$SCRIPT_DIR')
+sys.path.insert(0, sys.argv[1])
 from lib.reference_check import check_references
-checked, failures = check_references(Path('$REPO_ROOT'))
+checked, failures = check_references(Path(sys.argv[2]))
 print(checked)
 for f in failures:
     print(f)
-")"
+' "$SCRIPT_DIR" "$REPO_ROOT")"
 ref_checked="$(printf '%s\n' "$ref_out" | head -1)"
 ref_failures="$(printf '%s\n' "$ref_out" | tail -n +2)"
 ref_broken=0
