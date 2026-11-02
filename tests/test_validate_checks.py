@@ -68,5 +68,42 @@ class CheckRepo(unittest.TestCase):
         self.assertEqual(0, self.run_check().returncode)
 
 
+class HeadRun(unittest.TestCase):
+    """`validate.sh --head` tests the committed code, whatever the working tree holds."""
+
+    PASSING = "import unittest\n\nclass T(unittest.TestCase):\n    def test_ok(self):\n        self.assertTrue(True)\n"
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-head-"))
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        scratch_repo(self.repo)
+        (self.repo / "scripts").mkdir()
+        shutil.copy(VALIDATE, self.repo / "scripts" / "validate.sh")
+        (self.repo / "tests").mkdir()
+        (self.repo / "tests" / "test_stub.py").write_text(self.PASSING, encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "base", "--no-verify")
+
+    def run_head(self):
+        return subprocess.run(["bash", str(self.repo / "scripts" / "validate.sh"), "--head"],
+                              cwd=self.repo, capture_output=True, text=True, env=git_env())
+
+    def test_uncommitted_edits_do_not_change_the_result(self):
+        (self.repo / "tests" / "test_stub.py").write_text(self.PASSING.replace("assertTrue(True)", "fail('uncommitted')"),
+                                                          encoding="utf-8")
+        done = self.run_head()
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertNotIn("uncommitted", done.stdout)
+
+    def test_a_failure_names_the_commit_it_ran_on(self):
+        (self.repo / "tests" / "test_stub.py").write_text(self.PASSING.replace("assertTrue(True)", "fail('committed')"),
+                                                          encoding="utf-8")
+        git(self.repo, "commit", "-q", "-am", "break", "--no-verify")
+        sha = git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        done = self.run_head()
+        self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+        self.assertIn(f"FAILED on commit {sha[:12]}", done.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
