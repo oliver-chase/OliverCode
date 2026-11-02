@@ -11,6 +11,8 @@ Exits 0 when the story has a builder comment and the newest QA comment from an a
 builder on the story says PASS and lists every Gherkin scenario by its whole name after "confirmed:",
 separated by ";", and prints each confirmed scenario. Exits 1 and prints
 the reason otherwise, and 2 on a usage error.
+A scenario also counts as confirmed when its segment is the name plus a note after ".", ",", ":", " (" or " -".
+A story body line `QA: mechanical` accepts a builder comment saying "validate.sh exits 0" without a QA comment.
 """
 import argparse
 import json
@@ -21,6 +23,8 @@ import sys
 FIELD = re.compile(r"^\s*-?\s*(Agent|Role|Result):\s*(.*?)\s*$", re.M)
 SCENARIO = re.compile(r"^\s*Scenario(?: Outline)?:\s*(.+?)\s*$", re.M)
 CONFIRMED = re.compile(r"\bconfirmed:(.*)$", re.I | re.S)
+MECHANICAL = re.compile(r"^\s*QA:\s*mechanical\s*$", re.I | re.M)
+NOTE = re.compile(r"^(?:[.,:]|\s+[(\-\u2014\u2013])")
 VERDICT = re.compile(r"^\s*(PASS|FAIL)\b", re.I)
 REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -63,8 +67,26 @@ def confirmed_names(result):
     return {part.strip().lower() for part in found.group(1).split(";") if part.strip()}
 
 
+def is_confirmed(name, confirmed):
+    """True when a segment is the whole name, or the name followed by a sentence break and a note."""
+    name = name.lower()
+    return any(seg == name or (seg.startswith(name) and NOTE.match(seg[len(name):])) for seg in confirmed)
+
+
 def check(comment_bodies, story_body):
     """Return (ok, lines). Lines are the confirmed scenarios on success, the reasons on failure."""
+    if not MECHANICAL.search(story_body or ""):
+        return check_independent(comment_bodies, story_body)
+    for agent, role, result in filter(None, map(parse_action, comment_bodies)):
+        if role == "builder" and "validate.sh exits 0" in result.lower():
+            return True, [f"mechanical: proof from {agent}: {result}"]
+    ok, lines = check_independent(comment_bodies, story_body)
+    if ok:
+        return ok, lines
+    return ok, lines + ['mechanical proof missing: the builder comment must say "validate.sh exits 0"']
+
+
+def check_independent(comment_bodies, story_body):
     actions = [a for a in map(parse_action, comment_bodies) if a]
     builders = {agent.strip().lower() for agent, role, _ in actions if role == "builder"}
     if not builders:
@@ -84,7 +106,7 @@ def check(comment_bodies, story_body):
     if not names:
         return False, ["the story has no Gherkin scenario to confirm"]
     confirmed = confirmed_names(result)
-    missing = [n for n in names if n.lower() not in confirmed]
+    missing = [n for n in names if not is_confirmed(n, confirmed)]
     if missing:
         return False, [f"scenario unconfirmed by {agent}: {n}" for n in missing]
     return True, [f"confirmed by {agent}: {n}" for n in names]

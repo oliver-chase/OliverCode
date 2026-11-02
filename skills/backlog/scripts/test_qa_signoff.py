@@ -73,6 +73,33 @@ class QaSignoff(unittest.TestCase):
         ]
         self.assertFalse(qa.check(comments, body)[0])
 
+    def test_a_trailing_note_is_tolerated_but_a_longer_name_is_not(self):
+        body = "Scenario: A full run\nScenario: Validation passes on a clean main\n"
+        b = "Agent action\n- Agent: b\n- Role: builder\n- Result: x"
+
+        def ok(conf):
+            return qa.check([b, f"Agent action\n- Agent: q\n- Role: qa\n- Result: PASS; confirmed: {conf}"], body)[0]
+        self.assertTrue(ok("A full run; Validation passes on a clean main. Tested on main 74a99fb"))
+        self.assertTrue(ok("A full run (note); Validation passes on a clean main - fine"))
+        self.assertTrue(ok("A full run, ok; Validation passes on a clean main: yes"))
+        self.assertFalse(ok("A full run leaves X unchanged; Validation passes on a clean main"))
+
+    def test_mechanical_story_needs_builder_proof_else_normal_path(self):
+        b = "Agent action\n- Agent: b\n- Role: builder\n- Result: %s"
+        q = "Agent action\n- Agent: q\n- Role: qa\n- Result: PASS; confirmed: Work is finished"
+        mech, plain = "Scenario: Work is finished\n  qa: Mechanical \n", "Scenario: Work is finished\n"
+        ok, lines = qa.check([b % "Validate.sh exits 0"], mech)
+        self.assertTrue(ok)
+        self.assertEqual(lines, ["mechanical: proof from b: Validate.sh exits 0"])
+        ok, lines = qa.check([b % "done"], mech)
+        self.assertFalse(ok)
+        self.assertIn('mechanical proof missing: the builder comment must say "validate.sh exits 0"', lines)
+        self.assertTrue(qa.check([b % "done", q], mech)[0])
+        ok, lines = qa.check([b % "validate.sh exits 0"], plain)
+        self.assertFalse(ok)
+        self.assertIn("no QA comment", lines[0])
+        self.assertEqual(len(lines), 1)
+
     def test_a_later_fail_overrides_an_earlier_pass(self):
         pages = json.loads((FIX / "qa-pass.json").read_text())
         pages.append(json.loads((FIX / "qa-fail.json").read_text())[1])
