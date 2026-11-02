@@ -136,6 +136,11 @@
       "source": "skills/audit/scripts/size.sh",
       "target": "scripts/size.sh",
       "mode": "strict"
+    },
+    {
+      "source": "scripts/lib/duplication_check.py",
+      "target": "scripts/duplication_check.py",
+      "mode": "strict"
     }
   ]
 }
