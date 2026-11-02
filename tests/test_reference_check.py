@@ -2,6 +2,7 @@
 
 A `$OC/...` path names a file in this repo, so a broken one must fail too.
 """
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +19,7 @@ BT = chr(96)
 class TestOcPaths(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="reference-check-"))
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
         scratch_repo(self.repo)
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "REAL.md").write_text("# Real\n")
@@ -53,6 +55,7 @@ class TestWhatCounts(unittest.TestCase):
 
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="reference-check-"))
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
         scratch_repo(self.repo)
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "REAL.md").write_text("# Real\n")

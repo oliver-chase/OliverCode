@@ -31,6 +31,9 @@ class TestInstall(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-install-"))
         self._home = Path.home
         Path.home = staticmethod(lambda: self.tmp)  # type: ignore[assignment]
+        env = mock.patch.dict(os.environ, {"HOME": str(self.tmp)})
+        env.start()
+        self.addCleanup(env.stop)
 
     def tearDown(self):
         Path.home = self._home  # type: ignore[assignment]
@@ -206,6 +209,9 @@ class TestUninstall(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-uninstall-"))
         self._home = Path.home
         Path.home = staticmethod(lambda: self.tmp)  # type: ignore[assignment]
+        env = mock.patch.dict(os.environ, {"HOME": str(self.tmp)})
+        env.start()
+        self.addCleanup(env.stop)
         self.claude = self.tmp / ".claude"
 
     def tearDown(self):

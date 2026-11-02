@@ -1,5 +1,6 @@
 """Health must say when the local scheduler is missing or a job has gone stale."""
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -13,6 +14,7 @@ from lib.health_checks import SCHEDULER_LABEL, _check_scheduler  # noqa: E402
 class TestSchedulerHealth(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp(prefix="scheduler-health-"))
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
         self.agents = self.home / "Library" / "LaunchAgents"
         self.state = self.home / "Library" / "Application Support" / "olivercode-scheduler"
 

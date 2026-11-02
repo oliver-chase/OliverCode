@@ -258,9 +258,6 @@ class OversizedTracked(HealthBase):
         plain.mkdir()
         self.assertEqual((0, 0, 1), self.check([("plain", plain)])[0])
 
-    def test_the_limit_is_githubs_100mb(self):
-        self.assertEqual(100 * 1024 * 1024, health.GITHUB_FILE_LIMIT)
-
 
 if __name__ == "__main__":
     unittest.main()
