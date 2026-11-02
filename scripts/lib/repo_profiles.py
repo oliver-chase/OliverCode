@@ -75,8 +75,7 @@ def iter_fleet(profiles: dict, fleet_root: Path):
     own copy of this filter and had already drifted apart: one compared the self-skip
     case-sensitively and the other did not, so a profile named "OliverCode" -- the
     casing `discover` emits from a directory name -- was skipped by sync-hooks and
-    treated as a governed repo by health. Moved here 2026-09-15 so a third caller
-    (find-spec.py) does not become a third copy to drift.
+    treated as a governed repo by health. It lives here so the two callers share one copy.
     """
     for name, profile in profiles.items():
         if name.lower() == "olivercode":

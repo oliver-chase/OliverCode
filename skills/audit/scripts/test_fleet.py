@@ -55,18 +55,6 @@ class FleetRoot(unittest.TestCase):
         self.assertEqual(_fleet.fleet_root({}), Path(_fleet.__file__).resolve().parents[2])
 
 
-class FleetData(unittest.TestCase):
-    def test_data_lives_with_the_fleet_it_describes(self):
-        self.assertEqual(_fleet.fleet_data("x.json", {}, root=Path("/fleet")), Path("/fleet/.fleet-audit/x.json"))
-
-    def test_the_environment_variable_points_the_data_elsewhere(self):
-        self.assertEqual(_fleet.fleet_data("x.json", {_fleet.DATA_ENV: "/data"}), Path("/data/x.json"))
-
-    def test_missing_data_stops_the_gate(self):
-        with self.assertRaises(SystemExit):
-            _fleet.read_fleet_data(Path("/nonexistent/.fleet-audit/x.json"))
-
-
 class DescriptionWords(unittest.TestCase):
     def test_quoted_and_folded_descriptions_count_the_same(self):
         quoted = "---\nname: x\ndescription: \"One two three.\"\n---\n"

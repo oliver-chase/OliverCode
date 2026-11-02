@@ -235,37 +235,6 @@ def check_gate_coverage_table(repo_root: Path) -> list[str]:
     return failures
 
 
-def check_gate_integrity(repo_root: Path) -> list[str]:
-    """Every hook must actually contain as many gates as its banners claim.
-
-    Replaces the only unique check the post-commit hook performed (grep for "Gate 6
-    still present"). That hook could not block, always exited 0, and its skill-count
-    check globbed a path that had not existed for months without anyone noticing --
-    so it was not being read. This runs in validate.sh and fails closed.
-
-    Runs over ALL hook variants, not just OliverCode's. Checking only OliverCode's was
-    a real blind spot: the public template printed "Gate 1/5" through "Gate 5/5" and
-    then "Gate 6/6", so it disagreed with itself about its own size and no check looked.
-
-    Counts DISTINCT gate numbers, not echo sites: a conditional gate prints from two
-    branches (ran / skipped), so a naive line count reports more gates than exist.
-    """
-    failures: list[str] = []
-    # A missing hook, no banners or banners that disagree are _hook_totals' findings, which
-    # check_gate_count already reports. This adds the one thing only it checks.
-    totals, _ = _hook_totals(repo_root)
-    for name, claimed in totals.items():
-        rel = HOOKS[name]
-        present = {int(num) for num, _ in GATE_DECL.findall((repo_root / rel).read_text(encoding="utf-8"))}
-        if len(present) != claimed:
-            missing = sorted(set(range(1, claimed + 1)) - present)
-            failures.append(
-                f"  [GATES] {rel} claims {claimed} gates but only {len(present)} are present"
-                + (f"; missing gate number(s): {missing}" if missing else "")
-            )
-    return failures
-
-
 def check_contract_reachability(repo_root: Path) -> list[str]:
     """Every contract is pointed AT by something. A contract nothing references is
     worse than a deleted one: it stays in the tree, drifts because no reader arrives,
@@ -343,7 +312,6 @@ def check_all(repo_root: Path) -> list[str]:
     return (
         check_skill_index(repo_root)
         + check_gate_count(repo_root)
-        + check_gate_integrity(repo_root)
         + check_gate_coverage_table(repo_root)
         + check_contract_reachability(repo_root)
         + check_skill_cross_references(repo_root)

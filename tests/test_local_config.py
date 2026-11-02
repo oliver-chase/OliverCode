@@ -23,7 +23,7 @@ class LocalConfig(unittest.TestCase):
         env = mock.patch.dict(os.environ, {}, clear=False)
         env.start()
         self.addCleanup(env.stop)
-        for key in ("OLIVERCODE_VAULT_ROOT", "OLIVERCODE_SKILLS_ROOT"):
+        for key in ("OLIVERCODE_SKILLS_ROOT",):
             os.environ.pop(key, None)
 
     def write(self, data):
@@ -41,25 +41,10 @@ class LocalConfig(unittest.TestCase):
         self.assertEqual(local_config.skills_root(), Path("/s"))
         self.assertEqual(local_config.push_repos(), ["a"])
 
-    def test_environment_wins_over_the_file(self):
-        self.write({"vaultRoot": "/from-file"})
-        os.environ["OLIVERCODE_VAULT_ROOT"] = "/from-env"
-        self.assertEqual(local_config.private_repos(), {"vault": Path("/from-env")})
-
-    def test_a_machine_set_up_with_the_old_vault_setting_keeps_working(self):
-        self.write({"vaultRoot": "~/old", "privateRepos": {"notes": "/n"}})
-        self.assertEqual(local_config.private_repos(), {"notes": Path("/n"), "vault": Path.home() / "old"})
-
     def test_the_skills_root_environment_variable_wins_over_the_file(self):
         self.write({"skillsRoot": "/from-file"})
         os.environ["OLIVERCODE_SKILLS_ROOT"] = "/from-env"
         self.assertEqual(local_config.skills_root(), Path("/from-env"))
-
-    def test_a_vault_named_in_private_repos_wins_over_the_old_vault_setting(self):
-        self.write({"vaultRoot": "/old", "privateRepos": {"vault": "/new"}})
-        self.assertEqual(local_config.private_repos(), {"vault": Path("/new")})
-        os.environ["OLIVERCODE_VAULT_ROOT"] = "/from-env"
-        self.assertEqual(local_config.private_repos(), {"vault": Path("/new")})
 
     def test_repo_paths_expand_a_tilde(self):
         self.write({"repoPaths": {"alpha": "~/work/alpha"}})

@@ -21,4 +21,4 @@ The work a session produced, reviewed before it is called done. It runs at two s
 
 ## The tracker
 
-The repo's `docs/BACKLOG.md` carries the live tracker, laid out by `$OC/core/templates/project/docs/BACKLOG-live-tracker.md`. Its marker line, "Reviewed through: `<sha>`", records coverage, and `$OC/scripts/audit-staleness.py` reads it. Update it in the commit that finishes the review.
+The repo's `docs/BACKLOG.md` carries the live tracker, laid out by `$OC/core/templates/project/docs/BACKLOG-live-tracker.md`. Its marker line, "Reviewed through: `<sha>`", records coverage. Update it in the commit that finishes the review.

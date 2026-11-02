@@ -52,10 +52,7 @@ if (!existsSync(githubDir)) failures.push('missing .github directory')
 
 if (existsSync(githubDir)) {
   const allMarkdown = listFilesRecursive(githubDir).filter((f) => f.endsWith('.md'))
-  const legacyBacklogs = allMarkdown.filter((file) => {
-    if (basename(file).toLowerCase() !== 'backlog.md') return false
-    return true
-  })
+  const legacyBacklogs = allMarkdown.filter((file) => basename(file).toLowerCase() === 'backlog.md')
   for (const file of legacyBacklogs) failures.push(`legacy backlog.md should be retired: ${relative(ROOT, file)}`)
 }
 

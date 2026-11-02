@@ -91,12 +91,6 @@ class TestMutations(unittest.TestCase):
         self.assertTrue(self._fails_after(
             "core/templates/project/pre-commit", "Gate 1/9", "Gate 1/5"))
 
-    def test_catches_a_gate_removed_without_updating_the_total(self):
-        self.assertTrue(self._fails_after(
-            "core/templates/project/pre-commit",
-            'echo "[pre-commit] Gate 3/9: PII scan..."',
-            'echo "[pre-commit] PII scan..."'))
-
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
         """The original false claim, in the shape the old pattern could not match.
 

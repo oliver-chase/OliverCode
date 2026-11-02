@@ -32,13 +32,8 @@ def _path(value: str | None) -> Path | None:
 
 def private_repos() -> dict[str, Path]:
     """Private repos outside the fleet, by name: each gets the private hook variant, a hook
-    check, a push and a backlog search. `vaultRoot` (or OLIVERCODE_VAULT_ROOT), the single
-    setting this replaced, still reads as one entry named "vault", so a machine configured
-    before the list existed keeps working."""
+    check, a push and a backlog search."""
     repos = {name: Path(p).expanduser() for name, p in load_local().get("privateRepos", {}).items()}
-    legacy = _path(os.environ.get("OLIVERCODE_VAULT_ROOT") or load_local().get("vaultRoot"))
-    if legacy and "vault" not in repos:
-        repos["vault"] = legacy
     return repos
 
 
