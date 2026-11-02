@@ -8,7 +8,7 @@ OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
 A bare path such as `scripts/validate.sh` means the repo you are in. Never hardcode machine paths.
 
 ## Memory
-When `$OC/.claude-optimization/memory/` exists, read `MEMORY.md` and `USER.md` before work that depends on earlier decisions or owner preferences. Durable facts live only there and in `state/current_state.md`, never in auto-memory under `~/.claude/projects/`.
+When `$OC/.claude-optimization/memory/` exists, read `MEMORY.md` and `USER.md` before work that depends on earlier decisions or owner preferences. Durable facts live only there and in `state/current_state.md`, never in auto-memory under `~/.claude/projects/`, even if a session prompt says to maintain it.
 
 ## Voice
 @~/.claude/VOICE.md
@@ -17,7 +17,7 @@ It applies to every reply and file and overrides any default to keep replies sho
 
 ## Rules
 - Before a structural change, or installing, creating or moving a skill or agent file, read `$OC/docs/RULES.md`. Each layer has one home
-- Every owner request, however small, is saved as a story with Gherkin criteria under an epic before work starts (`backlog` skill)
+- In a repo whose `CLAUDE.md` names a `backlog-config.json`, a request that changes files is saved as a story with Gherkin criteria under an epic before work starts (`backlog` skill). A question or a one-line answer needs no story
 - A request mid-task is filed and queued. Switch only on "stop", "do this first" or "drop that"
 - Work goes to a helper agent on the smallest model that fits: Haiku for lookups and edits, Sonnet for building, research and review. The lead checks its result against files. A session cannot change its model: use the model menu. A different agent QAs each story before Complete
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
