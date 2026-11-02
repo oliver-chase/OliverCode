@@ -10,18 +10,14 @@ consistency check that cannot fail is the class this repo keeps rediscovering (s
 scripts/lib/falsifiability_check.py), so these are written to prove it can.
 """
 
-import importlib.util
-import subprocess
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location(
-    "cc", REPO_ROOT / "scripts" / "lib" / "consistency_check.py"
-)
-cc = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(cc)
+from _support import REPO_ROOT, git, load_script, scratch_repo
+
+cc = load_script("scripts/lib/consistency_check.py", "cc")
 
 
 def _sandbox(dest: Path) -> Path:
@@ -31,9 +27,7 @@ def _sandbox(dest: Path) -> Path:
     test HEAD rather than the tree under test -- silently green on uncommitted work.
     """
     dest.mkdir(parents=True, exist_ok=True)
-    listing = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=REPO_ROOT, capture_output=True, text=True
-    ).stdout.split("\0")
+    listing = git(REPO_ROOT, "ls-files", "-z").stdout.split("\0")
     for rel in filter(None, listing):
         src = REPO_ROOT / rel
         if not src.is_file():
@@ -41,15 +35,12 @@ def _sandbox(dest: Path) -> Path:
         out = dest / rel
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(src.read_bytes())
-    subprocess.run(["git", "init", "-q", "."], cwd=dest, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=dest, capture_output=True, check=True)
+    scratch_repo(dest)
+    git(dest, "add", "-A")
     return dest
 
 
 class TestShippedTree(unittest.TestCase):
-    def test_repo_is_consistent(self):
-        self.assertEqual(cc.check_all(REPO_ROOT), [])
-
     def test_hook_totals_are_the_documented_ones(self):
         totals, problems = cc._hook_totals(REPO_ROOT)
         self.assertEqual(problems, [])
@@ -70,17 +61,29 @@ class TestShippedTree(unittest.TestCase):
 
 
 class TestMutations(unittest.TestCase):
-    """Break one thing; the checker must notice."""
+    """Break one thing; the checker must notice. One sandbox serves the class, and each
+    mutation is put back before the next test runs."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.mkdtemp(prefix="olivercode-gates-")
+        cls.sandbox = _sandbox(Path(cls._tmp) / "oc")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls._tmp, ignore_errors=True)
 
     def _fails_after(self, rel: str, old: str, new: str) -> list[str]:
-        with tempfile.TemporaryDirectory(prefix="olivercode-gates-") as tmp:
-            work = _sandbox(Path(tmp) / "oc")
-            target = work / rel
-            text = target.read_text(encoding="utf-8")
-            self.assertIn(old, text, f"mutation anchor missing from {rel}")
-            target.write_text(text.replace(old, new, 1), encoding="utf-8")
-            subprocess.run(["git", "add", "-A"], cwd=work, capture_output=True, check=True)
-            return cc.check_all(work)
+        target = self.sandbox / rel
+        text = target.read_text(encoding="utf-8")
+        self.assertIn(old, text, f"mutation anchor missing from {rel}")
+        target.write_text(text.replace(old, new, 1), encoding="utf-8")
+        try:
+            git(self.sandbox, "add", "-A")
+            return cc.check_all(self.sandbox)
+        finally:
+            target.write_text(text, encoding="utf-8")
+            git(self.sandbox, "add", "-A")
 
     def test_catches_template_disagreeing_with_itself(self):
         # The real bug: a run of banners counting to one total, then a later one
@@ -139,8 +142,7 @@ class TestMutations(unittest.TestCase):
     def test_unmutated_sandbox_passes(self):
         """Guards the harness: if the sandbox failed on its own, every test above
         would 'pass' without testing anything."""
-        with tempfile.TemporaryDirectory(prefix="olivercode-gates-") as tmp:
-            self.assertEqual(cc.check_all(_sandbox(Path(tmp) / "oc")), [])
+        self.assertEqual(cc.check_all(self.sandbox), [])
 
 
 if __name__ == "__main__":

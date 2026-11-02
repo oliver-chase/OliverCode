@@ -59,14 +59,19 @@ run_hook_state() {
   #
   # Advisory, never fatal. A fork, a fresh clone, or a checkout with no fleet
   # registered has nothing to check and must still pass -- that property is what
-  # check-fork-usable.sh guards.
+  # rehearse-install.sh guards.
+  #
+  # --hooks-only reads local files and makes no network call. The full health run also
+  # asks every fleet remote whether it resolves, which validation has no need to do.
   echo "=== validate: checking fleet hook state ==="
   local out registered
-  out="$(python3 "${SCRIPT_DIR}/olivercode" health 2>&1)" && local rc=0 || local rc=$?
+  out="$(python3 "${SCRIPT_DIR}/olivercode" health --hooks-only 2>&1)" && local rc=0 || local rc=$?
 
   # "every registered repo has working hooks" was printed even when the number of
   # registered repos was ZERO -- a fork with no fleet got a green line asserting a
   # fleet was verified. Say which case it is.
+  # --hooks-only prints one line per repo and checks each repo once, so the count is the
+  # number of repos.
   registered="$(printf '%s\n' "$out" | grep -cE '^\s+\[(OK|FAIL|WARN)\] [^ ]+: ' || true)"
   if [[ "$rc" -eq 0 && "$registered" -eq 0 ]]; then
     echo "  [SKIP] no fleet repos registered — nothing to check."
@@ -115,6 +120,101 @@ sys.exit(1 if failures else 0)
   echo "=== validate: duplication check passed ==="
 }
 
+run_bloat_check() {
+  # Bloat in one repo (default: this one). A repo holds current state only, so a tracked
+  # archive-style directory or a file that marks itself historical fails. A docs-to-code
+  # ratio past the threshold only warns, because it is a signal and not a defect.
+  # Bash 3.2 compatible, with no grep -P and no mapfile.
+  local dir="${1:-$REPO_ROOT}" ratio_max="0.60"
+  echo "=== validate: checking for bloat and legacy files ==="
+  if ! git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then
+    echo "  [SKIP] $dir is not a git repository"
+    return 0
+  fi
+  local hits=0 f n archive="" marked="" doc_loc=0 total_loc=0 ratio over
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    n=$(wc -l < "$dir/$f" 2>/dev/null || echo 0)
+    total_loc=$((total_loc + n))
+    case "$f" in *.md) doc_loc=$((doc_loc + n)) ;; esac
+    if printf '%s\n' "$f" | grep -qiE '(^|/)(archive|archived|old|legacy)/'; then
+      archive="$archive
+  - $f"
+    fi
+    case "$f" in
+      *.md)
+        if head -5 "$dir/$f" 2>/dev/null | grep -qiE '^\**\s*(status:\s*)?(HISTORICAL|DEPRECATED|SUPERSEDED|ARCHIVED)\b'; then
+          marked="$marked
+  - $f"
+        fi ;;
+    esac
+  done <<< "$(git -C "$dir" -c core.quotepath=false ls-files)"
+  if [[ -n "$archive" ]]; then
+    echo "  [FAIL] tracked files under archive-style directories (delete them, git history is the archive):$archive"
+    hits=1
+  fi
+  if [[ -n "$marked" ]]; then
+    echo "  [FAIL] files that mark themselves historical or deprecated (delete or update them):$marked"
+    hits=1
+  fi
+  if [[ "$total_loc" -gt 0 ]]; then
+    ratio=$(awk "BEGIN {printf \"%.2f\", $doc_loc / $total_loc}")
+    over=$(awk "BEGIN {print ($ratio > $ratio_max) ? 1 : 0}")
+    if [[ "$over" == "1" ]]; then
+      echo "  [WARN] docs are $ratio of the repo's lines ($doc_loc of $total_loc; threshold $ratio_max) - run the audit skill on the docs"
+    fi
+  fi
+  if [[ "$hits" -ne 0 ]]; then
+    echo "=== validate: bloat check FAILED ==="
+    return 1
+  fi
+  echo "=== validate: bloat check passed ==="
+}
+
+run_code_quality() {
+  # Code quality in one repo (default: this one): TypeScript files over 400 lines, a
+  # Python syntax error, and a scripts/lib module no test file mentions. The module
+  # check matches the module's name, because tests here are named for behavior and not
+  # for the module they cover.
+  local dir="${1:-$REPO_ROOT}" issues=0 f lines
+  echo "=== validate: checking code quality ==="
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    lines=$(wc -l < "$f")
+    if [[ "$lines" -gt 400 ]]; then
+      echo "  [FAIL] $f has $lines lines (limit 400)"
+      issues=$((issues + 1))
+    fi
+  done < <(find "$dir" \( -name node_modules -o -name .next -o -name .git -o -name .claude \) -prune -o \
+             \( -name '*.ts' -o -name '*.tsx' \) ! -name '*.test.*' -print 2>/dev/null)
+  if command -v python3 &>/dev/null; then
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      if ! python3 -c 'import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' "$f" 2>/dev/null; then
+        echo "  [FAIL] syntax error in $f"
+        issues=$((issues + 1))
+      fi
+    done < <(find "$dir" \( -name node_modules -o -name .git -o -name __pycache__ \) -prune -o -name '*.py' -print 2>/dev/null)
+  fi
+  if [[ -d "$dir/scripts/lib" && -d "$dir/tests" ]]; then
+    local module stem
+    for module in "$dir"/scripts/lib/*.py; do
+      [[ -e "$module" ]] || continue
+      stem="$(basename "$module" .py)"
+      [[ "$stem" == "__init__" ]] && continue
+      if ! grep -qE "(^|[^A-Za-z0-9_])${stem}([^A-Za-z0-9_]|\$)" "$dir"/tests/*.py 2>/dev/null; then
+        echo "  [FAIL] no test file mentions scripts/lib/${stem}.py"
+        issues=$((issues + 1))
+      fi
+    done
+  fi
+  if [[ "$issues" -ne 0 ]]; then
+    echo "=== validate: code quality FAILED ($issues issue(s)) ==="
+    return 1
+  fi
+  echo "=== validate: code quality passed ==="
+}
+
 run_smoke_tests() {
   # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read the one
   # tracked shared/repo-profiles.json, so they pass identically everywhere.
@@ -130,13 +230,31 @@ run_smoke_tests() {
   fi
   echo "=== validate: running smoke tests ==="
   if command -v python3 &>/dev/null; then
-    # -b buffers each test's stdout/stderr and replays it only for failures. Several
-    # tests exercise paths that print "[FAIL]" or "Error:" by design; unbuffered, a
-    # fully green run scrolled those past the operator and read like a broken build.
-    if ! python3 -m unittest discover -b -s "$tests_dir"; then
+    # Each test module runs in its own process, several at a time, because the suite spends
+    # its time starting git and bash. -b buffers each test's stdout/stderr and replays it only
+    # for failures: several tests exercise paths that print "[FAIL]" or "Error:" by design,
+    # and unbuffered, a fully green run read like a broken build.
+    local jobs log_dir module ran=0 n
+    jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
+    [[ "$jobs" -gt 6 ]] && jobs=6
+    log_dir="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$log_dir'" RETURN
+    (cd "$tests_dir" && ls test_*.py | sed 's/\.py$//' | xargs -P "$jobs" -I{} \
+      sh -c 'python3 -m unittest -b "$1" > "$2/$1.log" 2>&1 || echo "$1" >> "$2/failed"' _ {} "$log_dir")
+    for module in "$log_dir"/*.log; do
+      n="$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' "$module")"
+      ran=$((ran + ${n:-0}))
+    done
+    if [[ -s "$log_dir/failed" ]]; then
+      while IFS= read -r module; do
+        echo "--- $module ---"
+        cat "$log_dir/$module.log"
+      done < "$log_dir/failed"
       echo "=== validate: python smoke tests FAILED ==="
       exit 1
     fi
+    echo "  Ran $ran tests across $(ls "$log_dir"/*.log | wc -l | tr -d ' ') modules, all passed"
   else
     echo "  [WARN] python3 not found — skipping Python smoke tests"
   fi
@@ -182,21 +300,40 @@ main() {
       echo ""
       echo "Options:"
       echo "  (no args)              Run pre-commit gates, doc/code consistency,"
-      echo "                         reference integrity, doc duplication,"
-      echo "                         and smoke tests (tests/, if present)"
+      echo "                         reference integrity, bloat, code quality, doc duplication,"
+      echo "                         smoke tests (tests/, if present) and fleet hook state"
       echo "  --target-repo <repo-root> [args...]"
       echo "                         Run <repo-root>/scripts/validate-repo.sh if it exists"
       echo "                         (repo-local validation hook convention), else skip"
       echo "  --tree                 Run everything above, with the gates over every tracked file"
       echo "  --check-consistency    Run doc/code consistency checks only"
+      echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
+      echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
       echo "  --help                 Show this help"
       ;;
     --check-consistency)
       run_consistency
       ;;
+    --check-repo)
+      # The downstream governance gate: bloat and code quality for another checkout.
+      local dir="${2:-}"
+      if [[ -z "$dir" || ! -d "$dir" ]]; then
+        echo "Usage: bash scripts/validate.sh --check-repo <dir>"
+        exit 1
+      fi
+      local rc=0
+      run_code_quality "$dir" || rc=1
+      run_bloat_check "$dir" || rc=1
+      exit "$rc"
+      ;;
+    --rehearse)
+      exec bash "${SCRIPT_DIR}/qa/rehearse-install.sh" "${@:2}"
+      ;;
     *)
       run_precommit
       run_consistency
+      run_bloat_check || exit 1
+      run_code_quality || exit 1
       run_reference_check
       run_duplication_check
       run_smoke_tests

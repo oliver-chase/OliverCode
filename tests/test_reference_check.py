@@ -2,18 +2,13 @@
 
 A `$OC/...` path names a file in this repo, so a broken one must fail too.
 """
-import importlib.util
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location(
-    "reference_check", REPO_ROOT / "scripts" / "lib" / "reference_check.py"
-)
-reference_check = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(reference_check)
+from _support import load_script, scratch_repo
+
+reference_check = load_script("scripts/lib/reference_check.py", "reference_check")
 check_references = reference_check.check_references
 
 # Built at runtime so this file holds no backtick-quoted path for the checker to read.
@@ -23,7 +18,7 @@ BT = chr(96)
 class TestOcPaths(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="reference-check-"))
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        scratch_repo(self.repo)
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "REAL.md").write_text("# Real\n")
 
@@ -58,7 +53,7 @@ class TestWhatCounts(unittest.TestCase):
 
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="reference-check-"))
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        scratch_repo(self.repo)
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "REAL.md").write_text("# Real\n")
 

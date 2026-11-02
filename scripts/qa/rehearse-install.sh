@@ -1,43 +1,62 @@
 #!/usr/bin/env bash
-# ─── Scenario Matrix ──────────────────────────────────────────────────────
-# Every documented setup and walkthrough case, each in an isolated sandbox with a
-# throwaway HOME: fresh machine, existing ~/.claude, scattered fleet via `path`,
-# --root layouts (right and wrong), discover, bootstrap, hookVariant, the full
-# documented backout, idempotency, update, the no-commit probe, zero-config basics.
+# ─── Install Rehearsal ────────────────────────────────────────────────────
+# Runs every documented setup case against a copy of this repo, each in a sandbox with its
+# own HOME, and runs the real `olivercode install`, `sync-hooks`, `health`, `update` and
+# `uninstall` there. It never touches the real ~/.claude: every command runs with HOME set to
+# a folder under the sandbox, and the script stops if that folder is anywhere else.
 #
-# check-fork-usable.sh stays the fast gate (CI + full-qa-pass): clone works, the
-# core adoption path governs. This is the exhaustive complement -- run it after
-# changing the launcher, the hooks, or docs/SETUP.md. Everything it asserts is
-# a sentence somewhere in SETUP.md or the README; when one fails, either the
-# code or that sentence is lying.
+# Cases: a fresh clone's commands, the adoption skill, a virgin machine, an existing
+# ~/.claude, a scattered fleet, --root layouts, discover, bootstrap, hookVariant, the full
+# backout, idempotency, update, the no-commit probe and zero-config basics. Every claim is a
+# sentence in README.md or docs/SETUP.md, so a failure means the code or that sentence is wrong.
 #
-# Exercises the WORKING TREE's tracked files, so uncommitted fixes are what gets
-# tested. macOS userland (md5, BSD find), same declared platform as the repo.
+# Usage:
+#   bash scripts/qa/rehearse-install.sh            # copy the working tree's tracked files
+#   bash scripts/qa/rehearse-install.sh --clone    # clone this repo's HEAD instead
 #
-# Exit codes: 0 = every scenario holds, 1 = at least one documented claim is false.
+# A secret probe counts as proof only when the commit output carries the Gate 1 line, so a
+# commit that failed for any other reason never reads as a blocked secret.
+# Exit codes: 0 = every case holds, 1 = at least one documented claim is false.
 set -u
+
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE OLIVERCODE_SCAN_TREE
+
+MODE="worktree"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --clone) MODE="clone"; shift ;;
+    *) echo "rehearse-install.sh: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ROOT="$(mktemp -d)"
 PASS=0; FAIL=0; FAILED_NAMES=""
+trap 'rm -rf "$ROOT"' EXIT
 
 say()  { printf '%s\n' "$*"; }
 ok()   { PASS=$((PASS+1)); say "  [OK]   $1"; }
 bad()  { FAIL=$((FAIL+1)); FAILED_NAMES="$FAILED_NAMES $2"; say "  [FAIL] $1"; }
 
-# Fresh copy of the working tree's tracked files as a committed git repo.
+# A fresh copy of the checkout as a committed git repo, matching a real clone.
 mk_oc() { # $1 = dest
   local dest="$1"
+  if [ "$MODE" = "clone" ]; then
+    git clone -q "$REPO" "$dest" || { say "FAIL: clone failed"; exit 1; }
+    return
+  fi
   mkdir -p "$dest"
   (cd "$REPO" && git ls-files -z | while IFS= read -r -d '' f; do
     mkdir -p "$dest/$(dirname "$f")"
-    cp -R "$REPO/$f" "$dest/$f" 2>/dev/null
+    cp -R "$REPO/$f" "$dest/$f" 2>/dev/null   # -R: .claude/skills/* is a symlink to a directory
   done)
   chmod +x "$dest/scripts/olivercode" "$dest"/scripts/*.sh "$dest"/scripts/qa/*.sh "$dest"/.githooks/* 2>/dev/null
   git -C "$dest" init -q .
   git -C "$dest" add -A >/dev/null 2>&1
-  git -C "$dest" -c user.email=matrix -c user.name=matrix commit -q -m base --no-verify >/dev/null 2>&1
+  # The identity has no "@": an email literal would trip the PII gate.
+  git -C "$dest" -c user.email=rehearsal -c user.name=rehearsal commit -q -m base --no-verify >/dev/null 2>&1
 }
 
 mk_repo() { # $1 = dest, $2 = optional rules filename
@@ -47,7 +66,7 @@ mk_repo() { # $1 = dest, $2 = optional rules filename
   [ -n "${2:-}" ] && printf '# rules\n' > "$1/$2"
   git -C "$1" init -q .
   git -C "$1" add -A >/dev/null 2>&1
-  git -C "$1" -c user.email=matrix -c user.name=matrix commit -q -m init --no-verify >/dev/null 2>&1
+  git -C "$1" -c user.email=rehearsal -c user.name=rehearsal commit -q -m init --no-verify >/dev/null 2>&1
 }
 
 register() { # $1 = oc dir, $2.. = "name[:path]" entries
@@ -67,33 +86,46 @@ json.dump(d, open(p, "w"), indent=2)
 PY
 }
 
-probe_blocked() { # $1 = repo dir; returns 0 if a staged secret is BLOCKED
-  ( cd "$1" \
+# Returns 0 only when a staged secret is blocked AND the output carries the Gate 1 line.
+probe_blocked() { # $1 = repo dir
+  local out rc
+  out="$(cd "$1" \
     && printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt \
     && git add leak-probe.txt \
-    && HOME="$H" git -c user.email=matrix -c user.name=matrix commit -m probe >/dev/null 2>&1 )
-  local committed=$?
+    && HOME="$H" git -c user.email=rehearsal -c user.name=rehearsal commit -m probe 2>&1)"
+  rc=$?
   ( cd "$1" && git rm -q --cached leak-probe.txt 2>/dev/null; rm -f leak-probe.txt )
-  [ "$committed" -ne 0 ]
+  [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'Gate 1/[0-9]*: Secret scan' \
+    && printf '%s\n' "$out" | grep -q 'matches secret pattern'
 }
 
 new_case() { # $1 = case id
   H="$ROOT/$1/home"; WS="$ROOT/$1/ws"
   mkdir -p "$H" "$WS"
+  case "$H" in "$ROOT"/*) ;; *) say "ABORT: HOME $H is outside the sandbox"; exit 1 ;; esac
 }
 
-# ---------------------------------------------------------------- S1 fresh machine
-say "--- S1: brand-new machine, sibling layout, full manual path ---"
+oc() { (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode "$@"); }
+
+# ------------------------------------------------ S1 fresh machine, real install
+say "--- S1: brand-new machine, sibling layout, the real install ---"
 new_case s1
 mk_oc "$WS/OliverCode"; mk_repo "$WS/app-a"; mk_repo "$WS/app-b"
-oc() { (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode "$@"); }
 oc install >/dev/null 2>&1 && ok "install on virgin HOME" s1 || bad "install on virgin HOME" s1
 [ -L "$H/.claude/CLAUDE.md" ] && ok "CLAUDE.md symlinked" s1 || bad "CLAUDE.md symlinked" s1
+OCR="$(dirname "$(readlink "$H/.claude/CLAUDE.md" 2>/dev/null)" 2>/dev/null)"
+[ -f "$OCR/docs/RULES.md" ] && [ -L "$H/.claude/VOICE.md" ] \
+  && ok "\$OC resolves from a virgin HOME" s1 || bad "\$OC resolves from a virgin HOME" s1
+ADOPT="$H/.claude/skills/olivercode-adoption/SKILL.md"
+[ -f "$WS/OliverCode/.claude/skills/olivercode-adoption/SKILL.md" ] && grep -q "^name: olivercode-adoption" "$WS/OliverCode/.claude/skills/olivercode-adoption/SKILL.md" \
+  && ok "adoption skill resolves in a fresh clone, before any setup" s1 || bad "adoption skill resolves in a fresh clone, before any setup" s1
+[ -e "$ADOPT" ] && ok "adoption skill linked into ~/.claude/skills" s1 || bad "adoption skill linked into ~/.claude/skills" s1
 register "$WS/OliverCode" app-a app-b
 oc sync-hooks 2>&1 | grep -q "app-a: hooks synced" && ok "sync-hooks reaches fleet" s1 || bad "sync-hooks reaches fleet" s1
-probe_blocked "$WS/app-a" && ok "secret blocked in app-a" s1 || bad "secret blocked in app-a" s1
-probe_blocked "$WS/app-b" && ok "secret blocked in app-b" s1 || bad "secret blocked in app-b" s1
-oc health >/dev/null 2>&1 && ok "health exits 0" s1 || bad "health exits 0" s1
+probe_blocked "$WS/app-a" && ok "secret blocked in app-a (Gate 1 line seen)" s1 || bad "secret blocked in app-a" s1
+probe_blocked "$WS/app-b" && ok "secret blocked in app-b (Gate 1 line seen)" s1 || bad "secret blocked in app-b" s1
+oc health 2>&1 | grep -q "app-a: hooksPath set" && ok "health confirms the adopted fleet's hooks" s1 || bad "health confirms the adopted fleet's hooks" s1
+oc health --hooks-only >/dev/null 2>&1 && ok "health --hooks-only exits 0" s1 || bad "health --hooks-only exits 0" s1
 
 # ------------------------------------------------- S2 existing ~/.claude preserved
 say "--- S2: existing ~/.claude (real rules + vendor skill + foreign symlink) ---"
@@ -133,8 +165,7 @@ register "$WS/tools/OliverCode" web api
 oc4 sync-hooks --root "$WS/code" 2>&1 | grep -q "web: hooks synced" && ok "--root honored by sync-hooks" s4 || bad "--root honored by sync-hooks" s4
 probe_blocked "$WS/code/web" && ok "secret blocked under --root" s4 || bad "secret blocked under --root" s4
 oc4 health --root "$WS/code" 2>&1 | grep -q "web: hooksPath set" && ok "--root honored by health" s4 || bad "--root honored by health" s4
-# The failure the docs warn about: a wrong --root must NOT read as success.
-# Nonexistent dir: hard error. Existing-but-wrong dir: visible "0 target(s) synced".
+# A wrong --root must not read as success.
 oc4 sync-hooks --root "$WS/nowhere" >/dev/null 2>&1 \
   && bad "nonexistent --root should hard-error" s4 || ok "nonexistent --root hard-errors" s4
 mkdir -p "$WS/emptydir"
@@ -150,7 +181,6 @@ out5="$( (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode discover -
 echo "$out5" | grep -q "AGENTS.md"     && ok "discover flags AGENTS.md" s5     || bad "discover flags AGENTS.md" s5
 echo "$out5" | grep -q ".cursorrules"  && ok "discover flags .cursorrules" s5  || bad "discover flags .cursorrules" s5
 echo "$out5" | grep -qi "hooksPath"    && ok "discover reports hook state" s5  || bad "discover reports hook state" s5
-# the emitted skeleton must be valid JSON containing explicit paths
 echo "$out5" | sed -n '/^{/,/^}/p' | python3 -c "import json,sys; d=json.load(sys.stdin); assert all('path' in v for v in d.values()), 'no path'" 2>/dev/null \
   && ok "emitted profile skeleton is valid JSON with paths" s5 || bad "emitted profile skeleton is valid JSON with paths" s5
 
@@ -158,10 +188,10 @@ echo "$out5" | sed -n '/^{/,/^}/p' | python3 -c "import json,sys; d=json.load(sy
 say "--- S6: bootstrap a repo (dry-run, real, presence vs strict, idempotent) ---"
 new_case s6
 mk_oc "$WS/OliverCode"; mk_repo "$WS/newrepo"
-printf 'hand-written\n' > "$WS/newrepo/CLAUDE.md"   # presence-mode file pre-exists
-before6="$(find "$WS/newrepo" -type f | sort | md5)"
+printf 'hand-written\n' > "$WS/newrepo/CLAUDE.md"
+before6="$(find "$WS/newrepo" -type f -not -path '*/.git/*' | sort | xargs cat | cksum)"
 (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode bootstrap "$WS/newrepo" --dry-run) >/dev/null 2>&1
-after6="$(find "$WS/newrepo" -type f | sort | md5)"
+after6="$(find "$WS/newrepo" -type f -not -path '*/.git/*' | sort | xargs cat | cksum)"
 [ "$before6" = "$after6" ] && ok "dry-run writes nothing" s6 || bad "dry-run writes nothing" s6
 (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode bootstrap "$WS/newrepo") >/dev/null 2>&1
 grep -q "hand-written" "$WS/newrepo/CLAUDE.md" && ok "presence file not clobbered" s6 || bad "presence file not clobbered" s6
@@ -189,10 +219,10 @@ oc sync-hooks 2>&1 | grep -q "special: declared hook variant" && ok "variant ski
 grep -q "custom-gate" "$WS/special/.githooks/pre-commit" && ok "variant hook not overwritten" s7 || bad "variant hook not overwritten" s7
 h7="$(oc health 2>&1)"
 echo "$h7" | grep -q "\[WARN\] special: declared hook variant" && ok "health reports variant as WARN" s7 || bad "health reports variant as WARN" s7
-oc health >/dev/null 2>&1 && ok "variant does not fail health" s7 || bad "variant does not fail health" s7
+oc health --hooks-only >/dev/null 2>&1 && ok "variant does not fail health" s7 || bad "variant does not fail health" s7
 
 # --------------------------------------------------------------- S8 backout
-say "--- S8: the documented backout actually removes everything ---"
+say "--- S8: the documented backout removes everything ---"
 new_case s8
 mk_oc "$WS/OliverCode"; mk_repo "$WS/app"
 mkdir -p "$H/.claude/skills/vendor-skill" "$H/elsewhere/other-skill"
@@ -207,7 +237,6 @@ oc sync-hooks >/dev/null 2>&1
 probe_blocked "$WS/app" || bad "precondition: hooks active before backout" s8
 grep -q "scripts/hooks/" "$H/.claude/settings.json" || bad "precondition: install wrote its settings.json hooks" s8
 [ -L "$H/.claude/VOICE.md" ] || bad "precondition: install linked VOICE.md" s8
-# docs/SETUP.md "Backing out", verbatim steps
 oc uninstall >/dev/null 2>&1 && ok "uninstall exits 0" s8 || bad "uninstall exits 0" s8
 git -C "$WS/app" config --unset core.hooksPath
 HOME="$H" bash "$WS/OliverCode/scripts/local-scheduler/uninstall.sh" >/dev/null 2>&1
@@ -225,8 +254,10 @@ python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d=={"model":
 [ -d "$H/.claude/skills/vendor-skill" ] && [ "$(readlink "$H/.claude/skills/other-skill")" = "$H/elsewhere/other-skill" ] \
   && ok "backout keeps the owner's skill folder and foreign link" s8 || bad "backout keeps the owner's skill folder and foreign link" s8
 oc uninstall >/dev/null 2>&1 && ok "uninstall twice exits 0" s8 || bad "uninstall twice exits 0" s8
-probe_blocked "$WS/app" && bad "backout: hooks still firing after unset" s8 || ok "backout: hooks genuinely gone (secret commits again)" s8
-( cd "$WS/app" && git log --oneline | grep -q probe && git reset -q --hard HEAD~1 )
+# With hooksPath unset the secret commits again: the commit must SUCCEED for the gates to be gone.
+( cd "$WS/app" && printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt && git add leak-probe.txt \
+  && HOME="$H" git -c user.email=rehearsal -c user.name=rehearsal commit -qm probe >/dev/null 2>&1 ) \
+  && ok "backout: hooks genuinely gone (secret commits again)" s8 || bad "backout: hooks still firing after unset" s8
 
 say "--- S8b: backout after the checkout moved leaves nothing behind ---"
 new_case s8b
@@ -262,25 +293,26 @@ chmod +x "$WS/OliverCode/scripts/olivercode" "$WS/OliverCode"/scripts/*.sh 2>/de
 mk_repo "$WS/app"
 register "$WS/OliverCode" app
 ( cd "$WS/origin" && printf '\n# upstream change\n' >> README.md \
-  && git add README.md && git -c user.email=matrix -c user.name=matrix commit -q -m upstream --no-verify )
+  && git add README.md && git -c user.email=rehearsal -c user.name=rehearsal commit -q -m upstream --no-verify )
 (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode update) >/dev/null 2>&1
 grep -q "upstream change" "$WS/OliverCode/README.md" && ok "update pulled upstream commit" s10 || bad "update pulled upstream commit" s10
 [ -x "$WS/app/.githooks/pre-commit" ] && ok "update re-synced fleet hooks" s10 || bad "update re-synced fleet hooks" s10
 
 # ------------------------------------------------- S11 probe in a no-commit repo
-say "--- S11: SETUP's probe cleanup works in a repo with no commits ---"
+say "--- S11: the probe script works in a repo with no commits ---"
 new_case s11
 mk_oc "$WS/OliverCode"
 mkdir -p "$WS/fresh" && git -C "$WS/fresh" init -q .
 register "$WS/OliverCode" fresh
 oc sync-hooks >/dev/null 2>&1
-( cd "$WS/fresh" \
-  && printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt \
-  && git add leak-probe.txt \
-  && ! HOME="$H" git -c user.email=matrix -c user.name=matrix commit -m probe >/dev/null 2>&1 \
-  && git rm -q --cached leak-probe.txt && rm -f leak-probe.txt ) \
-  && ok "probe blocked + documented cleanup works with no HEAD" s11 \
-  || bad "probe blocked + documented cleanup works with no HEAD" s11
+( cd "$WS/fresh" && HOME="$H" bash "$WS/OliverCode/scripts/qa/probe-secret-gate.sh" ) >/dev/null 2>&1 \
+  && ok "probe-secret-gate.sh passes and cleans up with no HEAD" s11 \
+  || bad "probe-secret-gate.sh passes and cleans up with no HEAD" s11
+[ ! -e "$WS/fresh/leak-probe.txt" ] && ok "probe leaves no file behind" s11 || bad "probe leaves no file behind" s11
+# A commit that fails for another reason must read as inconclusive, never as proof.
+mkdir -p "$WS/ungated" && git -C "$WS/ungated" init -q . && git -C "$WS/ungated" config user.useConfigOnly true
+( cd "$WS/ungated" && HOME="$H" bash "$WS/OliverCode/scripts/qa/probe-secret-gate.sh" ) >/dev/null 2>&1 \
+  && bad "probe counted a non-Gate-1 failure as proof" s11 || ok "probe rejects a commit that failed outside Gate 1" s11
 
 # --------------------------------------------------------------- S12 zero-config
 say "--- S12: zero-config clone basics ---"
@@ -291,14 +323,9 @@ for cmd in "--help" "health" "skills"; do
     && ok "olivercode $cmd" s12 || bad "olivercode $cmd" s12
 done
 (cd "$WS/OliverCode" && HOME="$H" bash scripts/validate.sh) >/dev/null 2>&1 \
-  && ok "validate.sh on clean copy" s12 || bad "validate.sh on clean copy" s12
+  && ok "validate.sh on a clean copy" s12 || bad "validate.sh on a clean copy" s12
 
-# ----------------------------------------------------------------------- summary
 say ""
-say "================ MATRIX: $PASS passed, $FAIL failed ================"
+say "================ REHEARSAL: $PASS passed, $FAIL failed ================"
 [ -n "$FAILED_NAMES" ] && say "failing cases:$FAILED_NAMES"
-rm -rf "$ROOT"
-if [ "$FAIL" -ne 0 ]; then
-  exit 1
-fi
-exit 0
+[ "$FAIL" -eq 0 ]

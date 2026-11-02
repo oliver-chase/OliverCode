@@ -192,7 +192,7 @@ Not every rule in this repo is machine-checked, so know which is which before as
 
 **Hard-enforced:** the gates in `.githooks/pre-commit`, which fire on every `git commit` (`docs/GATES.md` lists them). Inside Claude Code, the commit guard also refuses a commit that would skip them.
 
-**Soft, meaning instruction only:** "read the framework boundary before structural changes", the skill-placement requirements, the code, docs, audit, QA, gate, commit and push ordering, and running the QA scripts at all (`full-qa-pass.sh` is never auto-triggered). These are real rules worth following, and nothing blocks a commit that skips them. Being written in `CLAUDE.md` does not make a rule enforced, so check whether it is a hook or a sentence.
+**Soft, meaning instruction only:** "read the framework boundary before structural changes", the skill-placement requirements, the code, docs, audit, QA, gate, commit and push ordering, and running the install rehearsal at all (`rehearse-install.sh` is never auto-triggered). These are real rules worth following, and nothing blocks a commit that skips them. Being written in `CLAUDE.md` does not make a rule enforced, so check whether it is a hook or a sentence.
 
 ### Every gate must actually fail
 
@@ -274,10 +274,8 @@ None of these third-party tools ship here, and none are required, because Oliver
 Run these checks when you want to verify the complete system:
 
 ```bash
-bash scripts/validate.sh --tree        # Every gate over every tracked file
-bash scripts/qa/check-fork-usable.sh   # Fresh clone + enforcement
-bash scripts/qa/check-scenarios.sh     # Complete setup scenarios
-bash scripts/qa/full-qa-pass.sh        # Code, docs, and size checks
+bash scripts/validate.sh --tree          # Every gate over every tracked file, plus docs, bloat, code quality and tests
+bash scripts/qa/rehearse-install.sh      # Fresh clone, real install and every setup scenario
 ```
 
 The scenarios run in disposable sandboxes that cannot touch your real files.
@@ -308,7 +306,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | `scripts/validate.sh` | The single validation command, which runs the gates, the consistency checks, the reference check and the tests |
 | `scripts/lib/` | The checkers and helpers behind the launcher and `validate.sh` |
 | `scripts/hooks/` | The three Claude Code hooks: session check, commit guard and early-stop guard |
-| `scripts/qa/` | Code quality, bloat, fork-usability and scenario checks, plus the secret-gate probe |
+| `scripts/qa/` | The install rehearsal and the secret-gate probe |
 | `scripts/local-scheduler/` | Unattended `audit-fleet` and `push-fleet` runs through `launchd` (`docs/SETUP.md`, "Scheduled runs") |
 | `scripts/audit-staleness.py`, `scripts/find-spec.py`, `scripts/link-check.sh`, `scripts/run-governance-target.sh` | Staleness report, backlog ID lookup, reference check and the CI entrypoint for a downstream repo |
 | `docs/` | One document per concept, listed below |
@@ -343,10 +341,10 @@ python3 -m unittest discover tests
 
 The suite reports its own test count and deliberately breaks each gate to verify that the gate catches the failure.
 
-Run the complete setup scenarios with:
+Run the install rehearsal with:
 
 ```bash
-bash scripts/qa/check-scenarios.sh
+bash scripts/qa/rehearse-install.sh
 ```
 
-The command reports its own scenario count. CI is included and can be enabled per fork.
+The command reports its own case count. CI is included and can be enabled per fork.

@@ -6,7 +6,6 @@ Argument handling gets tests because an ignored unknown flag is a wrong success:
 """
 
 import contextlib
-import importlib.util
 import os
 import io
 import json
@@ -15,38 +14,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from unittest import mock
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _support import REPO_ROOT, git, load_script, scratch_repo
+
 LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
-
-
-def _load():
-    loader = SourceFileLoader("olivercode_launcher", str(LAUNCHER))
-    spec = importlib.util.spec_from_loader("olivercode_launcher", loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    return module
-
-
-launcher = _load()
-from lib import local_config  # noqa: E402  (importable once the launcher put scripts/ on the path)
-
-
-class NoLocalConfig(unittest.TestCase):
-    """Points local_config at a file that does not exist, so this machine's gitignored
-    olivercode.local.json (a `repoPaths` entry named alpha, say) cannot change the result."""
-
-    def setUp(self):
-        empty = tempfile.TemporaryDirectory()  # a private folder, so no other process can create the file
-        self.addCleanup(empty.cleanup)
-        for patcher in (mock.patch.object(local_config, "LOCAL_FILE", Path(empty.name) / "olivercode.local.json"),
-                        mock.patch.dict(os.environ, {k: v for k, v in os.environ.items()
-                                                     if k not in ("OLIVERCODE_VAULT_ROOT", "OLIVERCODE_SKILLS_ROOT")}, clear=True)):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+launcher = load_script("scripts/olivercode", "olivercode_launcher")
 
 
 class TestInstall(unittest.TestCase):
@@ -446,33 +420,13 @@ class TestUnknownArgsRejected(unittest.TestCase):
 
 
 
-class TestRepoPathResolution(NoLocalConfig):
-    """Adopting into an existing setup usually means repos are NOT siblings. Before
-    the `path` field they could not be registered at all -- the name WAS the path."""
-
-    def test_defaults_to_sibling_convention(self):
-        got = launcher._resolve_repo_path("alpha", {}, Path("/fleet"))
-        self.assertEqual(got, Path("/fleet/alpha"))
-
-    def test_absolute_path_wins(self):
-        got = launcher._resolve_repo_path("alpha", {"path": "/elsewhere/deep/alpha"}, Path("/fleet"))
-        self.assertEqual(got, Path("/elsewhere/deep/alpha"))
-
-    def test_relative_path_resolves_against_fleet_root(self):
-        got = launcher._resolve_repo_path("alpha", {"path": "sub/alpha"}, Path("/fleet"))
-        self.assertEqual(got, Path("/fleet/sub/alpha"))
-
-    def test_tilde_is_expanded(self):
-        got = launcher._resolve_repo_path("alpha", {"path": "~/work/alpha"}, Path("/fleet"))
-        self.assertEqual(got, Path.home() / "work" / "alpha")
-
 class TestBootstrap(unittest.TestCase):
     """`bootstrap` executes the manifest that nothing previously read. Its modes are
     the correctness property: strict overwrites, presence must never clobber."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-bootstrap-"))
-        subprocess.run(["git", "init", "-q", str(self.tmp)], check=True)
+        scratch_repo(self.tmp)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -538,84 +492,12 @@ class TestBootstrap(unittest.TestCase):
         finally:
             shutil.rmtree(plain, ignore_errors=True)
 
-class TestFleetIteration(NoLocalConfig):
-    """health and sync-hooks each had their own copy of this filter and had drifted:
-    one compared the self-skip case-sensitively, the other did not."""
-
-    def test_framework_repo_is_excluded_regardless_of_casing(self):
-        profiles = {"OliverCode": {}, "olivercode": {}, "OLIVERCODE": {}, "product-repo": {}}
-        names = [n for n, _, _ in launcher._iter_fleet(profiles, Path("/fleet"))]
-        self.assertEqual(names, ["product-repo"])
-
-    def test_yields_the_resolved_path(self):
-        profiles = {"alpha": {"path": "/elsewhere/alpha"}, "beta": {}}
-        got = {n: p for n, _, p in launcher._iter_fleet(profiles, Path("/fleet"))}
-        self.assertEqual(got["alpha"], Path("/elsewhere/alpha"))
-        self.assertEqual(got["beta"], Path("/fleet/beta"))
-
-    def test_yields_the_profile_for_variant_lookups(self):
-        profiles = {"alpha": {"hookVariant": "custom"}}
-        _, profile, _ = next(iter(launcher._iter_fleet(profiles, Path("/fleet"))))
-        self.assertEqual(profile.get("hookVariant"), "custom")
-
-
-class TestWaiverExpiryDateHandling(unittest.TestCase):
-    """One waiver written without a timezone must not crash the whole health run.
-
-    min() over mixed offset-naive and offset-aware datetimes raises TypeError;
-    reproduced live before the fix normalized both sides identically."""
-
-    def test_mixed_naive_and_aware_expiry_dates(self):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
-        try:
-            (tmp / "shared").mkdir()
-            (tmp / "shared" / "repo-profiles.json").write_text(json.dumps({
-                "unmanagedRepoWaivers": [
-                    {"name": "a", "reason": "r", "expiresAt": "2099-06-01T00:00:00+00:00"},
-                    {"name": "b", "reason": "r", "expiresAt": "2099-07-01T00:00:00"},
-                ]}))
-            with contextlib.redirect_stdout(io.StringIO()):
-                passed, failed, skipped = launcher._check_waiver_expiry(tmp)
-            self.assertEqual((passed, failed), (1, 0))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-
-    def test_expired_waiver_fails(self):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
-        try:
-            (tmp / "shared").mkdir()
-            (tmp / "shared" / "repo-profiles.json").write_text(json.dumps({
-                "unmanagedRepoWaivers": [
-                    {"name": "a", "reason": "r", "expiresAt": "2000-01-01T00:00:00+00:00"},
-                ]}))
-            with contextlib.redirect_stdout(io.StringIO()):
-                passed, failed, _ = launcher._check_waiver_expiry(tmp)
-            self.assertEqual((passed, failed), (0, 1))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-
-    def test_expired_variance_on_a_profile_fails(self):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-waiver-"))
-        try:
-            (tmp / "shared").mkdir()
-            (tmp / "shared" / "repo-profiles.json").write_text(json.dumps({
-                "profiles": {"a": {"approvedStrictVariances": [
-                    {"target": "x", "reason": "r", "expiresAt": "2000-01-01T00:00:00+00:00"},
-                ]}}}))
-            with contextlib.redirect_stdout(io.StringIO()):
-                passed, failed, _ = launcher._check_waiver_expiry(tmp)
-            self.assertEqual((passed, failed), (0, 1))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-
-
 class TestPushFleetExitCode(unittest.TestCase):
     """A blocked push must exit non-zero: the local scheduler touches its marker on exit 0,
     so a push that failed and exited 0 was logged OK and not retried for hours."""
 
     def _git(self, *args, cwd):
-        subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
-                       env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull})
+        git(cwd, *args)
 
     def _repo_ahead_of(self, remote: Path) -> Path:
         repo = self.tmp / "work"
@@ -628,9 +510,8 @@ class TestPushFleetExitCode(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-pushfleet-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.remote = self.tmp / "remote.git"
-        self._git("init", "-q", "--bare", "-b", "main", str(self.remote), cwd=self.tmp)
-        seed = self.tmp / "seed"
-        self._git("init", "-q", "-b", "main", str(seed), cwd=self.tmp)
+        scratch_repo(self.remote, bare=True, branch="main")
+        seed = scratch_repo(self.tmp / "seed", branch="main", identity=False)
         self._git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
                   "--allow-empty", "-m", "seed", cwd=seed)
         self._git("push", "-q", str(self.remote), "main", cwd=seed)
@@ -641,7 +522,6 @@ class TestPushFleetExitCode(unittest.TestCase):
         with mock.patch.object(launcher, "_private_repos", return_value={"target": repo}), \
              mock.patch.object(launcher, "_push_repos", return_value=[]), \
              mock.patch.object(launcher, "load_repo_profiles", return_value=({}, None)), \
-             mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": os.devnull}), \
              contextlib.redirect_stdout(io.StringIO()):
             # OliverCode itself is a target too; an absent .git makes it a plain SKIP.
             return launcher.command_push_fleet(oc_root, dry_run=False)

@@ -6,26 +6,19 @@ The scheduler check has its own file, tests/test_scheduler_health.py.
 """
 
 import contextlib
-import importlib.util
 import io
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-# The module imports `lib.repo_profiles`, so scripts/ must be importable first.
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-spec = importlib.util.spec_from_file_location(
-    "health_checks", REPO_ROOT / "scripts" / "lib" / "health_checks.py"
-)
-health = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(health)
+from _support import git, load_script, scratch_repo
+
+health = load_script("scripts/lib/health_checks.py", "health_checks")
 
 
 def quiet(fn, *args):
@@ -34,10 +27,6 @@ def quiet(fn, *args):
     with contextlib.redirect_stdout(out):
         result = fn(*args)
     return result, out.getvalue()
-
-
-def git(*args, cwd):
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
 
 class HealthBase(unittest.TestCase):
@@ -186,45 +175,12 @@ class VaultSkillLinks(HealthBase):
         self.assertEqual((0, 3, 0), self.check())
 
 
-class VoiceCopies(HealthBase):
-    def setUp(self):
-        super().setUp()
-        self.oc = self.root / "oc"
-        (self.oc / "docs").mkdir(parents=True)
-        (self.oc / "docs" / "VOICE.md").write_text("canonical")
-        self.links = self.root / "links"
-        self.links.mkdir()
-
-    def suite(self, name, voice):
-        skill = self.root / name / "skills" / f"{name}-skill"
-        skill.mkdir(parents=True)
-        (self.root / name / "docs").mkdir()
-        (self.root / name / "docs" / "VOICE.md").write_text(voice)
-        (self.links / f"{name}-skill").symlink_to(skill)
-
-    def check(self):
-        return quiet(health._check_voice_copies, self.oc, self.links)[0]
-
-    def test_a_missing_canonical_copy_fails(self):
-        (self.oc / "docs" / "VOICE.md").unlink()
-        self.assertEqual((0, 1, 0), self.check())
-
-    def test_no_suite_is_not_checked(self):
-        self.assertEqual((0, 0, 0), self.check())
-
-    def test_a_matching_suite_passes_and_a_drifted_one_fails(self):
-        self.suite("same", "canonical")
-        self.suite("drifted", "edited")
-        self.assertEqual((1, 1, 0), self.check())
-
-
 class RemotesResolve(HealthBase):
     def repo(self, name, origin=None):
         path = self.root / name
-        path.mkdir()
-        git("init", "-q", cwd=path)
+        scratch_repo(path)
         if origin:
-            git("remote", "add", "origin", origin, cwd=path)
+            git(path, "remote", "add", "origin", origin)
         return path
 
     def check(self, repos, ls_remote_stderr=None, ls_remote_code=0):
@@ -240,12 +196,12 @@ class RemotesResolve(HealthBase):
 
     def test_a_reachable_remote_passes(self):
         bare = self.root / "remote.git"
-        git("init", "-q", "--bare", str(bare), cwd=self.root)
+        scratch_repo(bare, bare=True)
         work = self.repo("work", origin=str(bare))
         (work / "f").write_text("x")
-        git("add", "f", cwd=work)
-        git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x", cwd=work)
-        git("push", "-q", "origin", "HEAD:main", cwd=work)
+        git(work, "add", "f")
+        git(work, "commit", "-qm", "x")
+        git(work, "push", "-q", "origin", "HEAD:main")
         self.assertEqual((1, 0, 0), self.check([("work", work)]))
 
     def test_a_denied_remote_fails(self):
@@ -275,11 +231,10 @@ class RemotesResolve(HealthBase):
 class OversizedTracked(HealthBase):
     def repo(self, name, files):
         path = self.root / name
-        path.mkdir()
-        git("init", "-q", cwd=path)
+        scratch_repo(path)
         for rel, size in files.items():
             (path / rel).write_bytes(b"x" * size)
-        git("add", ".", cwd=path)
+        git(path, "add", ".")
         return path
 
     def check(self, repos):

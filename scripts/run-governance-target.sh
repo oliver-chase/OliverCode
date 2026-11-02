@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─── Governance Gate — Target Repo Wrapper ────────────────────────────────
-# Thin CI wrapper around the QA phase list (scripts/qa/full-qa-pass.sh).
+# Thin CI wrapper around `validate.sh --check-repo`, which runs the bloat and code quality checks.
 # Invoked by core/templates/project/.github/workflows/olivercode-governance.yml
 # from within a downstream repo's checkout, after this OliverCode repo has been
 # checked out to `.olivercode/` inside that checkout:
@@ -8,7 +8,7 @@
 #   .olivercode/scripts/run-governance-target.sh --target-repo "$GITHUB_WORKSPACE" \
 #     --repo-name "<repo-name>"
 #
-# Deliberately does not reimplement the QA phases — it points full-qa-pass.sh at
+# Deliberately does not reimplement the checks — it points validate.sh at
 # the target repo and propagates its exit code.
 
 set -euo pipefail
@@ -48,4 +48,4 @@ LABEL="${REPO_NAME:-$(basename "$TARGET_REPO")}"
 
 echo "OliverCode governance gate — target: $LABEL ($TARGET_REPO)"
 
-exec bash "$SCRIPT_DIR/qa/full-qa-pass.sh" --target "$TARGET_REPO"
+exec bash "$SCRIPT_DIR/validate.sh" --check-repo "$TARGET_REPO"

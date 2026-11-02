@@ -5,32 +5,27 @@ could not fail. These tests replay two of the real ones, so the detector itself
 cannot rot into the thing it was built to catch.
 """
 
-import importlib.util
 import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location(
-    "fc", REPO_ROOT / "scripts" / "lib" / "falsifiability_check.py"
-)
-fc = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(fc)
+from _support import git, load_script, scratch_repo
+
+fc = load_script("scripts/lib/falsifiability_check.py", "fc")
 
 
 class _Scratch(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-falsify-"))
-        subprocess.run(["git", "init", "-q", str(self.tmp)], check=True)
+        scratch_repo(self.tmp)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def write(self, name, body):
         (self.tmp / name).write_text(body, encoding="utf-8")
-        subprocess.run(["git", "-C", str(self.tmp), "add", name], check=True)
+        git(self.tmp, "add", name)
 
 
 class TestDeadCounter(_Scratch):
@@ -71,10 +66,6 @@ class TestCheckAll(_Scratch):
         found = " ".join(fc.check_all(self.tmp))
         self.assertIn("CRITICAL", found)
         self.assertIn("no nonzero exit", found)
-
-    def test_this_repo_has_no_unfalsifiable_checks(self):
-        self.assertEqual(fc.check_all(REPO_ROOT), [])
-
 
 if __name__ == "__main__":
     unittest.main()

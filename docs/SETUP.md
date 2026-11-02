@@ -30,12 +30,12 @@ Each command must exit 0 on a clean clone with no configuration. `health` notes 
 One command checks all of this in a sandbox with a throwaway HOME:
 
 ```bash
-bash scripts/qa/check-fork-usable.sh
+bash scripts/qa/rehearse-install.sh
 ```
 
-It also walks this guide's load-bearing steps against two throwaway repos (fleet registration, `sync-hooks`, the secret probe and `health`), so the instructions below are verified by running them. When it passes, every failure further on is a setup problem. Run it after any change to the framework's own plumbing. It is also Phase 3 of `scripts/qa/full-qa-pass.sh`.
+It runs the real `olivercode install` against a throwaway HOME, then walks this guide's load-bearing steps (fleet registration, `sync-hooks`, the secret probe, `health`, `update` and the backout), so the instructions below are verified by running them. It never touches your real `~/.claude`. When it passes, every failure further on is a setup problem. Run it after any change to the framework's own plumbing.
 
-Enable CI in your fork. `.github/workflows/framework-ci.yml` ships ready to run and is paused on the origin repo (`docs/GATES.md`, "Validation", says why). Where CI is off, the local commands are the entire enforcement layer, so run `full-qa-pass.sh` before you push.
+Enable CI in your fork. `.github/workflows/framework-ci.yml` ships ready to run and is paused on the origin repo (`docs/GATES.md`, "Validation", says why). Where CI is off, the local commands are the entire enforcement layer, so run `bash scripts/validate.sh` before you push.
 
 ## Step 1: inventory before you touch anything
 
@@ -187,7 +187,7 @@ git remote add upstream <the repo you forked from>   # once
 git fetch upstream
 git log --oneline HEAD..upstream/main                # read what you are about to take
 git merge upstream/main                              # resolve conflicts deliberately
-bash scripts/qa/check-fork-usable.sh                 # prove the merge did not break the fork
+bash scripts/qa/rehearse-install.sh                  # prove the merge did not break the fork
 scripts/olivercode sync-hooks                        # templates may have changed
 ```
 
@@ -290,8 +290,8 @@ Verify the restore:
 
 ```bash
 scripts/olivercode health            # HEALTHY, and the five topology checks pass
-bash scripts/validate.sh             # gates, doc consistency, references, tests
-bash scripts/qa/check-scenarios.sh   # the setup walkthroughs, in disposable sandboxes
+bash scripts/validate.sh             # gates, doc consistency, references, bloat, code quality, tests
+bash scripts/qa/rehearse-install.sh  # the setup walkthroughs, in disposable sandboxes
 ```
 
 A restore is finished when `health` is HEALTHY, a planted secret is refused by a real commit, and a skill from each plugin is invocable as `/<plugin>:<skill>`.

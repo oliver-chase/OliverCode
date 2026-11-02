@@ -7,18 +7,13 @@ duplicate it was masking.
 
 from __future__ import annotations
 
-import importlib.util
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location(
-    "dc", REPO_ROOT / "scripts" / "lib" / "duplication_check.py"
-)
-dc = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(dc)
+from _support import git, load_script, scratch_repo
+
+dc = load_script("scripts/lib/duplication_check.py", "dc")
 
 
 def _repo(tmp: Path, files: dict[str, str]) -> Path:
@@ -28,8 +23,8 @@ def _repo(tmp: Path, files: dict[str, str]) -> Path:
         path = tmp / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-    subprocess.run(["git", "init", "-q", "."], cwd=tmp, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=tmp, capture_output=True, check=True)
+    scratch_repo(tmp)
+    git(tmp, "add", "-A")
     return tmp
 
 
@@ -41,11 +36,6 @@ LONG_PASSAGE = (
 
 
 class TestDuplicationCheck(unittest.TestCase):
-    def test_shipped_tree_is_clean(self):
-        # The real gate this repo runs on itself -- must stay green, or the gate
-        # that ships in validate.sh is failing its own build.
-        self.assertEqual(dc.check_all(REPO_ROOT), [])
-
     def test_catches_a_real_cross_file_duplicate(self):
         with tempfile.TemporaryDirectory(prefix="olivercode-dup-") as tmp:
             work = _repo(

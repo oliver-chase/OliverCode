@@ -4,17 +4,12 @@ A pull can add a skill or a Claude Code hook, and only install links those into 
 Before update ran install, a second device pulled four new skills and had no link to them.
 """
 
-import importlib.util
 import unittest
-from importlib.machinery import SourceFileLoader
-from pathlib import Path
 from unittest import mock
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-loader = SourceFileLoader("olivercode_update", str(REPO_ROOT / "scripts" / "olivercode"))
-spec = importlib.util.spec_from_loader("olivercode_update", loader)
-launcher = importlib.util.module_from_spec(spec)
-loader.exec_module(launcher)
+from _support import load_script
+
+launcher = load_script("scripts/olivercode", "olivercode_update")
 
 
 class UpdateRunsInstall(unittest.TestCase):

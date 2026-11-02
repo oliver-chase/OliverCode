@@ -1,7 +1,6 @@
-"""Tests for scripts/build-hooks.py: the committed hooks match the build, and a hand edit fails."""
+"""Tests for scripts/build-hooks.py: a hand edit to a built hook fails. validate.sh runs the check on the committed hooks."""
 
 import contextlib
-import importlib.util
 import io
 import shutil
 import tempfile
@@ -9,10 +8,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("build_hooks", REPO_ROOT / "scripts" / "build-hooks.py")
-bh = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bh)
+from _support import REPO_ROOT, load_script
+
+bh = load_script("scripts/build-hooks.py", "build_hooks")
 
 
 class TestBuildHooks(unittest.TestCase):
@@ -38,9 +36,6 @@ class TestBuildHooks(unittest.TestCase):
         with unittest.mock.patch("sys.argv", ["build-hooks.py", *argv]), \
                 contextlib.redirect_stdout(io.StringIO()):
             return bh.main()
-
-    def test_committed_hooks_match_the_build(self):
-        self.assertEqual(self.check("--check"), 0)
 
     def test_a_hand_edit_to_a_built_hook_fails(self):
         hook = self.tmp / "core" / "templates" / "project" / "pre-commit-private"

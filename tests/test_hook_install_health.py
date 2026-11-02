@@ -5,45 +5,27 @@ the wrong variant, git runs weaker gates or none and says nothing. `olivercode h
 fleet-wide detector, so it must not report OK in any of those states.
 """
 
-import importlib.util
+import contextlib
+import io
 import os
 import shutil
-import subprocess
-import stat
 import tempfile
 import unittest
-from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from unittest import mock
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from _support import REPO_ROOT, git, load_script, scratch_repo
+
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
-
-
-def _load_launcher():
-    loader = SourceFileLoader("olivercode_launcher", str(REPO_ROOT / "scripts" / "olivercode"))
-    spec = importlib.util.spec_from_loader("olivercode_launcher", loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    return module
-
-
-launcher = _load_launcher()
-
-
-GIT_ENV = {**{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
-           "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
-
-
-def git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), *args], env=GIT_ENV, check=True,
-                          capture_output=True, text=True)
+launcher = load_script("scripts/olivercode", "olivercode_launcher")
+repo_gates = load_script("scripts/lib/repo_gates.py")
 
 
 class TestHookProblems(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="olivercode-hookhealth-"))
         self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
-        git(self.repo, "init", "-q")
+        scratch_repo(self.repo)
         self.hooks = self.repo / ".githooks"
 
     def install(self, private=False):
@@ -102,13 +84,56 @@ class TestHookProblems(unittest.TestCase):
                 self.assertEqual(self.problems(private), [])
 
 
+class TestFleetHooks(unittest.TestCase):
+    """`health --hooks-only`: the hook state of each fleet and private repo, counted once, offline."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="olivercode-fleethooks-"))
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        self.public = scratch_repo(self.root / "public")
+        self.private = scratch_repo(self.root / "private")
+        self.bare = scratch_repo(self.root / "bare")
+        launcher._install_hook_pair(self.public, TEMPLATES, private_repo=False)
+        launcher._install_hook_pair(self.private, TEMPLATES, private_repo=True)
+        profiles = {"public": {}, "private": {}, "bare": {}}
+        for name, patcher in (
+            ("profiles", mock.patch.object(launcher, "load_repo_profiles", return_value=(profiles, None))),
+            ("gap", mock.patch.object(launcher, "registry_gap", return_value=None)),
+            ("private", mock.patch.object(launcher, "_private_repos", return_value={"private": self.private})),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_check(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            return launcher._check_fleet_hooks(launcher.OC_ROOT, self.root), out.getvalue()
+
+    def test_a_repo_in_the_fleet_and_in_private_repos_is_checked_once_as_private(self):
+        (passed, failed, _), out = self.run_check()
+        self.assertEqual(1, out.count("private: hooksPath set"))
+        self.assertEqual((2, 1), (passed, failed))  # public and private pass, bare fails
+
+    def test_a_repo_with_no_hooks_fails_by_name(self):
+        _, out = self.run_check()
+        self.assertIn("[FAIL] bare:", out)
+
+    def test_hooks_only_exits_nonzero_for_a_failing_repo_and_checks_nothing_over_the_network(self):
+        with mock.patch.object(launcher, "_check_remotes_resolve", side_effect=AssertionError("network")), \
+                mock.patch.object(launcher, "_check_github_about", side_effect=AssertionError("network")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(1, launcher.command_health(self.root, hooks_only=True))
+            shutil.rmtree(self.bare)
+            self.assertEqual(0, launcher.command_health(self.root, hooks_only=True))
+
+
 class TestInstallHookPair(unittest.TestCase):
     """What sync-hooks deploys to each repo, file by file."""
 
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="olivercode-hookpair-"))
         self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        scratch_repo(self.repo)
 
     def hook(self, name):
         return (self.repo / ".githooks" / name).read_bytes()
@@ -131,10 +156,14 @@ class TestInstallHookPair(unittest.TestCase):
                 self.assertEqual(self.hook("pre-push"), (TEMPLATES / "pre-push").read_bytes())
                 self.assertTrue(os.access(self.repo / ".githooks" / "pre-push", os.X_OK))
 
+    def test_gate_problem_names_an_unset_hooks_path_and_clears_after_install(self):
+        self.assertIn("core.hooksPath is unset", repo_gates.gate_problem(self.repo))
+        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
+        self.assertEqual("", repo_gates.gate_problem(self.repo))
+
     def test_git_is_pointed_at_the_installed_hooks(self):
         launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
-        got = subprocess.run(["git", "-C", str(self.repo), "config", "--get", "core.hooksPath"],
-                             capture_output=True, text=True).stdout.strip()
+        got = git(self.repo, "config", "--get", "core.hooksPath").stdout.strip()
         self.assertEqual(got, ".githooks")
 
 
