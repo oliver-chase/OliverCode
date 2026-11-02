@@ -12,6 +12,7 @@
         "Backlog": "e4bb8de7",
         "Ready": "87bf165b",
         "In Progress": "f40bfa45",
+        "QA": "fb31ba5b",
         "Complete": "27846d19"
       }
     },
@@ -38,6 +39,20 @@
       "options": {
         "Epic": "fa49b04e",
         "Story": "1f939005"
+      }
+    },
+    "area": {
+      "id": "PVTSSF_lAHOCyeGV84BoY_xzhoOR-Y",
+      "options": {
+        "audit": "1a0353b5",
+        "automation-first-agent-design": "3799ee27",
+        "backlog": "f3fc0a77",
+        "diagnosing-bugs": "469888f6",
+        "olivercode-adoption": "a3f959e2",
+        "plan": "6af407dd",
+        "skill-creation": "e71ffeff",
+        "growth": "6acde981",
+        "fleet-wide": "dcbe21ce"
       }
     }
   },

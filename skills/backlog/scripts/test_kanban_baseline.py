@@ -88,16 +88,16 @@ class Baseline(unittest.TestCase):
 
 
 class CurrentOliverCodeBoard(unittest.TestCase):
-    """The live OliverCode config lists no QA option, so the checker has to report the lane."""
+    """The live OliverCode config lists every baseline lane. A board without the QA lane is still reported."""
     CONFIG = json.loads((ROOT / "docs" / "backlog-config.json").read_text(encoding="utf-8"))
 
     def test_the_layout_without_a_qa_lane_is_flagged_and_nothing_else(self):
-        problems = check(fixture("board-no-qa-lane"), self.CONFIG)
+        problems = check(fixture("board-no-qa-lane"))
         self.assertEqual(1, len(problems))
         self.assertIn("missing option QA", problems[0])
 
-    def test_the_config_stays_valid_and_names_the_lane_it_lacks(self):
-        self.assertEqual(["QA"], bh.missing_lanes(self.CONFIG))
+    def test_the_config_stays_valid_and_names_every_lane(self):
+        self.assertEqual([], bh.missing_lanes(self.CONFIG))
         bh.verify_config(self.CONFIG, ROOT / "docs" / "backlog-config.json")
 
     def test_the_example_config_lists_every_baseline_lane(self):

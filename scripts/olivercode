@@ -26,6 +26,7 @@ from lib.health_checks import (  # noqa: E402,F401
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
     _check_voice_copies, _check_scheduler,
 )
+from lib import backlog_setup as _backlog_setup  # noqa: E402
 from lib import claude_settings as _claude_settings  # noqa: E402
 from lib import repo_gates as _repo_gates  # noqa: E402
 from lib.local_config import private_repos as _private_repos  # noqa: E402
@@ -38,6 +39,7 @@ OC_ROOT = Path(__file__).resolve().parent.parent
 
 COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
+    ("olivercode backlog-setup [DIR] [--apply]", "Set up or repair a repo's GitHub Project board, backlog config, commit-msg hook and story rule. Dry run unless --apply"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
@@ -695,9 +697,44 @@ def command_health(fleet_root: Path | None = None, hooks_only: bool = False) -> 
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
 
+    # 7. Each repo's board against shared/kanban-baseline.json, and its commit-msg hook.
+    print("\nBacklog boards:")
+    t.add(*_backlog_setup.boards_health(topo_repos, _backlog_setup.Api()))
+
     print(f"\n{'=' * 40}")
     print(t.summary())
     return 1 if t.failed else 0
+
+
+def command_backlog_setup(argv: list[str]) -> int:
+    """`olivercode backlog-setup [DIR] [--apply]`: see lib/backlog_setup.py and docs/SETUP.md."""
+    apply = "--apply" in argv
+    rest = [a for a in argv if a != "--apply"]
+    opts: dict[str, list[str]] = {"--title": [], "--area": [], "--map": []}
+    link = "--no-link" not in rest
+    rest = [a for a in rest if a != "--no-link"]
+    paths: list[str] = []
+    i = 0
+    while i < len(rest):
+        if rest[i] in opts:
+            if i + 1 >= len(rest):
+                print(f"Error: {rest[i]} needs a value.")
+                return 1
+            opts[rest[i]].append(rest[i + 1])
+            i += 2
+        else:
+            paths.append(rest[i])
+            i += 1
+    if len(paths) > 1 or (paths and paths[0].startswith("-")):
+        print("Usage: olivercode backlog-setup [DIR] [--apply] [--title NAME] [--area NAME ...] [--map OLD=NEW ...] [--no-link]")
+        return 1
+    target = Path(paths[0] if paths else ".").expanduser()
+    if not target.is_dir():
+        print(f"Error: {target} is not a directory.")
+        return 1
+    return _backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT,
+                                    title=(opts["--title"] or [None])[-1], areas=opts["--area"] or None,
+                                    maps=opts["--map"], link=link)
 
 
 # _resolve_repo_path / _iter_fleet moved to lib/repo_profiles.py 2026-09-15 so
@@ -890,12 +927,8 @@ def _install_pre_push(repo_path: Path, templates_dir: Path) -> None:
     """Deploy pre-push and commit-msg. A declared pre-commit variant still gets both: what is
     safe to push and the story reference every commit carries do not depend on which commit
     gates a repo runs. A repo's `commit-msg.optout` file is never written or removed here."""
-    hooks_dir = repo_path / ".githooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
     for name in ("pre-push", "commit-msg"):
-        target = hooks_dir / name
-        target.write_bytes((templates_dir / name).read_bytes())
-        target.chmod(0o755)
+        _backlog_setup.deploy_hook(repo_path / ".githooks", templates_dir, name)
 
 
 def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
@@ -1191,6 +1224,8 @@ def main() -> int:
             print(f"Error: {target} is not a directory.")
             return 1
         return command_bootstrap(OC_ROOT, target, dry)
+    if cmd == "backlog-setup":
+        return command_backlog_setup(argv)
     if cmd == "install":
         _reject_extra(cmd, argv)
         return command_install(OC_ROOT)
