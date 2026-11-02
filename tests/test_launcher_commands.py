@@ -447,6 +447,7 @@ class TestBootstrap(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue((self.tmp / "QUALITY_BASELINE.md").is_file())
         self.assertTrue((self.tmp / ".githooks" / "pre-commit").is_file())
+        self.assertTrue((self.tmp / ".githooks" / "commit-msg").is_file())
         self.assertTrue((self.tmp / "docs" / "repo-structure-contract.md").is_file())
 
     def test_presence_files_are_never_clobbered(self):
@@ -459,6 +460,7 @@ class TestBootstrap(unittest.TestCase):
     def test_hooks_are_executable(self):
         self._run()
         self.assertTrue(os.access(self.tmp / ".githooks" / "pre-commit", os.X_OK))
+        self.assertTrue(os.access(self.tmp / ".githooks" / "commit-msg", os.X_OK))
 
     def _fake_checkout(self, manifest: dict) -> Path:
         """An OliverCode root holding only a bootstrap manifest, so one rule is tested alone."""

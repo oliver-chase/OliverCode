@@ -77,6 +77,11 @@
       "mode": "strict"
     },
     {
+      "source": "core/templates/project/commit-msg",
+      "target": ".githooks/commit-msg",
+      "mode": "strict"
+    },
+    {
       "source": "core/templates/project/pre-commit-private",
       "target": ".githooks/pre-commit-private",
       "mode": "strict"

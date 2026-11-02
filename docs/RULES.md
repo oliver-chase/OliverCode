@@ -386,6 +386,8 @@ Every repo's Project runs the same kanban baseline, defined once in `shared/kanb
 
 Every owner request, however small, becomes a story before work starts, and `skills/backlog/references/story-template.md` defines the body: a user story sentence, Given/When/Then scenarios, an epic link, Priority, Size and Work type. A request that matches an open story is added to it, and a request that arrives mid-task is filed and queued without reordering the board unless the owner says "stop", "do this first" or "drop that". `skills/backlog/scripts/check_story_format.py` verifies a body, and the `backlog` skill's "Save every ask" holds the procedure. `CLAUDE.md` and the project template's `CLAUDE.md` each carry one line pointing here.
 
+Every agent that commits or finishes work logs it on the story: its name, role (builder or QA), the commit, the files changed and the result. The lead logs a helper's result before reporting it. `.githooks/commit-msg` blocks a commit with no story reference, which is the part git enforces. The comment itself is procedure, because a hook cannot post to GitHub, and `docs/GATES.md` has the limit.
+
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`, and finished work leaves the file because git keeps that history.
 
 ### Keeping documents current
