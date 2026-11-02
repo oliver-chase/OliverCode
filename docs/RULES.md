@@ -78,12 +78,14 @@ Every change in any project follows this locked process, and no gate is skippabl
 6. Commit: only on pass, with a descriptive message
 7. Push: to the correct repo
 
+Audit reviewers run in parallel, one per area, and every other helper agent runs alone.
+
 `.githooks/pre-commit` runs the gates on every commit and there is no bypass mode. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
 
 Three Claude Code hooks run inside every session, and `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
 
 - `scripts/hooks/session_check.py` (`SessionStart`) tells the session once what would fail silently in the folder it opened: a repo whose gates git skips, a git repo with no gates, or a broken rules link. It prints nothing when all is well
-- `scripts/hooks/commit_guard.py` (`PreToolUse` on Bash) refuses a `git commit` that would skip the repo's gates, whether gates are present while `core.hooksPath` does not run them, `--no-verify` is passed, or `core.hooksPath` is overridden
+- `scripts/hooks/commit_guard.py` (`PreToolUse` on Bash) refuses a `git commit` that would skip the repo's gates, whether gates are present while `core.hooksPath` does not run them, `--no-verify` is passed (including inside `bash -c` and `eval`), or `core.hooksPath` is overridden
 - `scripts/hooks/early-stop-guard.py` (`Stop`, `EARLY-STOP-1` in `docs/DECISIONS.md`) sends a turn back to work when it ends by promising work it did not do
 
 All three are deterministic and fail open, so a hook's own bug never blocks a commit or a session. `olivercode health` fails when one is missing on a machine where install linked this checkout.
@@ -109,19 +111,15 @@ Core invariants:
 1. Every repo has exactly one active backlog source
 2. Each repo keeps `docs/repo-structure-contract.md` current
 
-Epic and commit hygiene:
+Commit hygiene:
 
-1. Every commit maps to exactly one owning epic
-2. The commit message format is `<type>(epic-<name>): <summary>`
-3. The commit body includes `Tickets:` and `Scope:` lines
-4. Mixed-epic work is split into separate commits
+1. Every commit message carries a story reference such as `(#53)`, which the commit-msg hook enforces
 
 Test hygiene:
 
 1. Every behavior change updates or adds automated tests in the correct lane (contract, regression, visual or integration)
 2. Every story has at least one negative-path assertion
-3. `Verified: true` is blocked unless fresh evidence is present in git
-4. Archived (not removed) features retain non-regression tests for data and telemetry paths
+3. Archived (not removed) features retain non-regression tests for data and telemetry paths
 
 Discoverability:
 
@@ -139,7 +137,7 @@ Required base paths in every repo:
 
 Agent read order: `README.md`, then `CLAUDE.md`, then `docs/repo-structure-contract.md`, then the repo's GitHub Project.
 
-Enforcement: `npm run qa:hygiene` runs in each repo, contract drift in `docs/repo-structure-contract.md` is a blocker, and pre-push blocks a history rewrite and a secret in any commit it sends (`docs/GATES.md`, "Pre-push gates").
+Enforcement: the commit-msg hook requires a story reference, and pre-push blocks a history rewrite and a secret in any commit it sends (`docs/GATES.md`, "Pre-push gates"). Contract drift in `docs/repo-structure-contract.md` is a convention that `olivercode health` does not check.
 
 ## File locations
 
@@ -203,7 +201,7 @@ Enforcement: pre-commit hooks block commits that violate location rules, such as
 
 ## No icons
 
-Zero emojis, icons or decorative Unicode appear anywhere, in code, comments, commits, documents, PRs, issues, chat, CLI output or config files. Output is plain text. Emphasis comes from structure (headings, lists, bold, italics) and never from icons. This applies to all projects, all channels and all contributors, with no exceptions and no override mechanism.
+Zero emojis, icons or pictographs appear anywhere, in code, comments, commits, documents, PRs, issues, chat, CLI output or config files. Output is plain text. Emphasis comes from structure (headings, lists, bold, italics) and never from icons. This applies to all projects, all channels and all contributors, with no exceptions and no override mechanism.
 
 The icon and emoji gate in `docs/GATES.md` is the enforcement source of truth, including the exact blocked Unicode ranges, which are not restated here because a second copy would drift from the scanner. `governance-secrets-gate.yml`, the CI template for downstream repos, gates secret filenames only and does not scan for emoji.
 
@@ -380,7 +378,7 @@ A count that changes, such as tests, gates or coverage, never appears in a docum
 
 ### The backlog
 
-A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which the `backlog` skill maintains. OliverCode works this way, and its `docs/BACKLOG.md` holds only the live tracker that the `audit` skill maintains, with the review marker `scripts/audit-staleness.py` reads. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
+A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which the `backlog` skill maintains. OliverCode works this way, and its `docs/BACKLOG.md` holds only the live tracker that the `audit` skill maintains. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
 
 Every repo's Project runs the same kanban baseline, defined once in `shared/kanban-baseline.json`. The Status lanes are Backlog, Ready, In Progress, QA and Complete. The fields are Priority (P0 to P2), Size (XS to XL), Work type (Epic or Story) and Area, whose options come from the repo's own config. The board has no pull-request lane and no status that a pull request sets, so work reaches QA and Complete when a person or agent moves it and never when a pull request opens or merges.
 
