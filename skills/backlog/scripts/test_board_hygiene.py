@@ -5,8 +5,11 @@ import datetime
 import json
 import subprocess
 import tempfile
+import io
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import check_board_hygiene as bh
 
@@ -16,6 +19,50 @@ CONFIG = {"repoOwner": "o", "repoName": "r", "fields": {"area": {}}}
 def item(number, status, area="gtm"):
     content = {"number": number, "repository": "o/r", "title": "t"}
     return {"content": content, "status": status, "area": area, "priority": "P1", "size": "S", "work Type": "Story"}
+
+
+class DimensionScoping(unittest.TestCase):
+    """--dimension limits a run to the named dimensions. No network: every read is replaced."""
+    CFG = json.loads((Path(__file__).resolve().parent / "fixtures" / "backlog-config.json").read_text(encoding="utf-8"))
+
+    def run_main(self, *flags):
+        calls = []
+        def spy(name):
+            return lambda *a, **k: calls.append(name) or []
+        patches = [
+            mock.patch.object(bh, "load_config", return_value=self.CFG),
+            mock.patch.object(bh, "load_items", return_value=[]),
+            mock.patch.object(bh, "live_status_names", return_value={}),
+            mock.patch.object(bh, "fetch_issue_details", spy("details")),
+            mock.patch.object(bh, "check_required_fields", spy("fields")),
+            mock.patch.object(bh, "check_status_drift", spy("drift")),
+            mock.patch.object(bh, "check_duplicate_cards", spy("duplicates")),
+            mock.patch.object(bh, "check_ready_occupancy", spy("ready")),
+            mock.patch.object(bh, "check_ready_candidates", spy("suggest")),
+            mock.patch.object(bh, "check_stale", spy("stale")),
+            mock.patch.object(bh, "check_qa_signoff", spy("qa-signoff")),
+            mock.patch("sys.argv", ["check_board_hygiene.py", "--config", "x.json", *flags]),
+        ]
+        out = io.StringIO()
+        for p in patches:
+            p.start()
+        try:
+            with redirect_stdout(out):
+                bh.main()
+        finally:
+            mock.patch.stopall()
+        return calls
+
+    def test_no_flag_runs_every_dimension(self):
+        self.assertEqual({"fields", "drift", "duplicates", "ready", "suggest", "stale", "qa-signoff", "details"},
+                         set(self.run_main()))
+
+    def test_one_dimension_runs_alone_and_reads_no_issue_details(self):
+        self.assertEqual(["fields"], self.run_main("--dimension", "fields"))
+
+    def test_the_post_filing_pair_runs_only_fields_and_duplicates(self):
+        self.assertEqual(["fields", "duplicates"],
+                         self.run_main("--dimension", "fields", "--dimension", "duplicates"))
 
 
 class Drift(unittest.TestCase):

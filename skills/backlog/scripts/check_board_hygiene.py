@@ -5,7 +5,7 @@
 Usage:
     check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension but area
     check_board_hygiene.py --config CFG --skills-root DIR                             # adds area-freshness against DIR's folders
-    check_board_hygiene.py --config CFG --dimension X    # one of: fields, drift, duplicates, ready, area, suggest, stale, qa-signoff
+    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, ready, area, suggest, stale, qa-signoff
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
     check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
@@ -391,9 +391,18 @@ def load_config(path):
     return config
 
 
+DIMENSIONS = ["fields", "drift", "duplicates", "ready", "area", "suggest", "stale", "qa-signoff"]
+
+
+def wanted(selected, name):
+    """True when no --dimension was given or `name` is one of those given."""
+    return not selected or name in selected
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dimension", choices=["fields", "drift", "duplicates", "ready", "area", "suggest", "stale", "qa-signoff"])
+    parser.add_argument("--dimension", action="append", choices=DIMENSIONS,
+                        help="run only this dimension; repeat the flag to run several")
     parser.add_argument("--config", type=Path, help="path to the repo's docs/backlog-config.json (required)")
     parser.add_argument(
         "--skills-root", type=Path,
@@ -423,15 +432,15 @@ def main():
 
     checks = []
     skipped = []
-    if args.dimension in (None, "fields"):
+    if wanted(args.dimension, "fields"):
         checks.append(("required-fields", lambda: check_required_fields(items, config, open_statuses)))
-    if args.dimension in (None, "drift"):
+    if wanted(args.dimension, "drift"):
         checks.append(("status-drift", lambda: check_status_drift(items, config, finished)))
-    if args.dimension in (None, "duplicates"):
+    if wanted(args.dimension, "duplicates"):
         checks.append(("duplicate-cards", lambda: check_duplicate_cards(items)))
-    if args.dimension in (None, "ready"):
+    if wanted(args.dimension, "ready"):
         checks.append(("ready-occupancy", lambda: check_ready_occupancy(items)))
-    if args.dimension in (None, "area"):
+    if wanted(args.dimension, "area"):
         if args.skills_root and "area" in config["fields"]:
             checks.append(("area-freshness", lambda: check_area_freshness(config, args.skills_root)))
         else:
@@ -439,14 +448,14 @@ def main():
                 "area-freshness: skipped. It compares Area options with the folders of a skills root, "
                 "so it needs --skills-root and an `area` field in the config"
             )
-    if args.dimension in (None, "suggest", "stale"):
+    if wanted(args.dimension, "suggest") or wanted(args.dimension, "stale"):
         fetch_issue_details(config, items, finished)
-    if args.dimension in (None, "suggest"):
+    if wanted(args.dimension, "suggest"):
         checks.append(("ready-candidates", lambda: check_ready_candidates(items)))
-    if args.dimension in (None, "stale"):
+    if wanted(args.dimension, "stale"):
         checks.append(("stale", lambda: check_stale(items, finished=finished)))
 
-    if args.dimension in (None, "qa-signoff"):
+    if wanted(args.dimension, "qa-signoff"):
         checks.append(("qa-signoff", lambda: check_qa_signoff(items, config, finished)))
 
     for s in skipped:

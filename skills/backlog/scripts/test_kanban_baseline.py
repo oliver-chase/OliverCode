@@ -87,18 +87,23 @@ class Baseline(unittest.TestCase):
         self.assertTrue(any("no single-select Status" in p for p in check(fields)))
 
 
-class CurrentOliverCodeBoard(unittest.TestCase):
-    """The live OliverCode config lists every baseline lane. A board without the QA lane is still reported."""
-    CONFIG = json.loads((ROOT / "docs" / "backlog-config.json").read_text(encoding="utf-8"))
+class FixtureBoardConfig(unittest.TestCase):
+    """A fixture config stands in for the owner's board, so these tests pass on a fork."""
+    CONFIG = json.loads((HERE / "fixtures" / "backlog-config.json").read_text(encoding="utf-8"))
 
-    def test_the_layout_without_a_qa_lane_is_flagged_and_nothing_else(self):
+    def test_a_board_without_a_qa_lane_is_flagged_and_nothing_else(self):
         problems = check(fixture("board-no-qa-lane"))
         self.assertEqual(1, len(problems))
         self.assertIn("missing option QA", problems[0])
 
-    def test_the_config_stays_valid_and_names_every_lane(self):
+    def test_the_fixture_config_names_every_lane_and_passes_the_placeholder_check(self):
         self.assertEqual([], bh.missing_lanes(self.CONFIG))
-        bh.verify_config(self.CONFIG, ROOT / "docs" / "backlog-config.json")
+        self.assertFalse(bh.placeholder_values(self.CONFIG))
+
+    def test_a_config_without_a_qa_option_is_missing_that_lane(self):
+        config = copy.deepcopy(self.CONFIG)
+        del config["fields"]["status"]["options"]["QA"]
+        self.assertEqual(["QA"], bh.missing_lanes(config))
 
     def test_the_example_config_lists_every_baseline_lane(self):
         example = json.loads((ROOT / "shared" / "backlog-config.example.json").read_text(encoding="utf-8"))
@@ -107,6 +112,22 @@ class CurrentOliverCodeBoard(unittest.TestCase):
     def test_qa_counts_as_open_work_in_the_sweep(self):
         self.assertIn("QA", bh.REQUIRED_STATUSES)
         self.assertNotIn("Complete", bh.REQUIRED_STATUSES)
+
+    def test_the_module_imports_when_docs_backlog_config_is_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code = ("import sys, pathlib\n"
+                    "sys.path.insert(0, sys.argv[1])\n"
+                    "real = pathlib.Path.read_text\n"
+                    "def guard(self, *a, **k):\n"
+                    "    if self.name == 'backlog-config.json' and self.parent.name == 'docs':\n"
+                    "        raise FileNotFoundError(self)\n"
+                    "    return real(self, *a, **k)\n"
+                    "pathlib.Path.read_text = guard\n"
+                    "import test_kanban_baseline\n"
+                    "print('imported')\n")
+            result = subprocess.run([sys.executable, "-c", code, str(HERE)], capture_output=True, text=True, cwd=tmp)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("imported", result.stdout)
 
 
 class Command(unittest.TestCase):
@@ -123,8 +144,9 @@ class Command(unittest.TestCase):
         self.assertIn("1 difference", bad.stdout)
 
     def test_verify_baseline_mode_reads_a_file_and_never_calls_gh(self):
-        config = ROOT / "docs" / "backlog-config.json"
         with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "backlog-config.json"
+            config.write_text((HERE / "fixtures" / "backlog-config.json").read_text(encoding="utf-8"), encoding="utf-8")
             stub = Path(tmp) / "gh"
             stub.write_text(f"#!/bin/sh\ntouch '{tmp}/gh-was-called'\nexit 1\n")
             stub.chmod(0o755)
