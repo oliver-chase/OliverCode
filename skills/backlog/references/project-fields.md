@@ -87,3 +87,20 @@ gh api graphql -f query="{ repository(owner: \"$(jq -r '.repoOwner' "$CONFIG")\"
 ```
 
 Pick the node whose `project.number` equals `projectNumber` in the config. Read an issue, post a comment and close an issue through the REST API (`gh api repos/<owner>/<repo>/issues/<n>`). REST has its own limit and keeps working when GraphQL runs out.
+
+## Baseline check
+
+`python3 scripts/check_board_hygiene.py --config CONFIG --verify-baseline` reads the Project's field list from `gh`. `--fields-file FILE` compares a saved `gh project field-list --format json` output with no network call. A config with no option ID for a baseline lane such as QA stays valid: add the lane to the Project, then copy its option ID from the field list into the config. `olivercode backlog-setup DIR --apply` makes the changes the check asks for and keeps every item's field values. Built-in workflows do not appear in the field list, so a pull-request workflow on the Project is turned off by hand.
+
+## Sweep dimensions
+
+- **Required fields**: every open item has Priority and Size, plus Work Type and Area where the config defines them.
+- **Status drift**: the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board.
+- **Duplicate cards**: no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues.
+- **Ready occupancy**: the `Ready` column holds at least one item whenever Backlog holds one.
+- **Area freshness**: every Area option matches a folder directly under the `--skills-root` folder or one of the retired, parked or catch-all options in `areaPolicy`, and every such folder has an option. Without `--skills-root` the dimension reports a skip and the other seven run.
+- **Ready candidates**: fires only with an empty Ready column and a non-empty Backlog. Ranks Backlog items by Priority then Size, skips any that a keyword scan reads as blocked, and lists up to 5.
+- **Stale**: a `P0` or `P1` item in `Backlog` with no comment in 14 days, an item in `In Progress` with none in 7, and an item labelled `deferred` with none in 30. An item with no comment counts from its filing date. The 14-day threshold has no real data behind it, so revise it once a real complaint says it is wrong.
+- **QA sign-off**: every Complete item numbered at or above the config's `qaRequiredFromIssue` has an accepted independent sign-off, as `check_qa_signoff.py` defines it. A null or absent key switches the dimension off.
+
+The board list, issue lists and comment history are read with explicit limits and pagination. Without `--config`, or with a path that holds no file, the script stops with one line that names the example config a fork starts from.
