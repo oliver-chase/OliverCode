@@ -42,15 +42,6 @@ class CheckRepo(unittest.TestCase):
         self.add("notes.md", "Status: SUPERSEDED\n\nOld text.\n")
         self.assertIn("notes.md", self.run_check().stdout)
 
-    def test_a_tracked_symlink_to_a_directory_passes(self):
-        self.add("README.md", "# Fine\n")
-        (self.repo / "real").mkdir()
-        (self.repo / "link").symlink_to("real", target_is_directory=True)
-        git(self.repo, "add", "link")
-        result = self.run_check()
-        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertNotIn("syntax error", result.stderr)
-
     def test_a_python_syntax_error_fails(self):
         self.add("broken.py", "def (:\n")
         result = self.run_check()

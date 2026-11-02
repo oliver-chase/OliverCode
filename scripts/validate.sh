@@ -133,9 +133,7 @@ run_bloat_check() {
   local hits=0 f n archive="" marked="" doc_loc=0 total_loc=0 ratio over
   while IFS= read -r f; do
     [[ -z "$f" ]] && continue
-    # A tracked symlink (to a directory, or dangling) counts as zero lines, and wc output is never doubled.
-    n=0
-    if [[ -f "$dir/$f" && ! -L "$dir/$f" ]]; then n=$(wc -l < "$dir/$f" 2>/dev/null) || n=0; fi
+    n=$(wc -l < "$dir/$f" 2>/dev/null || echo 0)
     total_loc=$((total_loc + n))
     case "$f" in *.md) doc_loc=$((doc_loc + n)) ;; esac
     if printf '%s\n' "$f" | grep -qiE '(^|/)(archive|archived|old|legacy)/'; then
