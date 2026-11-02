@@ -892,10 +892,10 @@ def _install_pre_push(repo_path: Path, templates_dir: Path) -> None:
 def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
     """Idempotently deploy the hook template(s) + hooksPath config to one repo.
 
-    A public repo gets the public template as its live `pre-commit`, plus the private
-    variant beside it as an inert reference copy. A private repo (private_repo=True)
-    gets the private template's content deployed AS `pre-commit`, because git only
-    auto-invokes that exact filename.
+    A public repo gets the public template as its live `pre-commit`. A private repo
+    (private_repo=True) gets the private template's content deployed AS `pre-commit`,
+    because git only auto-invokes that exact filename. No second copy is written, and a
+    leftover `pre-commit-private` from an earlier sync is deleted.
 
     Also deploys `commit-msg` (story reference on every commit) and `pre-push` (force-push/history-rewrite block, secret scan on the push
     range). It has no public/private variant: what is safe to push does not differ by
@@ -914,11 +914,7 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
     live_target.write_bytes(live_source.read_bytes())
     live_target.chmod(0o755)
 
-    if not private_repo:
-        reference_source = templates_dir / "pre-commit-private"
-        reference_target = hooks_dir / "pre-commit-private"
-        reference_target.write_bytes(reference_source.read_bytes())
-        reference_target.chmod(0o755)
+    (hooks_dir / "pre-commit-private").unlink(missing_ok=True)
 
     _install_pre_push(repo_path, templates_dir)
 

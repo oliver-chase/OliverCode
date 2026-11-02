@@ -13,16 +13,20 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 OC_ROOT = Path(__file__).resolve().parent.parent.parent
 LOCAL_FILE = OC_ROOT / "olivercode.local.json"
+REAL_LOCAL_FILE = LOCAL_FILE
 
 
 def load_local() -> dict:
     """The local file's contents. OLIVERCODE_LOCAL_CONFIG names another file; the test harness
     points it at /dev/null so no test reads this machine's real repo paths."""
     path = Path(os.environ["OLIVERCODE_LOCAL_CONFIG"]) if "OLIVERCODE_LOCAL_CONFIG" in os.environ else LOCAL_FILE
+    if path == REAL_LOCAL_FILE and "unittest" in sys.modules and path.is_file():
+        raise RuntimeError(f"a test read the real {path}; import tests/_support.py or set OLIVERCODE_LOCAL_CONFIG")
     if not path.is_file():
         return {}
     with open(path) as f:
