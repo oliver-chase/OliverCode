@@ -48,8 +48,8 @@ Fix nothing during the audit, with three exceptions: a fix the owner asked for i
 ## The report
 
 1. What the target is meant to be, and for whom, in plain words
-2. What it is today: its parts and size, what loads in every session and what loads on use, and how a new user gets it, starts it and what it does for them
-3. Whether the size makes sense, both in how the text is written and in how it runs
+2. What it is today: its parts and size, what loads in every session and what loads on use, and how a new user gets it, starts it and what it does for them. Run `skills/audit/scripts/size.sh <target>` and put its table in the report: files, lines and KB for code, tests, docs and skills, plus the open backlog by status
+3. Whether the size makes sense, both in how the text is written and in how it runs. Answer "is it the right size" with a verdict, the ratios from `size.sh` (tests per 100 lines of code, docs and skills per 100 lines of code and tests), and the lines to cut or add. Say how much is left: open issues by status, and the work the findings add
 4. The findings, grouped by lens, each with a file and line, the evidence and the smallest fix
 5. Everything over-engineered, duplicated, competing or unused, named one by one
 6. What was read, what the lead re-checked, and what is still unknown

@@ -5,7 +5,7 @@ The default route: a repo, a suite or a system read end to end.
 ## Before reading
 
 1. State what the target is meant to be. Take it from the README's first lines and the entry skill, then check it against what the code does
-2. Measure it:
+2. Measure it. `~/.claude/skills/audit/scripts/size.sh <target>` prints files, lines and KB by kind (code, tests, docs, skills, config), the test and documentation ratios, and the open backlog by status. It is the table the report's size sections cite. The loop below adds the per-folder view:
 
 ```bash
 git ls-files | wc -l
