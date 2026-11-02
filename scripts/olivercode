@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -489,6 +490,24 @@ def command_install(oc_root: Path) -> int:
     except ValueError as exc:  # invalid JSON, or a shape the merge would have to guess at
         print(f"  [FAIL] ~/.claude/settings.json could not be merged ({exc}); left as it is, hooks not installed")
         broken_settings = True
+
+    # A fresh clone has core.hooksPath unset, so git runs none of this checkout's own gates.
+    # Set it only when unset and only in this checkout's own repo; a value the owner chose stays.
+    own_repo = subprocess.run(["git", "-C", str(oc_root), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if _repo_gates.has_gates(oc_root) and own_repo.stdout.strip() and Path(own_repo.stdout.strip()).resolve() == oc_root.resolve():
+        set_hooks = ["git", "-C", str(oc_root), "config", "core.hooksPath", ".githooks"]
+        fix = shlex.join(set_hooks)
+        problem = _repo_gates.gate_problem(oc_root)
+        if not _repo_gates.hooks_path(oc_root):
+            done = subprocess.run(set_hooks, capture_output=True).returncode == 0
+            print("  [SET] core.hooksPath in the OliverCode checkout" if done
+                  else f"  [WARN] could not set core.hooksPath; run `{fix}`")
+        elif not problem:
+            print("  [ALREADY] core.hooksPath in the OliverCode checkout")
+        elif "not executable" in problem:
+            print(f"  [WARN] {problem}; to fix it run `chmod +x {shlex.quote(str(oc_root / '.githooks' / 'pre-commit'))}`")
+        else:
+            print(f"  [WARN] {problem}; to fix it run `{fix}`")
 
     broken = _broken_links(skills_dir)
     if broken:

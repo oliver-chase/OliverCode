@@ -31,7 +31,7 @@ class TestInstall(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-install-"))
         self._home = Path.home
         Path.home = staticmethod(lambda: self.tmp)  # type: ignore[assignment]
-        env = mock.patch.dict(os.environ, {"HOME": str(self.tmp)})
+        env = mock.patch.dict(os.environ, {"HOME": str(self.tmp), "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
         env.start()
         self.addCleanup(env.stop)
 
@@ -134,10 +134,77 @@ class TestInstall(unittest.TestCase):
         self.assertEqual(settings["model"], "opus")
         self.assertEqual(launcher._claude_settings.missing(claude_dir / "settings.json"), [])
 
-    def _install(self):
+    def _install(self, root=REPO_ROOT):
         with contextlib.redirect_stdout(io.StringIO()) as out:
-            rc = launcher.command_install(REPO_ROOT)
+            rc = launcher.command_install(root)
         return rc, out.getvalue()
+
+    def _checkout(self):
+        """A throwaway OliverCode checkout with gates, so no test touches the real git config."""
+        root = scratch_repo(self.tmp / "checkout")
+        (root / "skills").mkdir()
+        (root / "docs").mkdir()
+        (root / "CLAUDE.md").write_text("rules\n")
+        (root / "docs" / "VOICE.md").write_text("voice\n")
+        (root / ".githooks").mkdir()
+        (root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
+        (root / ".githooks" / "pre-commit").chmod(0o755)
+        return root
+
+    def test_unset_hooks_path_is_set_to_githooks(self):
+        root = self._checkout()
+        rc, out = self._install(root)
+        self.assertEqual(rc, 0)
+        self.assertEqual(git(root, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
+        self.assertIn("[SET] core.hooksPath in the OliverCode checkout", out)
+
+    def test_hooks_path_elsewhere_is_left_alone_with_a_warning(self):
+        root = self._checkout()
+        git(root, "config", "core.hooksPath", ".git/hooks")
+        rc, out = self._install(root)
+        self.assertEqual(git(root, "config", "--get", "core.hooksPath").stdout.strip(), ".git/hooks")
+        self.assertIn("[WARN]", out)
+        self.assertIn(f"git -C {root} config core.hooksPath .githooks", out)
+
+    def test_a_checkout_path_with_spaces_gets_its_hooks_path_set(self):
+        root = scratch_repo(self.tmp / "with space" / "checkout")
+        (root / ".githooks").mkdir()
+        (root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
+        (root / ".githooks" / "pre-commit").chmod(0o755)
+        (root / "CLAUDE.md").write_text("rules\n")
+        (root / "docs").mkdir()
+        (root / "docs" / "VOICE.md").write_text("voice\n")
+        (root / "skills").mkdir()
+        rc, out = self._install(root)
+        self.assertEqual(git(root, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
+        self.assertIn("[SET]", out)
+
+    def test_a_folder_inside_another_repo_never_sets_that_repos_hooks_path(self):
+        parent = scratch_repo(self.tmp / "parent")
+        root = parent / "oc"
+        for d in (".githooks", "skills", "docs"):
+            (root / d).mkdir(parents=True)
+        (root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
+        (root / ".githooks" / "pre-commit").chmod(0o755)
+        (root / "CLAUDE.md").write_text("rules\n")
+        (root / "docs" / "VOICE.md").write_text("voice\n")
+        self._install(root)
+        self.assertEqual(git(parent, "config", "--get", "core.hooksPath", check=False).stdout.strip(), "")
+
+    def test_a_non_executable_pre_commit_names_chmod(self):
+        root = self._checkout()
+        git(root, "config", "core.hooksPath", ".githooks")
+        (root / ".githooks" / "pre-commit").chmod(0o644)
+        rc, out = self._install(root)
+        self.assertIn("chmod +x", out)
+
+    def test_hooks_path_already_githooks_changes_nothing(self):
+        root = self._checkout()
+        git(root, "config", "core.hooksPath", ".githooks")
+        rc, out = self._install(root)
+        self.assertEqual(git(root, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
+        self.assertIn("[ALREADY] core.hooksPath", out)
+        self.assertNotIn("[SET]", out)
 
     def test_a_file_where_the_claude_folder_belongs_fails_and_is_left_alone(self):
         (self.tmp / ".claude").write_text("not a folder")
