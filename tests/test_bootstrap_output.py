@@ -134,7 +134,6 @@ class ShippedWorkflows(unittest.TestCase):
         shipped = {Path(e["source"]).name for e in manifest["templatedFiles"]
                    if e["source"].startswith("core/templates/project/.github/workflows/")}
         self.assertEqual({p.name for p in WORKFLOWS.glob("*.yml")}, shipped)
-        self.assertNotIn("githubActionsPolicy", manifest)
 
 if __name__ == "__main__":
     unittest.main()

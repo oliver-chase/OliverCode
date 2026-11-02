@@ -17,7 +17,7 @@ def gate_config(**fields):
     return json.dumps({"configGlobs": [], "localData": [], **fields}, indent=2) + "\n"
 
 
-class IdentifierGate:
+class IdentifierSetup:
     HOOK_FILE = None
 
     @classmethod
@@ -31,6 +31,11 @@ class IdentifierGate:
         git(self.tmp, "config", "user.email", f"{FAKE}@example.invalid")
         self.stage("seed.txt", "seed\n")
         git(self.tmp, "commit", "-q", "--no-verify", "-m", "seed")
+
+
+class IdentifierGate(IdentifierSetup):
+    """Every rule of the gate, run against OliverCode's own hook. The two templates are built from the same gate
+    source (build-hooks --check fails on drift), so they get one wiring test."""
 
     def test_a_derived_author_name_in_a_skill_blocks_and_names_file_and_line(self):
         self.stage("skills/demo/SKILL.md", f"intro\nowned by {FAKE.capitalize()} today\n")
@@ -120,9 +125,15 @@ class TestIdentifiersOliverCodeHook(IdentifierGate, GateHarness):
     HOOK_FILE = ".githooks/pre-commit"
 
 
-class TestIdentifiersPublicTemplateHook(IdentifierGate, GateHarness):
+class IdentifierWired(IdentifierSetup):
+    def test_a_derived_author_name_blocks(self):
+        self.stage("skills/demo/SKILL.md", f"owned by {FAKE.capitalize()} today\n")
+        self.assertIn("skills/demo/SKILL.md:1", self.assertBlocked("owner identifier").stdout)
+
+
+class TestIdentifiersPublicTemplateHook(IdentifierWired, GateHarness):
     HOOK_FILE = "core/templates/project/pre-commit"
 
 
-class TestIdentifiersPrivateTemplateHook(IdentifierGate, GateHarness):
+class TestIdentifiersPrivateTemplateHook(IdentifierWired, GateHarness):
     HOOK_FILE = "core/templates/project/pre-commit-private"
