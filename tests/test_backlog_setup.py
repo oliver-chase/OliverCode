@@ -1,4 +1,4 @@
-"""`olivercode backlog-setup` and the board part of `olivercode health`, offline.
+"""`olivercode backlog-setup` and the board part of `olivercode conform`, offline.
 
 A fake GitHub answers the GraphQL calls `lib/backlog_setup.py` makes, so no test reaches the network. The fake
 can behave like the real API (an option sent with its id keeps its item values) or like the destructive case
@@ -214,14 +214,10 @@ class TestNewRepo(SetupCase):
         self.assertEqual([], backlog_setup.config_problems(config, backlog_setup.read_board(backlog_setup.Api(self.fake.runner), project["id"])))
         self.assertIn("The board matches", self.text)
 
-    def test_apply_installs_hook_and_story_rule(self):
+    def test_apply_installs_the_hook(self):
         self.run_setup()
         self.assertEqual("", backlog_setup.commit_msg_problem(self.repo, REPO_ROOT))
         self.assertEqual(".githooks", git(self.repo, "config", "--get", "core.hooksPath").stdout.strip())
-        claude = (self.repo / "CLAUDE.md").read_text()
-        self.assertRegex(claude, r"(filed|saved) as a story")
-        self.assertIn("backlog-config.json", claude)
-        self.assertIn("scratch/", (self.repo / ".gitignore").read_text())
 
     def test_a_second_run_changes_nothing_and_says_so(self):
         self.run_setup()
@@ -235,19 +231,6 @@ class TestNewRepo(SetupCase):
         self.assertEqual(before, after)
         self.assertEqual(0, self.run_setup(apply=False))
         self.assertIn("Nothing to change", self.text)
-
-    def test_existing_claude_md_keeps_its_text(self):
-        (self.repo / "CLAUDE.md").write_text("# Widgets\n\nKeep this.\n")
-        self.run_setup()
-        claude = (self.repo / "CLAUDE.md").read_text()
-        self.assertTrue(claude.startswith("# Widgets\n\nKeep this.\n"))
-        self.assertIn("Rules:", claude)
-
-    def test_area_options_come_from_skill_folders_then_flags(self):
-        (self.repo / "skills" / "alpha").mkdir(parents=True)
-        (self.repo / "skills" / "beta").mkdir()
-        self.run_setup()
-        self.assertEqual({"alpha", "beta"}, set(self.config()["fields"]["area"]["options"]))
 
     def test_a_project_created_before_a_stop_is_found_again(self):
         flaky = FakeGitHub(rate_limit_after=4)
@@ -306,22 +289,13 @@ class TestExistingBoard(SetupCase):
         self.assertIn("do not match the snapshot", self.text)
         self.assertIn("backlog-snapshot-", self.text)
 
-    def test_a_pull_request_lane_is_reported_and_kept(self):
+    def test_an_option_outside_the_baseline_is_kept_and_reported(self):
         project = self.seed_existing_board()
         self.fake.field(project, "Status")["options"].append({"id": "optX", "name": "In Review", "color": "GRAY", "description": ""})
         self.fake.add_item(project, "five", Status="In Review")
         self.assertEqual(1, self.run_setup())
-        self.assertIn("lane In Review is driven by pull requests", self.text)
+        self.assertIn("In Review", self.text)
         self.assertEqual("In Review", self.fake.value_names(project)["five"]["Status"])
-
-    def test_map_moves_the_items_of_a_pull_request_lane_and_drops_it(self):
-        project = self.seed_existing_board()
-        self.fake.field(project, "Status")["options"].append({"id": "optX", "name": "In Review", "color": "GRAY", "description": ""})
-        self.fake.add_item(project, "five", Status="In Review")
-        self.assertEqual(0, self.run_setup(maps=["In Review=QA"]))
-        self.assertEqual("QA", self.fake.value_names(project)["five"]["Status"])
-        self.assertNotIn("In Review", [o["name"] for o in self.fake.field(project, "Status")["options"]])
-        self.assertEqual("Backlog", self.fake.value_names(project)["one"]["Status"])
 
     def test_another_repos_config_is_refused(self):
         (self.repo / "docs").mkdir()
@@ -341,7 +315,7 @@ class TestExistingBoard(SetupCase):
 class TestPlanning(unittest.TestCase):
     def test_existing_options_keep_their_ids_and_colors(self):
         existing = [{"id": "a", "name": "Todo", "color": "RED", "description": "d"}, {"id": "b", "name": "Done", "color": "BLUE", "description": ""}]
-        plan = backlog_setup.plan_options(existing, ["Backlog", "Ready", "Complete"], backlog_setup.DEFAULT_STATUS_MAP, [])
+        plan = backlog_setup.plan_options(existing, ["Backlog", "Ready", "Complete"], backlog_setup.DEFAULT_STATUS_MAP)
         self.assertEqual(["a", None, "b"], [o.get("id") for o in plan["final"]])
         self.assertEqual("RED", plan["final"][0]["color"])
         self.assertEqual([("Todo", "Backlog"), ("Done", "Complete")], plan["renamed"])
@@ -349,15 +323,12 @@ class TestPlanning(unittest.TestCase):
 
     def test_a_mapped_option_merges_into_an_existing_target(self):
         existing = [{"id": "a", "name": "Backlog"}, {"id": "b", "name": "Todo"}]
-        plan = backlog_setup.plan_options(existing, ["Backlog"], backlog_setup.DEFAULT_STATUS_MAP, [])
+        plan = backlog_setup.plan_options(existing, ["Backlog"], backlog_setup.DEFAULT_STATUS_MAP)
         self.assertEqual(["Todo"], plan["dropped"])
         self.assertEqual({"Todo": "Backlog"}, plan["remap"])
         self.assertEqual(["a"], [o["id"] for o in plan["final"]])
 
-    def test_map_arguments_are_checked(self):
-        self.assertEqual({"in review": "QA"}, backlog_setup.parse_map(["In Review=QA"]))
-        with self.assertRaises(backlog_setup.SetupError):
-            backlog_setup.parse_map(["nonsense"])
+
 
 class TestHealth(SetupCase):
     def health(self):
@@ -412,85 +383,13 @@ class TestHealth(SetupCase):
         self.assertEqual(1, failed)
         self.assertIn("no commit-msg hook", text)
 
-    def test_an_unreadable_board_falls_back_to_the_config(self):
+    def test_an_unreadable_board_is_a_warning(self):
         self.run_setup()
         down = FakeGitHub(rate_limit_after=0)
         lines = []
         result = backlog_setup.boards_health([("widgets", self.repo)], backlog_setup.Api(down.runner), REPO_ROOT, out=lines.append)
         self.assertEqual((0, 0, 1), result)
-        self.assertIn("config alone matches", "\n".join(lines))
-
-
-class TestRepairLog(SetupCase):
-    """A repair that changed something is logged on its story, or the command prints the line that does."""
-
-    def setUp(self):
-        super().setUp()
-        git(self.repo, "commit", "--allow-empty", "-q", "-m", "base")
-        self.head = git(self.repo, "rev-parse", "--short=7", "HEAD").stdout.strip()
-        self.posted = []
-        self.seed_existing_board()
-
-    def runner(self, args, stdin=None):
-        if args[1].startswith("repos/"):
-            self.posted.append(args)
-            return 0, "https://github.com/acme/widgets/issues/7#issuecomment-1\n", ""
-        return self.fake.runner(args, stdin)
-
-    def apply(self, **kw):
-        self.lines = []
-        return backlog_setup.run_setup(self.repo, True, backlog_setup.Api(self.runner), out=self.lines.append, **kw)
-
-    def test_story_flag_posts_the_comment(self):
-        self.assertEqual(0, self.apply(story=7, agent="fixer"))
-        self.assertEqual(1, len(self.posted))
-        args = self.posted[0]
-        self.assertEqual("api", args[0])
-        self.assertEqual("repos/acme/widgets/issues/7/comments", args[1])
-        body = next(a for a in args if a.startswith("body="))
-        self.assertIn("- Agent: fixer", body)
-        self.assertIn("- Role: builder", body)
-        self.assertIn(f"- Commit: {self.head}", body)
-        self.assertIn("Repaired board:", body)
-        self.assertIn("4 items kept", body)
-        self.assertEqual(1, len(body.splitlines()[-1:]))
-        self.assertIn("Logged on acme/widgets#7", self.text)
-
-    def test_default_agent_name(self):
-        self.apply(story=7)
-        self.assertIn("- Agent: backlog-setup", next(a for a in self.posted[0] if a.startswith("body=")))
-
-    def test_without_story_the_line_is_printed(self):
-        self.assertEqual(0, self.apply())
-        self.assertEqual([], self.posted)
-        line = next(l for l in self.lines if l.startswith("python3 skills/backlog/scripts/log_action.py"))
-        self.assertIn("--role builder", line)
-        self.assertIn(f"--commit {self.head}", line)
-        self.assertIn("--agent backlog-setup", line)
-
-    def test_nothing_is_posted_or_printed_on_a_no_op(self):
-        self.apply()
-        self.posted.clear()
-        self.assertEqual(0, self.apply(story=7))
-        self.assertEqual([], self.posted)
-        self.assertIn("Nothing to change", self.text)
-        self.assertNotIn("log_action.py", self.text)
-
-    def test_a_dry_run_posts_nothing(self):
-        self.lines = []
-        code = backlog_setup.run_setup(self.repo, False, backlog_setup.Api(self.runner), out=self.lines.append, story=7)
-        self.assertEqual(0, code)
-        self.assertEqual([], self.posted)
-        self.assertNotIn("log_action.py", self.text)
-
-    def test_a_failed_post_exits_non_zero_and_prints_the_line(self):
-        def failing(args, stdin=None):
-            return (1, "", "HTTP 404") if args[1].startswith("repos/") else self.fake.runner(args, stdin)
-        self.lines = []
-        code = backlog_setup.run_setup(self.repo, True, backlog_setup.Api(failing), out=self.lines.append, story=7)
-        self.assertEqual(1, code)
-        self.assertIn("was not posted", self.text)
-        self.assertIn("log_action.py", self.text)
+        self.assertIn("board not read", "\n".join(lines))
 
 
 class TestLauncher(SetupCase):
@@ -500,14 +399,10 @@ class TestLauncher(SetupCase):
             code = launcher.command_backlog_setup(list(argv))
         return code, buf.getvalue()
 
-    def test_unknown_directory_and_missing_values_are_rejected(self):
+    def test_unknown_directory_and_flags_are_rejected(self):
         self.assertEqual(1, self.call(str(self.tmp / "nope"))[0])
-        self.assertEqual(1, self.call(str(self.repo), "--map")[0])
         self.assertEqual(1, self.call(str(self.repo), "--bogus")[0])
 
-    def test_story_must_be_a_number(self):
-        self.assertEqual(1, self.call(str(self.repo), "--story", "abc")[0])
-        self.assertEqual(1, self.call(str(self.repo), "--story")[0])
 
 if __name__ == "__main__":
     unittest.main()

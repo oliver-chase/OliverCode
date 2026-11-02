@@ -73,11 +73,6 @@
       "mode": "strict"
     },
     {
-      "source": "core/templates/project/pre-commit-private",
-      "target": ".githooks/pre-commit-private",
-      "mode": "strict"
-    },
-    {
       "source": "core/templates/project/.env.example",
       "target": ".env.example",
       "mode": "presence"

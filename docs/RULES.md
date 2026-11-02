@@ -21,7 +21,7 @@ Removal rules decide what happens to a file that does none of those:
 
 A new file is allowed only when it reduces runtime complexity, replaces duplicated authority, tightens baseline verification or improves what downstream repos receive. Any other new file is rejected, and a new document replaces or merges with an older one so authority stays in one place.
 
-Downstream managed repos inherit this baseline through the shared template and bootstrap path (`core/templates/project/QUALITY_BASELINE.md` and `shared/project-bootstrap-manifest.json`). They never reinterpret it locally. Any variance is explicit, temporary and recorded in the repo's profile in `repo-profiles.json`.
+Downstream managed repos inherit this baseline through the shared template and bootstrap path (`core/templates/project/QUALITY_BASELINE.md` and `shared/project-bootstrap-manifest.json`). They never reinterpret it locally. The requirements and the allowed differences are listed once in `docs/CONTRACT.md`, and any variance is explicit, temporary and recorded in the repo as that file describes.
 
 Other framework rules:
 
@@ -323,7 +323,7 @@ Hooks are not skills and follow the same pattern. The gates are written in `core
 
 When a repo-specific skill must win over a generic one: both can match the same task, for example a generic email-writing skill and a repo's own approval-gated outreach skill both matching "draft a cold email sequence". Matching is based on task phrasing and happens before any repo file is touched, so the generic skill can fire first even inside the repo the specific one was built for (`ACT-3` in `docs/DECISIONS.md`). No framework-level fix exists for that first mis-fire. The mitigation is a named, explicit directive in that repo's own `CLAUDE.md`, which loads for every session in that repo. It names the mandatory skill and the generic one to avoid, inside a section the agent reads early such as "Approval Boundaries". It catches the agent on its first repo-file touch and sends it back to the correct path even when it already invoked the wrong skill. If your repo has an approval-gated skill that a generic one could shadow, add this directive.
 
-Drift check: `scripts/olivercode health` flags any of OliverCode's skills missing its symlink at `~/.claude/skills/<name>` and any symlink there that points somewhere other than `OliverCode/skills/<name>`. For every fleet repo and private repo it also flags any hook install state that makes git run no hooks, which means `core.hooksPath` unset, pointing at a missing directory, a hooks directory with no `pre-commit`, or a `pre-commit` that is not executable. It also flags a hook whose content diverges from the template. The first four make git skip hooks silently (`docs/SETUP.md` explains why), and `scripts/olivercode sync-hooks` repairs all five.
+Drift check: `scripts/olivercode health` flags any of OliverCode's skills missing its symlink at `~/.claude/skills/<name>` and any symlink there that points somewhere other than `OliverCode/skills/<name>`. `scripts/olivercode conform` flags, for every fleet repo and private repo, any hook install state that makes git run no hooks, which means `core.hooksPath` unset, pointing at a missing directory, a hooks directory with no `pre-commit`, or a `pre-commit` that is not executable. It also flags a hook whose content diverges from the template. The first four make git skip hooks silently (`docs/SETUP.md` explains why), and `scripts/olivercode sync-hooks` repairs all five.
 
 ## Documents
 
@@ -389,7 +389,7 @@ Every agent that commits or finishes work logs it on the story: its name, role (
 
 The agent that built a story never signs off its own work. A different agent verifies each Gherkin scenario against the files and tests while the story sits in QA, logs the verdict with role `qa`, and only a pass moves the story to Complete. A failure returns it to In Progress with the findings. `skills/backlog/scripts/check_qa_signoff.py` rejects a pass from any agent that is a builder on the story, and the `backlog` skill's "Close a story or epic" holds the procedure.
 
-`olivercode backlog-setup [DIR] [--apply]` is the one command that creates or repairs a repo's Project to this baseline, writes its `backlog-config.json` and installs the story rule and hook, and `olivercode health` lists any repo whose board differs. A repair never loses an item's field values: the command saves every item's Status, Priority, Size and Work type before it changes a field, and it restores and verifies them afterward. `docs/SETUP.md` ("Launcher commands") documents the options.
+`olivercode backlog-setup [DIR] [--apply]` is the one command that creates or repairs a repo's Project to this baseline, writes its `backlog-config.json` and installs the commit-msg hook, and `olivercode conform` lists any repo whose board differs. A repair never loses an item's field values: the command saves every item's Status, Priority, Size and Work type before it changes a field, and it restores and verifies them afterward. `docs/SETUP.md` ("Launcher commands") documents the options.
 
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`, and finished work leaves the file because git keeps that history.
 
@@ -403,7 +403,7 @@ A change to behavior, options, structure or file layout updates every document t
 
 ### The GitHub about
 
-Every repo has a filled-in About with a one-sentence description and topics that name its real technologies and problem areas. An empty About counts as missing documentation, and `olivercode health` reports it wherever the `gh` CLI is available.
+Every repo has a filled-in About with a one-sentence description and topics that name its real technologies and problem areas. An empty About counts as missing documentation, and `olivercode conform` reports it wherever the `gh` CLI is available.
 
 ```bash
 gh repo edit --description "..." --add-topic <topic>

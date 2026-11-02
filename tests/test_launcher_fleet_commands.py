@@ -277,9 +277,6 @@ class TestPlacementDrift(ScratchHome):
     def setUp(self):
         super().setUp()
         self.skills = self.home / ".claude" / "skills"
-        patcher = mock.patch.object(launcher, "_check_fleet_hooks", return_value=(0, 0, 0))
-        patcher.start()
-        self.addCleanup(patcher.stop)
         self.add_skill("alpha")
         self.add_skill("beta")
 
@@ -331,13 +328,6 @@ class TestPlacementDrift(ScratchHome):
         (_, failed, _), out = self.drift()
         self.assertEqual(failed, 1)
         self.assertIn("broken symlinks in ~/.claude/skills/: stale", out)
-
-    def test_the_fleet_hook_counts_are_added_in(self):
-        self.link("alpha")
-        self.link("beta")
-        with mock.patch.object(launcher, "_check_fleet_hooks", return_value=(3, 2, 1)):
-            (passed, failed, skipped), _ = self.drift()
-        self.assertEqual((passed, failed, skipped), (5, 2, 1))
 
 
 if __name__ == "__main__":

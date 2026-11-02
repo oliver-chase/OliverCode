@@ -65,3 +65,34 @@ def hooks_dir_problem(hooks_dir: Path) -> str:
     if not os.access(live, os.X_OK):
         return f"{live} is not executable, so git skips it"
     return ""
+
+
+def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> list[str]:
+    """Return human-readable problems with a repo's live hooks, or [] when they match.
+
+    `repo_gates.gate_problem` first catches every state where git runs none of the repo's
+    gates: hooksPath unset or pointed away from `.githooks`, the folder or its pre-commit
+    missing, or a pre-commit that is not executable. The live pre-commit must then match
+    the one template this repo's variant names, so a public repo running the weaker private
+    hook fails. pre-push and commit-msg must match their templates too, because sync-hooks deploys them.
+    """
+    gate = gate_problem(repo_root)
+    if gate:
+        return [gate]
+
+    hooks_dir = repo_root / ".githooks"
+    expected = {"pre-commit": "pre-commit-private" if private_repo else "pre-commit",
+                "pre-push": "pre-push", "commit-msg": "commit-msg"}
+
+    problems = []
+    for filename, template in expected.items():
+        installed = hooks_dir / filename
+        canonical = templates_dir / template
+        if not installed.is_file():
+            problems.append(f"no {filename} in {hooks_dir}")
+        elif not os.access(installed, os.X_OK):
+            problems.append(f"{installed} is not executable, so git skips it")
+        elif installed.read_bytes() != canonical.read_bytes():
+            problems.append(f"{filename} diverges from the {template} template")
+
+    return problems

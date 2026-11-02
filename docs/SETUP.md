@@ -25,7 +25,7 @@ bash scripts/validate.sh
 scripts/olivercode health
 ```
 
-Each command must exit 0 on a clean clone with no configuration. `health` notes that there is no control plane and warns about an unregistered fleet, which is correct and still reports HEALTHY. If `validate.sh` fails here, the fork is broken and your setup is fine, so stop.
+Each command must exit 0 on a clean clone with no configuration. `health` notes that there is no control plane, and `conform` reports that no fleet is registered. Both are correct and exit 0. If `validate.sh` fails here, the fork is broken and your setup is fine, so stop.
 
 One command checks all of this in a sandbox with a throwaway HOME:
 
@@ -117,21 +117,21 @@ Edit the registry's `repo-profiles.json` with your real repo names and validatio
 Confirm the fleet registered before continuing:
 
 ```bash
-scripts/olivercode health     # must list your repos by name, not "no fleet registered"
+scripts/olivercode conform --offline     # must list your repos by name, not "no fleet registered"
 ```
 
 ## Step 6: install enforcement
 
 ```bash
 scripts/olivercode sync-hooks     # writes .githooks/ + sets core.hooksPath in every fleet repo
-scripts/olivercode health         # confirms each repo's hooks are installed and current
+scripts/olivercode conform --offline         # confirms each repo's hooks are installed and current
 ```
 
 `sync-hooks` resolves your fleet from the registry file named in Step 5 and expects those repos as siblings of the OliverCode checkout. If your layout differs, see "Folder structure" below. Every repo reported as `[SKIP] not present on this machine` is one it did not govern, and the exit code does not show them, so read that list.
 
 `docs/GATES.md` has the table of which gates each kind of repo runs.
 
-Hook enforcement fails open. The troubleshooting entry "Commits are passing gates that should have blocked them" below explains why and how to fix it. `scripts/olivercode health` detects it fleet-wide, so run it on a schedule as well as at setup. The Claude Code session check also reports it for the repo a session opens.
+Hook enforcement fails open. The troubleshooting entry "Commits are passing gates that should have blocked them" below explains why and how to fix it. `scripts/olivercode conform` detects it fleet-wide, so run it on a schedule as well as at setup. The Claude Code session check also reports it for the repo a session opens.
 
 ### Step 6b: stamp the project template into a repo (optional)
 
@@ -155,7 +155,7 @@ Always run `--dry-run` against an existing repo first and read the OVERWRITE lin
 
 ```bash
 bash scripts/validate.sh          # gates, consistency, references, tests
-scripts/olivercode health         # symlinks + per-repo hook install state
+scripts/olivercode conform --offline         # per-repo hook install state and the rest of the contract
 scripts/olivercode skills         # every skill discoverable
 ```
 
@@ -211,7 +211,7 @@ git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can 
 
 ## Folder structure
 
-The framework assumes one layout: `sync-hooks` and `health` look for fleet repos as siblings of the OliverCode checkout. Nothing else depends on where anything sits.
+The framework assumes one layout: `sync-hooks` and `conform` look for fleet repos as siblings of the OliverCode checkout. Nothing else depends on where anything sits.
 
 ```
 <workspace-root>/
@@ -271,7 +271,7 @@ A blank machine restoring an existing setup from its remotes follows this order.
 
 - OliverCode comes first, because its `CLAUDE.md` holds the rules every session loads
 - The fleet registry comes back with its repo's clone once `olivercode.local.json` names that repo under `privateRepos` (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`)
-- The private repos, the skills folder and any repo outside the fleet folder are per machine, so name them in `olivercode.local.json` before `sync-hooks` and `health` run
+- The private repos, the skills folder and any repo outside the fleet folder are per machine, so name them in `olivercode.local.json` before `sync-hooks` and `conform` run
 
 Clone OliverCode and each fleet repo side by side in one folder, then copy `olivercode.local.example.json` to `olivercode.local.json` and fill in this machine's paths. The rest follows the steps above: Step 0 proves the clone, Step 2 runs `install`, Step 6 installs enforcement and Step 7 proves a gate blocks. Steps 1, 3, 4 and 5 are already done, because the rules and the registry come back with the clones. `health` is the checkpoint and it must end HEALTHY. A registered repo that is not cloned here is listed once and is not a failure.
 
@@ -285,7 +285,7 @@ Four things need a person, because no script restores them:
 Verify the restore:
 
 ```bash
-scripts/olivercode health            # HEALTHY, and the five topology checks pass
+scripts/olivercode health            # HEALTHY, and the topology checks pass
 bash scripts/validate.sh             # gates, doc consistency, references, bloat, code quality, tests
 bash scripts/qa/rehearse-install.sh  # the setup walkthroughs, in disposable sandboxes
 ```
@@ -297,11 +297,12 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 `python3 scripts/olivercode --help` prints the command list and each command's arguments, and this section holds what the help line cannot say. `scripts/olivercode` is the whole launcher surface. It invokes nothing outside this repo, contains no hardcoded vault, home or container paths, and derives every path from its own location (`__file__`), so it runs identically from cron, a hook or an interactive shell. It has no global alias and runs from inside the checkout. If a host sets up its own alias or PATH entry, verify that separately and never commit host-specific paths into this repo.
 
 - `bootstrap` stamps the project template into a repo per `shared/project-bootstrap-manifest.json` and creates its required directories. `strict` files are overwritten, because byte-identity is their contract, and `presence` files are created only when missing, so repo-specific content is never clobbered. `--dry-run` shows the plan and writes nothing
-- `backlog-setup` brings one repo, new or existing, to the board baseline in `shared/kanban-baseline.json`, and without `--apply` it prints the plan and changes nothing. It creates the repo's GitHub Project when the backlog config names none, adds the missing Status lanes (QA included) and the Priority, Size, Work type and Area fields, and writes `docs/backlog-config.json` with the real field and option IDs. It also installs the story-reference `commit-msg` hook and the story rule in `CLAUDE.md`, and a second run changes nothing and says so. Before it touches a field it saves every item's Status, Priority, Size and Work type to `scratch/backlog-backups/`. Afterward it restores any value that moved and checks the count per option against that file, and it exits non-zero when they differ. `--map OLD=NEW` merges an option into a baseline option, such as a pull-request lane into QA. `--title`, `--area NAME` and `--no-link` set the Project title, the Area options and whether the Project links to the repo. `--story N` (with `--agent NAME`, default `backlog-setup`) makes a successful `--apply` that changed something post its log comment on story N, and without it the command prints the `log_action.py` line to run. GitHub's API cannot switch off a board's built-in workflows, so the command lists them for you to turn off on the Project's Workflows page. The live check below proves the behavior
+- `backlog-setup` brings one repo, new or existing, to the board baseline in `shared/kanban-baseline.json`, and without `--apply` it prints the plan and changes nothing. It creates the repo's GitHub Project when the backlog config names none, adds the missing Status lanes (QA included) and the Priority, Size, Work type and Area fields, and writes `docs/backlog-config.json` with the real field and option IDs. It also installs the story-reference `commit-msg` hook, and a second run changes nothing and says so. Before it touches a field it saves every item's Status, Priority, Size and Work type to `scratch/backlog-backups/`. Afterward it restores any value that moved and checks the count per option against that file, and it exits non-zero when they differ. An option outside the baseline stays on the board and the baseline check reports it. A new Project takes the repo's name. GitHub's API cannot switch off a board's built-in workflows, so the command lists them for you to turn off on the Project's Workflows page. The live check below proves the behavior
 - `discover` is a read-only scan for git repos under the given roots. It reports each one's agent-rules filename and hook state, inventories `~/.claude` (skills linked here, linked elsewhere, real directories and broken links) and emits a `repo-profiles.json` skeleton with explicit `path` values. It excludes the OliverCode checkout itself, because the framework governs the fleet and is not part of it. It is the mechanical form of Step 1
 - `install` symlinks this checkout's `CLAUDE.md`, its `docs/VOICE.md` (as `~/.claude/VOICE.md`, which `CLAUDE.md` imports) and every skill into `~/.claude`, creating `~/.claude/` and `~/.claude/skills/` if absent. It also merges OliverCode's three Claude Code hooks into `~/.claude/settings.json`, creating the file if absent and leaving every other key alone (`docs/RULES.md`, "Execution"). It also sets `core.hooksPath` to `.githooks` in this checkout when the setting is unset, and warns without changing it when the setting points elsewhere. It is never destructive. A real file or any other link at a target path, including a dangling one or one into another OliverCode checkout, is moved to `<name>.pre-olivercode` (then `.2`, `.3` on later collisions) and the path is printed, because that file is usually the operator's whole existing ruleset (`BACKUP-COLLISION-1` in `docs/DECISIONS.md`). Only a link an OliverCode install wrote that now dangles because its checkout moved is replaced in place. It records the links it wrote in `~/.claude/.olivercode-install.json`, and a re-install of the same checkout reports ALREADY and makes no backup
 - `uninstall` is the reverse of `install` and step 1 of "Backing out". It removes each link in `~/.claude` that points into this checkout, and each dangling one an OliverCode install wrote, which the install record names. For an install made before the record existed, two or more of install's links must dangle into the same checkout-shaped folder, so a lone link to a drive that is not mounted stays, and a link into another live checkout stays too. It removes the record itself. It moves the newest `<name>.pre-olivercode` backup back once its path is free and lists older ones. It takes out only hook entries whose command is exactly the form install writes, so an operator hook that runs a script of the same name stays. A `settings.json` left empty is deleted, since Claude Code reads that the same as no file, unless it is a symlink, in which case it stays a link and keeps its file mode. Links pointing anywhere else, real skill folders, `~/.claude/` and `skills/` themselves and every other settings key stay. It leaves `core.hooksPath` alone, since `install` and `sync-hooks` set it, and it is idempotent
-- `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. Its Backlog boards section reads each registered repo's Project once, compares it with the baseline, checks the `commit-msg` hook and lists `olivercode backlog-setup <repo> --apply` as the fix for any repo that differs. It falls back to the repo's config when GitHub is unreachable. A repo, private repo or control plane that is not on this machine is noted once and not counted
+- `conform [DIR]` checks one repo, or every registered repo when it gets no directory, against `docs/CONTRACT.md`, which lists each requirement, its fix and how a repo records an allowed difference. `--offline` skips the board and GitHub About checks, which are the only ones that call GitHub. It replaced the fleet hook, board and baseline checks that `health` used to run
+- `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. It checks this machine only. What each repo must match is `conform`'s job. A repo, private repo or control plane that is not on this machine is noted once and not counted
 - `update` runs `git pull`, then `install` (so a new skill or Claude Code hook reaches this machine), then `sync-hooks`. Run it on each device to bring it current
 - `sync-hooks` converges pre-commit hooks and `core.hooksPath` across the fleet and the private repos. It also runs at the end of `update`
 - `audit-fleet` runs the `audit` skill's structure check (dangling references and description length) against OliverCode's own `skills/` and, when this machine names one, the skills folder (`skillsRoot`). It is non-interactive, writes findings to a log and never fixes anything
@@ -325,8 +326,7 @@ The unit tests use a fake GitHub, so the real API gets a manual check whenever `
 
 1. Create a Project named `oc-setup-test-<timestamp>` under your account, add the Priority and Size fields, and add three draft items with different Status, Priority and Size values
 2. In a scratch git repo whose `origin` names any repo you own, write a `docs/backlog-config.json` that names the throwaway Project, then run `olivercode backlog-setup <scratch repo> --apply` twice. The first run must finish with "The board matches", the items must keep their values (compare `gh project item-list <number> --owner <owner> --format json` before and after) and the second run must print "Nothing to change"
-3. Add an option named `In Review` to Status, put an item on it, and run again with `--map 'In Review=QA'`. The item must land on QA
-4. Delete the throwaway Project with `gh project delete <number> --owner <owner>`
+3. Delete the throwaway Project with `gh project delete <number> --owner <owner>`
 
 GitHub keeps an option's item values only when `updateProjectV2Field` receives that option's `id`. An update that omits the ids creates new options and clears every item value, which is why the command sends the ids and still verifies the counts. Run the command on a real Project only after this check passes.
 
@@ -360,7 +360,7 @@ Git runs hooks only when `core.hooksPath` resolves to a directory holding an exe
 
 ```bash
 git config --get core.hooksPath      # expect: .githooks
-scripts/olivercode health            # FAILs with the exact reason if any repo is in that state
+scripts/olivercode conform --offline            # FAILs with the exact reason if any repo is in that state
 scripts/olivercode sync-hooks        # repairs it across the fleet and the private repos
 ```
 
@@ -368,7 +368,7 @@ Use the relative `.githooks` and never an absolute path, because an absolute one
 
 ### Fleet hooks report drift after a gate edit
 
-The placement-drift check in `scripts/olivercode health` compares each fleet repo's live hook against `core/templates/project/pre-commit` and `core/templates/project/pre-commit-private`. Those templates are built from `core/hooks/`, so a gate change is an edit there followed by a rebuild, and every fleet repo diverges until it is re-synced:
+The hooks check in `scripts/olivercode conform` compares each fleet repo's live hook against `core/templates/project/pre-commit` and `core/templates/project/pre-commit-private`. Those templates are built from `core/hooks/`, so a gate change is an edit there followed by a rebuild, and every fleet repo diverges until it is re-synced:
 
 ```bash
 python3 scripts/build-hooks.py

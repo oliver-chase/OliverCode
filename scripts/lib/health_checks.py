@@ -14,43 +14,6 @@ from pathlib import Path
 from lib.repo_profiles import registry_file
 from lib.skill_links import link_states
 
-def _check_github_about(oc_root: Path) -> tuple[int, int, int]:
-    """WARN-degrading check that this repo's GitHub About is filled in.
-
-    docs/RULES.md requires every repo to carry a description and
-    topics. No gate can see GitHub, so this is the one place the requirement is
-    checked at all. Degrades to a skip without `gh`, without auth, or without a
-    network -- a fork working offline must still report healthy.
-    """
-    try:
-        out = subprocess.run(
-            ["gh", "repo", "view", "--json", "description,repositoryTopics"],
-            capture_output=True, text=True, timeout=15, cwd=str(oc_root),
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        print("  [WARN] gh unavailable — cannot check the About section")
-        return 0, 0, 1
-    if out.returncode != 0:
-        print("  [WARN] gh cannot reach the repo (no auth/remote/network) — skipping About check")
-        return 0, 0, 1
-    try:
-        data = json.loads(out.stdout)
-    except json.JSONDecodeError:
-        print("  [WARN] unexpected gh output — skipping About check")
-        return 0, 0, 1
-    desc = (data.get("description") or "").strip()
-    topics = data.get("repositoryTopics") or []
-    if not desc:
-        print("  [FAIL] GitHub About description is empty — the documentation standard "
-              "treats this as missing documentation (gh repo edit --description ...)")
-        return 0, 1, 0
-    if not topics:
-        print("  [WARN] About description set but no topics — add the real domains "
-              "(gh repo edit --add-topic ...)")
-        return 0, 0, 1
-    print(f"  [OK] About: description set, {len(topics)} topic(s)")
-    return 1, 0, 0
-
 def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
     """Flag governance exceptions in repo-profiles.json whose `expiresAt` has passed.
 
