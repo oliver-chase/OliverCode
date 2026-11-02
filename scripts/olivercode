@@ -21,6 +21,7 @@ from lib.repo_profiles import load_repo_profiles, registry_file, registry_gap  #
 from lib.repo_profiles import resolve_repo_path as _resolve_repo_path  # noqa: E402
 from lib.repo_profiles import iter_fleet as _iter_fleet  # noqa: E402
 from lib.skills_catalog import _load_skills  # noqa: E402
+from lib.skill_links import broken_links as _broken_links, link_states as _link_states  # noqa: E402
 from lib.health_checks import (  # noqa: E402,F401
     _check_waiver_expiry, _check_github_about,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
@@ -444,7 +445,7 @@ def command_install(oc_root: Path) -> int:
         print(f"  [FAIL] ~/.claude/settings.json could not be merged ({exc}); left as it is, hooks not installed")
         broken_settings = True
 
-    broken = sorted(p.name for p in skills_dir.iterdir() if p.is_symlink() and not p.exists())
+    broken = _broken_links(skills_dir)
     if broken:
         print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
 
@@ -803,16 +804,10 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
         oc_skill_names = sorted(
             p.name for p in skills_dir.iterdir() if p.is_dir() and (p / "SKILL.md").exists()
         ) if skills_dir.is_dir() else []
-        installed, missing, wrong_target = [], [], []
-        for name in oc_skill_names:
-            link = claude_skills_dir / name
-            expected = skills_dir / name
-            if not link.is_symlink():
-                missing.append(name)
-            elif link.resolve() != expected.resolve():
-                wrong_target.append(name)
-            else:
-                installed.append(name)
+        states = _link_states({n: skills_dir / n for n in oc_skill_names}, claude_skills_dir)
+        installed = [n for n, st in states.items() if st == "ok"]
+        missing = [n for n, st in states.items() if st in ("absent", "real")]
+        wrong_target = [n for n, st in states.items() if st in ("broken", "elsewhere")]
         if oc_skill_names and not installed:
             # Zero symlinks resolve into THIS checkout: it isn't the machine's installed
             # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
@@ -830,9 +825,7 @@ def _check_placement_drift(oc_root: Path, fleet_root: Path | None = None) -> tup
             print(f"  [OK] all {len(oc_skill_names)} OliverCode skills correctly symlinked at ~/.claude/skills/")
             passed += 1
 
-        broken = sorted(
-            p.name for p in claude_skills_dir.iterdir() if p.is_symlink() and not p.exists()
-        )
+        broken = _broken_links(claude_skills_dir)
         if broken:
             print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
             failed += 1

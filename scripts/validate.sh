@@ -31,18 +31,18 @@ run_consistency() {
   #    edit to a built hook fails. See scripts/build-hooks.py.
   echo "=== validate: checking doc/code consistency ==="
   local out
-  if ! out="$(python3 -c "
+  if ! out="$(python3 -c '
 import sys
 from pathlib import Path
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
 from lib.consistency_check import check_all as consistency
 from lib.falsifiability_check import check_all as falsifiability
-root = Path('${REPO_ROOT}')
+root = Path(sys.argv[2])
 failures = consistency(root) + falsifiability(root)
 for f in failures:
     print(f)
 sys.exit(1 if failures else 0)
-")" || ! out="$(python3 "${SCRIPT_DIR}/build-hooks.py" --check)"; then
+' "${SCRIPT_DIR}" "${REPO_ROOT}")" || ! out="$(python3 "${SCRIPT_DIR}/build-hooks.py" --check)"; then
     printf '%s\n' "$out"
     echo "=== validate: consistency check FAILED ==="
     exit 1
@@ -103,16 +103,16 @@ run_duplication_check() {
   # is what watches for it regrowing between reads.
   echo "=== validate: checking documentation duplication ==="
   local out
-  if ! out="$(python3 -c "
+  if ! out="$(python3 -c '
 import sys
 from pathlib import Path
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
 from lib.duplication_check import check_all
-failures = check_all(Path('${REPO_ROOT}'))
+failures = check_all(Path(sys.argv[2]))
 for f in failures:
     print(f)
 sys.exit(1 if failures else 0)
-")"; then
+' "${SCRIPT_DIR}" "${REPO_ROOT}")"; then
     printf '%s\n' "$out"
     echo "=== validate: duplication check FAILED ==="
     exit 1

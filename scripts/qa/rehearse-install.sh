@@ -14,8 +14,8 @@
 #   bash scripts/qa/rehearse-install.sh            # copy the working tree's tracked files
 #   bash scripts/qa/rehearse-install.sh --clone    # clone this repo's HEAD instead
 #
-# A secret probe counts as proof only when the commit output carries the Gate 1 line, so a
-# commit that failed for any other reason never reads as a blocked secret.
+# The secret probe is scripts/qa/probe-secret-gate.sh, which counts a block as proof only when the
+# commit output carries the Gate 1 line, so a commit that failed for any other reason never reads as one.
 # Exit codes: 0 = every case holds, 1 = at least one documented claim is false.
 set -u
 
@@ -91,17 +91,12 @@ json.dump(d, open(p, "w"), indent=2)
 PY
 }
 
-# Returns 0 only when a staged secret is blocked AND the output carries the Gate 1 line.
+# Returns 0 only when scripts/qa/probe-secret-gate.sh sees the secret blocked at Gate 1. The probe
+# is the one home of that check; this runs it with the sandbox HOME and a throwaway git identity.
 probe_blocked() { # $1 = repo dir
-  local out rc
-  out="$(cd "$1" \
-    && printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt \
-    && git add leak-probe.txt \
-    && HOME="$H" git -c user.email=rehearsal -c user.name=rehearsal commit -m probe 2>&1)"
-  rc=$?
-  ( cd "$1" && git rm -q --cached leak-probe.txt 2>/dev/null; rm -f leak-probe.txt )
-  [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'Gate 1/[0-9]*: Secret scan' \
-    && printf '%s\n' "$out" | grep -q 'matches secret pattern'
+  ( cd "$1" && HOME="$H" GIT_AUTHOR_NAME=rehearsal GIT_AUTHOR_EMAIL=rehearsal \
+      GIT_COMMITTER_NAME=rehearsal GIT_COMMITTER_EMAIL=rehearsal \
+      bash "$SCRIPT_DIR/probe-secret-gate.sh" ) >/dev/null 2>&1
 }
 
 new_case() { # $1 = case id
