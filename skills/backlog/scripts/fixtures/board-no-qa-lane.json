@@ -1,0 +1,119 @@
+{
+  "fields": [
+    {
+      "id": "T",
+      "name": "Title",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "A",
+      "name": "Assignees",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTSSF_Status",
+      "name": "Status",
+      "type": "ProjectV2SingleSelectField",
+      "options": [
+        {
+          "id": "St0",
+          "name": "Backlog"
+        },
+        {
+          "id": "St1",
+          "name": "Ready"
+        },
+        {
+          "id": "St2",
+          "name": "In Progress"
+        },
+        {
+          "id": "St3",
+          "name": "Complete"
+        }
+      ]
+    },
+    {
+      "id": "L",
+      "name": "Linked pull requests",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTSSF_Priority",
+      "name": "Priority",
+      "type": "ProjectV2SingleSelectField",
+      "options": [
+        {
+          "id": "Pr0",
+          "name": "P0"
+        },
+        {
+          "id": "Pr1",
+          "name": "P1"
+        },
+        {
+          "id": "Pr2",
+          "name": "P2"
+        }
+      ]
+    },
+    {
+      "id": "PVTSSF_Size",
+      "name": "Size",
+      "type": "ProjectV2SingleSelectField",
+      "options": [
+        {
+          "id": "Si0",
+          "name": "XS"
+        },
+        {
+          "id": "Si1",
+          "name": "S"
+        },
+        {
+          "id": "Si2",
+          "name": "M"
+        },
+        {
+          "id": "Si3",
+          "name": "L"
+        },
+        {
+          "id": "Si4",
+          "name": "XL"
+        }
+      ]
+    },
+    {
+      "id": "PVTSSF_WorkType",
+      "name": "Work Type",
+      "type": "ProjectV2SingleSelectField",
+      "options": [
+        {
+          "id": "Wo0",
+          "name": "Epic"
+        },
+        {
+          "id": "Wo1",
+          "name": "Story"
+        }
+      ]
+    },
+    {
+      "id": "PVTSSF_Area",
+      "name": "Area",
+      "type": "ProjectV2SingleSelectField",
+      "options": [
+        {
+          "id": "Ar0",
+          "name": "backlog"
+        },
+        {
+          "id": "Ar1",
+          "name": "audit"
+        }
+      ]
+    }
+  ],
+  "totalCount": 8
+}
