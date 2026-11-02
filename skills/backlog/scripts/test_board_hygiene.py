@@ -4,6 +4,7 @@ Run: python3 -m unittest discover -p "test_*.py"   (from this folder)
 import datetime
 import json
 import subprocess
+import sys
 import tempfile
 import io
 import unittest
@@ -328,13 +329,38 @@ class QaSignoffDimension(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bh.check_qa_signoff([], dict(self.CFG, qaRequiredFromIssue="50"))
 
-    def test_the_repo_config_sets_the_start_at_50(self):
+    def test_a_config_with_the_start_at_50_is_read_as_50(self):
         root = Path(__file__).resolve().parents[3]
-        live = json.loads((root / "docs" / "backlog-config.json").read_text())
-        example = json.loads((root / "shared" / "backlog-config.example.json").read_text())
-        self.assertEqual(50, live["qaRequiredFromIssue"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "backlog-config.json"
+            path.write_text(json.dumps(dict(self.CFG, qaRequiredFromIssue=50)), encoding="utf-8")
+            self.assertEqual(50, json.loads(path.read_text(encoding="utf-8"))["qaRequiredFromIssue"])
+        example = json.loads((root / "shared" / "backlog-config.example.json").read_text(encoding="utf-8"))
         self.assertIn("qaRequiredFromIssue", example)
         self.assertIsNone(example["qaRequiredFromIssue"])
+
+    def test_no_test_module_reads_the_live_config_at_import(self):
+        here = Path(__file__).resolve().parent
+        code = ("import sys, pathlib, importlib\n"
+                "sys.path.insert(0, sys.argv[1])\n"
+                "real_read = pathlib.Path.read_text\n"
+                "real_open = pathlib.Path.open\n"
+                "def hit(p):\n"
+                "    return p.name == 'backlog-config.json' and p.parent.name == 'docs'\n"
+                "def read(self, *a, **k):\n"
+                "    if hit(self): raise FileNotFoundError(self)\n"
+                "    return real_read(self, *a, **k)\n"
+                "def opn(self, *a, **k):\n"
+                "    if hit(self): raise FileNotFoundError(self)\n"
+                "    return real_open(self, *a, **k)\n"
+                "pathlib.Path.read_text = read\n"
+                "pathlib.Path.open = opn\n"
+                "importlib.import_module(sys.argv[2])\n")
+        for module in sorted(here.glob("test_*.py")):
+            with self.subTest(module=module.name):
+                run = subprocess.run([sys.executable, "-c", code, str(here), module.stem],
+                                     capture_output=True, text=True)
+                self.assertEqual(0, run.returncode, run.stderr)
 
 
 class ForkGuard(unittest.TestCase):
