@@ -3,12 +3,21 @@
 Slides a 15-word window across every tracked markdown file; a window shared by two
 files fails the build unless it matches a declared canonical-reuse marker below.
 Substring match, not semantic similarity, by design -- see the ledger entry for why.
+
+Every tracked markdown file is covered: docs, skills and their references, core templates and
+the repo root. The same file ships to adopted repos as scripts/duplication_check.py (#80), so
+no repo keeps a private copy. The commit hook runs it with --staged-only over the staged
+markdown files, checking each against the whole tracked tree.
+
+    python3 duplication_check.py [--root DIR] [--staged-only FILE ...]
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 WINDOW = 15  # words; below this, ordinary short phrase overlap is expected and noisy
@@ -102,7 +111,21 @@ def _merge_spans(indices: list[int]) -> list[tuple[int, int]]:
     return spans
 
 
-def check_all(repo_root: Path) -> list[str]:
+def _read(repo_root: Path, rel: str, staged: set[str] | None) -> str:
+    """The text of one file: the staged copy for a file in the commit, else the working copy."""
+    if staged is not None and rel in staged:
+        out = subprocess.run(
+            ["git", "-C", str(repo_root), "show", f":{rel}"],
+            capture_output=True, text=True, check=False,
+        )
+        if out.returncode == 0:
+            return out.stdout
+    return (repo_root / rel).read_text(encoding="utf-8")
+
+
+def check_all(repo_root: Path, staged: set[str] | None = None) -> list[str]:
+    """Findings across every tracked markdown file. With `staged`, only pairs that include a
+    staged file are reported, so a commit is judged on what it adds to the existing tree."""
     failures: list[str] = []
 
     files = _tracked_md(repo_root)
@@ -110,9 +133,8 @@ def check_all(repo_root: Path) -> list[str]:
     file_words: dict[str, list[str]] = {}
     file_windows: dict[str, dict[tuple[str, ...], int]] = {}
     for rel in files:
-        path = repo_root / rel
         try:
-            text = path.read_text(encoding="utf-8")
+            text = _read(repo_root, rel, staged)
         except (OSError, UnicodeDecodeError):
             continue
         words = WORD.findall(text.lower())
@@ -139,6 +161,8 @@ def check_all(repo_root: Path) -> list[str]:
 
     for pair, starts_by_file in sorted(pair_starts.items(), key=lambda kv: sorted(kv[0])):
         a, b = sorted(pair)
+        if staged is not None and a not in staged and b not in staged:
+            continue
         spans_a = _merge_spans(starts_by_file.get(a, []))
         for start, end in spans_a:
             snippet = " ".join(file_words[a][start:end])
@@ -150,3 +174,20 @@ def check_all(repo_root: Path) -> list[str]:
             )
 
     return failures
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Fail when two tracked markdown files share a passage.")
+    parser.add_argument("--root", default=".", help="repo root (default: the current directory)")
+    parser.add_argument("--staged-only", nargs="*", metavar="FILE",
+                        help="report only passages that involve these files, such as the staged ones")
+    args = parser.parse_args(argv)
+    staged = None if args.staged_only is None else set(args.staged_only)
+    failures = check_all(Path(args.root).resolve(), staged)
+    for failure in failures:
+        print(failure)
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

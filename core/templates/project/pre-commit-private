@@ -25,7 +25,7 @@ cd "$REPO_ROOT"
 VIOLATIONS=0
 # ─── Gate 1: Secrets ──────────────────────────────────────────────────────────
 # Block commits containing API keys, tokens, JWTs, private keys.
-echo "[pre-commit] Gate 1/6: Secret scan..."
+echo "[pre-commit] Gate 1/7: Secret scan..."
 
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
@@ -79,7 +79,7 @@ echo "  Gate 1 passed."
 
 # ─── Gate 2: Icons / Emojis ───────────────────────────────────────────────────
 # Block ALL emojis and Unicode icons. Plain text only. No exceptions.
-echo "[pre-commit] Gate 2/6: Icon/Emoji scan..."
+echo "[pre-commit] Gate 2/7: Icon/Emoji scan..."
 
 EMOJI_PATTERN='[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}\x{2300}-\x{23FF}\x{2B50}\x{2764}\x{1F004}\x{1F0CF}\x{2934}-\x{2935}\x{25AA}-\x{25FE}\x{2B05}-\x{2B07}\x{2B1B}-\x{2B1C}\x{3030}\x{303D}\x{3297}\x{3299}\x{2139}\x{2328}\x{23CF}\x{24C2}\x{25B6}\x{23E9}-\x{23F3}\x{23F8}-\x{23FA}\x{200D}\x{20E3}]'
 
@@ -113,7 +113,7 @@ echo "  Gate 2 passed."
 # parked in an Archive/ folder or beside its replacement as "-old" -- git already
 # holds every past version, so a second copy on disk is a copy nothing keeps in sync,
 # and the reader cannot tell which one is live.
-echo "[pre-commit] Gate 3/6: Archived-content scan..."
+echo "[pre-commit] Gate 3/7: Archived-content scan..."
 
 # Matched as a whole PATH SEGMENT, never a substring: a file legitimately titled
 # "Legacy Modernization Intelligence" is prose about legacy systems, not an archive.
@@ -171,7 +171,7 @@ echo "  Gate 3 passed."
 # any network, auth, or rate-limit problem skips the check silently rather
 # than blocking a commit on infrastructure the content gate does not own.
 # See docs/DECISIONS.md.
-echo "[pre-commit] Gate 4/6: Skill citations..."
+echo "[pre-commit] Gate 4/7: Skill citations..."
 CITATION_FAILED=0
 CITED_NUMS=""
 if [ -n "$STAGED_FILES" ]; then
@@ -214,7 +214,7 @@ echo "  Gate 4 passed."
 # A story that must grow the repo raises "lines" in the same commit. This gate reads the staged
 # baseline and trusts the value it finds. The commit-msg hook is what requires a story reference,
 # and no gate can check that the raise is justified, so the rule is procedure plus a reference.
-echo "[pre-commit] Gate 5/6: Size ratchet..."
+echo "[pre-commit] Gate 5/7: Size ratchet..."
 SIZE_JSON="$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)"
 size_field() {
   printf '%s\n' "$SIZE_JSON" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
@@ -263,7 +263,7 @@ fi
 # Every staged file is scanned, markdown and tests included, except local data: the built-in
 # paths below and the "localData" globs in docs/IDENTIFIER-GATE.json, each declared with a
 # reason. Fewer than one derivable identifier skips the gate.
-echo "[pre-commit] Gate 6/6: Owner identifiers..."
+echo "[pre-commit] Gate 6/7: Owner identifiers..."
 ID_CONFIG="$(git show ":docs/IDENTIFIER-GATE.json" 2>/dev/null || true)"
 id_array() {
   printf '%s\n' "$ID_CONFIG" | tr '\n' ' ' \
@@ -330,6 +330,39 @@ else
     exit 1
   fi
   echo "  Gate 6 passed ($(wc -l < "$ID_LIST" | tr -d ' ') identifiers derived)."
+fi
+
+# ─── Gate 7: Duplicate text ───────────────────────────────────────────────────
+# DUPLICATION-HOOK-1. A passage of 15 words or more may live in one markdown file only, so a rule
+# keeps one home across docs, skills, references and templates. The shared check
+# (scripts/duplication_check.py, shipped to adopted repos by bootstrap; OliverCode keeps it at
+# scripts/lib/duplication_check.py) reads every tracked markdown file and reports each passage that
+# a staged file shares with another file, naming both. Files outside the commit are judged as they
+# stand, so an old duplicate between two untouched files blocks nothing here; validate.sh reports it.
+echo "[pre-commit] Gate 7/7: Duplicate text..."
+DUP_CHECKER=""
+for candidate in scripts/duplication_check.py scripts/lib/duplication_check.py; do
+  if [ -f "$candidate" ]; then DUP_CHECKER="$candidate"; break; fi
+done
+DUP_FILES=()
+while IFS= read -r dup_file; do
+  case "$dup_file" in *.md) DUP_FILES+=("$dup_file") ;; esac
+done <<< "$STAGED_FILES"
+if [ ${#DUP_FILES[@]} -eq 0 ]; then
+  echo "  Gate 7 passed (no staged markdown)."
+elif [ -z "$DUP_CHECKER" ]; then
+  echo "  Gate 7 skipped (no scripts/duplication_check.py; run olivercode bootstrap to add it)."
+elif ! command -v python3 >/dev/null 2>&1; then
+  echo "  Gate 7 skipped (python3 is not installed)."
+else
+  DUP_OUT="$(python3 "$DUP_CHECKER" --root "$REPO_ROOT" --staged-only "${DUP_FILES[@]}" 2>&1)" && DUP_RC=0 || DUP_RC=$?
+  if [ "$DUP_RC" -ne 0 ]; then
+    printf '%s\n' "$DUP_OUT" | sed 's/^/  /'
+    echo "  BLOCKED: a staged markdown file repeats a passage that another file already holds."
+    echo "  Keep the rule in one file and point the other at it, or declare a deliberate reuse in DECLARED_MARKERS with a reason."
+    exit 1
+  fi
+  echo "  Gate 7 passed (${#DUP_FILES[@]} staged markdown file(s) checked)."
 fi
 
 # ─── Repo-local gates ─────────────────────────────────────────────────────────
