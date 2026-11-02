@@ -25,7 +25,7 @@
   (`skillsRoot` in `olivercode.local.json`).
 - Update this table in the same change when a skill is added or removed. This index is the
   only catalog — do not create a second copy of the skill list anywhere.
-- Remove references to retired skills, and keep no dead aliases.
+- Remove references to retired skills, and keep no dead aliases
 - Adding one: `docs/RULES.md` ("Skill placement") has the full contract (real content, index row, and
   the `~/.claude/skills/<name>` symlink — all three in the same session).
 

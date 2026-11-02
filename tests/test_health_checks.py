@@ -228,5 +228,38 @@ class OversizedTracked(HealthBase):
         self.assertEqual((0, 0, 1), self.check([("plain", plain)])[0])
 
 
+class TestFleetLocations(unittest.TestCase):
+    """A repo placed by config that is gone is a FAIL. A repo never placed is only a note."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="olivercode-fleetloc-")).resolve()
+        self.addCleanup(__import__("shutil").rmtree, self.root, ignore_errors=True)
+        self.fleet = self.root / "fleet"
+        self.fleet.mkdir()
+
+    def check(self, profiles, repo_paths=None):
+        config = self.root / "local.json"
+        config.write_text(json.dumps({"repoPaths": {n: str(p) for n, p in (repo_paths or {}).items()}}))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(config)}):
+            return quiet(health._check_fleet_locations, profiles, self.fleet)
+
+    def test_a_repo_missing_at_a_configured_location_fails_naming_path_and_entry(self):
+        gone = self.root / "moved" / "alpha"
+        profiles = {"alpha": {}, "beta": {"path": "elsewhere/beta"}}
+        (passed, failed, skipped), out = self.check(profiles, {"alpha": gone})
+        self.assertEqual((0, 2, 0), (passed, failed, skipped))
+        self.assertIn(f"[FAIL] alpha: no repo at {gone}. Update repoPaths.alpha in olivercode.local.json", out)
+        self.assertIn(f"{self.fleet / 'elsewhere' / 'beta'}. Update profiles.beta.path in repo-profiles.json", out)
+
+    def test_a_repo_never_cloned_is_a_note_and_does_not_fail(self):
+        (passed, failed, _), out = self.check({"gamma": {}})
+        self.assertEqual((0, 0), (passed, failed))
+        self.assertIn("[INFO] gamma is not cloned on this machine", out)
+
+    def test_a_repo_present_at_its_configured_path_passes(self):
+        here = scratch_repo(self.root / "here")
+        self.assertEqual((1, 0, 0), self.check({"alpha": {}}, {"alpha": here})[0])
+
+
 if __name__ == "__main__":
     unittest.main()

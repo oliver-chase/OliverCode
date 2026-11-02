@@ -94,9 +94,9 @@ Pick the node whose `project.number` equals `projectNumber` in the config. Read 
 
 ## Sweep dimensions
 
-- **Required fields**: every open item has Priority and Size, plus Work Type and Area where the config defines them.
-- **Status drift**: the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board.
-- **Duplicate cards**: no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues.
-- **QA sign-off**: every Complete item numbered at or above the config's `qaRequiredFromIssue` has an accepted independent sign-off, as `check_qa_signoff.py` defines it. A null or absent key switches the dimension off.
+- **Required fields**: every open item has Priority and Size, plus Work Type and Area where the config defines them
+- **Status drift**: the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board
+- **Duplicate cards**: no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues
+- **QA sign-off**: every Complete item numbered at or above the config's `qaRequiredFromIssue` has an accepted independent sign-off, as `check_qa_signoff.py` defines it. A null or absent key switches the dimension off
 
 The board list, issue lists and comment history are read with explicit limits and pagination. Without `--config`, or with a path that holds no file, the script stops with one line that names the example config a fork starts from.
