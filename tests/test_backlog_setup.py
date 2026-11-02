@@ -370,6 +370,26 @@ class TestHealth(SetupCase):
         result = backlog_setup.boards_health([("widgets", self.repo)], backlog_setup.Api(self.fake.runner), REPO_ROOT, out=lines.append)
         return result, "\n".join(lines)
 
+    def test_a_checkout_with_no_origin_remote_skips_the_board_check(self):
+        self.run_setup()
+        git(self.repo, "remote", "remove", "origin")
+        (passed, failed, skipped), text = self.health()
+        self.assertEqual((0, 0, 1), (passed, failed, skipped))
+        self.assertIn("[WARN] widgets: board check skipped", text)
+        self.assertIn("no origin remote", text)
+
+    def test_a_fork_whose_origin_differs_from_the_config_still_fails(self):
+        self.run_setup()
+        git(self.repo, "remote", "set-url", "origin", "https://github.com/someone/fork.git")
+        (passed, failed, skipped), text = self.health()
+        self.assertEqual(1, failed)
+        self.assertIn("names another repo's Project", text)
+
+    def test_a_bare_file_name_in_prose_does_not_hide_the_real_config_path(self):
+        self.run_setup()
+        (self.repo / "CLAUDE.md").write_text("A repo that names a `backlog-config.json` files stories.\nThe board is `docs/backlog-config.json`.\n")
+        self.assertEqual(self.repo / "docs" / "backlog-config.json", backlog_setup.config_path(self.repo))
+
     def test_a_repo_with_no_config_fails_with_the_fix_command(self):
         (passed, failed, skipped), text = self.health()
         self.assertEqual(1, failed)
