@@ -26,7 +26,7 @@ The intake path for a new skill. Ask each question below in order, against the l
 
 These rules apply to skills in a personal skills folder. A skill that ships inside OliverCode may read `$OC/` files and name its sibling skills.
 
-`python3 skills/audit/scripts/check_skill_structure.py` and `check_descriptions.py` enforce the rules a script can check. The rest are judgment calls the audit skill reads.
+`python3 skills/audit/scripts/check_skill_structure.py` enforces the rules a script can check, including the 150-word description cap. The rest are judgment calls the audit skill reads.
 
 1. **Generic at creation.** The skill's own files hold no personal fact in code or prose: no name, address, account ID, token or local path. A value the skill needs comes from one config file in the skill folder or from a question in the chat.
 2. **No read outside the folder.** No `../`, no `$HOME/.claude/skills/<other>/...`, no vault path, no sibling skill's script or config. The skill carries any rule it needs as its own text.
@@ -61,7 +61,14 @@ A tracker, a record store or a growing list needs a home that the connectors and
 
 ## 3. Automation or agent?
 
-The job may be repeatable automation, or it may need judgment each time. Load `automation-first-agent-design` for that decision.
+The job may be repeatable automation, or it may need judgment each time. Default to automation, and add a model call only where a deterministic rule cannot do the step. These rules apply:
+
+- **Route and query without a model.** Intent routing uses keyword or pattern matching. Data queries read the store directly. The order is intent router, data query, static fallback, and a model call last, only when the earlier steps fail.
+- **Every model call has a non-model fallback.** An error returns a helpful message and never crashes. State changes follow an explicit state machine.
+- **Fail closed.** When a check fails, deny access or skip the action. A silent failure is worse than a false positive.
+- **Log every action** with its timestamp, user and cost. An action without a log line did not happen.
+- **Data flows one way.** Each fact has one source of truth, and stores do not depend on each other in a circle.
+- **A scheduled job runs a deterministic script.** The model may summarize its output. The script exits 0 on success and non-zero on error, and the exit code is the health signal. A `mkdir` lock with a stale threshold stops concurrent runs. Each job has one responsibility, so a sync, a draft and a send are three jobs.
 
 ## 4. Which connectors?
 
@@ -71,8 +78,7 @@ List each connector the skill uses and what the skill does without it. Write the
 
 The new skill's `SKILL.md` exists by now, with its symlink created and its `README.md` row written. Run, in order:
 
-1. `python3 skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves and no file goes unused.
-2. `python3 skills/audit/scripts/check_descriptions.py` on the skills folder. Clean means every description is within the word cap.
-3. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see.
+1. `python3 skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, no file goes unused and every description is within the word cap.
+2. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see.
 
 Fix the exact gap each check names, then run it again. Never finish with a named gap open.

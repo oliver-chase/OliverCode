@@ -10,6 +10,9 @@ Two dangling-reference checks run by default and block a commit:
 It also prints the in-family and cross-family reference counts. Both counts are information,
 never findings.
 
+Description cap (SKILL-DESC-1): a skill whose `description` runs over 150 words fails, since every
+description loads in every session. Writing quality is judged against the voice file, which no script can check.
+
 Weight pass (SKILL-WEIGHT-1): `--weight` prints one ranked table of every skill with the
 counts that suggest excess. It makes no judgment. It is the candidate list for a read of
 each skill. The columns are:
@@ -39,6 +42,7 @@ from pathlib import Path
 import _fleet
 
 SKILLS_ROOT = _fleet.FLEET_ROOT
+DESCRIPTION_WORD_LIMIT = 150
 # Skills that live outside this fleet but are real: whatever is installed on this machine.
 # A name that is in neither place is dangling.
 EXTERNAL_SKILL_DIRS = [
@@ -278,6 +282,11 @@ def main(argv=None):
     for n, tokens in file_ref_scan(skill_dirs).items():
         findings.setdefault(n, []).extend(
             ("dangling-file-reference", f"`{x}` matches no file in this fleet") for x in sorted(tokens))
+    for d in skill_dirs:
+        words = _fleet.description_words((d / "SKILL.md").read_text(encoding="utf-8"))
+        if words > DESCRIPTION_WORD_LIMIT:
+            findings.setdefault(d.name, []).append(
+                ("description-over-cap", f"description is {words} words (cap {DESCRIPTION_WORD_LIMIT})"))
     print(f"Skill references: {sum(map(len, in_family.values()))} in-family across "
           f"{len(in_family)} skill(s), {sum(map(len, cross_family.values()))} cross-family "
           f"across {len(cross_family)} skill(s).\n")
@@ -290,7 +299,7 @@ def main(argv=None):
             print(f"  - [{rule}] {note}")
 
     if total == 0:
-        print("No dangling skill or file references.")
+        print("No dangling skill or file references, and every description is within the word cap.")
         sys.exit(0)
 
     print(f"\n{total} likely finding(s) across {len(findings)} skill(s). Verify each before treating it as a real defect.")
