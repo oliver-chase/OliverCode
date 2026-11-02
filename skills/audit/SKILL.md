@@ -49,7 +49,7 @@ Fix nothing during the audit, with three exceptions: a fix the owner asked for i
 
 1. What the target is meant to be, and for whom, in plain words
 2. What it is today: its parts and size, what loads in every session and what loads on use, and how a new user gets it, starts it and what it does for them. Run `skills/audit/scripts/size.sh <target>` and put its table in the report: files, lines and KB for code, tests, docs and skills, plus the open backlog by status
-3. Whether the size makes sense, both in how the text is written and in how it runs. Answer "is it the right size" with a verdict, the ratios from `size.sh` (tests per 100 lines of code, docs and skills per 100 lines of code and tests), and the lines to cut or add. Say how much is left: open issues by status and the added work
+3. Whether the size makes sense, both in how the text is written and in how it runs. Answer "is it the right size" with a verdict, the ratios from `size.sh` (tests per 100 lines of code, docs and skills per 100 lines of code and tests), and the lines to cut or add. Say how much is left: open issues by status and the added work. Run `skills/audit/scripts/fleet_check.py --time <target>` and put its budget lines in the report: test count and runtime, doc words and skill words against `docs/BUDGET.json`
 4. The findings, grouped by lens, each with a file and line, the evidence and the smallest fix
 5. Everything over-engineered, duplicated, competing or unused, named one by one with the evidence of use, the test cut list and the standard tool for each rule mechanism
 6. What was read, what the lead re-checked, and what is still unknown
@@ -59,5 +59,5 @@ Fix nothing during the audit, with three exceptions: a fix the owner asked for i
 
 - A finding is a defect with evidence. A style preference outside the voice, a hypothetical and a "consider" are not findings
 - Owner data in a shipped file is a finding even when no list of names exists: a person's or business's name, an ID, a color, a motif or a niche written as the default
-- Count each voice violation by kind, and name the file of every competing writing rule
+- Count each voice violation by kind, and name the file of every competing writing rule. The `fleet_check.py` voice lines give the file and line of each violation it can find, and its board lines name every difference from `shared/kanban-baseline.json`
 - Say what could not be verified, and why
