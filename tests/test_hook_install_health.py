@@ -1,7 +1,7 @@
-"""Tests for _hook_problems() and _install_hook_pair() in scripts/olivercode.
+"""Tests for repo_gates.hook_problems() and _install_hook_pair() in scripts/olivercode.
 
 When core.hooksPath is unset or points elsewhere, or the hook is missing, not executable or
-the wrong variant, git runs weaker gates or none and says nothing. `olivercode health` is the
+the wrong variant, git runs weaker gates or none and says nothing. `olivercode conform` is the
 fleet-wide detector, so it must not report OK in any of those states.
 """
 

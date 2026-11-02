@@ -84,6 +84,10 @@ class TestRequirements(ConformBase):
         self.assertEqual("pass", row.status)
         self.assertIn("declared hook variant", row.detail)
 
+    def test_a_private_repo_is_not_failed_for_running_the_private_pre_commit(self):
+        launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=True)
+        self.assertEqual("pass", self.rows(private=True)["managed-files"].status)
+
     def test_an_edited_strict_managed_file_fails(self):
         (self.repo / "QUALITY_BASELINE.md").write_text("changed\n")
         row = self.rows()["managed-files"]
@@ -149,6 +153,11 @@ class TestExceptions(ConformBase):
         _, bad = conform.exceptions(self.repo, TODAY)
         self.assertEqual(2, len(bad))
 
+    def test_an_impossible_date_or_another_list_marker_is_an_unreadable_entry_and_never_a_crash(self):
+        self.contract("\n## Contract exceptions\n\n- validation: x. Expires 2026-13-45\n* hooks: y. Expires 2027-01-01\n")
+        _, bad = conform.exceptions(self.repo, TODAY)
+        self.assertEqual(2, len(bad))
+
     def test_an_exception_for_a_passing_requirement_changes_nothing(self):
         self.contract("\n## Contract exceptions\n\n- validation: unused. Expires 2026-12-01\n")
         self.assertEqual("pass", self.rows()["validation"].status)
@@ -180,6 +189,22 @@ class TestCommand(ConformBase):
         self.assertIn("widgets\n", out)
         self.assertIn("absent is not cloned", out)
         self.assertIn("Checked 1 repo(s): 0 requirement(s) failed", out)
+
+    def test_a_directory_that_does_not_exist_is_rejected_and_not_reported_as_drift(self):
+        code, out = quiet(launcher.command_conform, REPO_ROOT, self.tmp / "nope", None, True)
+        self.assertEqual(1, code)
+        self.assertIn("is not a directory", out)
+        self.assertNotIn("layout", out)
+
+    def test_a_directory_takes_its_hook_variant_from_the_registry(self):
+        (self.repo / ".githooks" / "pre-commit").write_text("#!/usr/bin/env bash\nexit 0\n")
+        code, _ = quiet(launcher.command_conform, REPO_ROOT, self.repo, self.tmp, True)
+        self.assertEqual(1, code)
+        profiles = {"widgets": {"hookVariant": "custom gate"}}
+        with mock.patch.object(launcher, "load_repo_profiles", return_value=(profiles, None)):
+            code, out = quiet(launcher.command_conform, REPO_ROOT, self.repo, self.tmp, True)
+        self.assertEqual(0, code, out)
+        self.assertIn("declared hook variant", out)
 
     def test_an_empty_fleet_reports_nothing_registered(self):
         with mock.patch.object(launcher, "load_repo_profiles", return_value=({}, None)), \

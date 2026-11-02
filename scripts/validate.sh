@@ -52,8 +52,8 @@ sys.exit(1 if failures else 0)
 
 run_hook_state() {
   # Hook enforcement fails OPEN -- an unset or broken core.hooksPath means git
-  # runs no hooks and prints nothing. `olivercode health` detects it, but health ran
-  # only from a weekly cron into a log nobody read, so a repo could sit ungoverned
+  # runs no hooks and prints nothing. `olivercode conform` detects it, but nobody ran it
+  # from a log anyone read, so a repo could sit ungoverned
   # for a week. Surfacing it here puts the signal where agents already look: CLAUDE.md
   # tells them to run validate.sh before every commit.
   #

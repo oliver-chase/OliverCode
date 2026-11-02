@@ -24,6 +24,6 @@ It applies to every reply and file and overrides any default to keep replies sho
 - A multi-commit session ending: run the `audit` skill on its commits
 - Writing a README, doc or `CLAUDE.md`: follow RULES.md "Documents"
 - Before committing, run the current repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's, per RULES.md "Execution"
-- `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `$OC/docs/GATES.md` lists the gates, and `$OC/scripts/olivercode health` finds stopped hooks
+- `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `$OC/docs/GATES.md` lists the gates, and `$OC/scripts/olivercode conform` finds stopped hooks
 
 In OliverCode, `README.md` has the layout and the Project in `docs/backlog-config.json` holds open work.

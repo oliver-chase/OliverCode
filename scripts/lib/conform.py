@@ -75,12 +75,13 @@ def hooks(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant
     return Row("hooks", "pass")
 
 
-def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, **_) -> Row:
+def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant: str = "", **_) -> Row:
+    """A declared variant or a private repo runs a different pre-commit, and the hooks row checks that file."""
     manifest = oc_root / "shared" / "project-bootstrap-manifest.json"
     entries = json.loads(manifest.read_text()).get("templatedFiles", [])
     drifted = []
     for entry in entries:
-        if entry.get("mode") != "strict":
+        if entry.get("mode") != "strict" or (entry["target"] == ".githooks/pre-commit" and (private or variant)):
             continue
         source, target = oc_root / entry["source"], repo / entry["target"]
         if not target.is_file() or target.read_bytes() != source.read_bytes():
@@ -139,6 +140,13 @@ def audit(repo: Path, **_) -> Row:
 CHECKS = (layout, validation, board, hooks, managed_files, size, tests, docs, audit)
 
 
+def _parse_date(text: str) -> date | None:
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 def exceptions(repo: Path, today: date | None = None) -> tuple[dict[str, tuple[str, str]], list[Row]]:
     """The repo's recorded exceptions by requirement id, and a failure row for each bad entry."""
     today = today or date.today()
@@ -151,12 +159,13 @@ def exceptions(repo: Path, today: date | None = None) -> tuple[dict[str, tuple[s
     bad: list[Row] = []
     known = {check.__name__.replace("_", "-") for check in CHECKS}
     for line in (section.group(1).splitlines() if section else []):
-        if not line.startswith("- "):
+        if not line.strip().startswith(("-", "*", "+")):
             continue
         match = EXCEPTION_LINE.match(line)
-        if not match or not match["reason"].strip() or match["id"] not in known:
+        expires = _parse_date(match["expires"]) if match else None
+        if not match or not expires or not match["reason"].strip() or match["id"] not in known:
             bad.append(_fail("exceptions", f"unreadable entry: {line}", f"write it as `- <requirement>: <reason>. Expires YYYY-MM-DD` in {path.name}"))
-        elif date.fromisoformat(match["expires"]) < today:
+        elif expires < today:
             bad.append(_fail("exceptions", f"the {match['id']} exception expired on {match['expires']}", f"fix {match['id']} or renew the entry in {path.name}"))
         else:
             valid[match["id"]] = (match["reason"].strip(), match["expires"])

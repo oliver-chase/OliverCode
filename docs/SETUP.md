@@ -25,7 +25,7 @@ bash scripts/validate.sh
 scripts/olivercode health
 ```
 
-Each command must exit 0 on a clean clone with no configuration. `health` notes that there is no control plane and warns about an unregistered fleet, which is correct and still reports HEALTHY. If `validate.sh` fails here, the fork is broken and your setup is fine, so stop.
+Each command must exit 0 on a clean clone with no configuration. `health` notes that there is no control plane, and `conform` reports that no fleet is registered. Both are correct and exit 0. If `validate.sh` fails here, the fork is broken and your setup is fine, so stop.
 
 One command checks all of this in a sandbox with a throwaway HOME:
 
@@ -211,7 +211,7 @@ git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can 
 
 ## Folder structure
 
-The framework assumes one layout: `sync-hooks` and `health` look for fleet repos as siblings of the OliverCode checkout. Nothing else depends on where anything sits.
+The framework assumes one layout: `sync-hooks` and `conform` look for fleet repos as siblings of the OliverCode checkout. Nothing else depends on where anything sits.
 
 ```
 <workspace-root>/
@@ -271,7 +271,7 @@ A blank machine restoring an existing setup from its remotes follows this order.
 
 - OliverCode comes first, because its `CLAUDE.md` holds the rules every session loads
 - The fleet registry comes back with its repo's clone once `olivercode.local.json` names that repo under `privateRepos` (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`)
-- The private repos, the skills folder and any repo outside the fleet folder are per machine, so name them in `olivercode.local.json` before `sync-hooks` and `health` run
+- The private repos, the skills folder and any repo outside the fleet folder are per machine, so name them in `olivercode.local.json` before `sync-hooks` and `conform` run
 
 Clone OliverCode and each fleet repo side by side in one folder, then copy `olivercode.local.example.json` to `olivercode.local.json` and fill in this machine's paths. The rest follows the steps above: Step 0 proves the clone, Step 2 runs `install`, Step 6 installs enforcement and Step 7 proves a gate blocks. Steps 1, 3, 4 and 5 are already done, because the rules and the registry come back with the clones. `health` is the checkpoint and it must end HEALTHY. A registered repo that is not cloned here is listed once and is not a failure.
 
@@ -285,7 +285,7 @@ Four things need a person, because no script restores them:
 Verify the restore:
 
 ```bash
-scripts/olivercode health            # HEALTHY, and the five topology checks pass
+scripts/olivercode health            # HEALTHY, and the topology checks pass
 bash scripts/validate.sh             # gates, doc consistency, references, bloat, code quality, tests
 bash scripts/qa/rehearse-install.sh  # the setup walkthroughs, in disposable sandboxes
 ```
