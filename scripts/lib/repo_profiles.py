@@ -68,6 +68,19 @@ def resolve_repo_path(name: str, profile: dict, fleet_root: Path) -> Path:
     return p if p.is_absolute() else (fleet_root / p)
 
 
+def configured_location(name: str, profile: dict) -> str | None:
+    """The config entry that names where `name` lives, or None when nothing does.
+
+    A repo with an entry has been placed on purpose, so a missing folder there means it moved.
+    A repo with none only sits at the default spot, and its absence means it was never cloned.
+    """
+    if name in repo_paths():
+        return f"repoPaths.{name} in olivercode.local.json"
+    if profile.get("path"):
+        return f"profiles.{name}.path in repo-profiles.json"
+    return None
+
+
 def iter_fleet(profiles: dict, fleet_root: Path):
     """Yield (name, profile, repo_path) for every fleet repo, framework repo excluded.
 

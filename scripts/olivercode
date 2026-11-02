@@ -26,7 +26,7 @@ from lib.skill_links import broken_links as _broken_links, link_states as _link_
 from lib.health_checks import (  # noqa: E402,F401
     _check_waiver_expiry,
     _check_vault_skill_links, _check_remotes_resolve, _check_oversized_tracked,
-    _check_voice_copies,
+    _check_voice_copies, _check_fleet_locations,
 )
 from lib import backlog_setup as _backlog_setup  # noqa: E402
 from lib import claude_settings as _claude_settings  # noqa: E402
@@ -746,6 +746,7 @@ def command_health(fleet_root: Path | None = None) -> int:
         if repo_path.is_dir():
             topo_repos.append((name, repo_path))
 
+    t.add(*_check_fleet_locations(_profiles, fleet_root or OC_ROOT.parent))
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
 
