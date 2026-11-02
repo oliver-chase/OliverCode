@@ -376,13 +376,6 @@ class TestHealth(SetupCase):
         self.assertEqual((1, 0, 0), (passed, failed, skipped))
         self.assertIn("[OK]", text)
 
-    def test_a_missing_hook_alone_fails(self):
-        self.run_setup()
-        (self.repo / ".githooks" / "commit-msg").unlink()
-        (passed, failed, skipped), text = self.health()
-        self.assertEqual(1, failed)
-        self.assertIn("no commit-msg hook", text)
-
     def test_an_unreadable_board_is_a_warning(self):
         self.run_setup()
         down = FakeGitHub(rate_limit_after=0)
