@@ -72,6 +72,18 @@ class RatchetGate:
         self.stage(BASELINE, baseline_text(total_of(self.tmp, "--staged")))
         self.assertIn("is trusted", self.assertAllowed().stdout)
 
+    def test_a_raise_inside_the_cap_passes_and_is_printed(self):
+        raised = self.recorded + 2
+        self.stage("small.txt", "x\n" * 2)
+        self.stage(BASELINE, baseline_text(raised))
+        self.assertIn("raises the baseline by 2 lines", self.assertAllowed().stdout)
+
+    def test_a_raise_over_the_cap_is_printed_for_the_commit_msg_hook_to_judge(self):
+        self.stage("big.txt", "x\n" * 100)
+        self.stage(BASELINE, baseline_text(total_of(self.tmp, "--staged")))
+        out = self.assertAllowed().stdout
+        self.assertIn("without an L or XL story", out)
+
     def test_an_unset_baseline_skips(self):
         self.stage(BASELINE, '{\n  "lines": null,\n  "allowancePercent": 5,\n  "updated": null\n}\n')
         self.stage("big.txt", "x\n" * 500)
@@ -102,6 +114,61 @@ class TestRatchetPublicTemplateHook(RatchetGate, GateHarness):
 
 class TestRatchetPrivateTemplateHook(RatchetGate, GateHarness):
     HOOK_FILE = "core/templates/project/pre-commit-private"
+
+
+class TestRaiseCap(unittest.TestCase):
+    """The commit-msg hook refuses a baseline raise over the cap unless the message says L or XL."""
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-raisecap-"))
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        scratch_repo(self.repo)
+        (self.repo / "docs").mkdir()
+        (self.repo / ".githooks").mkdir()
+        shutil.copy2(REPO_ROOT / "core/templates/project/commit-msg", self.repo / ".githooks/commit-msg")
+        (self.repo / BASELINE).write_text(baseline_text(1000))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "--no-verify", "-m", "base")
+        git(self.repo, "config", "core.hooksPath", ".githooks")
+
+    def commit(self, lines, message):
+        (self.repo / BASELINE).write_text(baseline_text(lines))
+        git(self.repo, "add", BASELINE)
+        return git(self.repo, "commit", "-m", message, check=False)
+
+    def test_a_raise_inside_the_cap_passes(self):
+        self.assertEqual(0, self.commit(1020, "Grow a little (#5)").returncode)
+
+    def test_a_raise_over_the_cap_is_blocked(self):
+        result = self.commit(1021, "Grow a lot (#5)")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("raises the size baseline by 21 lines, over the cap of 20", result.stdout + result.stderr)
+
+    def test_a_raise_over_the_cap_passes_with_a_size_l_line(self):
+        self.assertEqual(0, self.commit(1500, "Grow a lot (#5)\n\nSize: L").returncode)
+
+    def test_a_size_xl_line_also_passes(self):
+        self.assertEqual(0, self.commit(1500, "Grow a lot (#5)\n\nSize: XL").returncode)
+
+    def test_a_smaller_story_size_does_not_pass(self):
+        self.assertNotEqual(0, self.commit(1500, "Grow a lot (#5)\n\nSize: M").returncode)
+
+    def test_lowering_the_baseline_passes(self):
+        self.assertEqual(0, self.commit(900, "Clean up (#5)").returncode)
+
+    def test_a_commit_that_leaves_the_baseline_alone_passes(self):
+        (self.repo / "a.txt").write_text("a\n")
+        git(self.repo, "add", "a.txt")
+        self.assertEqual(0, git(self.repo, "commit", "-m", "Other work (#5)", check=False).returncode)
+
+    def test_the_cap_percent_comes_from_the_baseline_file(self):
+        (self.repo / BASELINE).write_text(baseline_text(1000, 5).replace('"updated"', '"raiseCapPercent": 10,\n  "updated"'))
+        git(self.repo, "add", BASELINE)
+        git(self.repo, "commit", "-q", "--no-verify", "-m", "cap ten (#5)")
+        self.assertEqual(0, self.commit(1000, "same (#5)").returncode)
+        (self.repo / BASELINE).write_text(baseline_text(1090, 5).replace('"updated"', '"raiseCapPercent": 10,\n  "updated"'))
+        git(self.repo, "add", BASELINE)
+        self.assertEqual(0, git(self.repo, "commit", "-m", "inside ten (#5)", check=False).returncode)
 
 
 class TestSizeCounter(unittest.TestCase):

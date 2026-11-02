@@ -80,7 +80,7 @@ The private variant drops the PII gate on purpose. A private repo holds personal
 * `olivercode size --lower` rewrites `lines` to the current total after a cleanup. It sets a `null` baseline and accepts an equal total, and exits non-zero without writing when the total is higher
 * A story that must grow the repo raises `lines` by editing the file in the same commit, with the story number in the message
 
-The raise rule is procedure plus a reference and not a hard limit. A pre-commit gate cannot read the commit message, so when `docs/SIZE-BASELINE.json` is staged the gate trusts the `lines` it holds, and the commit-msg gate below is what requires a story number on that commit. Nothing checks that the raise belongs to the story named.
+A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how far one commit may raise `lines` above the committed value. The size gate prints the raise and passes it, because a pre-commit gate cannot read the commit message. The commit-msg hook then refuses a raise over the cap unless the message carries a line `Size: L` or `Size: XL`, copied from the Size field of the story that needs the growth. A story of size M or smaller splits its work so each commit stays inside the cap, or lowers the total elsewhere in the same commit. The hook checks the declaration and nothing checks that the raise belongs to the story named, so the reviewer confirms that when the Size line appears. A repo that opts out of the commit-msg hook loses this check with it.
 
 ### Owner identifiers
 
@@ -100,15 +100,16 @@ Every variant's archived-content gate also asks this file about a path it is abo
 
 ## Commit-message gate
 
-Git shows a commit message only to the `commit-msg` hook, so this check is a hook of its own and the commit gate tables above leave it out. Every repo that `sync-hooks`, `olivercode bootstrap` or `olivercode backlog-setup` manages gets the same one, and `conform` fails a repo whose board or `commit-msg` copy is missing or differs from the template and lists the `backlog-setup` command that fixes it.
+Git shows a commit message only to the `commit-msg` hook, so these checks are a hook of their own and the commit gate tables above leave it out. Every repo that `sync-hooks`, `olivercode bootstrap` or `olivercode backlog-setup` manages gets the same one, and `conform` fails a repo whose board or `commit-msg` copy is missing or differs from the template and lists the `backlog-setup` command that fixes it.
 
 | Gate | What it blocks |
 |------|---------------|
 | Story reference | A commit whose message has no `#<number>`, such as `(#53)` or `Story: #53`. Merge, revert and `fixup!`, `squash!` and `amend!` messages are exempt, and so is a repo's first commit. A reference inside a `#` comment line does not count, and the hook blocks when it cannot read the message file |
+| Size raise | A commit that raises `lines` in `docs/SIZE-BASELINE.json` by more than `raiseCapPercent` (default 2) of the committed value, without a `Size: L` or `Size: XL` line in the message. See "Size ratchet" above |
 
 A repo opts out only when its owner creates a file named `commit-msg.optout` in the repo's `.githooks` folder. The hook and `sync-hooks` never create or remove that file, and every commit it lets through prints that the check is off.
 
-The hook enforces the reference and nothing more. Posting the log comment on the story (`skills/backlog/scripts/log_action.py`) is a procedure that the `backlog` skill and `docs/RULES.md` assign to each agent, and no hook can force a comment on GitHub.
+The hook enforces the reference and the size-raise declaration and nothing more. Posting the log comment on the story (`skills/backlog/scripts/log_action.py`) is a procedure that the `backlog` skill and `docs/RULES.md` assign to each agent, and no hook can force a comment on GitHub.
 
 ## Pre-push gates
 
