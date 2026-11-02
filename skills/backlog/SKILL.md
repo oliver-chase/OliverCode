@@ -35,6 +35,16 @@ Every owner request, however small, becomes a story before any work starts. This
 5. **File it** with "File a story or epic" below, setting Status, Priority, Size and Work type. A request the owner asks for now goes in `Ready`, and the session starts it after filing.
 6. **A request that arrives mid-task is filed and queued**. The current story keeps its order. Reorder only when the owner says "stop", "do this first" or "drop that".
 
+## Work an item
+
+Take items one at a time from the board. For each one:
+
+1. **Restate the ask** in your own words, after reading the story in full.
+2. **Check the ask against the current code, tests and docs.** A story written weeks ago may describe a state that has moved.
+3. **Pause when they conflict.** Show the owner the exact differences and wait for a decision before overwriting, updating or skipping. A story that matches the code goes ahead without a pause.
+4. **Rewrite the story** with accurate Gherkin criteria when the code has moved, and file any prerequisite or follow-on stories the item implies, each through "Save every ask".
+5. **Confirm the exact changes** you made to the backlog before the build starts.
+
 ## Log every action
 
 Run `python3 scripts/log_action.py --config CONFIG --story N --agent NAME --role builder|qa --commit HASH --files COUNT --result "one line"` from this skill's folder after each commit or finished piece of work, and before a lead reports a helper's result. It posts one comment on the story through `gh api`, and `--dry-run` prints the comment and posts nothing. The commit message carries `(#N)`, which the commit-msg hook requires.
