@@ -45,10 +45,7 @@ DOWNSTREAM_RELATIVE = frozenset(
     {
         "docs/repo-structure-contract.md",
         "scripts/validate-repo.sh",
-        "scripts/bootstrap-profile.sh",
-        "scripts/run-profile-checks.sh",
         "scripts/check-structure-contract.mjs",
-        "scripts/check-planning-doc-governance.py",
         ".githooks/pre-commit-private",
     }
 )
