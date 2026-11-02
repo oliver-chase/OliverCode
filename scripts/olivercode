@@ -209,9 +209,8 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
 def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     """Stamp the project template into a repo, per shared/project-bootstrap-manifest.json.
 
-    The manifest declared 27 templated files and 5 required directories and NOTHING read
-    it -- `sync-hooks` covered the two hook files and every other file was a hand-copy.
-    README claimed a new repo "starts compliant on day one"; this is what makes that true.
+    The manifest lists the templated files and the required directories, so a new repo starts
+    compliant on day one.
 
     Honours the manifest's modes: `strict` files are overwritten (their contract is
     byte-identity with the template), `presence` files are only created when missing so
@@ -1060,7 +1059,7 @@ def command_audit_fleet(oc_root: Path) -> int:
     log_path = log_dir / "audit-fleet.log"
     log_lines = [f"=== audit-fleet run {datetime.now(timezone.utc).isoformat()} ==="]
 
-    any_failed = False
+    broken = False
     for target_name, target_path in targets.items():
         if not target_path.is_dir():
             print(f"  [SKIP] {target_name}: {target_path} not found")
@@ -1073,9 +1072,10 @@ def command_audit_fleet(oc_root: Path) -> int:
             )
             out_lines = result.stdout.strip().splitlines()
             summary = out_lines[-1] if out_lines else "(no output)"
-            status = "FAIL" if result.returncode != 0 else "ok"
-            if status == "FAIL":
-                any_failed = True
+            # A check exits 1 when it has findings. Any other nonzero exit, or a traceback, means it did not run.
+            crashed = result.returncode > 1 or "Traceback" in result.stderr
+            broken = broken or crashed
+            status = "ERROR" if crashed else "FAIL" if result.returncode != 0 else "ok"
             print(f"  [{status}] {check}: {summary}")
             log_lines.append(f"{target_name} {check}: {status} -- {summary}")
 
@@ -1083,7 +1083,8 @@ def command_audit_fleet(oc_root: Path) -> int:
     print(f"\nFull output: {log_path}")
     print("Findings are heuristic. Read the flagged locations before treating any as a real "
           "defect -- this command never fixes anything on its own.")
-    return 1 if any_failed else 0
+    # Findings exit 0 so the scheduler waits its interval; only a check that could not run exits 1.
+    return 1 if broken else 0
 
 
 def command_push_fleet(oc_root: Path, dry_run: bool) -> int:

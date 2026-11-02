@@ -114,6 +114,16 @@ class TestCommitGuard(RepoCase):
                     'git commit -uno -m x', 'git commit -Snewkey -m x', 'git commit -auno -m x'):
             self.assertEqual(guard.reason(cmd, self.repo), "", cmd)
 
+    def test_a_skip_wrapped_in_a_shell_is_refused(self):
+        self.gates(point_git_at_them=True)
+        for cmd in ('bash -c "git commit --no-verify -m x"', "sh -c 'git commit -n -m x'",
+                    'eval "git commit --no-verify -m x"'):
+            self.assertIn("skips the repo's commit gates", guard.reason(cmd, self.repo), cmd)
+
+    def test_a_wrapped_commit_without_a_skip_is_allowed(self):
+        self.gates(point_git_at_them=True)
+        self.assertEqual(guard.reason('bash -c "git commit -m x"', self.repo), "")
+
     def test_skipping_hooks_in_a_repo_with_no_gates_skips_nothing_and_is_allowed(self):
         self.assertEqual(guard.reason("git commit --no-verify -m x", self.repo), "")
 

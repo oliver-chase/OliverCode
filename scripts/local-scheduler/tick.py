@@ -35,6 +35,8 @@ LOG_DIR = STATE_DIR / "logs"
 PUSH_FLEET_INTERVAL_S = 3 * 60 * 60 - 10 * 60   # ~3h, the owner's chosen push cadence
 AUDIT_FLEET_INTERVAL_S = (6 * 24 + 20) * 60 * 60  # ~6.83 days, matching the sibling scheduler's weekly margin
 
+JOB_TIMEOUT_S = 30 * 60
+
 JOBS = [
     ("push-fleet", STATE_DIR / "last-push-fleet", PUSH_FLEET_INTERVAL_S, ["push-fleet"]),
     ("audit-fleet", STATE_DIR / "last-audit-fleet", AUDIT_FLEET_INTERVAL_S, ["audit-fleet"]),
@@ -64,11 +66,15 @@ def log(line: str) -> None:
 def run_job(name: str, marker: Path, argv: list[str]) -> None:
     log(f"{name}: starting")
     job_log = LOG_DIR / f"{name}.log"
-    result = subprocess.run(
-        [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), *argv],
-        cwd=str(OC_ROOT), capture_output=True, text=True,
-        timeout=30 * 60,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), *argv],
+            cwd=str(OC_ROOT), capture_output=True, text=True,
+            timeout=JOB_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        log(f"{name}: TIMED OUT after {JOB_TIMEOUT_S // 60} minutes, will retry next tick")
+        return
     stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
     with job_log.open("a", encoding="utf-8") as f:
         f.write(f"\n=== {stamp} ===\n{result.stdout}\n{result.stderr}\n")

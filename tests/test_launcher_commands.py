@@ -537,6 +537,29 @@ class TestPushFleetExitCode(unittest.TestCase):
     def test_successful_push_exits_zero(self):
         self.assertEqual(self._run(self._repo_ahead_of(self.remote)), 0)
 
+class TestAuditFleetExit(unittest.TestCase):
+    """Findings exit 0 so the scheduler waits its interval. A check that cannot run exits 1."""
+
+    def run_with(self, returncode, stderr=""):
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-auditfleet-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        (tmp / "skills" / "audit" / "scripts").mkdir(parents=True)
+        done = subprocess.CompletedProcess([], returncode, stdout="a finding\n", stderr=stderr)
+        with mock.patch.object(launcher, "_skills_root", return_value=None), \
+                mock.patch.object(launcher.subprocess, "run", return_value=done), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return launcher.command_audit_fleet(tmp)
+
+    def test_findings_exit_zero(self):
+        self.assertEqual(self.run_with(1), 0)
+
+    def test_a_clean_run_exits_zero(self):
+        self.assertEqual(self.run_with(0), 0)
+
+    def test_a_check_that_crashes_exits_one(self):
+        self.assertEqual(self.run_with(2), 1)
+        self.assertEqual(self.run_with(1, stderr="Traceback (most recent call last):"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
