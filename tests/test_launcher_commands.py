@@ -561,6 +561,33 @@ class TestAuditFleetExit(unittest.TestCase):
         self.assertEqual(self.run_with(1, stderr="Traceback (most recent call last):"), 1)
 
 
+class TestAuditFleetDescriptionCap(unittest.TestCase):
+    """audit-fleet runs the real structure check, which fails a description over 150 words."""
+
+    def run_with_description_words(self, words):
+        tmp = Path(tempfile.mkdtemp(prefix="olivercode-auditcap-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        scripts = tmp / "skills" / "audit" / "scripts"
+        scripts.mkdir(parents=True)
+        real = Path(launcher.__file__).resolve().parent.parent / "skills" / "audit" / "scripts"
+        for name in ("check_skill_structure.py", "_fleet.py"):
+            shutil.copy(real / name, scripts / name)
+        wordy = tmp / "skills" / "wordy-skill"
+        wordy.mkdir()
+        desc = " ".join(["word"] * words)
+        (wordy / "SKILL.md").write_text(f'---\nname: wordy-skill\ndescription: "{desc}"\n---\n\nBody.\n', encoding="utf-8")
+        out = io.StringIO()
+        with mock.patch.object(launcher, "_skills_root", return_value=None), contextlib.redirect_stdout(out):
+            launcher.command_audit_fleet(tmp)
+        return out.getvalue()
+
+    def test_a_151_word_description_fails(self):
+        self.assertIn("[FAIL] check_skill_structure.py", self.run_with_description_words(151))
+
+    def test_a_150_word_description_passes(self):
+        self.assertIn("[ok] check_skill_structure.py", self.run_with_description_words(150))
+
+
 if __name__ == "__main__":
     unittest.main()
 

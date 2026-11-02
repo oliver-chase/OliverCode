@@ -10,8 +10,6 @@ Run these from this skill's folder before reading. Each scans every skill under 
 python3 scripts/check_skill_structure.py <path>            # a cited skill or file that does not exist
 python3 scripts/check_skill_structure.py --weight <path>   # files, size, description words, unreferenced and uncalled files per skill
 python3 scripts/check_skill_structure.py --routes <path>   # route rows that load more than 2,000 words for one task
-python3 scripts/check_mcp_patterns.py <path>               # a search per blank field, several agents started together, or a tell to configure a connector
-python3 scripts/check_descriptions.py <path>               # a description over the word cap, since every description loads in every session
 ```
 
 A fleet with checks of its own runs them too. Its `<repo>/.githooks/pre-commit.local` names them.

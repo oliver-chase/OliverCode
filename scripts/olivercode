@@ -46,7 +46,7 @@ COMMANDS = [
     ("olivercode health [--root DIR] [--hooks-only]", "Run health checks: Claude Code hooks, placement drift. --hooks-only checks just the fleet hooks and makes no network call"),
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
-    ("olivercode audit-fleet", "Run the audit skill's 3 static checks against this machine's skills folder + OliverCode's own skills"),
+    ("olivercode audit-fleet", "Run the audit skill's structure check, which includes the description cap, against this machine's skills folder + OliverCode's own skills"),
     ("olivercode push-fleet [--dry-run]", "Push already-committed work for OliverCode, the private repos and this machine's pushRepos, unattended"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
 ]
@@ -742,7 +742,7 @@ def command_backlog_setup(argv: list[str]) -> int:
 
 
 # _resolve_repo_path / _iter_fleet moved to lib/repo_profiles.py 2026-09-15 so
-# find-spec.py could reuse fleet-repo resolution instead of a third copy. Imported
+# other scripts reuse fleet-repo resolution instead of keeping a copy. Imported
 # under their original names below so `launcher._iter_fleet` etc. keep working for
 # existing callers and tests.
 
@@ -1024,7 +1024,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
 
 
 def command_audit_fleet(oc_root: Path) -> int:
-    """Run the audit skill's 3 static checks against every known skill root.
+    """Run the audit skill's structure check against every known skill root.
 
     Targets exactly 2 roots -- this machine's skills folder (local_config) and
     OliverCode's own skills/ -- not the fleet-repo iteration sync-hooks uses. Fleet
@@ -1048,7 +1048,7 @@ def command_audit_fleet(oc_root: Path) -> int:
         print("  [INFO] no skills folder set for this machine (skillsRoot) — only OliverCode's skills are checked")
     else:
         targets = {"skills": skills, **targets}
-    checks = ["check_skill_structure.py", "check_mcp_patterns.py", "check_descriptions.py"]
+    checks = ["check_skill_structure.py"]
 
     # runtime/manifests/ is the sanctioned home for a generated observability
     # artifact -- runtime/control-plane/ specifically means the local control

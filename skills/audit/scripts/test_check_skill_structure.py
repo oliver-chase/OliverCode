@@ -176,6 +176,28 @@ class DanglingSkillReferenceFinding(unittest.TestCase):
             self.assertEqual(run_gate(tmp)[0], 0)
 
 
+class DescriptionCap(unittest.TestCase):
+    def long_skill(self, tmp, words):
+        skill = Path(tmp) / "fam" / "wordy-skill"
+        skill.mkdir(parents=True)
+        desc = " ".join(["word"] * words)
+        (skill / "SKILL.md").write_text(f'---\nname: wordy-skill\ndescription: "{desc}"\n---\n\nBody.\n', encoding="utf-8")
+
+    def test_a_151_word_description_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.long_skill(tmp, 151)
+            code, out = run_gate(tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("[description-over-cap]", out)
+        self.assertIn("151 words", out)
+
+    def test_a_150_word_description_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.long_skill(tmp, 150)
+            code, out = run_gate(tmp)
+        self.assertEqual(code, 0, out)
+
+
 class DanglingFileReferenceFinding(unittest.TestCase):
     SCOPE = "fam/doc-builder"
 
