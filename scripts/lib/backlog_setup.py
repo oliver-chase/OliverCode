@@ -390,9 +390,14 @@ def config_path(target: Path) -> Path:
     """The config file the repo's CLAUDE.md names, else docs/backlog-config.json."""
     claude = target / "CLAUDE.md"
     if claude.is_file():
-        m = re.search(r"`?([\w./-]*backlog-config\.json)`?", claude.read_text(encoding="utf-8", errors="ignore"))
-        if m and not m.group(1).startswith("$"):
-            return target / m.group(1)
+        names = [n for n in re.findall(r"`?([\w./-]*backlog-config\.json)`?", claude.read_text(encoding="utf-8", errors="ignore"))
+                 if not n.startswith("$")]
+        # A prose mention of the bare file name must not hide the path the file really has.
+        for name in names:
+            if (target / name).is_file():
+                return target / name
+        if names:
+            return target / next((n for n in names if "/" in n), names[0])
     return target / "docs" / "backlog-config.json"
 
 
@@ -719,12 +724,14 @@ def _create_project(api, owner, repo, title, link, cfg_path, config, out) -> dic
 
 def board_status(target: Path, api: Api, oc_root: Path = OC_ROOT) -> tuple[str, list[str]]:
     """('ok'|'fail'|'warn', problems) for one repo's board against the baseline."""
+    slug = origin_owner_name(target)
+    if slug is None:
+        return "warn", ["board check skipped: the checkout has no origin remote, so there is no board to verify"]
     cfg_path = config_path(target)
     config = load_config(cfg_path)
     if config is None:
         return "fail", [f"no usable backlog config at {cfg_path.relative_to(target) if cfg_path.is_relative_to(target) else cfg_path}"]
-    slug = origin_owner_name(target)
-    if slug and f"{config['repoOwner']}/{config['repoName']}".lower() != f"{slug[0]}/{slug[1]}".lower():
+    if f"{config['repoOwner']}/{config['repoName']}".lower() != f"{slug[0]}/{slug[1]}".lower():
         return "fail", ["the backlog config names another repo's Project"]
     baseline = kanban.load_baseline()
     try:
