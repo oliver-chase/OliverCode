@@ -20,6 +20,7 @@ from _support import REPO_ROOT, git, load_script, scratch_repo
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import local_config  # noqa: E402  (load_script put scripts/ on the path)
+from lib import cmd_fleet, cmd_repo  # noqa: E402
 
 
 def quiet(fn, *args, **kwargs):
@@ -54,7 +55,7 @@ class ScratchHome(unittest.TestCase):
 
 class TestCommandSkills(ScratchHome):
     def run_skills(self, *argv):
-        with mock.patch.object(launcher, "OC_ROOT", self.oc):
+        with mock.patch.object(cmd_repo, "OC_ROOT", self.oc):
             return quiet(launcher.command_skills, list(argv))
 
     def test_lists_every_skill(self):
@@ -154,8 +155,8 @@ class TestCommandSyncHooks(ScratchHome):
         self.private = {}
 
     def sync(self, profiles):
-        with mock.patch.object(launcher, "load_repo_profiles", return_value=(profiles, None)), \
-                mock.patch.object(launcher, "_private_repos", return_value=self.private):
+        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(profiles, None)), \
+                mock.patch.object(cmd_fleet, "_private_repos", return_value=self.private):
             return quiet(launcher.command_sync_hooks, self.oc, self.fleet)
 
     def test_a_fleet_repo_gets_the_public_hooks_and_a_hooks_path(self):
@@ -205,11 +206,11 @@ class TestCommandSyncHooks(ScratchHome):
     def test_with_the_harness_config_it_touches_nothing_outside_the_temp_dir(self):
         """No fixture config: the machine's olivercode.local.json must not reach the run."""
         self.assertEqual(os.environ["OLIVERCODE_LOCAL_CONFIG"], os.devnull)
-        self.assertEqual(({}, {}), (launcher._private_repos(), local_config.repo_paths()))
+        self.assertEqual(({}, {}), (cmd_fleet._private_repos(), local_config.repo_paths()))
         (self.oc / "shared").mkdir()
         (self.oc / "shared" / "repo-profiles.json").write_text('{"profiles": {}}')
         scratch_repo(self.fleet / "alpha")
-        with mock.patch.object(launcher, "registry_gap", return_value=None):
+        with mock.patch.object(cmd_fleet, "registry_gap", return_value=None):
             code, out = quiet(launcher.command_sync_hooks, self.oc, self.fleet)
         self.assertEqual(code, 0)
         self.assertIn("0 target(s) synced, 0 skipped.", out)
@@ -232,7 +233,7 @@ class TestCommandAuditFleet(ScratchHome):
     def audit(self, skills_root=None, runner=None):
         done = subprocess.CompletedProcess([], 0, stdout="12 skills, 0 findings\n", stderr="")
         runner = runner or mock.Mock(return_value=done)
-        with mock.patch.object(launcher, "_skills_root", return_value=skills_root), \
+        with mock.patch.object(cmd_fleet, "_skills_root", return_value=skills_root), \
                 mock.patch.object(launcher.subprocess, "run", runner):
             code, out = quiet(launcher.command_audit_fleet, self.oc)
         return code, out, runner
