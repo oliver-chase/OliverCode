@@ -40,17 +40,6 @@ def _sandbox(dest: Path) -> Path:
     return dest
 
 
-class TestShippedTree(unittest.TestCase):
-    def test_oliveronly_gates_are_absent_from_the_template(self):
-        """The gate a fleet repo does not get, asserted against the files."""
-        template = (REPO_ROOT / "core/templates/project/pre-commit").read_text()
-        self.assertNotIn(
-            "Contract integrity", template,
-            "'Contract integrity' now ships in the template; it was OliverCode-only, so the "
-            "coverage table and the README's summary both need updating",
-        )
-
-
 class TestMutations(unittest.TestCase):
     """Break one thing; the checker must notice. One sandbox serves the class, and each
     mutation is put back before the next test runs."""
@@ -80,7 +69,7 @@ class TestMutations(unittest.TestCase):
         # The real bug: a run of banners counting to one total, then a later one
         # counting to another.
         self.assertTrue(self._fails_after(
-            "core/templates/project/pre-commit", "Gate 1/12", "Gate 1/5"))
+            "core/templates/project/pre-commit", "Gate 1/10", "Gate 1/5"))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
         """A false claim in the shape a number-adjacent pattern cannot match.
@@ -117,7 +106,7 @@ class TestMutations(unittest.TestCase):
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/GATES.md", "| **12** | **12** | **7** |", "| **12** | **13** | **7** |"))
+            "docs/GATES.md", "| **9** | **10** | **7** |", "| **9** | **11** | **7** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""

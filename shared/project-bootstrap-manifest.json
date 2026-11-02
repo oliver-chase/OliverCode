@@ -53,11 +53,6 @@
       "mode": "presence"
     },
     {
-      "source": "core/templates/project/scripts/check-backlog-hygiene.mjs",
-      "target": "scripts/check-backlog-hygiene.mjs",
-      "mode": "presence"
-    },
-    {
       "source": "core/templates/project/CLAUDE.md",
       "target": "CLAUDE.md",
       "mode": "presence"
