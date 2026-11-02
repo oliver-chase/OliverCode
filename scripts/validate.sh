@@ -228,7 +228,7 @@ run_smoke_tests() {
   if [[ ! -d "$tests_dir" ]]; then
     return 0
   fi
-  echo "=== validate: running smoke tests${SMOKE_LABEL:-} ==="
+  echo "=== validate: running smoke tests ==="
   if command -v python3 &>/dev/null; then
     # Each test module runs in its own process, several at a time, because the suite spends
     # its time starting git and bash. -b buffers each test's stdout/stderr and replays it only
@@ -261,7 +261,7 @@ run_smoke_tests() {
         echo "--- $module ---"
         cat "$log_dir/$module.log"
       done < "$log_dir/failed"
-      echo "=== validate: python smoke tests FAILED${SMOKE_LABEL:-} ==="
+      echo "=== validate: python smoke tests FAILED ==="
       exit 1
     fi
     echo "  Ran $ran tests across $(ls "$log_dir"/*.log | wc -l | tr -d ' ') modules, all passed"
@@ -288,7 +288,6 @@ main() {
       echo "                         smoke tests (tests/ and the skills' own script tests, if present)
                          and fleet hook state"
       echo "  --tree                 Run everything above, with the gates over every tracked file"
-      echo "  --head                 Run the smoke tests from a clean clone of HEAD, ignoring uncommitted edits"
       echo "  --check-consistency    Run doc/code consistency checks only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
       echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
@@ -296,18 +295,6 @@ main() {
       ;;
     --check-consistency)
       run_consistency
-      ;;
-    --head)
-      # The committed code only: another session's edits in progress cannot change the result.
-      local sha work
-      sha="$(git -C "$REPO_ROOT" rev-parse HEAD)" || exit 1
-      work="$(mktemp -d)"
-      # shellcheck disable=SC2064
-      trap "rm -rf '$work'" EXIT
-      git clone -q --no-checkout "$REPO_ROOT" "$work/head" && git -C "$work/head" checkout -q --detach "$sha" || exit 1
-      REPO_ROOT="$work/head"
-      SMOKE_LABEL=" on commit ${sha:0:12}"
-      run_smoke_tests
       ;;
     --check-repo)
       # The downstream governance gate: bloat and code quality for another checkout.
