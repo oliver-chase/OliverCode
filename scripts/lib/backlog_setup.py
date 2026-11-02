@@ -1,6 +1,6 @@
 """One repeatable setup and repair for a repo's GitHub Project board .
 
-`olivercode backlog-setup [DIR] [--apply]` calls `run_setup`, and `olivercode health` calls
+`olivercode backlog-setup [DIR] [--apply]` calls `run_setup`, and `olivercode conform` calls
 `boards_health`. The baseline itself lives once in `shared/kanban-baseline.json`, and the
 comparison lives once in `skills/backlog/scripts/check_kanban_baseline.py`, which this module imports.
 
