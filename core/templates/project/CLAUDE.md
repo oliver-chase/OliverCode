@@ -9,3 +9,6 @@ Read before working here:
 - <each document that is authoritative for this repo. List only files that exist. The convention is `docs/repo-structure-contract.md`, and `docs/backlog-config.json` when the repo has a GitHub Project.>
 
 Run `bash scripts/validate.sh` before every commit. It is this repo's canonical validation.
+
+Rules:
+- Every owner request, however small, is filed as a story with Gherkin criteria under an epic before work starts, per the `backlog` skill

@@ -1,0 +1,18 @@
+**As the owner**, I want a failed nightly backup to message me the same day, so that I never find a gap in my backups by accident.
+
+```gherkin
+Feature: Backup failure alert
+  Scenario: The nightly backup fails
+    Given the nightly backup job ran and exited with an error
+    When the job finishes
+    Then the owner receives a message naming the failed step
+    And the message arrives before 9am the same day
+
+  Scenario: The nightly backup succeeds
+    Given the nightly backup job ran and exited cleanly
+    When the job finishes
+    Then no message is sent
+```
+
+Epic: #50
+Priority: P5. Size: huge. Work type: Story.
