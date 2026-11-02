@@ -95,3 +95,4 @@ runtime/manifests/
 
 # This machine's paths (scripts/lib/local_config.py). The example is tracked.
 olivercode.local.json
+scratch/

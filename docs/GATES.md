@@ -70,7 +70,7 @@ Every variant's archived-content gate also asks this file about a path it is abo
 
 ## Commit-message gate
 
-Git shows a commit message only to the `commit-msg` hook, so this check is a hook of its own and the commit gate tables above leave it out. Every repo that `sync-hooks` or `olivercode bootstrap` manages gets the same one, and `health` fails a repo whose copy is missing or differs from the template.
+Git shows a commit message only to the `commit-msg` hook, so this check is a hook of its own and the commit gate tables above leave it out. Every repo that `sync-hooks`, `olivercode bootstrap` or `olivercode backlog-setup` manages gets the same one, and `health` fails a repo whose copy is missing or differs from the template and lists the `backlog-setup` command that fixes it.
 
 | Gate | What it blocks |
 |------|---------------|
