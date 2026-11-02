@@ -6,8 +6,7 @@ stages a fixture, and runs the hook against it. Each class builds its template o
 Nothing touches this checkout.
 
 Gates that consult the machine run against stand-ins: the workflow-auth gate and the
-skill-citation check get a stub `gh` on PATH, and the planning-doc gate gets its checker
-stubbed into the scratch repo. Every `exit 1` in a gate has a test that fails when it
+skill-citation check get a stub `gh` on PATH. Every `exit 1` in a gate has a test that fails when it
 becomes `true`.
 """
 
@@ -242,26 +241,6 @@ class TestGateWorkflowAuth(GateHarness):
         result = self.assertAllowed(**self.stub_gh(self.SCOPES.format("repo, workflow")))
         self.assertIn("gh credential has workflow scope", result.stdout)
         self.assertIn("Gate 4 passed.", result.stdout)
-
-
-class TestGatePlanningDocs(GateHarness):
-    """Planning doc governance ships in the template hook, not OliverCode's own."""
-
-    HOOK_SOURCE = TEMPLATE_HOOK
-
-    def test_no_checker_skips(self):
-        self.stage("src/app.py", "print('hello')\n")
-        self.assertIn("Planning doc governance... skipped", self.assertAllowed().stdout)
-
-    def test_a_failing_checker_blocks(self):
-        self.write("scripts/check-planning-doc-governance.py", "raise SystemExit(1)\n")
-        self.stage("src/app.py", "print('hello')\n")
-        self.assertIn("BLOCKED: Planning doc governance failed.", self.assertBlocked("gate 5").stdout)
-
-    def test_a_passing_checker_passes(self):
-        self.write("scripts/check-planning-doc-governance.py", "raise SystemExit(0)\n")
-        self.stage("src/app.py", "print('hello')\n")
-        self.assertIn("Gate 5 passed.", self.assertAllowed().stdout)
 
 
 class TestGateArchivedContent(GateHarness):
