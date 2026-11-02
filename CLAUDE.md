@@ -19,7 +19,7 @@ It applies to every reply and file and overrides any default to keep replies sho
 - Before a structural change, or installing, creating or moving a skill or agent file, read `$OC/docs/RULES.md`. Each layer has one home
 - Every owner request, however small, is saved as a story with Gherkin criteria under an epic before work starts (`backlog` skill)
 - A request mid-task is filed and queued. Switch only on "stop", "do this first" or "drop that"
-- Work goes to a helper agent on the smallest model that fits: Haiku for lookups and mechanical edits, Sonnet for building, research and review. The lead checks its result against the files before reporting or committing. A session cannot change its own model, so point to the app's model menu
+- Work goes to a helper agent on the smallest model that fits: Haiku for lookups and edits, Sonnet for building, research and review. The lead checks its result against files. A session cannot change its model: use the model menu. A different agent QAs each story before Complete
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
 - A multi-commit session ending: run the `audit` skill on its commits
 - Writing a README, doc or `CLAUDE.md`: follow RULES.md "Documents"

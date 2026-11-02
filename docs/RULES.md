@@ -388,6 +388,8 @@ Every owner request, however small, becomes a story before work starts, and `ski
 
 Every agent that commits or finishes work logs it on the story: its name, role (builder or QA), the commit, the files changed and the result. The lead logs a helper's result before reporting it. `.githooks/commit-msg` blocks a commit with no story reference, which is the part git enforces. The comment itself is procedure, because a hook cannot post to GitHub, and `docs/GATES.md` has the limit.
 
+The agent that built a story never signs off its own work. A different agent verifies each Gherkin scenario against the files and tests while the story sits in QA, logs the verdict with role `qa`, and only a pass moves the story to Complete. A failure returns it to In Progress with the findings. `skills/backlog/scripts/check_qa_signoff.py` rejects a pass from any agent that is a builder on the story, and the `backlog` skill's "Close a story or epic" holds the procedure.
+
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`, and finished work leaves the file because git keeps that history.
 
 ### Keeping documents current
