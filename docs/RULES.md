@@ -99,7 +99,7 @@ Evidence gate: the WRITE MODE evidence gate is opt-in (`EVIDENCE-OPT-IN-1` in `d
 
 Secrets stay out of git. Real credentials live in a gitignored `.secrets/` folder or in `.env.local`, `.env.example` is tracked and holds variable names without values, and `.githooks/pre-commit` is the enforcement gate.
 
-Hooks are installed by the launcher from OliverCode with `scripts/olivercode sync-hooks`. It deploys `core/templates/project/pre-commit` (or the private variant for a private repo) to each repo's `.githooks/` and sets `core.hooksPath`. Planning-doc governance needs no separate install, because the hook runs `scripts/check-planning-doc-governance.py` whenever that file is present in the repo and skips the gate when it is not.
+Hooks are installed by the launcher from OliverCode with `scripts/olivercode sync-hooks`. It deploys `core/templates/project/pre-commit` (or the private variant for a private repo) to each repo's `.githooks/` and sets `core.hooksPath`.
 
 ## Project structure
 

@@ -124,7 +124,7 @@ The rehearsal runs in disposable sandboxes that cannot touch your real files. Ev
 | `.githooks/` | OliverCode's own pre-commit, commit-msg and pre-push hooks |
 | `scripts/olivercode` | The launcher. `python3 scripts/olivercode --help` lists its commands |
 | `scripts/validate.sh` | The single validation command, which runs the gates, the consistency checks, the reference check and the tests |
-| `scripts/lib/` | The checkers and helpers behind the launcher and `validate.sh` |
+| `scripts/lib/` | The checkers and helpers behind `validate.sh`, and the launcher command bodies in `cmd_*.py` |
 | `scripts/hooks/` | The three Claude Code hooks: session check, commit guard and early-stop guard |
 | `scripts/qa/` | The install rehearsal and the secret-gate probe |
 | `scripts/link-check.sh`, `scripts/run-governance-target.sh` | The reference check and the CI entrypoint for a downstream repo |
