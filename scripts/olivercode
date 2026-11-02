@@ -42,7 +42,7 @@ OC_ROOT = Path(__file__).resolve().parent.parent
 COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
     ("olivercode size [DIR] [--lower]", "Print a repo's total lines, its docs/SIZE-BASELINE.json baseline and the headroom. --lower rewrites the baseline to the current total when that is no higher, and refuses to raise it"),
-    ("olivercode backlog-setup [DIR] [--apply] [--story N]", "Set up or repair a repo's GitHub Project board, backlog config, commit-msg hook and story rule. Dry run unless --apply, which logs the repair on story N"),
+    ("olivercode backlog-setup [DIR] [--apply]", "Set up or repair a repo's GitHub Project board, backlog config and commit-msg hook. Dry run unless --apply"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
@@ -792,36 +792,14 @@ def command_backlog_setup(argv: list[str]) -> int:
     """`olivercode backlog-setup [DIR] [--apply]`: see lib/backlog_setup.py and docs/SETUP.md."""
     apply = "--apply" in argv
     rest = [a for a in argv if a != "--apply"]
-    opts: dict[str, list[str]] = {"--title": [], "--area": [], "--map": [], "--story": [], "--agent": []}
-    link = "--no-link" not in rest
-    rest = [a for a in rest if a != "--no-link"]
-    paths: list[str] = []
-    i = 0
-    while i < len(rest):
-        if rest[i] in opts:
-            if i + 1 >= len(rest):
-                print(f"Error: {rest[i]} needs a value.")
-                return 1
-            opts[rest[i]].append(rest[i + 1])
-            i += 2
-        else:
-            paths.append(rest[i])
-            i += 1
-    if len(paths) > 1 or (paths and paths[0].startswith("-")):
-        print("Usage: olivercode backlog-setup [DIR] [--apply] [--title NAME] [--area NAME ...] [--map OLD=NEW ...] [--no-link] [--story N] [--agent NAME]")
+    if len(rest) > 1 or (rest and rest[0].startswith("-")):
+        print("Usage: olivercode backlog-setup [DIR] [--apply]")
         return 1
-    if opts["--story"] and not opts["--story"][-1].isdigit():
-        print(f"Error: --story needs an issue number, not {opts['--story'][-1]!r}.")
-        return 1
-    target = Path(paths[0] if paths else ".").expanduser()
+    target = Path(rest[0] if rest else ".").expanduser()
     if not target.is_dir():
         print(f"Error: {target} is not a directory.")
         return 1
-    return _backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT,
-                                    title=(opts["--title"] or [None])[-1], areas=opts["--area"] or None,
-                                    maps=opts["--map"], link=link,
-                                    story=int(opts["--story"][-1]) if opts["--story"] else None,
-                                    agent=(opts["--agent"] or ["backlog-setup"])[-1])
+    return _backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT)
 
 
 # _resolve_repo_path and _iter_fleet live in lib/repo_profiles.py so other scripts share

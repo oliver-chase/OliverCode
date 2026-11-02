@@ -389,7 +389,7 @@ Every agent that commits or finishes work logs it on the story: its name, role (
 
 The agent that built a story never signs off its own work. A different agent verifies each Gherkin scenario against the files and tests while the story sits in QA, logs the verdict with role `qa`, and only a pass moves the story to Complete. A failure returns it to In Progress with the findings. `skills/backlog/scripts/check_qa_signoff.py` rejects a pass from any agent that is a builder on the story, and the `backlog` skill's "Close a story or epic" holds the procedure.
 
-`olivercode backlog-setup [DIR] [--apply]` is the one command that creates or repairs a repo's Project to this baseline, writes its `backlog-config.json` and installs the story rule and hook, and `olivercode conform` lists any repo whose board differs. A repair never loses an item's field values: the command saves every item's Status, Priority, Size and Work type before it changes a field, and it restores and verifies them afterward. `docs/SETUP.md` ("Launcher commands") documents the options.
+`olivercode backlog-setup [DIR] [--apply]` is the one command that creates or repairs a repo's Project to this baseline, writes its `backlog-config.json` and installs the commit-msg hook, and `olivercode conform` lists any repo whose board differs. A repair never loses an item's field values: the command saves every item's Status, Priority, Size and Work type before it changes a field, and it restores and verifies them afterward. `docs/SETUP.md` ("Launcher commands") documents the options.
 
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`, and finished work leaves the file because git keeps that history.
 
