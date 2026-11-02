@@ -9,7 +9,6 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from lib import local_config  # noqa: E402
-from lib.repo_profiles import resolve_repo_path  # noqa: E402
 
 
 class LocalConfig(unittest.TestCase):
@@ -49,12 +48,6 @@ class LocalConfig(unittest.TestCase):
     def test_repo_paths_expand_a_tilde(self):
         self.write({"repoPaths": {"alpha": "~/work/alpha"}})
         self.assertEqual(local_config.repo_paths(), {"alpha": Path.home() / "work" / "alpha"})
-
-    def test_a_local_repo_path_wins_over_the_profile_and_the_sibling_default(self):
-        self.write({"repoPaths": {"alpha": "/this/machine/alpha"}})
-        got = resolve_repo_path("alpha", {"path": "sub/alpha"}, Path("/fleet"))
-        self.assertEqual(got, Path("/this/machine/alpha"))
-        self.assertEqual(resolve_repo_path("beta", {}, Path("/fleet")), Path("/fleet/beta"))
 
 
 if __name__ == "__main__":

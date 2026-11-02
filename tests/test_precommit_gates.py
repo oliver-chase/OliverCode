@@ -138,6 +138,32 @@ class TestGate1Secrets(GateHarness):
         self.assertAllowed()
 
 
+class SecretGateEveryVariant:
+    """A staged fake key blocks the commit in every shipped hook. The key is built at run time."""
+
+    def test_a_staged_fake_key_blocks_at_the_secret_gate(self):
+        self.stage("config.py", 'KEY = "' + "sk-" + "z" * 32 + '"\n')
+        out = self.assertBlocked("gate 1").stdout
+        self.assertIn("Secret scan", out)
+        self.assertIn("matches secret pattern", out)
+
+    def test_a_clean_file_passes_the_secret_gate(self):
+        self.stage("notes.txt", "Plain notes.\n")
+        self.assertIn("Gate 1", self.assertAllowed().stdout)
+
+
+class TestLiveHookBlocksASecret(SecretGateEveryVariant, GateHarness):
+    pass
+
+
+class TestTemplateHookBlocksASecret(SecretGateEveryVariant, GateHarness):
+    HOOK_SOURCE = TEMPLATE_HOOK
+
+
+class TestPrivateHookBlocksASecret(SecretGateEveryVariant, GateHarness):
+    HOOK_SOURCE = REPO_ROOT / "core" / "templates" / "project" / "pre-commit-private"
+
+
 class TestGate2Emoji(GateHarness):
     def test_emoji_blocks(self):
         self.stage("readme.md", "Status: done \U0001F600\n")

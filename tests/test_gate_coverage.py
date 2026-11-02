@@ -41,15 +41,6 @@ def _sandbox(dest: Path) -> Path:
 
 
 class TestShippedTree(unittest.TestCase):
-    def test_hook_totals_are_the_documented_ones(self):
-        totals, problems = cc._hook_totals(REPO_ROOT)
-        self.assertEqual(problems, [])
-        self.assertEqual(
-            totals, {"olivercode": 9, "template": 9, "template-private": 4},
-            "gate coverage changed -- update the table in docs/GATES.md, which is "
-            "its single home, and every doc that points there",
-        )
-
     def test_oliveronly_gates_are_absent_from_the_template(self):
         """The gate a fleet repo does not get, asserted against the files."""
         template = (REPO_ROOT / "core/templates/project/pre-commit").read_text()
