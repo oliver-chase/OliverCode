@@ -64,12 +64,53 @@ class TestCommitMsg(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertEqual(0, self.commit(message).returncode)
 
-    def test_a_reference_only_in_a_comment_line_does_not_count(self):
+    def test_a_message_that_opens_with_a_reference_passes(self):
         self.first_commit()
-        msg = self.repo / "msg"
-        msg.write_text("Add a feature\n# Story: #53\n")
-        result = git(self.repo, "commit", "-F", str(msg), "--cleanup=verbatim", "--allow-empty", check=False)
+        self.assertEqual(0, self.commit("#53 fix").returncode)
+
+    def test_a_reference_line_in_an_m_message_is_kept_by_git_and_counts(self):
+        self.first_commit()
+        result = self.commit("Add a feature\n#53 is the story")
+        self.assertEqual(0, result.returncode)
+        self.assertIn("#53", git(self.repo, "log", "-1", "--format=%B").stdout)
+
+    def test_a_reference_must_be_a_standalone_token(self):
+        self.first_commit()
+        for message in ("Fix 5#3", "Fix a#53", "Fix x#53b", "Entity &#39; here"):
+            with self.subTest(message=message):
+                self.assertEqual(1, self.commit(message).returncode)
+        for message in ("Fix (#53)", "Fix org/repo#53", "Fix #53.", "Fix #53, #54"):
+            with self.subTest(message=message):
+                self.assertEqual(0, self.commit(message).returncode)
+
+    def test_zero_is_not_a_story(self):
+        self.first_commit()
+        for message in ("Fix #0", "Fix (#000)"):
+            with self.subTest(message=message):
+                self.assertEqual(1, self.commit(message).returncode)
+
+    def test_an_editor_comment_line_is_dropped_by_git_so_it_does_not_count(self):
+        self.first_commit()
+        editor = self.repo / "editor.sh"
+        editor.write_text('#!/bin/sh\n{ printf "Add a feature\\n# Story: #53\\n"; cat "$1"; } > "$1.new"\nmv "$1.new" "$1"\n')
+        editor.chmod(0o755)
+        (self.repo / "a.txt").write_text("edited\n")
+        git(self.repo, "add", "a.txt")
+        env = dict(git_env(), GIT_EDITOR=str(editor))
+        result = subprocess.run(["git", "commit"], cwd=self.repo, env=env, capture_output=True, text=True)
         self.assertEqual(1, result.returncode)
+        self.assertIn("names no story", result.stdout + result.stderr)
+
+    def test_an_editor_message_with_a_real_reference_passes(self):
+        self.first_commit()
+        editor = self.repo / "editor.sh"
+        editor.write_text('#!/bin/sh\n{ printf "Add a feature (#53)\\n"; cat "$1"; } > "$1.new"\nmv "$1.new" "$1"\n')
+        editor.chmod(0o755)
+        (self.repo / "a.txt").write_text("edited\n")
+        git(self.repo, "add", "a.txt")
+        env = dict(git_env(), GIT_EDITOR=str(editor))
+        result = subprocess.run(["git", "commit"], cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     def test_an_unreadable_message_file_fails_closed(self):
         result = self.run_hook(str(self.repo / "nope"))

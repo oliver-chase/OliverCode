@@ -7,8 +7,9 @@ Reads the story's comments (a JSON list of objects with a "body", or a list of l
 `gh api --paginate --slurp` prints) from --comments, or fetches them through the gh REST
 API when the file is omitted. The acceptance criteria come from --body, or from the story
 body fetched the same way. Comments are the ones log_action.py posts.
-Exits 0 when the newest QA comment from an agent that is not a builder on the story says
-PASS and names every Gherkin scenario, and prints each confirmed scenario. Exits 1 and prints
+Exits 0 when the story has a builder comment and the newest QA comment from an agent that is not a
+builder on the story says PASS and lists every Gherkin scenario by its whole name after "confirmed:",
+separated by ";", and prints each confirmed scenario. Exits 1 and prints
 the reason otherwise, and 2 on a usage error.
 """
 import argparse
@@ -19,6 +20,7 @@ import sys
 
 FIELD = re.compile(r"^\s*-?\s*(Agent|Role|Result):\s*(.*?)\s*$", re.M)
 SCENARIO = re.compile(r"^\s*Scenario(?: Outline)?:\s*(.+?)\s*$", re.M)
+CONFIRMED = re.compile(r"\bconfirmed:(.*)$", re.I | re.S)
 VERDICT = re.compile(r"^\s*(PASS|FAIL)\b", re.I)
 REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -53,10 +55,20 @@ def scenarios(story_body):
     return SCENARIO.findall(story_body or "")
 
 
+def confirmed_names(result):
+    """The scenario names after "confirmed:" in a QA result, split on ";", trimmed and lower-cased."""
+    found = CONFIRMED.search(result or "")
+    if not found:
+        return set()
+    return {part.strip().lower() for part in found.group(1).split(";") if part.strip()}
+
+
 def check(comment_bodies, story_body):
     """Return (ok, lines). Lines are the confirmed scenarios on success, the reasons on failure."""
     actions = [a for a in map(parse_action, comment_bodies) if a]
     builders = {agent.strip().lower() for agent, role, _ in actions if role == "builder"}
+    if not builders:
+        return False, ["no builder comment: independence cannot be shown without one, so log the build with log_action.py --role builder"]
     qa = [(agent, result) for agent, role, result in actions if role == "qa"]
     if not qa:
         return False, ["no QA comment: log one with log_action.py --role qa"]
@@ -71,7 +83,8 @@ def check(comment_bodies, story_body):
     names = scenarios(story_body)
     if not names:
         return False, ["the story has no Gherkin scenario to confirm"]
-    missing = [n for n in names if n.lower() not in result.lower()]
+    confirmed = confirmed_names(result)
+    missing = [n for n in names if n.lower() not in confirmed]
     if missing:
         return False, [f"scenario unconfirmed by {agent}: {n}" for n in missing]
     return True, [f"confirmed by {agent}: {n}" for n in names]

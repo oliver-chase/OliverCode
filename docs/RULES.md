@@ -139,7 +139,7 @@ Required base paths in every repo:
 
 Agent read order: `README.md`, then `CLAUDE.md`, then `docs/repo-structure-contract.md`, then the repo's GitHub Project.
 
-Enforcement: `npm run qa:hygiene` runs in each repo, contract drift in `docs/repo-structure-contract.md` is a blocker, and pre-push requires an explicit and correct epic assignment, a commit scope of one epic, tests added or updated with the relevant suite passing, documents and backlog metadata synchronized, and passing secret and privacy scans.
+Enforcement: `npm run qa:hygiene` runs in each repo, contract drift in `docs/repo-structure-contract.md` is a blocker, and pre-push blocks a history rewrite and a secret in any commit it sends (`docs/GATES.md`, "Pre-push gates").
 
 ## File locations
 

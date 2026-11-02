@@ -228,6 +228,68 @@ class IssueDetails(unittest.TestCase):
         self.assertIn("limit", str(raised.exception))
 
 
+class QaSignoffDimension(unittest.TestCase):
+    CFG = {"repoOwner": "o", "repoName": "r", "qaRequiredFromIssue": 50}
+    BODY = "Scenario: Work is finished\n"
+
+    @staticmethod
+    def comment(agent, role, result):
+        return {"body": f"Agent action\n- Agent: {agent}\n- Role: {role}\n- Result: {result}"}
+
+    def runner(self, comments_by_issue, calls=None):
+        def run(args):
+            if calls is not None:
+                calls.append(args)
+            number = int(args[-1].split("/")[-2] if args[-1].endswith("/comments") else args[0].split("/")[-1])
+            if "--slurp" in args:
+                return subprocess.CompletedProcess([], 0, json.dumps([comments_by_issue.get(number, [])]), "")
+            return subprocess.CompletedProcess([], 0, self.BODY, "")
+        return run
+
+    GOOD = [comment.__func__("b", "builder", "built"), comment.__func__("q", "qa", "PASS; confirmed: Work is finished")]
+
+    def test_a_complete_item_without_a_sign_off_is_flagged_and_a_signed_one_is_not(self):
+        items = [item(60, "Complete"), item(61, "Complete")]
+        found = bh.check_qa_signoff(items, self.CFG, runner=self.runner({61: self.GOOD}))
+        self.assertEqual(1, len(found))
+        self.assertIn("#60", found[0])
+
+    def test_issues_below_the_start_and_open_items_are_not_read(self):
+        calls = []
+        items = [item(49, "Complete"), item(70, "In Progress")]
+        self.assertEqual([], bh.check_qa_signoff(items, self.CFG, runner=self.runner({}, calls)))
+        self.assertEqual([], calls)
+
+    def test_a_null_or_absent_key_turns_the_dimension_off(self):
+        calls = []
+        for cfg in ({"repoOwner": "o", "repoName": "r"}, dict(self.CFG, qaRequiredFromIssue=None)):
+            self.assertEqual([], bh.check_qa_signoff([item(60, "Complete")], cfg, runner=self.runner({}, calls)))
+        self.assertEqual([], calls)
+
+    def test_a_lone_qa_comment_does_not_count(self):
+        lone = [self.comment("A", "qa", "PASS; confirmed: Work is finished")]
+        self.assertEqual(1, len(bh.check_qa_signoff([item(60, "Complete")], self.CFG, runner=self.runner({60: lone}))))
+
+    def test_a_failed_read_stops_the_run(self):
+        def bad(args):
+            return subprocess.CompletedProcess([], 1, "", "boom")
+        with self.assertRaises(SystemExit) as raised:
+            bh.check_qa_signoff([item(60, "Complete")], self.CFG, runner=bad)
+        self.assertIn("boom", str(raised.exception))
+
+    def test_a_non_number_key_is_refused(self):
+        with self.assertRaises(SystemExit):
+            bh.check_qa_signoff([], dict(self.CFG, qaRequiredFromIssue="50"))
+
+    def test_the_repo_config_sets_the_start_at_50(self):
+        root = Path(__file__).resolve().parents[3]
+        live = json.loads((root / "docs" / "backlog-config.json").read_text())
+        example = json.loads((root / "shared" / "backlog-config.example.json").read_text())
+        self.assertEqual(50, live["qaRequiredFromIssue"])
+        self.assertIn("qaRequiredFromIssue", example)
+        self.assertIsNone(example["qaRequiredFromIssue"])
+
+
 class ForkGuard(unittest.TestCase):
     REAL = {"repoOwner": "owner", "repoName": "Repo", "projectNumber": 1, "projectId": "PVT_x", "fields": {}}
 

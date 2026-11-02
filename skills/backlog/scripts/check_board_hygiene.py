@@ -5,7 +5,7 @@
 Usage:
     check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension but area
     check_board_hygiene.py --config CFG --skills-root DIR                             # adds area-freshness against DIR's folders
-    check_board_hygiene.py --config CFG --dimension X    # one of: fields, drift, duplicates, ready, area, suggest, stale
+    check_board_hygiene.py --config CFG --dimension X    # one of: fields, drift, duplicates, ready, area, suggest, stale, qa-signoff
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
     check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import check_kanban_baseline as kanban
+import check_qa_signoff as qa
 
 # The config's `areaPolicy` names the Area options that match no folder:
 #   retired   - frozen labels on Complete items, for families that no longer exist
@@ -308,6 +309,36 @@ def check_stale(items, now=None, finished="Complete"):
     return problems
 
 
+def check_qa_signoff(items, config, finished="Complete", runner=qa.gh_api):
+    """Every finished item of the config's own repo numbered at or above `qaRequiredFromIssue` needs an
+    accepted independent QA sign-off (check_qa_signoff.check). A null or absent key switches the
+    dimension off. Comments come through `runner`, the REST runner `qa.fetch` takes, and a failed read
+    exits so a cut-short read can never pass as clean."""
+    start = config.get("qaRequiredFromIssue")
+    if start is None:
+        return []
+    if isinstance(start, bool) or not isinstance(start, int):
+        sys.exit(f"qaRequiredFromIssue must be an issue number or null, not {start!r}")
+    own = f"{config['repoOwner']}/{config['repoName']}"
+    problems = []
+    for i in items:
+        c = i.get("content", {})
+        number = c.get("number")
+        if i.get("status") != finished or not number or number < start:
+            continue
+        repo = c.get("repository") or own
+        if repo.lower() != own.lower():
+            continue
+        try:
+            data, body = qa.fetch(repo, number, runner)
+        except (RuntimeError, ValueError) as exc:
+            sys.exit(f"cannot read #{number} to check its QA sign-off: {exc}")
+        ok, lines = qa.check(qa.flatten(data), body)
+        if not ok:
+            problems.append(f"#{number} \"{c.get('title', '')[:50]}\" ({finished}): no accepted QA sign-off: {'; '.join(lines)}")
+    return problems
+
+
 def placeholder_values(config):
     """True when the config still holds the example's placeholder values."""
     text = json.dumps(config)
@@ -362,7 +393,7 @@ def load_config(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dimension", choices=["fields", "drift", "duplicates", "ready", "area", "suggest", "stale"])
+    parser.add_argument("--dimension", choices=["fields", "drift", "duplicates", "ready", "area", "suggest", "stale", "qa-signoff"])
     parser.add_argument("--config", type=Path, help="path to the repo's docs/backlog-config.json (required)")
     parser.add_argument(
         "--skills-root", type=Path,
@@ -414,6 +445,9 @@ def main():
         checks.append(("ready-candidates", lambda: check_ready_candidates(items)))
     if args.dimension in (None, "stale"):
         checks.append(("stale", lambda: check_stale(items, finished=finished)))
+
+    if args.dimension in (None, "qa-signoff"):
+        checks.append(("qa-signoff", lambda: check_qa_signoff(items, config, finished)))
 
     for s in skipped:
         print(f"{s}")
