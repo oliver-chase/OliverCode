@@ -1,18 +1,15 @@
 """Helpers the tests share: loading a script as a module and building scratch git repos.
 
-Importing this module sets GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1 and OLIVERCODE_LOCAL_CONFIG=/dev/null and a throwaway HOME for the whole
+Importing this module sets GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1 and OLIVERCODE_LOCAL_CONFIG=/dev/null for the whole
 test process. A machine's global git config (a signing key, a commit template, a `core.hooksPath`,
 a different default branch) would otherwise change what a scratch repo does, and a test could pass
 or fail because of the machine and not the code.
 """
 
-import atexit
 import importlib.util
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -21,11 +18,6 @@ ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 # olivercode.local.json lists this machine's real repos, and a command that reaches them
 # (sync-hooks, health) would write there. Pointing the config at /dev/null keeps every test on scratch paths.
 os.environ["OLIVERCODE_LOCAL_CONFIG"] = os.devnull
-# install and uninstall write to ~/.claude. A test that forgets to set HOME would back up and relink
-# the owner's own setup, so the whole process gets a throwaway home. Tests that set their own HOME still win.
-_TEST_HOME = tempfile.mkdtemp(prefix="olivercode-home-")
-atexit.register(shutil.rmtree, _TEST_HOME, ignore_errors=True)
-os.environ["HOME"] = _TEST_HOME
 
 os.environ.update(ISOLATION)
 
