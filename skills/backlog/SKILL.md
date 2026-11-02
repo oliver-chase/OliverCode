@@ -35,6 +35,10 @@ Every owner request, however small, becomes a story before any work starts. This
 5. **File it** with "File a story or epic" below, setting Status, Priority, Size and Work type. A request the owner asks for now goes in `Ready`, and the session starts it after filing.
 6. **A request that arrives mid-task is filed and queued**. The current story keeps its order. Reorder only when the owner says "stop", "do this first" or "drop that".
 
+## Log every action
+
+Run `python3 scripts/log_action.py --config CONFIG --story N --agent NAME --role builder|qa --commit HASH --files COUNT --result "one line"` from this skill's folder after each commit or finished piece of work, and before a lead reports a helper's result. It posts one comment on the story through `gh api`, and `--dry-run` prints the comment and posts nothing. The commit message carries `(#N)`, which the commit-msg hook requires.
+
 ## File a story or epic
 
 1. **Search first**. Use `references/project-fields.md`'s search command, loading the repo's config first. An existing open item wins. Extend it with a comment. Never create a duplicate.

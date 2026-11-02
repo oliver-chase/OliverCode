@@ -713,14 +713,15 @@ def _hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> 
     gates: hooksPath unset or pointed away from `.githooks`, the folder or its pre-commit
     missing, or a pre-commit that is not executable. The live pre-commit must then match
     the one template this repo's variant names, so a public repo running the weaker private
-    hook fails. pre-push must match its template too, because sync-hooks deploys it.
+    hook fails. pre-push and commit-msg must match their templates too, because sync-hooks deploys them.
     """
     gate = _repo_gates.gate_problem(repo_root)
     if gate:
         return [gate]
 
     hooks_dir = repo_root / ".githooks"
-    expected = {"pre-commit": "pre-commit-private" if private_repo else "pre-commit", "pre-push": "pre-push"}
+    expected = {"pre-commit": "pre-commit-private" if private_repo else "pre-commit",
+                "pre-push": "pre-push", "commit-msg": "commit-msg"}
     if not private_repo:
         expected["pre-commit-private"] = "pre-commit-private"   # the inert reference copy
 
@@ -846,7 +847,7 @@ def _check_fleet_hooks(oc_root: Path, fleet_root: Path | None = None) -> tuple[i
                 # considered" -- it is reported, not failed, and sync-hooks leaves it
                 # alone. Divergence WITHOUT a declaration is still a failure, so this
                 # cannot be used to quietly opt out of enforcement.
-                # A variant only replaces pre-commit; sync-hooks still manages pre-push.
+                # A variant only replaces pre-commit; sync-hooks still manages pre-push and commit-msg.
                 fatal = [p for p in problems if not p.startswith("pre-commit")]
                 if fatal:
                     print(f"  [FAIL] {name}: {'; '.join(fatal)}")
@@ -886,13 +887,15 @@ def _check_fleet_hooks(oc_root: Path, fleet_root: Path | None = None) -> tuple[i
 
 
 def _install_pre_push(repo_path: Path, templates_dir: Path) -> None:
-    """Deploy pre-push. A declared pre-commit variant still gets it, since what is safe to push
-    does not depend on which commit gates a repo runs."""
+    """Deploy pre-push and commit-msg. A declared pre-commit variant still gets both: what is
+    safe to push and the story reference every commit carries do not depend on which commit
+    gates a repo runs. A repo's `commit-msg.optout` file is never written or removed here."""
     hooks_dir = repo_path / ".githooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    target = hooks_dir / "pre-push"
-    target.write_bytes((templates_dir / "pre-push").read_bytes())
-    target.chmod(0o755)
+    for name in ("pre-push", "commit-msg"):
+        target = hooks_dir / name
+        target.write_bytes((templates_dir / name).read_bytes())
+        target.chmod(0o755)
 
 
 def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
@@ -903,7 +906,7 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
     gets the private template's content deployed AS `pre-commit`, because git only
     auto-invokes that exact filename.
 
-    Also deploys `pre-push` (force-push/history-rewrite block, secret scan on the push
+    Also deploys `commit-msg` (story reference on every commit) and `pre-push` (force-push/history-rewrite block, secret scan on the push
     range). It has no public/private variant: what is safe to push does not differ by
     repo visibility the way commit-time PII checks do, and `push-fleet` needs
     the same mechanical gate on every repo it touches.
@@ -956,7 +959,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
             # `health` reports it as WARN rather than drift. Remove the profile field
             # to bring the repo back under the template.
             _install_pre_push(repo_path, templates_dir)
-            print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push synced")
+            print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced")
             skipped += 1
             continue
         # A private repo gets the private variant, which drops the PII gate (it holds

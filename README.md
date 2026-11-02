@@ -301,7 +301,7 @@ Every scenario tests a claim made in the documentation. If one fails, the code o
 | `core/templates/project/` | The project template that `bootstrap` and `sync-hooks` copy into a repo, including the built hooks |
 | `skills/` | The skills linked into `~/.claude/skills/`. `skills/INDEX.md` lists them |
 | `shared/` | The bootstrap manifest and the example fleet registry |
-| `.githooks/` | OliverCode's own pre-commit and pre-push hooks |
+| `.githooks/` | OliverCode's own pre-commit, commit-msg and pre-push hooks |
 | `scripts/olivercode` | The launcher: `bootstrap`, `discover`, `install`, `uninstall`, `health`, `update`, `sync-hooks`, `audit-fleet`, `push-fleet` and `skills` |
 | `scripts/validate.sh` | The single validation command, which runs the gates, the consistency checks, the reference check and the tests |
 | `scripts/lib/` | The checkers and helpers behind the launcher and `validate.sh` |

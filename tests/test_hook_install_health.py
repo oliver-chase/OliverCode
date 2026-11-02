@@ -75,6 +75,16 @@ class TestHookProblems(unittest.TestCase):
         (self.hooks / "pre-push").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
         self.assertIn("pre-push diverges", "; ".join(self.problems()))
 
+    def test_a_missing_commit_msg_is_reported(self):
+        self.install()
+        (self.hooks / "commit-msg").unlink()
+        self.assertIn("no commit-msg", "; ".join(self.problems()))
+
+    def test_a_stale_commit_msg_is_reported(self):
+        self.install()
+        (self.hooks / "commit-msg").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        self.assertIn("commit-msg diverges", "; ".join(self.problems()))
+
     def test_install_hook_pair_output_is_clean_for_both_variants(self):
         """What sync-hooks writes must pass health, for the variant it wrote."""
         for private in (True, False):
@@ -155,6 +165,14 @@ class TestInstallHookPair(unittest.TestCase):
                 launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
                 self.assertEqual(self.hook("pre-push"), (TEMPLATES / "pre-push").read_bytes())
                 self.assertTrue(os.access(self.repo / ".githooks" / "pre-push", os.X_OK))
+
+    def test_both_variants_get_an_executable_commit_msg(self):
+        for private in (True, False):
+            with self.subTest(private=private):
+                shutil.rmtree(self.repo / ".githooks", ignore_errors=True)
+                launcher._install_hook_pair(self.repo, TEMPLATES, private_repo=private)
+                self.assertEqual(self.hook("commit-msg"), (TEMPLATES / "commit-msg").read_bytes())
+                self.assertTrue(os.access(self.repo / ".githooks" / "commit-msg", os.X_OK))
 
     def test_gate_problem_names_an_unset_hooks_path_and_clears_after_install(self):
         self.assertIn("core.hooksPath is unset", repo_gates.gate_problem(self.repo))

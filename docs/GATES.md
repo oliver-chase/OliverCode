@@ -68,6 +68,18 @@ A repo adds its own blocking checks in an executable `pre-commit.local` file bes
 
 Every variant's archived-content gate also asks this file about a path it is about to block. It runs `pre-commit.local archive-exempt <path>` with empty stdin, and the exit status 10 exempts that path. Any other status leaves the block in place, so a local hook that does not know the argument cannot exempt anything by accident. A repo with permanent records in an archive-named folder, such as a weekly-task archive, declares them in its own `pre-commit.local`, and the framework carries no repo-specific exemption.
 
+## Commit-message gate
+
+Git shows a commit message only to the `commit-msg` hook, so this check is a hook of its own and the commit gate tables above leave it out. Every repo that `sync-hooks` or `olivercode bootstrap` manages gets the same one, and `health` fails a repo whose copy is missing or differs from the template.
+
+| Gate | What it blocks |
+|------|---------------|
+| Story reference | A commit whose message has no `#<number>`, such as `(#53)` or `Story: #53`. Merge, revert and `fixup!`, `squash!` and `amend!` messages are exempt, and so is a repo's first commit. A reference inside a `#` comment line does not count, and the hook blocks when it cannot read the message file |
+
+A repo opts out only when its owner creates a file named `commit-msg.optout` in the repo's `.githooks` folder. The hook and `sync-hooks` never create or remove that file, and every commit it lets through prints that the check is off.
+
+The hook enforces the reference and nothing more. Posting the log comment on the story (`skills/backlog/scripts/log_action.py`) is a procedure that the `backlog` skill and `docs/RULES.md` assign to each agent, and no hook can force a comment on GitHub.
+
 ## Pre-push gates
 
 Every repo that `sync-hooks` manages also gets one pre-push hook, the same for every variant, because what is safe to push does not depend on which commit gates a repo runs.

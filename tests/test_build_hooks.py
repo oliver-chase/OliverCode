@@ -17,7 +17,7 @@ class TestBuildHooks(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-hooks-"))
         shutil.copytree(REPO_ROOT / "core" / "hooks", self.tmp / "core" / "hooks")
-        for rel in (*bh.VARIANTS, *bh.PRE_PUSH_TARGETS):
+        for rel in (*bh.VARIANTS, *bh.PRE_PUSH_TARGETS, *bh.COMMIT_MSG_TARGETS):
             (self.tmp / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(REPO_ROOT / rel, self.tmp / rel)
         self.saved = (bh.OC_ROOT, bh.GATES_DIR, bh.HEADER, bh.SECRET_PATTERNS, bh.PRE_PUSH)
@@ -44,6 +44,11 @@ class TestBuildHooks(unittest.TestCase):
 
     def test_a_hand_edit_to_the_built_pre_push_fails(self):
         hook = self.tmp / ".githooks" / "pre-push"
+        hook.write_text(hook.read_text() + "echo hand edit\n")
+        self.assertEqual(self.check("--check"), 1)
+
+    def test_a_hand_edit_to_the_built_commit_msg_fails(self):
+        hook = self.tmp / "core" / "templates" / "project" / "commit-msg"
         hook.write_text(hook.read_text() + "echo hand edit\n")
         self.assertEqual(self.check("--check"), 1)
 
