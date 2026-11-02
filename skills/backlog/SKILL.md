@@ -24,10 +24,21 @@ This skill files an item, closes it and sweeps the whole board. Filing and closi
 
 Run `python3 scripts/check_board_hygiene.py --config CONFIG --verify-baseline` from this skill's folder. It reads the Project's field list from `gh` and compares it with `shared/kanban-baseline.json`, which `docs/RULES.md` ("The backlog") describes. Add `--fields-file FILE` to compare a saved `gh project field-list --format json` output with no network call. Each difference prints with its fix, and the exit status is 1 when any exist. A config with no option ID for a baseline lane, such as QA, is still valid. Add the lane to the Project, then copy its option ID from the field list into the config. The check reads fields and never edits a board. Built-in workflows do not appear in the field list, so a pull-request workflow on the Project is turned off by hand.
 
+## Save every ask
+
+Every owner request, however small, becomes a story before any work starts. This is how nothing the owner asks for is lost or done untracked. The format lives in `references/story-template.md`, and the rule's home is `docs/RULES.md` ("The backlog").
+
+1. **Search the open stories first**, with `references/project-fields.md`'s search command. A request that duplicates an open story is added to it as a comment. File nothing new.
+2. **Write the body** from `references/story-template.md`: the user story sentence, Given/When/Then scenarios, the epic link, then Priority, Size and Work type.
+3. **Pick the epic**. Use the open epic whose goal the request serves. When none fits, file an epic first with the same template and `Work type: Epic`.
+4. **Check the body**: `python3 scripts/check_story_format.py BODY_FILE`, run from this skill's folder. Fix every part it prints before filing.
+5. **File it** with "File a story or epic" below, setting Status, Priority, Size and Work type. A request the owner asks for now goes in `Ready`, and the session starts it after filing.
+6. **A request that arrives mid-task is filed and queued**. The current story keeps its order. Reorder only when the owner says "stop", "do this first" or "drop that".
+
 ## File a story or epic
 
 1. **Search first**. Use `references/project-fields.md`'s search command, loading the repo's config first. An existing open item wins. Extend it with a comment. Never create a duplicate.
-2. **Classify the work**. A quick fix — a missing fallback, a stale word, a small config change with an obvious safe default — gets fixed inline. No Project item. Real new scope — a schema change, a new mechanism, a cross-family contract — gets filed before it gets built. Follow the repo's own quick-wins-only convention if it states one. Assume the same split if it doesn't.
+2. **Classify the work**. An owner request is never a quick fix to skip filing: it follows "Save every ask" above. A quick fix — a missing fallback, a stale word, a small config change with an obvious safe default — gets fixed inline. No Project item. Real new scope — a schema change, a new mechanism, a cross-family contract — gets filed before it gets built. Follow the repo's own quick-wins-only convention if it states one. Assume the same split if it doesn't.
 3. **Check the fit, in the issue body**. Adding to what exists is the default, so the body answers:
    - What existing skill, reference, script or config this extends. A new skill or file states why no existing home fits
    - Whether it belongs to the target's core or to an add-on, where the target names that split
@@ -115,6 +126,7 @@ A repo that adopts this skill names it, in its own `CLAUDE.md`, as the mechanism
 - File an item that the repo's prioritization doc lists under "What never gets filed". Read that section before step 1 of filing.
 - Finish a filing or answer a backlog question without running the sweep. The sweep is the baseline: run it whenever a person mentions the backlog and after every item you file.
 - Write to a Project the checkout does not own. A fork that inherited the owner's config stops at the verify step.
+- Start work on an owner request before its story exists.
 - Create a duplicate item without first searching for an existing one.
 - Decide Priority or Size from a template — each one is a real per-item judgment call.
 - File a quick fix as a Story.

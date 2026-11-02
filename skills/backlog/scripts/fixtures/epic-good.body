@@ -1,0 +1,16 @@
+**As the owner**, I want every backup to run unattended and report its own failures, so that losing data requires two things to break at once.
+
+```gherkin
+Feature: Backups that watch themselves
+  Scenario: A backup run completes
+    Given the nightly backup is scheduled
+    When it runs
+    Then the result is recorded and any failure reaches the owner the same day
+```
+
+**Stories, in order**
+1. Schedule the nightly backup
+2. Alert the owner when a backup fails
+3. Test a restore every month
+
+Priority: P1. Size: M. Work type: Epic.

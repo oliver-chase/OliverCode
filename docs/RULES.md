@@ -384,6 +384,8 @@ A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in th
 
 Every repo's Project runs the same kanban baseline, defined once in `shared/kanban-baseline.json`. The Status lanes are Backlog, Ready, In Progress, QA and Complete. The fields are Priority (P0 to P2), Size (XS to XL), Work type (Epic or Story) and Area, whose options come from the repo's own config. The board has no pull-request lane and no status that a pull request sets, so work reaches QA and Complete when a person or agent moves it and never when a pull request opens or merges.
 
+Every owner request, however small, becomes a story before work starts, and `skills/backlog/references/story-template.md` defines the body: a user story sentence, Given/When/Then scenarios, an epic link, Priority, Size and Work type. A request that matches an open story is added to it, and a request that arrives mid-task is filed and queued without reordering the board unless the owner says "stop", "do this first" or "drop that". `skills/backlog/scripts/check_story_format.py` verifies a body, and the `backlog` skill's "Save every ask" holds the procedure. `CLAUDE.md` and the project template's `CLAUDE.md` each carry one line pointing here.
+
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`, and finished work leaves the file because git keeps that history.
 
 ### Keeping documents current
