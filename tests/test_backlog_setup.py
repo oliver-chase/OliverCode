@@ -326,7 +326,7 @@ class TestExistingBoard(SetupCase):
     def test_another_repos_config_is_refused(self):
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "backlog-config.json").write_text(json.dumps(
-            {"repoOwner": "oliver-chase", "repoName": "OliverCode", "projectOwner": "oliver-chase", "projectNumber": 15,
+            {"repoOwner": "other-owner", "repoName": "other-repo", "projectOwner": "other-owner", "projectNumber": 15,
              "projectId": "PVT_x", "fields": {}}))
         self.assertEqual(1, self.run_setup())
         self.assertIn("another repo's config", self.text)

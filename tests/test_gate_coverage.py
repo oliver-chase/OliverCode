@@ -80,7 +80,7 @@ class TestMutations(unittest.TestCase):
         # The real bug: a run of banners counting to one total, then a later one
         # counting to another.
         self.assertTrue(self._fails_after(
-            "core/templates/project/pre-commit", "Gate 1/10", "Gate 1/5"))
+            "core/templates/project/pre-commit", "Gate 1/11", "Gate 1/5"))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
         """A false claim in the shape a number-adjacent pattern cannot match.
@@ -117,7 +117,7 @@ class TestMutations(unittest.TestCase):
 
     def test_catches_a_stale_coverage_table(self):
         self.assertTrue(self._fails_after(
-            "docs/GATES.md", "| **10** | **10** | **5** |", "| **10** | **11** | **5** |"))
+            "docs/GATES.md", "| **11** | **11** | **6** |", "| **11** | **12** | **6** |"))
 
     def test_catches_the_coverage_table_going_missing(self):
         """Other docs defer to that table, so losing it must not be silent."""

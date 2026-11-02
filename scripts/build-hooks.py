@@ -48,6 +48,7 @@ TITLES = {
     "archived-content": "Archived content",
     "skill-citations": "Skill citations",
     "size-ratchet": "Size ratchet",
+    "owner-identifiers": "Owner identifiers",
     "repo-local": "Repo-local gates",
 }
 # Runs after the numbered gates and prints no "Gate N/M" banner, so it is not counted.
@@ -62,20 +63,20 @@ VARIANTS = {
         "backlog_checker": "core/templates/project/scripts/check-backlog-hygiene.mjs",
         "gates": ["secrets", "emojis", "pii", "deleted-repos", "workflow-auth",
                   "contract-integrity", "backlog-hygiene", "archived-content",
-                  "skill-citations", "size-ratchet"],
+                  "skill-citations", "size-ratchet", "owner-identifiers"],
     },
     "core/templates/project/pre-commit": {
         "variant": "public repos",
         "backlog_checker": "scripts/check-backlog-hygiene.mjs",
         "gates": ["secrets", "emojis", "pii", "deleted-repos", "workflow-auth",
                   "planning-docs", "backlog-hygiene", "archived-content",
-                  "skill-citations", "size-ratchet"],
+                  "skill-citations", "size-ratchet", "owner-identifiers"],
     },
     "core/templates/project/pre-commit-private": {
         "variant": "private repos",
         "backlog_checker": "scripts/check-backlog-hygiene.mjs",
         "gates": ["secrets", "emojis", "archived-content", "skill-citations",
-                  "size-ratchet", "repo-local"],
+                  "size-ratchet", "owner-identifiers", "repo-local"],
     },
 }
 

@@ -28,9 +28,9 @@ While CI is paused the local commands are the enforcement. `bash scripts/validat
 
 Gate coverage differs by repo. This table is the one home for that, and anywhere else that names a count points here (`GATE-COUNT-1` in `docs/DECISIONS.md`).
 
-* OliverCode runs ten gates on itself.
-* A repo your fleet adopts runs ten gates too, with planning doc governance in place of the framework's contract-integrity gate.
-* A repo deployed with the private variant runs five.
+* OliverCode runs eleven gates on itself.
+* A repo your fleet adopts runs eleven gates too, with planning doc governance in place of the framework's contract-integrity gate.
+* A repo deployed with the private variant runs six.
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
 |------|---------------|:---:|:---:|:---:|
@@ -45,7 +45,8 @@ Gate coverage differs by repo. This table is the one home for that, and anywhere
 | Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 8 | 8 | 3 |
 | Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 9 | 9 | 4 |
 | Size ratchet | A commit that leaves the repo's total lines more than the allowance above `lines` in `docs/SIZE-BASELINE.json`. It counts through `skills/audit/scripts/size.sh --total --staged`, names the three files that grew most, and skips where the baseline file is missing or its `lines` is `null`. See "Size ratchet" below | 10 | 10 | 5 |
-| **Total** | | **10** | **10** | **5** |
+| Owner identifiers | A staged file that names an identifier the gate derives from git: the names and email local parts of `git log` authors, the owner of the origin remote, and the account and shop values in the config files that `configGlobs` lists in `docs/IDENTIFIER-GATE.json`. Matching is lowercase on whole words, for identifiers of 4 characters or more. Markdown and tests are scanned. It names the file and line, and skips where nothing can be derived. See "Owner identifiers" below | 11 | 11 | 6 |
+| **Total** | | **11** | **11** | **6** |
 
 The numbers are each gate's position in that hook's run order, so the same gate can carry a different number in different hooks. Read the column and not the number.
 
@@ -72,6 +73,12 @@ The private variant drops the PII gate on purpose. A private repo holds personal
 * A story that must grow the repo raises `lines` by editing the file in the same commit, with the story number in the message
 
 The raise rule is procedure plus a reference and not a hard limit. A pre-commit gate cannot read the commit message, so when `docs/SIZE-BASELINE.json` is staged the gate trusts the `lines` it holds, and the commit-msg gate below is what requires a story number on that commit. Nothing checks that the raise belongs to the story named.
+
+### Owner identifiers
+
+The gate keeps a repo free of the people and accounts behind it, with no name list to maintain. It builds its identifiers from `git log` authors (names split into words, plus each email local part), from the owner segment of the `origin` remote, and from the string values of account, shop, store, handle, username, owner, brand and seller keys in the files matched by `configGlobs`. Noreply addresses, bots, Claude, GitHub and Anthropic are ignored.
+
+`docs/IDENTIFIER-GATE.json` holds two lists. `configGlobs` names config files to read, and ships empty. `localData` names files that may hold an identifier, each with a line in `localDataReasons`. Built in as local data are `.secrets/`, `scratch/`, `.githooks/`, `docs/backlog-config.json` and the config file itself. `docs/DECISIONS.md` is scanned like any other file. The PII gate still skips markdown and tests, and this gate scans them.
 
 ### Repo-local hook
 

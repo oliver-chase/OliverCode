@@ -128,6 +128,11 @@
       "mode": "presence"
     },
     {
+      "source": "core/templates/project/docs/IDENTIFIER-GATE.json",
+      "target": "docs/IDENTIFIER-GATE.json",
+      "mode": "presence"
+    },
+    {
       "source": "skills/audit/scripts/size.sh",
       "target": "scripts/size.sh",
       "mode": "strict"
