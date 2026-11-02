@@ -56,6 +56,7 @@ Working rules that hold in every session:
 - Gate and lint findings get one pass: read the whole list, fix every finding, then re-run once
 - Read a file before its first edit, and again whenever another session, a hook or a generator could have changed it. Grep for callers before changing a function signature
 - A new top-level folder needs a reason in "Project structure"
+- Before a commit, review the staged files and the diff: a removed file has no surviving canonical reference, and the diff holds only intended current-state changes. Never stage secrets, `.env*`, runtime state, private repo content, caches or generated local reports. After a push, `git status --short --branch` is clean and the pushed short SHA is recorded
 
 Token efficiency applies to these rules too:
 
@@ -238,7 +239,7 @@ A public or shared repo describes the pattern and never your implementation. Nev
 - Personal identifiers, shell aliases and machine-specific configs
 - An enumeration that matches your actual project count
 
-`repo-profiles.json` ships one `_exampleProfile` and no real projects. The real fleet lives in a private repo.
+`repo-profiles.json` ships one `_exampleProfile` and no real projects (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`).
 
 ## Framework boundary
 
@@ -365,7 +366,7 @@ Documents live in `docs/` and use CAPS-KEBAB names such as `GATES.md`. The root 
 | File | What it holds |
 |---|---|
 | `README.md` | The document a new reader starts from, including how the system is organized and how a change flows through it |
-| A reference doc, one file or split by surface | Every option and field. OliverCode keeps its command reference and layout table in `README.md` and `docs/SETUP.md` |
+| A reference doc, one file or split by surface | Every option and field. OliverCode keeps its layout table in `README.md`, the launcher's command list in `olivercode --help` and each command's behavior in `docs/SETUP.md` |
 | `docs/SETUP.md` | The steps a new user or a fork follows, each one verifiable, and the failures a user will hit, listed by symptom |
 | `docs/DECISIONS.md` | Each design decision whose reasoning is longer than a code comment, cited by ID |
 | `docs/BACKLOG.md` | The live tracker, or the open items for a repo without a GitHub Project |
