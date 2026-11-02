@@ -111,6 +111,16 @@
       "source": "core/templates/project/.github/workflows/olivercode-governance.yml",
       "target": ".github/workflows/olivercode-governance.yml",
       "mode": "presence"
+    },
+    {
+      "source": "core/templates/project/scripts/validate.sh",
+      "target": "scripts/validate.sh",
+      "mode": "presence"
+    },
+    {
+      "source": "core/templates/project/docs/backlog-config.json",
+      "target": "docs/backlog-config.json",
+      "mode": "presence"
     }
   ]
 }

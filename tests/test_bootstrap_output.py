@@ -1,0 +1,146 @@
+"""What `olivercode bootstrap` leaves in a new repo works: the files it names exist, the
+validation passes, the board config is a placeholder, and every shipped workflow is manual.
+
+Each test bootstraps into a scratch repo with HOME and git config isolated, and reaches no network.
+"""
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+from _support import REPO_ROOT, git_env, scratch_repo
+
+LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
+BACKLOG_CHECK = REPO_ROOT / "skills" / "backlog" / "scripts" / "check_board_hygiene.py"
+WORKFLOWS = REPO_ROOT / "core" / "templates" / "project" / ".github" / "workflows"
+
+
+def workflow_triggers(text):
+    """The keys under the top-level `on:` block of a workflow file."""
+    keys, inside = [], False
+    for line in text.splitlines():
+        if re.match(r"on:\s*$", line):
+            inside = True
+        elif inside and re.match(r"\S", line) and not line.startswith("#"):
+            break
+        elif inside:
+            m = re.match(r"  ([A-Za-z_]+):", line)
+            if m:
+                keys.append(m.group(1))
+    return keys
+
+
+def step_blocks(text):
+    """Each step of a workflow as its lines, split on the `- name:` or `- uses:` markers."""
+    blocks, current = [], None
+    for line in text.splitlines():
+        if re.match(r"      - (name|uses):", line):
+            current = [line]
+            blocks.append(current)
+        elif current is not None:
+            current.append(line)
+    return ["\n".join(b) for b in blocks]
+
+
+class BootstrapOutput(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-bootout-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.repo = scratch_repo(self.tmp / "repo")
+        self.env = git_env(HOME=str(self.home))
+        done = subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)],
+                              env=self.env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+    def test_the_qa_hygiene_npm_steps_wait_for_package_json(self):
+        text = (self.repo / ".github" / "workflows" / "qa-hygiene.yml").read_text()
+        npm_steps = [b for b in step_blocks(text) if re.search(r"run: npm|setup-node", b)]
+        self.assertTrue(npm_steps)
+        for block in npm_steps:
+            self.assertIn("steps.pkg.outputs.found == 'true'", block, block)
+        self.assertEqual(1, text.count("SUPABASE_URL"))
+        gate = next(b for b in npm_steps if "qa:hygiene" in b)
+        self.assertIn("SUPABASE_URL", gate)
+
+    def test_the_package_json_probe_reports_absent_on_a_repo_without_one(self):
+        text = (self.repo / ".github" / "workflows" / "qa-hygiene.yml").read_text()
+        probe = next(b for b in step_blocks(text) if "id: pkg" in b)
+        script = re.search(r"run: \|\n((?:          .*\n?)+)", probe).group(1)
+        for present, expected in ((False, "found=false"), (True, "found=true")):
+            work = Path(tempfile.mkdtemp(dir=self.tmp))
+            if present:
+                (work / "package.json").write_text("{}")
+            out = work / "out.txt"
+            out.write_text("")
+            subprocess.run(["bash", "-c", script], cwd=work, check=True, capture_output=True,
+                           env={**self.env, "GITHUB_OUTPUT": str(out)})
+            self.assertEqual(expected, out.read_text().strip())
+
+    def test_every_file_claude_md_names_exists(self):
+        claude = (self.repo / "CLAUDE.md").read_text()
+        for rel in ("scripts/validate.sh", "docs/backlog-config.json"):
+            self.assertIn(rel, claude)
+        named = set(re.findall(r"`(?:bash )?((?:scripts|docs)/[A-Za-z0-9_./-]+\.(?:sh|json))`", claude))
+        self.assertTrue({"scripts/validate.sh", "docs/backlog-config.json"} <= named)
+        for rel in named:
+            self.assertTrue((self.repo / rel).is_file(), rel)
+
+    def test_validate_sh_exits_zero_on_the_new_repo(self):
+        done = subprocess.run(["bash", "scripts/validate.sh"], cwd=self.repo, env=self.env,
+                              capture_output=True, text=True)
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+
+    def test_validate_sh_fails_when_the_repo_check_fails(self):
+        (self.repo / "package.json").write_text(
+            json.dumps({"scripts": {"validate": "exit 1"}}))
+        if not shutil.which("npm"):
+            self.skipTest("npm is not installed")
+        done = subprocess.run(["bash", "scripts/validate.sh"], cwd=self.repo, env=self.env,
+                              capture_output=True, text=True)
+        self.assertNotEqual(0, done.returncode)
+
+    def test_the_backlog_config_is_the_placeholder_and_the_skill_rejects_it(self):
+        shipped = (self.repo / "docs" / "backlog-config.json").read_text()
+        self.assertEqual((REPO_ROOT / "shared" / "backlog-config.example.json").read_text(), shipped)
+        done = subprocess.run([sys.executable, str(BACKLOG_CHECK), "--config",
+                               str(self.repo / "docs" / "backlog-config.json"), "--verify-config"],
+                              env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(0, done.returncode, done.stdout)
+
+    def test_a_filled_in_backlog_config_survives_a_second_bootstrap(self):
+        path = self.repo / "docs" / "backlog-config.json"
+        path.write_text('{"mine": true}\n')
+        subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)],
+                       env=self.env, check=True, capture_output=True)
+        self.assertEqual('{"mine": true}\n', path.read_text())
+
+
+class ShippedWorkflows(unittest.TestCase):
+    def test_every_workflow_triggers_on_workflow_dispatch_only(self):
+        files = sorted(WORKFLOWS.glob("*.yml"))
+        self.assertGreaterEqual(len(files), 4)
+        for path in files:
+            self.assertEqual(["workflow_dispatch"], workflow_triggers(path.read_text()), path.name)
+
+    def test_the_manifest_ships_each_workflow_and_keeps_no_unread_policy_key(self):
+        manifest = json.loads((REPO_ROOT / "shared" / "project-bootstrap-manifest.json").read_text())
+        shipped = {Path(e["source"]).name for e in manifest["templatedFiles"]
+                   if e["source"].startswith("core/templates/project/.github/workflows/")}
+        self.assertEqual({p.name for p in WORKFLOWS.glob("*.yml")}, shipped)
+        self.assertNotIn("githubActionsPolicy", manifest)
+
+    def test_the_trigger_reader_sees_a_push_trigger(self):
+        self.assertEqual(["pull_request", "push"],
+                         workflow_triggers("name: x\non:\n  pull_request:\n  push:\n    branches: [a]\n\njobs:\n"))
+
+
+if __name__ == "__main__":
+    unittest.main()
