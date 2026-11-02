@@ -83,6 +83,9 @@ class QaSignoff(unittest.TestCase):
         self.assertTrue(ok("A full run (note); Validation passes on a clean main - fine"))
         self.assertTrue(ok("A full run, ok; Validation passes on a clean main: yes"))
         self.assertFalse(ok("A full run leaves X unchanged; Validation passes on a clean main"))
+        longer = "Scenario: Login\nScenario: Login - admin\n"
+        self.assertFalse(qa.check([b, "Agent action\n- Agent: q\n- Role: qa\n- Result: PASS; confirmed: Login - admin"], longer)[0])
+        self.assertTrue(qa.check([b, "Agent action\n- Agent: q\n- Role: qa\n- Result: PASS; confirmed: Login; Login - admin"], longer)[0])
 
     def test_mechanical_story_needs_builder_proof_else_normal_path(self):
         b = "Agent action\n- Agent: b\n- Role: builder\n- Result: %s"
@@ -99,6 +102,9 @@ class QaSignoff(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("no QA comment", lines[0])
         self.assertEqual(len(lines), 1)
+        fenced = "Scenario: Work is finished\n```\nQA: mechanical\n```\n"
+        self.assertFalse(qa.check([b % "validate.sh exits 0"], fenced)[0])
+        self.assertFalse(qa.check([b % "validate.sh exits 01 failed"], mech)[0])
 
     def test_a_later_fail_overrides_an_earlier_pass(self):
         pages = json.loads((FIX / "qa-pass.json").read_text())

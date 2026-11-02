@@ -24,6 +24,8 @@ FIELD = re.compile(r"^\s*-?\s*(Agent|Role|Result):\s*(.*?)\s*$", re.M)
 SCENARIO = re.compile(r"^\s*Scenario(?: Outline)?:\s*(.+?)\s*$", re.M)
 CONFIRMED = re.compile(r"\bconfirmed:(.*)$", re.I | re.S)
 MECHANICAL = re.compile(r"^\s*QA:\s*mechanical\s*$", re.I | re.M)
+FENCE = re.compile(r"```.*?```", re.S)
+PROOF = re.compile(r"\bvalidate\.sh exits 0\b", re.I)
 NOTE = re.compile(r"^(?:[.,:]|\s+[(\-\u2014\u2013])")
 VERDICT = re.compile(r"^\s*(PASS|FAIL)\b", re.I)
 REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
@@ -67,18 +69,23 @@ def confirmed_names(result):
     return {part.strip().lower() for part in found.group(1).split(";") if part.strip()}
 
 
-def is_confirmed(name, confirmed):
-    """True when a segment is the whole name, or the name followed by a sentence break and a note."""
+def is_confirmed(name, confirmed, names=()):
+    """True when a segment is the whole name, or the name followed by a sentence break and a note.
+    A segment that belongs to a longer scenario name starting with this one does not confirm this one."""
     name = name.lower()
-    return any(seg == name or (seg.startswith(name) and NOTE.match(seg[len(name):])) for seg in confirmed)
+    longer = [n.lower() for n in names if len(n) > len(name) and n.lower().startswith(name)]
+
+    def claims(seg, n):
+        return seg == n or (seg.startswith(n) and NOTE.match(seg[len(n):]))
+    return any(claims(seg, name) and not any(claims(seg, m) for m in longer) for seg in confirmed)
 
 
 def check(comment_bodies, story_body):
     """Return (ok, lines). Lines are the confirmed scenarios on success, the reasons on failure."""
-    if not MECHANICAL.search(story_body or ""):
+    if not MECHANICAL.search(FENCE.sub("", story_body or "")):
         return check_independent(comment_bodies, story_body)
     for agent, role, result in filter(None, map(parse_action, comment_bodies)):
-        if role == "builder" and "validate.sh exits 0" in result.lower():
+        if role == "builder" and PROOF.search(result):
             return True, [f"mechanical: proof from {agent}: {result}"]
     ok, lines = check_independent(comment_bodies, story_body)
     if ok:
@@ -106,7 +113,7 @@ def check_independent(comment_bodies, story_body):
     if not names:
         return False, ["the story has no Gherkin scenario to confirm"]
     confirmed = confirmed_names(result)
-    missing = [n for n in names if not is_confirmed(n, confirmed)]
+    missing = [n for n in names if not is_confirmed(n, confirmed, names)]
     if missing:
         return False, [f"scenario unconfirmed by {agent}: {n}" for n in missing]
     return True, [f"confirmed by {agent}: {n}" for n in names]
