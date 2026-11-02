@@ -56,7 +56,7 @@ Each gate stays only while it names a defect it blocks and a test that triggers 
 |------|---------|------------------|-----------------------|
 | Icons and emoji | Stays | An emoji or icon character committed into a file, which `docs/RULES.md` ("No icons") forbids | `TestGate2Emoji.test_emoji_blocks` in `tests/test_precommit_gates.py` |
 | Archived content | Stays | A superseded file parked under an archive-named folder or beside its replacement as `-old`, so the reader cannot tell which copy is live. Its first run flagged more than 30 live files, which is why the suffix list leaves out `copy` | `TestGateArchivedContent` in `tests/test_precommit_gates.py` stages an `Archive/` path and an `-old` file and expects a block |
-| Planning doc governance | Removed | None it still prevents. It ran only where `scripts/check-planning-doc-governance.py` exists, and only two repos carry that file (`gh issue view 111`), each of which calls the checker from its own `package.json`. The file-based backlog it governed moved to GitHub Projects | None. The tests went with the gate |
+| Planning doc governance | Removed | None it still prevents. It ran only where the planning-doc checker script exists, and only two repos carry that file (`gh issue view 111`). The template no longer ships the checker. The file-based backlog it governed moved to GitHub Projects | None. The tests went with the gate |
 
 The checker and its contract file still ship in the bootstrap manifest until story #111 confirms with the two repos that carry them, so a repo that uses them keeps working.
 

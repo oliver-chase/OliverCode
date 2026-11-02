@@ -127,7 +127,7 @@ Discoverability:
 1. Each repo's GitHub Project is the one place to list open stories, epics and unassigned entries, and the `backlog` skill's sweep covers it
 2. Archive indexes for deferred functionality carry clear re-enable instructions
 
-Shared quality baseline: managed files stay byte-identical across all repos where `shared/project-bootstrap-manifest.json` marks them strict. The managed files are the template's workflows (`qa-hygiene.yml`, `governance-secrets-gate.yml`, `dependency-review.yml`), `CODEOWNERS`, `pull_request_template.md`, `QUALITY_BASELINE.md`, the hooks and the template governance scripts, all under `core/templates/project/`. A change to a managed file is made first in OliverCode and then synced to every project, because OliverCode is the single source of truth.
+Shared quality baseline: managed files stay byte-identical across all repos where `shared/project-bootstrap-manifest.json` marks them strict. The managed files are `CODEOWNERS`, `pull_request_template.md`, `QUALITY_BASELINE.md`, the hooks and the template governance scripts, all under `core/templates/project/`. A change to a managed file is made first in OliverCode and then synced to every project, because OliverCode is the single source of truth.
 
 Required base paths in every repo:
 
@@ -204,7 +204,7 @@ Enforcement: pre-commit hooks block commits that violate location rules, such as
 
 Zero emojis, icons or pictographs appear anywhere, in code, comments, commits, documents, PRs, issues, chat, CLI output or config files. Output is plain text. Emphasis comes from structure (headings, lists, bold, italics) and never from icons. This applies to all projects, all channels and all contributors, with no exceptions and no override mechanism.
 
-The icon and emoji gate in `docs/GATES.md` is the enforcement source of truth, including the exact blocked Unicode ranges, which are not restated here because a second copy would drift from the scanner. `governance-secrets-gate.yml`, the CI template for downstream repos, gates secret filenames only and does not scan for emoji.
+The icon and emoji gate in `docs/GATES.md` is the enforcement source of truth, including the exact blocked Unicode ranges, which are not restated here because a second copy would drift from the scanner.
 
 ## Public and private repos
 
@@ -214,21 +214,12 @@ Every repo separates three surfaces: the public tracked contract surface, the lo
 
 1. Public repos own code, documents, templates, validators and bootstrap entrypoints
 2. Private overlays own delegated tokens, `.runtime/`, per-agent OS state (`.claude-optimization/memory/` and `.claude-optimization/state/`), host scheduler wiring and machine-specific state. What goes in `.env.local` and `.secrets/*`, and what each tracked `.example` file shows, follows "File locations"
-3. Each repo provides `scripts/bootstrap-profile.sh` and `scripts/run-profile-checks.sh`
 
 Repos may extend these baseline profiles and must support the vocabulary:
 
 - `repo-contract-only`: tracked code, documents and contracts only
 - `local-runtime`: a local runnable checkout using `.env.local`
 - `private-overlay`: a machine-specific private runtime overlay
-
-`scripts/run-profile-checks.sh` verifies at minimum that:
-
-1. Tracked setup files exist
-2. `.env.example` exists
-3. `.env.local` exists for `local-runtime` and `private-overlay`
-4. `.secrets/README.md` exists for `private-overlay`
-5. Repo-native hygiene validation runs when available
 
 Canonical template files live in `OliverCode/core/templates/project/` and are applied manually. Hooks are converged by `scripts/olivercode sync-hooks`.
 

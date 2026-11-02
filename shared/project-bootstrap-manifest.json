@@ -8,21 +8,6 @@
   ],
   "templatedFiles": [
     {
-      "source": "core/templates/project/.github/workflows/qa-hygiene.yml",
-      "target": ".github/workflows/qa-hygiene.yml",
-      "mode": "strict"
-    },
-    {
-      "source": "core/templates/project/.github/workflows/governance-secrets-gate.yml",
-      "target": ".github/workflows/governance-secrets-gate.yml",
-      "mode": "strict"
-    },
-    {
-      "source": "core/templates/project/.github/workflows/dependency-review.yml",
-      "target": ".github/workflows/dependency-review.yml",
-      "mode": "strict"
-    },
-    {
       "source": "core/templates/project/.github/CODEOWNERS",
       "target": ".github/CODEOWNERS",
       "mode": "strict"
@@ -38,19 +23,9 @@
       "mode": "strict"
     },
     {
-      "source": "core/templates/project/config/contracts/planning-doc-governance.json",
-      "target": "config/contracts/planning-doc-governance.json",
-      "mode": "presence"
-    },
-    {
       "source": "core/templates/project/scripts/check-structure-contract.mjs",
       "target": "scripts/check-structure-contract.mjs",
       "mode": "strict"
-    },
-    {
-      "source": "core/templates/project/scripts/check-planning-doc-governance.py",
-      "target": "scripts/check-planning-doc-governance.py",
-      "mode": "presence"
     },
     {
       "source": "core/templates/project/CLAUDE.md",
@@ -80,21 +55,6 @@
     {
       "source": "core/templates/project/.secrets/README.md",
       "target": ".secrets/README.md",
-      "mode": "presence"
-    },
-    {
-      "source": "core/templates/project/scripts/bootstrap-profile.sh",
-      "target": "scripts/bootstrap-profile.sh",
-      "mode": "presence"
-    },
-    {
-      "source": "core/templates/project/scripts/run-profile-checks.sh",
-      "target": "scripts/run-profile-checks.sh",
-      "mode": "presence"
-    },
-    {
-      "source": "core/templates/project/docs/BACKLOG-live-tracker.md",
-      "target": "docs/BACKLOG-live-tracker.md",
       "mode": "presence"
     },
     {
