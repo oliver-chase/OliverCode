@@ -40,6 +40,7 @@ OC_ROOT = Path(__file__).resolve().parent.parent
 
 COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
+    ("olivercode size [DIR] [--lower]", "Print a repo's total lines, its docs/SIZE-BASELINE.json baseline and the headroom. --lower rewrites the baseline to the current total when that is no higher, and refuses to raise it"),
     ("olivercode backlog-setup [DIR] [--apply] [--story N]", "Set up or repair a repo's GitHub Project board, backlog config, commit-msg hook and story rule. Dry run unless --apply, which logs the repair on story N"),
     ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
@@ -276,6 +277,52 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
         print("\nNext: `olivercode sync-hooks` installs the hooks and sets core.hooksPath,")
         print("then fill in the placeholders in docs/repo-structure-contract.md.")
     return 1 if missing_src else 0
+
+
+def command_size(oc_root: Path, target: Path, lower: bool) -> int:
+    """Print a repo's line total against docs/SIZE-BASELINE.json, or lower the baseline to it.
+
+    The total comes from skills/audit/scripts/size.sh --total, the counter the size-ratchet gate
+    uses. The baseline only moves down here: raising it is an edit to the file in a commit that
+    names a story (docs/GATES.md, "Size ratchet").
+    """
+    baseline_path = target / "docs" / "SIZE-BASELINE.json"
+    if not baseline_path.is_file():
+        print(f"  [FAIL] {baseline_path} not found. `olivercode bootstrap` adds it.")
+        return 1
+    try:
+        baseline = json.loads(baseline_path.read_text())
+    except ValueError as exc:
+        print(f"  [FAIL] {baseline_path} is not valid JSON: {exc}")
+        return 1
+    done = subprocess.run(["bash", str(oc_root / "skills" / "audit" / "scripts" / "size.sh"),
+                           "--total", str(target)], capture_output=True, text=True)
+    if done.returncode != 0 or not done.stdout.strip().isdigit():
+        print(f"  [FAIL] could not count lines in {target}: {done.stderr.strip() or done.stdout.strip()}")
+        return 1
+    total = int(done.stdout)
+    recorded = baseline.get("lines")
+    percent = baseline.get("allowancePercent", 5)
+
+    if lower:
+        if recorded is not None and total > recorded:
+            print(f"  [FAIL] {total} lines is above the baseline of {recorded}; --lower never raises it.")
+            print("         To grow the repo for a story, edit docs/SIZE-BASELINE.json in that story's commit.")
+            return 1
+        baseline.update({"lines": total, "allowancePercent": percent,
+                         "updated": datetime.now().date().isoformat()})
+        baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
+        print(f"Baseline set to {total} lines (was {recorded if recorded is not None else 'unset'}).")
+        return 0
+
+    print(f"Total lines: {total}")
+    if recorded is None:
+        print("Baseline: unset (run `olivercode size --lower` to record the current total)")
+        return 0
+    allowed = recorded * percent // 100
+    print(f"Baseline: {recorded} lines, allowance {percent}% ({allowed} lines)")
+    print(f"Headroom: {recorded + allowed - total} lines before the commit gate blocks")
+    return 0
 
 
 BACKUP_SUFFIX = ".pre-olivercode"
@@ -1221,6 +1268,16 @@ def main() -> int:
             print(f"Error: {target} is not a directory.")
             return 1
         return command_bootstrap(OC_ROOT, target, dry)
+    if cmd == "size":
+        lower = "--lower" in argv
+        rest = [a for a in argv if a != "--lower"]
+        if len(rest) > 1:
+            _reject_extra(cmd, rest[1:])
+        target = Path(rest[0]).expanduser() if rest else Path.cwd()
+        if not target.is_dir():
+            print(f"Error: {target} is not a directory.")
+            return 1
+        return command_size(OC_ROOT, target, lower)
     if cmd == "backlog-setup":
         return command_backlog_setup(argv)
     if cmd == "install":

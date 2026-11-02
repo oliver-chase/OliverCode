@@ -28,9 +28,9 @@ While CI is paused the local commands are the enforcement. `bash scripts/validat
 
 Gate coverage differs by repo. This table is the one home for that, and anywhere else that names a count points here (`GATE-COUNT-1` in `docs/DECISIONS.md`).
 
-* OliverCode runs nine gates on itself.
-* A repo your fleet adopts runs nine gates too, with planning doc governance in place of the framework's contract-integrity gate.
-* A repo deployed with the private variant runs four.
+* OliverCode runs ten gates on itself.
+* A repo your fleet adopts runs ten gates too, with planning doc governance in place of the framework's contract-integrity gate.
+* A repo deployed with the private variant runs five.
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
 |------|---------------|:---:|:---:|:---:|
@@ -44,7 +44,8 @@ Gate coverage differs by repo. This table is the one home for that, and anywhere
 | Backlog hygiene | A `docs/BACKLOG.md` or root `BACKLOG.md` heading marked DONE that should have been removed (`BACKLOG-HYGIENE-1` in `docs/DECISIONS.md`). Conditional: it runs where `scripts/check-backlog-hygiene.mjs` exists and node is installed, and reports *skipped* where either is missing or where no backlog file exists | 7 | 7 | — |
 | Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 8 | 8 | 3 |
 | Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 9 | 9 | 4 |
-| **Total** | | **9** | **9** | **4** |
+| Size ratchet | A commit that leaves the repo's total lines more than the allowance above `lines` in `docs/SIZE-BASELINE.json`. It counts through `skills/audit/scripts/size.sh --total --staged`, names the three files that grew most, and skips where the baseline file is missing or its `lines` is `null`. See "Size ratchet" below | 10 | 10 | 5 |
+| **Total** | | **10** | **10** | **5** |
 
 The numbers are each gate's position in that hook's run order, so the same gate can carry a different number in different hooks. Read the column and not the number.
 
@@ -61,6 +62,16 @@ Which hook a repo receives:
 The private variant drops the PII gate on purpose. A private repo holds personal data by design, and a gate that blocks host paths and email addresses would block every legitimate commit in it. It is deployed as a file literally named `pre-commit`, because git invokes that name and no other. Fleet repos also receive `pre-commit-private` beside their live hook as an inert reference copy that git never runs.
 
 `hookVariant` carries a real cost, set out with the incident that proved it in `_hookVariant_note` in `shared/repo-profiles.json`. `scripts/build-hooks.py` generates OliverCode's own hook and the two templates and never a variant repo's hook. When a third repo declares a variant, give `build-hooks.py` an entry for each variant repo, using the template's gate list plus that repo's own gates, so its hook is generated too.
+
+### Size ratchet
+
+`docs/SIZE-BASELINE.json` holds `lines` (the repo's total), `allowancePercent` (5) and `updated`. The gate counts the staged tree with `size.sh --total --staged`, the one line counter, and blocks a commit that leaves the total more than `allowancePercent` above `lines`. `olivercode bootstrap` adds the file with `lines: null`, which skips the gate until the repo records its total, and adds a copy of the counter to the repo's scripts folder, which the gate runs. A baseline set without a counter blocks.
+
+* `olivercode size` prints the total, the baseline and the headroom
+* `olivercode size --lower` rewrites `lines` to the current total after a cleanup. It sets a `null` baseline and accepts an equal total, and exits non-zero without writing when the total is higher
+* A story that must grow the repo raises `lines` by editing the file in the same commit, with the story number in the message
+
+The raise rule is procedure plus a reference and not a hard limit. A pre-commit gate cannot read the commit message, so when `docs/SIZE-BASELINE.json` is staged the gate trusts the `lines` it holds, and the commit-msg gate below is what requires a story number on that commit. Nothing checks that the raise belongs to the story named.
 
 ### Repo-local hook
 
