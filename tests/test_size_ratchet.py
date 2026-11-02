@@ -161,11 +161,25 @@ class TestRaiseCap(unittest.TestCase):
         git(self.repo, "add", "a.txt")
         self.assertEqual(0, git(self.repo, "commit", "-m", "Other work (#5)", check=False).returncode)
 
+    def test_editing_the_cap_in_the_same_commit_does_not_help(self):
+        (self.repo / BASELINE).write_text(baseline_text(1500).replace('"updated"', '"raiseCapPercent": 100,\n  "updated"'))
+        git(self.repo, "add", BASELINE)
+        result = git(self.repo, "commit", "-m", "Sneaky (#5)", check=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("over the cap of 20", result.stdout + result.stderr)
+
+    def test_a_merge_prefixed_message_does_not_skip_the_cap(self):
+        result = self.commit(1500, "Merge x")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("over the cap", result.stdout + result.stderr)
+
+    def test_a_merge_prefixed_message_inside_the_cap_still_passes(self):
+        self.assertEqual(0, self.commit(1010, "Merge x").returncode)
+
     def test_the_cap_percent_comes_from_the_baseline_file(self):
         (self.repo / BASELINE).write_text(baseline_text(1000, 5).replace('"updated"', '"raiseCapPercent": 10,\n  "updated"'))
         git(self.repo, "add", BASELINE)
         git(self.repo, "commit", "-q", "--no-verify", "-m", "cap ten (#5)")
-        self.assertEqual(0, self.commit(1000, "same (#5)").returncode)
         (self.repo / BASELINE).write_text(baseline_text(1090, 5).replace('"updated"', '"raiseCapPercent": 10,\n  "updated"'))
         git(self.repo, "add", BASELINE)
         self.assertEqual(0, git(self.repo, "commit", "-m", "inside ten (#5)", check=False).returncode)
