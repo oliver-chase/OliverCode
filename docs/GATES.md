@@ -29,9 +29,9 @@ While CI is paused the local commands are the enforcement. `bash scripts/validat
 
 Gate coverage differs by repo. This table is the one home for that, and anywhere else that names a count points here (`GATE-COUNT-1` in `docs/DECISIONS.md`).
 
-* OliverCode runs nine gates on itself.
-* An adopted repo runs ten gates, which adds planning doc governance.
-* A repo deployed with the private variant runs seven.
+* OliverCode runs nine gates on itself
+* An adopted repo runs ten gates, which adds planning doc governance
+* A repo deployed with the private variant runs seven
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
 |------|---------------|:---:|:---:|:---:|
