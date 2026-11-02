@@ -74,6 +74,7 @@ Worked example, from this repo:
 
 `VOICE.md` is the only writing standard. Read it first, then check every text a person reads.
 
+- Run `skills/audit/scripts/fleet_check.py <target>` for the mechanical kinds, each with its file and line, and read the text for the rest
 - Count violations by kind: contrast framing, fragments, filler openings, process history in reader text, curly quotes, Title Case headings, trailing periods on bullets
 - Name every file that sets writing rules of its own, such as a style section, a sentence cap or a lint standard
 - A self-contained suite's byte-identical copy of `VOICE.md` is the same standard
