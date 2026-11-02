@@ -78,6 +78,13 @@ class Voice(unittest.TestCase):
             self.assertNotIn("docs/A.md:8", out)
             self.assertNotIn("docs/A.md:5", out)
 
+    def test_a_quoted_phrase_list_is_not_contrast_framing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(tmp, {"A.md": 'Never use "not X, but Y" or "rather than" here.\nIt is fast rather than slow.\n'})
+            _, out = run(str(repo))
+            self.assertNotIn("A.md:1", out)
+            self.assertIn("A.md:2: contrast framing", out)
+
     def test_flags_title_case_headings_and_curly_quotes(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = make_repo(tmp, {"A.md": "## How The Gates Work\n\nA “quote” here\n\n## How the gates work\n"})

@@ -27,6 +27,7 @@ BASELINE_SCRIPT = Path(__file__).resolve().parents[2] / "backlog" / "scripts" / 
 
 CONTRAST = re.compile(
     r"\b(?:not\b[^.\n]{1,60}?,\s*but\b|rather than\b|instead of\b|less\b[^.\n]{1,40}?,\s*more\b|it is not about\b)", re.I)
+QUOTED = re.compile(r'"[^"\n]*"')
 SMALL = {"a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "vs", "is", "at", "by"}
 CURLY = "‘’“”"
 
@@ -118,7 +119,7 @@ def voice_findings(repo, files):
             if fenced:
                 continue
             heading = re.match(r"#{1,6}\s+(.*)", stripped)
-            if CONTRAST.search(line):
+            if CONTRAST.search(QUOTED.sub('', line)):
                 found.append((rel, n, "contrast framing"))
             if re.match(r"[-*]\s+.*\.$", stripped) and not stripped.endswith(("...", "etc.")):
                 found.append((rel, n, "trailing period on a bullet"))

@@ -52,7 +52,7 @@ Every claim is checked against the code, and the code wins.
 
 **Test necessity.** For each test module, report:
 - Tests of counts, totals and exact message wording, which fail on a harmless change
-- One behavior covered at two levels, and tests of process tooling rather than product behavior
+- One behavior covered at two levels, and tests of process tooling that cover no product behavior
 - The tests a mutation of the code would not fail. Make the mutation in a scratch copy, never in the repo
 - A verdict on tests per 100 lines of code, and a cut list in lines
 
