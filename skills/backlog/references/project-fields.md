@@ -16,7 +16,7 @@ this shape:
   "projectNumber": 1,
   "projectId": "PVT_...",
   "fields": {
-    "status": {"id": "...", "options": {"Backlog": "...", "Ready": "...", "In Progress": "...", "Complete": "..."}},
+    "status": {"id": "...", "options": {"Backlog": "...", "Ready": "...", "In Progress": "...", "QA": "...", "Complete": "..."}},
     "priority": {"id": "...", "options": {"P0": "...", "P1": "...", "P2": "..."}},
     "size": {"id": "...", "options": {"XS": "...", "S": "...", "M": "...", "L": "...", "XL": "..."}},
     "workType": {"id": "...", "options": {"Epic": "...", "Story": "..."}}

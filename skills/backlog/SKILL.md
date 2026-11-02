@@ -20,6 +20,10 @@ This skill files an item, closes it and sweeps the whole board. Filing and closi
 
 **Then verify it**: `python3 scripts/check_board_hygiene.py --config CONFIG --verify-config`, run from this skill's folder. The check stops a config that still holds the example's placeholders, and a config whose repo is not the git origin of the folder it sits in. The second case is a fork that inherited the owner's `docs/backlog-config.json`. On a stop, file nothing, comment on nothing and edit no field. Tell the owner of the fork to copy `shared/backlog-config.example.json`, fill in their own Project and pass that path. The example holds placeholders only, so nothing runs against it, and no fallback reaches the owner's Project.
 
+## Check the board against the baseline
+
+Run `python3 scripts/check_board_hygiene.py --config CONFIG --verify-baseline` from this skill's folder. It reads the Project's field list from `gh` and compares it with `shared/kanban-baseline.json`, which `docs/RULES.md` ("The backlog") describes. Add `--fields-file FILE` to compare a saved `gh project field-list --format json` output with no network call. Each difference prints with its fix, and the exit status is 1 when any exist. A config with no option ID for a baseline lane, such as QA, is still valid. Add the lane to the Project, then copy its option ID from the field list into the config. The check reads fields and never edits a board. Built-in workflows do not appear in the field list, so a pull-request workflow on the Project is turned off by hand.
+
 ## File a story or epic
 
 1. **Search first**. Use `references/project-fields.md`'s search command, loading the repo's config first. An existing open item wins. Extend it with a comment. Never create a duplicate.

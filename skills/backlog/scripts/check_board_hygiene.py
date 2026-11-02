@@ -7,6 +7,7 @@ Usage:
     check_board_hygiene.py --config CFG --skills-root DIR                             # adds area-freshness against DIR's folders
     check_board_hygiene.py --config CFG --dimension X    # one of: fields, drift, duplicates, ready, area, suggest, stale
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
+    check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
 """
 
@@ -17,6 +18,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+import check_kanban_baseline as kanban
 
 # The config's `areaPolicy` names the Area options that match no folder:
 #   retired   - frozen labels on Complete items, for families that no longer exist
@@ -31,7 +34,8 @@ STALE_IN_PROGRESS_DAYS = 7     # items in In Progress
 STALE_DEFERRED_DAYS = 30       # items labelled "deferred"
 ITEM_LIMIT = 2000
 
-REQUIRED_STATUSES = {"Backlog", "Ready", "In Progress"}
+# Every baseline lane except the finished one holds open work (shared/kanban-baseline.json).
+REQUIRED_STATUSES = {lane for lane in kanban.load_baseline()["lanes"] if lane.lower() not in {"complete", "done"}}
 # The finished column's config key. Every other column, such as Todo or In review, holds open work.
 FINISHED_STATUS_KEYS = {"complete", "done"}
 
@@ -337,6 +341,12 @@ def verify_config(config, path):
                  "and pass that path.")
 
 
+def missing_lanes(config):
+    """Baseline lanes the config's status options do not list."""
+    have = {k.lower() for k in config.get("fields", {}).get("status", {}).get("options", {})}
+    return [lane for lane in kanban.load_baseline()["lanes"] if lane.lower() not in have]
+
+
 def load_config(path):
     """The repo's backlog config. A missing path exits with one line that says where the file lives
     and names the example a fork starts from. The example is never used as a live config."""
@@ -358,6 +368,10 @@ def main():
         "--skills-root", type=Path,
         help="folder whose direct sub-folders are the Area options' families; area-freshness runs only with it",
     )
+    parser.add_argument("--verify-baseline", action="store_true",
+                        help="compare the board's field list with shared/kanban-baseline.json, then stop")
+    parser.add_argument("--fields-file", type=Path,
+                        help="with --verify-baseline: field list JSON from `gh project field-list --format json`; without it gh is read")
     parser.add_argument("--verify-config", action="store_true",
                         help="check the config is placeholder-free and belongs to this checkout, then stop")
     args = parser.parse_args()
@@ -365,7 +379,14 @@ def main():
     config = load_config(args.config)
     if args.verify_config:
         print(f"{args.config}: names {config['repoOwner']}/{config['repoName']}, Project {config['projectNumber']}.")
+        absent = missing_lanes(config)
+        if absent:
+            print(f"The config lists no status option for {', '.join(absent)}. Run --verify-baseline to compare the board.")
         return
+    if args.verify_baseline:
+        fields = json.loads(args.fields_file.read_text(encoding="utf-8")) if args.fields_file \
+            else kanban.read_fields_from_gh(config)
+        sys.exit(1 if kanban.run(fields, config) else 0)
     items = load_items(config)
     finished, open_statuses = resolve_statuses(config, live_status_names(config))
 

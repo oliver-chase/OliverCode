@@ -382,6 +382,8 @@ A count that changes, such as tests, gates or coverage, never appears in a docum
 
 A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which the `backlog` skill maintains. OliverCode works this way, and its `docs/BACKLOG.md` holds only the live tracker that the `audit` skill maintains, with the review marker `scripts/audit-staleness.py` reads. Every design decision, including each failure class a gate exists to stop, lives in `docs/DECISIONS.md`.
 
+Every repo's Project runs the same kanban baseline, defined once in `shared/kanban-baseline.json`. The Status lanes are Backlog, Ready, In Progress, QA and Complete. The fields are Priority (P0 to P2), Size (XS to XL), Work type (Epic or Story) and Area, whose options come from the repo's own config. The board has no pull-request lane and no status that a pull request sets, so work reaches QA and Complete when a person or agent moves it and never when a pull request opens or merges.
+
 A repo without a `backlog-config.json` keeps its open items in `docs/BACKLOG.md`, and finished work leaves the file because git keeps that history.
 
 ### Keeping documents current
