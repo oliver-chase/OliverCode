@@ -17,7 +17,7 @@ It applies to every reply and file. A skill's messages and any drafted document 
 
 ## Rules
 - Before a structural change, or installing, creating or moving a skill or agent file, read `$OC/docs/RULES.md`. Each layer has one home
-- In a repo whose `CLAUDE.md` names a `backlog-config.json`, a request that changes files is saved as a story with Gherkin criteria under an epic before work starts (`backlog` skill). A question or a one-line answer needs no story
+- In a repo whose `CLAUDE.md` names a `backlog-config.json`, a request that changes files is saved as a story with Gherkin criteria under an epic before work starts (`backlog` skill), unless it is a small change (RULES.md "The backlog"), which commits with the open epic's number. A question or a one-line answer needs no story
 - A request mid-task is filed and queued. Switch only on "stop", "do this first" or "drop that"
 - Work goes to a helper agent on the smallest model that fits: Haiku for lookups and edits, Sonnet for building, research and review. The lead checks its result against files. A session cannot change its model: use the model menu. A different agent QAs each story before Complete
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
