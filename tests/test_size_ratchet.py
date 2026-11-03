@@ -67,6 +67,13 @@ class RatchetGate(RatchetSetup):
         listed = [l.split()[-1] for l in out.splitlines() if l.strip().startswith("+")]
         self.assertEqual(["a.txt", "b.txt", "c.txt"], listed)
 
+    def test_a_one_line_baseline_reads_the_same_as_the_shipped_layout(self):
+        """A hand-written {"lines": N, "allowancePercent": 5} used to read 5 as the line count and block every commit."""
+        self.stage(BASELINE, json.dumps({"lines": self.recorded, "allowancePercent": 5}) + "\n")
+        self.stage("small.txt", "x\n" * (self.allowance - 1))
+        out = self.assertAllowed().stdout
+        self.assertIn(f"baseline {self.recorded})", out)
+
     def test_a_cleanup_never_blocks(self):
         git(self.tmp, "rm", "-q", "base.txt")
         self.assertAllowed()
