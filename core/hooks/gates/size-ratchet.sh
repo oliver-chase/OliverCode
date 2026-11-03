@@ -10,7 +10,7 @@
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Size ratchet..."
 SIZE_JSON="$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)"
 size_field_of() {
-  printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
+  printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*"'"$1"'"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
 }
 size_field() { size_field_of "$1" "$SIZE_JSON"; }
 SIZE_BASE="$(size_field lines)"
