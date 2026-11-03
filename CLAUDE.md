@@ -21,7 +21,7 @@ It applies to every reply and file. A skill's messages and any drafted document 
 - A request mid-task is filed and queued. Switch only on "stop", "do this first" or "drop that"
 - Work goes to a helper agent on the smallest model that fits: Haiku for lookups and edits, Sonnet for building, research and review. The lead checks its result against files. A session cannot change its model: use the model menu. A different agent QAs each story before Complete
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
-- A multi-commit session ending: run the `audit` skill on its commits
+- A session ending with 5 or more commits or 500 or more changed lines: run the `audit` skill on its commits
 - Writing a README, doc or `CLAUDE.md`: follow RULES.md "Documents"
 - Before committing, run the current repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's, per RULES.md "Execution"
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `$OC/docs/GATES.md` lists the gates, and `$OC/scripts/olivercode conform` finds stopped hooks
