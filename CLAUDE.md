@@ -16,14 +16,9 @@ When `$OC/.claude-optimization/memory/` exists, read `MEMORY.md` and `USER.md` b
 It applies to every reply and file. A skill's messages and any drafted document go out word for word.
 
 ## Rules
-- Before a structural change, or installing, creating or moving a skill or agent file, read `$OC/docs/RULES.md`. Each layer has one home
-- In a repo whose `CLAUDE.md` names a `backlog-config.json`, a request that changes files is saved as a story with Gherkin criteria under an epic before work starts (`backlog` skill), unless it is a small change (RULES.md "The backlog"), which commits with the open epic's number. A question or a one-line answer needs no story
-- A request mid-task is filed and queued. Switch only on "stop", "do this first" or "drop that"
-- Work goes to a helper agent on the smallest model that fits: Haiku for lookups and edits, Sonnet for building, research and review. The lead checks its result against files. A session cannot change its model: use the model menu. A different agent QAs each story before Complete
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
-- A session ending with 5 or more commits or 500 or more changed lines: run the `audit` skill on its commits
-- Writing a README, doc or `CLAUDE.md`: follow RULES.md "Documents"
-- Before committing, run the current repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's, per RULES.md "Execution"
+- Before committing, run the current repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `$OC/docs/GATES.md` lists the gates, and `$OC/scripts/olivercode conform` finds stopped hooks
+- Stories, helper agents, QA passes and the `audit` skill run only when asked for by name. Read `$OC/docs/RULES.md` only when the task is about OliverCode's own structure
 
-In OliverCode, `README.md` has the layout and the Project in `docs/backlog-config.json` holds open work.
+In OliverCode, `README.md` has the layout.
