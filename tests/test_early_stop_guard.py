@@ -78,6 +78,16 @@ class EarlyStopGuard(unittest.TestCase):
         self.assertTrue(self.blocks(user("a"), tool(WRAP_UP, {"recap": "r", "ask": "Go?"}), result(), text("Asked."),
                                     user("yes"), text("I'll implement the fix now.")))
 
+    def test_a_promise_in_the_last_sentence_blocks(self):
+        self.assertTrue(self.blocks(user("x"), text("The fix is written. I'll run the tests now.")))
+
+    def test_a_promise_before_the_last_sentence_does_not_block(self):
+        closing = "I fixed it. I'll mention the hook now runs on every commit. The tests pass."
+        self.assertFalse(self.blocks(user("x"), text(closing)))
+
+    def test_a_next_step_label_does_not_block(self):
+        self.assertFalse(self.blocks(user("x"), text("The audit is filed. Next: file the follow-up story.")))
+
     def test_it_never_blocks_twice_in_a_row(self):
         self.assertFalse(self.blocks(user("x"), text("I'll implement the fix now."), active=True))
 

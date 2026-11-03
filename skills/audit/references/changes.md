@@ -1,9 +1,9 @@
 # Changes
 
-The work a session produced, reviewed before it is called done. It runs at two sizes, and both are required.
+The work a session produced, reviewed before it is called done. It runs at two sizes.
 
-- **Each unit, before its commit.** One backlog item, one bug fix or one feature slice gets its own review of its own diff before it is committed. Every finding is fixed or filed first
-- **The session, before it closes.** A session with several commits gets one wider review over its whole range, which catches what a per-unit review cannot see: duplication across units, drift between them, and the tracker
+- **Each unit, before its commit.** One backlog item sized M or above, or a bug fix or feature slice of that size, gets its own review of its own diff before it is committed. An XS or S unit relies on the repo's validation. Every finding is fixed or filed first
+- **The session, before it closes.** A session with 5 or more commits or 500 or more changed lines gets one wider review over its whole range, which catches what a per-unit review cannot see: duplication across units, drift between them, and the tracker
 
 ## The review
 
