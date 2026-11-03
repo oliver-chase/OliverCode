@@ -22,8 +22,8 @@ trap 'rm -f "$ID_LIST"' EXIT
     id_name_lc="$(printf '%s' "$id_name" | tr 'A-Z' 'a-z')"
     id_mail_lc="$(printf '%s' "$id_mail" | tr 'A-Z' 'a-z')"
     case "$id_name_lc$id_mail_lc" in *"[bot]"*|*"-bot@"*) continue ;; esac
-    # An Anthropic noreply commit is a session and not a person. Its name (claude-session, conform-bot)
-    # would otherwise split into words that block later commits.
+    # An Anthropic noreply commit is a session and not a person. Its author name would otherwise split
+    # into ordinary words that block later commits.
     case "$id_mail_lc" in *@anthropic.com) continue ;; esac
     printf '%s\n' "$id_name_lc" | tr -c 'a-z0-9\n' ' ' | tr ' ' '\n'
     case "$id_mail_lc" in
