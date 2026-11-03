@@ -80,6 +80,34 @@ class LogAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             la.parse_args([a if a != "builder" else "lead" for a in ARGS])
 
+    def test_from_report_and_agent_from_commit(self):
+        base = ["--repo", "o/r", "--agent", "qa-1", "--commit", "abc1234"]
+        with tempfile.TemporaryDirectory() as tmp:
+            rep = Path(tmp) / "r.md"
+            rep.write_text("intro\nStory 7: PASS first\n\nStory 8: FAIL no test\nStory 7: BLOCKED later\n")
+            none = Path(tmp) / "n.md"
+            none.write_text("nothing here\nstory 1: PASS\n")
+            rec = Recorder()
+            code, out, _ = run(base + ["--from-report", str(rep)], rec)
+            self.assertEqual(0, code)
+            self.assertEqual(["repos/o/r/issues/7/comments", "repos/o/r/issues/8/comments"],
+                             [c[0] for c in rec.calls])
+            self.assertIn("- Result: BLOCKED later", rec.calls[0][2])
+            self.assertIn("- Result: FAIL no test", rec.calls[1][2])
+            self.assertIn("- Role: qa", rec.calls[1][2])
+            self.assertIn("- Files changed: 0", rec.calls[1][2])
+            self.assertEqual(2, out.count("Logged on"))
+            self.assertEqual(2, run(base + ["--from-report", str(none)], rec)[0])
+            self.assertEqual(2, run(base + ["--from-report", str(rep), "--story", "7"], rec)[0])
+            self.assertEqual(2, len(rec.calls))
+        pre = ["--repo", "o/r", "--story", "5", "--role", "builder", "--commit", "abc1234",
+               "--files", "1", "--result", "ok", "--agent-from-commit", "--dry-run"]
+        out = io.StringIO()
+        self.assertEqual(0, la.main(pre, out=out, git=lambda commit: "Dana"))
+        self.assertIn("- Agent: Dana", out.getvalue())
+        self.assertEqual(2, la.main(pre, out=out, err=io.StringIO(), git=lambda commit: ""))
+        self.assertEqual(2, la.main(pre + ["--agent", "x"], out=out, err=io.StringIO(), git=lambda c: "D"))
+
 
 if __name__ == "__main__":
     unittest.main()
