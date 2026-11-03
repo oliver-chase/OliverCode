@@ -23,7 +23,7 @@ Run `python3 scripts/check_board_hygiene.py --config CONFIG --verify-baseline`. 
 
 ## Save every ask
 
-Every owner request that changes files becomes a story before any work starts, so nothing the owner asks for is lost or done untracked. The rule lives in `docs/RULES.md` ("The backlog") and the body format in `references/story-template.md`.
+Every owner request that changes files becomes a story before any work starts, so nothing the owner asks for is lost or done untracked. The exception is a small change (`docs/RULES.md`, "The backlog"): it runs the repo's validation and commits with the number of the open epic whose goal fits. The rule lives in `docs/RULES.md` ("The backlog") and the body format in `references/story-template.md`.
 
 1. **Search the open stories first** (command in `references/project-fields.md`). A request that duplicates an open story is added to it as a comment.
 2. **Write the body** from the template, and pick the open epic whose goal the request serves. When none fits, file an epic first with `Work type: Epic`: the container whose body lists its stories and carries no `Epic:` line.
@@ -42,7 +42,7 @@ After each commit or finished piece of work, and before a lead reports a helper'
 ## File a story or epic
 
 1. **Search first** and extend an existing open item with a comment. File nothing the repo's prioritization doc lists under "What never gets filed".
-2. **Classify the work.** An owner request is always filed ("Save every ask"). A quick fix the session finds on its own, such as a missing fallback or a stale word, is fixed inline with no Project item. Real new scope is filed before it is built. A repo's own quick-wins convention wins.
+2. **Classify the work.** An owner request is filed ("Save every ask") unless it meets that section's small-change exception. A quick fix the session finds on its own, such as a missing fallback or a stale word, is fixed inline with no Project item. Real new scope is filed before it is built. A repo's own quick-wins convention wins.
 3. **Answer the fit check in the body.** Adding to what exists is the default, so the body names what it extends (a new file states why no home fits), whether it is core or an add-on, what it replaces and its effect on size and always-loaded tokens, and whether it passes `$OC/skills/audit/references/lenses.md`.
 4. **Create it** with the create-and-add command in `references/project-fields.md`.
 5. **Set Status, Priority, Size and Work type every time.** Status is `Backlog` when something blocks the item or it needs a decision, and `Ready` when the next action is clear and unblocked. Priority and Size are a per-item judgment under the repo's prioritization doc, never copied from a template or left blank.

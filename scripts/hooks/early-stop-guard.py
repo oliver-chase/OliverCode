@@ -3,7 +3,7 @@
 
 EARLY-STOP-1 in docs/DECISIONS.md has the reasoning. The hook is stdlib Python
 and uses a deterministic regex with no model call: it looks at only
-the closing paragraph of the last assistant turn for future-intent language
+the closing sentence of the last assistant turn for future-intent language
 ("I'll implement X", "let me build Y") with no tool call and no question to the
 user, and asks the session to continue.
 
@@ -32,6 +32,7 @@ ASKS_USER_RE = re.compile(
     re.IGNORECASE,
 )
 TAIL_CHARS = 400
+SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 # A question can leave the turn through a tool call: the desktop app's next-step box
 # (its `ask` field) or the question tool. The closing text then holds no question mark,
 # so a turn that ended waiting on the owner read as an unkept promise.
@@ -112,6 +113,13 @@ def _last_assistant_turn(transcript_path: Path) -> tuple[str, bool, bool] | None
     return last_text, last_had_tool, asked
 
 
+def _closing_sentence(tail: str) -> str:
+    """The last sentence or line of the tail. A promise earlier in the closing text, such as
+    "I'll mention the hook now runs" before a finished summary, does not leave work undone."""
+    parts = [p for p in SENTENCE_BREAK_RE.split(tail.strip()) if p.strip()]
+    return parts[-1] if parts else ""
+
+
 def _is_safe_path(path_str: str) -> bool:
     """Reject a transcript path outside TMPDIR/HOME -- hook input is untrusted."""
     if not path_str:
@@ -153,7 +161,7 @@ def main() -> int:
         return 0
 
     tail = last_text[-TAIL_CHARS:]
-    promise = PROMISE_RE.search(tail)
+    promise = PROMISE_RE.search(_closing_sentence(tail))
     asks_user = asked_owner or ASKS_USER_RE.search(tail)
 
     if promise and not asks_user:

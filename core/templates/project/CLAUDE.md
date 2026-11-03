@@ -11,4 +11,4 @@ Read before working here:
 Run `bash scripts/validate.sh` before every commit. It is this repo's canonical validation.
 
 Rules:
-- Every owner request, however small, is filed as a story with Gherkin criteria under an epic before work starts, per the `backlog` skill, and a different agent QAs each story before Complete
+- An owner request that changes files is filed as a story with Gherkin criteria under an epic before work starts, per the `backlog` skill. A small change, as RULES.md "The backlog" defines it, needs no story and cites the open epic's number in its commit. A different agent QAs each filed story before Complete
