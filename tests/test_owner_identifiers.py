@@ -111,6 +111,18 @@ class IdentifierGate(IdentifierSetup):
         self.stage("a.txt", "Claude dependabot github anthropic noreply\n")
         self.assertAllowed()
 
+    def test_an_anthropic_session_author_name_adds_no_words(self):
+        """A session commit is authored with a name like claude-session or conform-bot and the Anthropic
+        noreply email. Splitting the name made 'session' and 'conform' owner identifiers, which blocked
+        every later commit that staged CLAUDE.md or QUALITY_BASELINE.md (#133)."""
+        git(self.tmp, "config", "user.name", "claude-session")
+        git(self.tmp, "config", "user.email", "noreply@anthropic.com")
+        self.write("seed.txt", "seed2\n")
+        git(self.tmp, "add", "seed.txt")
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "second")
+        self.stage("a.txt", "A session tracker. Run olivercode conform here.\n")
+        self.assertAllowed()
+
     def test_nothing_derivable_skips_with_a_note(self):
         import shutil
         shutil.rmtree(self.tmp / ".git" / "refs" / "heads", ignore_errors=True)
