@@ -13,7 +13,7 @@ When `$OC/.claude-optimization/memory/` exists, read `MEMORY.md` and `USER.md` b
 ## Voice
 @~/.claude/VOICE.md
 
-It applies to every reply and file and overrides any default to keep replies short. A skill's messages and any drafted document go out word for word.
+It applies to every reply and file. A skill's messages and any drafted document go out word for word.
 
 ## Rules
 - Before a structural change, or installing, creating or moving a skill or agent file, read `$OC/docs/RULES.md`. Each layer has one home
