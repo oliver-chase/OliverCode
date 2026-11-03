@@ -90,7 +90,7 @@ The gate keeps a repo free of the people and accounts behind it, with no name li
 
 ### Duplicate text
 
-One check serves every repo: `scripts/lib/duplication_check.py` here, shipped by bootstrap into an adopted repo's `scripts/` folder, so no repo keeps a private copy. It slides a 15-word window across every tracked markdown file and fails on a window two files share, unless `DECLARED_MARKERS` lists it with a reason. The commit gate passes it the staged markdown files and judges each against the whole tracked tree, so a commit is blocked only for a passage it adds or edits. `validate.sh` runs the same check over every pair, which reports an old duplicate between two untouched files.
+One check serves every repo: `scripts/lib/duplication_check.py` here, shipped by bootstrap into an adopted repo's `scripts/` folder, so no repo keeps a private copy. It slides a 15-word window across every tracked markdown file and fails on a window two files share, unless `DECLARED_MARKERS` lists it with a reason, or the repo's own `DUPLICATION-ALLOW.json` in its docs folder does (a `markers` object of lowercase passage words to the reason it repeats, where an entry with no reason counts for nothing). The commit gate passes it the staged markdown files and judges each against the whole tracked tree, so a commit is blocked only for a passage it adds or edits. `validate.sh` runs the same check over every pair, which reports an old duplicate between two untouched files.
 
 ### Repo-local hook
 
