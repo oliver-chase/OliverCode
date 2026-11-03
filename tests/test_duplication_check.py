@@ -7,6 +7,7 @@ duplicate it was masking.
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -77,6 +78,30 @@ class TestDuplicationCheck(unittest.TestCase):
         finally:
             dc.DECLARED_MARKERS.clear()
             dc.DECLARED_MARKERS.update(original)
+
+    def _allow_repo(self, tmp: str, entry: dict) -> Path:
+        files = {"a.md": f"# A\n\n{LONG_PASSAGE}\n", "b.md": f"# B\n\n{LONG_PASSAGE}\n",
+                 "docs/DUPLICATION-ALLOW.json": json.dumps({"markers": entry})}
+        return _repo(Path(tmp), files)
+
+    def test_a_repo_declares_reuse_in_its_own_allow_file_with_a_reason(self):
+        marker = "hook enforcement fails open if core hookspath is unset"
+        with tempfile.TemporaryDirectory(prefix="olivercode-dup-") as tmp:
+            work = self._allow_repo(tmp, {marker: "a routing table repeats its own description on purpose"})
+            self.assertEqual(dc.check_all(work), [])
+
+    def test_a_repo_marker_with_no_reason_declares_nothing(self):
+        marker = "hook enforcement fails open if core hookspath is unset"
+        for reason in ("", "   "):
+            with tempfile.TemporaryDirectory(prefix="olivercode-dup-") as tmp:
+                work = self._allow_repo(tmp, {marker: reason})
+                self.assertTrue(dc.check_all(work), "a marker with no reason must not hide a duplicate")
+
+    def test_a_broken_allow_file_does_not_hide_duplicates_or_crash(self):
+        with tempfile.TemporaryDirectory(prefix="olivercode-dup-") as tmp:
+            work = _repo(Path(tmp), {"a.md": f"# A\n\n{LONG_PASSAGE}\n", "b.md": f"# B\n\n{LONG_PASSAGE}\n",
+                                     "docs/DUPLICATION-ALLOW.json": "{not json"})
+            self.assertTrue(dc.check_all(work))
 
     def test_ablation_neutering_a_marker_re_exposes_the_duplicate(self):
         # Same shape as the manual ablation run when this gate was built: remove a
