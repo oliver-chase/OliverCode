@@ -17,7 +17,7 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
       ANON_META='<meta name="supabase-anon-key" content="eyJ'
       # Captured, never piped into `grep -q` or `head`: an early exit there sends SIGPIPE
       # upstream, pipefail turns it into 141, and a large file with a secret passed.
-      hits=$(grep -nE -e "$pattern" "$file" 2>/dev/null | grep -vF "$ANON_META" || true)
+      hits=$(staged_content "$file" 2>/dev/null | grep -nE -e "$pattern" | grep -vF "$ANON_META" || true)
       if [ -n "$hits" ]; then
         printf '%s\n' "$hits" | sed -n '1,3p'
         echo "  BLOCKED: $file matches secret pattern: $pattern"
@@ -31,7 +31,7 @@ if [ $VIOLATIONS -gt 0 ]; then
   echo ""
   echo "=========================================="
   echo "COMMIT BLOCKED: $VIOLATIONS potential secret leak(s) found."
-  echo "If this is a false positive (test data, example), rename it to match the tests/*.test.* skip patterns above. Otherwise remove the value from the staged file."
+  echo "Remove the value from the staged file, or replace it with a placeholder."
   echo "=========================================="
   exit 1
 fi

@@ -37,8 +37,8 @@ for pattern in "${PII_PATTERNS[@]}"; do
       #
       # The left boundary's back-reference closes the prefix attack, so
       # `notgit@github.com:a/b.git` no longer anchors the exemption.
-      if sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' "$file" 2>/dev/null | grep -nE -e "$pattern" >/dev/null; then
-        sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' "$file" 2>/dev/null | grep -nE -e "$pattern"
+      if staged_content "$file" 2>/dev/null | sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' | grep -nE -e "$pattern" >/dev/null; then
+        staged_content "$file" 2>/dev/null | sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' | grep -nE -e "$pattern"
         echo "  BLOCKED: $file contains PII matching pattern: $pattern"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi

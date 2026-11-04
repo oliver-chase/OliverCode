@@ -151,6 +151,46 @@ class SecretGateEveryVariant:
         self.assertIn("Gate 1", self.assertAllowed().stdout)
 
 
+class StagedContentEveryVariant:
+    """The gates read what the commit records: the staged content, under the file's real name.
+
+    Git prints a name with an accent or an em dash quoted, and a gate that reads the staged list as
+    plain text never opens the file. A gate that reads the working copy sees only what the file holds
+    now, so a value staged and then edited out of the working copy still lands in the commit."""
+
+    def test_a_secret_in_a_name_with_an_em_dash_blocks(self):
+        self.stage("Notes \u2014 Plan.txt", 'KEY = "' + "sk-" + "z" * 32 + '"\n')
+        self.assertIn("matches secret pattern", self.assertBlocked("gate 1").stdout)
+
+    def test_a_secret_in_a_name_with_an_accent_blocks(self):
+        self.stage("caf\u00e9.txt", "TOKEN=ghp_" + "b" * 36 + "\n")
+        self.assertBlocked("gate 1")
+
+    def test_a_staged_secret_blocks_after_the_working_copy_is_cleaned(self):
+        self.stage("config.py", 'KEY = "' + "sk-" + "z" * 32 + '"\n')
+        self.write("config.py", "KEY = os.environ['KEY']\n")
+        self.assertIn("matches secret pattern", self.assertBlocked("gate 1").stdout)
+
+    def test_an_emoji_in_a_name_with_an_accent_blocks(self):
+        self.stage("caf\u00e9.txt", "party \U0001F600\n")
+        self.assertBlocked("gate 2")
+
+    def test_a_staged_emoji_blocks_after_the_working_copy_is_cleaned(self):
+        self.stage("notes.txt", "party \U0001F600\n")
+        self.write("notes.txt", "party\n")
+        self.assertBlocked("gate 2")
+
+    def test_the_block_message_does_not_suggest_a_way_around_the_gate(self):
+        self.stage("config.py", 'KEY = "' + "sk-" + "z" * 32 + '"\n')
+        out = self.assertBlocked("gate 1").stdout
+        self.assertNotIn("rename", out)
+        self.assertNotIn("skip patterns", out)
+
+    def test_a_clean_file_with_an_em_dash_name_passes(self):
+        self.stage("Notes \u2014 Clean.txt", "Plain notes.\n")
+        self.assertAllowed()
+
+
 class TestLiveHookBlocksASecret(SecretGateEveryVariant, GateHarness):
     pass
 
@@ -160,6 +200,18 @@ class TestTemplateHookBlocksASecret(SecretGateEveryVariant, GateHarness):
 
 
 class TestPrivateHookBlocksASecret(SecretGateEveryVariant, GateHarness):
+    HOOK_SOURCE = REPO_ROOT / "core" / "templates" / "project" / "pre-commit-private"
+
+
+class TestLiveHookReadsStagedContent(StagedContentEveryVariant, GateHarness):
+    pass
+
+
+class TestTemplateHookReadsStagedContent(StagedContentEveryVariant, GateHarness):
+    HOOK_SOURCE = TEMPLATE_HOOK
+
+
+class TestPrivateHookReadsStagedContent(StagedContentEveryVariant, GateHarness):
     HOOK_SOURCE = REPO_ROOT / "core" / "templates" / "project" / "pre-commit-private"
 
 
