@@ -88,6 +88,14 @@ class EarlyStopGuard(unittest.TestCase):
     def test_a_next_step_label_does_not_block(self):
         self.assertFalse(self.blocks(user("x"), text("The audit is filed. Next: file the follow-up story.")))
 
+    def test_a_conditional_promise_does_not_block(self):
+        for closing in ("Done. If you hit an error, I'll fix it then.", "All set; I will add more later if needed.",
+                        "The fix is in. I'll run the tests when the build finishes."):
+            self.assertFalse(self.blocks(user("x"), text(closing)), closing)
+
+    def test_a_promise_after_a_semicolon_blocks(self):
+        self.assertTrue(self.blocks(user("x"), text("The fix is written; I'll run the tests now.")))
+
     def test_it_never_blocks_twice_in_a_row(self):
         self.assertFalse(self.blocks(user("x"), text("I'll implement the fix now."), active=True))
 
