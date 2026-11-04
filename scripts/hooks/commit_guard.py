@@ -7,7 +7,7 @@ level up, in Claude Code, and refuses a commit in four cases:
 - the repo ships `.githooks/pre-commit` but git is not pointed at it (see repo_gates)
 - the commit passes `--no-verify` or `-n`, which skips every hook
 - the commit is wrapped in `bash -c`, `sh -c`, `zsh -c` or `eval`; the wrapped string is read as a command line
-- the command overrides `core.hooksPath`: `git -c`, `--config-env` or a `GIT_CONFIG_*` variable
+- the command overrides `core.hooksPath`: `git -c`, `--config-env`, a `GIT_CONFIG_*` variable, or an earlier `git config` in the same line
 
 A repo with no gates of its own commits normally, with any flags, since there is nothing to
 skip; the session-start check names that gap.
@@ -69,6 +69,7 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
     found = []
     here = cwd
     exported: list[str] = []  # `export NAME=value` reaches every later command in the line
+    hooks_path_changed = False  # an earlier `git config core.hooksPath ...` reaches every later commit
     try:
         segments = list(_segments(command))
     except ValueError:
@@ -121,7 +122,15 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                 i += 1 if "=" in w else 2
             else:
                 i += 1
+        if i < len(words) and words[i] == "config":
+            rest = [w.lower() for w in words[i + 1:]]
+            if "core.hookspath" in rest:
+                at = rest.index("core.hookspath")
+                if at + 1 < len(rest) or any(w.startswith("--unset") for w in rest):
+                    hooks_path_changed = True
         if i < len(words) and words[i] == "commit":
+            if hooks_path_changed:
+                keys = keys + ["core.hookspath"]
             for assignment in exported + env:
                 name, _, value = assignment.partition("=")
                 if name in ("GIT_DIR", "GIT_WORK_TREE") and value:
@@ -152,8 +161,8 @@ def _skips_hooks(args: list[str]) -> bool:
         if skip_next:
             skip_next = False
             continue
-        if a == "--no-verify":
-            return True
+        if a.startswith("--no-v") and "--no-verify".startswith(a):
+            return True  # git accepts any unambiguous prefix of a long option
         if a.startswith("-") and not a.startswith("--") and len(a) > 1:
             for k, ch in enumerate(a[1:]):
                 if ch == "n":

@@ -60,6 +60,22 @@ class TestCommitGuard(RepoCase):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertIn("overrides core.hooksPath", guard.reason("git -c core.hooksPath=/dev/null commit -m x", self.repo))
 
+    def test_refuses_an_abbreviated_no_verify(self):
+        # git accepts any unambiguous prefix of a long option, so --no-verif skips the hooks too.
+        self.gates(point_git_at_them=True)
+        for cmd in ("git commit --no-verif -m x", "git commit --no-ver -m x", "git commit --no-v -m x"):
+            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
+        self.assertEqual(guard.reason("git commit --no-edit -m x", self.repo), "")
+
+    def test_refuses_a_commit_after_the_same_line_changes_hooks_path(self):
+        self.gates(point_git_at_them=True)
+        for cmd in ("git config core.hooksPath /dev/null && git commit -m x",
+                    "git config --local core.hookspath /dev/null; git commit -m x",
+                    "git config --unset core.hooksPath && git commit -m x",
+                    "GIT_CONFIG_PARAMETERS='core.hookspath=/dev/null' git commit -m x"):
+            self.assertIn("overrides core.hooksPath", guard.reason(cmd, self.repo), cmd)
+        self.assertEqual(guard.reason("git config core.hooksPath && git commit -m x", self.repo), "")
+
     def test_separators_inside_a_message_do_not_hide_the_commit(self):
         self.gates(point_git_at_them=True)
         heredoc = "git commit --no-verify -m \"$(cat <<'EOF'\nsubject; body | more && done\nEOF\n)\""
