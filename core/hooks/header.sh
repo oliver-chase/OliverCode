@@ -16,10 +16,18 @@ fi
 # A commit checks only what it stages, so a clean commit says nothing about the rest of the tree.
 # `validate.sh --tree` sets this to run every gate over every tracked file.
 if [ "${OLIVERCODE_SCAN_TREE:-}" = 1 ]; then
-  STAGED_FILES=$(git -C "$REPO_ROOT" ls-files)
+  STAGED_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off ls-files)
 else
-  STAGED_FILES=$(git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=ACM)
+  STAGED_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off diff --cached --name-only --diff-filter=ACM)
 fi
 cd "$REPO_ROOT"
+
+# Git prints a name with an accent or an em dash quoted unless core.quotepath is off, and a gate that
+# read the quoted name would never open the file. A gate also reads what the commit records, which is
+# the staged content, because the working copy can hold something else by the time the commit lands.
+# A path that is not in the index falls back to the working copy.
+staged_content() {
+  git -C "$REPO_ROOT" show ":$1" 2>/dev/null || cat -- "$1"
+}
 
 VIOLATIONS=0
