@@ -67,6 +67,15 @@ class TestCommitGuard(RepoCase):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertEqual(guard.reason("git commit --no-edit -m x", self.repo), "")
 
+    def test_allows_setting_hooks_path_back_to_the_repos_gates_in_the_same_line(self):
+        # The refusal message itself tells the session to run this command, so the combined form must pass.
+        self.gates(point_git_at_them=True)
+        for cmd in ("git config core.hooksPath .githooks && git commit -m x",
+                    "git config --local core.hooksPath ./.githooks; git commit -m x"):
+            self.assertEqual(guard.reason(cmd, self.repo), "", cmd)
+        self.assertIn("overrides core.hooksPath", guard.reason("git config core.hooksPath /dev/null && git commit -m x", self.repo))
+        self.assertIn("overrides core.hooksPath", guard.reason("git config --unset core.hooksPath && git commit -m x", self.repo))
+
     def test_refuses_a_commit_after_the_same_line_changes_hooks_path(self):
         self.gates(point_git_at_them=True)
         for cmd in ("git config core.hooksPath /dev/null && git commit -m x",

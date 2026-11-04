@@ -126,7 +126,11 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
             rest = [w.lower() for w in words[i + 1:]]
             if "core.hookspath" in rest:
                 at = rest.index("core.hookspath")
-                if at + 1 < len(rest) or any(w.startswith("--unset") for w in rest):
+                value = rest[at + 1] if at + 1 < len(rest) else ""
+                unsets = any(w.startswith("--unset") for w in rest)
+                # Pointing git back at the repo's own gates is the fix the refusal message recommends.
+                restores = value in (".githooks", "./.githooks") and not unsets
+                if (at + 1 < len(rest) or unsets) and not restores:
                     hooks_path_changed = True
         if i < len(words) and words[i] == "commit":
             if hooks_path_changed:

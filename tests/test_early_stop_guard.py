@@ -93,6 +93,9 @@ class EarlyStopGuard(unittest.TestCase):
                         "The fix is in. I'll run the tests when the build finishes."):
             self.assertFalse(self.blocks(user("x"), text(closing)), closing)
 
+    def test_an_unconditional_promise_that_says_once_more_still_blocks(self):
+        self.assertTrue(self.blocks(user("x"), text("I'll run the tests once more now.")))
+
     def test_a_promise_after_a_semicolon_blocks(self):
         self.assertTrue(self.blocks(user("x"), text("The fix is written; I'll run the tests now.")))
 

@@ -34,7 +34,7 @@ ASKS_USER_RE = re.compile(
 TAIL_CHARS = 400
 SENTENCE_BREAK_RE = re.compile(r"(?<=[.!?;])\s+|\n+")
 # A promise that depends on a later event or condition leaves nothing undone in this turn.
-CONDITIONAL_RE = re.compile(r"\b(if|when|whenever|unless|once|later)\b", re.IGNORECASE)
+CONDITIONAL_RE = re.compile(r"\b(if|when|whenever|unless|later)\b", re.IGNORECASE)
 # A question can leave the turn through a tool call: the desktop app's next-step box
 # (its `ask` field) or the question tool. The closing text then holds no question mark,
 # so a turn that ended waiting on the owner read as an unkept promise.
