@@ -37,20 +37,14 @@ class TestBuildHooks(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()):
             return bh.main()
 
-    def test_a_hand_edit_to_a_built_hook_fails(self):
-        hook = self.tmp / "core" / "templates" / "project" / "pre-commit-private"
-        hook.write_text(hook.read_text() + "echo hand edit\n")
-        self.assertEqual(self.check("--check"), 1)
-
-    def test_a_hand_edit_to_the_built_pre_push_fails(self):
-        hook = self.tmp / ".githooks" / "pre-push"
-        hook.write_text(hook.read_text() + "echo hand edit\n")
-        self.assertEqual(self.check("--check"), 1)
-
-    def test_a_hand_edit_to_the_built_commit_msg_fails(self):
-        hook = self.tmp / "core" / "templates" / "project" / "commit-msg"
-        hook.write_text(hook.read_text() + "echo hand edit\n")
-        self.assertEqual(self.check("--check"), 1)
+    def test_a_hand_edit_to_any_built_hook_fails(self):
+        for rel in ("core/templates/project/pre-commit-private", ".githooks/pre-push", "core/templates/project/commit-msg"):
+            with self.subTest(rel):
+                hook = self.tmp / rel
+                original = hook.read_text()
+                hook.write_text(original + "echo hand edit\n")
+                self.assertEqual(self.check("--check"), 1)
+                hook.write_text(original)
 
     def test_a_secret_pattern_edit_reaches_the_commit_gate_and_the_push_hook(self):
         patterns = bh.SECRET_PATTERNS

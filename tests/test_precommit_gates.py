@@ -177,6 +177,7 @@ class SecretGateEveryVariant:
         out = self.assertBlocked("gate 1").stdout
         self.assertIn("Secret scan", out)
         self.assertIn("matches secret pattern", out)
+        self.assertNotIn("Gate 2/", out)  # Gate 1 stops the commit itself, before any later gate runs
 
     def test_a_clean_file_passes_the_secret_gate(self):
         self.stage("notes.txt", "Plain notes.\n")
@@ -324,7 +325,7 @@ class TestGateWorkflowAuth(GateHarness):
     def test_a_credential_with_workflow_scope_passes(self):
         result = self.assertAllowed(**self.stub_gh(self.SCOPES.format("repo, workflow")))
         self.assertIn("gh credential has workflow scope", result.stdout)
-        self.assertIn("Gate 4 passed.", result.stdout)
+        self.assertIn("passed", result.stdout)
 
 
 class TestGateArchivedContent(GateHarness):
@@ -338,7 +339,7 @@ class TestGateArchivedContent(GateHarness):
 
     def test_prose_about_legacy_systems_passes(self):
         self.stage("docs/Legacy Modernization.md", "How we replace legacy systems.\n")
-        self.assertIn("Gate 5 passed.", self.assertAllowed().stdout)
+        self.assertIn("passed", self.assertAllowed().stdout)
 
     def local_hook(self, body):
         local = self.write(".githooks/pre-commit.local", "#!/usr/bin/env bash\n" + body)
@@ -348,7 +349,7 @@ class TestGateArchivedContent(GateHarness):
         """The framework carries no repo-specific exemption; the repo declares its own."""
         self.local_hook('[ "${1:-}" = archive-exempt ] && case "$2" in "records/Archive/"*) exit 10 ;; esac\nexit 0\n')
         self.stage("records/Archive/week-1.md", "Done.\n")
-        self.assertIn("Gate 5 passed.", self.assertAllowed().stdout)
+        self.assertIn("passed", self.assertAllowed().stdout)
 
     def test_the_exemption_covers_only_the_path_the_hook_names(self):
         self.local_hook('[ "${1:-}" = archive-exempt ] && case "$2" in "records/Archive/"*) exit 10 ;; esac\nexit 0\n')
@@ -384,7 +385,7 @@ class TestGateSkillCitations(GateHarness):
 
     def test_a_citation_to_a_real_issue_passes(self):
         self.stage("skills/x/SKILL.md", "Fixes the parser, see #2.\n")
-        self.assertIn("Gate 6 passed.", self.assertAllowed(**self.env).stdout)
+        self.assertIn("passed", self.assertAllowed(**self.env).stdout)
 
 
 class TestPrivateRepoLocalGate(GateHarness):

@@ -412,6 +412,13 @@ class TestUninstall(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unexpected argument", result.stdout)
         self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
+        # Every command that takes no extra word refuses one before it acts.
+        for cmd in ("install", "health", "update", "sync-hooks", "audit-fleet", "skills"):
+            with self.subTest(cmd):
+                done = subprocess.run([sys.executable, str(LAUNCHER), cmd, "--bogus"],
+                                      capture_output=True, text=True, cwd=str(self.tmp), env=env)
+                self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+                self.assertIn("unexpected argument", done.stdout)
 
 
 class TestRootFlag(unittest.TestCase):

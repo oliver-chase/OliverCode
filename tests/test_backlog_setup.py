@@ -397,5 +397,34 @@ class TestLauncher(SetupCase):
         self.assertEqual(1, self.call(str(self.repo), "--bogus")[0])
 
 
+
+class PagingAndConfigChecks(unittest.TestCase):
+    """read_items follows every page, and config_problems names each kind of mismatch."""
+
+    def test_read_items_reads_every_page(self):
+        pages = {None: ("c1", True, 1), "c1": (None, False, 2)}
+
+        class Api:
+            def graphql(self, query, **kw):
+                cursor, more, n = pages[kw["c"]]
+                return {"node": {"items": {"pageInfo": {"hasNextPage": more, "endCursor": cursor},
+                                           "nodes": [{"id": f"I{n}", "content": {"number": n}}]}}}
+        self.assertEqual([1, 2], [i["number"] for i in backlog_setup.read_items(Api(), "P")])
+
+    def test_config_problems_names_each_mismatch(self):
+        board = {"id": "P", "fields": [{"id": "F", "options": [{"name": "Ready", "id": "R"}, {"name": "QA", "id": "Q"}]}]}
+        good = {"projectId": "P", "fields": {"status": {"id": "F", "options": {"Ready": "R", "QA": "Q"}}}}
+        self.assertEqual([], backlog_setup.config_problems(good, board))
+        cases = {
+            "projectId differs": {**good, "projectId": "X"},
+            "is not on the board": {**good, "fields": {"status": {"id": "G", "options": {}}}},
+            "option Ready id does not match": {**good, "fields": {"status": {"id": "F", "options": {"Ready": "Z", "QA": "Q"}}}},
+            "board option QA is missing": {**good, "fields": {"status": {"id": "F", "options": {"Ready": "R"}}}},
+        }
+        for words, config in cases.items():
+            with self.subTest(words):
+                self.assertTrue(any(words in p for p in backlog_setup.config_problems(config, board)))
+
+
 if __name__ == "__main__":
     unittest.main()

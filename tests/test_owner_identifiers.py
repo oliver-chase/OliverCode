@@ -52,6 +52,12 @@ class IdentifierGate(IdentifierSetup):
     def test_the_email_local_part_and_a_second_name_word_count(self):
         self.stage("a.txt", "Vantrel wrote this\n")
         self.assertBlocked("owner identifier")
+        # A local part that matches no name word counts on its own.
+        git(self.tmp, "rm", "-q", "--cached", "a.txt")
+        git(self.tmp, "commit", "-q", "--no-verify", "--allow-empty", "-m", "other author",
+            "--author", "Ola Pen <quillomarr@example.invalid>")
+        self.stage("b.txt", "quillomarr\n")
+        self.assertBlocked("owner identifier")
 
     def test_the_remote_owner_counts(self):
         git(self.tmp, "remote", "add", "origin", "git@github.com:acme-widgets/repo.git")
