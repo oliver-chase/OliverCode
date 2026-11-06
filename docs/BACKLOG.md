@@ -6,6 +6,6 @@ This file is the live tracker that the `audit` skill maintains.
 
 ## Coverage
 
-Reviewed through: `8ab89fa` (2026-11-01, two deep-reviews: the harness and separation work `5d529b4`, `e7962c2`, `0e4766f`, `f447211`, `14a96d1`, `d526367`, `e1343d0` and `98a5782`, with fixes in `8ab89fa`; and the #23 merges `e525dd5`, `3f9c975`, `3182acd` and `056ea84`, with fixes in `3653f62`. Other commits in the range were not part of either review)
+Reviewed through: `8ab89fa` (2026-11-01, the harness and separation work and the #23 merges)
 
-The audit changes route has not reviewed the commits after `8ab89fa`. Each of those stories closed through its own independent QA, and the next changes-route review moves this line forward.
+No changes-route review has read the commits after `8ab89fa`. Their stories closed through independent QA, and the next review moves this line forward.
