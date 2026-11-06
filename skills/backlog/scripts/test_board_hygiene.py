@@ -93,6 +93,13 @@ class Drift(unittest.TestCase):
         found = bh.check_required_fields([lower, bare], cfg, {"Ready"})
         self.assertEqual(1, len(found))
         self.assertIn("#6", found[0])
+        # A card with no Status is open work with every field to fill.
+        nostatus = item(7, None)
+        nostatus["priority"] = None
+        found = bh.check_required_fields([nostatus], cfg, {"Ready"})
+        self.assertEqual(1, len(found))
+        self.assertIn("status", found[0])
+        self.assertIn("priority", found[0])
 
 
 class BoardSpelling(unittest.TestCase):

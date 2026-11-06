@@ -84,11 +84,12 @@ def check_required_fields(items, config, open_statuses=REQUIRED_STATUSES):
         + (("area",) if "area" in config["fields"] else ())
     problems = []
     for i in items:
-        if i.get("status") not in open_statuses:
+        # A card with no Status is open work too, and its Status is the first gap.
+        if i.get("status") and i.get("status") not in open_statuses:
             continue
         c = i.get("content", {})
         num = c.get("number")
-        missing = [f for f in required if not field(i, f)]
+        missing = ([] if i.get("status") else ["status"]) + [f for f in required if not field(i, f)]
         if missing:
             problems.append(
                 f"#{num} \"{c.get('title', '')[:60]}\" ({i.get('status')}): "

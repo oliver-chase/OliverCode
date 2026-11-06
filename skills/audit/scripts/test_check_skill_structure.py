@@ -161,6 +161,12 @@ class DanglingSkillReferenceFinding(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("[dangling-skill-reference]", out)
         self.assertIn("ghost-skill-zz", out)
+        # A single-word skill name is a skill name too.
+        with tempfile.TemporaryDirectory() as tmp:
+            write_skill(tmp, "fam/alpha-skill", "Hand the result to the `ghost` skill.\n")
+            code, out = run_gate(tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("ghost", out)
 
     def test_reference_to_real_sibling_is_clean(self):
         with tempfile.TemporaryDirectory() as tmp:

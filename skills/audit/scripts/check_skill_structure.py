@@ -48,7 +48,7 @@ DESCRIPTION_WORD_LIMIT = 150
 EXTERNAL_SKILL_DIRS = [
     Path.home() / ".claude" / "skills",
 ]
-_NAME = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)+"
+_NAME = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
 # A strong shape says "this is a skill": the word skill beside the name, or the install path.
 STRONG_REF_RES = [
     re.compile(rf"`({_NAME})`\s+skill"),

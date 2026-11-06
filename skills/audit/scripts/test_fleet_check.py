@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fleet_check  # noqa: E402
@@ -124,6 +125,18 @@ class Board(unittest.TestCase):
             repo = make_repo(tmp, {"README.md": "ok\n"})
             _, out = run(str(repo))
             self.assertIn("board: no backlog config, not checked", out)
+            # A failed board read is reported and the other measures still print.
+            (repo / "docs").mkdir()
+            (repo / "docs" / "backlog-config.json").write_text(json.dumps(
+                {"repoOwner": "o", "repoName": "r", "projectNumber": 1, "projectOwner": "o"}), encoding="utf-8")
+            gh_dir = Path(tmp) / "bin"
+            gh_dir.mkdir()
+            (gh_dir / "gh").write_text("#!/bin/sh\necho 'rate limit' >&2\nexit 1\n")
+            (gh_dir / "gh").chmod(0o755)
+            with mock.patch.dict("os.environ", {"PATH": f"{gh_dir}:/usr/bin:/bin"}):
+                _, out = run(str(repo))
+            self.assertIn("board: not checked", out)
+            self.assertIn("voice:", out)
 
 
 if __name__ == "__main__":

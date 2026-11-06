@@ -235,6 +235,19 @@ class TestSizeCounter(unittest.TestCase):
                                 capture_output=True, text=True).stdout
         total_row = next(l for l in report.splitlines() if l.startswith("TOTAL"))
         self.assertEqual("3", total_row.split()[2])
+        # The repo's own backlog config wins over a fixture that sorts first.
+        for rel, name in (("a/fixtures/backlog-config.json", "fixture"), ("docs/backlog-config.json", "real")):
+            (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / rel).write_text(json.dumps({"repoOwner": "o", "repoName": name, "projectNumber": 1,
+                                                      "projectOwner": "o"}))
+            git(self.repo, "add", rel)
+        stub = self.tmp / "bin"
+        stub.mkdir()
+        (stub / "gh").write_text("#!/bin/sh\nexit 0\n")
+        (stub / "gh").chmod(0o755)
+        env = {**git_env(), "PATH": f"{stub}:{git_env().get('PATH', '/usr/bin:/bin')}"}
+        out = subprocess.run(["bash", str(SIZE_SH), str(self.repo)], env=env, capture_output=True, text=True).stdout
+        self.assertIn("Remaining work (o/real)", out)
 
     def test_staged_counts_the_index_copy(self):
         (self.repo / "a.txt").write_text("1\n" * 10)
