@@ -37,11 +37,11 @@ A skill that ships inside OliverCode may read `$OC/` files and name its sibling 
 5. **Describe what the skill does, nothing else.** A skill file holds no decision ID, date, issue number or person. It holds no history, ledger, change log, archive note, Known gaps section or maintainer section. It names no vault or fleet-tooling place. A comment says what the code does, never how it came to be. The reason for a rule goes in the family `DECISIONS.md`, the commit message or the issue
 6. **Placeholder names.** Exactly three names are fictional-safe: `Jane Doe`, `John Smith`, `Sally May`. Any example person name is one of them
 7. **Portable-zip limits.** The `name` field equals the folder name, in lowercase letters, digits and hyphens, at most 64 characters. The `description` field is at most 1024 characters and under 150 words. It leads with the trigger phrases a person says
-8. **Name no other skill and no outside place.** The skill's text never names a sibling skill, the owner's vault, a vault folder, or an earlier name of the skill. A description says what the skill is not for and names no alternative
-9. **The skill folder holds only what the skill uses.** Put the family `DECISIONS.md` and `README.md` in the family folder, beside the skill. Put tests in `<family>/tests/<skill>/`. A zip of the folder then carries no developer file
+8. **Name no outside place.** The skill's text never names the owner's vault, a vault folder or an earlier name of the skill. It may name a sibling skill it hands work to, by the skill's name only, never by a path into that skill's folder
+9. **The skill folder holds only what the skill uses.** Put the family `DECISIONS.md` and `README.md` in the family folder, beside the skill. Put a script's test beside it as `scripts/test_<script>.py`, or in `<family>/tests/<skill>/` when the skill ships as a zip without developer files
 10. **Names a person would say.** A skill, folder or file name uses the word a person says aloud. No number suffix, ticket id or decision id appears in a name or in text the person reads. A decision id may stay in a code comment and in `DECISIONS.md`
 11. **Count the files before you finish.** Run `find <skill> -type f | wc -l`. For each file, name what the skill does not need and cut it
-12. **Open with a message that says what to send.** A skill a person triggers cold has a `## Opening message` section in `SKILL.md`. The section starts with one line: send this first, in one turn, exactly as written. The message says why the result matters, what the skill does and when the person approves. Then it says what input helps and lists the ways to answer. It holds no personal fact, and an answer given to it is never asked again
+12. **Open with a message that says what to send.** A skill that needs input its trigger does not carry has a `## Opening message` section in `SKILL.md`. The section starts with one line: send this first, in one turn, exactly as written. The message says why the result matters, what the skill does and when the person approves. Then it says what input helps and lists the ways to answer. It holds no personal fact, and an answer given to it is never asked again
 13. **A step a command can do is a command.** Opening a file, counting rows, comparing two structures or finding a marker is a script that prints the answer, and the text tells the model to run it and act on the output
 14. **A script has a test that goes red without its guard.** Build the test, remove the guard once, check that the test fails, then restore it. `check_skill_structure.py --weight` lists the scripts no test names
 15. **A skill with several tasks loads one reference per task.** A route row names one file. A setup file loads only when a one-line `check` command says setup is not done
@@ -58,26 +58,15 @@ Search the loaded skill list's names and descriptions for the trigger phrase. Ex
 
 A tracker, a record store or a growing list needs a home that the connectors and the person's machine can reach, named at the top of `SKILL.md`: a file the person names, a download-out loop, or a Slack post. A skill that appends checks what is there first. A real match merges or updates, a near-duplicate is skipped and flagged, and only a new entry is appended.
 
-## 3. Automation or agent?
-
-Default to automation, and add a model call only where a deterministic rule cannot do the step:
-
-- **Route and query without a model.** Intent routing uses keyword or pattern matching. Data queries read the store directly. The order is intent router, data query, static fallback, and a model call last, only when the earlier steps fail
-- **Every model call has a non-model fallback.** An error returns a helpful message and never crashes. State changes follow an explicit state machine
-- **Fail closed.** When a check fails, deny access or skip the action
-- **Log every action** with its timestamp, user and cost. An action without a log line did not happen
-- **Data flows one way.** Each fact has one source of truth
-- **A scheduled job runs a deterministic script.** The model may summarize its output. The script exits 0 on success and non-zero on error, and a `mkdir` lock with a stale threshold stops concurrent runs. A sync, a draft and a send are three jobs
-
-## 4. Which connectors?
+## 3. Which connectors?
 
 List each connector the skill uses and what the skill does without it. Write the connector-missing line for each one. A skill with no fallback for a required connector states that it needs the connector, at the top.
 
-## 5. Close by running the checks
+## 4. Close by running the checks
 
 The new skill's `SKILL.md` exists by now, with its symlink created and its `README.md` row written. Run, in order:
 
-1. `python3 skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, no file goes unused and every description is within the word cap
+1. `python3 $OC/skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, no file goes unused and every description is within the word cap
 2. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see
 
 Fix the exact gap each check names, then run it again. Never finish with a named gap open.
