@@ -136,7 +136,13 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                 if (at + 1 < len(rest) or unsets) and not restores:
                     hooks_path_changed = True
         if i < len(words) and words[i].lower() in aliases:
-            words = words[:i] + aliases[words[i].lower()] + words[i + 1:]
+            expansion = aliases[words[i].lower()]
+            if expansion[0] == "!":
+                # git runs a shell alias with the remaining words appended
+                rest = " ".join(shlex.quote(w) for w in words[i + 1:])
+                found += [(w, k + keys, exported + env + e, a) for w, k, e, a in _commits(f"{expansion[1]} {rest}", where)]
+                continue
+            words = words[:i] + expansion + words[i + 1:]
         if i < len(words) and words[i] == "commit":
             if hooks_path_changed:
                 keys = keys + ["core.hookspath"]
@@ -151,6 +157,9 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
 def _alias(setting: str, aliases: dict) -> None:
     """Record `alias.NAME=commit ...` from a `git -c` setting as NAME -> its words."""
     key, _, value = setting.partition("=")
+    if key.lower().startswith("alias.") and value.startswith("!"):
+        aliases[key[len("alias."):].lower()] = ["!", value[1:]]  # a shell alias: read as a command line
+        return
     if key.lower().startswith("alias.") and value:
         try:
             expansion = shlex.split(value)

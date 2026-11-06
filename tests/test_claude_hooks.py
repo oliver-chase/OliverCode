@@ -71,7 +71,7 @@ class TestCommitGuard(RepoCase):
         # An alias set through git -c that expands to a commit with a hook skip is refused.
         for cmd in ("git -c alias.ci='commit -n' ci -m x", 'git -c "alias.ci=commit --no-verify" ci -m x',
                     "git -c alias.ci='commit -m y' ci -n", "git -c alias.CI='commit -n' ci -m x",
-                    "git -c Alias.CI='commit -n' ci -m x"):
+                    "git -c Alias.CI='commit -n' ci -m x", "git -c alias.ci='!git commit -n' CI -m x"):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertEqual(guard.reason("git -c alias.ci=commit ci -m x", self.repo), "")
 
