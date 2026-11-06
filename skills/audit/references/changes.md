@@ -7,7 +7,7 @@ The work a session produced, reviewed before it is called done. It runs at two s
 
 ## The review
 
-1. **Scope the range.** `git log --oneline <base>..HEAD`, where the base is the audit epic's last reviewed commit or the session's first commit. Review only this session's commits when other sessions commit to the same repo
+1. **Scope the range.** `git log --oneline <base>..HEAD`, where the base is the Reviewed-through commit in `docs/BACKLOG.md` or the session's first commit. Review only this session's commits when other sessions commit to the same repo
 2. **A reviewer agent**, one per about 3,000 changed lines, reads the full diff of each file with its surrounding code. Brief it tightly, since an open-ended brief is the real cost: name the exact commands to run, name the edge cases that matter, and allow one fresh fixture per code path. It hunts, in order:
    - Correctness: logic errors, missing-file and empty handling, races, references broken by a rename, wiring whose selectors no longer match
    - Security: injection, auth and scope leaks, secrets in the diff, a guard that fails open
