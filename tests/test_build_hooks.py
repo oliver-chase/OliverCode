@@ -69,3 +69,20 @@ class TestBuildHooks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAdoptedRepoHooksCarryNoOliverCodeText(unittest.TestCase):
+    """An adopted repo does not hold OliverCode's docs or generator, so its hooks must not point at them."""
+
+    def test_the_template_hooks_name_no_oliver_code_path_or_doc(self):
+        targets = [r for r in (*bh.VARIANTS, *bh.PRE_PUSH_TARGETS, *bh.COMMIT_MSG_TARGETS) if r.startswith("core/templates/")]
+        self.assertTrue(targets)
+        for rel in targets:
+            text = (REPO_ROOT / rel).read_text()
+            for word in ("OliverCode", "DECISIONS.md", "RULES.md", "build-hooks.py"):
+                self.assertNotIn(word, text, f"{rel} mentions {word}")
+
+    def test_oliver_codes_own_hooks_keep_their_pointers(self):
+        text = (REPO_ROOT / ".githooks" / "pre-commit").read_text()
+        self.assertIn("See docs/DECISIONS.md.", text)
+        self.assertIn("OliverCode pre-commit hook", text)

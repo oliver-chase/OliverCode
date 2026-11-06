@@ -1,7 +1,8 @@
 # DUPLICATION-HOOK-1. A passage of 15 words or more may live in one markdown file only, so a rule
 # keeps one home across docs, skills, references and templates. The shared check
-# (scripts/duplication_check.py, shipped to adopted repos by bootstrap; OliverCode keeps it at
-# scripts/lib/duplication_check.py) reads every tracked markdown file and reports each passage that
+# (scripts/duplication_check.py, shipped to adopted repos by bootstrap; OliverCode keeps it at #OC-ONLY
+# scripts/lib/duplication_check.py) reads every tracked markdown file and reports each passage that #OC-ONLY
+# (scripts/duplication_check.py) reads every tracked markdown file and reports each passage that #PROJECT-ONLY
 # a staged file shares with another file, naming both. Files outside the commit are judged as they
 # stand, so an old duplicate between two untouched files blocks nothing here; validate.sh reports it.
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Duplicate text..."
