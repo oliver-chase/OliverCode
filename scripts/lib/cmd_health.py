@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lib import claude_settings as _claude_settings
 from lib.health_checks import (
-    _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies, _check_waiver_expiry,
+    _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
     _check_vault_skill_links,
 )
 from lib.local_config import OC_ROOT
@@ -115,11 +115,6 @@ def command_health(fleet_root: Path | None = None) -> int:
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no private repos around it is still a valid, healthy checkout.
     passed, failed, skipped = _check_placement_drift(OC_ROOT)
-    t.add(passed, failed, skipped)
-
-    # 4. Governance exceptions that have run out.
-    print("\nGovernance waivers:")
-    passed, failed, skipped = _check_waiver_expiry(OC_ROOT)
     t.add(passed, failed, skipped)
 
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the

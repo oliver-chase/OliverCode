@@ -181,15 +181,6 @@ def command_audit_fleet(oc_root: Path) -> int:
         targets = {"skills": skills, **targets}
     checks = ["check_skill_structure.py"]
 
-    # runtime/manifests/ is the sanctioned home for a generated observability
-    # artifact -- runtime/control-plane/ specifically means the local control
-    # plane install and trips a health check expecting its full shape (a
-    # launcher shim) the moment anything creates a directory under it.
-    log_dir = oc_root / "runtime" / "manifests" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "audit-fleet.log"
-    log_lines = [f"=== audit-fleet run {datetime.now(timezone.utc).isoformat()} ==="]
-
     broken = False
     for target_name, target_path in targets.items():
         if not target_path.is_dir():
@@ -208,11 +199,8 @@ def command_audit_fleet(oc_root: Path) -> int:
             broken = broken or crashed
             status = "ERROR" if crashed else "FAIL" if result.returncode != 0 else "ok"
             print(f"  [{status}] {check}: {summary}")
-            log_lines.append(f"{target_name} {check}: {status} -- {summary}")
 
-    log_path.write_text("\n".join(log_lines) + "\n", encoding="utf-8")
-    print(f"\nFull output: {log_path}")
-    print("Findings are heuristic. Read the flagged locations before treating any as a real "
+    print("\nFindings are heuristic. Read the flagged locations before treating any as a real "
           "defect -- this command never fixes anything on its own.")
     # Findings exit 0; only a check that could not run exits 1.
     return 1 if broken else 0

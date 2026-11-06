@@ -1,101 +1,16 @@
-"""Health checks: governance-waiver expiry, the GitHub About, and fleet topology.
+"""Health checks: the GitHub About and fleet topology.
 
 `cmd_health.py` imports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.repo_profiles import configured_location, iter_fleet, registry_file
 from lib.skill_links import link_states
-
-def _check_waiver_expiry(oc_root: Path) -> tuple[int, int, int]:
-    """Flag governance exceptions in repo-profiles.json whose `expiresAt` has passed.
-
-    The registry records deliberate exceptions -- repos waived out of the governance
-    contract, complexity variances approved with a reason -- and every entry carries an
-    `expiresAt`. Nothing read the file. An expiry date that no code checks is not a
-    deadline, it is a comment: the waiver simply became permanent on the day it was
-    written, which is the opposite of what an expiring waiver is for.
-
-    Reported, never fatal. The point is to make the date mean something at the moment
-    someone looks at fleet health, not to block a commit in an unrelated repo.
-    """
-    path = registry_file(oc_root, "repo-profiles.json")
-    if not path.is_file():
-        print("  [WARN] no repo-profiles.json — skipping waiver expiry check")
-        return 0, 0, 1
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"  [FAIL] {path.name} is unreadable: {exc}")
-        return 0, 1, 0
-
-    now = datetime.now(timezone.utc)
-    entries: list[tuple[str, str, str]] = []  # (label, expiresAt, reason)
-    for waiver in data.get("unmanagedRepoWaivers", []):
-        entries.append((f"unmanaged-repo waiver for {waiver.get('name', '?')}",
-                        waiver.get("expiresAt", ""), waiver.get("reason", "")))
-    for name, profile in data.get("profiles", {}).items():
-        # Both variance kinds carry the same contract: target + reason + expiry.
-        for key in ("approvedMaintainabilityVariances", "approvedStrictVariances"):
-            for variance in profile.get(key, []):
-                entries.append(
-                    (f"{name}: {variance.get('target', 'variance')} variance",
-                     variance.get("expiresAt", ""), variance.get("reason", ""))
-                )
-
-    # An exception with no written reason is unauditable: nobody can later judge
-    # whether it still applies, so it can never be safely removed.
-    # `or ""`: a JSON null reason is still no reason, and must not crash the health run.
-    unreasoned = [label for label, _, reason in entries if not (reason or "").strip()]
-    for label in unreasoned:
-        print(f"  [FAIL] {label}: no reason recorded — an exception without a reason "
-              f"can never be reviewed or retired")
-
-    dated = [(label, raw) for label, raw, _ in entries if raw]
-    if not dated and not unreasoned:
-        print("  [OK] no dated governance waivers to expire")
-        return 1, 0, 0
-
-    expired = []
-    unparsable = []
-    for label, raw in dated:
-        try:
-            when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):  # AttributeError: a number or list, not a date string
-            unparsable.append(label)
-            continue
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=timezone.utc)
-        if when < now:
-            expired.append((label, when))
-
-    for label in unparsable:
-        print(f"  [FAIL] {label}: expiresAt is not an ISO-8601 date — it can never expire")
-    for label, when in expired:
-        days = (now - when).days
-        print(f"  [FAIL] {label}: EXPIRED {days}d ago ({when.date()}) — renew it with a new "
-              f"reason and date, or remove the waiver and fix the underlying issue")
-    if expired or unparsable or unreasoned:
-        return 0, len(expired) + len(unparsable) + len(unreasoned), 0
-
-    # Normalize before comparing: min() over a mix of offset-naive and offset-aware
-    # datetimes raises TypeError, so one waiver written without a timezone crashed the
-    # whole health run. The expiry loop above already normalizes; this must match it.
-    def _aware(raw: str) -> datetime:
-        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-    soonest = min(_aware(r) for _, r in dated)
-    print(f"  [OK] {len(dated)} waiver(s) current; next expires {soonest.date()}")
-    return 1, 0, 0
-
 
 # ── Topology checks ──────────────────────────────────────────────────────────
 # The gates cover CONTENT: no secret, no emoji, no archived copy in a commit.

@@ -95,8 +95,6 @@ Completion: run the repo's canonical validation before committing and stop on fa
 
 Authority hierarchy: the deploy platform must not be the first place a build or type error is discovered. Each repo profile declares a `canonicalValidationCommand` and a `finalAuthority`. Run the canonical command locally before the commit and treat the declared final authority, which is a full build and not a lint pass, as the check that decides whether the change is sound. Pre-commit gates catch secrets, structure and hygiene. They do not catch a block-scoped `const` referenced before its declaration, which only a full type-checking build surfaces.
 
-Evidence gate: the WRITE MODE evidence gate is opt-in (`EVIDENCE-OPT-IN-1` in `docs/DECISIONS.md`). The machinery works and is tested, no evidence record exists in this fleet, and a contract that every commit violates teaches that written rules are optional.
-
 Secrets stay out of git. Real credentials live in a gitignored `.secrets/` folder or in `.env.local`, `.env.example` is tracked and holds variable names without values, and `.githooks/pre-commit` is the enforcement gate.
 
 Hooks are installed by the launcher from OliverCode with `scripts/olivercode sync-hooks`. It deploys `core/templates/project/pre-commit` (or the private variant for a private repo) to each repo's `.githooks/` and sets `core.hooksPath`.
