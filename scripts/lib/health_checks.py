@@ -1,6 +1,6 @@
 """Health checks: governance-waiver expiry, the GitHub About, and fleet topology.
 
-The launcher re-exports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
+`cmd_health.py` imports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
 """
 
 from __future__ import annotations

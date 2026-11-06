@@ -81,7 +81,7 @@ Every change in any project follows this locked process, and no gate is skippabl
 
 Audit reviewers run in parallel, one per area, and every other helper agent runs alone.
 
-`.githooks/pre-commit` runs the gates on every commit and there is no bypass mode. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
+`.githooks/pre-commit` runs the gates on every commit git runs it for. Four things skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
 
 Three Claude Code hooks run inside every session, and `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
 

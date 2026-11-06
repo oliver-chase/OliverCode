@@ -174,7 +174,7 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
         if oc_skill_names and not installed:
             # Zero symlinks resolve into THIS checkout: it isn't the machine's installed
             # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
-            # drift -- G4 requires a stranger clone to report HEALTHY.
+            # drift, because a stranger's fresh clone must report HEALTHY.
             print(f"  [WARN] this checkout is not the machine's installed OliverCode "
                   f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/RULES.md")
             skipped += 1

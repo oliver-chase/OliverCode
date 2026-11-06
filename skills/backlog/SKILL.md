@@ -41,7 +41,7 @@ After each commit or finished piece of work, and before a lead reports a helper'
 
 ## File a story or epic
 
-1. **Search first** and extend an existing open item with a comment. File nothing the repo's prioritization doc lists under "What never gets filed".
+1. **Search first** and extend an existing open item with a comment.
 2. **Classify the work.** An owner request is filed ("Save every ask") unless it meets that section's small-change exception. A quick fix the session finds on its own, such as a missing fallback or a stale word, is fixed inline with no Project item. Real new scope is filed before it is built. A repo's own quick-wins convention wins.
 3. **Answer the fit check in the body.** Adding to what exists is the default, so the body names what it extends (a new file states why no home fits), whether it is core or an add-on, what it replaces and its effect on size and always-loaded tokens, and whether it passes `$OC/skills/audit/references/lenses.md`.
 4. **Create it and add it to the board yourself** with the create-and-add command in `references/project-fields.md`. Nothing adds an issue to the Project automatically, so an issue made any other way (the web, a script, `gh api`) is not on the board until `gh project item-add` runs. Check with the item list afterwards that the new number appears with every field set

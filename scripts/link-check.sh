@@ -58,7 +58,7 @@ while IFS= read -r -d '' file; do
     # runtime/control-plane/ is gitignored, local-only state (docs/RULES.md) —
     # links into it (e.g. README.md -> runtime/control-plane/README.md) are valid
     # documentation of an optional local layer, not broken references. A fresh/
-    # standalone clone genuinely won't have this directory (G4 stranger-clone test).
+    # standalone clone genuinely won't have this directory (a stranger's fresh clone).
     case "$target" in
       "$REPO_ROOT/runtime/control-plane/"*) checked=$((checked + 1)); continue ;;
     esac
