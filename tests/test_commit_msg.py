@@ -57,6 +57,18 @@ class TestCommitMsg(CommitMsgCase):
         self.assertEqual(0, git(self.repo, "commit", "-m", "Change the tool (#5)", check=False).returncode)
         self.assertEqual(0, self.commit("Docs only (#5)").returncode)
 
+    def test_a_co_author_line_has_one_form(self):
+        self.first_commit()
+        good = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+        self.assertEqual(0, self.commit(f"Work (#5)\n\n{good}").returncode)
+        self.assertEqual(0, self.commit("Work (#5)").returncode)  # a commit with no co-author passes
+        for bad in ("Co-authored-by: Claude <noreply@anthropic.com>", "Co-Authored-By: Claude <claude@anthropic.com>",
+                    "co-authored-by: Jane Doe <jane@example.invalid>", "Co-Authored-By: Claude"):
+            with self.subTest(bad):
+                result = self.commit(f"Merge branch x (#5)\n\n{bad}")  # merges are checked too
+                self.assertEqual(1, result.returncode)
+                self.assertIn("Co-Authored-By", result.stdout + result.stderr)
+
     def test_the_initial_commit_is_exempt(self):
         self.assertEqual(0, git(self.repo, "commit", "-m", "first", check=False).returncode)
 

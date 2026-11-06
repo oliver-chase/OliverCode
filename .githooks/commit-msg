@@ -65,6 +65,20 @@ if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
   fi
 fi
 
+# COAUTHOR-1. Every co-author line has one form, "Co-Authored-By: Name <email>", and a Claude
+# co-author uses Anthropic's noreply address, so the attribution reads the same on every commit,
+# merges and cherry-picks included. A commit with no co-author line passes.
+BAD_COAUTHOR="$(printf '%s\n' "$MESSAGE" | grep -Ei '^[[:space:]]*co-authored-by:' \
+  | grep -Ev '^Co-Authored-By: [^<>]+ <[^<>@ ]+@[^<> ]+>$' || true)"
+CLAUDE_MAIL="noreply@""anthropic.com"
+BAD_COAUTHOR="$BAD_COAUTHOR$(printf '%s\n' "$MESSAGE" | grep -E '^Co-Authored-By: Claude' | grep -vF "<$CLAUDE_MAIL>" || true)"
+if [ -n "$BAD_COAUTHOR" ]; then
+  echo "[commit-msg] BLOCKED: a co-author line is not in the standard form:"
+  printf '%s\n' "$BAD_COAUTHOR" | sed 's/^/    /'
+  echo "  Write it as \"Co-Authored-By: Name <email>\"; a Claude co-author uses <$CLAUDE_MAIL>."
+  exit 1
+fi
+
 # Merge, revert and autosquash commits carry the message of work that already has a reference.
 # The first commit of a repo has no story to name yet.
 case "$SUBJECT" in
