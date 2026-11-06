@@ -55,7 +55,7 @@
       }
     }
   },
-  "qaRequiredFromIssue": 50,
+  "qaRequiredFromIssue": null,
   "areaPolicy": {
     "parked": [
       "growth"

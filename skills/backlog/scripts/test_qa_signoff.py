@@ -171,9 +171,16 @@ class CompleteStory(unittest.TestCase):
         for wanted in ("-f i=PVTI_1x", "-f v=OPT_DONE", "-f body=3 files, validate.sh exits 0", "state=closed"):
             self.assertIn(wanted, joined)
         writes = lambda cs: [c for c in cs if "PATCH" in c or "mutation" in c or "-f body" in c]
-        code, text, calls = self.run_it("qa-none.json")
+        code, _, calls = self.run_it("qa-none.json")  # a builder entry and no QA pass: closes on the builder's evidence
+        self.assertEqual(code, 0)
+        self.assertIn("state=closed", "\n".join(calls))
+        code, text, calls = self.run_it("qa-fail.json")  # a QA pass that failed blocks the close
         self.assertEqual(code, 1)
-        self.assertIn("no QA comment", text)
+        self.assertIn("not completed", text)
+        self.assertEqual([], writes(calls))
+        code, text, calls = self.run_it("qa-only.json")  # no builder entry
+        self.assertEqual(code, 1)
+        self.assertIn("not completed", text)
         self.assertEqual([], writes(calls))
         code, text, calls = self.run_it("qa-pass.json", items=None)
         self.assertEqual(code, 1)

@@ -37,7 +37,7 @@ def item_id(cfg, story, runner):
 
 
 def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
-    p = argparse.ArgumentParser(description="Close a story after its QA sign-off passes.")
+    p = argparse.ArgumentParser(description="Close a story on its builder entry, and its QA sign-off when it had a QA pass.")
     p.add_argument("--story", type=int, required=True)
     p.add_argument("--config", required=True)
     p.add_argument("--evidence", required=True, help="the comment: files touched and what shipped")
@@ -51,12 +51,23 @@ def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
     except (OSError, ValueError, KeyError) as exc:
         print(f"complete_story: cannot read the config: {exc}", file=err)
         return 2
-    check_out = io.StringIO()
-    code = qa.main(["--story", str(args.story), "--config", args.config], runner=runner, out=check_out, err=err)
-    if code != 0:
-        out.write(check_out.getvalue())
+    try:
+        data, _ = qa.fetch(repo, args.story, runner)
+    except (RuntimeError, ValueError) as exc:
+        print(f"complete_story: cannot read #{args.story}: {exc}", file=err)
+        return 1
+    roles = {a[1] for a in (qa.parse_action(b) for b in qa.flatten(data)) if a}
+    if "builder" not in roles:
+        print(f"complete_story: #{args.story} has no builder entry; log one with log_action.py --role builder", file=out)
         print(f"complete_story: #{args.story} not completed", file=out)
-        return code
+        return 1
+    if "qa" in roles:  # a story that had a QA pass closes only on its sign-off
+        check_out = io.StringIO()
+        code = qa.main(["--story", str(args.story), "--config", args.config], runner=runner, out=check_out, err=err)
+        if code != 0:
+            out.write(check_out.getvalue())
+            print(f"complete_story: #{args.story} not completed", file=out)
+            return code
     try:
         item = item_id(cfg, args.story, runner)
         if not item:
