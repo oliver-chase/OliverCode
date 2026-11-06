@@ -121,7 +121,7 @@ class TestGate1Secrets(GateHarness):
         # Current credential formats, each built at run time and staged alone.
         modern = {
             "anthropic": "sk-" + "ant-api03-" + "A1b_" * 20,
-            "github fine-grained": "github" + "_pat_" + "11ABC" + "x" * 60,
+            "github fine-grained": "github" + "_pat_" + "11ABC" + "Ab3" * 20,
             "github oauth": "gh" + "o_" + "c" * 36,
             "aws secret with slashes": "aws_secret_access_key = " + "Ab/c+De" * 5 + "Ab/c+",
             "slack webhook": "https://hooks." + "slack.com/services/T0ABC/B0DEF/" + "g" * 24,
@@ -138,7 +138,7 @@ class TestGate1Secrets(GateHarness):
                 git(self.tmp, "rm", "-q", "--cached", "cred.txt")
 
     def test_private_key_header_blocks(self):
-        self.stage("id.txt", "-----REDACTED-----\n")
+        self.stage("id.txt", "-----BEGIN RSA " + "PRIVATE KEY-----\n")
         self.assertBlocked("gate 1")
 
     def test_a_secret_in_a_large_file_blocks(self):
@@ -146,9 +146,15 @@ class TestGate1Secrets(GateHarness):
         self.stage("big.py", ('KEY = "sk-' + "d" * 32 + '"\n') * 2000)
         self.assertBlocked("gate 1")
 
-    def test_env_example_is_exempt(self):
-        # Placeholder-only tracked env templates must not trip the scan.
-        self.stage(".env.example", 'API_KEY="sk-' + "c" * 32 + '"\n')
+    def test_no_path_is_exempt_and_a_placeholder_is_exempt_by_its_value_or_line(self):
+        key = "sk-" + "c" * 32
+        for path in ("tests/t.txt", "src/mock_client.py", ".env.example"):
+            with self.subTest(path):
+                self.stage(path, f'API_KEY="{key}"\n')
+                self.assertBlocked("gate 1")
+                git(self.tmp, "rm", "-q", "--cached", path)
+        self.stage(".env.example", 'API_KEY="sk-' + "EXAMPLE" + "0" * 20 + '"\n'
+                   f'TOKEN="{key}"  # secret-scan: allow\n')
         self.assertAllowed()
 
     def test_ordinary_prose_passes(self):
@@ -365,6 +371,9 @@ class TestGateSkillCitations(GateHarness):
         self.stage("skills/x/SKILL.md", "Fixes the parser, see #99.\n")
         result = self.assertBlocked("gate 6", **self.env)
         self.assertIn("#99 is cited in a staged skill file but resolves to no real issue", result.stdout)
+        # The staged copy is judged, so cleaning the working copy after staging does not hide it.
+        self.write("skills/x/SKILL.md", "Fixes the parser.\n")
+        self.assertBlocked("gate 6", **self.env)
 
     def test_a_citation_to_a_real_issue_passes(self):
         self.stage("skills/x/SKILL.md", "Fixes the parser, see #2.\n")

@@ -101,6 +101,7 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
         if not words or words[0] != "git":
             continue
         keys, i, where = [], 1, here
+        aliases = {}  # `git -c alias.ci='commit -n' ci` runs a commit under another name
         while i < len(words) and words[i].startswith("-"):
             w = words[i]
             nxt = words[i + 1] if i + 1 < len(words) else ""
@@ -109,9 +110,11 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                 i += 2
             elif w in ("-c", "--config-env") and nxt:
                 keys.append(nxt.split("=", 1)[0].lower())
+                _alias(nxt, aliases)
                 i += 2
             elif w.startswith("-c") and len(w) > 2:
                 keys.append(w[2:].split("=", 1)[0].lower())
+                _alias(w[2:], aliases)
                 i += 1
             elif w.startswith("--config-env="):
                 keys.append(w.split("=", 1)[1].split("=", 1)[0].lower())
@@ -132,6 +135,8 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                 restores = value in (".githooks", "./.githooks") and not unsets
                 if (at + 1 < len(rest) or unsets) and not restores:
                     hooks_path_changed = True
+        if i < len(words) and words[i] in aliases:
+            words = words[:i] + aliases[words[i]] + words[i + 1:]
         if i < len(words) and words[i] == "commit":
             if hooks_path_changed:
                 keys = keys + ["core.hookspath"]
@@ -141,6 +146,18 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                     where = _located(where, "--git-dir" if name == "GIT_DIR" else "--work-tree", value)
             found.append((where, keys, exported + env, words[i + 1:]))
     return found
+
+
+def _alias(setting: str, aliases: dict) -> None:
+    """Record `alias.NAME=commit ...` from a `git -c` setting as NAME -> its words."""
+    key, _, value = setting.partition("=")
+    if key.lower().startswith("alias.") and value:
+        try:
+            expansion = shlex.split(value)
+        except ValueError:
+            return
+        if expansion and expansion[0] == "commit":
+            aliases[key[len("alias."):]] = expansion
 
 
 def _overrides_hooks_path(keys: list[str], env: list[str]) -> bool:

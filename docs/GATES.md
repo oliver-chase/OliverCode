@@ -36,7 +36,7 @@ Gate coverage differs by repo. This table is the one home for that, and anywhere
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
 |------|---------------|:---:|:---:|:---:|
-| Secrets | API keys, tokens, JWTs and private keys in staged files | 1 | 1 | 1 |
+| Secrets | API keys, tokens, JWTs and private keys in any staged file. A placeholder passes by its value, such as `EXAMPLE` or a run of `x`, or on a line that carries `secret-scan: allow` | 1 | 1 | 1 |
 | Icons and emoji | Unicode emoji and icon characters | 2 | 2 | 2 |
 | PII | Host paths, email addresses and personal data in staged code and config. Markdown, tests, mocks and hook sources are skipped | 3 | 3 | — |
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential, checked through `gh api user -i` and not the remote URL scheme | 4 | 4 | — |
@@ -57,9 +57,6 @@ Each gate stays only while it names a defect it blocks and a test that triggers 
 |------|---------|------------------|-----------------------|
 | Icons and emoji | Stays | An emoji or icon character committed into a file, which `docs/RULES.md` ("No icons") forbids | `TestGate2Emoji.test_emoji_blocks` in `tests/test_precommit_gates.py` |
 | Archived content | Stays | A superseded file parked under an archive-named folder or beside its replacement as `-old`, so the reader cannot tell which copy is live. Its first run flagged more than 30 live files, which is why the suffix list leaves out `copy` | `TestGateArchivedContent` in `tests/test_precommit_gates.py` stages an `Archive/` path and an `-old` file and expects a block |
-| Planning doc governance | Removed | None it still prevents. It ran only where the planning-doc checker script exists, and only two repos carry that file (`gh issue view 111`). The template no longer ships the checker. The file-based backlog it governed moved to GitHub Projects | None. The tests went with the gate |
-
-The checker and its contract file still ship in the bootstrap manifest until story #111 confirms with the two repos that carry them, so a repo that uses them keeps working.
 
 Which hook a repo receives:
 
@@ -99,6 +96,10 @@ One check serves every repo: `scripts/lib/duplication_check.py` here, shipped by
 A repo adds its own blocking checks in an executable `pre-commit.local` file beside the hook in `.githooks/` (`GATE-LOCAL-1` in `docs/DECISIONS.md`). `sync-hooks` never writes or overwrites that file. The private hook runs it after its numbered gates with the staged file list on stdin, and a non-zero exit blocks the commit.
 
 Every variant's archived-content gate also asks this file about a path it is about to block, by running `pre-commit.local archive-exempt <path>` with empty stdin. Exit status 10 exempts the path and any other status leaves the block in place. A repo declares its permanent archive records in its own `pre-commit.local`.
+
+### Commit guard limits
+
+Inside Claude Code, `scripts/hooks/commit_guard.py` refuses `--no-verify` and `-n` in any form git accepts, a `core.hooksPath` override, a commit wrapped in `bash -c` or `eval`, and a `git -c alias.NAME=commit ...` alias that adds a hook skip. It cannot see a commit run through a shell function, a variable, command substitution, a shell alias, a configured git alias or a pipe into `sh`, where the pre-push secret scan and CI still apply.
 
 ## Commit-message gate
 
