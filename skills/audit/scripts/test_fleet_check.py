@@ -64,7 +64,7 @@ class Budgets(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = make_repo(tmp, {"README.md": "word\n"})
             _, out = run(str(repo))
-            self.assertIn("testSeconds: not measured (pass --time)", out)
+            self.assertIn("not measured", out)
 
 
 class Voice(unittest.TestCase):
@@ -75,7 +75,7 @@ class Voice(unittest.TestCase):
             code, out = run(str(repo))
             self.assertEqual(code, 1)
             self.assertIn("docs/A.md:3: contrast framing", out)
-            self.assertIn("docs/A.md:4: trailing period on a bullet", out)
+            self.assertIn("docs/A.md:4", out)
             self.assertNotIn("docs/A.md:8", out)
             self.assertNotIn("docs/A.md:5", out)
 

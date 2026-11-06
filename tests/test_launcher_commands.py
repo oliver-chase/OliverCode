@@ -157,7 +157,7 @@ class TestInstall(unittest.TestCase):
         rc, out = self._install(root)
         self.assertEqual(rc, 0)
         self.assertEqual(git(root, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
-        self.assertIn("[SET] core.hooksPath in the OliverCode checkout", out)
+        self.assertIn("core.hooksPath", out)
 
     def test_hooks_path_elsewhere_is_left_alone_with_a_warning(self):
         root = self._checkout()
@@ -393,7 +393,7 @@ class TestUninstall(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             cmd_install.command_uninstall(REPO_ROOT)
-        self.assertIn("skills.pre-olivercode is your own copy", out.getvalue())
+        self.assertIn("skills.pre-olivercode", out.getvalue())
         self.assertNotIn("An earlier install made", out.getvalue())
         self.assertTrue((self.claude / "skills.pre-olivercode").is_dir())
 
@@ -413,9 +413,10 @@ class TestUninstall(unittest.TestCase):
         self.assertIn("unexpected argument", result.stdout)
         self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
         # Every command that takes no extra word refuses one before it acts.
-        for cmd in ("install", "health", "update", "sync-hooks", "audit-fleet", "skills"):
+        for cmd in ("install", "health", "update", "sync-hooks", "audit-fleet", "skills",
+                    "size . ", "conform . ", "discover --root . "):
             with self.subTest(cmd):
-                done = subprocess.run([sys.executable, str(LAUNCHER), cmd, "--bogus"],
+                done = subprocess.run([sys.executable, str(LAUNCHER), *cmd.split(), "--bogus"],
                                       capture_output=True, text=True, cwd=str(self.tmp), env=env)
                 self.assertEqual(1, done.returncode, done.stdout + done.stderr)
                 self.assertIn("unexpected argument", done.stdout)

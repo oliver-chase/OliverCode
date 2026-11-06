@@ -54,84 +54,61 @@ class TestCommitGuard(RepoCase):
         self.gates(point_git_at_them=True)
         self.assertEqual(guard.reason('git add . && git commit -m "x"', self.repo), "")
 
-    def test_refuses_an_abbreviated_no_verify(self):
-        # git accepts any unambiguous prefix of a long option, so --no-verif skips the hooks too.
-        self.gates(point_git_at_them=True)
-        self.assertIn("overrides core.hooksPath", guard.reason("git -c core.hooksPath=/dev/null commit -m x", self.repo))
-        for cmd in ("git commit --no-verify -m x", "git commit -n -m x", "git commit -nm x", "git commit -anm x",
-                    "git commit --no-verif -m x", "git commit --no-ver -m x", "git commit --no-v -m x"):
-            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
-        self.assertEqual(guard.reason("git commit --no-edit -m x", self.repo), "")
-        # git rejects a value on --no-verify, so that commit never runs and is not refused.
-        self.assertEqual(guard.reason("git commit --no-verify=1 -m x", self.repo), "")
-        # An alias set through git -c that expands to a commit with a hook skip is refused.
-        for cmd in ("git -c alias.ci='commit -n' ci -m x", 'git -c "alias.ci=commit --no-verify" ci -m x',
-                    "git -c alias.ci='commit -m y' ci -n", "git -c alias.CI='commit -n' ci -m x",
-                    "git -c Alias.CI='commit -n' ci -m x", "git -c alias.ci='!git commit -n' CI -m x",
-                    "git -c alias.ci='!f() { git commit -n -m x; }; f' ci",
-                    "git -c alias.a=ci -c alias.ci='commit -n' a -m x",
-                    "git -c alias.ci='!git ci2' -c alias.ci2='commit -n' ci -m x",
-                    "git " + " ".join(f"-c alias.a{k}=a{k + 1}" for k in range(8)) + " -c alias.a8='commit -n' a0 -m x",
-                    "git " + " ".join(f"-c alias.a{k}='!git a{k + 1}'" for k in range(8)) + " -c alias.a8='commit -n' a0",
-                    "git -c alias.ci='!f() { git commit \"$@\"; }; f' ci -n -m x",
-                    "git -c alias.ci='!f() { git $1 -n -m x; }; f' ci commit",
-                    "git -c alias.ci='!f() { git commit ${1} -m x; }; f' ci -n",
-                    "git -c alias.ci='!f() { git commit \"${@}\"; }; f' ci -n -m x",
-                    "git -c alias.ci='!git -c alias.ci=\"commit -n\" ci' ci -m x",
-                    "V='commit -n' git --config-env=alias.ci=V ci -m x"):
-            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
-        self.assertEqual(guard.reason("git -c alias.ci=commit ci -m x", self.repo), "")
-        self.assertEqual(guard.reason("git -c alias.a=b -c alias.b=a a", self.repo), "")  # a loop git refuses
-        self.assertIn("overrides core.hooksPath",
-                      guard.reason("git -c alias.ci='-c core.hooksPath=/dev/null commit' ci -m x", self.repo))
+    # Every way a session has tried to skip or redirect the gates, each refused in a repo whose gates run.
+    SKIPS = (
+        "git commit --no-verify -m x", "git commit -n -m x", "git commit -nm x", "git commit -anm x",
+        "git commit --no-verif -m x", "git commit --no-ver -m x", "git commit --no-v -m x",  # any prefix git accepts
+        'git commit -m "a; b" --no-verify', "git commit -m 'x | y' -n",
+        "git commit --no-verify -m \"$(cat <<'EOF'\nsubject; body | more && done\nEOF\n)\"",
+        "git add .\ngit commit --no-verify -m x", "(git commit --no-verify -m x)", "env git commit --no-verify -m x",
+        "true & git commit --no-verify -m x", "command git commit -n -m x", "FOO=1 git commit --no-verify -m x",
+        "A=1 B=2 git commit -n -m x", "git add -A; git commit --no-verify -m x", "git add -A ;git commit -n -m x",
+        "echo msg | git commit --no-verify -F -", "true || git commit -n -m x",
+        'bash -c "git commit --no-verify -m x"', "sh -c 'git commit -n -m x'", 'eval "git commit --no-verify -m x"',
+        "git --namespace ns commit -n -m x",
+        "git -c alias.ci='commit -n' ci -m x", 'git -c "alias.ci=commit --no-verify" ci -m x',
+        "git -c alias.ci='commit -m y' ci -n", "git -c alias.CI='commit -n' ci -m x",
+        "git -c Alias.CI='commit -n' ci -m x", "git -c alias.ci='!git commit -n' CI -m x",
+        "git -c alias.ci='!f() { git commit -n -m x; }; f' ci", "git -c alias.a=ci -c alias.ci='commit -n' a -m x",
+        "git -c alias.ci='!git ci2' -c alias.ci2='commit -n' ci -m x",
+        "git " + " ".join(f"-c alias.a{k}=a{k + 1}" for k in range(8)) + " -c alias.a8='commit -n' a0 -m x",
+        "git " + " ".join(f"-c alias.a{k}='!git a{k + 1}'" for k in range(8)) + " -c alias.a8='commit -n' a0",
+        "git -c alias.ci='!f() { git commit \"$@\"; }; f' ci -n -m x", "git -c alias.ci='!f() { git $1 -n -m x; }; f' ci commit",
+        "git -c alias.ci='!f() { git commit ${1} -m x; }; f' ci -n",
+        "git -c alias.ci='!f() { git commit \"${@}\"; }; f' ci -n -m x",
+        "git -c alias.ci='!git -c alias.ci=\"commit -n\" ci' ci -m x", "V='commit -n' git --config-env=alias.ci=V ci -m x",
+    )
+    OVERRIDES = (
+        "git -c core.hooksPath=/dev/null commit -m x", "git -ccore.hooksPath=/dev/null commit -m x",
+        "git --config-env=core.hooksPath=X commit -m x",
+        "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x",
+        "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null; git commit -m x",
+        "GIT_CONFIG_PARAMETERS='core.hookspath=/dev/null' git commit -m x",
+        "git config core.hooksPath /dev/null && git commit -m x", "git config --local core.hookspath /dev/null; git commit -m x",
+        "git config --unset core.hooksPath && git commit -m x",
+        "git -c alias.ci='-c core.hooksPath=/dev/null commit' ci -m x",
+    )
+    ALLOWED = (
+        "git commit --no-edit -m x", "git commit --no-verify=1 -m x",  # git rejects a value on --no-verify
+        "git -c alias.ci=commit ci -m x", "git -c alias.a=b -c alias.b=a a",  # a loop git refuses
+        "git config core.hooksPath .githooks && git commit -m x",  # the fix the refusal recommends
+        "git config --local core.hooksPath ./.githooks; git commit -m x", "git config core.hooksPath && git commit -m x",
+        "git commit -m -n", "git commit -mnote", "git commit -F notes.txt", 'echo "git commit -n" > notes.txt',
+        "git commit -uno -m x", "git commit -Snewkey -m x", "git commit -auno -m x", 'bash -c "git commit -m x"',
+    )
 
-    def test_allows_setting_hooks_path_back_to_the_repos_gates_in_the_same_line(self):
-        # The refusal message itself tells the session to run this command, so the combined form must pass.
+    def test_every_skip_and_override_is_refused_and_ordinary_commits_pass(self):
         self.gates(point_git_at_them=True)
-        for cmd in ("git config core.hooksPath .githooks && git commit -m x",
-                    "git config --local core.hooksPath ./.githooks; git commit -m x"):
-            self.assertEqual(guard.reason(cmd, self.repo), "", cmd)
-        self.assertIn("overrides core.hooksPath", guard.reason("git config core.hooksPath /dev/null && git commit -m x", self.repo))
-        self.assertIn("overrides core.hooksPath", guard.reason("git config --unset core.hooksPath && git commit -m x", self.repo))
-
-    def test_refuses_a_commit_after_the_same_line_changes_hooks_path(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ("git config core.hooksPath /dev/null && git commit -m x",
-                    "git config --local core.hookspath /dev/null; git commit -m x",
-                    "git config --unset core.hooksPath && git commit -m x",
-                    "GIT_CONFIG_PARAMETERS='core.hookspath=/dev/null' git commit -m x"):
-            self.assertIn("overrides core.hooksPath", guard.reason(cmd, self.repo), cmd)
-        self.assertEqual(guard.reason("git config core.hooksPath && git commit -m x", self.repo), "")
-
-    def test_separators_inside_a_message_do_not_hide_the_commit(self):
-        self.gates(point_git_at_them=True)
-        heredoc = "git commit --no-verify -m \"$(cat <<'EOF'\nsubject; body | more && done\nEOF\n)\""
-        for cmd in ('git commit -m "a; b" --no-verify', "git commit -m 'x | y' -n", heredoc):
-            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
-
-    def test_newlines_subshells_and_wrappers_do_not_hide_the_commit(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ("git add .\ngit commit --no-verify -m x", "(git commit --no-verify -m x)",
-                    "env git commit --no-verify -m x", "true & git commit --no-verify -m x",
-                    "command git commit -n -m x"):
-            self.assertIn("--no-verify", guard.reason(cmd, self.repo), repr(cmd))
-
-    def test_a_leading_variable_assignment_does_not_hide_the_commit(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ("FOO=1 git commit --no-verify -m x", "A=1 B=2 git commit -n -m x"):
-            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
-
-    def test_a_semicolon_or_pipe_before_the_commit_does_not_hide_it(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ("git add -A; git commit --no-verify -m x", "git add -A ;git commit -n -m x",
-                    "echo msg | git commit --no-verify -F -", "true || git commit -n -m x"):
-            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
-
-    def test_every_way_of_overriding_core_hookspath_is_refused(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ("git -ccore.hooksPath=/dev/null commit -m x", "git --config-env=core.hooksPath=X commit -m x",
-                    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x"):
-            self.assertIn("overrides core.hooksPath", guard.reason(cmd, self.repo), cmd)
+        for cmd in self.SKIPS:
+            self.assertIn("skips the repo's commit gates", guard.reason(cmd, self.repo), repr(cmd))
+        for cmd in self.OVERRIDES:
+            self.assertIn("overrides core.hooksPath", guard.reason(cmd, self.repo), repr(cmd))
+        for cmd in self.ALLOWED:
+            self.assertEqual(guard.reason(cmd, self.repo), "", repr(cmd))
+        for cmd in (f'git --git-dir "{self.repo}/.git" commit -n -m x', f'git --work-tree "{self.repo}" commit -n -m x',
+                    f'git --git-dir="{self.repo}/.git" commit -n -m x', f'git --work-tree="{self.repo}" commit -n -m x',
+                    f'GIT_DIR="{self.repo}/.git" git commit -n -m x', f'export GIT_DIR="{self.repo}/.git"; git commit -n -m x'):
+            self.assertIn("--no-verify", guard.reason(cmd, self.tmp), cmd)  # the guard follows the command to the repo
 
     def test_a_message_with_separators_still_reaches_the_unset_hooks_check(self):
         self.gates(point_git_at_them=False)
@@ -148,42 +125,8 @@ class TestCommitGuard(RepoCase):
         git(self.repo, "config", "core.hooksPath", ".git/hooks")
         self.assertIn(".githooks", guard.reason('git commit -m "x"', self.repo))
 
-    def test_a_message_or_value_that_looks_like_n_is_not_a_skip(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ('git commit -m -n', 'git commit -mnote', 'git commit -F notes.txt', 'echo "git commit -n" > notes.txt',
-                    'git commit -uno -m x', 'git commit -Snewkey -m x', 'git commit -auno -m x'):
-            self.assertEqual(guard.reason(cmd, self.repo), "", cmd)
-
-    def test_a_skip_wrapped_in_a_shell_is_refused(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ('bash -c "git commit --no-verify -m x"', "sh -c 'git commit -n -m x'",
-                    'eval "git commit --no-verify -m x"'):
-            self.assertIn("skips the repo's commit gates", guard.reason(cmd, self.repo), cmd)
-
-    def test_a_wrapped_commit_without_a_skip_is_allowed(self):
-        self.gates(point_git_at_them=True)
-        self.assertEqual(guard.reason('bash -c "git commit -m x"', self.repo), "")
-
     def test_skipping_hooks_in_a_repo_with_no_gates_skips_nothing_and_is_allowed(self):
         self.assertEqual(guard.reason("git commit --no-verify -m x", self.repo), "")
-
-    def test_a_global_option_value_does_not_hide_the_commit(self):
-        self.gates(point_git_at_them=True)
-        self.assertIn("--no-verify", guard.reason(f'git --git-dir "{self.repo}/.git" commit -n -m x', self.tmp))
-        self.assertIn("--no-verify", guard.reason(f'git --work-tree "{self.repo}" commit -n -m x', self.tmp))
-        self.assertIn("--no-verify", guard.reason("git --namespace ns commit -n -m x", self.repo))
-        self.assertIn("--no-verify", guard.reason(f'git --git-dir="{self.repo}/.git" commit -n -m x', self.tmp))
-        self.assertIn("--no-verify", guard.reason(f'git --work-tree="{self.repo}" commit -n -m x', self.tmp))
-
-    def test_git_dir_in_the_environment_points_the_guard_at_that_repo(self):
-        self.gates(point_git_at_them=True)
-        self.assertIn("--no-verify", guard.reason(f'GIT_DIR="{self.repo}/.git" git commit -n -m x', self.tmp))
-        self.assertIn("--no-verify", guard.reason(f'export GIT_DIR="{self.repo}/.git"; git commit -n -m x', self.tmp))
-
-    def test_an_exported_override_reaches_a_later_commit(self):
-        self.gates(point_git_at_them=True)
-        cmd = "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null; git commit -m x"
-        self.assertIn("overrides core.hooksPath", guard.reason(cmd, self.repo))
 
     def test_the_hook_prints_a_deny_decision(self):
         self.gates(point_git_at_them=False)

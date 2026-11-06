@@ -181,7 +181,7 @@ class SecretGateEveryVariant:
 
     def test_a_clean_file_passes_the_secret_gate(self):
         self.stage("notes.txt", "Plain notes.\n")
-        self.assertIn("Gate 1", self.assertAllowed().stdout)
+        self.assertIn("Secret scan", self.assertAllowed().stdout)
 
 
 class StagedContent:

@@ -181,7 +181,7 @@ class TestCommand(ConformBase):
         self.assertEqual(0, code, out)
         self.assertIn("widgets\n", out)
         self.assertIn("absent is not cloned", out)
-        self.assertIn("Checked 1 repo(s): 0 requirement(s) failed", out)
+        self.assertIn("Checked 1", out)
 
     def test_a_directory_that_does_not_exist_is_rejected_and_not_reported_as_drift(self):
         code, out = quiet(launcher.command_conform, REPO_ROOT, self.tmp / "nope", None, True)

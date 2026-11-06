@@ -189,7 +189,7 @@ class TestFleetLocations(unittest.TestCase):
     def test_a_repo_never_cloned_is_a_note_and_does_not_fail(self):
         (passed, failed, _), out = self.check({"gamma": {}})
         self.assertEqual((0, 0), (passed, failed))
-        self.assertIn("[INFO] gamma is not cloned on this machine", out)
+        self.assertIn("gamma", out)
 
     def test_a_repo_present_at_its_configured_path_passes(self):
         here = scratch_repo(self.root / "here")

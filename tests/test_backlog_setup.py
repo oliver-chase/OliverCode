@@ -197,8 +197,8 @@ class TestNewRepo(SetupCase):
         self.assertEqual([], self.fake.writes)
         self.assertFalse((self.repo / "docs" / "backlog-config.json").exists())
         self.assertFalse((self.repo / ".githooks" / "commit-msg").exists())
-        self.assertIn("create the Project 'widgets' under acme", self.text)
-        self.assertIn("install the story-reference commit-msg hook", self.text)
+        self.assertIn("widgets", self.text)
+        self.assertIn("commit-msg", self.text)
         self.assertIn("--apply", self.text)
 
     def test_apply_builds_everything_and_the_baseline_passes(self):

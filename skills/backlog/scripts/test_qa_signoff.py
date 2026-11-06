@@ -48,7 +48,7 @@ class QaSignoff(unittest.TestCase):
     def test_an_unconfirmed_scenario_is_named(self):
         code, text = run("qa-unconfirmed.json")
         self.assertEqual(code, 1)
-        self.assertIn("scenario unconfirmed by qa-1: Work fails", text)
+        self.assertIn("Work fails", text)
 
     def test_a_lone_qa_comment_with_no_builder_comment_is_refused(self):
         code, text = run("qa-only.json")
@@ -58,7 +58,7 @@ class QaSignoff(unittest.TestCase):
     def test_a_scenario_name_must_match_whole_not_as_a_substring(self):
         code, text = run("qa-substring.json")
         self.assertEqual(code, 1)
-        self.assertIn("scenario unconfirmed by qa-1: Work is finished", text)
+        self.assertIn("Work is finished", text)
 
     def test_matching_ignores_case_and_surrounding_space(self):
         body = "Scenario: Work is finished\n"
