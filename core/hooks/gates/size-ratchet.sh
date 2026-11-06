@@ -42,6 +42,12 @@ else
       SIZE_CAP_PCT="$(size_field_of raiseCapPercent "$SIZE_HEAD_JSON")"
       SIZE_CAP=$(( SIZE_HEAD_BASE * ${SIZE_CAP_PCT:-2} / 100 ))
       echo "  This commit raises the baseline by $(( SIZE_BASE - SIZE_HEAD_BASE )) lines (cap $SIZE_CAP without an L or XL story)."
+      # A raised baseline is the counted total, never a hand-picked figure.
+      if [ "$SIZE_BASE" -ne "$SIZE_TOTAL" ]; then
+        echo "  BLOCKED: the raised baseline is $SIZE_BASE, but the staged tree counts $SIZE_TOTAL lines."
+        echo "  Set \"lines\" to the counted total $SIZE_TOTAL, which bash $SIZE_COUNTER --total --staged prints."
+        exit 1
+      fi
     fi
   fi
   if [ $(( (SIZE_TOTAL - SIZE_BASE) * 100 )) -gt $(( SIZE_BASE * SIZE_PCT )) ]; then

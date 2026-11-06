@@ -91,7 +91,11 @@ class RatchetGate(RatchetSetup):
     def test_raising_the_baseline_in_the_same_commit_passes(self):
         self.stage("big.txt", "x\n" * 100)
         self.assertBlocked("size ratchet")
-        self.stage(BASELINE, baseline_text(total_of(self.tmp, "--staged")))
+        total = total_of(self.tmp, "--staged")
+        # A raise to a number the files do not count to, such as a round figure, is refused.
+        self.stage(BASELINE, baseline_text(total + 37))
+        self.assertIn("counted total", self.assertBlocked("size ratchet").stdout)
+        self.stage(BASELINE, baseline_text(total))
         self.assertIn("is trusted", self.assertAllowed().stdout)
 
     def test_a_raise_inside_the_cap_passes_and_is_printed(self):

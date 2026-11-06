@@ -76,7 +76,7 @@ The private variant drops the PII gate on purpose, because a private repo holds 
 
 * `olivercode size` prints the total, the baseline and the headroom
 * `olivercode size --lower` rewrites `lines` to the current total after a cleanup. It sets a `null` baseline and accepts an equal total, and exits non-zero without writing when the total is higher
-* A story that must grow the repo raises `lines` by editing the file in the same commit, with the story number in the message
+* A story that must grow the repo raises `lines` to the counted total in the same commit, with the story number in the message. The gate refuses any other figure
 * A repo that keeps its own size_baseline script under scripts gets that command named in the block message. The script counts the files and writes `lines`, so a merge of two branches reruns it and never picks between two hand-edited numbers. The gate and the raise cap read the file the same way
 
 A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how far one commit may raise `lines` above the committed value. The hook reads the cap from the committed file, so the same commit cannot change it, and merge, revert and fixup messages get the same check. The size gate prints the raise and passes it, because a pre-commit gate cannot read the commit message. The commit-msg hook then refuses a raise over the cap unless the message carries a line `Size: L` or `Size: XL`, copied from the Size field of the story that needs the growth. A story of size M or smaller splits its work so each commit stays inside the cap, or lowers the total elsewhere in the same commit. The reviewer confirms the raise belongs to the story named. A repo that opts out of the commit-msg hook loses this check with it.
