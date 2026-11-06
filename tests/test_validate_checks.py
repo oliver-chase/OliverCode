@@ -61,3 +61,35 @@ class CheckRepo(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CheckBudget(unittest.TestCase):
+    """`validate.sh --check-budget`: docs/BUDGET.json fails a repo that measures over it."""
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-budget-"))
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        scratch_repo(self.repo)
+
+    def add(self, rel, text):
+        path = self.repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        git(self.repo, "add", rel)
+
+    def run_check(self):
+        return subprocess.run(["bash", str(VALIDATE), "--check-budget", str(self.repo)],
+                              capture_output=True, text=True, env=git_env())
+
+    def test_a_repo_over_its_doc_word_budget_fails(self):
+        self.add("docs/BUDGET.json", '{"testCount": 5, "docWords": 3, "skillWords": 50}')
+        self.add("README.md", "one two three four five\n")
+        result = self.run_check()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("docWords", result.stdout)
+
+    def test_a_repo_within_budget_or_with_no_budget_file_passes(self):
+        self.add("README.md", "one two\n")
+        self.assertEqual(0, self.run_check().returncode)
+        self.add("docs/BUDGET.json", '{"testCount": 5, "docWords": 50, "skillWords": 50}')
+        self.assertEqual(0, self.run_check().returncode)

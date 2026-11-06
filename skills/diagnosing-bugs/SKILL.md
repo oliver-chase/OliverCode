@@ -7,13 +7,13 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
-When exploring the codebase, read `CONTEXT.md` (if it exists) to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
+Read `CONTEXT.md` if it exists, and check the ADRs in the area you're touching.
 
 ## Phase 1 — Build a feedback loop
 
-**This is the skill.** Everything else is mechanical. If you have a **tight** pass/fail signal for the bug — one that goes red on _this_ bug — you will find the cause. Bisection, hypothesis-testing, and instrumentation all just consume it. If you don't have one, no amount of staring at code will save you.
+**This is the skill.** A **tight** pass/fail signal that goes red on _this_ bug finds the cause, and bisection, hypothesis-testing and instrumentation all consume it. Without one, staring at code will not save you.
 
-Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give up.**
+Spend most of the effort here.
 
 ### Ways to construct one — try them in roughly this order
 
@@ -28,21 +28,17 @@ Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give
 9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs
 10. **HITL bash script.** Last resort. If a human must click, drive _them_ with a structured script so the loop is still structured
 
-Build the right feedback loop, and the bug is 90% fixed.
-
 ### Tighten the loop
 
-Treat the loop as a product. Once you have _a_ loop, **tighten** it:
+Once you have _a_ loop, **tighten** it:
 
 - Can I make it faster? (Cache setup, skip unrelated init, narrow the test scope.)
 - Can I make the signal sharper? (Assert on the specific symptom, not "didn't crash".)
 - Can I make it more deterministic? (Pin time, seed RNG, isolate filesystem, freeze network.)
 
-A 30-second flaky loop is barely better than no loop. A 2-second deterministic one is tight — a debugging superpower.
-
 ### Non-deterministic bugs
 
-The goal is not a clean repro but a **higher reproduction rate**. Loop the trigger 100×, parallelise, add stress, narrow timing windows, inject sleeps. A 50%-flake bug is debuggable. 1% is not — keep raising the rate until it's debuggable.
+Raise the **reproduction rate**: loop the trigger 100×, parallelise, add stress, narrow timing windows, inject sleeps. A 50% flake is debuggable and a 1% flake is not.
 
 ### When you genuinely cannot build a loop
 
@@ -73,11 +69,9 @@ Confirm:
 
 Once it's red, shrink the repro to the **smallest scenario that still goes red**. Cut inputs, callers, config, data, and steps **one at a time** — keep only what's load-bearing.
 
-Do not proceed until you have reproduced **and** minimised.
-
 ## Phase 3 — Hypothesise
 
-Check the obvious shortcut first: if Phase 1/2 shows the code path itself is correct, the data source (file, Sheet, API, mailbox) is wrong — fix the data. Don't spend a hypothesis round on code that already checks out.
+Check the obvious shortcut first: if Phase 1/2 shows the code path is correct, the data source (file, Sheet, API, mailbox) is wrong, so fix the data.
 
 Generate **3–5 ranked hypotheses** before testing any of them.
 
@@ -105,9 +99,7 @@ Tool preference:
 
 Write the regression test **before the fix** — but only if there is a **correct seam** for it.
 
-A correct seam is one where the test exercises the **real bug pattern** as it occurs at the call site.
-
-**If no correct seam exists, that itself is the finding.** Note it. The codebase architecture is preventing the bug from being locked down.
+A correct seam is one where the test exercises the **real bug pattern** as it occurs at the call site. **If none exists, that is the finding:** note that the architecture prevents locking the bug down.
 
 If a correct seam exists:
 

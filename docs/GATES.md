@@ -17,13 +17,14 @@ Beyond the commit hook, `validate.sh` fails closed on these classes, each of whi
 - **Internal reference integrity** (`scripts/link-check.sh`): markdown links and backtick repo paths
 - **Documentation duplication** (`scripts/lib/duplication_check.py`, `GATE-DUPLICATION-1` in `docs/DECISIONS.md`)
 - **Unfalsifiable checks**, meaning a gate or script that cannot fail whatever the input (`scripts/lib/falsifiability_check.py`, `GATE-FALSIFIABILITY-1` in `docs/DECISIONS.md`)
+- **Budget** (`docs/BUDGET.json`): `testCount`, `docWords` and `skillWords` are measured by `skills/audit/scripts/fleet_check.py` and fail when over
 - **Hook drift**: OliverCode's hook, the public template and the private template run the same gates, each gate's body lives once in `core/hooks/gates/`, and `scripts/build-hooks.py` assembles the three hooks from one ordered gate list. `validate.sh` fails when a committed hook differs from the build
 
-`validate.sh` also reports fleet hook state on every run, through `olivercode conform --offline`, which reads local files and makes no network call. That report is advisory and never fatal, because hook enforcement fails open: a repo with an unset or broken `core.hooksPath` is silently ungoverned. Surfacing it where agents already look replaced a weekly log nobody read. A repo that must diverge from the template declares `hookVariant` in its profile, which `shared/repo-profiles.json` documents.
+`validate.sh` also reports fleet hook state on every run, through `olivercode conform --offline`, which reads local files and makes no network call. That report is advisory and never fatal, because hook enforcement fails open: a repo with an unset or broken `core.hooksPath` is silently ungoverned. A repo that must diverge from the template declares `hookVariant` in its profile, which `shared/repo-profiles.json` documents.
 
-OliverCode ships `.github/workflows/framework-ci.yml`, which runs health, `validate.sh` and the install rehearsal as gating steps on push and pull request. The workflow is paused on the origin repo while GitHub Actions billing is blocked. That is policy and not drift, and the same pause applies to managed repos. Do not re-enable it as a fix. Enable it in your own fork, where your billing applies.
+OliverCode ships `.github/workflows/framework-ci.yml`, which runs health, `validate.sh` and the install rehearsal as gating steps on push and pull request. The workflow is paused on the origin repo and on managed repos while GitHub Actions billing is blocked. Do not re-enable it as a fix. Enable it in your own fork, where your billing applies.
 
-While CI is paused the local commands are the enforcement. `bash scripts/validate.sh` is the one entry point and also runs the bloat and code quality checks (`CI-STRICT-1` in `docs/DECISIONS.md`). `bash scripts/qa/rehearse-install.sh` rehearses the install in sandboxes, and `validate.sh --rehearse` runs it. Nothing runs the rehearsal automatically, so it is advisory. A governance CI workflow template for downstream repos exists at `core/templates/project/.github/workflows/olivercode-governance.yml`.
+While CI is paused the local commands are the enforcement. `bash scripts/validate.sh` also runs the bloat and code quality checks (`CI-STRICT-1` in `docs/DECISIONS.md`). `validate.sh --rehearse` rehearses the install in sandboxes (`scripts/qa/rehearse-install.sh`), and nothing runs it automatically, so it is advisory. A governance CI workflow template for downstream repos exists at `core/templates/project/.github/workflows/olivercode-governance.yml`.
 
 ## Commit gates
 
@@ -68,9 +69,9 @@ Which hook a repo receives:
 | `core/templates/project/pre-commit-private` | Every repo in `privateRepos` in `olivercode.local.json`, plus any fleet repo whose profile sets `"private": true` | Each repo declares itself, so `sync-hooks` maintains it like any other target |
 | A repo's own hook | That repo | The profile declares `hookVariant: "<reason>"`, which makes `sync-hooks` skip it and `conform` pass it with a note |
 
-The private variant drops the PII gate on purpose. A private repo holds personal data by design, and a gate that blocks host paths and email addresses would block every legitimate commit in it. It is deployed as a file literally named `pre-commit`, because git invokes that name and no other. `sync-hooks` writes no second copy beside it and deletes a leftover `pre-commit-private` from an earlier sync.
+The private variant drops the PII gate on purpose, because a private repo holds personal data by design and the gate would block every legitimate commit. It is deployed as a file named `pre-commit`, the only name git invokes. `sync-hooks` writes no second copy and deletes a leftover `pre-commit-private`.
 
-`hookVariant` carries a real cost, set out with the incident that proved it in `_hookVariant_note` in `shared/repo-profiles.json`. `scripts/build-hooks.py` generates OliverCode's own hook and the two templates and never a variant repo's hook. When a third repo declares a variant, give `build-hooks.py` an entry for each variant repo, using the template's gate list plus that repo's own gates, so its hook is generated too.
+`hookVariant` has a real cost, set out in `_hookVariant_note` in `shared/repo-profiles.json`. `scripts/build-hooks.py` generates OliverCode's own hook and the two templates, never a variant repo's. When a third repo declares a variant, give `build-hooks.py` an entry for it, using the template's gate list plus that repo's own gates.
 
 ### Size ratchet
 
@@ -79,7 +80,7 @@ The private variant drops the PII gate on purpose. A private repo holds personal
 * `olivercode size` prints the total, the baseline and the headroom
 * `olivercode size --lower` rewrites `lines` to the current total after a cleanup. It sets a `null` baseline and accepts an equal total, and exits non-zero without writing when the total is higher
 * A story that must grow the repo raises `lines` by editing the file in the same commit, with the story number in the message
-* A repo that keeps its own size_baseline script under scripts gets that command named in the block message. The script counts the files and writes `lines`, so a merge of two branches reruns it instead of choosing between two hand-edited numbers. The gate and the raise cap read the file the same way
+* A repo that keeps its own size_baseline script under scripts gets that command named in the block message. The script counts the files and writes `lines`, so a merge of two branches reruns it and never picks between two hand-edited numbers. The gate and the raise cap read the file the same way
 
 A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how far one commit may raise `lines` above the committed value. The hook reads the cap from the committed file, so the same commit cannot change it, and merge, revert and fixup messages get the same check. The size gate prints the raise and passes it, because a pre-commit gate cannot read the commit message. The commit-msg hook then refuses a raise over the cap unless the message carries a line `Size: L` or `Size: XL`, copied from the Size field of the story that needs the growth. A story of size M or smaller splits its work so each commit stays inside the cap, or lowers the total elsewhere in the same commit. The hook checks the declaration and nothing checks that the raise belongs to the story named, so the reviewer confirms that when the Size line appears. A repo that opts out of the commit-msg hook loses this check with it.
 
@@ -97,7 +98,7 @@ One check serves every repo: `scripts/lib/duplication_check.py` here, shipped by
 
 A repo adds its own blocking checks in an executable `pre-commit.local` file beside the hook in `.githooks/` (`GATE-LOCAL-1` in `docs/DECISIONS.md`). `sync-hooks` never writes or overwrites that file. The private hook runs it after its numbered gates with the staged file list on stdin, and a non-zero exit blocks the commit.
 
-Every variant's archived-content gate also asks this file about a path it is about to block. It runs `pre-commit.local archive-exempt <path>` with empty stdin, and the exit status 10 exempts that path. Any other status leaves the block in place, so a local hook that does not know the argument cannot exempt anything by accident. A repo with permanent records in an archive-named folder, such as a weekly-task archive, declares them in its own `pre-commit.local`, and the framework carries no repo-specific exemption.
+Every variant's archived-content gate also asks this file about a path it is about to block, by running `pre-commit.local archive-exempt <path>` with empty stdin. Exit status 10 exempts the path and any other status leaves the block in place. A repo declares its permanent archive records in its own `pre-commit.local`.
 
 ## Commit-message gate
 
@@ -110,7 +111,7 @@ Git shows a commit message only to the `commit-msg` hook, so these checks are a 
 
 A repo opts out only when its owner creates a file named `commit-msg.optout` in the repo's `.githooks` folder. The hook and `sync-hooks` never create or remove that file, and every commit it lets through prints that the check is off.
 
-The hook enforces the reference and the size-raise declaration and nothing more. Posting the log comment on the story (`skills/backlog/scripts/log_action.py`) is a procedure that the `backlog` skill and `docs/RULES.md` assign to each agent, and no hook can force a comment on GitHub.
+The hook enforces the reference and the size-raise declaration only. Each agent posts the log comment on the story (`skills/backlog/scripts/log_action.py`) as the `backlog` skill and `docs/RULES.md` direct, because no hook can force a GitHub comment.
 
 ## Pre-push gates
 

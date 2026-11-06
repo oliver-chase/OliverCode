@@ -210,6 +210,37 @@ run_code_quality() {
   echo "=== validate: code quality passed ==="
 }
 
+run_budget_check() {
+  # docs/BUDGET.json caps the test count, doc words and skill words. A repo with no budget file has
+  # nothing to check. The test runtime is measured by the audit skill's fleet_check.py --time.
+  local dir="${1:-$REPO_ROOT}" out
+  echo "=== validate: checking size budget ==="
+  if [[ ! -f "$dir/docs/BUDGET.json" ]]; then
+    echo "  [SKIP] no docs/BUDGET.json - nothing to check."
+    return 0
+  fi
+  if ! out="$(python3 -c '
+import sys
+from pathlib import Path
+import json
+sys.path.insert(0, sys.argv[1])
+import fleet_check as fc
+repo = Path(sys.argv[2])
+budget = json.loads((repo / fc.BUDGET_FILE).read_text(encoding="utf-8"))
+measured = fc.measure(repo, fc.tracked(repo))
+lines, over = fc.budget_lines(measured, budget)
+for line in lines:
+    if " is over the budget" in line:
+        print("  [FAIL] " + line)
+sys.exit(1 if over else 0)
+' "${REPO_ROOT}/skills/audit/scripts" "$dir")"; then
+    printf '%s\n' "$out"
+    echo "=== validate: size budget FAILED (raise docs/BUDGET.json only with the story that needs the room) ==="
+    return 1
+  fi
+  echo "=== validate: size budget passed ==="
+}
+
 run_smoke_tests() {
   # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read the one
   # tracked shared/repo-profiles.json, so they pass identically everywhere.
@@ -281,12 +312,16 @@ main() {
                          and fleet conformance"
       echo "  --tree                 Run everything above, with the gates over every tracked file"
       echo "  --check-consistency    Run doc/code consistency checks only"
+      echo "  --check-budget [dir]   Run the size budget check (docs/BUDGET.json) on this or another checkout"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
       echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
       echo "  --help                 Show this help"
       ;;
     --check-consistency)
       run_consistency
+      ;;
+    --check-budget)
+      run_budget_check "${2:-$REPO_ROOT}"
       ;;
     --check-repo)
       # The downstream governance gate: bloat and code quality for another checkout.
@@ -310,6 +345,7 @@ main() {
       run_code_quality || exit 1
       run_reference_check
       run_duplication_check
+      run_budget_check || exit 1
       run_smoke_tests
       run_hook_state
       ;;
