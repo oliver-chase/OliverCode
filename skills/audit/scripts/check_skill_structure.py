@@ -187,11 +187,19 @@ def weight_row(skill_dir):
             unloaded.append(str(rel))
     tests_dir = skill_dir.parent / "tests" / skill_dir.name
     # An import line alone proves the module loads, not that a test exercises it, so import lines do not count.
-    test_text = "".join(line for f in [*(tests_dir.rglob("*") if tests_dir.is_dir() else []), *skill_dir.rglob("test_*")]
-                        if f.is_file() for line in f.read_text(encoding="utf-8", errors="ignore").splitlines(True)
-                        if not re.match(r"\s*(import|from)\s", line))
+    test_lines = [line for f in [*(tests_dir.rglob("*") if tests_dir.is_dir() else []), *skill_dir.rglob("test_*")]
+                  if f.is_file() for line in f.read_text(encoding="utf-8", errors="ignore").splitlines(True)]
+    test_text = "".join(line for line in test_lines if not re.match(r"\s*(import|from)\s", line))
+    # `import used as U` names the module U, so a use of `U.` counts as a use of `used`.
+    aliases = {}
+    for line in test_lines:
+        for stem, alias in re.findall(r"^\s*import\s+(\w+)\s+as\s+(\w+)", line):
+            aliases.setdefault(stem, []).append(alias)
+
+    def exercised(stem):
+        return stem in test_text or any(re.search(rf"\b{a}\.", test_text) for a in aliases.get(stem, []))
     untested = [str(f.relative_to(skill_dir)) for f in files if f.relative_to(skill_dir).parts[0] == "scripts"
-                and f.suffix in SCRIPT_SUFFIXES and not f.name.startswith("test_") and f.stem not in test_text]
+                and f.suffix in SCRIPT_SUFFIXES and not f.name.startswith("test_") and not exercised(f.stem)]
     skill_md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     desc = re.search(r"^description:\s*(.*?)(?=^\w[\w-]*:|^---)", skill_md, re.S | re.M)
     return {

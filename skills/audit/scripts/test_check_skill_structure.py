@@ -64,6 +64,11 @@ class WeightRow(unittest.TestCase):
             self.assertEqual(C.weight_row(skill)["untested"], ["scripts/used.py"])
             (tests / "test_smoke.py").write_text("import used\nassert used.run() == 1\n", encoding="utf-8")
             self.assertEqual(C.weight_row(skill)["untested"], [])
+            # A module imported under another name is exercised through that name.
+            (tests / "test_smoke.py").write_text("import used as U\nassert U.run() == 1\n", encoding="utf-8")
+            self.assertEqual(C.weight_row(skill)["untested"], [])
+            (tests / "test_smoke.py").write_text("import used as U\n", encoding="utf-8")
+            self.assertEqual(C.weight_row(skill)["untested"], ["scripts/used.py"])
 
     def test_counts_and_description(self):
         with tempfile.TemporaryDirectory() as tmp:

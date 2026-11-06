@@ -58,10 +58,6 @@ Every claim is checked against the code, and the code wins.
 
 **Existing tools.** For each mechanism that distributes or enforces rules, name the standard tool that does the same job, such as the pre-commit framework, lefthook, a global `core.hooksPath`, GitHub rulesets or a package manager, and say why it is or is not used.
 
-Worked example, from this repo:
-- The local scheduler has no LaunchAgent in `~/Library/LaunchAgents` and no `olivercode-scheduler` state folder, so it has never run and counts as unused
-- `test_banners_count_only_numbered_gates` asserts the text "Gate 7/7", so it fails whenever a gate is added and guards no product behavior. It belongs on the cut list
-
 ## 6. Token cost in use
 
 - Always-loaded text: every `CLAUDE.md` in the chain, its imports, and every skill description. Count characters, and estimate tokens at four characters each
@@ -74,7 +70,7 @@ Worked example, from this repo:
 
 `VOICE.md` is the only writing standard. Read it first, then check every text a person reads.
 
-- Run `skills/audit/scripts/fleet_check.py <target>` for the mechanical kinds, each with its file and line, and read the text for the rest
+- Run `python3 scripts/fleet_check.py <target>` for the mechanical kinds, each with its file and line, and read the text for the rest
 - Count violations by kind: contrast framing, fragments, filler openings, process history in reader text, curly quotes, Title Case headings, trailing periods on bullets
 - Name every file that sets writing rules of its own, such as a style section, a sentence cap or a lint standard
 - A self-contained suite's byte-identical copy of `VOICE.md` is the same standard
