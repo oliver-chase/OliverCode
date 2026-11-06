@@ -80,6 +80,20 @@ if ! printf '%s\n' "$MESSAGE" | grep -Eq "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_E
   exit 1
 fi
 
+# TEST-WITH-CODE-1. A commit that adds or changes code also changes a test, or says why not on a
+# line "No test: <reason>". Code is a .py, .sh, .js, .mjs, .ts or .tsx file outside a test path; a
+# test is anything under tests/ or named test_*, *_test.* or *.test.*.
+TEST_PATH='(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$'
+CODE_CHANGED="$(git diff --cached --name-only --diff-filter=AM | grep -E '\.(py|sh|js|mjs|ts|tsx)$' | grep -vE "$TEST_PATH" || true)"
+TEST_CHANGED="$(git diff --cached --name-only --diff-filter=AMD | grep -E "$TEST_PATH" || true)"
+if [ -n "$CODE_CHANGED" ] && [ -z "$TEST_CHANGED" ] \
+    && ! printf '%s\n' "$MESSAGE" | grep -Eiq '^[[:space:]]*no test:[[:space:]]*[^[:space:]]'; then
+  echo "[commit-msg] BLOCKED: this commit changes code and no test:"
+  printf '%s\n' "$CODE_CHANGED" | sed -n '1,5s/^/    /p'
+  echo "  Add or update a test in the same commit, or add a line \"No test: <reason>\" to the message."
+  exit 1
+fi
+
 # STORY-EXISTS-1. A number must name a story that exists. #165 cited in a repo whose board stops at #40
 # passed the check above, so the hook asks GitHub about each reference: a plain #N is looked up in the repo
 # named by docs/backlog-config.json (repoOwner, repoName), and owner/repo#N in the repo it spells out.

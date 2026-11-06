@@ -36,6 +36,27 @@ class CommitMsgCase(unittest.TestCase):
 
 
 class TestCommitMsg(CommitMsgCase):
+    def test_a_code_change_needs_a_test_change_or_a_stated_reason(self):
+        self.first_commit()
+        for rel, text in (("tool.py", "x = 1\n"), ("run.sh", "echo hi\n")):
+            with self.subTest(rel):
+                (self.repo / rel).write_text(text)
+                git(self.repo, "add", rel)
+                result = git(self.repo, "commit", "-m", "Add a tool (#5)", check=False)
+                self.assertEqual(1, result.returncode)
+                self.assertIn("no test", result.stdout + result.stderr)
+                git(self.repo, "rm", "-q", "--cached", rel)
+        (self.repo / "tool.py").write_text("x = 1\n")
+        git(self.repo, "add", "tool.py")
+        self.assertEqual(0, git(self.repo, "commit", "-m", "Add a tool (#5)\n\nNo test: a constant with no behavior",
+                                check=False).returncode)
+        (self.repo / "tool.py").write_text("x = 2\n")
+        (self.repo / "tests").mkdir()
+        (self.repo / "tests" / "test_tool.py").write_text("import tool\n")
+        git(self.repo, "add", "tool.py", "tests/test_tool.py")
+        self.assertEqual(0, git(self.repo, "commit", "-m", "Change the tool (#5)", check=False).returncode)
+        self.assertEqual(0, self.commit("Docs only (#5)").returncode)
+
     def test_the_initial_commit_is_exempt(self):
         self.assertEqual(0, git(self.repo, "commit", "-m", "first", check=False).returncode)
 
