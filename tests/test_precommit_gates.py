@@ -153,6 +153,13 @@ class TestGate1Secrets(GateHarness):
                 self.stage(path, f'API_KEY="{key}"\n')
                 self.assertBlocked("gate 1")
                 git(self.tmp, "rm", "-q", "--cached", path)
+        # A placeholder word elsewhere on the line does not excuse a real key.
+        for line in (f'curl https://api.example.com -H "Authorization: Bearer {key}"',
+                     f"OPENAI_KEY={key}  # paste your_token here"):
+            with self.subTest(line):
+                self.stage("run.sh", line + "\n")
+                self.assertBlocked("gate 1")
+                git(self.tmp, "rm", "-q", "--cached", "run.sh")
         self.stage(".env.example", 'API_KEY="sk-' + "EXAMPLE" + "0" * 20 + '"\n'
                    f'TOKEN="{key}"  # secret-scan: allow\n')
         self.assertAllowed()

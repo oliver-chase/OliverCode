@@ -135,8 +135,8 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                 restores = value in (".githooks", "./.githooks") and not unsets
                 if (at + 1 < len(rest) or unsets) and not restores:
                     hooks_path_changed = True
-        if i < len(words) and words[i] in aliases:
-            words = words[:i] + aliases[words[i]] + words[i + 1:]
+        if i < len(words) and words[i].lower() in aliases:
+            words = words[:i] + aliases[words[i].lower()] + words[i + 1:]
         if i < len(words) and words[i] == "commit":
             if hooks_path_changed:
                 keys = keys + ["core.hookspath"]
@@ -157,7 +157,7 @@ def _alias(setting: str, aliases: dict) -> None:
         except ValueError:
             return
         if expansion and expansion[0] == "commit":
-            aliases[key[len("alias."):]] = expansion
+            aliases[key[len("alias."):].lower()] = expansion  # git reads config keys without case
 
 
 def _overrides_hooks_path(keys: list[str], env: list[str]) -> bool:

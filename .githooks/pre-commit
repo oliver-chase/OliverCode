@@ -76,7 +76,14 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
       # upstream, pipefail turns it into 141, and a large file with a secret passed.
       PLACEHOLDER='EXAMPLE|[Ee]xample|[Pp]laceholder|PLACEHOLDER|[Yy]our[_-]?([Aa]pi[_-]?)?([Kk]ey|[Tt]oken|[Ss]ecret)|YOUR_|x{8,}|X{8,}'
       hits=$(staged_content "$file" 2>/dev/null | grep -nE -e "$pattern" | grep -vF "$ANON_META" \
-        | grep -vF 'secret-scan: allow' | grep -vE -e "$PLACEHOLDER" || true)
+        | grep -vF 'secret-scan: allow' || true)
+      # Keep a line when any matched value is not a placeholder; a word elsewhere on the line never excuses it.
+      hits=$(printf '%s\n' "$hits" | while IFS= read -r hit; do
+        [ -n "$hit" ] || continue
+        if printf '%s\n' "$hit" | grep -oE -e "$pattern" | grep -vE -e "$PLACEHOLDER" >/dev/null; then
+          printf '%s\n' "$hit"
+        fi
+      done || true)
       if [ -n "$hits" ]; then
         printf '%s\n' "$hits" | sed -n '1,3p'
         echo "  BLOCKED: $file matches secret pattern: $pattern"
