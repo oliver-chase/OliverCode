@@ -51,7 +51,7 @@ if [ $VIOLATIONS -gt 0 ]; then
   echo "=========================================="
   echo "COMMIT BLOCKED: $VIOLATIONS PII violation(s) found."
   echo "Use <workspace-root> placeholders for paths. Remove personal identifiers."
-  echo "See OliverCode/docs/RULES.md (File locations)"
+  echo "See OliverCode/docs/RULES.md (File locations)" #OC-ONLY
   echo "=========================================="
   exit 1
 fi
