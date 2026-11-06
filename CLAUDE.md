@@ -19,6 +19,6 @@ It applies to every reply and file. A skill's messages and any drafted document 
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
 - Before committing, run the current repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `$OC/docs/GATES.md` lists the gates, and `$OC/scripts/olivercode conform` finds stopped hooks
-- A story a session moves to QA gets an independent QA agent in that same turn, which logs its verdict and moves the story to Complete on a pass or back to In Progress on a fail. Other stories, helper agents and the `audit` skill run only when asked for by name. Read `$OC/docs/RULES.md` only when the task is about OliverCode's own structure
+- A request that changes files is filed as a story, as `$OC/docs/RULES.md` ("The backlog") describes. A story a session moves to QA gets an independent QA agent in that same turn, which logs its verdict and moves the story to Complete on a pass or back to In Progress on a fail. Builder helper agents and the `audit` skill run only when asked for by name. Read the rest of `$OC/docs/RULES.md` only when the task is about OliverCode's own structure
 
 In OliverCode, `README.md` has the layout.
