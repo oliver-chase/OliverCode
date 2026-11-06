@@ -1,4 +1,4 @@
-"""Health checks: the GitHub About and fleet topology.
+"""Health checks: vault skill links, voice copies, fleet locations, remotes and oversized files.
 
 `cmd_health.py` imports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
 """
