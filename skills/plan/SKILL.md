@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Use when the user says 'make a plan', 'write this up as a plan first', or 'don't start coding yet, just plan'. Writes a structured plan (Goal/Steps/Risks/Definition-of-Done) as a markdown file to <repo>/docs/plans/. Does not execute. Distinct from Claude Code's built-in ephemeral Plan Mode, which writes no file."
+description: "Use when the user says 'make a plan', 'write this up as a plan first', or 'don't start coding yet, just plan'. Writes a structured plan (Goal/Steps/Risks/Definition-of-Done) as a dated markdown file, <repo>/docs/plans/YYYY-MM-DD-<slug>.md. Does not execute. Distinct from Claude Code's built-in ephemeral Plan Mode, which writes no file."
 ---
 
 # Plan — Markdown planning protocol
@@ -14,20 +14,11 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 
 ## Claims discipline
 
-A plan is a set of assertions about live state — "this file exists," "this skill has no
-probe," "3 of 8 items already do X." Every assertion of that shape names a set of N items.
-Before a sentence claims a check across N named items, read all N. A sample, "most of them"
-or one case generalized to the rest is not a check. A `find`/`grep` listing that only names
-the items is not a check of them either.
-
-This applies whether N is 3 or 30. A larger N is a reason to batch the reads efficiently, not
-a reason to sample. When reading all N costs too much before drafting, the plan says so:
-"checked 3 of 8, the rest assumed from their names". The `audit` skill's plan check then
-tests the rest. That check is the safety net for a wrong inference from real evidence.
+A plan asserts live state, such as "this file exists" or "3 of 8 items already do X". Before a sentence claims something across N named items, read all N, whether N is 3 or 30. When that costs too much before drafting, the plan says so, as in "checked 3 of 8, the rest assumed from their names", and the `audit` skill's plan route tests the rest.
 
 ## Plan file location
 
-Repo: `<repo>/docs/plans/`. Some work spans the vault or multiple product repos, not one repo. There is currently no dedicated vault-level plans directory for that case. Write the plan into whichever single repo the work centers on. If the work is genuinely cross-repo, ask the user where they want it instead.
+Write the plan to `<repo>/docs/plans/YYYY-MM-DD-<slug>.md`, dated the day it is written, in the repo the work centers on. When the work spans several repos, ask the user which repo holds it.
 
 ## Plan headers
 
