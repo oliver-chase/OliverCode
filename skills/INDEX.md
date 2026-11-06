@@ -13,7 +13,7 @@
 | `audit` | The one audit, with a router: a whole repo or suite, a skill or family, the docs, a commit range or a plan. Reads every line, checks seven lenses, files fixes as one epic | "Audit this", "QA this", "review tonight's work", "are the docs accurate", "audit my skills", "pressure test this plan", and before closing a multi-commit session |
 | `olivercode-adoption` | Onboarding a fork into an existing setup | "Set this up for my repos", pointing existing CLAUDE.md files at OliverCode |
 | `plan` | Markdown planning | Planning a task before executing |
-| `backlog` | Config-driven GitHub Project backlog: files, closes and sweeps the board across four dimensions (required fields, status drift, duplicate cards, QA sign-off) | Filing, closing or sweeping backlog work in a repo that names a backlog-config.json in its own CLAUDE.md; "board hygiene", "is the backlog properly organized" |
+| `backlog` | Config-driven GitHub Project backlog: files, closes and sweeps and grooms the board across five dimensions (required fields, status drift, duplicate cards, QA sign-off, grooming) | Filing, closing or sweeping backlog work in a repo that names a backlog-config.json in its own CLAUDE.md; "board hygiene", "is the backlog properly organized" |
 | `skill-creation` | Intake for a new skill: overlap check first, then the baseline every new skill meets | "New skill", "build a skill for X", "should this be a new skill" |
 
 ## Rules

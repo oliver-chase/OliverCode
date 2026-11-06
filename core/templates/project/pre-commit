@@ -38,11 +38,20 @@ echo "[pre-commit] Gate 1/9: Secret scan..."
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
   'sk-[A-Za-z0-9]{20,}'                        # OpenAI/Anthropic-style keys
-  'ghp_[A-Za-z0-9]{36}'                        # GitHub personal access tokens
+  'gh[pousr]_[A-Za-z0-9]{36}'                  # GitHub classic, OAuth, user, server and refresh tokens
+  'github_pat_[A-Za-z0-9_]{22,}'               # GitHub fine-grained tokens
+  'sk-ant-[a-z0-9]+-[A-Za-z0-9_-]{20,}'        # Anthropic keys (hyphens, so the sk- rule above misses them)
+  'glpat-[A-Za-z0-9_-]{20,}'                   # GitLab tokens
+  'hf_[A-Za-z0-9]{30,}'                        # Hugging Face tokens
+  'SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'   # SendGrid keys
+  'whsec_[A-Za-z0-9]{24,}'                     # Webhook signing secrets
+  'ya29\.[0-9A-Za-z_-]{20,}'                   # Google OAuth access tokens
+  'hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+'  # Slack webhook URLs
+  '(AWS|aws)_?(SECRET|secret)_?(ACCESS|access)?_?(KEY|key)?["'\'':= ]+[A-Za-z0-9/+=]{40}'  # AWS secret keys, which carry slashes
   'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+'  # JWT tokens
   '(A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}'   # AWS access key id -- a bare AKIA... has no secret-named var to catch it
   'xox[baprs]-[0-9A-Za-z-]{10,}'               # Slack tokens (hyphens, so the alnum rule below misses them)
-  '(sk|rk)_live_[0-9A-Za-z]{20,}'              # Stripe LIVE keys (underscore, not the sk- shape above). test keys deliberately allowed -- they appear in docs
+  '(sk|rk)_live_[0-9A-Za-z]{20,}'              # Stripe LIVE keys (an underscore, which the sk- shape above misses). test keys deliberately allowed -- they appear in docs
   'AIza[0-9A-Za-z_-]{35}'                      # Google API key
   'npm_[0-9A-Za-z]{36}'                        # npm access token
   '-----BEGIN [A-Z ]*PRIVATE KEY-----'         # Private keys (RSA/EC/DSA/OPENSSH/PKCS8) — matches "BEGIN <TYPE> PRIVATE KEY"
@@ -52,9 +61,10 @@ SECRET_PATTERNS=(
 for pattern in "${SECRET_PATTERNS[@]}"; do
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
-      case "$file" in
-        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore) continue ;;
-      esac
+      # No path is exempt: a fake key in a test file still reaches the remote. A placeholder is
+      # exempt by its value (EXAMPLE, placeholder, your_key, a run of x) or by a line that carries
+      # "secret-scan: allow".
+      [ "$file" = .gitignore ] && continue
       # Per-line allowlist: ONLY the exact anon-key meta-tag shape is
       # exempt (the anon key is public by design -- it ships in client
       # HTML; service_role is the secret one). Narrow on purpose: a bare
@@ -64,7 +74,16 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
       ANON_META='<meta name="supabase-anon-key" content="eyJ'
       # Captured, never piped into `grep -q` or `head`: an early exit there sends SIGPIPE
       # upstream, pipefail turns it into 141, and a large file with a secret passed.
-      hits=$(staged_content "$file" 2>/dev/null | grep -nE -e "$pattern" | grep -vF "$ANON_META" || true)
+      PLACEHOLDER='EXAMPLE|[Ee]xample|[Pp]laceholder|PLACEHOLDER|[Yy]our[_-]?([Aa]pi[_-]?)?([Kk]ey|[Tt]oken|[Ss]ecret)|YOUR_|x{8,}|X{8,}'
+      hits=$(staged_content "$file" 2>/dev/null | grep -nE -e "$pattern" | grep -vF "$ANON_META" \
+        | grep -vF 'secret-scan: allow' || true)
+      # Keep a line when any matched value is not a placeholder; a word elsewhere on the line never excuses it.
+      hits=$(printf '%s\n' "$hits" | while IFS= read -r hit; do
+        [ -n "$hit" ] || continue
+        if printf '%s\n' "$hit" | grep -oE -e "$pattern" | grep -vE -e "$PLACEHOLDER" >/dev/null; then
+          printf '%s\n' "$hit"
+        fi
+      done || true)
       if [ -n "$hits" ]; then
         printf '%s\n' "$hits" | sed -n '1,3p'
         echo "  BLOCKED: $file matches secret pattern: $pattern"
@@ -131,30 +150,15 @@ for pattern in "${PII_PATTERNS[@]}"; do
       case "$file" in
         *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|*.md|.githooks/pre-commit|core/templates/project/pre-commit|core/hooks/*) continue ;;
       esac
-      # Strip known non-PII strings before matching. `git@github.com` is the
-      # SSH form npm writes into package-lock.json "resolved" entries for a git
-      # dependency — a protocol user on a public host, not a person's address.
-      # Without this, adding any git dependency makes the lockfile permanently
-      # uncommittable, and a gate that blocks a correct commit is one people
-      # learn to pass with --no-verify.
+      # Strip known non-PII strings before matching. `git@github.com` is the SSH form npm
+      # writes into package-lock.json for a git dependency, a protocol user on a public host,
+      # so a lockfile with a git dependency stays committable.
       #
-      # Stripped at MATCH level, not line level. Filtering whole grep output
-      # lines let anything sharing a line with an exempt string escape EVERY
-      # pattern, including /Users/ home paths that have nothing to do with
-      # lockfiles.
-      #
-      # The class is POSITIVE and bounded to owner/repo, which is all a GitHub
-      # remote is. A negative class terminated on only three characters, so the
-      # strip ran past the repo name and ate whatever followed — fifteen
-      # separators defeated it, e.g. `git@github.com:a/b.git;victim@example.org`
-      # stripped to nothing and committed clean.
-      #
-      # The `#<sha>` fragment is deliberately NOT consumed: eating it let
-      # `...git#victim@example.org` escape, because `victim` is a legal tag
-      # name, and a SHA matches no PII pattern anyway.
-      #
-      # The left boundary's back-reference closes the prefix attack, so
-      # `notgit@github.com:a/b.git` no longer anchors the exemption.
+      # The strip works on the match, so anything else on the same line is still scanned.
+      # Its class is positive and bounded to owner/repo, which is all a GitHub remote is,
+      # so a separator after the repo name ends the strip. The `#<sha>` fragment is left in
+      # place, since a tag name after it could hide an address. The left boundary stops a
+      # longer word such as `notgit@github.com` from anchoring the exemption.
       if staged_content "$file" 2>/dev/null | sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' | grep -nE -e "$pattern" >/dev/null; then
         staged_content "$file" 2>/dev/null | sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' | grep -nE -e "$pattern"
         echo "  BLOCKED: $file contains PII matching pattern: $pattern"
@@ -211,7 +215,7 @@ echo "  Gate 4 passed."
 echo "[pre-commit] Gate 5/9: Archived-content scan..."
 
 # Matched as a whole PATH SEGMENT, never a substring: a file legitimately titled
-# "Legacy Modernization Intelligence" is prose about legacy systems, not an archive.
+# "Legacy Modernization Intelligence" is prose about legacy systems and passes.
 ARCHIVE_SEGMENTS='^(_?[Aa]rchive[ds]?|[Ll]egacy|[Dd]eprecated|[Oo]utdated|_?[Bb]ackups?|[Oo]ld)$'
 # Suffixes that mark a file as a superseded copy of its neighbour.
 # "copy" is deliberately NOT here. In many repos copy means written copy -- "Slide
@@ -270,10 +274,10 @@ CITED_NUMS=""
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
     case "$file" in
-      */SKILL.md|SKILL.md|*/CLAUDE.md|CLAUDE.md|*/references/*.md) [ -f "$file" ] || continue ;;
+      */SKILL.md|SKILL.md|*/CLAUDE.md|CLAUDE.md|*/references/*.md) ;;
       *) continue ;;
     esac
-    hits=$(grep -ohE '(^|[^A-Za-z0-9&])#[0-9]{1,5}([^0-9]|$)' "$file" 2>/dev/null | grep -oE '[0-9]{1,5}' || true)
+    hits=$(staged_content "$file" 2>/dev/null | grep -ohE '(^|[^A-Za-z0-9&])#[0-9]{1,5}([^0-9]|$)' | grep -oE '[0-9]{1,5}' || true)
     [ -n "$hits" ] && CITED_NUMS="$CITED_NUMS
 $hits"
   done <<< "$STAGED_FILES"
@@ -315,7 +319,11 @@ size_field_of() {
 }
 size_field() { size_field_of "$1" "$SIZE_JSON"; }
 SIZE_BASE="$(size_field lines)"
-SIZE_PCT="$(size_field allowancePercent)"
+SIZE_HEAD_JSON="$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)"
+# The allowance and the raise cap come from the committed baseline when there is one, so a commit
+# cannot widen its own limit. The staged file still sets the line count, under the raise cap.
+SIZE_PCT="$(size_field_of allowancePercent "$SIZE_HEAD_JSON")"
+[ -n "$SIZE_PCT" ] || SIZE_PCT="$(size_field allowancePercent)"
 SIZE_COUNTER=""
 for candidate in scripts/size.sh skills/audit/scripts/size.sh; do
   if [ -f "$candidate" ]; then SIZE_COUNTER="$candidate"; break; fi
@@ -334,9 +342,9 @@ else
   SIZE_EXTRA=$(( SIZE_BASE * SIZE_PCT / 100 ))
   if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
     echo "  docs/SIZE-BASELINE.json is part of this commit, so its baseline of $SIZE_BASE lines is trusted."
-    SIZE_HEAD_BASE="$(size_field_of lines "$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
+    SIZE_HEAD_BASE="$(size_field_of lines "$SIZE_HEAD_JSON")"
     if [ -n "$SIZE_HEAD_BASE" ] && [ "$SIZE_BASE" -gt "$SIZE_HEAD_BASE" ]; then
-      SIZE_CAP_PCT="$(size_field raiseCapPercent)"
+      SIZE_CAP_PCT="$(size_field_of raiseCapPercent "$SIZE_HEAD_JSON")"
       SIZE_CAP=$(( SIZE_HEAD_BASE * ${SIZE_CAP_PCT:-2} / 100 ))
       echo "  This commit raises the baseline by $(( SIZE_BASE - SIZE_HEAD_BASE )) lines (cap $SIZE_CAP without an L or XL story)."
     fi

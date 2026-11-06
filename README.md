@@ -9,6 +9,12 @@ OliverCode is a shared set of **rules, skills, and automated checks for your cod
 
 ## Start with a conversation
 
+Fork the repo on GitHub, then clone your fork:
+
+```bash
+git clone <your-fork> OliverCode && cd OliverCode
+```
+
 Open the cloned folder in Claude Code and say one sentence, such as:
 
 > **Set this up for me.**
@@ -39,7 +45,7 @@ OliverCode also installs three Claude Code hooks that run in every session. The 
 
 | You get | How it reaches you | Actually enforced? |
 |---|---|---|
-| Pre-commit gates (`docs/GATES.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes**, on every `git commit`. Only `--no-verify` skips it, and the commit guard refuses that inside Claude Code |
+| Pre-commit gates (`docs/GATES.md` has the per-repo table) | `.githooks/pre-commit`, installed per repo by `olivercode sync-hooks` | **Yes**, on every `git commit` while `core.hooksPath` points at it. `--no-verify` skips it, and the commit guard refuses that inside Claude Code |
 | Local validation | `bash scripts/validate.sh`: gates, doc/code consistency, reference integrity, tests | **Yes**, when run. Nothing runs it automatically |
 | Standards and templates | `docs/RULES.md` and `core/templates/project/`, inherited by every repo through the bootstrap manifest | No, they are instruction text an agent follows |
 | Claude Code hooks (session check, commit guard, early-stop guard) | `~/.claude/settings.json`, written by `olivercode install` | **Yes**, inside Claude Code sessions |
@@ -107,7 +113,7 @@ Every tracked file has to justify itself as run, verify, ship or support (`docs/
 ```bash
 bash scripts/validate.sh --tree          # Every gate over every tracked file, plus docs, bloat, code quality and tests
 bash scripts/qa/rehearse-install.sh      # Fresh clone, real install and every setup scenario
-python3 -m unittest discover tests       # The test suite alone
+bash scripts/validate.sh                 # The full test suite, including each skill's own tests
 ```
 
 The rehearsal runs in disposable sandboxes that cannot touch your real files. Every scenario tests a claim made in the documentation, so a failure means the code or that claim is wrong. Both commands report their own counts.

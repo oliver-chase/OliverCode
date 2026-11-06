@@ -10,7 +10,7 @@
     {
       "source": "core/templates/project/.github/CODEOWNERS",
       "target": ".github/CODEOWNERS",
-      "mode": "strict"
+      "mode": "presence"
     },
     {
       "source": "core/templates/project/.github/pull_request_template.md",

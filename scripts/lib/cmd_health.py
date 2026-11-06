@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lib import claude_settings as _claude_settings
 from lib.health_checks import (
-    _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies, _check_waiver_expiry,
+    _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
     _check_vault_skill_links,
 )
 from lib.local_config import OC_ROOT
@@ -21,14 +21,11 @@ from lib.skill_links import broken_links as _broken_links, link_states as _link_
 class _HealthTally:
     """Accumulates health-check results.
 
-    WARN does not fail the run, on purpose: a standalone clone missing local-only
-    context (control plane, private repos) must still exit 0 (see docs/RULES.md).
+    WARN does not fail the run: a standalone clone missing local-only context
+    (control plane, private repos) must still exit 0 (see docs/RULES.md).
 
-    It is counted SEPARATELY from OK all the same. Folding the two together printed
-    "HEALTHY — 8/8 checks passed" on a run where five of the eight had been skipped
-    for missing context and only three had actually verified anything. Nothing was
-    wrong, but the summary claimed evidence it did not have, which is the same shape
-    as every other defect this repo has had to dig out (scripts/lib/falsifiability_check.py).
+    WARN is counted apart from OK, so the summary claims only the checks that verified
+    something, and a skipped check never reads as a pass.
     """
 
     def __init__(self) -> None:
@@ -117,11 +114,6 @@ def command_health(fleet_root: Path | None = None) -> int:
     passed, failed, skipped = _check_placement_drift(OC_ROOT)
     t.add(passed, failed, skipped)
 
-    # 4. Governance exceptions that have run out.
-    print("\nGovernance waivers:")
-    passed, failed, skipped = _check_waiver_expiry(OC_ROOT)
-    t.add(passed, failed, skipped)
-
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # failure classes.
@@ -174,7 +166,7 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
         if oc_skill_names and not installed:
             # Zero symlinks resolve into THIS checkout: it isn't the machine's installed
             # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
-            # drift -- G4 requires a stranger clone to report HEALTHY.
+            # drift, because a stranger's fresh clone must report HEALTHY.
             print(f"  [WARN] this checkout is not the machine's installed OliverCode "
                   f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/RULES.md")
             skipped += 1

@@ -14,10 +14,10 @@ CITED_NUMS=""
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
     case "$file" in
-      */SKILL.md|SKILL.md|*/CLAUDE.md|CLAUDE.md|*/references/*.md) [ -f "$file" ] || continue ;;
+      */SKILL.md|SKILL.md|*/CLAUDE.md|CLAUDE.md|*/references/*.md) ;;
       *) continue ;;
     esac
-    hits=$(grep -ohE '(^|[^A-Za-z0-9&])#[0-9]{1,5}([^0-9]|$)' "$file" 2>/dev/null | grep -oE '[0-9]{1,5}' || true)
+    hits=$(staged_content "$file" 2>/dev/null | grep -ohE '(^|[^A-Za-z0-9&])#[0-9]{1,5}([^0-9]|$)' | grep -oE '[0-9]{1,5}' || true)
     [ -n "$hits" ] && CITED_NUMS="$CITED_NUMS
 $hits"
   done <<< "$STAGED_FILES"

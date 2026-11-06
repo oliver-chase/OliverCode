@@ -7,8 +7,6 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
-Read `CONTEXT.md` if it exists, and check the ADRs in the area you're touching.
-
 ## Phase 1 — Build a feedback loop
 
 **This is the skill.** A **tight** pass/fail signal that goes red on _this_ bug finds the cause, and bisection, hypothesis-testing and instrumentation all consume it. Without one, staring at code will not save you.
@@ -26,14 +24,14 @@ Spend most of the effort here.
 7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode
 8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it
 9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs
-10. **HITL bash script.** Last resort. If a human must click, drive _them_ with a structured script so the loop is still structured
+10. **Human-in-the-loop script.** Last resort. If a human must click, drive _them_ with a structured script so the loop is still structured
 
 ### Tighten the loop
 
 Once you have _a_ loop, **tighten** it:
 
 - Can I make it faster? (Cache setup, skip unrelated init, narrow the test scope.)
-- Can I make the signal sharper? (Assert on the specific symptom, not "didn't crash".)
+- Can I make the signal sharper? (Assert on the specific symptom, such as the wrong value, so a run that merely finishes cannot pass.)
 - Can I make it more deterministic? (Pin time, seed RNG, isolate filesystem, freeze network.)
 
 ### Non-deterministic bugs
@@ -50,7 +48,7 @@ Phase 1 is done when the loop is **tight** and **red-capable**: you can name **o
 
 - [ ] **Red-capable** — it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed
 - [ ] **Deterministic** — same verdict every run
-- [ ] **Fast** — seconds, not minutes
+- [ ] **Fast** — it finishes in seconds
 - [ ] **Agent-runnable** — you can run it unattended
 
 If you catch yourself reading code to build a theory before this command exists, **stop.** No red-capable command, no Phase 2.
@@ -61,13 +59,13 @@ Run the loop. Watch it go red.
 
 Confirm:
 
-- [ ] The loop produces the failure mode the **user** described — not a different failure nearby
+- [ ] The loop produces the failure mode the **user** described, the same symptom at the same place
 - [ ] The failure is reproducible across multiple runs
 - [ ] You have captured the exact symptom so later phases can verify the fix
 
 ### Minimise
 
-Once it's red, shrink the repro to the **smallest scenario that still goes red**. Cut inputs, callers, config, data, and steps **one at a time** — keep only what's load-bearing.
+Once it's red, shrink the repro to the **smallest scenario that still goes red**. Cut inputs, callers, config, data, and steps **one at a time** — keep only what the failure needs.
 
 ## Phase 3 — Hypothesise
 
@@ -79,7 +77,7 @@ Each hypothesis must be **falsifiable**:
 
 > "If <X> is the cause, then <changing Y> will make the bug disappear / <changing Z> will make it worse."
 
-Show the ranked list before testing. Proceed with your ranking if the user is AFK.
+Show the ranked list before testing. Proceed with your ranking if the user is away.
 
 ## Phase 4 — Instrument
 

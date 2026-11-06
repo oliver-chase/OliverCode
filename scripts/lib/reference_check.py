@@ -35,10 +35,10 @@ TRACKED_ROOTS = (
 # is a real reference once the prefix comes off. Any other `$` still marks a placeholder.
 OC_PREFIX = "$OC/"
 
-# Placeholder syntax — the token names a shape, not a file that exists.
+# Placeholder syntax — the token names a shape, and no such file exists.
 PLACEHOLDER_CHARS = set("<>*|$")
 
-# Paths that are correct as written but resolve inside a DOWNSTREAM repo, not this
+# Paths that are correct as written but resolve inside a downstream repo, outside this
 # one. A contract that tells another repo where to put its files necessarily names
 # paths absent here; flagging them would make the contract unwritable.
 DOWNSTREAM_RELATIVE = frozenset(

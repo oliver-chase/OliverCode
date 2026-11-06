@@ -242,11 +242,10 @@ class TestCommandAuditFleet(ScratchHome):
         self.assertEqual(code, 1)
         self.assertIn("this checkout is missing skills/audit", out)
 
-    def test_writes_a_log_with_one_line_per_check(self):
+    def test_prints_one_line_per_check(self):
         code, out, _ = self.audit()
         self.assertEqual(code, 0)
-        log = (self.oc / "runtime" / "manifests" / "logs" / "audit-fleet.log").read_text()
-        self.assertIn("olivercode-skills check_skill_structure.py: ok -- 12 skills, 0 findings", log)
+        self.assertIn("[ok] check_skill_structure.py: 12 skills, 0 findings", out)
         self.assertIn("[INFO] no skills folder set for this machine", out)
 
     def test_checks_the_machines_skills_folder_too_and_skips_one_that_is_gone(self):

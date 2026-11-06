@@ -2,7 +2,7 @@
 
 Slides a 15-word window across every tracked markdown file; a window shared by two
 files fails the build unless it matches a declared canonical-reuse marker below.
-Substring match, not semantic similarity, by design -- see the ledger entry for why.
+It matches substrings by design; docs/DECISIONS.md says why.
 
 Every tracked markdown file is covered: docs, skills and their references, core templates and
 the repo root. The same file ships to adopted repos as scripts/duplication_check.py (#80), so
@@ -34,9 +34,9 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 # is exactly the kind of copy-paste drift this check exists to catch -- excluding code
 # fences would blind it to the duplicated probe script that motivated building it.
 
-# Snippets that are deliberate reuse, not drift -- matched as a normalized (lowercase,
+# Deliberate reuse, matched as a normalized (lowercase,
 # punctuation-stripped) substring of the finding, so one entry covers every file pair
-# that shares it, so pairs need no listing. An entry without a real
+# that shares it. An entry without a real
 # reason recreates the blind spot this check exists to close.
 DECLARED_MARKERS: dict[str, str] = {
     "dirname readlink claude claude md": (
@@ -44,31 +44,6 @@ DECLARED_MARKERS: dict[str, str] = {
         "skills/olivercode-adoption/SKILL.md). Deliberately identical everywhere it "
         "appears -- SETUP.md itself calls this 'the one hard constraint' and every "
         "doc teaching it should show the exact same pattern so it is recognizable."
-    ),
-    "optimize do not amputate you are pointing existing rules at a shared home not "
-    "deleting them": (
-        "docs/SETUP.md's governing rule, restated identically in "
-        "skills/olivercode-adoption/SKILL.md because the skill exists to drive that "
-        "exact rule during a live session -- see the skill's own 'the rule that "
-        "governs everything here' section."
-    ),
-    "in sessions whose working directory is almost never olivercode so every path in "
-    "it must resolve from anywhere": (
-        "Same $OC-constraint explanation, SETUP.md and its own driving skill. "
-        "Declared alongside the $OC-resolution snippet above for the same reason."
-    ),
-    "scripts qa probe secret gate sh writes a fake secret commits expects a block": (
-        "The one canonical invocation line for scripts/qa/probe-secret-gate.sh "
-        "(README.md, docs/SETUP.md, skills/olivercode-adoption/SKILL.md) "
-        "-- a runnable example docs/RULES.md wants shown identically "
-        "everywhere it appears, not three independently-worded ones."
-    ),
-    "send this first in one turn exactly as written with no other opening line and no "
-    "closing recap": (
-        "The fixed instruction that opens every skill's Opening message section "
-        "(skill-creation's baseline rule 12). Every skill a person triggers cold carries "
-        "the same words, so the agent recognises the section; it is a convention line, "
-        "not a rule restated."
     ),
 }
 

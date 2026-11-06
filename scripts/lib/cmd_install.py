@@ -129,10 +129,8 @@ def command_install(oc_root: Path) -> int:
                 target.symlink_to(source)
                 return "relinked"
         if target.exists() or target.is_symlink():
-            # BACKUP-COLLISION-1: rename() overwrites an existing destination on POSIX,
-            # so a fixed two-name fallback silently destroyed the second backup on a
-            # third real-file collision at the same path -- contradicts "never
-            # destructive". Keep counting until a free name is found instead.
+            # BACKUP-COLLISION-1: rename() overwrites an existing destination on POSIX, so the
+            # backup name keeps counting until it is free and no earlier backup is ever replaced.
             backup = target.with_name(target.name + BACKUP_SUFFIX)
             n = 1
             while backup.exists() or backup.is_symlink():  # a backed-up link may dangle
@@ -235,7 +233,7 @@ def command_uninstall(oc_root: Path) -> int:
     free, and any older one is listed. The hook entries come out of settings.json by the
     same rule install uses to replace them, and every other key stays. Idempotent.
 
-    `core.hooksPath` and each repo's `.githooks/` come from `sync-hooks`, not install,
+    `core.hooksPath` and each repo's `.githooks/` come from `sync-hooks`,
     so they stay; docs/SETUP.md "Backing out" covers them.
     """
     claude_dir = Path.home() / ".claude"

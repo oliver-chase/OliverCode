@@ -1,6 +1,6 @@
 """Skill discovery: read every skills/*/SKILL.md's frontmatter.
 
-The launcher re-exports both names, so the catalog logic is importable and testable on its own.
+`cmd_repo.py` imports it, so the catalog logic is importable and testable on its own.
 """
 
 from __future__ import annotations

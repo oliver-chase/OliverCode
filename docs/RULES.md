@@ -81,7 +81,7 @@ Every change in any project follows this locked process, and no gate is skippabl
 
 Audit reviewers run in parallel, one per area, and every other helper agent runs alone.
 
-`.githooks/pre-commit` runs the gates on every commit and there is no bypass mode. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
+`.githooks/pre-commit` runs the gates on every commit git runs it for. Four things skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
 
 Three Claude Code hooks run inside every session, and `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
 
@@ -94,8 +94,6 @@ All three are deterministic and fail open, so a hook's own bug never blocks a co
 Completion: run the repo's canonical validation before committing and stop on failure. A failing run never counts as completion. The mechanically enforced requirement is the pre-commit hook plus the repo's own `scripts/validate.sh`.
 
 Authority hierarchy: the deploy platform must not be the first place a build or type error is discovered. Each repo profile declares a `canonicalValidationCommand` and a `finalAuthority`. Run the canonical command locally before the commit and treat the declared final authority, which is a full build and not a lint pass, as the check that decides whether the change is sound. Pre-commit gates catch secrets, structure and hygiene. They do not catch a block-scoped `const` referenced before its declaration, which only a full type-checking build surfaces.
-
-Evidence gate: the WRITE MODE evidence gate is opt-in (`EVIDENCE-OPT-IN-1` in `docs/DECISIONS.md`). The machinery works and is tested, no evidence record exists in this fleet, and a contract that every commit violates teaches that written rules are optional.
 
 Secrets stay out of git. Real credentials live in a gitignored `.secrets/` folder or in `.env.local`, `.env.example` is tracked and holds variable names without values, and `.githooks/pre-commit` is the enforcement gate.
 
@@ -279,7 +277,7 @@ Those belong in the runtime environment (`runtime/control-plane/`).
 Two more layers exist on any machine running OliverCode, and neither is framework material:
 
 - **`~/.claude/` (user-global Claude Code settings, skills, agents).** Local and per machine: permissions, theme, model and any hook the operator writes stay theirs. `olivercode install` writes only the `CLAUDE.md` and `VOICE.md` links, a link per skill in `skills/`, its three hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, and a `.pre-olivercode` backup of anything it replaced. `scripts/lib/claude_settings.py` merges those entries and leaves every other key as it was. The skill and agent layer within it, such as cross-repo work skills for marketing, hiring or meeting notes, is real durable content. OliverCode never edits anything else in `~/.claude/`
-- **Sibling agent state**, such as `.codex/`-class directories from other coding agents. It is out of scope for OliverCode: not inventoried, not migrated and not a placement target. Delete it when the tool that created it is decommissioned, and never fold its contents into an OliverCode location
+- **Sibling agent state**, such as `.codex/`-class directories from other coding agents. OliverCode leaves it alone: it is never inventoried, migrated or used as a placement target. Delete it when the tool that created it is decommissioned, and never fold its contents into an OliverCode location
 
 The dependency is one-directional. The runtime environment depends on OliverCode and reads standards, templates, skills and workflow definitions from it. OliverCode does not depend on the runtime environment and cannot reference runtime-specific paths, scripts or configuration in its documents. Architectural descriptions may mention the runtime environment as a deployment concept and never depend on it for correctness.
 

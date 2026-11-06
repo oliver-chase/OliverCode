@@ -66,6 +66,9 @@ class RatchetGate(RatchetSetup):
         self.assertIn("three files that grew most", out)
         listed = [l.split()[-1] for l in out.splitlines() if l.strip().startswith("+")]
         self.assertEqual(["a.txt", "b.txt", "c.txt"], listed)
+        # The allowance comes from the committed baseline, so the same commit cannot widen it.
+        self.stage(BASELINE, baseline_text(self.recorded, 100))
+        self.assertIn("5% allowance", self.assertBlocked("size ratchet").stdout)
 
     def test_a_one_line_baseline_reads_the_same_as_the_shipped_layout(self):
         """A hand-written {"lines": N, "allowancePercent": 5} used to read 5 as the line count and block every commit."""
@@ -168,6 +171,14 @@ class TestRaiseCap(unittest.TestCase):
         result = self.commit(1021, "Grow a lot (#5)")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("raises the size baseline by 21 lines, over the cap of 20", result.stdout + result.stderr)
+        # A one-line baseline is read by key, so allowancePercent is never taken for lines.
+        git(self.repo, "reset", "-q", "--hard")
+        (self.repo / BASELINE).write_text('{"lines": 1000, "allowancePercent": 5}\n')
+        git(self.repo, "commit", "-q", "--no-verify", "-am", "one line (#5)")
+        (self.repo / BASELINE).write_text('{"lines": 1021, "allowancePercent": 5}\n')
+        git(self.repo, "add", BASELINE)
+        result = git(self.repo, "commit", "-m", "Grow a lot (#5)", check=False)
+        self.assertIn("raises the size baseline by 21 lines, over the cap of 20", result.stdout + result.stderr)
 
     def test_a_raise_over_the_cap_passes_with_a_size_l_line(self):
         self.assertEqual(0, self.commit(1500, "Grow a lot (#5)\n\nSize: L").returncode)
@@ -224,6 +235,19 @@ class TestSizeCounter(unittest.TestCase):
                                 capture_output=True, text=True).stdout
         total_row = next(l for l in report.splitlines() if l.startswith("TOTAL"))
         self.assertEqual("3", total_row.split()[2])
+        # The repo's own backlog config wins over a fixture that sorts first.
+        for rel, name in (("a/fixtures/backlog-config.json", "fixture"), ("docs/backlog-config.json", "real")):
+            (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / rel).write_text(json.dumps({"repoOwner": "o", "repoName": name, "projectNumber": 1,
+                                                      "projectOwner": "o"}))
+            git(self.repo, "add", rel)
+        stub = self.tmp / "bin"
+        stub.mkdir()
+        (stub / "gh").write_text("#!/bin/sh\nexit 0\n")
+        (stub / "gh").chmod(0o755)
+        env = {**git_env(), "PATH": f"{stub}:{git_env().get('PATH', '/usr/bin:/bin')}"}
+        out = subprocess.run(["bash", str(SIZE_SH), str(self.repo)], env=env, capture_output=True, text=True).stdout
+        self.assertIn("Remaining work (o/real)", out)
 
     def test_staged_counts_the_index_copy(self):
         (self.repo / "a.txt").write_text("1\n" * 10)

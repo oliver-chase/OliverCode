@@ -30,6 +30,11 @@ class CheckRepo(unittest.TestCase):
     def test_a_clean_repo_passes(self):
         self.add("README.md", "# Fine\n")
         self.add("tool.py", "print('ok')\n")
+        # Untracked folders such as a virtualenv or a build output are not the repo's files.
+        for rel in (".venv/lib/bad.py", "dist/big.ts"):
+            (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (self.repo / ".venv/lib/bad.py").write_text("def (:\n", encoding="utf-8")
+        (self.repo / "dist/big.ts").write_text("x\n" * 500, encoding="utf-8")
         self.assertEqual(0, self.run_check().returncode)
 
     def test_a_tracked_archive_directory_fails(self):

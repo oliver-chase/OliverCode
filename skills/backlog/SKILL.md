@@ -41,32 +41,31 @@ After each commit or finished piece of work, and before a lead reports a helper'
 
 ## File a story or epic
 
-1. **Search first** and extend an existing open item with a comment. File nothing the repo's prioritization doc lists under "What never gets filed".
+1. **Search first** and extend an existing open item with a comment.
 2. **Classify the work.** An owner request is filed ("Save every ask") unless it meets that section's small-change exception. A quick fix the session finds on its own, such as a missing fallback or a stale word, is fixed inline with no Project item. Real new scope is filed before it is built. A repo's own quick-wins convention wins.
 3. **Answer the fit check in the body.** Adding to what exists is the default, so the body names what it extends (a new file states why no home fits), whether it is core or an add-on, what it replaces and its effect on size and always-loaded tokens, and whether it passes `$OC/skills/audit/references/lenses.md`.
 4. **Create it and add it to the board yourself** with the create-and-add command in `references/project-fields.md`. Nothing adds an issue to the Project automatically, so an issue made any other way (the web, a script, `gh api`) is not on the board until `gh project item-add` runs. Check with the item list afterwards that the new number appears with every field set
-5. **Set Status, Priority, Size and Work type every time.** Status is `Backlog` when something blocks the item or it needs a decision, and `Ready` when the next action is clear and unblocked. Priority and Size are a per-item judgment under the repo's prioritization doc, never copied from a template or left blank.
+5. **Set Status, Priority, Size and Work type every time.** Status is `Backlog` when something blocks the item or it needs a decision, and `Ready` when the next action is clear and unblocked. Priority and Size are a per-item judgment, never copied from a template or left blank.
 6. **An XL or L item** gets an audit Story first, with a re-runnable command and a before and after count, then one fix Story per boundary. `references/story-template.md` ("Sizing an XL or L item") has the procedure.
 7. **Filed from a plan doc?** Copy its reasoning into the issue body once, and delete the plan file in the same pass that files its last Step. Keep it while any Step or open question is unfiled or deferred.
 
 ## Close a story or epic
 
 1. **QA first.** The builder moves the story to `QA` and, in the same turn, starts a QA agent. That different agent that built no part of the story checks each Gherkin scenario against the files without seeing the builder's conclusion. One agent covers every story of a branch and ends its report with one line per story, as in `Story 12: PASS; confirmed: Work is finished; Work fails`. Log the whole report with `log_action.py --role qa --from-report FILE`, and a note may follow the last scenario name. A story whose body has the line `QA: mechanical` changes no behavior (a wording, whitespace or duplicate-removal edit), needs no QA agent, and closes when the builder logs a result that says `validate.sh exits 0` and quotes the counts it changed. The check looks for the phrase only, so the lead reads the counts.
-2. **Check the sign-off** with `python3 scripts/check_qa_signoff.py --story N --config CONFIG`. It exits 0 on an independent PASS that confirms every scenario by its whole name when the story also has a builder comment, or on the mechanical proof above. When another session built the story and never logged it, log the builder with `log_action.py --role builder --agent-from-commit --commit HASH`. Otherwise the story returns to `In Progress` with the findings in a comment.
-3. **Move Status to `Complete`** and comment the evidence: files touched and what shipped. One comment per real change, and the issue body is never rewritten to show the final state, so the comment trail stays the record.
-4. **Update the parent epic.** Status does not follow sub-issue progress, so query `subIssuesSummary` (`references/project-fields.md`). All complete: move the parent to `Complete`. A sub-issue deliberately deferred: the parent stays `In Progress` and the comment says why. Some complete, none deferred: move a `Backlog` or `Ready` parent to `In Progress`. Comment the real count either way.
+2. **Complete it** with `python3 scripts/complete_story.py --story N --config CONFIG --evidence "files touched and what shipped"`. It runs `check_qa_signoff.py` first, and only on a pass moves Status to `Complete`, posts the evidence and closes the issue. On a refusal it changes nothing, and the story returns to `In Progress` with the findings in a comment. The check exits 0 on an independent PASS that confirms every scenario by its whole name when the story also has a builder comment, or on the mechanical proof above. A story another session built but never logged needs its builder logged first with `log_action.py --role builder --agent-from-commit --commit HASH`. The issue body is never rewritten, so the comment trail stays the record.
+3. **Update the parent epic.** Status does not follow sub-issue progress, so query `subIssuesSummary` (`references/project-fields.md`). All complete: move the parent to `Complete`. A sub-issue deliberately deferred: the parent stays `In Progress` and the comment says why. Some complete, none deferred: move a `Backlog` or `Ready` parent to `In Progress`. Comment the real count either way.
 
 ## Sweep the board
 
 The sweep is read-only and changes nothing until the owner approves a fix. A stopped read (a reached limit, a failed call, a GraphQL rate limit) means it did not run, so say so and never report clean.
 
-**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full four-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene").
+**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full five-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene").
 
-When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md` and check all four dimensions unless the owner names one. Open with this message, word for word, with no other opening line and no closing recap.
+When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md` and check all five dimensions unless the owner names one. Open with this message, word for word, with no other opening line and no closing recap.
 
 > A tidy board shows at a glance what to work on next and where each item stands.
 >
-> I read your live GitHub Project board and report anything out of order across four dimensions. We go through each finding together, and I change nothing until you approve a fix.
+> I read your live GitHub Project board and report anything out of order across five dimensions. We go through each finding together, and I change nothing until you approve a fix.
 
 | Dimension | Checks |
 |---|---|
@@ -74,6 +73,7 @@ When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md
 | Status drift (`drift`) | Board Status matches issue state, and every open issue is on the board |
 | Duplicate cards (`duplicates`) | One card per issue |
 | QA sign-off (`qa-signoff`) | Every Complete item from `qaRequiredFromIssue` has an independent sign-off |
+| Grooming (`groom`) | Built work left in Backlog or Ready, epics whose Status lags their sub-issues, and open stories whose titles overlap |
 
 `references/project-fields.md` ("Sweep dimensions") holds each rule in full.
 

@@ -64,6 +64,11 @@ class WeightRow(unittest.TestCase):
             self.assertEqual(C.weight_row(skill)["untested"], ["scripts/used.py"])
             (tests / "test_smoke.py").write_text("import used\nassert used.run() == 1\n", encoding="utf-8")
             self.assertEqual(C.weight_row(skill)["untested"], [])
+            # A module imported under another name is exercised through that name.
+            (tests / "test_smoke.py").write_text("import used as U\nassert U.run() == 1\n", encoding="utf-8")
+            self.assertEqual(C.weight_row(skill)["untested"], [])
+            (tests / "test_smoke.py").write_text("import used as U\n", encoding="utf-8")
+            self.assertEqual(C.weight_row(skill)["untested"], ["scripts/used.py"])
 
     def test_counts_and_description(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -156,6 +161,12 @@ class DanglingSkillReferenceFinding(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("[dangling-skill-reference]", out)
         self.assertIn("ghost-skill-zz", out)
+        # A single-word skill name is a skill name too.
+        with tempfile.TemporaryDirectory() as tmp:
+            write_skill(tmp, "fam/alpha-skill", "Hand the result to the `ghost` skill.\n")
+            code, out = run_gate(tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("ghost", out)
 
     def test_reference_to_real_sibling_is_clean(self):
         with tempfile.TemporaryDirectory() as tmp:

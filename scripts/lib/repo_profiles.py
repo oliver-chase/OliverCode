@@ -1,6 +1,6 @@
 """Repo-profiles loader, and where the fleet registry lives on this machine.
 
-The registry (`repo-profiles.json`) names the operator's repos, waivers
+The registry (`repo-profiles.json`) names the operator's repos
 and services, so a fork must not inherit it. The real files live in a private repo at
 `olivercode/<file>`, found through `privateRepos` in olivercode.local.json. A checkout with
 none falls back to the tracked `shared/<file>`, which ships as an empty example and is

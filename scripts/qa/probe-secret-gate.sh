@@ -5,7 +5,7 @@
 # README, docs/SETUP.md and skills/olivercode-adoption/SKILL.md walkthroughs
 # all invoke this one script.
 #
-# Writes the probe file straight into the current repo, not staged through
+# Writes the probe file straight into the current repo, unstaged by
 # /tmp: the gate scans what is staged, so a copy step would prove nothing.
 #
 # Usage: bash scripts/qa/probe-secret-gate.sh   (run from inside the repo to probe)
@@ -17,6 +17,12 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 2
 fi
 
+# A machine with no git identity would fail the commit before any gate runs, so the probe
+# sets one for this run only when none is configured.
+if [ -z "$(git config user.email 2>/dev/null)" ]; then
+  export GIT_AUTHOR_NAME=probe GIT_AUTHOR_EMAIL=probe@localhost
+  export GIT_COMMITTER_NAME=probe GIT_COMMITTER_EMAIL=probe@localhost
+fi
 printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt
 git add leak-probe.txt
 COMMIT_OUT="$(git commit -m probe -- leak-probe.txt 2>&1)"

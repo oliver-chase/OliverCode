@@ -66,6 +66,19 @@ class TestCommitGuard(RepoCase):
         for cmd in ("git commit --no-verif -m x", "git commit --no-ver -m x", "git commit --no-v -m x"):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertEqual(guard.reason("git commit --no-edit -m x", self.repo), "")
+        # git rejects a value on --no-verify, so that commit never runs and is not refused.
+        self.assertEqual(guard.reason("git commit --no-verify=1 -m x", self.repo), "")
+        # An alias set through git -c that expands to a commit with a hook skip is refused.
+        for cmd in ("git -c alias.ci='commit -n' ci -m x", 'git -c "alias.ci=commit --no-verify" ci -m x',
+                    "git -c alias.ci='commit -m y' ci -n", "git -c alias.CI='commit -n' ci -m x",
+                    "git -c Alias.CI='commit -n' ci -m x", "git -c alias.ci='!git commit -n' CI -m x",
+                    "git -c alias.ci='!f() { git commit -n -m x; }; f' ci",
+                    "git -c alias.a=ci -c alias.ci='commit -n' a -m x",
+                    "git -c alias.ci='!git ci2' -c alias.ci2='commit -n' ci -m x"):
+            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
+        self.assertEqual(guard.reason("git -c alias.ci=commit ci -m x", self.repo), "")
+        self.assertIn("overrides core.hooksPath",
+                      guard.reason("git -c alias.ci='-c core.hooksPath=/dev/null commit' ci -m x", self.repo))
 
     def test_allows_setting_hooks_path_back_to_the_repos_gates_in_the_same_line(self):
         # The refusal message itself tells the session to run this command, so the combined form must pass.

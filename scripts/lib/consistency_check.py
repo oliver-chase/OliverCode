@@ -2,7 +2,7 @@
 
 One failure class: a tracked doc asserts something the code contradicts. Collapsed
 into a single checker per docs/RULES.md's removal rule -- a validator that
-duplicates another's failure class gets merged, not added alongside.
+duplicates another's failure class gets merged into it.
 
 Each `check_*` below states what drifts and why nothing else catches it. Gate counts
 are per-repo-type, so a claim resolves to its own hook before being compared:

@@ -22,13 +22,11 @@ run_precommit() {
 }
 
 run_consistency() {
-  # Two classes, both fail-closed, both learned from real defects here:
+  # Three classes, each fail-closed:
   #  - doc-vs-code drift (skills index parity, gate-count claims)
-  #  - unfalsifiable checks: a gate or script that cannot fail. A string of defects in this
-  #    repo shared that shape, and none was visible from output, because the output
-  #    always said PASS. See scripts/lib/falsifiability_check.py.
+  #  - unfalsifiable checks: a gate or script that cannot fail (scripts/lib/falsifiability_check.py)
   #  - hook drift: the three pre-commit hooks are built from core/hooks/, and a hand
-  #    edit to a built hook fails. See scripts/build-hooks.py.
+  #    edit to a built hook fails (scripts/build-hooks.py)
   echo "=== validate: checking doc/code consistency ==="
   local out
   if ! out="$(python3 -c '
@@ -169,8 +167,7 @@ run_bloat_check() {
 run_code_quality() {
   # Code quality in one repo (default: this one): TypeScript files over 400 lines, a
   # Python syntax error, and a scripts/lib module no test file mentions. The module
-  # check matches the module's name, because tests here are named for behavior and not
-  # for the module they cover.
+  # check matches the module's name, because tests here are named for the behavior they cover.
   local dir="${1:-$REPO_ROOT}" issues=0 f lines
   echo "=== validate: checking code quality ==="
   while IFS= read -r f; do
@@ -180,8 +177,8 @@ run_code_quality() {
       echo "  [FAIL] $f has $lines lines (limit 400)"
       issues=$((issues + 1))
     fi
-  done < <(find "$dir" \( -name node_modules -o -name .next -o -name .git -o -name .claude \) -prune -o \
-             \( -name '*.ts' -o -name '*.tsx' \) ! -name '*.test.*' -print 2>/dev/null)
+  done < <(git -C "$dir" -c core.quotepath=false ls-files -- '*.ts' '*.tsx' 2>/dev/null \
+             | grep -v '\.test\.' | sed "s|^|$dir/|")
   if command -v python3 &>/dev/null; then
     while IFS= read -r f; do
       [[ -z "$f" ]] && continue
@@ -189,7 +186,7 @@ run_code_quality() {
         echo "  [FAIL] syntax error in $f"
         issues=$((issues + 1))
       fi
-    done < <(find "$dir" \( -name node_modules -o -name .git -o -name __pycache__ \) -prune -o -name '*.py' -print 2>/dev/null)
+    done < <(git -C "$dir" -c core.quotepath=false ls-files -- '*.py' 2>/dev/null | sed "s|^|$dir/|")
   fi
   if [[ -d "$dir/scripts/lib" && -d "$dir/tests" ]]; then
     local module stem
@@ -248,7 +245,7 @@ run_smoke_tests() {
   # Python-only by design. A `node --test <dir>/*.mjs` block with no .mjs test present
   # exits 0 on the unmatched glob and reports success on zero tests. The one .mjs this repo ships
   # (core/templates/project/scripts/check-structure-contract.mjs) is a template that runs
-  # in downstream repos, not here. Re-add a runner deliberately if JS tests ever land.
+  # in downstream repos. Re-add a runner deliberately if JS tests ever land.
   local tests_dir="${REPO_ROOT}/tests"
   if [[ ! -d "$tests_dir" ]]; then
     return 0

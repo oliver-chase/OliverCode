@@ -33,4 +33,4 @@ what moves through it.
 
 ## Enforcement
 
-1. `npm run qa:hygiene`
+1. `bash scripts/validate.sh`, which also runs `npm run validate` when the repo has one

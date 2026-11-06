@@ -5,7 +5,7 @@
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Archived-content scan..."
 
 # Matched as a whole PATH SEGMENT, never a substring: a file legitimately titled
-# "Legacy Modernization Intelligence" is prose about legacy systems, not an archive.
+# "Legacy Modernization Intelligence" is prose about legacy systems and passes.
 ARCHIVE_SEGMENTS='^(_?[Aa]rchive[ds]?|[Ll]egacy|[Dd]eprecated|[Oo]utdated|_?[Bb]ackups?|[Oo]ld)$'
 # Suffixes that mark a file as a superseded copy of its neighbour.
 # "copy" is deliberately NOT here. In many repos copy means written copy -- "Slide

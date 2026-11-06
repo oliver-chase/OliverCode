@@ -63,7 +63,8 @@ def _located(where: Path, option: str, value: str) -> Path:
     return path if option == "--work-tree" else where
 
 
-def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], list[str]]]:
+def _commits(command: str, cwd: Path, aliases_in: dict | None = None,
+             depth: int = 0) -> list[tuple[Path, list[str], list[str], list[str]]]:
     """Each `git ... commit ...` in the command: (directory it runs in, config keys it sets,
     environment assignments before it, commit args). Anything unparseable yields nothing."""
     found = []
@@ -74,7 +75,12 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
         segments = list(_segments(command))
     except ValueError:
         return found
+    if depth > 5:
+        return found  # an alias loop; git refuses it too
     for words in segments:
+        # A shell function definition wraps its body: `f() { git commit -n; }; f`.
+        while words and (words[0] in ("{", "}") or words[0].endswith("()")):
+            words = words[1:]
         env = []
         while words and (ASSIGNMENT.match(words[0]) or words[0] in WRAPPERS):
             wrapper = words[0] in WRAPPERS
@@ -93,14 +99,15 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
             # `bash -c "git commit ..."` hides the commit inside a string; read that string as a command line.
             flags = [k for k, w in enumerate(words[1:], 1) if w.startswith("-") and not w.startswith("--") and "c" in w]
             if flags and flags[0] + 1 < len(words):
-                found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here)]
+                found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here, aliases_in, depth + 1)]
             continue
         if words and words[0] == "eval":
-            found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here)]
+            found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here, aliases_in, depth + 1)]
             continue
         if not words or words[0] != "git":
             continue
         keys, i, where = [], 1, here
+        aliases = dict(aliases_in or {})  # `git -c alias.ci='commit -n' ci` runs a commit under another name
         while i < len(words) and words[i].startswith("-"):
             w = words[i]
             nxt = words[i + 1] if i + 1 < len(words) else ""
@@ -109,9 +116,11 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                 i += 2
             elif w in ("-c", "--config-env") and nxt:
                 keys.append(nxt.split("=", 1)[0].lower())
+                _alias(nxt, aliases)
                 i += 2
             elif w.startswith("-c") and len(w) > 2:
                 keys.append(w[2:].split("=", 1)[0].lower())
+                _alias(w[2:], aliases)
                 i += 1
             elif w.startswith("--config-env="):
                 keys.append(w.split("=", 1)[1].split("=", 1)[0].lower())
@@ -132,6 +141,19 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                 restores = value in (".githooks", "./.githooks") and not unsets
                 if (at + 1 < len(rest) or unsets) and not restores:
                     hooks_path_changed = True
+        if i < len(words) and words[i].lower() in aliases:
+            expansion = aliases[words[i].lower()]
+            rest = " ".join(shlex.quote(w) for w in words[i + 1:])
+            if expansion[0] == "!":
+                # git runs a shell alias with the remaining words appended
+                line = f"{expansion[1]} {rest}"
+            else:
+                # Reparse as a git command line, so a chained alias or leading global options resolve too.
+                head = " ".join(shlex.quote(w) for w in words[:i] + expansion)
+                line = f"{head} {rest}"
+            found += [(w, k + keys, exported + env + e, a)
+                      for w, k, e, a in _commits(line, where, aliases, depth + 1)]
+            continue
         if i < len(words) and words[i] == "commit":
             if hooks_path_changed:
                 keys = keys + ["core.hookspath"]
@@ -141,6 +163,21 @@ def _commits(command: str, cwd: Path) -> list[tuple[Path, list[str], list[str], 
                     where = _located(where, "--git-dir" if name == "GIT_DIR" else "--work-tree", value)
             found.append((where, keys, exported + env, words[i + 1:]))
     return found
+
+
+def _alias(setting: str, aliases: dict) -> None:
+    """Record `alias.NAME=commit ...` from a `git -c` setting as NAME -> its words."""
+    key, _, value = setting.partition("=")
+    if key.lower().startswith("alias.") and value.startswith("!"):
+        aliases[key[len("alias."):].lower()] = ["!", value[1:]]  # a shell alias: read as a command line
+        return
+    if key.lower().startswith("alias.") and value:
+        try:
+            expansion = shlex.split(value)
+        except ValueError:
+            return
+        if expansion:
+            aliases[key[len("alias."):].lower()] = expansion  # git reads config keys without case
 
 
 def _overrides_hooks_path(keys: list[str], env: list[str]) -> bool:

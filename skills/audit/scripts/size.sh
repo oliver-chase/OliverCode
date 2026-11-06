@@ -69,7 +69,8 @@ awk -F'\t' '
   }' "$tmp"
 
 rc=0
-cfg="$(git ls-files 2>/dev/null | grep -m1 'backlog-config.json' || true)"
+# The repo's own config wins over a test fixture that happens to sort first.
+cfg="$(git ls-files 2>/dev/null | grep -x 'docs/backlog-config.json' || git ls-files 2>/dev/null | grep -v fixture | grep -m1 'backlog-config.json' || true)"
 if [ -n "$cfg" ] && command -v gh >/dev/null 2>&1; then
   repo="$(python3 -c "import json,sys; c=json.load(open('$cfg')); print(c['repoOwner']+'/'+c['repoName'])")"
   echo

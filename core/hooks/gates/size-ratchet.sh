@@ -14,7 +14,11 @@ size_field_of() {
 }
 size_field() { size_field_of "$1" "$SIZE_JSON"; }
 SIZE_BASE="$(size_field lines)"
-SIZE_PCT="$(size_field allowancePercent)"
+SIZE_HEAD_JSON="$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)"
+# The allowance and the raise cap come from the committed baseline when there is one, so a commit
+# cannot widen its own limit. The staged file still sets the line count, under the raise cap.
+SIZE_PCT="$(size_field_of allowancePercent "$SIZE_HEAD_JSON")"
+[ -n "$SIZE_PCT" ] || SIZE_PCT="$(size_field allowancePercent)"
 SIZE_COUNTER=""
 for candidate in scripts/size.sh skills/audit/scripts/size.sh; do
   if [ -f "$candidate" ]; then SIZE_COUNTER="$candidate"; break; fi
@@ -33,9 +37,9 @@ else
   SIZE_EXTRA=$(( SIZE_BASE * SIZE_PCT / 100 ))
   if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
     echo "  docs/SIZE-BASELINE.json is part of this commit, so its baseline of $SIZE_BASE lines is trusted."
-    SIZE_HEAD_BASE="$(size_field_of lines "$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
+    SIZE_HEAD_BASE="$(size_field_of lines "$SIZE_HEAD_JSON")"
     if [ -n "$SIZE_HEAD_BASE" ] && [ "$SIZE_BASE" -gt "$SIZE_HEAD_BASE" ]; then
-      SIZE_CAP_PCT="$(size_field raiseCapPercent)"
+      SIZE_CAP_PCT="$(size_field_of raiseCapPercent "$SIZE_HEAD_JSON")"
       SIZE_CAP=$(( SIZE_HEAD_BASE * ${SIZE_CAP_PCT:-2} / 100 ))
       echo "  This commit raises the baseline by $(( SIZE_BASE - SIZE_HEAD_BASE )) lines (cap $SIZE_CAP without an L or XL story)."
     fi

@@ -26,7 +26,8 @@ BUDGET_FILE = "docs/BUDGET.json"
 BASELINE_SCRIPT = Path(__file__).resolve().parents[2] / "backlog" / "scripts" / "check_kanban_baseline.py"
 
 CONTRAST = re.compile(
-    r"\b(?:not\b[^.\n]{1,60}?,\s*but\b|rather than\b|instead of\b|less\b[^.\n]{1,40}?,\s*more\b|it is not about\b)", re.I)
+    r"\b(?:not\b[^.\n]{1,60}?,?\s*\bbut\b|rather than\b|instead of\b|less\b[^.\n]{1,40}?,\s*more\b|it is not about\b)"
+    r"|,\s+not\s+(?:a|an|the|by|at|in|on|to|for|from|this|that|its|their|my|our|your)\b", re.I)
 QUOTED = re.compile(r'"[^"\n]*"')
 SMALL = {"a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "vs", "is", "at", "by"}
 CURLY = "‘’“”"
@@ -139,9 +140,12 @@ def board_drift(repo, fields_file):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None
-    fields = json.loads(Path(fields_file).read_text(encoding="utf-8")) if fields_file else mod.read_fields_from_gh(config)
     name = f"{config['repoOwner']}/{config['repoName']}" if config else "the saved board"
-    return name, mod.check_baseline(fields, mod.load_baseline(), config)
+    try:
+        fields = json.loads(Path(fields_file).read_text(encoding="utf-8")) if fields_file else mod.read_fields_from_gh(config)
+    except (SystemExit, OSError, ValueError) as exc:
+        return name, None, str(exc)
+    return name, mod.check_baseline(fields, mod.load_baseline(), config), ""
 
 
 def main(argv=None):
@@ -181,11 +185,14 @@ def main(argv=None):
     if drift is None:
         print("board: no backlog config, not checked")
     else:
-        name, diffs = drift
-        for d in diffs:
-            print(f"{name}: {d}")
-        print(f"board: {len(diffs)} difference(s) from shared/kanban-baseline.json" if diffs else "board: matches the baseline")
-        problems += len(diffs)
+        name, diffs, failure = drift
+        if diffs is None:
+            print(f"board: not checked ({failure})")
+        else:
+            for d in diffs:
+                print(f"{name}: {d}")
+            print(f"board: {len(diffs)} difference(s) from shared/kanban-baseline.json" if diffs else "board: matches the baseline")
+            problems += len(diffs)
     return 1 if problems else 0
 
 
