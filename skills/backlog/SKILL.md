@@ -88,3 +88,5 @@ Every finding is mechanical. Report them as one grouped list, or "Nothing due" w
 Clear each required-fields and status-drift finding with `gh project item-edit` or `gh api graphql`. A closed issue that shows open means the board and the issue were edited separately: close the issue and set Status `Complete` together, then re-run `drift`.
 
 A calling skill says "file via `backlog`" once and does not repeat this procedure.
+
+Finishing a whole backlog with several agents (file groups, briefs, QA that names every scenario, merging): `references/delegating-a-backlog.md`.
