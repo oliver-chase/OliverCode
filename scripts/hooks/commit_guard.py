@@ -116,7 +116,7 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
                 i += 2
             elif w in ("-c", "--config-env") and nxt:
                 keys.append(nxt.split("=", 1)[0].lower())
-                _alias(nxt, aliases)
+                _alias(nxt if w == "-c" else _from_env(nxt, exported + env), aliases)
                 i += 2
             elif w.startswith("-c") and len(w) > 2:
                 keys.append(w[2:].split("=", 1)[0].lower())
@@ -124,6 +124,7 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
                 i += 1
             elif w.startswith("--config-env="):
                 keys.append(w.split("=", 1)[1].split("=", 1)[0].lower())
+                _alias(_from_env(w.split("=", 1)[1], exported + env), aliases)
                 i += 1
             elif w.split("=", 1)[0] in GLOBAL_VALUE_OPTIONS and ("=" in w or nxt):
                 option, value = w.split("=", 1) if "=" in w else (w, nxt)
@@ -143,27 +144,28 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
                     hooks_path_changed = True
         if i < len(words) and words[i].lower() in aliases:
             name = words[i].lower()
-            if name in seen:
-                continue  # an alias that expands to itself; git refuses the loop
             expansion = aliases[name]
+            if (name, tuple(expansion)) in seen:
+                continue  # an alias that expands to itself; git refuses the loop
             args = words[i + 1:]
             rest = " ".join(shlex.quote(w) for w in args)
             if expansion[0] == "!":
                 # git runs a shell alias with the remaining words appended, which its body
                 # can also read as "$@" and $1..$9.
                 body = expansion[1]
-                for token in ('"$@"', "$@", '"$*"', "$*"):
+                for token in ('"${@}"', "${@}", '"${*}"', "${*}", '"$@"', "$@", '"$*"', "$*"):
                     body = body.replace(token, rest)
                 for n in range(9, 0, -1):
                     value = shlex.quote(args[n - 1]) if n <= len(args) else ""
-                    body = body.replace(f'"${n}"', value).replace(f"${n}", value)
+                    for form in (f'"${{{n}}}"', f"${{{n}}}", f'"${n}"', f"${n}"):
+                        body = body.replace(form, value)
                 line = f"{body} {rest}"
             else:
                 # Reparse as a git command line, so a chained alias or leading global options resolve too.
                 head = " ".join(shlex.quote(w) for w in words[:i] + expansion)
                 line = f"{head} {rest}"
             found += [(w, k + keys, exported + env + e, a)
-                      for w, k, e, a in _commits(line, where, aliases, depth + 1, seen | {name})]
+                      for w, k, e, a in _commits(line, where, aliases, depth + 1, seen | {(name, tuple(expansion))})]
             continue
         if i < len(words) and words[i] == "commit":
             if hooks_path_changed:
@@ -174,6 +176,16 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
                     where = _located(where, "--git-dir" if name == "GIT_DIR" else "--work-tree", value)
             found.append((where, keys, exported + env, words[i + 1:]))
     return found
+
+
+def _from_env(setting: str, env: list[str]) -> str:
+    """`--config-env=KEY=VAR` takes its value from VAR: return KEY=value when the line sets VAR."""
+    key, _, var = setting.partition("=")
+    for assignment in reversed(env):
+        name, _, value = assignment.partition("=")
+        if name == var:
+            return f"{key}={value}"
+    return ""
 
 
 def _alias(setting: str, aliases: dict) -> None:

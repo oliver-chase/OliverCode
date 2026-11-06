@@ -74,7 +74,11 @@ class TestCommitGuard(RepoCase):
                     "git " + " ".join(f"-c alias.a{k}=a{k + 1}" for k in range(8)) + " -c alias.a8='commit -n' a0 -m x",
                     "git " + " ".join(f"-c alias.a{k}='!git a{k + 1}'" for k in range(8)) + " -c alias.a8='commit -n' a0",
                     "git -c alias.ci='!f() { git commit \"$@\"; }; f' ci -n -m x",
-                    "git -c alias.ci='!f() { git $1 -n -m x; }; f' ci commit"):
+                    "git -c alias.ci='!f() { git $1 -n -m x; }; f' ci commit",
+                    "git -c alias.ci='!f() { git commit ${1} -m x; }; f' ci -n",
+                    "git -c alias.ci='!f() { git commit \"${@}\"; }; f' ci -n -m x",
+                    "git -c alias.ci='!git -c alias.ci=\"commit -n\" ci' ci -m x",
+                    "V='commit -n' git --config-env=alias.ci=V ci -m x"):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertEqual(guard.reason("git -c alias.ci=commit ci -m x", self.repo), "")
         self.assertEqual(guard.reason("git -c alias.a=b -c alias.b=a a", self.repo), "")  # a loop git refuses
