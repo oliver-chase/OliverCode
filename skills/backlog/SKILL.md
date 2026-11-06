@@ -60,13 +60,13 @@ After each commit or finished piece of work, and before a lead reports a helper'
 
 The sweep is read-only and changes nothing until the owner approves a fix. A stopped read (a reached limit, a failed call, a GraphQL rate limit) means it did not run, so say so and never report clean.
 
-**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full four-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene").
+**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full five-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene").
 
-When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md` and check all four dimensions unless the owner names one. Open with this message, word for word, with no other opening line and no closing recap.
+When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md` and check all five dimensions unless the owner names one. Open with this message, word for word, with no other opening line and no closing recap.
 
 > A tidy board shows at a glance what to work on next and where each item stands.
 >
-> I read your live GitHub Project board and report anything out of order across four dimensions. We go through each finding together, and I change nothing until you approve a fix.
+> I read your live GitHub Project board and report anything out of order across five dimensions. We go through each finding together, and I change nothing until you approve a fix.
 
 | Dimension | Checks |
 |---|---|
@@ -74,6 +74,7 @@ When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md
 | Status drift (`drift`) | Board Status matches issue state, and every open issue is on the board |
 | Duplicate cards (`duplicates`) | One card per issue |
 | QA sign-off (`qa-signoff`) | Every Complete item from `qaRequiredFromIssue` has an independent sign-off |
+| Grooming (`groom`) | Built work left in Backlog or Ready, epics whose Status lags their sub-issues, and open stories whose titles overlap |
 
 `references/project-fields.md` ("Sweep dimensions") holds each rule in full.
 

@@ -37,6 +37,7 @@ class DimensionScoping(unittest.TestCase):
             mock.patch.object(bh, "check_status_drift", spy("drift")),
             mock.patch.object(bh, "check_duplicate_cards", spy("duplicates")),
             mock.patch.object(bh, "check_qa_signoff", spy("qa-signoff")),
+            mock.patch.object(bh, "check_grooming", spy("groom")),
             mock.patch("sys.argv", ["check_board_hygiene.py", "--config", "x.json", *flags]),
         ]
         out = io.StringIO()
@@ -50,7 +51,7 @@ class DimensionScoping(unittest.TestCase):
         return calls
 
     def test_no_flag_runs_every_dimension(self):
-        self.assertEqual({"fields", "drift", "duplicates", "qa-signoff"},
+        self.assertEqual({"fields", "drift", "duplicates", "qa-signoff", "groom"},
                          set(self.run_main()))
 
     def test_one_dimension_runs_alone(self):
@@ -133,6 +134,36 @@ class DuplicateCards(unittest.TestCase):
 
     def test_one_card_per_issue_is_clean(self):
         self.assertEqual([], bh.check_duplicate_cards([item(1, "Ready"), item(2, "Ready")]))
+
+
+class Grooming(unittest.TestCase):
+    @staticmethod
+    def titled(number, status, title, work="Story"):
+        found = item(number, status)
+        found["content"]["title"] = title
+        found["work Type"] = work
+        return found
+
+    def test_built_work_lagging_epics_and_overlapping_titles_are_flagged(self):
+        builder = [{"body": "Agent action\n- Agent: b\n- Role: builder\n- Result: built"}]
+        found = bh.built_not_moved([item(1, "Ready"), item(2, "QA"), item(3, "Backlog")],
+                                   {1: builder, 2: builder, 3: [{"body": "a note"}]})
+        self.assertEqual(["#1"], [f.split()[0] for f in found])
+
+        epics = [self.titled(n, s, "e", "Epic") for n, s in
+                 ((10, "Ready"), (11, "Backlog"), (12, "In Progress"), (13, "Complete"))]
+        found = bh.epic_rollup(epics, {10: (3, 3), 11: (4, 1), 12: (4, 1), 13: (2, 2)}, "Complete")
+        self.assertEqual(2, len(found))
+        self.assertTrue(found[0].startswith("#10") and found[0].endswith("to Complete"))
+        self.assertTrue(found[1].startswith("#11") and found[1].endswith("to In Progress"))
+
+        stories = [self.titled(20, "Ready", "Fix the audit skill script paths"),
+                   self.titled(21, "Backlog", "Audit skill: one script path style"),
+                   self.titled(22, "Ready", "Rewrite the README"),
+                   self.titled(23, "Ready", "Epic: audit skill script paths", "Epic")]
+        found = bh.overlapping_titles(stories, {"Ready", "Backlog"})
+        self.assertEqual(1, len(found))
+        self.assertIn("#20 and #21", found[0])
 
 
 class ConfigLoading(unittest.TestCase):

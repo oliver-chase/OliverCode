@@ -4,7 +4,7 @@
 
 Usage:
     check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension
-    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, qa-signoff
+    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, qa-signoff, groom
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
     check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
@@ -172,6 +172,92 @@ def check_qa_signoff(items, config, finished="Complete", runner=qa.gh_api):
     return problems
 
 
+# Grooming finds work the board has not caught up with. Every finding is a judgment for the owner.
+WAITING_STATUSES = {"Backlog", "Ready"}
+STOPWORDS = {"the", "and", "for", "with", "that", "this", "from", "into", "every", "each", "when",
+             "make", "makes", "only", "its", "their", "them", "they", "one", "all", "add", "fix", "put", "move",
+             "bring"}
+
+
+def title_words(title):
+    words = re.findall(r"[a-z0-9][a-z0-9-]*", title.lower())
+    return {w[:-1] if w.endswith("s") and len(w) > 4 else w for w in words if len(w) > 2 and w not in STOPWORDS}
+
+
+def overlapping_titles(items, open_statuses, min_shared=3, ratio=0.6):
+    """Pairs of open stories whose titles share most of the shorter title's content words. An epic
+    shares words with its own stories by design, so epics are left out."""
+    open_items = [(i["content"]["number"], title_words(i["content"].get("title", "")))
+                  for i in items if i.get("status") in open_statuses and i.get("content", {}).get("number")
+                  and i.get("work Type") != "Epic"]
+    problems = []
+    for a in range(len(open_items)):
+        for b in range(a + 1, len(open_items)):
+            (na, wa), (nb, wb) = open_items[a], open_items[b]
+            shared = wa & wb
+            if len(shared) >= min_shared and len(shared) / min(len(wa), len(wb)) >= ratio:
+                problems.append(f"#{na} and #{nb} share {', '.join(sorted(shared))}: "
+                                "possible duplicate or superseded pair, close one or link them")
+    return problems
+
+
+def built_not_moved(items, comments_by_number):
+    """Open items still in Backlog or Ready whose issue carries a log_action builder entry."""
+    problems = []
+    for i in items:
+        number = i.get("content", {}).get("number")
+        if i.get("status") not in WAITING_STATUSES or number not in comments_by_number:
+            continue
+        if any("- Role: builder" in (c.get("body") or "") for c in comments_by_number[number]):
+            problems.append(f"#{number} \"{i['content'].get('title', '')[:50]}\" ({i.get('status')}): "
+                            "has a builder entry, move it to QA")
+    return problems
+
+
+def epic_rollup(items, summaries, finished):
+    """Open epics whose Status lags their sub-issues. `summaries` maps number to (total, completed)."""
+    problems = []
+    for i in items:
+        number = i.get("content", {}).get("number")
+        if i.get("work Type") != "Epic" or i.get("status") == finished or number not in summaries:
+            continue
+        total, completed = summaries[number]
+        title = i["content"].get("title", "")[:50]
+        if total and completed == total:
+            problems.append(f"#{number} \"{title}\": all {total} sub-issues closed, move the epic to {finished}")
+        elif completed and i.get("status") in WAITING_STATUSES:
+            problems.append(f"#{number} \"{title}\" ({i.get('status')}): {completed} of {total} "
+                            "sub-issues closed, move the epic to In Progress")
+    return problems
+
+
+def open_issue_comments(config):
+    repo = f"{config['repoOwner']}/{config['repoName']}"
+    issues = json.loads(run_gh(["issue", "list", "--repo", repo, "--state", "open",
+                                "--limit", str(ITEM_LIMIT), "--json", "number,comments"]))
+    return {x["number"]: x["comments"] for x in issues}
+
+
+def epic_summaries(items, config, finished):
+    out = {}
+    for i in items:
+        number = i.get("content", {}).get("number")
+        if i.get("work Type") != "Epic" or i.get("status") == finished or not number:
+            continue
+        data = json.loads(run_gh(["api", "graphql", "-f",
+            f'query={{ repository(owner: "{config["repoOwner"]}", name: "{config["repoName"]}") '
+            f'{{ issue(number: {number}) {{ subIssuesSummary {{ total completed }} }} }} }}']))
+        summary = data["data"]["repository"]["issue"]["subIssuesSummary"]
+        out[number] = (summary["total"], summary["completed"])
+    return out
+
+
+def check_grooming(items, config, finished, open_statuses):
+    return (built_not_moved(items, open_issue_comments(config))
+            + epic_rollup(items, epic_summaries(items, config, finished), finished)
+            + overlapping_titles(items, open_statuses))
+
+
 def placeholder_values(config):
     """True when the config still holds the example's placeholder values."""
     text = json.dumps(config)
@@ -224,7 +310,7 @@ def load_config(path):
     return config
 
 
-DIMENSIONS = ["fields", "drift", "duplicates", "qa-signoff"]
+DIMENSIONS = ["fields", "drift", "duplicates", "qa-signoff", "groom"]
 
 
 def wanted(selected, name):
@@ -268,6 +354,8 @@ def main():
         checks.append(("duplicate-cards", lambda: check_duplicate_cards(items)))
     if wanted(args.dimension, "qa-signoff"):
         checks.append(("qa-signoff", lambda: check_qa_signoff(items, config, finished)))
+    if wanted(args.dimension, "groom"):
+        checks.append(("groom", lambda: check_grooming(items, config, finished, open_statuses)))
 
     all_problems = []
     for name, fn in checks:
