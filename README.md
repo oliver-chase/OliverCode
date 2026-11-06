@@ -9,10 +9,10 @@ OliverCode is a shared set of **rules, skills, and automated checks for your cod
 
 ## Start with a conversation
 
-Fork the repo on GitHub, then clone your fork:
+Clone the repo, or your fork of it:
 
 ```bash
-git clone <your-fork> OliverCode && cd OliverCode
+git clone https://github.com/oliver-chase/OliverCode.git && cd OliverCode
 ```
 
 Open the cloned folder in Claude Code and say one sentence, such as:
