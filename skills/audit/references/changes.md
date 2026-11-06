@@ -18,6 +18,7 @@ The work a session produced, reviewed before it is called done. It runs at two s
 5. **Remove legacy the review finds.** Check that nothing references it, then delete it, since git holds the history. Never remove a file that records current state, such as the backlog or a tracker. When unsure, ask the owner
 6. **Verify on the real environment** anything marked unverified, or file it at the top of the open items
 7. **Check closed issues** where the repo names a backlog: the cited paths still say what the close claims, the commit exists, and the fix is in the code today
+8. **Count the commit findings** with `python3 scripts/commit_audit.py <repo> [<repo> ...]`. It prints each class (no story, pull-request merge, code with no test, co-author form, voice) with its count and the change since the last run, and changes nothing
 
 ## The tracker
 
