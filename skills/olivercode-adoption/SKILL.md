@@ -1,6 +1,6 @@
 ---
 name: olivercode-adoption
-description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode', 'audit my Claude config'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
+description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
 ---
 
 # OliverCode adoption
@@ -26,10 +26,9 @@ bash scripts/qa/rehearse-install.sh
 If it fails, stop and report: the fork is broken, not their machine. Everything below assumes
 a sound checkout.
 
-## The four decisions only a human can make
+## The two decisions only a human can make
 
-Everything else is mechanical. Bring the user exactly these four, each with your recommendation and
-its evidence. Never decide one silently, and keep the full inventory out of the question.
+Bring the user exactly these two, each with your recommendation and its evidence. Never decide one silently, and keep the full inventory out of the question.
 
 **1. For each existing rules file: global, repo-specific, or personal?**
 The whole adoption. Most setups tangle all three in one file.
@@ -43,12 +42,10 @@ Present as a table with your proposed bucket per item. Get agreement before movi
 `discover` lists what exists. Only the user knows which repos are live, which they retired, and
 which they do not want governed. Do not register a repo they did not confirm.
 
-**3. Any repo that genuinely needs a different hook?**
-A repo can have a real reason to diverge, such as its own governance path or a gate whose checker
-lives only there. Set `hookVariant` in its profile for that repo. Ask before assuming either way.
+## What you discover and the user confirms
 
-**4. What is each repo's canonical validation command?**
-Only they know. `npm run build`, `pytest`, a repo script. This lands in the profile.
+- **Each repo's validation command.** Read the repo: `scripts/validate.sh`, a `validate` or `check` script in `package.json`, or the command its `CLAUDE.md` names. Propose what you find, and ask only when you find none or several
+- **A hook variant.** The default is none. Propose `hookVariant` in a repo's profile only when the repo already runs its own governance path or a gate whose checker lives only there, and show the file that proves it
 
 ## Procedure
 
@@ -58,7 +55,7 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 - **Step 2, install.** Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
 - **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
-- **Step 5, register.** Add each repo's validation command (decision 4)
+- **Step 5, register.** Add each repo's confirmed validation command
 - **Step 6, enforcement.** Tell the user plainly that hook enforcement fails open, and point at `docs/SETUP.md` ("Troubleshooting")
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
 - **Step 8, reconcile.** Ask before deleting any backup
@@ -73,10 +70,4 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 
 ## Known traps
 
-- A repo `CLAUDE.md` pointing at a workspace-root-relative path. Reads fine, resolves to
-  nothing from inside the repo.
-- `~/.claude/skills/` absent on a fresh machine — `install` handles it. A bare `ln -s` does not
-- An uninstalled symlink makes `dirname "$(readlink ~/.claude/CLAUDE.md)"` return `.`, silently
-  resolving to whatever repo the agent is standing in. Always guard the resolution.
-- A layout the scripts cannot resolve degrades to WARN and skips. **WARN is not coverage.**
-- Registering a repo by name alone when it is not a sibling — it will never be found. Use `path`
+`docs/SETUP.md` holds them: the `$OC` guard in Step 3, the sibling layout and the `path` field in "Folder structure", a WARN that is not coverage, and "Troubleshooting".
