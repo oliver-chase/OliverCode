@@ -117,6 +117,25 @@ class TestGate1Secrets(GateHarness):
     def test_github_pat_blocks(self):
         self.stage("deploy.sh", "TOKEN=ghp_" + "b" * 36 + "\n")
         self.assertBlocked("gate 1")
+        git(self.tmp, "rm", "-q", "--cached", "deploy.sh")
+        # Current credential formats, each built at run time and staged alone.
+        modern = {
+            "anthropic": "sk-" + "ant-api03-" + "A1b_" * 20,
+            "github fine-grained": "github" + "_pat_" + "11ABC" + "x" * 60,
+            "github oauth": "gh" + "o_" + "c" * 36,
+            "aws secret with slashes": "aws_secret_access_key = " + "Ab/c+De" * 5 + "Ab/c+",
+            "slack webhook": "https://hooks." + "slack.com/services/T0ABC/B0DEF/" + "g" * 24,
+            "gitlab": "gl" + "pat-" + "h" * 20,
+            "hugging face": "h" + "f_" + "i" * 34,
+            "sendgrid": "S" + "G." + "j" * 22 + "." + "k" * 43,
+            "webhook secret": "wh" + "sec_" + "m" * 32,
+            "google oauth": "ya" + "29." + "n" * 40,
+        }
+        for name, value in modern.items():
+            with self.subTest(name):
+                self.stage("cred.txt", value + "\n")
+                self.assertBlocked("gate 1")
+                git(self.tmp, "rm", "-q", "--cached", "cred.txt")
 
     def test_private_key_header_blocks(self):
         self.stage("id.txt", "-----REDACTED-----\n")

@@ -38,7 +38,16 @@ echo "[pre-commit] Gate 1/9: Secret scan..."
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
   'sk-[A-Za-z0-9]{20,}'                        # OpenAI/Anthropic-style keys
-  'ghp_[A-Za-z0-9]{36}'                        # GitHub personal access tokens
+  'gh[pousr]_[A-Za-z0-9]{36}'                  # GitHub classic, OAuth, user, server and refresh tokens
+  'github_pat_[A-Za-z0-9_]{22,}'               # GitHub fine-grained tokens
+  'sk-ant-[a-z0-9]+-[A-Za-z0-9_-]{20,}'        # Anthropic keys (hyphens, so the sk- rule above misses them)
+  'glpat-[A-Za-z0-9_-]{20,}'                   # GitLab tokens
+  'hf_[A-Za-z0-9]{30,}'                        # Hugging Face tokens
+  'SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'   # SendGrid keys
+  'whsec_[A-Za-z0-9]{24,}'                     # Webhook signing secrets
+  'ya29\.[0-9A-Za-z_-]{20,}'                   # Google OAuth access tokens
+  'hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+'  # Slack webhook URLs
+  '(AWS|aws)_?(SECRET|secret)_?(ACCESS|access)?_?(KEY|key)?["'\'':= ]+[A-Za-z0-9/+=]{40}'  # AWS secret keys, which carry slashes
   'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+'  # JWT tokens
   '(A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}'   # AWS access key id -- a bare AKIA... has no secret-named var to catch it
   'xox[baprs]-[0-9A-Za-z-]{10,}'               # Slack tokens (hyphens, so the alnum rule below misses them)
@@ -315,7 +324,11 @@ size_field_of() {
 }
 size_field() { size_field_of "$1" "$SIZE_JSON"; }
 SIZE_BASE="$(size_field lines)"
-SIZE_PCT="$(size_field allowancePercent)"
+SIZE_HEAD_JSON="$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)"
+# The allowance and the raise cap come from the committed baseline when there is one, so a commit
+# cannot widen its own limit. The staged file still sets the line count, under the raise cap.
+SIZE_PCT="$(size_field_of allowancePercent "$SIZE_HEAD_JSON")"
+[ -n "$SIZE_PCT" ] || SIZE_PCT="$(size_field allowancePercent)"
 SIZE_COUNTER=""
 for candidate in scripts/size.sh skills/audit/scripts/size.sh; do
   if [ -f "$candidate" ]; then SIZE_COUNTER="$candidate"; break; fi
@@ -334,9 +347,9 @@ else
   SIZE_EXTRA=$(( SIZE_BASE * SIZE_PCT / 100 ))
   if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
     echo "  docs/SIZE-BASELINE.json is part of this commit, so its baseline of $SIZE_BASE lines is trusted."
-    SIZE_HEAD_BASE="$(size_field_of lines "$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
+    SIZE_HEAD_BASE="$(size_field_of lines "$SIZE_HEAD_JSON")"
     if [ -n "$SIZE_HEAD_BASE" ] && [ "$SIZE_BASE" -gt "$SIZE_HEAD_BASE" ]; then
-      SIZE_CAP_PCT="$(size_field raiseCapPercent)"
+      SIZE_CAP_PCT="$(size_field_of raiseCapPercent "$SIZE_HEAD_JSON")"
       SIZE_CAP=$(( SIZE_HEAD_BASE * ${SIZE_CAP_PCT:-2} / 100 ))
       echo "  This commit raises the baseline by $(( SIZE_BASE - SIZE_HEAD_BASE )) lines (cap $SIZE_CAP without an L or XL story)."
     fi

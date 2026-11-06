@@ -66,6 +66,9 @@ class RatchetGate(RatchetSetup):
         self.assertIn("three files that grew most", out)
         listed = [l.split()[-1] for l in out.splitlines() if l.strip().startswith("+")]
         self.assertEqual(["a.txt", "b.txt", "c.txt"], listed)
+        # The allowance comes from the committed baseline, so the same commit cannot widen it.
+        self.stage(BASELINE, baseline_text(self.recorded, 100))
+        self.assertIn("5% allowance", self.assertBlocked("size ratchet").stdout)
 
     def test_a_one_line_baseline_reads_the_same_as_the_shipped_layout(self):
         """A hand-written {"lines": N, "allowancePercent": 5} used to read 5 as the line count and block every commit."""
