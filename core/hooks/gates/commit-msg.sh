@@ -38,7 +38,7 @@ SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}')"
 # and first-commit exits below so no message prefix skips it.
 if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
   baseline_field() {
-    printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
+    printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*"'"$1"'"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
   }
   NEW_LINES="$(baseline_field lines "$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
   OLD_JSON="$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)"
