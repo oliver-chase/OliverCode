@@ -209,6 +209,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     own_origin = _backlog_setup_origin(oc_root)
     if own_origin:
         fills["your-org/your-orchestration"] = f"{own_origin[0]}/{own_origin[1]}"
+    fills["<Repo>"] = target.name
 
     new = overwritten = kept = 0
     missing_src = []
@@ -245,7 +246,10 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
         print("\nRe-run without --dry-run to apply.")
     else:
         print("\nNext: `olivercode sync-hooks` installs the hooks and sets core.hooksPath,")
-        print("then fill in the placeholders in docs/repo-structure-contract.md.")
+        if not target_origin:
+            print("The repo has no origin remote, so .github/CODEOWNERS still names <your-github-owner>.")
+        if not own_origin:
+            print("This checkout has no origin remote, so the governance workflow still names your-org/your-orchestration.")
     return 1 if missing_src else 0
 
 
