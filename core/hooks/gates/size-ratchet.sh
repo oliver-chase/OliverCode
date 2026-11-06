@@ -46,7 +46,11 @@ else
     git diff --cached --numstat --no-renames --diff-filter=ACM \
       | awk -F'\t' '$1 != "-" && $1 - $2 > 0 { print $1 - $2 "\t" $3 }' | sort -rn | sed -n 1,3p \
       | while IFS="$(printf '\t')" read -r grown path; do echo "    +$grown  $path"; done
-    echo "  Remove lines, or raise \"lines\" in docs/SIZE-BASELINE.json in this commit with the story number in the message. A raise over the cap also needs a \"Size: L\" or \"Size: XL\" line."
+    if [ -f scripts/size_baseline.py ]; then
+      echo "  Remove lines, or run python3 scripts/size_baseline.py --write, stage docs/SIZE-BASELINE.json and put the story number in the message. The script counts the files, so a merge of two branches reruns it instead of choosing between two numbers. A raise over the cap also needs a \"Size: L\" or \"Size: XL\" line."
+    else
+      echo "  Remove lines, or raise \"lines\" in docs/SIZE-BASELINE.json in this commit with the story number in the message. A raise over the cap also needs a \"Size: L\" or \"Size: XL\" line."
+    fi
     exit 1
   fi
   echo "  Gate {{N}} passed ($SIZE_TOTAL lines, baseline $SIZE_BASE)."

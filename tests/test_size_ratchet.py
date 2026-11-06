@@ -74,6 +74,13 @@ class RatchetGate(RatchetSetup):
         out = self.assertAllowed().stdout
         self.assertIn(f"baseline {self.recorded})", out)
 
+    def test_the_block_names_the_repos_baseline_script_when_it_has_one(self):
+        self.stage("big.txt", "x\n" * 100)
+        self.assertNotIn("size_baseline.py", self.assertBlocked("size ratchet").stdout)
+        self.stage("scripts/size_baseline.py", "# the repo's own baseline writer\n")
+        out = self.assertBlocked("size ratchet").stdout
+        self.assertIn("python3 scripts/size_baseline.py --write", out)
+
     def test_a_cleanup_never_blocks(self):
         git(self.tmp, "rm", "-q", "base.txt")
         self.assertAllowed()
