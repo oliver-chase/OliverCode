@@ -13,9 +13,9 @@ Every script below runs from this skill's folder, and command shapes live in `re
 
 ## Which repo, which config
 
-Before running anything, read the current repo's `CLAUDE.md` for the line that names its `backlog-config.json`. Never ask the owner for the path when that line exists, and never guess one. A `CLAUDE.md` with no such line means the repo has not adopted this skill: ask where a config should live, write it there from `$OC/shared/backlog-config.example.json`, and name it in that file in the same session.
+Before running anything, read the current repo's `CLAUDE.md` for the line that names its `backlog-config.json`. Never ask the owner for the path when that line exists, and never guess one. A `CLAUDE.md` with no such line means the repo has not adopted this skill. The config lives at `docs/backlog-config.json`: run `olivercode backlog-setup` (add `--apply` to create the Project and write the file) and name the file in `CLAUDE.md` in the same session.
 
-Verify it with `python3 scripts/check_board_hygiene.py --config CONFIG --verify-config`. It stops a config that holds the example's placeholders and a config whose repo is not the git origin of its folder, which is a fork that inherited the owner's config. On a stop, file, comment and edit nothing, and tell the fork's owner to copy `shared/backlog-config.example.json`, fill in their own Project and pass that path. Never hardcode a repo, Project or field ID.
+Verify it with `python3 scripts/check_board_hygiene.py --config CONFIG --verify-config`. It stops a config that holds the example's placeholders and a config whose repo is not the git origin of its folder, which is a fork that inherited the owner's config. On a stop, file, comment and edit nothing, and run `olivercode backlog-setup --apply` for the fork's own repo, which creates its Project and writes the config. Never hardcode a repo, Project or field ID.
 
 ## Check the board against the baseline
 
@@ -33,7 +33,7 @@ Every owner request that changes files becomes a story before any work starts, s
 
 ## Work an item
 
-Take items one at a time. Before building, run `git fetch origin main` and list the open pull requests, since another session may have built it already. Read the story in full, restate the ask in your own words and check it against the current code, tests and docs, since a story written weeks ago may describe a state that has moved. When they conflict, show the owner the exact differences and wait for a decision before overwriting, updating or skipping. A matching story goes ahead without a pause. When the code has moved, rewrite the story with accurate Gherkin criteria, file any prerequisite or follow-on stories through "Save every ask", and confirm the backlog changes before the build starts.
+Take items one at a time. Before building, run `git fetch origin main` and list the branches and recent commits that name the story, since another session may have built it already. Read the story in full, restate the ask in your own words and check it against the current code, tests and docs, since a story written weeks ago may describe a state that has moved. When they conflict, show the owner the exact differences and wait for a decision before overwriting, updating or skipping. A matching story goes ahead without a pause. When the code has moved, rewrite the story with accurate Gherkin criteria, file any prerequisite or follow-on stories through "Save every ask", and confirm the backlog changes before the build starts.
 
 ## Log every action
 
@@ -51,7 +51,7 @@ After each commit or finished piece of work, and before a lead reports a helper'
 
 ## Close a story or epic
 
-1. **QA first.** The builder moves the story to `QA` and stops. A different agent that built no part of the story checks each Gherkin scenario against the files without seeing the builder's conclusion. One agent covers every story of a pull request and ends its report with one line per story, as in `Story 12: PASS; confirmed: Work is finished; Work fails`. Log the whole report with `log_action.py --role qa --from-report FILE`, and a note may follow the last scenario name. A story whose body has the line `QA: mechanical` changes no behavior (a wording, whitespace or duplicate-removal edit), needs no QA agent, and closes when the builder logs a result that says `validate.sh exits 0` and quotes the counts it changed. The check looks for the phrase only, so the lead reads the counts.
+1. **QA first.** The builder moves the story to `QA` and stops. A different agent that built no part of the story checks each Gherkin scenario against the files without seeing the builder's conclusion. One agent covers every story of a branch and ends its report with one line per story, as in `Story 12: PASS; confirmed: Work is finished; Work fails`. Log the whole report with `log_action.py --role qa --from-report FILE`, and a note may follow the last scenario name. A story whose body has the line `QA: mechanical` changes no behavior (a wording, whitespace or duplicate-removal edit), needs no QA agent, and closes when the builder logs a result that says `validate.sh exits 0` and quotes the counts it changed. The check looks for the phrase only, so the lead reads the counts.
 2. **Check the sign-off** with `python3 scripts/check_qa_signoff.py --story N --config CONFIG`. It exits 0 on an independent PASS that confirms every scenario by its whole name when the story also has a builder comment, or on the mechanical proof above. When another session built the story and never logged it, log the builder with `log_action.py --role builder --agent-from-commit --commit HASH`. Otherwise the story returns to `In Progress` with the findings in a comment.
 3. **Move Status to `Complete`** and comment the evidence: files touched and what shipped. One comment per real change, and the issue body is never rewritten to show the final state, so the comment trail stays the record.
 4. **Update the parent epic.** Status does not follow sub-issue progress, so query `subIssuesSummary` (`references/project-fields.md`). All complete: move the parent to `Complete`. A sub-issue deliberately deferred: the parent stays `In Progress` and the comment says why. Some complete, none deferred: move a `Backlog` or `Ready` parent to `In Progress`. Comment the real count either way.
@@ -60,15 +60,13 @@ After each commit or finished piece of work, and before a lead reports a helper'
 
 The sweep is read-only and changes nothing until the owner approves a fix. A stopped read (a reached limit, a failed call, a GraphQL rate limit) means it did not run, so say so and never report clean.
 
-**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full four-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene"), and weekly.
+**After every filing**, run only the required-fields and duplicate dimensions: `python3 scripts/check_board_hygiene.py --config CONFIG --dimension fields --dimension duplicates`. The full four-dimension sweep runs when the owner asks for it, when a person raises the backlog ("backlog status", "what needs triage", "groom the backlog", "board hygiene").
 
-When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md` and open with this message, word for word, with no other opening line and no closing recap. A named dimension skips it.
+When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md` and check all four dimensions unless the owner names one. Open with this message, word for word, with no other opening line and no closing recap.
 
 > A tidy board shows at a glance what to work on next and where each item stands.
 >
 > I read your live GitHub Project board and report anything out of order across four dimensions. We go through each finding together, and I change nothing until you approve a fix.
->
-> Which dimension should I check? Name one of fields, drift, duplicates or qa-signoff, or say "all" and I will check all four. I also need `gh` installed and signed in.
 
 | Dimension | Checks |
 |---|---|

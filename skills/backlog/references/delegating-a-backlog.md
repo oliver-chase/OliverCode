@@ -1,6 +1,6 @@
 # Delegating a backlog
 
-Use this when an owner asks for a whole backlog to be finished and several agents will build it. It records what held up on the content-flow and ecommerce backlogs.
+Use this when an owner asks for a whole backlog to be finished and several agents will build it. It records what held up when several agents finished a backlog.
 
 ## Split by the files a story touches
 
@@ -33,7 +33,5 @@ Send each QA report to a fixer as the spec, then a second reviewer re-checks onl
 
 ## Pitfalls seen
 
-- A wait loop that calls `pgrep -f` on its own command line matches itself and never ends; wait on a log line or a file
-- A queue step that makes rows for every ready line overwrote an owner's hold and rebuilt rows for lines the plan did not name; build only what the plan names
-- Re-timing in the middle of a day lost that day's remaining slots; start from the next slot still ahead
+- A wait loop that matches its own command line never ends; wait on a log line or a file
 - Add `--quick` checks for speed, and the full validation before every merge
