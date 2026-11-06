@@ -21,14 +21,11 @@ from lib.skill_links import broken_links as _broken_links, link_states as _link_
 class _HealthTally:
     """Accumulates health-check results.
 
-    WARN does not fail the run, on purpose: a standalone clone missing local-only
-    context (control plane, private repos) must still exit 0 (see docs/RULES.md).
+    WARN does not fail the run: a standalone clone missing local-only context
+    (control plane, private repos) must still exit 0 (see docs/RULES.md).
 
-    It is counted SEPARATELY from OK all the same. Folding the two together printed
-    "HEALTHY — 8/8 checks passed" on a run where five of the eight had been skipped
-    for missing context and only three had actually verified anything. Nothing was
-    wrong, but the summary claimed evidence it did not have, which is the same shape
-    as every other defect this repo has had to dig out (scripts/lib/falsifiability_check.py).
+    WARN is counted apart from OK, so the summary claims only the checks that verified
+    something, and a skipped check never reads as a pass.
     """
 
     def __init__(self) -> None:

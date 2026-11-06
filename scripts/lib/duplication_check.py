@@ -2,7 +2,7 @@
 
 Slides a 15-word window across every tracked markdown file; a window shared by two
 files fails the build unless it matches a declared canonical-reuse marker below.
-Substring match, not semantic similarity, by design -- see the ledger entry for why.
+It matches substrings by design; docs/DECISIONS.md says why.
 
 Every tracked markdown file is covered: docs, skills and their references, core templates and
 the repo root. The same file ships to adopted repos as scripts/duplication_check.py (#80), so
@@ -34,9 +34,9 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 # is exactly the kind of copy-paste drift this check exists to catch -- excluding code
 # fences would blind it to the duplicated probe script that motivated building it.
 
-# Snippets that are deliberate reuse, not drift -- matched as a normalized (lowercase,
+# Deliberate reuse, matched as a normalized (lowercase,
 # punctuation-stripped) substring of the finding, so one entry covers every file pair
-# that shares it, so pairs need no listing. An entry without a real
+# that shares it. An entry without a real
 # reason recreates the blind spot this check exists to close.
 DECLARED_MARKERS: dict[str, str] = {
     "dirname readlink claude claude md": (

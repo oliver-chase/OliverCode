@@ -10,7 +10,7 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 1. Understand what's being asked
 2. Decompose into sequential steps
 3. For each step: what, why, expected outcome, risk level
-4. Write to file (markdown), NOT executed
+4. Write it to a markdown file and stop there
 
 ## Claims discipline
 

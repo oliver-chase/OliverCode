@@ -145,7 +145,7 @@ def file_ref_scan(skill_dirs):
     return dangling
 
 
-# SKILL-WEIGHT-1: files that exist for the tooling, not for a step in the skill.
+# SKILL-WEIGHT-1: files that exist for the tooling and serve no step in the skill.
 WEIGHT_EXEMPT_NAMES = {"SKILL.md", "README.md", "DECISIONS.md", "_REQUIRES"}
 WEIGHT_SKIP_DIRS = {"__pycache__", "node_modules", ".git", "dist"}
 SCRIPT_SUFFIXES = {".py", ".js", ".sh"}
@@ -186,7 +186,7 @@ def weight_row(skill_dir):
         if rel.parts[0] == "references" and f.suffix == ".md":
             unloaded.append(str(rel))
     tests_dir = skill_dir.parent / "tests" / skill_dir.name
-    # An import line alone proves the module loads, not that a test exercises it, so import lines do not count.
+    # An import line alone proves only that the module loads, so import lines do not count.
     test_lines = [line for f in [*(tests_dir.rglob("*") if tests_dir.is_dir() else []), *skill_dir.rglob("test_*")]
                   if f.is_file() for line in f.read_text(encoding="utf-8", errors="ignore").splitlines(True)]
     test_text = "".join(line for line in test_lines if not re.match(r"\s*(import|from)\s", line))

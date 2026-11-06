@@ -153,7 +153,7 @@ def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int
 
     Only a host that answers and DENIES the repo counts as a FAIL. Two cases that
     look similar are deliberately warnings instead:
-      - a network error means unverifiable, not broken
+      - a network error means unverifiable, so it only warns
       - no origin at all is a local-only repo, which is a legitimate state; a fresh
         `git init` scratch repo has no remote and is not a governance failure
     """

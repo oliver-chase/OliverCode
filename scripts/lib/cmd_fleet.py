@@ -125,7 +125,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
         variant = profile.get("hookVariant")
         if variant:
             # Declared variant: overwriting its pre-commit would destroy a considered customization.
-            # `health` reports it as WARN, not drift. Remove the profile field
+            # `health` reports it as a WARN. Remove the profile field
             # to bring the repo back under the template.
             _install_pre_push(repo_path, templates_dir)
             print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced")

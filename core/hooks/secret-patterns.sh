@@ -14,7 +14,7 @@ SECRET_PATTERNS=(
   'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+'  # JWT tokens
   '(A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}'   # AWS access key id -- a bare AKIA... has no secret-named var to catch it
   'xox[baprs]-[0-9A-Za-z-]{10,}'               # Slack tokens (hyphens, so the alnum rule below misses them)
-  '(sk|rk)_live_[0-9A-Za-z]{20,}'              # Stripe LIVE keys (underscore, not the sk- shape above). test keys deliberately allowed -- they appear in docs
+  '(sk|rk)_live_[0-9A-Za-z]{20,}'              # Stripe LIVE keys (an underscore, which the sk- shape above misses). test keys deliberately allowed -- they appear in docs
   'AIza[0-9A-Za-z_-]{35}'                      # Google API key
   'npm_[0-9A-Za-z]{36}'                        # npm access token
   '-----BEGIN [A-Z ]*PRIVATE KEY-----'         # Private keys (RSA/EC/DSA/OPENSSH/PKCS8) — matches "BEGIN <TYPE> PRIVATE KEY"

@@ -5,7 +5,7 @@
 # README, docs/SETUP.md and skills/olivercode-adoption/SKILL.md walkthroughs
 # all invoke this one script.
 #
-# Writes the probe file straight into the current repo, not staged through
+# Writes the probe file straight into the current repo, unstaged by
 # /tmp: the gate scans what is staged, so a copy step would prove nothing.
 #
 # Usage: bash scripts/qa/probe-secret-gate.sh   (run from inside the repo to probe)

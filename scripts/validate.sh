@@ -22,13 +22,11 @@ run_precommit() {
 }
 
 run_consistency() {
-  # Two classes, both fail-closed, both learned from real defects here:
+  # Three classes, each fail-closed:
   #  - doc-vs-code drift (skills index parity, gate-count claims)
-  #  - unfalsifiable checks: a gate or script that cannot fail. A string of defects in this
-  #    repo shared that shape, and none was visible from output, because the output
-  #    always said PASS. See scripts/lib/falsifiability_check.py.
+  #  - unfalsifiable checks: a gate or script that cannot fail (scripts/lib/falsifiability_check.py)
   #  - hook drift: the three pre-commit hooks are built from core/hooks/, and a hand
-  #    edit to a built hook fails. See scripts/build-hooks.py.
+  #    edit to a built hook fails (scripts/build-hooks.py)
   echo "=== validate: checking doc/code consistency ==="
   local out
   if ! out="$(python3 -c '
@@ -248,7 +246,7 @@ run_smoke_tests() {
   # Python-only by design. A `node --test <dir>/*.mjs` block with no .mjs test present
   # exits 0 on the unmatched glob and reports success on zero tests. The one .mjs this repo ships
   # (core/templates/project/scripts/check-structure-contract.mjs) is a template that runs
-  # in downstream repos, not here. Re-add a runner deliberately if JS tests ever land.
+  # in downstream repos. Re-add a runner deliberately if JS tests ever land.
   local tests_dir="${REPO_ROOT}/tests"
   if [[ ! -d "$tests_dir" ]]; then
     return 0

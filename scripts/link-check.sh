@@ -34,9 +34,8 @@ checked=0
 $QUIET || echo "=== Internal Link Integrity Check ==="
 $QUIET || echo ""
 
-# Scan docs/ plus the other tracked homes of plain [text](path.md) links. Measured
-# Scanning only docs/ missed most real occurrences — scanning only
-# docs/ made the checker a near no-op. (Exclude docs/archive/ — archived links may break.)
+# Scan every tracked home of plain [text](path.md) links: docs/, core/, shared/, skills/,
+# README.md and CLAUDE.md. docs/archive/ is excluded because archived links may break.
 SCAN_ROOTS=("$REPO_ROOT/docs" "$REPO_ROOT/core" "$REPO_ROOT/shared" "$REPO_ROOT/skills"
   "$REPO_ROOT/README.md" "$REPO_ROOT/CLAUDE.md")
 while IFS= read -r -d '' file; do
@@ -57,7 +56,7 @@ while IFS= read -r -d '' file; do
 
     # runtime/control-plane/ is gitignored, local-only state (docs/RULES.md) —
     # links into it (e.g. README.md -> runtime/control-plane/README.md) are valid
-    # documentation of an optional local layer, not broken references. A fresh/
+    # documentation of an optional local layer, so they pass. A fresh/
     # standalone clone genuinely won't have this directory (a stranger's fresh clone).
     case "$target" in
       "$REPO_ROOT/runtime/control-plane/"*) checked=$((checked + 1)); continue ;;

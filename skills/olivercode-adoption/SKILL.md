@@ -11,7 +11,7 @@ need detail, but do not make the user read it.
 
 ## The rule that governs everything here
 
-**Optimize, do not amputate.** You are pointing existing rules at a shared home, not deleting
+**Optimize, do not amputate.** You are pointing existing rules at a shared home and keeping
 them. A rule you cannot classify is a rule you keep and flag. Never delete a user's config
 because it looks redundant — redundancy is their call.
 
@@ -23,7 +23,7 @@ Back up before the first mutation. Do not delete a backup until the user confirm
 bash scripts/qa/rehearse-install.sh
 ```
 
-If it fails, stop and report: the fork is broken, not their machine. Everything below assumes
+If it fails, stop and report that the fork is broken and their machine is fine. Everything below assumes
 a sound checkout.
 
 ## The two decisions only a human can make
@@ -34,7 +34,7 @@ Bring the user exactly these two, each with your recommendation and its evidence
 The whole adoption. Most setups tangle all three in one file.
 - *machine-global* (applies everywhere) → the fork's `CLAUDE.md`
 - *repo-specific* (true of one product only) → that repo's `CLAUDE.md`
-- *personal/business* (voice, GTM, hiring) → their own user-skills area, NOT the framework
+- *personal/business* (voice, GTM, hiring) → their own user-skills area, outside the framework
 - *cannot classify* → leave it exactly where it is and say so
 Present as a table with your proposed bucket per item. Get agreement before moving anything.
 

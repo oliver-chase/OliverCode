@@ -85,6 +85,13 @@ class Voice(unittest.TestCase):
             _, out = run(str(repo))
             self.assertNotIn("A.md:1", out)
             self.assertIn("A.md:2: contrast framing", out)
+        # The common forms: ", not a ..." and "not X but Y" without a comma.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(tmp, {"A.md": "It is a guide, not a rule.\nIt is not slow but fast.\nIt is fine.\n"})
+            _, out = run(str(repo))
+            self.assertIn("A.md:1: contrast framing", out)
+            self.assertIn("A.md:2: contrast framing", out)
+            self.assertNotIn("A.md:3", out)
 
     def test_flags_title_case_headings_and_curly_quotes(self):
         with tempfile.TemporaryDirectory() as tmp:
