@@ -1,6 +1,6 @@
 # Gates
 
-Every check that can block a commit or a push, what it blocks and which repos run it. A failed gate blocks the commit, and no bypass mode exists.
+Every check that can block a commit or a push, what it blocks and which repos run it. A failed gate blocks the commit.
 
 ## Validation
 
@@ -22,7 +22,7 @@ Beyond the commit hook, `validate.sh` fails closed on these classes, each of whi
 
 `validate.sh` also reports fleet hook state on every run, through `olivercode conform --offline`, which reads local files and makes no network call. That report is advisory and never fatal, because hook enforcement fails open: a repo with an unset or broken `core.hooksPath` is silently ungoverned. A repo that must diverge from the template declares `hookVariant` in its profile, which `shared/repo-profiles.json` documents.
 
-OliverCode ships `.github/workflows/framework-ci.yml`, which runs health, `validate.sh` and the install rehearsal as gating steps on push and pull request. The workflow is paused on the origin repo and on managed repos while GitHub Actions billing is blocked. Do not re-enable it as a fix. Enable it in your own fork, where your billing applies.
+OliverCode ships `.github/workflows/framework-ci.yml`, which runs health, `validate.sh` and the install rehearsal as gating steps on push and pull request. The workflow is paused on the origin repo and on managed repos while GitHub Actions billing is blocked. Enable it in your own fork, where your billing applies.
 
 While CI is paused the local commands are the enforcement. `bash scripts/validate.sh` also runs the bloat and code quality checks (`CI-STRICT-1` in `docs/DECISIONS.md`). `validate.sh --rehearse` rehearses the install in sandboxes (`scripts/qa/rehearse-install.sh`), and nothing runs it automatically, so it is advisory. A governance CI workflow template for downstream repos exists at `core/templates/project/.github/workflows/olivercode-governance.yml`.
 
@@ -47,7 +47,7 @@ Gate coverage differs by repo. This table is the one home for that, and anywhere
 | Duplicate text | A staged markdown file that shares a passage of 15 words or more with another tracked markdown file, in docs, skills, references, core templates or the repo root. It runs the shared check over the staged markdown files against the tracked tree, names both files, and skips where the script or python3 is missing. See "Duplicate text" below | 9 | 9 | 7 |
 | **Total** | | **9** | **9** | **7** |
 
-The numbers are each gate's position in that hook's run order, so the same gate can carry a different number in different hooks. Read the column and not the number.
+The numbers are each gate's position in that hook's run order, so read the column.
 
 ### Verdicts on judged gates
 
@@ -82,7 +82,7 @@ The private variant drops the PII gate on purpose, because a private repo holds 
 * A story that must grow the repo raises `lines` by editing the file in the same commit, with the story number in the message
 * A repo that keeps its own size_baseline script under scripts gets that command named in the block message. The script counts the files and writes `lines`, so a merge of two branches reruns it and never picks between two hand-edited numbers. The gate and the raise cap read the file the same way
 
-A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how far one commit may raise `lines` above the committed value. The hook reads the cap from the committed file, so the same commit cannot change it, and merge, revert and fixup messages get the same check. The size gate prints the raise and passes it, because a pre-commit gate cannot read the commit message. The commit-msg hook then refuses a raise over the cap unless the message carries a line `Size: L` or `Size: XL`, copied from the Size field of the story that needs the growth. A story of size M or smaller splits its work so each commit stays inside the cap, or lowers the total elsewhere in the same commit. The hook checks the declaration and nothing checks that the raise belongs to the story named, so the reviewer confirms that when the Size line appears. A repo that opts out of the commit-msg hook loses this check with it.
+A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how far one commit may raise `lines` above the committed value. The hook reads the cap from the committed file, so the same commit cannot change it, and merge, revert and fixup messages get the same check. The size gate prints the raise and passes it, because a pre-commit gate cannot read the commit message. The commit-msg hook then refuses a raise over the cap unless the message carries a line `Size: L` or `Size: XL`, copied from the Size field of the story that needs the growth. A story of size M or smaller splits its work so each commit stays inside the cap, or lowers the total elsewhere in the same commit. The reviewer confirms the raise belongs to the story named. A repo that opts out of the commit-msg hook loses this check with it.
 
 ### Owner identifiers
 
@@ -107,11 +107,12 @@ Git shows a commit message only to the `commit-msg` hook, so these checks are a 
 | Gate | What it blocks |
 |------|---------------|
 | Story reference | A commit whose message has no `#<number>`, such as `(#53)` or `Story: #53`. Merge, revert and `fixup!`, `squash!` and `amend!` messages are exempt, and so is a repo's first commit. A reference inside a `#` comment line does not count, and the hook blocks when it cannot read the message file |
+| Story exists | A reference to a story absent from its repo: `#N` is checked in the repo that `docs/backlog-config.json` names and `owner/repo#N` in the repo it spells out, through `gh api`. Yes answers are cached in `.git/story-exists-cache`. The check fails open with a warning when `gh` or GitHub is unavailable, and a repo without the config skips it |
 | Size raise | A commit that raises `lines` in `docs/SIZE-BASELINE.json` by more than `raiseCapPercent` (default 2) of the committed value, without a `Size: L` or `Size: XL` line in the message. See "Size ratchet" above |
 
 A repo opts out only when its owner creates a file named `commit-msg.optout` in the repo's `.githooks` folder. The hook and `sync-hooks` never create or remove that file, and every commit it lets through prints that the check is off.
 
-The hook enforces the reference and the size-raise declaration only. Each agent posts the log comment on the story (`skills/backlog/scripts/log_action.py`) as the `backlog` skill and `docs/RULES.md` direct, because no hook can force a GitHub comment.
+No hook can force the log comment on the story (`skills/backlog/scripts/log_action.py`), so each agent posts it as the `backlog` skill directs.
 
 ## Pre-push gates
 

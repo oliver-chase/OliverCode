@@ -88,4 +88,48 @@ if ! printf '%s\n' "$MESSAGE" | grep -Eq "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_E
   echo "  To turn the check off for a repo, the owner creates $HOOK_DIR/commit-msg.optout (docs/GATES.md)."
   exit 1
 fi
+
+# STORY-EXISTS-1. A number must name a story that exists. #165 cited in a repo whose board stops at #40
+# passed the check above, so the hook asks GitHub about each reference: a plain #N is looked up in the repo
+# named by docs/backlog-config.json (repoOwner, repoName), and owner/repo#N in the repo it spells out.
+# A yes is cached in .git/story-exists-cache so later commits skip the call. A repo without the config is
+# not checked. When gh is missing or the call fails for any reason but a 404 (offline, rate limit, no
+# login) the hook prints a warning and lets the commit through, so an offline commit is never blocked.
+CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || true)/docs/backlog-config.json"
+if [ -r "$CONFIG_FILE" ]; then
+  config_value() { sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_FILE" | head -1; }
+  HOME_REPO="$(config_value repoOwner)/$(config_value repoName)"
+  CACHE_FILE="$(git rev-parse --git-dir)/story-exists-cache"
+  REFS="$(printf '%s\n' "$MESSAGE" | { grep -Eo "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}" || true; } \
+    | sed -E 's/^[^[:alnum:]#]+//; s/[^0-9]+$//' | sort -u)"
+  MISSING=""
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    case "$ref" in */*) repo="${ref%%#*}" ;; *) repo="$HOME_REPO" ;; esac
+    num="$(printf '%s' "${ref##*#}" | sed 's/^0*//')"
+    case "$repo" in */*) ;; *) continue ;; esac
+    [ "$repo" != "/" ] || continue
+    key="$repo#$num"
+    if [ -r "$CACHE_FILE" ] && grep -qxF "$key" "$CACHE_FILE"; then continue; fi
+    if ! command -v gh >/dev/null 2>&1; then
+      echo "[commit-msg] WARNING: gh is not installed, so story numbers were not checked against GitHub."
+      break
+    fi
+    if reply="$(gh api "repos/$repo/issues/$num" --jq .number 2>&1 >/dev/null)"; then
+      echo "$key" >> "$CACHE_FILE"
+    elif printf '%s' "$reply" | grep -Eq '404|Not Found'; then
+      MISSING="$MISSING $key"
+    else
+      echo "[commit-msg] WARNING: GitHub could not be reached, so story numbers were not checked ($(printf '%s' "$reply" | head -1))."
+      break
+    fi
+  done <<EOF_REFS
+$REFS
+EOF_REFS
+  if [ -n "$MISSING" ]; then
+    echo "[commit-msg] BLOCKED: no such story:$MISSING"
+    echo "  Cite a story that exists in this repo, or write owner/repo#N for a story in another repo."
+    exit 1
+  fi
+fi
 exit 0

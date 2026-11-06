@@ -1,9 +1,11 @@
 """The commit-msg hook blocks a commit with no story reference, in a scratch repo."""
 
+import os
 import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from _support import REPO_ROOT, git, git_env, scratch_repo
@@ -11,7 +13,7 @@ from _support import REPO_ROOT, git, git_env, scratch_repo
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "commit-msg"
 
 
-class TestCommitMsg(unittest.TestCase):
+class CommitMsgCase(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-"))
         self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
@@ -32,6 +34,8 @@ class TestCommitMsg(unittest.TestCase):
         """The initial commit is exempt, so most tests start from a repo with a history."""
         git(self.repo, "commit", "-m", "first commit with no reference")
 
+
+class TestCommitMsg(CommitMsgCase):
     def test_the_initial_commit_is_exempt(self):
         self.assertEqual(0, git(self.repo, "commit", "-m", "first", check=False).returncode)
 
@@ -126,6 +130,62 @@ class TestCommitMsg(unittest.TestCase):
         result = self.commit("Add a feature")
         self.assertEqual(0, result.returncode)
         self.assertIn("check is off", result.stdout + result.stderr)
+
+
+FAKE_GH = """#!/bin/sh
+# Fake gh: records each call, answers 200 for the issue numbers in $FAKE_GH_OK and 404 for the rest,
+# and fails like a dead network when $FAKE_GH_DOWN is set.
+echo "$@" >> "$FAKE_GH_LOG"
+[ -n "$FAKE_GH_DOWN" ] && { echo "dial tcp: lookup api.github.com: no such host" >&2; exit 1; }
+for ok in $FAKE_GH_OK; do
+  case "$2" in "repos/$ok") echo "${ok##*/}"; exit 0 ;; esac
+done
+echo "gh: Not Found (HTTP 404)" >&2
+exit 1
+"""
+
+
+class TestStoryExists(CommitMsgCase):
+    """STORY-EXISTS-1: the hook checks each cited number against GitHub, for the repo in docs/backlog-config.json."""
+
+    def setUp(self):
+        super().setUp()
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "acme", "repoName": "app"}\n')
+        self.first_commit()
+        self.bin = self.repo / "fakebin"
+        self.bin.mkdir()
+        (self.bin / "gh").write_text(FAKE_GH)
+        (self.bin / "gh").chmod(0o755)
+        self.log = self.repo / "gh.log"
+        self.env = {"PATH": f"{self.bin}:{os.environ['PATH']}", "FAKE_GH_LOG": str(self.log),
+                    "FAKE_GH_OK": "acme/app/issues/12 acme/other/issues/7"}
+
+    def commit(self, message, **env):
+        with mock.patch.dict(os.environ, {**self.env, **env}):
+            return super().commit(message)
+
+    def calls(self):
+        return self.log.read_text().splitlines() if self.log.exists() else []
+
+    def test_story_numbers_are_checked_against_the_repo_cached_and_skipped_offline(self):
+        blocked = self.commit("Add a feature (#99)")
+        self.assertEqual(1, blocked.returncode)
+        self.assertIn("acme/app#99", blocked.stdout + blocked.stderr)
+        self.assertEqual(0, self.commit("Add a feature (#12)").returncode)
+        # owner/repo#N is checked against the repo it names
+        self.assertEqual(0, self.commit("Fix it (acme/other#7)").returncode)
+        self.assertEqual(1, self.commit("Fix it (acme/other#12)").returncode)
+        self.assertIn("repos/acme/other/issues/12", "\n".join(self.calls()))
+        # a yes is cached under .git, so the next commit makes no call
+        before = len(self.calls())
+        self.assertEqual(0, self.commit("Again (#12)").returncode)
+        self.assertEqual(before, len(self.calls()))
+        self.assertTrue(any((self.repo / ".git").glob("*story*")))
+        # a dead network warns and lets the commit through
+        offline = self.commit("Add a feature (#98)", FAKE_GH_DOWN="1")
+        self.assertEqual(0, offline.returncode)
+        self.assertIn("WARNING", offline.stdout + offline.stderr)
 
 
 if __name__ == "__main__":

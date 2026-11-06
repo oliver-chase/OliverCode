@@ -3,11 +3,14 @@ Run: python3 -m unittest discover -p "test_*.py"   (from this folder)
 """
 import io
 import json
+import os
+import tempfile
 import subprocess
 import unittest
 from pathlib import Path
 
 import check_qa_signoff as qa
+import complete_story as cs
 
 FIX = Path(__file__).parent / "fixtures"
 BODY = str(FIX / "qa-story.body")
@@ -128,6 +131,52 @@ class QaSignoff(unittest.TestCase):
 
     def test_missing_repo_is_a_usage_error(self):
         self.assertEqual(qa.main(["--story", "54"], out=io.StringIO(), err=io.StringIO()), 2)
+
+
+class CompleteStory(unittest.TestCase):
+    """complete_story.py closes a story only after the QA check passes, through a fake gh runner."""
+
+    def run_it(self, comments, items="PVTI_1"):
+        calls = []
+
+        def runner(args):
+            calls.append(args)
+            text = ""
+            if "--slurp" in args:
+                text = json.dumps([json.loads((FIX / comments).read_text())])
+            elif ".body" in args:
+                text = Path(BODY).read_text()
+            elif "graphql" in args:
+                joined = " ".join(args)
+                text = json.dumps({"data": {"repository": {"issue": {"projectItems": {"nodes": (
+                    [{"id": items, "project": {"id": "PVT_other"}}, {"id": items + "x", "project": {"id": "PVT_x"}}] if items else [])}}}}}) \
+                    if "projectItems" in joined else "{}"
+            return subprocess.CompletedProcess([], 0, text, "")
+        out = io.StringIO()
+        cfg = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        cfg.write(json.dumps({"repoOwner": "o", "repoName": "r", "projectId": "PVT_x", "projectNumber": 1,
+                              "fields": {"status": {"id": "F1", "options": {"Complete": "OPT_DONE"}}}}))
+        cfg.close()
+        self.addCleanup(os.unlink, cfg.name)
+        code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0"],
+                       runner=runner, out=out, err=io.StringIO())
+        return code, out.getvalue(), [" ".join(c) for c in calls]
+
+    def test_complete_writes_only_after_the_check_passes_and_the_item_is_found(self):
+        code, _, calls = self.run_it("qa-pass.json")
+        self.assertEqual(code, 0)
+        joined = "\n".join(calls)
+        for wanted in ("-f i=PVTI_1x", "-f v=OPT_DONE", "-f body=3 files, validate.sh exits 0", "state=closed"):
+            self.assertIn(wanted, joined)
+        writes = lambda cs: [c for c in cs if "PATCH" in c or "mutation" in c or "-f body" in c]
+        code, text, calls = self.run_it("qa-none.json")
+        self.assertEqual(code, 1)
+        self.assertIn("no QA comment", text)
+        self.assertEqual([], writes(calls))
+        code, text, calls = self.run_it("qa-pass.json", items=None)
+        self.assertEqual(code, 1)
+        self.assertIn("not on the project board", text)
+        self.assertEqual([], writes(calls))
 
 
 if __name__ == "__main__":
