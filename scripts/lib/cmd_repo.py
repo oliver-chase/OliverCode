@@ -68,7 +68,7 @@ def _report_claude_dir(oc_root: Path) -> None:
         owner = "OliverCode" if str(target).startswith(str(oc_root)) else f"elsewhere -> {target}"
         print(f"  CLAUDE.md   symlink ({owner})")
     elif rules.is_file():
-        print("  CLAUDE.md   REAL FILE — `install` will back it up, not overwrite it")
+        print("  CLAUDE.md   REAL FILE — `install` backs it up and keeps it")
     else:
         print("  CLAUDE.md   absent")
 

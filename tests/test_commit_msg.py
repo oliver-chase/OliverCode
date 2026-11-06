@@ -69,6 +69,16 @@ class TestCommitMsg(CommitMsgCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("Co-Authored-By", result.stdout + result.stderr)
 
+    def test_a_message_follows_the_voice(self):
+        self.first_commit()
+        for bad in ("Work (#5)\n\n- did a thing.", "Use the cache rather than the API (#5)",
+                    "Work (#5)\n\nIt is a guide, not a rule."):
+            with self.subTest(bad):
+                result = self.commit(bad)
+                self.assertEqual(1, result.returncode)
+                self.assertIn("voice", result.stdout + result.stderr)
+        self.assertEqual(0, self.commit("Work (#5)\n\n- did a thing\n\nA full sentence ends with a period.").returncode)
+
     def test_the_initial_commit_is_exempt(self):
         self.assertEqual(0, git(self.repo, "commit", "-m", "first", check=False).returncode)
 

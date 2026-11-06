@@ -213,7 +213,7 @@ def command_install(oc_root: Path) -> int:
 
     print()
     if backups:
-        print("Backed up, NOT deleted — merge these in deliberately, they are usually")
+        print("Backed up and kept — merge these in deliberately, since they are usually")
         print("the rules you already had (docs/SETUP.md Step 3):")
         for b in backups:
             print(f"  {b}")

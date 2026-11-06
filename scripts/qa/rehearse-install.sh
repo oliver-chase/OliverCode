@@ -169,7 +169,7 @@ oc4 sync-hooks --root "$WS/nowhere" >/dev/null 2>&1 \
   && bad "nonexistent --root should hard-error" s4 || ok "nonexistent --root hard-errors" s4
 mkdir -p "$WS/emptydir"
 oc4 sync-hooks --root "$WS/emptydir" 2>&1 | grep -q "0 target(s) synced" \
-  && ok "wrong --root reports 0 synced, not success" s4 || bad "wrong --root reports 0 synced, not success" s4
+  && ok "wrong --root reports 0 synced and fails" s4 || bad "wrong --root reports 0 synced and fails" s4
 
 # --------------------------------------------------------------- S5 discover
 say "--- S5: discover on a messy existing setup ---"

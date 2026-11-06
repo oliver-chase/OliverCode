@@ -75,7 +75,7 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
             print(f"  [FAIL] {name}: symlink is broken (points at {link.readlink()})")
             failed += 1
         elif state == "elsewhere":
-            print(f"  [FAIL] {name}: linked to {link.resolve()}, not {skill_dir}")
+            print(f"  [FAIL] {name}: linked to {link.resolve()}; expected {skill_dir}")
             failed += 1
         else:
             passed += 1
@@ -182,7 +182,7 @@ def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int
             print(f"  [FAIL] {name}: origin does not exist ({url}) — this repo is not backed up")
             failed += 1
         elif "could not resolve host" in err or "network" in err or "timed out" in err:
-            print(f"  [WARN] {name}: host unreachable — unverified, not a failure")
+            print(f"  [WARN] {name}: host unreachable — unverified, so only a warning")
             skipped += 1
         else:
             print(f"  [WARN] {name}: origin unverified ({err.strip().splitlines()[0][:70] if err.strip() else 'no detail'})")
