@@ -63,8 +63,8 @@ def _located(where: Path, option: str, value: str) -> Path:
     return path if option == "--work-tree" else where
 
 
-def _commits(command: str, cwd: Path, aliases_in: dict | None = None,
-             depth: int = 0) -> list[tuple[Path, list[str], list[str], list[str]]]:
+def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int = 0,
+             seen: frozenset = frozenset()) -> list[tuple[Path, list[str], list[str], list[str]]]:
     """Each `git ... commit ...` in the command: (directory it runs in, config keys it sets,
     environment assignments before it, commit args). Anything unparseable yields nothing."""
     found = []
@@ -75,8 +75,8 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None,
         segments = list(_segments(command))
     except ValueError:
         return found
-    if depth > 5:
-        return found  # an alias loop; git refuses it too
+    if depth > 200:
+        return found  # far past any real alias chain; loops end below by name
     for words in segments:
         # A shell function definition wraps its body: `f() { git commit -n; }; f`.
         while words and (words[0] in ("{", "}") or words[0].endswith("()")):
@@ -99,10 +99,10 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None,
             # `bash -c "git commit ..."` hides the commit inside a string; read that string as a command line.
             flags = [k for k, w in enumerate(words[1:], 1) if w.startswith("-") and not w.startswith("--") and "c" in w]
             if flags and flags[0] + 1 < len(words):
-                found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here, aliases_in, depth + 1)]
+                found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here, aliases_in, depth + 1, seen)]
             continue
         if words and words[0] == "eval":
-            found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here, aliases_in, depth + 1)]
+            found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here, aliases_in, depth + 1, seen)]
             continue
         if not words or words[0] != "git":
             continue
@@ -142,17 +142,28 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None,
                 if (at + 1 < len(rest) or unsets) and not restores:
                     hooks_path_changed = True
         if i < len(words) and words[i].lower() in aliases:
-            expansion = aliases[words[i].lower()]
-            rest = " ".join(shlex.quote(w) for w in words[i + 1:])
+            name = words[i].lower()
+            if name in seen:
+                continue  # an alias that expands to itself; git refuses the loop
+            expansion = aliases[name]
+            args = words[i + 1:]
+            rest = " ".join(shlex.quote(w) for w in args)
             if expansion[0] == "!":
-                # git runs a shell alias with the remaining words appended
-                line = f"{expansion[1]} {rest}"
+                # git runs a shell alias with the remaining words appended, which its body
+                # can also read as "$@" and $1..$9.
+                body = expansion[1]
+                for token in ('"$@"', "$@", '"$*"', "$*"):
+                    body = body.replace(token, rest)
+                for n in range(9, 0, -1):
+                    value = shlex.quote(args[n - 1]) if n <= len(args) else ""
+                    body = body.replace(f'"${n}"', value).replace(f"${n}", value)
+                line = f"{body} {rest}"
             else:
                 # Reparse as a git command line, so a chained alias or leading global options resolve too.
                 head = " ".join(shlex.quote(w) for w in words[:i] + expansion)
                 line = f"{head} {rest}"
             found += [(w, k + keys, exported + env + e, a)
-                      for w, k, e, a in _commits(line, where, aliases, depth + 1)]
+                      for w, k, e, a in _commits(line, where, aliases, depth + 1, seen | {name})]
             continue
         if i < len(words) and words[i] == "commit":
             if hooks_path_changed:

@@ -74,9 +74,14 @@ class TestCommitGuard(RepoCase):
                     "git -c Alias.CI='commit -n' ci -m x", "git -c alias.ci='!git commit -n' CI -m x",
                     "git -c alias.ci='!f() { git commit -n -m x; }; f' ci",
                     "git -c alias.a=ci -c alias.ci='commit -n' a -m x",
-                    "git -c alias.ci='!git ci2' -c alias.ci2='commit -n' ci -m x"):
+                    "git -c alias.ci='!git ci2' -c alias.ci2='commit -n' ci -m x",
+                    "git " + " ".join(f"-c alias.a{k}=a{k + 1}" for k in range(8)) + " -c alias.a8='commit -n' a0 -m x",
+                    "git " + " ".join(f"-c alias.a{k}='!git a{k + 1}'" for k in range(8)) + " -c alias.a8='commit -n' a0",
+                    "git -c alias.ci='!f() { git commit \"$@\"; }; f' ci -n -m x",
+                    "git -c alias.ci='!f() { git $1 -n -m x; }; f' ci commit"):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertEqual(guard.reason("git -c alias.ci=commit ci -m x", self.repo), "")
+        self.assertEqual(guard.reason("git -c alias.a=b -c alias.b=a a", self.repo), "")  # a loop git refuses
         self.assertIn("overrides core.hooksPath",
                       guard.reason("git -c alias.ci='-c core.hooksPath=/dev/null commit' ci -m x", self.repo))
 
