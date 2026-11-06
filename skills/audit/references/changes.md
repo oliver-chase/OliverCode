@@ -21,4 +21,4 @@ The work a session produced, reviewed before it is called done. It runs at two s
 
 ## The tracker
 
-The audit epic on the repo's GitHub Project records coverage in a line, "Reviewed through: `<sha>`". Update it when the review finishes.
+The repo's `docs/BACKLOG.md` records coverage in one line, "Reviewed through: `<sha>`", under "Coverage". Update it when a review finishes, and only to a commit the review read.
