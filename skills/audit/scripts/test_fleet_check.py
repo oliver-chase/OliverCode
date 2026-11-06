@@ -108,6 +108,21 @@ class Voice(unittest.TestCase):
             self.assertIn("voice: no violations found", out)
 
 
+class PullRequestMerges(unittest.TestCase):
+    def test_a_pull_request_merge_is_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(tmp, {"README.md": "ok\n"})
+            env = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1", "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+                   "GIT_AUTHOR_NAME": "a", "GIT_AUTHOR_EMAIL": "a" + "@x.invalid", "GIT_COMMITTER_NAME": "a",
+                   "GIT_COMMITTER_EMAIL": "a" + "@x.invalid"}
+            for msg in ("Add the readme (#1)", "Merge pull request #3 from a/topic"):
+                subprocess.run(["git", "-C", str(repo), "commit", "-q", "--no-verify", "--allow-empty", "-m", msg],
+                               check=True, env=env)
+            _, out = run(str(repo))
+            self.assertIn("1 pull-request merge", out)
+            self.assertIn("Merge pull request #3", out)
+
+
 class Board(unittest.TestCase):
     def drift(self, lanes):
         with tempfile.TemporaryDirectory() as tmp:

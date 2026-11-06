@@ -180,6 +180,15 @@ def main(argv=None):
     print("voice: " + (", ".join(f"{v} {k}" for k, v in sorted(kinds.items())) if kinds else "no violations found"))
     problems += len(findings)
 
+    print("== Merges")
+    # Branches merge after independent QA with no pull request (docs/RULES.md, "The backlog").
+    merges = subprocess.run(["git", "-C", str(repo), "log", "--since=90.days", "--format=%h %s",
+                             "--grep=^Merge pull request #"], capture_output=True, text=True).stdout.splitlines()
+    for line in merges:
+        print(f"merge: {line}")
+    print(f"merges: {len(merges)} pull-request merge(s) in 90 days" if merges else "merges: no pull-request merges")
+    problems += len(merges)
+
     print("== Board")
     drift = board_drift(repo, args.fields_file)
     if drift is None:
