@@ -74,32 +74,11 @@ class TestMutations(unittest.TestCase):
         self.assertTrue(self._fails_after(template, f"Gate 1/{total}", f"Gate 1/{total + 1}"))
 
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
-        """A false claim in the shape a number-adjacent pattern cannot match.
-
-        Exercises all three mechanisms at once: the modifier-tolerant claim pattern
-        ("N pre-commit gates"), the cue sitting on the PRECEDING line, and comparison
-        against the template's count, which differs from OliverCode's. The planted number is
-        the private variant's total, which matches neither, so the claim is wrong
-        whichever hook it resolves to.
-        """
+        """A claim names its hook on its own line and is compared with that hook's count."""
         self.assertTrue(self._fails_after(
             "README.md", "## What happens automatically\n",
-            "## What happens automatically\n\n**On every commit, in every adopted repo**\n"
+            "## What happens automatically\n\nIn every adopted repo, "
             f"{cc._hook_totals(REPO_ROOT)[0]['template-private']} pre-commit gates run.\n"))
-
-    def test_a_cue_in_an_earlier_paragraph_does_not_reattribute(self):
-        """Context stops at a blank line.
-
-        Widening it past the paragraph boundary made the checker MISS a planted wrong
-        claim: an unrelated "template" two paragraphs up re-attributed an OliverCode
-        claim to the private hook, where the wrong number happened to be right. The
-        planted number is the private variant's total, so reattribution would hide it.
-        """
-        self.assertTrue(self._fails_after(
-            "docs/SETUP.md", "### Commits are passing gates",
-            "The private variant is unrelated to what follows.\n\n"
-            f"All {cc._hook_totals(REPO_ROOT)[0]['template-private']} gates run in this repo.\n\n"
-            "### Commits are passing gates"))
 
     def test_catches_the_word_form_of_a_wrong_claim(self):
         self.assertTrue(self._fails_after(

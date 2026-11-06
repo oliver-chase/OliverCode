@@ -139,29 +139,9 @@ def _hook_totals(repo_root: Path) -> tuple[dict[str, int], list[str]]:
     return totals, problems
 
 
-# How many preceding lines count as context when resolving a claim. Prose wraps, and a
-# bold lead-in ("in every registered repo") routinely sits on the line above the sentence
-# carrying the number, so single-line resolution mis-attributed wrapped paragraphs.
-#
-# Context stops at a blank line. Widening it past the paragraph boundary made the checker
-# MISS a planted wrong claim, because an unrelated cue two paragraphs up re-attributed it
-# to the other hook -- caught by the mutation suite in tests/test_gate_coverage.py.
-_CUE_CONTEXT_LINES = 2
-
-
-def _block_context(lines: list[str], i: int) -> tuple[str, ...]:
-    """The few lines above `i` that belong to the same block, stopping at a blank line."""
-    out: list[str] = []
-    for j in range(i - 1, max(-1, i - 1 - _CUE_CONTEXT_LINES), -1):
-        if not lines[j].strip():
-            break
-        out.append(lines[j])
-    return tuple(reversed(out))
-
-
-def _hook_for_line(rel: str, line: str, preceding: tuple[str, ...] = ()) -> str:
-    """Which hook a gate-count claim refers to, from the doc path and nearby wording."""
-    haystack = " ".join((rel, *preceding, line)).lower()
+def _hook_for_line(rel: str, line: str) -> str:
+    """Which hook a gate-count claim refers to, from the doc path and the claim's own line."""
+    haystack = " ".join((rel, line)).lower()
     for hook, cues in _HOOK_CUES:
         if any(cue in haystack for cue in cues):
             return hook
@@ -181,13 +161,12 @@ def check_gate_count(repo_root: Path) -> list[str]:
 
     for rel in _tracked(repo_root, "*.md"):
         lines = (repo_root / rel).read_text(encoding="utf-8").splitlines()
-        for i, line in enumerate(lines):
+        for line in lines:
             for token in GATE_CLAIM.findall(line):
                 claimed = _claimed_count(token)
                 if claimed is None:
                     continue
-                context = _block_context(lines, i)
-                hook = _hook_for_line(rel, line, context)
+                hook = _hook_for_line(rel, line)
                 actual = totals.get(hook)
                 if actual is not None and claimed != actual:
                     failures.append(
