@@ -84,6 +84,15 @@ class Drift(unittest.TestCase):
 
     def test_missing_area_is_a_required_field_gap(self):
         self.assertEqual(1, len(bh.check_required_fields([item(2, "Backlog", area=None)], CONFIG)))
+        # gh names the Work type key by the board's own spelling, so any case counts as set.
+        cfg = {"fields": {"workType": {}}}
+        lower = item(5, "Ready")
+        lower["work type"] = lower.pop("work Type")
+        bare = item(6, "Ready")
+        del bare["work Type"]
+        found = bh.check_required_fields([lower, bare], cfg, {"Ready"})
+        self.assertEqual(1, len(found))
+        self.assertIn("#6", found[0])
 
 
 class BoardSpelling(unittest.TestCase):

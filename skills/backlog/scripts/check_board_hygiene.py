@@ -73,6 +73,11 @@ def live_status_names(config):
     return {o["id"]: o["name"] for o in json.loads(out)["data"]["node"]["options"]}
 
 
+def field(item, name):
+    """An item's value for a field, matched without case: gh keys a field by the board's own spelling."""
+    return next((v for k, v in item.items() if k.lower() == name.lower()), None)
+
+
 def check_required_fields(items, config, open_statuses=REQUIRED_STATUSES):
     # Work Type and Area are required only on a board whose config defines the field.
     required = ("priority", "size") + (("work Type",) if "workType" in config["fields"] else ()) \
@@ -83,7 +88,7 @@ def check_required_fields(items, config, open_statuses=REQUIRED_STATUSES):
             continue
         c = i.get("content", {})
         num = c.get("number")
-        missing = [f for f in required if not i.get(f)]
+        missing = [f for f in required if not field(i, f)]
         if missing:
             problems.append(
                 f"#{num} \"{c.get('title', '')[:60]}\" ({i.get('status')}): "
@@ -189,7 +194,7 @@ def overlapping_titles(items, open_statuses, min_shared=3, ratio=0.6):
     shares words with its own stories by design, so epics are left out."""
     open_items = [(i["content"]["number"], title_words(i["content"].get("title", "")))
                   for i in items if i.get("status") in open_statuses and i.get("content", {}).get("number")
-                  and i.get("work Type") != "Epic"]
+                  and field(i, "work type") != "Epic"]
     problems = []
     for a in range(len(open_items)):
         for b in range(a + 1, len(open_items)):
@@ -219,7 +224,7 @@ def epic_rollup(items, summaries, finished):
     problems = []
     for i in items:
         number = i.get("content", {}).get("number")
-        if i.get("work Type") != "Epic" or i.get("status") == finished or number not in summaries:
+        if field(i, "work type") != "Epic" or i.get("status") == finished or number not in summaries:
             continue
         total, completed = summaries[number]
         title = i["content"].get("title", "")[:50]
@@ -242,7 +247,7 @@ def epic_summaries(items, config, finished):
     out = {}
     for i in items:
         number = i.get("content", {}).get("number")
-        if i.get("work Type") != "Epic" or i.get("status") == finished or not number:
+        if field(i, "work type") != "Epic" or i.get("status") == finished or not number:
             continue
         data = json.loads(run_gh(["api", "graphql", "-f",
             f'query={{ repository(owner: "{config["repoOwner"]}", name: "{config["repoName"]}") '
