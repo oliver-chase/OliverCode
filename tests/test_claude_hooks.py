@@ -203,6 +203,18 @@ class TestSessionCheck(RepoCase):
         os.symlink(self.tmp / "gone.md", self.claude / "CLAUDE.md")
         self.assertIn("broken link", " ".join(session.notes(self.tmp, self.claude)))
 
+    def test_stories_waiting_in_qa_are_named_and_a_missing_config_or_gh_stays_silent(self):
+        self.assertEqual(session.qa_queue(self.repo), "")  # no backlog config
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "backlog-config.json").write_text(json.dumps({"projectNumber": 5, "projectOwner": "o"}))
+        items = {"items": [{"status": "QA", "content": {"number": 7}}, {"status": "Complete", "content": {"number": 8}},
+                           {"status": "QA", "content": {"number": 3}}]}
+        run = lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps(items), "")  # noqa: E731
+        self.assertIn("2 stories waiting in QA (#3, #7)", session.qa_queue(self.repo, run))
+        def no_gh(*a, **k):
+            raise FileNotFoundError("gh")
+        self.assertEqual(session.qa_queue(self.repo, no_gh), "")
+
 
 class TestSettingsMerge(unittest.TestCase):
     OWNER = {"model": "opus", "permissions": {"deny": ["Bash(rm -rf *)"]},
