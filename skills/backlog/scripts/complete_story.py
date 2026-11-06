@@ -9,6 +9,7 @@ posts TEXT as a comment and closes the issue. Exits 0 when all three writes succ
 failed call, 2 on a usage error.
 """
 import argparse
+import io
 import json
 import sys
 
@@ -50,7 +51,7 @@ def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
     except (OSError, ValueError, KeyError) as exc:
         print(f"complete_story: cannot read the config: {exc}", file=err)
         return 2
-    check_out = type(out)()
+    check_out = io.StringIO()
     code = qa.main(["--story", str(args.story), "--config", args.config], runner=runner, out=check_out, err=err)
     if code != 0:
         out.write(check_out.getvalue())

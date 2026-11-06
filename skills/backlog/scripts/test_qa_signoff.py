@@ -152,7 +152,8 @@ class CompleteStory(unittest.TestCase):
                     [{"id": items, "project": {"id": "PVT_other"}}, {"id": items + "x", "project": {"id": "PVT_x"}}] if items else [])}}}}}) \
                     if "projectItems" in joined else "{}"
             return subprocess.CompletedProcess([], 0, text, "")
-        out = io.StringIO()
+        # A real text stream, as sys.stdout is from the command line.
+        out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
         cfg = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         cfg.write(json.dumps({"repoOwner": "o", "repoName": "r", "projectId": "PVT_x", "projectNumber": 1,
                               "fields": {"status": {"id": "F1", "options": {"Complete": "OPT_DONE"}}}}))
@@ -160,7 +161,8 @@ class CompleteStory(unittest.TestCase):
         self.addCleanup(os.unlink, cfg.name)
         code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0"],
                        runner=runner, out=out, err=io.StringIO())
-        return code, out.getvalue(), [" ".join(c) for c in calls]
+        out.flush()
+        return code, out.buffer.getvalue().decode(), [" ".join(c) for c in calls]
 
     def test_complete_writes_only_after_the_check_passes_and_the_item_is_found(self):
         code, _, calls = self.run_it("qa-pass.json")
