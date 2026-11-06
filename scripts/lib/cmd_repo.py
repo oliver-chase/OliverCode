@@ -160,6 +160,12 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
     return 0
 
 
+def _backlog_setup_origin(repo: Path):
+    """(owner, name) of a repo's origin remote, or None."""
+    from lib.backlog_setup import origin_owner_name
+    return origin_owner_name(repo)
+
+
 def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     """Stamp the project template into a repo, per shared/project-bootstrap-manifest.json.
 
@@ -195,6 +201,15 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     if made_dirs:
         print(f"  directories: {', '.join(made_dirs)}")
 
+    # Placeholders the template ships, filled from the target's and this checkout's origin remotes.
+    fills = {}
+    target_origin = _backlog_setup_origin(target)
+    if target_origin:
+        fills["<your-github-owner>"] = target_origin[0]
+    own_origin = _backlog_setup_origin(oc_root)
+    if own_origin:
+        fills["your-org/your-orchestration"] = f"{own_origin[0]}/{own_origin[1]}"
+
     new = overwritten = kept = 0
     missing_src = []
     for entry in manifest.get("templatedFiles", []):
@@ -215,7 +230,10 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
         print(f"  [{action:<9}] {dst_rel}" + (f"   ({mode})" if exists else ""))
         if not dry_run:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_bytes(src.read_bytes())
+            data = src.read_bytes()
+            for placeholder, value in fills.items():
+                data = data.replace(placeholder.encode(), value.encode())
+            dst.write_bytes(data)
             if src.suffix == ".sh" or dst_rel.startswith(".githooks/"):
                 dst.chmod(0o755)
 

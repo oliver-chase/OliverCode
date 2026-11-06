@@ -12,13 +12,11 @@
 ## Dependency impact (required)
 
 - [ ] No dependency changes
-- [ ] Dependency changes included (`package.json`/lockfile) and reviewed
-- [ ] `npm audit --omit=dev --audit-level=high` reviewed
+- [ ] Dependency changes included and reviewed
 
 ## Required QA gates
 
-- [ ] `npm run -s qa:hygiene`
-- [ ] project-specific full gate (for example `npm run -s qa:prepush` when available)
+- [ ] `bash scripts/validate.sh` exits 0
 
 ## Evidence
 

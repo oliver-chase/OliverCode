@@ -167,8 +167,7 @@ run_bloat_check() {
 run_code_quality() {
   # Code quality in one repo (default: this one): TypeScript files over 400 lines, a
   # Python syntax error, and a scripts/lib module no test file mentions. The module
-  # check matches the module's name, because tests here are named for behavior and not
-  # for the module they cover.
+  # check matches the module's name, because tests here are named for the behavior they cover.
   local dir="${1:-$REPO_ROOT}" issues=0 f lines
   echo "=== validate: checking code quality ==="
   while IFS= read -r f; do
@@ -178,8 +177,8 @@ run_code_quality() {
       echo "  [FAIL] $f has $lines lines (limit 400)"
       issues=$((issues + 1))
     fi
-  done < <(find "$dir" \( -name node_modules -o -name .next -o -name .git -o -name .claude \) -prune -o \
-             \( -name '*.ts' -o -name '*.tsx' \) ! -name '*.test.*' -print 2>/dev/null)
+  done < <(git -C "$dir" -c core.quotepath=false ls-files -- '*.ts' '*.tsx' 2>/dev/null \
+             | grep -v '\.test\.' | sed "s|^|$dir/|")
   if command -v python3 &>/dev/null; then
     while IFS= read -r f; do
       [[ -z "$f" ]] && continue
@@ -187,7 +186,7 @@ run_code_quality() {
         echo "  [FAIL] syntax error in $f"
         issues=$((issues + 1))
       fi
-    done < <(find "$dir" \( -name node_modules -o -name .git -o -name __pycache__ \) -prune -o -name '*.py' -print 2>/dev/null)
+    done < <(git -C "$dir" -c core.quotepath=false ls-files -- '*.py' 2>/dev/null | sed "s|^|$dir/|")
   fi
   if [[ -d "$dir/scripts/lib" && -d "$dir/tests" ]]; then
     local module stem
