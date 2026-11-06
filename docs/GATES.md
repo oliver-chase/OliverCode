@@ -99,7 +99,7 @@ Every variant's archived-content gate also asks this file about a path it is abo
 
 ### Commit guard limits
 
-Inside Claude Code, `scripts/hooks/commit_guard.py` refuses `--no-verify` and `-n` in any form git accepts, a `core.hooksPath` override, a commit wrapped in `bash -c` or `eval`, and a `git -c alias.NAME=...` alias, plain or `!` shell form, that commits with a hook skip. It cannot see a commit run through a shell function, a variable, command substitution, a shell alias, a configured git alias or a pipe into `sh`, where the pre-push secret scan and CI still apply.
+Inside Claude Code, `scripts/hooks/commit_guard.py` refuses `--no-verify` and `-n` in any form git accepts, a `core.hooksPath` override, a commit wrapped in `bash -c` or `eval`, and a `git -c alias.NAME=...` alias that commits with a hook skip, including a chained alias, a `!` shell alias and one whose body is a shell function. It cannot see a commit run through a shell function, a variable, command substitution, a shell alias, a configured git alias or a pipe into `sh`, where the pre-push secret scan and CI still apply.
 
 ## Commit-message gate
 
