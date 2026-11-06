@@ -26,7 +26,7 @@ Ask each question below in order, against the live fleet and not from memory.
 
 A skill that ships inside OliverCode may read `$OC/` files and name its sibling skills.
 
-`python3 skills/audit/scripts/check_skill_structure.py` enforces the rules a script can check, including the 150-word description cap. The rest are judgment calls the audit skill reads.
+`python3 $OC/skills/audit/scripts/check_skill_structure.py` enforces the rules a script can check, including the 150-word description cap. The rest are judgment calls the audit skill reads.
 
 1. **Generic at creation.** The skill's own files hold no personal fact in code or prose: no name, address, account ID, token or local path. A value the skill needs comes from one config file in the skill folder or from a question in the chat
 2. **No read outside the folder.** No `../`, no `$HOME/.claude/skills/<other>/...`, no vault path, no sibling skill's script or config. The skill carries any rule it needs as its own text
