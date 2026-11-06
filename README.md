@@ -38,9 +38,9 @@ python3 scripts/olivercode conform
 
 ## What runs automatically
 
-- Git runs `.githooks/pre-commit` on every commit while `core.hooksPath` points to it.
-- Claude Code runs the session, commit and early-stop hooks installed by `install`.
-- `bash scripts/validate.sh` checks OliverCode's gates, documents, references and tests.
+- Git runs `.githooks/pre-commit` on every commit while `core.hooksPath` points to it
+- Claude Code runs the session, commit and early-stop hooks installed by `install`
+- `bash scripts/validate.sh` checks OliverCode's gates, documents, references and tests
 
 Hooks enforce the rules that must block work. The standards and skills guide the rest. [`docs/GATES.md`](docs/GATES.md) lists each gate and its scope.
 
