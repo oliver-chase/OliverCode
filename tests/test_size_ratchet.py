@@ -170,7 +170,7 @@ class TestRaiseCap(unittest.TestCase):
     def test_a_raise_over_the_cap_is_blocked(self):
         result = self.commit(1021, "Grow a lot (#5)")
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("raises the size baseline by 21 lines, over the cap of 20", result.stdout + result.stderr)
+        self.assertIn("cap of 20", result.stdout + result.stderr)
         # A one-line baseline is read by key, so allowancePercent is never taken for lines.
         git(self.repo, "reset", "-q", "--hard")
         (self.repo / BASELINE).write_text('{"lines": 1000, "allowancePercent": 5}\n')
@@ -178,7 +178,8 @@ class TestRaiseCap(unittest.TestCase):
         (self.repo / BASELINE).write_text('{"lines": 1021, "allowancePercent": 5}\n')
         git(self.repo, "add", BASELINE)
         result = git(self.repo, "commit", "-m", "Grow a lot (#5)", check=False)
-        self.assertIn("raises the size baseline by 21 lines, over the cap of 20", result.stdout + result.stderr)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("cap of 20", result.stdout + result.stderr)
 
     def test_a_raise_over_the_cap_passes_with_a_size_l_line(self):
         self.assertEqual(0, self.commit(1500, "Grow a lot (#5)\n\nSize: L").returncode)

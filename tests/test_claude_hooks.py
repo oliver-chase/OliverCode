@@ -54,16 +54,12 @@ class TestCommitGuard(RepoCase):
         self.gates(point_git_at_them=True)
         self.assertEqual(guard.reason('git add . && git commit -m "x"', self.repo), "")
 
-    def test_refuses_skipping_the_gates_on_purpose(self):
-        self.gates(point_git_at_them=True)
-        for cmd in ('git commit --no-verify -m x', 'git commit -n -m x', 'git commit -nm x', 'git commit -anm x'):
-            self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
-        self.assertIn("overrides core.hooksPath", guard.reason("git -c core.hooksPath=/dev/null commit -m x", self.repo))
-
     def test_refuses_an_abbreviated_no_verify(self):
         # git accepts any unambiguous prefix of a long option, so --no-verif skips the hooks too.
         self.gates(point_git_at_them=True)
-        for cmd in ("git commit --no-verif -m x", "git commit --no-ver -m x", "git commit --no-v -m x"):
+        self.assertIn("overrides core.hooksPath", guard.reason("git -c core.hooksPath=/dev/null commit -m x", self.repo))
+        for cmd in ("git commit --no-verify -m x", "git commit -n -m x", "git commit -nm x", "git commit -anm x",
+                    "git commit --no-verif -m x", "git commit --no-ver -m x", "git commit --no-v -m x"):
             self.assertIn("--no-verify", guard.reason(cmd, self.repo), cmd)
         self.assertEqual(guard.reason("git commit --no-edit -m x", self.repo), "")
         # git rejects a value on --no-verify, so that commit never runs and is not refused.

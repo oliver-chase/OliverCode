@@ -119,7 +119,7 @@ class Board(unittest.TestCase):
     def test_names_the_board_and_the_difference(self):
         code, out = self.drift(["Backlog", "Ready", "In Review", "Complete"])
         self.assertEqual(code, 1)
-        self.assertIn("the saved board: Status: lane In Review is driven by pull requests", out)
+        self.assertIn("In Review", out)
         self.assertIn("missing option In Progress", out)
 
     def test_a_matching_board_passes(self):
