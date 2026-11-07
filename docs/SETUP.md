@@ -306,6 +306,8 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 - `update` runs `git pull`, then `install` (so a new skill or Claude Code hook reaches this machine), then `sync-hooks`. Run it on each device to bring it current
 - `sync-hooks` converges pre-commit hooks and `core.hooksPath` across the fleet and the private repos. It also runs at the end of `update`
 - `audit-fleet` runs the `audit` skill's structure check (dangling references and description length) against OliverCode's own `skills/` and, when this machine names one, the skills folder (`skillsRoot`). It is non-interactive, writes findings to a log and never fixes anything
+- `size [DIR]` prints a repo's total lines, its `docs/SIZE-BASELINE.json` baseline and the headroom. `--lower` rewrites the baseline to the current total when that is no higher, and refuses to raise it
+- `guide` prints first steps, every command from the launcher's own table and every skill with its trigger phrases from `skills/INDEX.md`. The README command table is checked against the same table by a test
 - `skills` lists OliverCode's skills under `skills/` with name and description, read from each `SKILL.md`'s frontmatter and never from a hand-maintained copy. `--grep` filters by name or description
 
 `--root DIR` overrides where fleet repos are looked for. The default is the parent of the OliverCode checkout, which is the sibling layout. A fork whose repos live elsewhere needs it, and without it every repo silently reports as "not present on this machine". Unknown arguments are rejected with a nonzero exit, because silently ignoring one is a wrong success: `sync-hooks --root /elsewhere` once ignored the flag, synced the default fleet and reported that it had worked.
