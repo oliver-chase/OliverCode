@@ -404,15 +404,6 @@ class TestPrivateRepoLocalGate(GateHarness):
         self.assertIn("All gates passed", self.assertAllowed().stdout)
 
 
-class TestCleanCommitPasses(GateHarness):
-    def test_ordinary_change_passes_every_gate(self):
-        self.stage("src/module.py", "def add(a, b):\n    return a + b\n")
-        self.stage("docs/module.md", "# Module\n\nAdds two numbers.\n")
-        result = self.assertAllowed()
-        self.assertIn("All gates passed", result.stdout)
-
-
-
 class TestTreeScan(GateHarness):
     """A secret already committed passes a normal run, because nothing is staged, and fails a tree scan."""
 

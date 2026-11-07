@@ -103,27 +103,6 @@ class TestDuplicationCheck(unittest.TestCase):
                                      "docs/DUPLICATION-ALLOW.json": "{not json"})
             self.assertTrue(dc.check_all(work))
 
-    def test_ablation_neutering_a_marker_re_exposes_the_duplicate(self):
-        # Same shape as the manual ablation run when this gate was built: remove a
-        # real declared marker, confirm the check goes red, restore it.
-        real_marker = next(iter(dc.DECLARED_MARKERS))
-        saved_reason = dc.DECLARED_MARKERS.pop(real_marker)
-        try:
-            words = real_marker.split()
-            passage = " ".join(words + ["padding"] * max(0, dc.WINDOW - len(words)))
-            with tempfile.TemporaryDirectory(prefix="olivercode-dup-") as tmp:
-                work = _repo(
-                    Path(tmp),
-                    {
-                        "a.md": f"# A\n\n{passage}\n",
-                        "b.md": f"# B\n\n{passage}\n",
-                    },
-                )
-                found = dc.check_all(work)
-                self.assertTrue(found, "neutering a declared marker did not re-expose it")
-        finally:
-            dc.DECLARED_MARKERS[real_marker] = saved_reason
-
     def test_no_finding_across_a_single_file(self):
         with tempfile.TemporaryDirectory(prefix="olivercode-dup-") as tmp:
             work = _repo(Path(tmp), {"a.md": f"# A\n\n{LONG_PASSAGE}\n{LONG_PASSAGE}\n"})

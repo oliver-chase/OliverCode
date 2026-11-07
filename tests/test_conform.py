@@ -1,7 +1,5 @@
 """`olivercode conform`: each requirement in docs/CONTRACT.md passes on a bootstrapped repo and fails, with its fix, when broken."""
 
-import contextlib
-import io
 import json
 import shutil
 import subprocess
@@ -11,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, load_script, scratch_repo
+from _support import REPO_ROOT, load_script, scratch_repo, quiet
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import cmd_fleet  # noqa: E402  (load_script put scripts/ on the path)
@@ -19,13 +17,6 @@ from lib import conform  # noqa: E402  (load_script put scripts/ on the path)
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 TODAY = date(2026, 11, 2)
-
-
-def quiet(fn, *args, **kwargs):
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out):
-        result = fn(*args, **kwargs)
-    return result, out.getvalue()
 
 
 class ConformBase(unittest.TestCase):

@@ -35,11 +35,11 @@ class RegistryLocation(unittest.TestCase):
         other = Path(self.tmp.name) / "fork"
         (other / "shared").mkdir(parents=True)
         (other / "shared" / "repo-profiles.json").write_text(json.dumps({"profiles": {}}))
-        self.assertEqual(repo_profiles.registry_file(other, "repo-profiles.json"), other / "shared" / "repo-profiles.json")
+        self.assertEqual(repo_profiles.registry_file(other), other / "shared" / "repo-profiles.json")
 
     def test_a_private_repo_without_a_registry_falls_back_to_the_tracked_example(self):
         (self.private / "olivercode" / "repo-profiles.json").unlink()
-        self.assertEqual(repo_profiles.registry_file(local_config.OC_ROOT, "repo-profiles.json"),
+        self.assertEqual(repo_profiles.registry_file(local_config.OC_ROOT),
                          local_config.OC_ROOT / "shared" / "repo-profiles.json")
 
     def test_named_private_repos_with_no_registry_are_reported(self):

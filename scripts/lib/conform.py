@@ -55,7 +55,7 @@ def board(repo: Path, *, offline: bool, api=None, oc_root: Path = OC_ROOT, **_) 
     if offline:
         return Row("board", "skip", "offline")
     lines: list[str] = []
-    _, failed, skipped = backlog_setup.boards_health([(repo.name, repo)], api or backlog_setup.Api(), oc_root, out=lines.append)
+    _, failed, skipped = backlog_setup.boards_health([(repo.name, repo)], api or backlog_setup.Api(), oc_root, out=lines.append, check_hook=False)
     detail = "; ".join(line.split("] ", 1)[-1].strip() for line in lines if "Fix:" not in line)
     if failed:
         return _fail("board", detail, backlog_setup.FIX.format(path=repo))
@@ -93,21 +93,15 @@ def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False,
 
 def size(repo: Path, *, oc_root: Path = OC_ROOT, **_) -> Row:
     fix = f"olivercode bootstrap {repo}, then olivercode size {repo} --lower"
-    baseline_path = repo / "docs" / "SIZE-BASELINE.json"
-    if not baseline_path.is_file():
-        return _fail("size", "docs/SIZE-BASELINE.json is missing", fix)
     try:
-        baseline = json.loads(baseline_path.read_text())
-    except ValueError:
-        return _fail("size", "docs/SIZE-BASELINE.json is not valid JSON", fix)
+        total, baseline = repo_gates.size_report(repo, oc_root)
+    except repo_gates.SizeError as exc:
+        return _fail("size", {"missing": "docs/SIZE-BASELINE.json is missing", "invalid": "docs/SIZE-BASELINE.json is not valid JSON",
+                              "count": "the line count failed"}[exc.kind], fix)
     recorded = baseline.get("lines")
     if recorded is None:
         return _fail("size", "the baseline records no line count", fix)
-    done = subprocess.run(["bash", str(oc_root / "skills" / "audit" / "scripts" / "size.sh"), "--total", str(repo)],
-                          capture_output=True, text=True)
-    if done.returncode != 0 or not done.stdout.strip().isdigit():
-        return _fail("size", "the line count failed", fix)
-    total, allowed = int(done.stdout), recorded * (100 + baseline.get("allowancePercent", 5)) // 100
+    allowed = recorded * (100 + baseline.get("allowancePercent", 5)) // 100
     if total > allowed:
         return _fail("size", f"{total} lines is above the baseline of {recorded} plus its allowance", fix)
     return Row("size", "pass")

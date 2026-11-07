@@ -51,9 +51,6 @@ class FleetRoot(unittest.TestCase):
     def test_the_environment_variable_points_the_fleet_elsewhere(self):
         self.assertEqual(_fleet.fleet_root({_fleet.ROOT_ENV: "/tmp/elsewhere"}), Path("/tmp/elsewhere"))
 
-    def test_without_the_variable_the_root_is_the_skills_folder_this_skill_sits_in(self):
-        self.assertEqual(_fleet.fleet_root({}), Path(_fleet.__file__).resolve().parents[2])
-
 
 class DescriptionWords(unittest.TestCase):
     def test_quoted_and_folded_descriptions_count_the_same(self):

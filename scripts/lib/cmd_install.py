@@ -11,6 +11,7 @@ from pathlib import Path
 from lib import claude_settings as _claude_settings
 from lib import repo_gates as _repo_gates
 from lib.repo_profiles import registry_file
+from lib.skills_catalog import skill_dirs
 from lib.skill_links import broken_links as _broken_links
 
 
@@ -37,7 +38,7 @@ INSTALL_RECORD = ".olivercode-install.json"
 def _managed_links(oc_root: Path) -> dict[str, Path]:
     """Each link install makes, as its path under ~/.claude -> its source relative to the checkout."""
     links = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md"}
-    for skill in sorted(p for p in (oc_root / "skills").iterdir() if (p / "SKILL.md").is_file()):
+    for skill in skill_dirs(oc_root / "skills"):
         links[f"skills/{skill.name}"] = Path("skills") / skill.name
     return links
 
@@ -151,7 +152,7 @@ def command_install(oc_root: Path) -> int:
     print(f"  [{status.upper()}] ~/.claude/VOICE.md")
 
     linked = already = 0
-    for skill in sorted(p for p in (oc_root / "skills").iterdir() if (p / "SKILL.md").is_file()):
+    for skill in skill_dirs(oc_root / "skills"):
         result = _link(skills_dir / skill.name, skill)
         if result == "already":
             already += 1
@@ -218,7 +219,7 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    print(f"Next: register the repo in {registry_file(oc_root, 'repo-profiles.json')}, then `olivercode conform` to verify.")
+    print(f"Next: register the repo in {registry_file(oc_root)}, then `olivercode conform` to verify.")
     return 1 if broken or broken_settings else 0
 
 

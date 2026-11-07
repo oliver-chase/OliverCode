@@ -11,8 +11,9 @@ failure it exists to prevent.
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
+
+from lib.gitfiles import tracked_files
 
 # A counter compared against a threshold but never increased. This is exactly the
 # CRITICAL_ISSUES bug: `X=0` ... `if [ "$X" -gt 0 ]` with no `X=$((X + 1))` anywhere,
@@ -26,13 +27,7 @@ _FAILURE_LANGUAGE = re.compile(r"\b(FAIL|BLOCKED|ERROR|failed|violation)\b")
 _NONZERO_EXIT = re.compile(r"\bexit\s+[1-9]\b")
 
 def _tracked_shell_scripts(repo_root: Path) -> list[str]:
-    out = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-files", "*.sh", ".githooks/*"],
-        capture_output=True, text=True, check=False,
-    )
-    if out.returncode != 0:
-        return []
-    return sorted({line for line in out.stdout.splitlines() if line.strip()})
+    return sorted(set(tracked_files(repo_root, "*.sh", ".githooks/*")))
 
 
 def check_dead_counters(repo_root: Path) -> list[str]:

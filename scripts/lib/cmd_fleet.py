@@ -42,7 +42,7 @@ def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None,
             print(f"  [FAIL] {gap}")
             return 1
         if not repos:
-            print(f"  [SKIP] no fleet registered in {registry_file(oc_root, 'repo-profiles.json')}")
+            print(f"  [SKIP] no fleet registered in {registry_file(oc_root)}")
     failed = 0
     for name, path, private_repo, variant in repos:
         failed += _conform.render(name, _conform.check_repo(path, oc_root=oc_root, offline=offline, private=private_repo, variant=variant))

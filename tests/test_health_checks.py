@@ -4,8 +4,6 @@ Every check returns (passed, failed, skipped). A check that reads outside this r
 degrade to a skip when that context is missing, and must fail only on a real problem.
 """
 
-import contextlib
-import io
 import json
 import os
 import subprocess
@@ -15,17 +13,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from _support import git, load_script, scratch_repo
+from _support import git, load_script, scratch_repo, quiet
 
 health = load_script("scripts/lib/health_checks.py", "health_checks")
-
-
-def quiet(fn, *args):
-    """Run a check without its report lines, returning (result, printed text)."""
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out):
-        result = fn(*args)
-    return result, out.getvalue()
 
 
 class HealthBase(unittest.TestCase):

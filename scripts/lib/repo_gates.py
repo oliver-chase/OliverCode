@@ -11,6 +11,7 @@ Standard library only: these checks run inside a hook on every Bash call.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -56,7 +57,7 @@ def gate_problem(root: Path) -> str:
 
 def hooks_dir_problem(hooks_dir: Path) -> str:
     """Why git would run no hook from this directory, or "" when its pre-commit runs.
-    The one home of these three checks: health and the Claude Code hooks both call it."""
+    gate_problem is its one caller."""
     if not hooks_dir.is_dir():
         return f"core.hooksPath points at {hooks_dir}, which does not exist, so git runs no hooks"
     live = hooks_dir / "pre-commit"
@@ -96,3 +97,26 @@ def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> l
             problems.append(f"{filename} diverges from the {template} template")
 
     return problems
+
+
+class SizeError(Exception):
+    """Why a repo's line total or baseline could not be read: `kind` is missing, invalid or count, and `detail` names what failed."""
+
+    def __init__(self, kind: str, detail: str = ""):
+        super().__init__(f"{kind}: {detail}")
+        self.kind, self.detail = kind, detail
+
+
+def size_report(repo: Path, oc_root: Path) -> tuple[int, dict]:
+    """(the repo's line total, its docs/SIZE-BASELINE.json) from the counter the size-ratchet gate uses; raises SizeError when either cannot be read."""
+    path = repo / "docs" / "SIZE-BASELINE.json"
+    if not path.is_file():
+        raise SizeError("missing", str(path))
+    try:
+        baseline = json.loads(path.read_text())
+    except ValueError as exc:
+        raise SizeError("invalid", str(exc)) from exc
+    done = subprocess.run(["bash", str(oc_root / "skills" / "audit" / "scripts" / "size.sh"), "--total", str(repo)], capture_output=True, text=True)
+    if done.returncode != 0 or not done.stdout.strip().isdigit():
+        raise SizeError("count", done.stderr.strip() or done.stdout.strip())
+    return int(done.stdout), baseline

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from pathlib import Path
+
+from lib.gitfiles import tracked_files
+from lib.skills_catalog import skill_dirs
 
 INDEX_ROW = re.compile(r"^\|\s*`([a-z0-9-]+)`\s*\|", re.MULTILINE)
 FRONTMATTER_NAME = re.compile(r"^name:\s*(.+?)\s*$", re.MULTILINE)
@@ -43,18 +45,6 @@ def _claimed_count(token: str) -> int | None:
     return _NUMBER_WORDS.get(token.lower())
 
 
-def _tracked(repo_root: Path, *args: str) -> list[str]:
-    out = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-files", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if out.returncode != 0:
-        return []
-    return [line for line in out.stdout.splitlines() if line.strip()]
-
-
 def check_skill_index(repo_root: Path) -> list[str]:
     """skills/INDEX.md's table must match the skills/*/SKILL.md directories both ways,
     and each SKILL.md's frontmatter `name:` must match its directory.
@@ -68,9 +58,7 @@ def check_skill_index(repo_root: Path) -> list[str]:
     if not index_path.is_file():
         return ["  [SKILLS] skills/INDEX.md is missing"]
 
-    on_disk = {
-        p.name for p in skills_dir.iterdir() if p.is_dir() and (p / "SKILL.md").is_file()
-    }
+    on_disk = {p.name for p in skill_dirs(skills_dir)}
     in_index = set(INDEX_ROW.findall(index_path.read_text(encoding="utf-8")))
 
     for name in sorted(in_index - on_disk):
@@ -159,7 +147,7 @@ def check_gate_count(repo_root: Path) -> list[str]:
     if not totals:
         return failures
 
-    for rel in _tracked(repo_root, "*.md"):
+    for rel in tracked_files(repo_root, "*.md"):
         lines = (repo_root / rel).read_text(encoding="utf-8").splitlines()
         for line in lines:
             for token in GATE_CLAIM.findall(line):
@@ -232,9 +220,9 @@ def check_contract_reachability(repo_root: Path) -> list[str]:
     # contract as its worked example, which made the checker satisfy its own check and
     # report clean with the real reference deleted.
     self_rel = "scripts/lib/consistency_check.py"
-    tracked = [f for f in _tracked(repo_root) if f != self_rel]
+    tracked = [f for f in tracked_files(repo_root) if f != self_rel]
     orphans = []
-    for rel in sorted(_tracked(repo_root, "core/contracts/")):
+    for rel in sorted(tracked_files(repo_root, "core/contracts/")):
         name = Path(rel).name
         if not name.endswith(".md"):
             continue
@@ -269,7 +257,7 @@ def check_skill_cross_references(repo_root: Path) -> list[str]:
     skills_dir = repo_root / "skills"
     if not skills_dir.is_dir():
         return []
-    shipped = {p.name for p in skills_dir.iterdir() if (p / "SKILL.md").is_file()}
+    shipped = {p.name for p in skill_dirs(skills_dir)}
 
     failures: list[str] = []
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):

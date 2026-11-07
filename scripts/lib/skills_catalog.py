@@ -51,6 +51,11 @@ def _parse_skill_frontmatter(skill_md: Path) -> tuple[str, str]:
         i += 1
     return name, description
 
+def skill_dirs(skills_dir: Path) -> list[Path]:
+    """The skill folders under skills_dir: each directory that holds a SKILL.md, sorted by name."""
+    return sorted(p for p in skills_dir.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())
+
+
 def _load_skills(oc_root: Path) -> list[tuple[str, str]]:
     """Every skill in skills/: (name, description), sorted by name.
 

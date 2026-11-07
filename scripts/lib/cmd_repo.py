@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from lib.cli import reject_extra as _reject_extra
+from lib import repo_gates
 from lib.local_config import OC_ROOT
 from lib.repo_profiles import registry_file
 from lib.skills_catalog import _load_skills
@@ -150,7 +151,7 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
     print("auto-load in Claude Code — merge them into CLAUDE.md (docs/SETUP.md Step 4).")
 
     _report_claude_dir(oc_root)
-    print(f"\nProfile skeleton — paste into {registry_file(oc_root, 'repo-profiles.json')} under \"profiles\",")
+    print(f"\nProfile skeleton — paste into {registry_file(oc_root)} under \"profiles\",")
     print("and replace <command> with each repo's validation command:\n")
     skeleton = {
         name: {"name": name, "path": str(repo), "canonicalValidationCommand": "<command>"}
@@ -261,20 +262,13 @@ def command_size(oc_root: Path, target: Path, lower: bool) -> int:
     names a story (docs/GATES.md, "Size ratchet").
     """
     baseline_path = target / "docs" / "SIZE-BASELINE.json"
-    if not baseline_path.is_file():
-        print(f"  [FAIL] {baseline_path} not found. `olivercode bootstrap` adds it.")
-        return 1
     try:
-        baseline = json.loads(baseline_path.read_text())
-    except ValueError as exc:
-        print(f"  [FAIL] {baseline_path} is not valid JSON: {exc}")
+        total, baseline = repo_gates.size_report(target, oc_root)
+    except repo_gates.SizeError as exc:
+        print({"missing": f"  [FAIL] {baseline_path} not found. `olivercode bootstrap` adds it.",
+               "invalid": f"  [FAIL] {baseline_path} is not valid JSON: {exc.detail}",
+               "count": f"  [FAIL] could not count lines in {target}: {exc.detail}"}[exc.kind])
         return 1
-    done = subprocess.run(["bash", str(oc_root / "skills" / "audit" / "scripts" / "size.sh"),
-                           "--total", str(target)], capture_output=True, text=True)
-    if done.returncode != 0 or not done.stdout.strip().isdigit():
-        print(f"  [FAIL] could not count lines in {target}: {done.stderr.strip() or done.stdout.strip()}")
-        return 1
-    total = int(done.stdout)
     recorded = baseline.get("lines")
     percent = baseline.get("allowancePercent", 5)
 

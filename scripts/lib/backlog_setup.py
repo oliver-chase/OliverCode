@@ -23,6 +23,7 @@ from pathlib import Path
 OC_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 import check_kanban_baseline as kanban  # noqa: E402
+from lib import repo_gates  # noqa: E402
 
 COLORS = ["GRAY", "BLUE", "GREEN", "YELLOW", "ORANGE", "RED", "PINK", "PURPLE"]
 LANE_COLORS = {"backlog": "GRAY", "ready": "BLUE", "in progress": "YELLOW", "qa": "ORANGE", "complete": "GREEN"}
@@ -56,7 +57,6 @@ class Api:
 
     def __init__(self, runner=None):
         self.runner = runner or default_runner
-        self.calls = 0
 
     def graphql(self, query: str, **variables):
         args = ["api", "graphql", "-f", f"query={query}"]
@@ -64,7 +64,6 @@ class Api:
             if value is None:
                 continue
             args += ["-F" if isinstance(value, int) and not isinstance(value, bool) else "-f", f"{name}={value}"]
-        self.calls += 1
         code, out, err = self.runner(args, None)
         try:
             data = json.loads(out) if out.strip() else {}
@@ -374,9 +373,9 @@ def write_config(path: Path, config: dict) -> None:
 
 def hooks_dir_for(target: Path) -> tuple[Path, bool]:
     """(the folder git reads hooks from, whether core.hooksPath is unset)."""
-    p = subprocess.run(["git", "-C", str(target), "config", "--get", "core.hooksPath"], capture_output=True, text=True)
-    path = Path(p.stdout.strip() or ".githooks").expanduser()
-    return (path if path.is_absolute() else target / path), not p.stdout.strip()
+    configured = repo_gates.hooks_path(target)
+    path = Path(configured or ".githooks").expanduser()
+    return (path if path.is_absolute() else target / path), not configured
 
 
 def commit_msg_problem(target: Path, oc_root: Path) -> str:
@@ -548,8 +547,9 @@ def board_status(target: Path, api: Api, oc_root: Path = OC_ROOT) -> tuple[str, 
     return ("fail" if problems else "ok"), problems
 
 
-def boards_health(repos: list[tuple[str, Path]], api: Api, oc_root: Path = OC_ROOT, out=print) -> tuple[int, int, int]:
-    """Per repo: does its board match the baseline and does it carry the commit-msg hook. Lists the fix."""
+def boards_health(repos: list[tuple[str, Path]], api: Api, oc_root: Path = OC_ROOT, out=print, check_hook: bool = True) -> tuple[int, int, int]:
+    """Per repo: does its board match the baseline and, with `check_hook`, does it carry the commit-msg hook. Lists the fix. conform passes
+    check_hook=False, because its hooks row already reports the hook."""
     passed = failed = skipped = 0
     seen: set[Path] = set()
     for name, path in repos:
@@ -558,10 +558,10 @@ def boards_health(repos: list[tuple[str, Path]], api: Api, oc_root: Path = OC_RO
         seen.add(Path(path).resolve())
         fix = FIX.format(path=path)
         status, problems = board_status(path, api, oc_root)
-        hook = commit_msg_problem(path, oc_root)
+        hook = commit_msg_problem(path, oc_root) if check_hook else ""
         optout = (path / ".githooks" / "commit-msg.optout").exists()
         if status == "ok" and (not hook or optout):
-            out(f"  [OK] {name}: board matches the baseline, commit-msg hook present")
+            out(f"  [OK] {name}: board matches the baseline" + (", commit-msg hook present" if check_hook else ""))
             passed += 1
             continue
         if status == "warn" and not hook:

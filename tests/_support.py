@@ -32,6 +32,16 @@ atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
 os.environ["HOME"] = TEST_HOME
 
 
+def quiet(fn, *args, **kwargs):
+    """Run fn with stdout captured; return (result, printed text)."""
+    import contextlib
+    import io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        result = fn(*args, **kwargs)
+    return result, out.getvalue()
+
+
 def git_env(**extra):
     """The environment for a git call in a scratch repo.
 

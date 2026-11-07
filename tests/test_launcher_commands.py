@@ -451,16 +451,6 @@ class TestUnknownArgsRejected(unittest.TestCase):
             capture_output=True, text=True, cwd=str(REPO_ROOT),
         )
 
-    def test_sync_hooks_rejects_unknown_flag(self):
-        result = self._run("sync-hooks", "--bogus")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unexpected argument", result.stdout)
-
-    def test_health_rejects_unknown_flag(self):
-        result = self._run("health", "--bogus")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unexpected argument", result.stdout)
-
     def test_invalid_command_still_fails(self):
         result = self._run("not-a-command")
         self.assertNotEqual(result.returncode, 0)

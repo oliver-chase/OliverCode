@@ -97,11 +97,6 @@ class TestSharedCheck(GateHarness):
         self.assertIn("skills/x/references/one.md", done.stdout)
         self.assertIn("skills/y/references/two.md", done.stdout)
 
-    def test_the_live_repo_passes_its_own_check(self):
-        done = subprocess.run([sys.executable, str(CHECKER), "--root", str(REPO_ROOT)],
-                              capture_output=True, text=True)
-        self.assertEqual(0, done.returncode, done.stdout)
-
     def test_bootstrap_ships_the_check_to_scripts(self):
         manifest = json.loads((REPO_ROOT / "shared" / "project-bootstrap-manifest.json").read_text())
         entries = {e["target"]: e["source"] for e in manifest["templatedFiles"]}

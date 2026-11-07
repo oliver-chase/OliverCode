@@ -15,6 +15,7 @@ from lib.local_config import private_repos as _private_repos
 from lib.local_config import skills_root as _skills_root
 from lib.repo_profiles import iter_fleet as _iter_fleet
 from lib.repo_profiles import load_repo_profiles
+from lib.skills_catalog import skill_dirs
 from lib.skill_links import broken_links as _broken_links, link_states as _link_states
 
 
@@ -156,9 +157,7 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
         skipped += 1
     else:
         skills_dir = oc_root / "skills"
-        oc_skill_names = sorted(
-            p.name for p in skills_dir.iterdir() if p.is_dir() and (p / "SKILL.md").exists()
-        ) if skills_dir.is_dir() else []
+        oc_skill_names = [p.name for p in skill_dirs(skills_dir)] if skills_dir.is_dir() else []
         states = _link_states({n: skills_dir / n for n in oc_skill_names}, claude_skills_dir)
         installed = [n for n, st in states.items() if st == "ok"]
         missing = [n for n, st in states.items() if st in ("absent", "real")]

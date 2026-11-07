@@ -17,7 +17,10 @@ from lib.local_config import OC_ROOT, private_repos, repo_paths
 REGISTRY_DIR = "olivercode"
 
 
-def registry_file(repo_root: Path, filename: str) -> Path:
+REGISTRY_NAME = "repo-profiles.json"
+
+
+def registry_file(repo_root: Path) -> Path:
     """The registry file this checkout reads: a private repo's copy, else the tracked one.
 
     Only the checkout whose olivercode.local.json names the private repos looks there, so a
@@ -25,16 +28,16 @@ def registry_file(repo_root: Path, filename: str) -> Path:
     """
     if Path(repo_root).resolve() == OC_ROOT.resolve():
         for repo in private_repos().values():
-            candidate = repo / REGISTRY_DIR / filename
+            candidate = repo / REGISTRY_DIR / REGISTRY_NAME
             if candidate.is_file():
                 return candidate
-    return Path(repo_root) / "shared" / filename
+    return Path(repo_root) / "shared" / REGISTRY_NAME
 
 
 def registry_gap(repo_root: Path) -> str:
     """Why this checkout reads no real registry although it names private repos, or ""."""
     private = private_repos() if Path(repo_root).resolve() == OC_ROOT.resolve() else {}
-    if not private or registry_file(repo_root, "repo-profiles.json") != Path(repo_root) / "shared" / "repo-profiles.json":
+    if not private or registry_file(repo_root) != Path(repo_root) / "shared" / "repo-profiles.json":
         return ""
     names = ", ".join(f"{n} ({p})" for n, p in private.items())
     return (f"no private repo holds {REGISTRY_DIR}/repo-profiles.json, so the fleet reads as empty. Checked: {names}. "
@@ -43,7 +46,7 @@ def registry_gap(repo_root: Path) -> str:
 
 def load_repo_profiles(repo_root):
     """Return (profiles: dict, source_path: Path)."""
-    path = registry_file(repo_root, "repo-profiles.json")
+    path = registry_file(repo_root)
     with open(path) as f:
         data = json.load(f)
     return data.get("profiles", {}), path

@@ -12,8 +12,9 @@ top-level directory. Anything else (prose, commands, identifiers) is ignored.
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
+
+from lib.gitfiles import tracked_files
 
 BACKTICK = re.compile(r"`([^`\n]+)`")
 
@@ -83,15 +84,7 @@ def _tracked_files(repo_root: Path) -> list[str]:
     validate.sh while the file was untracked and only failed after it was committed,
     which is exactly backwards for a pre-commit gate.
     """
-    out = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-files", "--cached", "--others", "--exclude-standard"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if out.returncode != 0:
-        return []
-    return sorted({line for line in out.stdout.splitlines() if line.strip()})
+    return sorted(set(tracked_files(repo_root, "--cached", "--others", "--exclude-standard")))
 
 
 def _is_exempt(token: str) -> bool:
