@@ -5,6 +5,7 @@ Status: Active
 ## Canonical contract sources
 
 1. `OliverCode/docs/RULES.md` ("Project structure")
+2. `OliverCode/docs/CONTRACT.md`
 
 ## Profile
 
@@ -34,3 +35,7 @@ what moves through it.
 ## Enforcement
 
 1. `bash scripts/validate.sh`, which also runs `npm run validate` when the repo has one
+
+## Contract exceptions
+
+None.
