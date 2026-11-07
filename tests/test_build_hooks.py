@@ -38,7 +38,7 @@ class TestBuildHooks(unittest.TestCase):
             return bh.main()
 
     def test_a_hand_edit_to_any_built_hook_fails(self):
-        for rel in ("core/templates/project/pre-commit-private", ".githooks/pre-push", "core/templates/project/commit-msg"):
+        for rel in ("core/templates/project/pre-commit-private", "core/templates/project/pre-push", "core/templates/project/commit-msg"):
             with self.subTest(rel):
                 hook = self.tmp / rel
                 original = hook.read_text()
@@ -50,7 +50,7 @@ class TestBuildHooks(unittest.TestCase):
         patterns = bh.SECRET_PATTERNS
         patterns.write_text(patterns.read_text().replace("SECRET_PATTERNS=(", "SECRET_PATTERNS=(\n  'newtok_[0-9]{8}'", 1))
         self.assertEqual(self.check(), 0)
-        for rel in (".githooks/pre-commit", ".githooks/pre-push", "core/templates/project/pre-push"):
+        for rel in ("core/templates/project/pre-commit", "core/templates/project/pre-push"):
             self.assertIn("newtok_", (self.tmp / rel).read_text(), rel)
 
     def test_a_gate_edit_reaches_every_variant_that_runs_it(self):
@@ -76,7 +76,8 @@ class TestAdoptedRepoHooksCarryNoOliverCodeText(unittest.TestCase):
             for word in ("OliverCode", "DECISIONS.md", "RULES.md", "build-hooks.py"):
                 self.assertNotIn(word, text, f"{rel} mentions {word}")
 
-    def test_oliver_codes_own_hooks_keep_their_pointers(self):
-        text = (REPO_ROOT / ".githooks" / "pre-commit").read_text()
-        self.assertIn("See docs/DECISIONS.md.", text)
-        self.assertIn("OliverCode pre-commit hook", text)
+    def test_oliver_codes_own_hooks_are_links_to_the_templates(self):
+        for name in ("pre-commit", "commit-msg", "pre-push"):
+            link = REPO_ROOT / ".githooks" / name
+            self.assertTrue(link.is_symlink(), name)
+            self.assertEqual(link.resolve(), (REPO_ROOT / "core" / "templates" / "project" / name).resolve(), name)

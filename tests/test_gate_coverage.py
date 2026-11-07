@@ -76,8 +76,8 @@ class TestMutations(unittest.TestCase):
     def test_catches_a_doc_overstating_coverage_for_adopted_repos(self):
         """A claim names its hook on its own line and is compared with that hook's count."""
         self.assertTrue(self._fails_after(
-            "README.md", "## What happens automatically\n",
-            "## What happens automatically\n\nIn every adopted repo, "
+            "README.md", "## What runs automatically\n",
+            "## What runs automatically\n\nIn every adopted repo, "
             f"{cc._hook_totals(REPO_ROOT)[0]['template-private']} pre-commit gates run.\n"))
 
     def test_catches_the_word_form_of_a_wrong_claim(self):

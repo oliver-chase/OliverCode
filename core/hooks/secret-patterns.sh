@@ -20,3 +20,20 @@ SECRET_PATTERNS=(
   '-----BEGIN [A-Z ]*PRIVATE KEY-----'         # Private keys (RSA/EC/DSA/OPENSSH/PKCS8) — matches "BEGIN <TYPE> PRIVATE KEY"
   '(TOKEN|SECRET|KEY|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|AUTH|CREDENTIAL|token|secret|key|password|passwd|api_?key|access_?key|auth|credential)["'\'':= ]+[A-Za-z0-9]{20,}'  # Secret-named var assigned a 20+ char alphanumeric value (a bare hex-blob pattern false-positives on every git SHA/lockfile hash)
 )
+
+# secret_filter PATTERN: reads `grep -n` hits on stdin and prints those that hold a real secret.
+# The commit gate and the pre-push scan both call it, so a line one passes the other passes.
+# Exempt: the public supabase anon-key meta tag, a line marked "secret-scan: allow", and a hit
+# whose every matched value is a placeholder (EXAMPLE, placeholder, your_key, a run of x).
+SECRET_ANON_META='<meta name="supabase-anon-key" content="eyJ'
+SECRET_PLACEHOLDER='EXAMPLE|[Ee]xample|[Pp]laceholder|PLACEHOLDER|[Yy]our[_-]?([Aa]pi[_-]?)?([Kk]ey|[Tt]oken|[Ss]ecret)|YOUR_|x{8,}|X{8,}'
+secret_filter() {
+  local pattern="$1" hit
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    case "$hit" in *'secret-scan: allow'*|*"$SECRET_ANON_META"*) continue ;; esac
+    if printf '%s\n' "$hit" | grep -oE -e "$pattern" | grep -vE -e "$SECRET_PLACEHOLDER" >/dev/null; then
+      printf '%s\n' "$hit"
+    fi
+  done
+}
