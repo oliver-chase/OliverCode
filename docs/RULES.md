@@ -42,7 +42,7 @@ This sequence moves work from an idea to shipped code in every repo, without bei
 2. **Spec before build.** Every gap becomes a written spec before any code. A spec states the failure it prevents, what is in scope and what is explicitly out, and the watch-out, which is the way a plausible implementation gets it wrong. Specs live as issues in the repo's GitHub Project (see "Project structure"). Nothing is built that is not specced, and nothing is specced that cannot name its failure
 3. **Prioritize by the cost of being wrong.** Rank by what breaking it costs: silent data loss first (wrong output that looks right), then a security boundary that can be bypassed, then a visible failure that is loud and recoverable, then cost and performance, then ergonomics. A defect that surfaces as worse results blamed on something else outranks one that throws, because an exception gets fixed and silently thinner data gets shipped
 4. **Build, verify, commit, one loop per spec.** Write the failing test first, at a seam that reaches the real bug. Implement. Ablate by removing the guard, confirming the test goes red, then restoring it. Run the repo's own `check` or `validate` and read the exit code, never a grepped line, because a filtered log hides failing suites. Commit with the why, then push. One spec per commit, because a commit spanning two specs cannot be reverted cleanly
-5. **QA is a separate pass by a separate reader.** The author cannot QA their own work and confirms what they intended. Where an agent is available, QA runs as its own adversarial pass with a brief to find what is wrong. It verifies by running and never by reading, and its findings are fixed before the work is called done. A finding in the author's own recent edits is the most valuable kind
+5. **QA, when the owner asks for it, is a separate pass by a separate reader.** The author cannot QA their own work and confirms what they intended. QA then runs as its own adversarial pass with a brief to find what is wrong. It verifies by running and never by reading, and its findings are fixed before the work is called done. A finding in the author's own recent edits is the most valuable kind
 6. **Prefer boundary verification over volume.** A suite that grows without finding defects measures the wrong thing. Verify where the system meets reality (real networks, real files, real inputs), and say so when volume was not what found the bug
 7. **Simplify as part of finishing.** A change is not done until you have asked what it made redundant: merge duplicated helpers, delete dead code, collapse a constructor that four call sites hand-rolled. Removal is a deliverable. Never remove functionality to reduce size, and reduce the number of places a behavior is expressed
 8. **Consistency across repos is the point.** The same question gets the same answer in every repo: backlog policy, comment discipline, document shape, commit format and verification command name. A repo that deviates documents the deviation with its reason or removes it
@@ -61,11 +61,7 @@ Working rules that hold in every session:
 Token efficiency applies to these rules too:
 
 - Deterministic scripts beat model calls, because a gate that greps is cheaper, faster and more accurate than a model asked to check the same thing
-- A pointer beats a restatement, because a rule repeated in two places is two things to keep in sync
-- A number is measured once, lives in one place with its date, and is linked everywhere else
 - Targeted greps and line ranges beat whole-file reads
-
-Enforcement reality: steps 4 and 5 are partly gated by each repo's `check` or `validate` and its pre-commit hooks, and the sequencing itself is instruction text. See "Enforcement reality" in the README before assuming a written rule is unbreakable.
 
 ## Execution
 
@@ -74,12 +70,12 @@ Every change in any project follows this locked process, and no gate is skippabl
 1. Code: implement the change fully
 2. Docs: update every affected document to current state and audit related documents for stale references
 3. Audit: scan for stale references, conflict markers and ordering hazards
-4. QA: verify the change end to end by running the repo's own validation command, which its `CLAUDE.md` names
+4. Validate: verify the change end to end by running the repo's own validation command, which its `CLAUDE.md` names
 5. Gate: pre-commit enforcement runs automatically, and a blocked commit is fixed before committing. How many gates run depends on the repo, and `docs/GATES.md` has the table
 6. Commit: only on pass, with a descriptive message
 7. Push: to the correct repo
 
-Audit reviewers run in parallel, one per area, and every other helper agent runs alone.
+When the owner asks for an audit, its reviewers run in parallel, one per area. Every other helper agent runs alone.
 
 `.githooks/pre-commit` runs the gates on every commit git runs it for. Four things skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
 
