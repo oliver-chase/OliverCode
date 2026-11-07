@@ -69,7 +69,7 @@ Every change in any project follows this locked process, and no gate is skippabl
 
 1. Code: implement the change fully
 2. Docs: update every affected document to current state and audit related documents for stale references
-3. Audit: scan for stale references, conflict markers and ordering hazards
+3. Quick pass: read the diff for stale references, conflict markers and ordering hazards
 4. Validate: verify the change end to end by running the repo's own validation command, which its `CLAUDE.md` names
 5. Gate: pre-commit enforcement runs automatically, and a blocked commit is fixed before committing. How many gates run depends on the repo, and `docs/GATES.md` has the table
 6. Commit: only on pass, with a descriptive message
@@ -304,7 +304,7 @@ An unlinked skill is invisible and an unindexed one is undiscoverable. Skills ne
 
 `.claude/skills/olivercode-adoption` is the one project-level pointer, a tracked symlink to `skills/olivercode-adoption`, and it is not a second home. It breaks a chicken-and-egg problem: the skill that walks someone through installing OliverCode was invocable only after `olivercode install` had linked it into `~/.claude/skills/`, which is the step it exists to guide. A project-level skill is available the moment the repo is cloned and opened. Do not add a second one without the same justification, because every other skill reaches the user through `~/.claude/skills/`.
 
-Hooks are not skills and follow the same pattern. The gates are written in `core/hooks/` and built into `core/templates/project/` by `scripts/build-hooks.py`. Every fleet repo and private repo gets its copy through the bootstrap manifest or `sync-hooks` with `core.hooksPath = .githooks`, public repos use `pre-commit` and private repos use the private variant (`docs/GATES.md`). Every staged `SKILL.md`, `CLAUDE.md` and `references/*.md`, in this repo or any fleet repo, is checked for dead issue citations at commit time, and `docs/GATES.md` has the gate.
+Hooks are not skills and follow the same pattern: written once in `core/hooks/` (see "Framework baseline" above) and copied to every fleet and private repo by `sync-hooks`, with the public or private variant per `docs/GATES.md`, which also lists the dead-citation gate on staged skill and rule files.
 
 When a repo-specific skill must win over a generic one: both can match the same task, for example a generic email-writing skill and a repo's own approval-gated outreach skill both matching "draft a cold email sequence". Matching is based on task phrasing and happens before any repo file is touched, so the generic skill can fire first even inside the repo the specific one was built for (`ACT-3` in `docs/DECISIONS.md`). No framework-level fix exists for that first mis-fire. The mitigation is a named, explicit directive in that repo's own `CLAUDE.md`, which loads for every session in that repo. It names the mandatory skill and the generic one to avoid, inside a section the agent reads early such as "Approval Boundaries". It catches the agent on its first repo-file touch and sends it back to the correct path even when it already invoked the wrong skill. If your repo has an approval-gated skill that a generic one could shadow, add this directive.
 

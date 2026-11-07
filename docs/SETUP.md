@@ -131,7 +131,7 @@ scripts/olivercode conform --offline         # confirms each repo's hooks are in
 
 `docs/GATES.md` has the table of which gates each kind of repo runs.
 
-Hook enforcement fails open. The troubleshooting entry "Commits are passing gates that should have blocked them" below explains why and how to fix it. `scripts/olivercode conform` detects it fleet-wide, so run it on a schedule as well as at setup. The Claude Code session check also reports it for the repo a session opens.
+Hook enforcement fails open when `core.hooksPath` is unset (`docs/RULES.md`, "Execution"). Run `scripts/olivercode conform` at setup and on a schedule to find it fleet-wide, and see "Commits are passing gates that should have blocked them" below to fix it.
 
 ### Step 6b: stamp the project template into a repo (optional)
 
