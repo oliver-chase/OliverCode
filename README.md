@@ -36,6 +36,39 @@ python3 scripts/olivercode health
 python3 scripts/olivercode conform
 ```
 
+## Commands
+
+`python3 scripts/olivercode guide` prints this overview from the launcher itself, and `--help` prints the command list.
+
+| Command | Purpose |
+| --- | --- |
+| `olivercode install` | Link `CLAUDE.md`, `VOICE.md`, the skills and the Claude Code hooks into `~/.claude` |
+| `olivercode uninstall` | Remove what `install` wrote and restore what it backed up |
+| `olivercode update` | Pull this checkout, re-run `install`, then `sync-hooks` |
+| `olivercode health` | Check this machine: hooks, skill links, voice copies, remotes, file sizes |
+| `olivercode conform` | Check a repo, or every registered repo, against `docs/CONTRACT.md` |
+| `olivercode bootstrap` | Stamp the project template into a repo (`--dry-run` shows the plan) |
+| `olivercode sync-hooks` | Converge the hooks and `core.hooksPath` across the fleet |
+| `olivercode discover` | Scan for git repos and report what governance they have |
+| `olivercode backlog-setup` | Set up or repair a repo's GitHub Project board and backlog config |
+| `olivercode size` | Print a repo's line count, baseline and headroom |
+| `olivercode audit-fleet` | Run the audit skill's structure check on the skills folders |
+| `olivercode skills` | List the skills, optionally filtered with `--grep` |
+| `olivercode guide` | Print first steps, every command and every skill with its trigger phrases |
+
+## Skills
+
+Say the phrase to Claude Code and the skill loads. [`skills/INDEX.md`](skills/INDEX.md) holds the full table.
+
+| Say | Skill |
+| --- | --- |
+| "Audit this", "QA this", "audit my skills" | `audit` |
+| "Make a plan" | `plan` |
+| "Debug this", "diagnose" | `diagnosing-bugs` |
+| "Set this up for my repos" | `olivercode-adoption` |
+| "New skill" | `skill-creation` |
+| "Board hygiene", filing or closing backlog work | `backlog` |
+
 ## What runs automatically
 
 - Git runs `.githooks/pre-commit` on every commit while `core.hooksPath` points to it

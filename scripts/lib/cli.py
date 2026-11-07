@@ -19,6 +19,7 @@ COMMANDS = [
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run the audit skill's structure check, which includes the description cap, against this machine's skills folder + OliverCode's own skills"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
+    ("olivercode guide", "Print a plain-language overview: first steps, every command, and every skill with the phrases that load it"),
 ]
 
 
@@ -27,6 +28,7 @@ def print_usage() -> None:
     print("Commands:")
     for cmd, desc in COMMANDS:
         print(f"  {cmd:<32} {desc}")
+    print("\nNew here? Run: olivercode guide")
 
 
 def take_root_flag(argv: list[str]) -> tuple[Path | None, list[str]]:

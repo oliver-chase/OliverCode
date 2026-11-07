@@ -20,6 +20,7 @@ from lib.cli import print_usage, reject_extra as _reject_extra, require_dir as _
 from lib.cmd_fleet import (  # noqa: E402
     command_audit_fleet, command_backlog_setup, command_conform, command_sync_hooks, command_update,
 )
+from lib.cmd_guide import command_guide  # noqa: E402
 from lib.cmd_health import command_health, _check_placement_drift  # noqa: E402,F401
 from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
 from lib.cmd_repo import command_bootstrap, command_discover, command_size, command_skills  # noqa: E402
@@ -90,6 +91,9 @@ def main() -> int:
         return command_audit_fleet(OC_ROOT)
     if cmd == "skills":
         return command_skills(argv)
+    if cmd == "guide":
+        _reject_extra(cmd, argv)
+        return command_guide(OC_ROOT)
 
     print(f"Error: '{cmd}' is not a valid command.")
     print_usage()
