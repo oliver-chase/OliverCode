@@ -20,11 +20,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from fleet_check import CONTRAST  # one contrast-framing pattern for the audit and the fleet check
+
 STORY = re.compile(r"(^|[^\w/#&])#0*[1-9][0-9]*\b|[\w.-]+/[\w.-]+#0*[1-9][0-9]*\b")
 CODE = re.compile(r"\.(py|sh|js|mjs|ts|tsx)$")
 TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$")
 COAUTHOR_OK = re.compile(r"^Co-Authored-By: [^<>]+ <[^<>@ ]+@[^<> ]+>$")
-CONTRAST = re.compile(r"\b(?:not\b[^.\n]{1,60}?,?\s*\bbut\b|rather than\b|instead of\b)|,\s+not\s+(?:a|an|the)\b", re.I)
 CLASSES = ("no-story", "pr-merge", "code-no-test", "coauthor-form", "voice")
 SEP, END = "\x1e", "\x1f"
 

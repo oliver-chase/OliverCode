@@ -18,6 +18,11 @@ ENV = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1", "PATH": os.
 
 
 class CommitAudit(unittest.TestCase):
+    def test_the_audit_uses_the_fleet_checks_contrast_pattern(self):
+        import fleet_check
+        self.assertIs(commit_audit.CONTRAST, fleet_check.CONTRAST)
+        self.assertTrue(commit_audit.CONTRAST.search("less speed, more care"))
+
     def test_counts_each_class_and_the_change_since_the_last_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, state = Path(tmp) / "shop", Path(tmp) / "state.json"

@@ -17,9 +17,10 @@ import re
 import subprocess
 import sys
 
+from check_qa_signoff import REPO, gh_api  # one gh runner and one repo pattern for the backlog scripts
+
 ROLES = ("builder", "qa")
 HASH = re.compile(r"^[0-9a-f]{7,40}$")
-REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
 VERDICT = re.compile(r"^\s*Story (\d+):\s*(PASS|FAIL|BLOCKED)\b(.*)$")
 
 
@@ -34,10 +35,6 @@ def build_comment(agent, role, commit, files, result):
         f"- Result: {result}",
     ])
 
-
-def gh_api(args):
-    """Run `gh api ARGS` and return the CompletedProcess. Tests pass their own runner instead."""
-    return subprocess.run(["gh", "api"] + args, capture_output=True, text=True)
 
 
 def post_comment(repo, story, body, runner=gh_api):

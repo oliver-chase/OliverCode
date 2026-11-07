@@ -73,7 +73,7 @@ fi
 # VOICE-1. A commit message follows docs/VOICE.md: no bullet that ends in a period and no contrast
 # framing ("rather than", "instead of", "not X but Y", ", not a ..."). Lines starting with # are dropped
 # by git before the hook sees the message, and a trailer such as Co-Authored-By is never a bullet.
-VOICE_BREAKS="$(printf '%s\n' "$MESSAGE" | grep -nE '^[[:space:]]*[-*][[:space:]]+.*[^.]\.$|rather than|instead of|[Nn]ot [^.]{1,60} but |, not (a|an|the) ' || true)"
+VOICE_BREAKS="$(printf '%s\n' "$MESSAGE" | grep -nE '^[[:space:]]*[-*][[:space:]]+.*[^.]\.$|rather than|instead of|it is not about|[Ll]ess [^.]{1,40}, more |[Nn]ot [^.]{1,60} but |, not (a|an|the) ' || true)"
 if [ -n "$VOICE_BREAKS" ]; then
   echo "[commit-msg] BLOCKED: the message breaks the voice rules (docs/VOICE.md):"
   printf '%s\n' "$VOICE_BREAKS" | sed -n '1,5s/^/    /p'
