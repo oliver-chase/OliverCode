@@ -38,7 +38,7 @@ python3 scripts/olivercode conform
 
 ## Commands
 
-`python3 scripts/olivercode guide` prints this overview from the launcher itself, and `--help` prints the command list.
+The launcher's command table (`COMMANDS` in `scripts/lib/cli.py`) is the home of this list. `python3 scripts/olivercode guide` prints an overview built from it, and `--help` prints the table itself.
 
 | Command | Purpose |
 | --- | --- |
@@ -58,16 +58,7 @@ python3 scripts/olivercode conform
 
 ## Skills
 
-Say the phrase to Claude Code and the skill loads. [`skills/INDEX.md`](skills/INDEX.md) holds the full table.
-
-| Say | Skill |
-| --- | --- |
-| "Audit this", "QA this", "audit my skills" | `audit` |
-| "Make a plan" | `plan` |
-| "Debug this", "diagnose" | `diagnosing-bugs` |
-| "Set this up for my repos" | `olivercode-adoption` |
-| "New skill" | `skill-creation` |
-| "Board hygiene", filing or closing backlog work | `backlog` |
+Say what you want to Claude Code and the matching skill loads, for example "audit this". `python3 scripts/olivercode guide` lists every skill with the phrases that load it, and [`skills/INDEX.md`](skills/INDEX.md) is the catalog.
 
 ## What runs automatically
 

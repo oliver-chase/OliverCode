@@ -60,10 +60,12 @@ class TestReadmeListsEveryCommand(unittest.TestCase):
         for n in names:
             self.assertRegex(setup, rf"(?m)^- `{re.escape(n)}[ `]", f"docs/SETUP.md has no bullet for {n}")
 
-    def test_readme_skill_table_names_every_skill(self):
+    def test_readme_points_to_the_guide_and_the_skill_catalog_and_keeps_no_skill_list(self):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("olivercode guide", readme)
+        self.assertIn("skills/INDEX.md", readme)
         for name, _ in cmd_guide.skill_triggers(REPO_ROOT):
-            self.assertIn(f"| `{name}` |", readme)
+            self.assertNotIn(f"| `{name}` |", readme, "skills/INDEX.md is the only skill catalog")
 
 
 if __name__ == "__main__":
