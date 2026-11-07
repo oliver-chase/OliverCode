@@ -45,6 +45,7 @@ A skill that ships inside OliverCode may read `$OC/` files and name its sibling 
 13. **A step a command can do is a command.** Opening a file, counting rows, comparing two structures or finding a marker is a script that prints the answer, and the text tells the model to run it and act on the output
 14. **A script has a test that goes red without its guard.** Build the test, remove the guard once, check that the test fails, then restore it. `check_skill_structure.py --weight` lists the scripts no test names
 15. **A skill with several tasks loads one reference per task.** A route row names one file. A setup file loads only when a one-line `check` command says setup is not done
+16. **One data file per kind, no dated copies.** A skill that records data appends to one file per kind of thing, and a reading taken over time rolls up to one row a week inside that file once it passes 1,000 rows and 90 days. It writes no file per day, week or run. The skill names its data file and its roll-up point
 
 ## 0. Write the target in four lines
 

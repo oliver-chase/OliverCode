@@ -358,6 +358,10 @@ Documents live in `docs/` and use CAPS-KEBAB names such as `GATES.md`. The root 
 
 Each concept has one home, and every other mention points to it by name. Every ID that a document or comment cites exists in `docs/DECISIONS.md`.
 
+### Data files
+
+A skill or script that records data keeps one file per kind of thing and adds rows to it. It never writes a file per day, week, month or run, and a new attribute of a thing is a column of its file. A reading taken over time rolls up inside the same file once the file passes 1,000 rows: rows older than 90 days become the last reading of each week, and nothing is copied to an archive. A log of decisions or of posted items stays whole. The skill names its data file, its roll-up point and what it deletes.
+
 ### Numbers in prose
 
 A count that changes, such as tests, gates or coverage, never appears in a document. Give the command that produces it. A dated measurement goes in the backlog's live tracker once, with its date.
