@@ -465,8 +465,6 @@ class TestUnknownArgsRejected(unittest.TestCase):
             self.assertEqual(self._run(*args).returncode, 0, f"{args} should exit 0")
 
 
-
-
 class TestBootstrap(unittest.TestCase):
     """`bootstrap` executes the project bootstrap manifest. Its modes are
     the correctness property: strict overwrites, presence must never clobber."""
@@ -499,13 +497,6 @@ class TestBootstrap(unittest.TestCase):
         for hook in ("pre-commit", "commit-msg"):
             self.assertTrue(os.access(self.tmp / ".githooks" / hook, os.X_OK), hook)
 
-    def test_presence_files_are_never_clobbered(self):
-        self._run()
-        claude = self.tmp / "CLAUDE.md"          # presence mode in the manifest
-        claude.write_text("MY REPO RULES\n", encoding="utf-8")
-        self._run()
-        self.assertIn("MY REPO RULES", claude.read_text())
-
     def _fake_checkout(self, manifest: dict) -> Path:
         """An OliverCode root holding only a bootstrap manifest, so one rule is tested alone."""
         root = Path(tempfile.mkdtemp(prefix="olivercode-fakeoc-"))
@@ -537,24 +528,6 @@ class TestBootstrap(unittest.TestCase):
             self.assertEqual(rc, 1, "must refuse a directory with no .git")
         finally:
             shutil.rmtree(plain, ignore_errors=True)
-
-class TestAuditFleetExit(unittest.TestCase):
-    """Findings exit 0. A check that cannot run exits 1."""
-
-    def run_with(self, returncode, stderr=""):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-auditfleet-"))
-        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        (tmp / "skills" / "audit" / "scripts").mkdir(parents=True)
-        done = subprocess.CompletedProcess([], returncode, stdout="a finding\n", stderr=stderr)
-        with mock.patch.object(cmd_fleet, "_skills_root", return_value=None), \
-                mock.patch.object(launcher.subprocess, "run", return_value=done), \
-                contextlib.redirect_stdout(io.StringIO()):
-            return launcher.command_audit_fleet(tmp)
-
-    def test_a_check_that_crashes_exits_one(self):
-        self.assertEqual(self.run_with(2), 1)
-        self.assertEqual(self.run_with(1, stderr="Traceback (most recent call last):"), 1)
-
 
 
 if __name__ == "__main__":

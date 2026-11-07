@@ -17,6 +17,11 @@ import sys
 from pathlib import Path
 
 OC_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def claude_dir() -> Path:
+    """The operator's ~/.claude folder, resolved at call time so a test that sets HOME gets its own."""
+    return Path.home() / ".claude"
 LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 

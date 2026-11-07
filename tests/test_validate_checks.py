@@ -1,20 +1,17 @@
 """`validate.sh --check-repo`: the bloat and code quality checks, run on a scratch repo."""
 
-import shutil
 import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
-from _support import REPO_ROOT, git, git_env, scratch_repo
+from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
 
 VALIDATE = REPO_ROOT / "scripts" / "validate.sh"
 
 
 class CheckRepo(unittest.TestCase):
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-checkrepo-"))
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.repo = temp_dir(self, "olivercode-checkrepo-")
         scratch_repo(self.repo)
 
     def add(self, rel, text):
@@ -72,8 +69,7 @@ class CheckBudget(unittest.TestCase):
     """`validate.sh --check-budget`: docs/BUDGET.json fails a repo that measures over it."""
 
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-budget-"))
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.repo = temp_dir(self, "olivercode-budget-")
         scratch_repo(self.repo)
 
     def add(self, rel, text):

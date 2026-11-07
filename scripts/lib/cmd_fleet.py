@@ -9,6 +9,7 @@ from pathlib import Path
 
 from lib import backlog_setup as _backlog_setup
 from lib import conform as _conform
+from lib.cli import require_dir, take_flag
 from lib.local_config import OC_ROOT
 from lib.local_config import private_repos as _private_repos
 from lib.local_config import skills_root as _skills_root
@@ -52,16 +53,12 @@ def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None,
 
 def command_backlog_setup(argv: list[str]) -> int:
     """`olivercode backlog-setup [DIR] [--apply]`: see lib/backlog_setup.py and docs/SETUP.md."""
-    apply = "--apply" in argv
-    rest = [a for a in argv if a != "--apply"]
+    apply, rest = take_flag(argv, "--apply")
     if len(rest) > 1 or (rest and rest[0].startswith("-")):
         print("Usage: olivercode backlog-setup [DIR] [--apply]")
         return 1
     target = Path(rest[0] if rest else ".").expanduser()
-    if not target.is_dir():
-        print(f"Error: {target} is not a directory.")
-        return 1
-    return _backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT)
+    return _backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT) if require_dir(target) else 1
 
 
 def _install_pre_push(repo_path: Path, templates_dir: Path) -> None:

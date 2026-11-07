@@ -44,6 +44,19 @@ def take_root_flag(argv: list[str]) -> tuple[Path | None, list[str]]:
     return root, argv[:idx] + argv[idx + 2:]
 
 
+def take_flag(argv: list[str], flag: str) -> tuple[bool, list[str]]:
+    """Pull a bare flag such as `--dry-run` out of argv. Returns (whether it was there, the remaining args)."""
+    return flag in argv, [a for a in argv if a != flag]
+
+
+def require_dir(path: Path) -> bool:
+    """True when `path` is a directory; otherwise prints the launcher's one error line and returns False."""
+    if path.is_dir():
+        return True
+    print(f"Error: {path} is not a directory.")
+    return False
+
+
 def reject_extra(cmd: str, rest: list[str]) -> None:
     """Unknown arguments must fail loudly.
 

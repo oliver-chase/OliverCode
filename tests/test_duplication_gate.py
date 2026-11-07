@@ -16,13 +16,6 @@ PASSAGE = ("the release owner signs the checklist before any tag is pushed and r
 
 
 class DuplicationSetup:
-    HOOK_FILE = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.HOOK_SOURCE = REPO_ROOT / cls.HOOK_FILE
-        super().setUpClass()
-
     def setUp(self):
         super().setUp()
         self.write("scripts/duplication_check.py", CHECKER.read_text(encoding="utf-8"))
@@ -74,10 +67,6 @@ class DuplicationWired(DuplicationSetup):
     def test_a_staged_file_repeating_a_paragraph_blocks(self):
         self.stage("skills/two/references/b.md", f"# B\n\n{PASSAGE}.\n")
         self.assertBlocked("another file already holds")
-
-
-class TestDuplicationPublicTemplateHook(DuplicationWired, GateHarness):
-    HOOK_FILE = "core/templates/project/pre-commit"
 
 
 class TestDuplicationPrivateTemplateHook(DuplicationWired, GateHarness):

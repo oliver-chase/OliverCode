@@ -8,12 +8,11 @@ git reads no machine config (tests/_support.py).
 import os
 import shutil
 import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo, quiet
+from _support import REPO_ROOT, git, load_script, scratch_repo, quiet, temp_dir
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
@@ -25,8 +24,7 @@ class ScratchHome(unittest.TestCase):
     """A scratch HOME and checkout that no test can leave behind."""
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-fleetcmd-")).resolve()
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.tmp = temp_dir(self, "olivercode-fleetcmd-", resolve=True)
         self.home = self.tmp / "home"
         self.home.mkdir()
         env = mock.patch.dict(os.environ, {"HOME": str(self.home)})
@@ -225,6 +223,12 @@ class TestCommandAuditFleet(ScratchHome):
                 mock.patch.object(launcher.subprocess, "run", runner):
             code, out = quiet(launcher.command_audit_fleet, self.oc)
         return code, out, runner
+
+    def test_a_check_that_crashes_exits_one_and_findings_exit_zero(self):
+        for returncode, stderr in ((2, ""), (1, "Traceback (most recent call last):")):
+            done = subprocess.CompletedProcess([], returncode, stdout="a finding\n", stderr=stderr)
+            code, _, _ = self.audit(runner=mock.Mock(return_value=done))
+            self.assertEqual(code, 1)
 
     def test_a_checkout_without_the_audit_skill_fails(self):
         shutil.rmtree(self.oc / "skills" / "audit")

@@ -18,13 +18,6 @@ def gate_config(**fields):
 
 
 class IdentifierSetup:
-    HOOK_FILE = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.HOOK_SOURCE = REPO_ROOT / cls.HOOK_FILE
-        super().setUpClass()
-
     def setUp(self):
         super().setUp()
         git(self.tmp, "config", "user.name", f"{FAKE.capitalize()} Vantrel")
@@ -147,10 +140,6 @@ class IdentifierWired(IdentifierSetup):
     def test_a_derived_author_name_blocks(self):
         self.stage("skills/demo/SKILL.md", f"owned by {FAKE.capitalize()} today\n")
         self.assertIn("skills/demo/SKILL.md:1", self.assertBlocked("owner identifier").stdout)
-
-
-class TestIdentifiersPublicTemplateHook(IdentifierWired, GateHarness):
-    HOOK_FILE = "core/templates/project/pre-commit"
 
 
 class TestIdentifiersPrivateTemplateHook(IdentifierWired, GateHarness):

@@ -1,15 +1,13 @@
 """`olivercode conform`: each requirement in docs/CONTRACT.md passes on a bootstrapped repo and fails, with its fix, when broken."""
 
 import json
-import shutil
 import subprocess
-import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, load_script, scratch_repo, quiet
+from _support import REPO_ROOT, load_script, scratch_repo, quiet, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import cmd_fleet  # noqa: E402  (load_script put scripts/ on the path)
@@ -21,8 +19,7 @@ TODAY = date(2026, 11, 2)
 
 class ConformBase(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-conform-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.tmp = temp_dir(self, "olivercode-conform-")
         self.repo = scratch_repo(self.tmp / "widgets")
         quiet(launcher.command_bootstrap, REPO_ROOT, self.repo, False)
         (self.repo / "scripts").mkdir(exist_ok=True)

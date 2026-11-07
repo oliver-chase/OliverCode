@@ -32,6 +32,13 @@ atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
 os.environ["HOME"] = TEST_HOME
 
 
+def temp_dir(case, prefix="olivercode-test-", resolve=False):
+    """A fresh temporary folder that the test case removes when it ends."""
+    path = Path(tempfile.mkdtemp(prefix=prefix))
+    case.addCleanup(shutil.rmtree, path, ignore_errors=True)
+    return path.resolve() if resolve else path
+
+
 def quiet(fn, *args, **kwargs):
     """Run fn with stdout captured; return (result, printed text)."""
     import contextlib

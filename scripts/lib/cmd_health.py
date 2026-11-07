@@ -8,15 +8,13 @@ from pathlib import Path
 from lib import claude_settings as _claude_settings
 from lib.health_checks import (
     _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
-    _check_vault_skill_links,
+    _check_placement_drift, _check_vault_skill_links,
 )
-from lib.local_config import OC_ROOT
+from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 from lib.local_config import private_repos as _private_repos
 from lib.local_config import skills_root as _skills_root
 from lib.repo_profiles import iter_fleet as _iter_fleet
 from lib.repo_profiles import load_repo_profiles
-from lib.skills_catalog import skill_dirs
-from lib.skill_links import broken_links as _broken_links, link_states as _link_states
 
 
 class _HealthTally:
@@ -74,11 +72,11 @@ def command_health(fleet_root: Path | None = None) -> int:
     # Claude Code hooks. Only a machine where install linked this checkout is expected
     # to carry them; a fresh clone or CI runner has not installed, which is a skip.
     print("\nClaude Code hooks:")
-    claude_md = Path.home() / ".claude" / "CLAUDE.md"
+    claude_md = _claude_dir() / "CLAUDE.md"
     if not (claude_md.is_symlink() and claude_md.resolve() == (OC_ROOT / "CLAUDE.md").resolve()):
         t.warn("install has not linked this checkout on this machine — hooks not checked")
     else:
-        lacking = _claude_settings.missing(Path.home() / ".claude" / "settings.json")
+        lacking = _claude_settings.missing(_claude_dir() / "settings.json")
         if lacking:
             t.fail(f"~/.claude/settings.json lacks {', '.join(lacking)} for this checkout — run `olivercode install`")
         else:
@@ -119,7 +117,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     # pieces are still wired together and recoverable. See health_checks.py for the
     # failure classes.
     t.add(*_check_vault_skill_links(_skills_root()))
-    t.add(*_check_voice_copies(OC_ROOT, Path.home() / ".claude" / "skills"))
+    t.add(*_check_voice_copies(OC_ROOT, _claude_dir() / "skills"))
 
     # Repos to check for remote reachability and oversized files: the private repos,
     # this framework repo, and every fleet repo that exists on disk.
@@ -137,53 +135,3 @@ def command_health(fleet_root: Path | None = None) -> int:
     print(f"\n{'=' * 40}")
     print(t.summary())
     return 1 if t.failed else 0
-
-
-def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
-    print("\nPlacement drift (docs/RULES.md):")
-    passed = 0
-    failed = 0
-    skipped = 0
-    templates_dir = oc_root / "core" / "templates" / "project"
-
-    # (a)/(b) Every OliverCode skill must have a live, correctly-targeted symlink at
-    # ~/.claude/skills/<name> -- that's the mechanism making it invocable from any repo.
-    # ~/.claude/skills/ is a real directory (not one whole-directory symlink) holding a
-    # mix of individual symlinks (orchestration + personal) and real, untracked product/
-    # GTM and vendor content -- only the symlinked half is checkable from here.
-    claude_skills_dir = Path.home() / ".claude" / "skills"
-    if not claude_skills_dir.is_dir():
-        print("  [WARN] ~/.claude/skills/ not present — skipping")
-        skipped += 1
-    else:
-        skills_dir = oc_root / "skills"
-        oc_skill_names = [p.name for p in skill_dirs(skills_dir)] if skills_dir.is_dir() else []
-        states = _link_states({n: skills_dir / n for n in oc_skill_names}, claude_skills_dir)
-        installed = [n for n, st in states.items() if st == "ok"]
-        missing = [n for n, st in states.items() if st in ("absent", "real")]
-        wrong_target = [n for n, st in states.items() if st in ("broken", "elsewhere")]
-        if oc_skill_names and not installed:
-            # Zero symlinks resolve into THIS checkout: it isn't the machine's installed
-            # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
-            # drift, because a stranger's fresh clone must report HEALTHY.
-            print(f"  [WARN] this checkout is not the machine's installed OliverCode "
-                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/RULES.md")
-            skipped += 1
-        elif missing:
-            print(f"  [FAIL] not symlinked at ~/.claude/skills/: {', '.join(missing)}")
-            failed += 1
-        elif wrong_target:
-            print(f"  [FAIL] symlinked but pointing elsewhere: {', '.join(wrong_target)}")
-            failed += 1
-        else:
-            print(f"  [OK] all {len(oc_skill_names)} OliverCode skills correctly symlinked at ~/.claude/skills/")
-            passed += 1
-
-        broken = _broken_links(claude_skills_dir)
-        if broken:
-            print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
-            failed += 1
-        else:
-            passed += 1
-
-    return passed, failed, skipped

@@ -9,8 +9,11 @@ import os
 import subprocess
 from pathlib import Path
 
+from lib.local_config import claude_dir as _claude_dir
+
 from lib.repo_profiles import configured_location, iter_fleet, registry_file
-from lib.skill_links import link_states
+from lib.skill_links import broken_links, link_states
+from lib.skills_catalog import skill_dirs
 
 # ── Topology checks ──────────────────────────────────────────────────────────
 # The gates cover CONTENT: no secret, no emoji, no archived copy in a commit.
@@ -40,7 +43,7 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
     if skills_root is None:
         print("  [INFO] no skills folder set for this machine (skillsRoot) — not checked")
         return 0, 0, 0
-    target_dir = Path.home() / ".claude" / "skills"
+    target_dir = _claude_dir() / "skills"
 
     if not skills_root.is_dir():
         print(f"  [WARN] skills folder {skills_root} not found — skipping")
@@ -231,4 +234,54 @@ def _check_oversized_tracked(repos: list[tuple[str, Path]]) -> tuple[int, int, i
     elif not (passed or failed or skipped):
         print("  [WARN] no git repo to check — skipping")
         skipped = 1
+    return passed, failed, skipped
+
+
+def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
+    print("\nPlacement drift (docs/RULES.md):")
+    passed = 0
+    failed = 0
+    skipped = 0
+    templates_dir = oc_root / "core" / "templates" / "project"
+
+    # (a)/(b) Every OliverCode skill must have a live, correctly-targeted symlink at
+    # ~/.claude/skills/<name> -- that's the mechanism making it invocable from any repo.
+    # ~/.claude/skills/ is a real directory (not one whole-directory symlink) holding a
+    # mix of individual symlinks (orchestration + personal) and real, untracked product/
+    # GTM and vendor content -- only the symlinked half is checkable from here.
+    claude_skills_dir = _claude_dir() / "skills"
+    if not claude_skills_dir.is_dir():
+        print("  [WARN] ~/.claude/skills/ not present — skipping")
+        skipped += 1
+    else:
+        skills_dir = oc_root / "skills"
+        oc_skill_names = [p.name for p in skill_dirs(skills_dir)] if skills_dir.is_dir() else []
+        states = link_states({n: skills_dir / n for n in oc_skill_names}, claude_skills_dir)
+        installed = [n for n, st in states.items() if st == "ok"]
+        missing = [n for n, st in states.items() if st in ("absent", "real")]
+        wrong_target = [n for n, st in states.items() if st in ("broken", "elsewhere")]
+        if oc_skill_names and not installed:
+            # Zero symlinks resolve into THIS checkout: it isn't the machine's installed
+            # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
+            # drift, because a stranger's fresh clone must report HEALTHY.
+            print(f"  [WARN] this checkout is not the machine's installed OliverCode "
+                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/RULES.md")
+            skipped += 1
+        elif missing:
+            print(f"  [FAIL] not symlinked at ~/.claude/skills/: {', '.join(missing)}")
+            failed += 1
+        elif wrong_target:
+            print(f"  [FAIL] symlinked but pointing elsewhere: {', '.join(wrong_target)}")
+            failed += 1
+        else:
+            print(f"  [OK] all {len(oc_skill_names)} OliverCode skills correctly symlinked at ~/.claude/skills/")
+            passed += 1
+
+        broken = broken_links(claude_skills_dir)
+        if broken:
+            print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
+            failed += 1
+        else:
+            passed += 1
+
     return passed, failed, skipped

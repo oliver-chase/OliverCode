@@ -10,12 +10,10 @@ import io
 import itertools
 import json
 import re
-import shutil
-import tempfile
 import unittest
 from pathlib import Path
 
-from _support import REPO_ROOT, git, load_script, scratch_repo
+from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
 
 backlog_setup = load_script("scripts/lib/backlog_setup.py")
 launcher = load_script("scripts/olivercode", "olivercode_launcher_setup")
@@ -155,8 +153,7 @@ class FakeGitHub:
 
 class SetupCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-setup-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.tmp = temp_dir(self, "olivercode-setup-")
         self.repo = scratch_repo(self.tmp / "widgets")
         git(self.repo, "remote", "add", "origin", "https://github.com/acme/widgets.git")
         self.fake = FakeGitHub()

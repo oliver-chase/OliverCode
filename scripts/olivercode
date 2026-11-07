@@ -16,16 +16,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.cli import print_usage, take_root_flag as _take_root_flag, reject_extra as _reject_extra  # noqa: E402
+from lib.cli import print_usage, reject_extra as _reject_extra, require_dir as _require_dir, take_flag as _take_flag, take_root_flag as _take_root_flag  # noqa: E402
 from lib.cmd_fleet import (  # noqa: E402
     command_audit_fleet, command_backlog_setup, command_conform, command_sync_hooks, command_update,
 )
 from lib.cmd_health import command_health, _check_placement_drift  # noqa: E402,F401
 from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
 from lib.cmd_repo import command_bootstrap, command_discover, command_size, command_skills  # noqa: E402
+from lib.local_config import OC_ROOT  # noqa: E402,F401
 
-# This file lives at <OliverCode>/scripts/olivercode, so the repo root is two up.
-OC_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
@@ -48,26 +47,18 @@ def main() -> int:
             return 1
         return command_discover(OC_ROOT, roots)
     if cmd == "bootstrap":
-        dry = "--dry-run" in argv
-        rest = [a for a in argv if a != "--dry-run"]
+        dry, rest = _take_flag(argv, "--dry-run")
         if len(rest) != 1:
             print("Usage: olivercode bootstrap <repo-path> [--dry-run]")
             return 1
         target = Path(rest[0]).expanduser()
-        if not target.is_dir():
-            print(f"Error: {target} is not a directory.")
-            return 1
-        return command_bootstrap(OC_ROOT, target, dry)
+        return command_bootstrap(OC_ROOT, target, dry) if _require_dir(target) else 1
     if cmd == "size":
-        lower = "--lower" in argv
-        rest = [a for a in argv if a != "--lower"]
+        lower, rest = _take_flag(argv, "--lower")
         if len(rest) > 1:
             _reject_extra(cmd, rest[1:])
         target = Path(rest[0]).expanduser() if rest else Path.cwd()
-        if not target.is_dir():
-            print(f"Error: {target} is not a directory.")
-            return 1
-        return command_size(OC_ROOT, target, lower)
+        return command_size(OC_ROOT, target, lower) if _require_dir(target) else 1
     if cmd == "backlog-setup":
         return command_backlog_setup(argv)
     if cmd == "install":
@@ -82,8 +73,8 @@ def main() -> int:
         _reject_extra(cmd, rest)
         return command_health(root)
     if cmd == "conform":
-        offline = "--offline" in argv
-        root, rest = _take_root_flag([a for a in argv if a != "--offline"])
+        offline, rest = _take_flag(argv, "--offline")
+        root, rest = _take_root_flag(rest)
         if len(rest) > 1:
             _reject_extra(cmd, rest[1:])
         return command_conform(OC_ROOT, Path(rest[0]).resolve() if rest else None, root, offline)

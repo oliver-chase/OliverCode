@@ -10,11 +10,10 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
-from _support import REPO_ROOT, git_env, scratch_repo
+from _support import REPO_ROOT, git_env, scratch_repo, temp_dir
 
 LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
 BACKLOG_CHECK = REPO_ROOT / "skills" / "backlog" / "scripts" / "check_board_hygiene.py"
@@ -38,8 +37,7 @@ def workflow_triggers(text):
 
 class BootstrapOutput(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-bootout-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.tmp = temp_dir(self, "olivercode-bootout-")
         self.home = self.tmp / "home"
         self.home.mkdir()
         self.repo = scratch_repo(self.tmp / "repo")
@@ -93,12 +91,13 @@ class BootstrapOutput(unittest.TestCase):
                               env=self.env, capture_output=True, text=True)
         self.assertNotEqual(0, done.returncode, done.stdout)
 
-    def test_a_filled_in_backlog_config_survives_a_second_bootstrap(self):
-        path = self.repo / "docs" / "backlog-config.json"
-        path.write_text('{"mine": true}\n')
-        subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)],
-                       env=self.env, check=True, capture_output=True)
-        self.assertEqual('{"mine": true}\n', path.read_text())
+    def test_files_in_presence_mode_survive_a_second_bootstrap(self):
+        mine = {"CLAUDE.md": "MY REPO RULES\n", "docs/backlog-config.json": '{"mine": true}\n', "docs/SIZE-BASELINE.json": '{"lines": 777}\n'}
+        for rel, text in mine.items():
+            (self.repo / rel).write_text(text)
+        subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)], env=self.env, check=True, capture_output=True)
+        for rel, text in mine.items():
+            self.assertEqual(text, (self.repo / rel).read_text(), rel)
 
 
 class ShippedWorkflows(unittest.TestCase):

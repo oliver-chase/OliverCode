@@ -8,6 +8,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from lib.local_config import claude_dir as _claude_dir
+
 from lib import claude_settings as _claude_settings
 from lib import repo_gates as _repo_gates
 from lib.repo_profiles import registry_file
@@ -103,7 +105,7 @@ def command_install(oc_root: Path) -> int:
     checkout moved, is replaced in place. `uninstall` restores the backup. Install records
     the links it wrote in ~/.claude/.olivercode-install.json so uninstall need not guess.
     """
-    claude_dir = Path.home() / ".claude"
+    claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"
     print("OliverCode install — activating this checkout in ~/.claude")
     print("=" * 40)
@@ -237,7 +239,7 @@ def command_uninstall(oc_root: Path) -> int:
     `core.hooksPath` and each repo's `.githooks/` come from `sync-hooks`,
     so they stay; docs/SETUP.md "Backing out" covers them.
     """
-    claude_dir = Path.home() / ".claude"
+    claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"
     root = oc_root.resolve()
     moved_links = _dangling_from_install(claude_dir, oc_root) if claude_dir.is_dir() else set()

@@ -11,7 +11,9 @@ top-level directory. Anything else (prose, commands, identifiers) is ignored.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 from pathlib import Path
 
 from lib.gitfiles import tracked_files
@@ -139,3 +141,47 @@ def check_references(repo_root: Path) -> tuple[int, list[str]]:
                 failures.append(f"  [BROKEN REF] {rel} -> `{token}` (not found on disk)")
 
     return checked, failures
+
+
+MD_LINK = re.compile(r"\]\(([^)]*\.md)\)")
+LINK_ROOTS = ("docs", "core", "shared", "skills", "README.md", "CLAUDE.md")  # every tracked home of plain [text](path.md) links
+
+
+def check_markdown_links(repo_root: Path) -> tuple[int, list[str]]:
+    """(links checked, [failure lines]) for inline markdown links ending in .md, resolved relative to the file that holds them. External and
+    anchor-only links pass, docs/archive is skipped, and links into the gitignored runtime/control-plane/ count as valid."""
+    root, checked, failures = Path(repo_root), 0, []
+    optional = str(root / "runtime" / "control-plane") + os.sep
+    for name in LINK_ROOTS:
+        path = root / name
+        for file in [path] if path.is_file() else sorted(path.rglob("*.md")) if path.is_dir() else []:
+            if "archive" in file.relative_to(root).parts:
+                continue
+            for link in MD_LINK.findall(file.read_text(encoding="utf-8", errors="ignore")):
+                if link.startswith(("http://", "https://", "#")):
+                    continue
+                target = os.path.normpath(file.parent / link)  # normpath works when an intermediate folder is missing
+                checked += 1
+                if not target.startswith(optional) and not os.path.isfile(target):
+                    failures.append(f"  [BROKEN] {file.relative_to(root)} → {link} (resolved to {target}, not found)")
+    return checked, failures
+
+
+def report(repo_root: Path, quiet: bool = False) -> int:
+    """Run both passes, print what scripts/link-check.sh prints, and return its exit code."""
+    say = (lambda *_: None) if quiet else print
+    say("=== Internal Link Integrity Check ===\n")
+    checked, failures = check_markdown_links(repo_root)
+    ref_checked, ref_failures = check_references(repo_root)
+    for line in failures + ref_failures:
+        print(line)
+    broken = len(failures) + sum(1 for line in ref_failures if "BROKEN REF" in line)
+    say("\n--- Summary ---")
+    say(f"  Markdown links checked:   {checked}")
+    say(f"  Backtick refs checked:    {ref_checked}")
+    say(f"  Broken: {broken}")
+    if broken:
+        print(f"\nFAIL: {broken} broken internal reference(s) found")
+        return 1
+    say("\nOK: all internal references valid")
+    return 0

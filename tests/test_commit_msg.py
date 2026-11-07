@@ -3,20 +3,18 @@
 import os
 import shutil
 import subprocess
-import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
 
-from _support import REPO_ROOT, git, git_env, scratch_repo
+from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
 
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "commit-msg"
 
 
 class CommitMsgCase(unittest.TestCase):
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-"))
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.repo = temp_dir(self, "olivercode-commitmsg-")
         scratch_repo(self.repo)
         hooks = self.repo / ".githooks"
         hooks.mkdir()

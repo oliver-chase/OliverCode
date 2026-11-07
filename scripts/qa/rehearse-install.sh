@@ -74,7 +74,7 @@ mk_repo() { # $1 = dest, $2 = optional rules filename
   git -C "$1" -c user.email=rehearsal -c user.name=rehearsal commit -q -m init --no-verify >/dev/null 2>&1
 }
 
-register() { # $1 = oc dir, $2.. = "name[:path]" entries
+register() { # $1 = oc dir, $2.. = "name[:path][|hook variant reason]" entries
   local oc="$1"; shift
   HOME="$H" python3 - "$oc/shared/repo-profiles.json" "$@" <<'PY'
 import json, sys
@@ -83,9 +83,11 @@ d = json.load(open(p))
 tmpl = next(iter(d["profiles"].values()), None) or d["_exampleProfile"]
 d["profiles"] = {}
 for spec in sys.argv[2:]:
+    spec, _, variant = spec.partition("|")
     name, _, path = spec.partition(":")
     e = json.loads(json.dumps(tmpl)); e["name"] = name
     if path: e["path"] = path
+    if variant: e["hookVariant"] = variant
     d["profiles"][name] = e
 json.dump(d, open(p, "w"), indent=2)
 PY
@@ -105,7 +107,8 @@ new_case() { # $1 = case id
   case "$H" in "$ROOT"/*) ;; *) say "ABORT: HOME $H is outside the sandbox"; exit 1 ;; esac
 }
 
-oc() { (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode "$@"); }
+oc_in() { (cd "$1" && HOME="$H" python3 scripts/olivercode "${@:2}"); }  # $1 = the checkout to run in
+oc() { oc_in "$WS/OliverCode" "$@"; }
 
 # ------------------------------------------------ S1 fresh machine, real install
 say "--- S1: brand-new machine, sibling layout, the real install ---"
@@ -159,7 +162,7 @@ say "--- S4: fleet shares a parent that is not OliverCode's parent ---"
 new_case s4
 mkdir -p "$WS/tools" "$WS/code"
 mk_oc "$WS/tools/OliverCode"; mk_repo "$WS/code/web"; mk_repo "$WS/code/api"
-oc4() { (cd "$WS/tools/OliverCode" && HOME="$H" python3 scripts/olivercode "$@"); }
+oc4() { oc_in "$WS/tools/OliverCode" "$@"; }
 register "$WS/tools/OliverCode" web api
 oc4 sync-hooks --root "$WS/code" 2>&1 | grep -q "web: hooks synced" && ok "--root honored by sync-hooks" s4 || bad "--root honored by sync-hooks" s4
 probe_blocked "$WS/code/web" && ok "secret blocked under --root" s4 || bad "secret blocked under --root" s4
@@ -176,7 +179,7 @@ say "--- S5: discover on a messy existing setup ---"
 new_case s5
 mk_oc "$WS/OliverCode"
 mk_repo "$WS/r1" AGENTS.md; mk_repo "$WS/r2" .cursorrules; mk_repo "$WS/r3" CLAUDE.md; mk_repo "$WS/r4"
-out5="$( (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode discover --root "$WS") 2>&1 )"
+out5="$( oc_in "$WS/OliverCode" discover --root "$WS" 2>&1 )"
 echo "$out5" | grep -q "AGENTS.md"     && ok "discover flags AGENTS.md" s5     || bad "discover flags AGENTS.md" s5
 echo "$out5" | grep -q ".cursorrules"  && ok "discover flags .cursorrules" s5  || bad "discover flags .cursorrules" s5
 echo "$out5" | grep -qi "hooksPath"    && ok "discover reports hook state" s5  || bad "discover reports hook state" s5
@@ -189,14 +192,14 @@ new_case s6
 mk_oc "$WS/OliverCode"; mk_repo "$WS/newrepo"
 printf 'hand-written\n' > "$WS/newrepo/CLAUDE.md"
 before6="$(find "$WS/newrepo" -type f -not -path '*/.git/*' | sort | xargs cat | cksum)"
-(cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode bootstrap "$WS/newrepo" --dry-run) >/dev/null 2>&1
+oc_in "$WS/OliverCode" bootstrap "$WS/newrepo" --dry-run >/dev/null 2>&1
 after6="$(find "$WS/newrepo" -type f -not -path '*/.git/*' | sort | xargs cat | cksum)"
 [ "$before6" = "$after6" ] && ok "dry-run writes nothing" s6 || bad "dry-run writes nothing" s6
-(cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode bootstrap "$WS/newrepo") >/dev/null 2>&1
+oc_in "$WS/OliverCode" bootstrap "$WS/newrepo" >/dev/null 2>&1
 grep -q "hand-written" "$WS/newrepo/CLAUDE.md" && ok "presence file not clobbered" s6 || bad "presence file not clobbered" s6
 [ -x "$WS/newrepo/.githooks/pre-commit" ] && ok "hooks stamped executable" s6 || bad "hooks stamped executable" s6
-run1="$( (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode bootstrap "$WS/newrepo") 2>&1 )"
-run2="$( (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode bootstrap "$WS/newrepo") 2>&1 )"
+run1="$( oc_in "$WS/OliverCode" bootstrap "$WS/newrepo" 2>&1 )"
+run2="$( oc_in "$WS/OliverCode" bootstrap "$WS/newrepo" 2>&1 )"
 [ "$run1" = "$run2" ] && ok "bootstrap idempotent (same report twice)" s6 || bad "bootstrap idempotent (same report twice)" s6
 
 # --------------------------------------------------------------- S7 hookVariant
@@ -207,13 +210,7 @@ mkdir -p "$WS/special/.githooks"
 printf '#!/usr/bin/env bash\necho custom-gate\nexit 0\n' > "$WS/special/.githooks/pre-commit"
 chmod +x "$WS/special/.githooks/pre-commit"
 git -C "$WS/special" config core.hooksPath .githooks
-register "$WS/OliverCode" special
-HOME="$H" python3 - "$WS/OliverCode/shared/repo-profiles.json" <<'PY'
-import json, sys
-p = sys.argv[1]; d = json.load(open(p))
-d["profiles"]["special"]["hookVariant"] = "custom governance path"
-json.dump(d, open(p, "w"), indent=2)
-PY
+register "$WS/OliverCode" "special|custom governance path"
 oc sync-hooks 2>&1 | grep -q "special: declared hook variant" && ok "variant skipped by sync-hooks" s7 || bad "variant skipped by sync-hooks" s7
 grep -q "custom-gate" "$WS/special/.githooks/pre-commit" && ok "variant hook not overwritten" s7 || bad "variant hook not overwritten" s7
 h7="$(oc conform --offline 2>&1)"
@@ -260,9 +257,9 @@ oc uninstall >/dev/null 2>&1 && ok "uninstall twice exits 0" s8 || bad "uninstal
 say "--- S8b: backout after the checkout moved leaves nothing behind ---"
 new_case s8b
 mk_oc "$WS/OliverCode"
-(cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode install) >/dev/null 2>&1
+oc_in "$WS/OliverCode" install >/dev/null 2>&1
 mv "$WS/OliverCode" "$WS/Moved"
-(cd "$WS/Moved" && HOME="$H" python3 scripts/olivercode uninstall) >/dev/null 2>&1 \
+oc_in "$WS/Moved" uninstall >/dev/null 2>&1 \
   && ok "uninstall from the moved checkout exits 0" s8b || bad "uninstall from the moved checkout exits 0" s8b
 n_left="$(find "$H/.claude" -type l 2>/dev/null | wc -l | tr -d ' ')"
 [ "$n_left" = "0" ] && ok "no dangling link left after a move" s8b || bad "no dangling link left after a move ($n_left left)" s8b
@@ -292,7 +289,7 @@ mk_repo "$WS/app"
 register "$WS/OliverCode" app
 ( cd "$WS/origin" && printf '\n# upstream change\n' >> README.md \
   && git add README.md && git -c user.email=rehearsal -c user.name=rehearsal commit -q -m upstream --no-verify )
-(cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode update) >/dev/null 2>&1
+oc_in "$WS/OliverCode" update >/dev/null 2>&1
 grep -q "upstream change" "$WS/OliverCode/README.md" && ok "update pulled upstream commit" s10 || bad "update pulled upstream commit" s10
 [ -x "$WS/app/.githooks/pre-commit" ] && ok "update re-synced fleet hooks" s10 || bad "update re-synced fleet hooks" s10
 
@@ -317,7 +314,7 @@ say "--- S12: zero-config clone basics ---"
 new_case s12
 mk_oc "$WS/OliverCode"
 for cmd in "--help" "health" "skills"; do
-  (cd "$WS/OliverCode" && HOME="$H" python3 scripts/olivercode $cmd) >/dev/null 2>&1 \
+  oc_in "$WS/OliverCode" $cmd >/dev/null 2>&1 \
     && ok "olivercode $cmd" s12 || bad "olivercode $cmd" s12
 done
 (cd "$WS/OliverCode" && HOME="$H" bash scripts/validate.sh) >/dev/null 2>&1 \

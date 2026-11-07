@@ -2,12 +2,10 @@
 
 A `$OC/...` path names a file in this repo, so a broken one must fail too.
 """
-import shutil
-import tempfile
 import unittest
 from pathlib import Path
 
-from _support import load_script, scratch_repo
+from _support import load_script, scratch_repo, temp_dir
 
 reference_check = load_script("scripts/lib/reference_check.py", "reference_check")
 check_references = reference_check.check_references
@@ -16,14 +14,15 @@ check_references = reference_check.check_references
 BT = chr(96)
 
 
-class TestOcPaths(unittest.TestCase):
+class RepoCase(unittest.TestCase):
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="reference-check-"))
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.repo = temp_dir(self, "reference-check-")
         scratch_repo(self.repo)
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "REAL.md").write_text("# Real\n")
 
+
+class TestOcPaths(RepoCase):
     def check(self, text):
         (self.repo / "CLAUDE.md").write_text(text)
         return check_references(self.repo)[1]
@@ -54,8 +53,7 @@ class TestWhatCounts(unittest.TestCase):
     """Which tokens are references, which files are read, and which paths are exempt."""
 
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="reference-check-"))
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.repo = temp_dir(self, "reference-check-")
         scratch_repo(self.repo)
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "REAL.md").write_text("# Real\n")
@@ -113,3 +111,27 @@ class TestWhatCounts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMarkdownLinks(RepoCase):
+    def links(self, text):
+        (self.repo / "CLAUDE.md").write_text(text)
+        return reference_check.check_markdown_links(self.repo)
+
+    def test_a_link_to_a_missing_file_fails_and_a_link_to_a_real_one_passes(self):
+        checked, failures = self.links("[ok](docs/REAL.md) [gone](docs/GONE.md) [web](https://example.com/a.md) [top](#x)\n")
+        self.assertEqual(checked, 2)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("docs/GONE.md", failures[0])
+
+    def test_links_into_the_local_runtime_layer_pass_and_archived_docs_are_skipped(self):
+        (self.repo / "docs" / "archive").mkdir()
+        (self.repo / "docs" / "archive" / "OLD.md").write_text("[dead](NOPE.md)\n")
+        checked, failures = self.links("[local](runtime/control-plane/README.md)\n")
+        self.assertEqual((checked, failures), (1, []))
+
+    def test_report_exits_zero_when_clean_and_one_when_a_link_is_broken(self):
+        self.links("[ok](docs/REAL.md)\n")
+        self.assertEqual(reference_check.report(self.repo, quiet=True), 0)
+        self.links("[gone](docs/GONE.md)\n")
+        self.assertEqual(reference_check.report(self.repo, quiet=True), 1)

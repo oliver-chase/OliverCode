@@ -9,12 +9,11 @@ import contextlib
 import io
 import os
 import shutil
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo
+from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
@@ -24,8 +23,7 @@ repo_gates = load_script("scripts/lib/repo_gates.py")
 
 class TestHookProblems(unittest.TestCase):
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-hookhealth-"))
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.repo = temp_dir(self, "olivercode-hookhealth-")
         scratch_repo(self.repo)
         self.hooks = self.repo / ".githooks"
 
@@ -80,8 +78,7 @@ class TestInstallHookPair(unittest.TestCase):
     """What sync-hooks deploys to each repo, file by file."""
 
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="olivercode-hookpair-"))
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.repo = temp_dir(self, "olivercode-hookpair-")
         scratch_repo(self.repo)
 
     def hook(self, name):

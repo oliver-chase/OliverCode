@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _support import REPO_ROOT, git_env, scratch_repo
+from _support import REPO_ROOT, git_env, scratch_repo, temp_dir
 
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "pre-push"
 # Built at runtime so this file never holds a value the secret gates would match.
@@ -34,8 +34,7 @@ class PrePush(unittest.TestCase):
         shutil.rmtree(cls._template, ignore_errors=True)
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="pre-push-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.tmp = temp_dir(self, "pre-push-")
         shutil.copytree(self._template / "remote.git", self.tmp / "remote.git", symlinks=True)
         shutil.copytree(self._template / "work", self.tmp / "work", symlinks=True)
         self.remote = self.tmp / "remote.git"

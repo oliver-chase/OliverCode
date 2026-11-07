@@ -1,9 +1,9 @@
 """scripts/lib/skill_links.py: one classification of the links in a skills folder."""
 
-import shutil
 import sys
-import tempfile
 import unittest
+
+from _support import temp_dir
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -12,8 +12,7 @@ from lib.skill_links import broken_links, link_state, link_states  # noqa: E402
 
 class TestSkillLinks(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-links-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.tmp = temp_dir(self, "olivercode-links-")
         self.skills = self.tmp / "skills"
         self.links = self.tmp / "links"
         for name in ("a", "b"):

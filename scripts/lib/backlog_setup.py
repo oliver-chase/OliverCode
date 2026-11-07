@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-OC_ROOT = Path(__file__).resolve().parents[2]
+from lib.local_config import OC_ROOT  # noqa: E402
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 import check_kanban_baseline as kanban  # noqa: E402
 from lib import repo_gates  # noqa: E402

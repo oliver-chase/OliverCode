@@ -9,7 +9,7 @@ from pathlib import Path
 
 from lib.cli import reject_extra as _reject_extra
 from lib import repo_gates
-from lib.local_config import OC_ROOT
+from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 from lib.repo_profiles import registry_file
 from lib.skills_catalog import _load_skills
 
@@ -56,7 +56,7 @@ def _report_claude_dir(oc_root: Path) -> None:
     full picture, because the foreign and real entries are exactly the ones a human has
     to make a decision about.
     """
-    claude_dir = Path.home() / ".claude"
+    claude_dir = _claude_dir()
     print("\n~/.claude inventory")
     print("-" * 40)
     if not claude_dir.is_dir():
