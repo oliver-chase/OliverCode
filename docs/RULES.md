@@ -121,7 +121,7 @@ Discoverability:
 1. Each repo's GitHub Project is the one place to list open stories, epics and unassigned entries, and the `backlog` skill's sweep covers it
 2. Archive indexes for deferred functionality carry clear re-enable instructions
 
-Shared quality baseline: managed files stay byte-identical across all repos where `shared/project-bootstrap-manifest.json` marks them strict. The managed files are `CODEOWNERS`, `pull_request_template.md`, `QUALITY_BASELINE.md`, the hooks and the template governance scripts, all under `core/templates/project/`. A change to a managed file is made first in OliverCode and then synced to every project, because OliverCode is the single source of truth.
+Shared quality baseline: managed files stay byte-identical across all repos where `shared/project-bootstrap-manifest.json` marks them strict. The managed files are `CODEOWNERS`, `QUALITY_BASELINE.md`, the hooks and the template governance scripts, all under `core/templates/project/`. A change to a managed file is made first in OliverCode and then synced to every project, because OliverCode is the single source of truth.
 
 Required base paths in every repo:
 

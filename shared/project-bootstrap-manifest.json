@@ -13,11 +13,6 @@
       "mode": "presence"
     },
     {
-      "source": "core/templates/project/.github/pull_request_template.md",
-      "target": ".github/pull_request_template.md",
-      "mode": "strict"
-    },
-    {
       "source": "core/templates/project/QUALITY_BASELINE.md",
       "target": "QUALITY_BASELINE.md",
       "mode": "strict"
