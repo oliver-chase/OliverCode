@@ -57,6 +57,17 @@ class IdentifierGate(IdentifierSetup):
         self.stage("a.txt", "see acme-widgets here\n")
         self.assertIn("a.txt:1", self.assertBlocked("owner identifier").stdout)
 
+    def test_a_project_may_name_its_own_remote_path_and_package(self):
+        git(self.tmp, "remote", "add", "origin", "https://github.com/acme-widgets/widget-lib.git")
+        self.stage("package.json", '{"name": "@acme-widgets/widget-core"}\n')
+        self.stage("README.md", "npm i github:acme-widgets/widget-lib and import @acme-widgets/widget-core\n")
+        self.assertIn("passed", self.assertAllowed().stdout)
+
+    def test_the_owner_name_beside_the_project_name_still_blocks(self):
+        git(self.tmp, "remote", "add", "origin", "https://github.com/acme-widgets/widget-lib.git")
+        self.stage("README.md", "github:acme-widgets/widget-lib is maintained by acme-widgets staff\n")
+        self.assertIn("README.md:1", self.assertBlocked("owner identifier").stdout)
+
     def test_matching_is_on_whole_words(self):
         self.stage("a.txt", f"{FAKE}ish and un{FAKE} are other words\n")
         self.assertIn("passed", self.assertAllowed().stdout)
