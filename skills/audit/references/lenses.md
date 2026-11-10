@@ -46,6 +46,7 @@ Every claim is checked against the code, and the code wins.
 - Workarounds for a problem that no longer exists. Rerun the problem to check
 - A skill that does not earn its trigger: its job is done by another, or it fires on nothing a person says
 - Data bloat: a file per day, week or run, more than one file for one kind of thing, or a readings file that never rolls up (`docs/RULES.md`, "Data files")
+- Areas that are too big, and simplifications with the same behavior: a file over 400 lines, tests or docs that outweigh the code they cover, a module that serves one consumer, two files that merge, a custom script a standard tool replaces, a config file that restates defaults. Each is a finding with its lines, filed like a bug
 
 **Usage evidence.** For each command, scheduler, gate or flag, ask "has it ever run?" and record evidence a person could check:
 - An installed job (`ls ~/Library/LaunchAgents`, `crontab -l`), a state or log file, a registered repo, a commit or release that used it, or a nonzero count in a log

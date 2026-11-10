@@ -26,7 +26,7 @@ Give each reviewer exactly this, filled in. One reviewer per area, all started a
 >
 > Apply these seven lenses, and verify each finding against the code before you report it: autonomy and user flow, self-containment, accuracy, one home per concept, over-engineering and unused parts, token cost in use, and voice. The checks for each are in `<path to lenses.md>`. Read `<path to VOICE.md>` first.
 >
-> Report only defects with evidence. Return a ranked list, each with the lens, `file:line`, the defect in one sentence, the command or code that proves it and the smallest fix. Then list the files you read that are clean, and your totals of files and lines read. Keep it under 1,500 words.
+> Report only defects with evidence. Return a ranked list, each with an id (R1, R2 and so on), the lens, `file:line`, the defect in one sentence, the command or code that proves it and the smallest fix. Then add a second list headed "Simplify": every file, function, export, flag, config key, test or gate in your slice that could be deleted, merged, shrunk or replaced by a standard tool with the same behavior, each with the lines it removes and the evidence of use. Name any file over 400 lines and say whether it should split. Then list the files you read that are clean, and your totals of files and lines read. Keep it under 1,500 words.
 
 ## After the reviewers return
 
@@ -37,4 +37,4 @@ Give each reviewer exactly this, filled in. One reviewer per area, all started a
 
 ## Filing
 
-One epic named for the result, such as "Every job has one home". One story per boundary that can land on its own: a security fix, a set of deletions, one merge of skills, the docs, the voice, the tests. Order them so deletions land before the docs and voice work that would otherwise rewrite text about to go.
+Build a ledger first: one row per reviewer finding and per "Simplify" item, with its issue number. Every row has an issue before the report goes out. The epic states a size target in lines and the order of the stories. One epic named for the result, such as "Every job has one home". One story per boundary that can land on its own: a security fix, a set of deletions, one merge of skills, the docs, the voice, the tests. Order them so deletions land before the docs and voice work that would otherwise rewrite text about to go.

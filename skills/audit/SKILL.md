@@ -41,7 +41,8 @@ Every route loads `references/lenses.md`. A target with a user interface also lo
 2. **Read every line.** Split a scope larger than one reader can hold across reviewer agents, about 3,000 lines each. Brief each reviewer with its file list, the seven lenses and the output shape in `references/system.md`. A reviewer reads its files in full and edits nothing.
 3. **Re-check.** Before reporting, rerun the evidence for each reviewer's biggest claims: a security defect, a behavior bug and anything the report recommends deleting. A claim that does not reproduce is dropped.
 4. **Report** in the order below, written per `docs/VOICE.md` in the target repo or `~/.claude/VOICE.md`.
-5. **File.** Search the backlog first, then file one epic for the audit and one story per boundary, each with its priority, size, the evidence and a command that shows the problem before the fix and its absence after. The repo's `CLAUDE.md` names its backlog. Use `backlog`, or `docs/BACKLOG.md` where the repo has no Project.
+5. **File.** Search the backlog first, then file one epic for the audit and one story per boundary, each with its priority, size, the evidence and a command that shows the problem before the fix and its absence after. The repo's `CLAUDE.md` names its backlog. Use `backlog`, or `docs/BACKLOG.md` where the repo has no Project. When an earlier audit already filed stories, map each finding to one and file only what none covers.
+6. **Coverage check.** Before the report goes out, list every reviewer finding and every recommendation the report makes, each with the issue that holds it. A finding with no issue gets one now, and the report ends with this list.
 
 Fix nothing during the audit, with three exceptions: a fix the owner asked for in the same request, the changes route, which fixes its findings before the commit, and the plan route, which appends its findings to the plan.
 
@@ -53,10 +54,12 @@ Fix nothing during the audit, with three exceptions: a fix the owner asked for i
 4. The findings, grouped by lens, each with a file and line, the evidence and the smallest fix
 5. Everything over-engineered, duplicated, competing or unused, named one by one with the evidence of use, the test cut list and the standard tool for each rule mechanism
 6. What was read, what the lead re-checked, and what is still unknown
-7. Whether the fixes reach the goal. Measure files, skills and bytes before and after, and label any estimate as one. Say whether a new user would reach a result by talking, and whether someone who has never seen the target could use it. When the fixes only trim and leave the shape as it is, say so plainly and propose the structural moves that would reach the goal, such as a core with add-ons switched off by default or a small skill folded into its nearest neighbor. List the open backlog items that work against the goal, for the owner to keep, defer or close
+7. Whether the fixes reach the goal. Open with a table of every cut, merge and tool swap: what goes, lines removed, feature kept, issue, and the total against today's size. Measure files, skills and bytes before and after, and label any estimate as one. Say whether a new user would reach a result by talking, and whether someone who has never seen the target could use it. When the fixes only trim and leave the shape as it is, say so plainly and propose the structural moves that would reach the goal, such as a core with add-ons switched off by default or a small skill folded into its nearest neighbor. List the open backlog items that work against the goal, for the owner to keep, defer or close
 
 ## Rules
 
+- An audit aims at a smaller, simpler target that keeps its features. Over-engineering, dead code, oversized files and tests that cannot fail weigh as much as bugs. The epic states a size target in lines
+- Every finding and recommendation is filed, and none sits in the report as "not filed". An owner decision is filed as a story that names what it blocks
 - A finding is a defect with evidence. A style preference outside the voice, a hypothetical and a "consider" are not findings
 - Owner data in a shipped file is a finding even when no list of names exists: a person's or business's name, an ID, a color, a motif or a niche written as the default
 - Count each voice violation by kind, and name the file of every competing writing rule. The `fleet_check.py` voice lines give the file and line of each violation it can find, and its board lines name every difference from `shared/kanban-baseline.json`
