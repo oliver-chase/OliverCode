@@ -116,6 +116,14 @@ class TestSizeCounter(unittest.TestCase):
         out = subprocess.run(["bash", str(SIZE_SH), str(self.repo)], env=env, capture_output=True, text=True).stdout
         self.assertIn("Remaining work (o/real)", out)
 
+    def test_web_files_count_as_code_and_a_readme_does_not(self):
+        for name in ("index.html", "site.css", "view.jsx", "main.mjs", "types.tsx", "README.md"):
+            (self.repo / name).write_text("a\nb\n")
+            git(self.repo, "add", name)
+        report = subprocess.run(["bash", str(SIZE_SH), str(self.repo)], env=git_env(), capture_output=True, text=True).stdout
+        code = next(l.split() for l in report.splitlines() if l.split() and l.split()[0] == "code")
+        self.assertEqual(("5", "10"), (code[1], code[2]))  # five web files, no README
+
     def test_staged_counts_the_index_copy(self):
         (self.repo / "a.txt").write_text("1\n" * 10)
         self.assertEqual(3, total_of(self.repo, "--staged"))
