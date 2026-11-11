@@ -5,7 +5,8 @@ Three checks, all pure Python so they run the same on any machine:
 - sync-conflict copies: a sync tool or Finder leaves "name 2.ext" beside "name.ext" when two writers collide.
   A byte-identical copy is deleted, a differing copy older than its original moves to `<repoRoot>/_archive/stray-copies`,
   and a differing copy newer than its original is left for the owner.
-- a repoRoot inside a synced folder: the cause of the copies above, reported with the move that ends it.
+- git data inside a synced folder: `.git` moves to `.git.nosync` (sync services skip that suffix) and a symlink keeps
+  git working, so a sync tool can never evict, duplicate or half-sync the object store.
 - docs that trail the code: a tracked document that names a file which changed long after the document did.
 """
 
@@ -108,6 +109,32 @@ def synced_marker(root: Path, home: Path | None = None) -> str:
             except ValueError:
                 continue
     return ""
+
+
+NOSYNC = ".git.nosync"
+
+
+def git_protected(repo: Path) -> bool:
+    """True when `.git` is a symlink to a `.git.nosync` folder."""
+    return (repo / ".git").is_symlink() and (repo / NOSYNC).is_dir()
+
+
+def protect_git(repo: Path) -> str:
+    """Move `.git` to `.git.nosync` and link it back. Returns '' on success, else why the repo was left unchanged."""
+    git, nosync = repo / ".git", repo / NOSYNC
+    if git.is_symlink() or not git.is_dir():
+        return "not a plain .git folder"
+    if nosync.exists():
+        return f"{NOSYNC} already exists"
+    if any(git.glob("*.lock")):
+        return "a git operation is running (lock file in .git)"
+    git.rename(nosync)
+    git.symlink_to(NOSYNC)
+    if _git(repo, "rev-parse", "--git-dir").strip():
+        return ""
+    git.unlink()
+    nosync.rename(git)
+    return "git did not work through the link, so it was undone"
 
 
 def last_changed(repo: Path) -> dict[str, int]:

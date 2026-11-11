@@ -144,12 +144,38 @@ class TestCopies(Base):
 
 
 class TestSyncedRoot(Base):
-    def test_a_root_under_a_sync_service_is_reported_and_a_plain_root_is_not(self):
-        synced = self.cfg.root / "Dropbox" / "Repos"
-        synced.mkdir(parents=True)
-        cfg = placement.Config(root=synced, worktrees=synced / "_worktrees", archive=synced / "_archive", watch=[], allow=[])
-        self.assertIn("Dropbox", maintain.check_synced_root(cfg)[0].text)
-        self.assertEqual(maintain.check_synced_root(self.cfg), [])
+    def synced(self):
+        root = self.root / "Dropbox" / "Repos"
+        root.mkdir(parents=True)
+        repo = root / "app"
+        scratch_repo(repo)
+        (repo / "a.txt").write_text("a")
+        git(repo, "add", "."); git(repo, "commit", "-q", "-m", "x")
+        cfg = placement.Config(root=root, worktrees=root / "_worktrees", archive=root / "_archive", watch=[], allow=[])
+        return repo, cfg
+
+    def test_git_moves_out_of_the_sync_and_still_works(self):
+        repo, cfg = self.synced()
+        self.assertTrue(maintain.check_git_sync(cfg, False)[0].fixable)
+        self.assertFalse((repo / ".git").is_symlink())
+        self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
+        self.assertTrue((repo / ".git").is_symlink())
+        self.assertTrue((repo / ".git.nosync" / "HEAD").exists())
+        self.assertEqual(git(repo, "log", "--oneline").stdout.count("\n"), 1)
+        self.assertEqual(maintain.check_git_sync(cfg, True), [])
+
+    def test_a_running_git_operation_leaves_the_repo_alone(self):
+        repo, cfg = self.synced()
+        (repo / ".git" / "index.lock").write_text("")
+        problem = maintain.check_git_sync(cfg, True)[0]
+        self.assertFalse(problem.fixed)
+        self.assertIn("running", problem.text)
+        self.assertTrue((repo / ".git").is_dir() and not (repo / ".git").is_symlink())
+
+    def test_a_plain_root_reports_nothing(self):
+        scratch_repo(self.root / "app")
+        self.assertEqual(maintain.check_git_sync(self.cfg, True), [])
+        self.assertFalse((self.root / "app" / ".git").is_symlink())
 
     def test_documents_is_synced_when_icloud_mirrors_it(self):
         home = temp_dir(self, resolve=True)

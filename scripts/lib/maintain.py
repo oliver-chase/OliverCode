@@ -2,8 +2,8 @@
 
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
 a dangling activation link, prunes a worktree whose folder is gone, downloads git files that iCloud evicted
-from disk, and clears numbered sync-conflict copies (hygiene.py). A problem that is not safe to change on its own (hooks
-that drifted, a checkout outside repoRoot, a repoRoot inside a synced folder, a doc that trails its code, a failing health check) is reported, written to the failure log so `learn` can see it recur, and left alone.
+from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). A problem that is not safe to change on its own (hooks
+that drifted, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log so `learn` can see it recur, and left alone.
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
 """
 
@@ -47,7 +47,7 @@ def _repos(cfg: placement.Config) -> list[Path]:
 
 def dataless_files(repo: Path) -> list[Path]:
     """Files in the repo's .git that iCloud evicted: they read as empty until downloaded, and git hangs on them."""
-    ran = subprocess.run(["find", str(repo / ".git"), "-type", "f", "-flags", "+dataless"], capture_output=True, text=True)
+    ran = subprocess.run(["find", str((repo / ".git").resolve()), "-type", "f", "-flags", "+dataless"], capture_output=True, text=True)
     return [Path(line) for line in ran.stdout.splitlines() if line]
 
 
@@ -136,12 +136,20 @@ def check_copies(cfg: placement.Config, fix: bool) -> list[Problem]:
     return found
 
 
-def check_synced_root(cfg: placement.Config) -> list[Problem]:
-    """A repo root inside a synced folder is what creates the copies, so it is the owner's to move."""
+def check_git_sync(cfg: placement.Config, fix: bool) -> list[Problem]:
+    """Under a synced repoRoot, a plain .git folder can be evicted, duplicated or half-synced. Moving it out of the sync is safe."""
     marker = hygiene.synced_marker(cfg.root)
-    if not marker:
-        return []
-    return [Problem("synced-root", f"repoRoot {cfg.root} is inside {marker}. Set repoRoot in olivercode.local.json to a folder outside any synced folder, then run `olivercode place`")]
+    found = []
+    for repo in _repos(cfg) if marker else []:
+        if hygiene.git_protected(repo):
+            continue
+        problem = Problem("gitsync", f"{repo.name}: .git is inside {marker}", fixable=True)
+        if fix:
+            why = hygiene.protect_git(repo)
+            problem.fixed = not why
+            problem.text += f" ({why})" if why else ""
+        found.append(problem)
+    return found
 
 
 def check_docs(cfg: placement.Config) -> list[Problem]:
@@ -162,7 +170,7 @@ def check_health() -> list[Problem]:
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
-                *check_synced_root(cfg), *check_placement(cfg), *check_docs(cfg)]
+                *check_git_sync(cfg, fix), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
     return problems
