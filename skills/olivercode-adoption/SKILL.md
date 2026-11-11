@@ -20,7 +20,7 @@ Back up before the first mutation. Do not delete a backup until the user confirm
 ## Run this before anything else
 
 ```bash
-bash scripts/qa/rehearse-install.sh
+bash "$OC/scripts/qa/rehearse-install.sh"
 ```
 
 If it fails, stop and report that the fork is broken and their machine is fine. Everything below assumes

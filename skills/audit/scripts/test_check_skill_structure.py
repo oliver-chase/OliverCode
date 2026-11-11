@@ -69,6 +69,9 @@ class WeightRow(unittest.TestCase):
             self.assertEqual(C.weight_row(skill)["untested"], [])
             (tests / "test_smoke.py").write_text("import used as U\n", encoding="utf-8")
             self.assertEqual(C.weight_row(skill)["untested"], ["scripts/used.py"])
+            # A name inside a longer word is not a test of the script.
+            (tests / "test_smoke.py").write_text("reused = 1\nunused_value = 2\n", encoding="utf-8")
+            self.assertEqual(C.weight_row(skill)["untested"], ["scripts/used.py"])
 
     def test_counts_and_description(self):
         with tempfile.TemporaryDirectory() as tmp:

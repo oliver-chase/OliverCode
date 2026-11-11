@@ -14,7 +14,7 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 
 ## Claims discipline
 
-A plan asserts live state, such as "this file exists" or "3 of 8 items already do X". Before a sentence claims something across N named items, read all N, whether N is 3 or 30. When that costs too much before drafting, the plan says so, as in "checked 3 of 8, the rest assumed from their names", and the `audit` skill's plan route tests the rest.
+A claim across N named items is checked against all N, or the plan says how many were checked. The rule is in `audit/references/plan.md`.
 
 ## Plan file location
 
@@ -44,7 +44,7 @@ What we're trying to accomplish.
 - [ ] Condition 2
 ```
 
-## Execution protocol
+## After approval
 
 1. Write plan → present to user
 2. User approves → execute step by step

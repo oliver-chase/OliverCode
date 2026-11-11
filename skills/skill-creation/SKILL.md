@@ -36,7 +36,7 @@ A skill that ships inside OliverCode may read `$OC/` files and name its sibling 
 4. **One connector-missing line.** The skill checks a connector with one call. If the connector is missing, it says what to enable and the fallback in one line, then continues
 5. **Describe what the skill does, nothing else.** A skill file holds no decision ID, date, issue number or person. It holds no history, ledger, change log, archive note, Known gaps section or maintainer section. It names no vault or fleet-tooling place. A comment says what the code does, never how it came to be. The reason for a rule goes in the family `DECISIONS.md`, the commit message or the issue
 6. **Placeholder names.** Exactly three names are fictional-safe: `Jane Doe`, `John Smith`, `Sally May`. Any example person name is one of them
-7. **Portable-zip limits.** The `name` field equals the folder name, in lowercase letters, digits and hyphens, at most 64 characters. The `description` field is at most 1024 characters and under 150 words. It leads with the trigger phrases a person says
+7. **Portable-zip limits.** The `name` field equals the folder name, in lowercase letters, digits and hyphens, at most 64 characters. The `description` field is at most 1024 characters and 150 words or fewer. It leads with the trigger phrases a person says
 8. **Name no outside place.** The skill's text never names the owner's vault, a vault folder or an earlier name of the skill. It may name a sibling skill it hands work to, by the skill's name only, never by a path into that skill's folder
 9. **The skill folder holds only what the skill uses.** Put the family `DECISIONS.md` and `README.md` in the family folder, beside the skill. Put a script's test beside it as `scripts/test_<script>.py`, or in `<family>/tests/<skill>/` when the skill ships as a zip without developer files
 10. **Names a person would say.** A skill, folder or file name uses the word a person says aloud. No number suffix, ticket id or decision id appears in a name or in text the person reads. A decision id may stay in a code comment and in `DECISIONS.md`
@@ -65,9 +65,9 @@ List each connector the skill uses and what the skill does without it. Write the
 
 ## 4. Close by running the checks
 
-The new skill's `SKILL.md` exists by now, with its symlink created and its `README.md` row written. Run, in order:
+The new skill's `SKILL.md` exists by now, with its symlink created and its `skills/INDEX.md` row written. Run, in order:
 
-1. `python3 $OC/skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, no file goes unused and every description is within the word cap
+1. `python3 $OC/skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, and every description is within the word cap
 2. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see
 
 Fix the exact gap each check names, then run it again. Never finish with a named gap open.

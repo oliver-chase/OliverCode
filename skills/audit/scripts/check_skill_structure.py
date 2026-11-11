@@ -198,7 +198,7 @@ def weight_row(skill_dir):
             aliases.setdefault(stem, []).append(alias)
 
     def exercised(stem):
-        return stem in test_text or any(re.search(rf"\b{a}\.", test_text) for a in aliases.get(stem, []))
+        return re.search(rf"\b{re.escape(stem)}\b", test_text) is not None or any(re.search(rf"\b{a}\.", test_text) for a in aliases.get(stem, []))
     untested = [str(f.relative_to(skill_dir)) for f in files if f.relative_to(skill_dir).parts[0] == "scripts"
                 and f.suffix in SCRIPT_SUFFIXES and not f.name.startswith("test_") and not exercised(f.stem)]
     skill_md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
