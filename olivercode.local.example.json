@@ -1,5 +1,5 @@
 {
-  "repoRoot": "~/Documents/Repos",
+  "repoRoot": "~/path/to/your/repos",
   "allowOutside": [],
   "privateRepos": {
     "notes": "~/path/to/a-private-repo"

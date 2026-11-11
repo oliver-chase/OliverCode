@@ -61,9 +61,6 @@ class TestBuildHooks(unittest.TestCase):
         for rel in bh.VARIANTS:
             self.assertIn("# shared fix", (self.tmp / rel).read_text())
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestAdoptedRepoHooksCarryNoOliverCodeText(unittest.TestCase):
     """An adopted repo does not hold OliverCode's docs or generator, so its hooks must not point at them."""
@@ -81,3 +78,6 @@ class TestAdoptedRepoHooksCarryNoOliverCodeText(unittest.TestCase):
             link = REPO_ROOT / ".githooks" / name
             self.assertTrue(link.is_symlink(), name)
             self.assertEqual(link.resolve(), (REPO_ROOT / "core" / "templates" / "project" / name).resolve(), name)
+
+if __name__ == "__main__":
+    unittest.main()

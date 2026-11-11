@@ -112,9 +112,6 @@ class ShippedWorkflows(unittest.TestCase):
                    if e["source"].startswith("core/templates/project/.github/workflows/")}
         self.assertEqual({p.name for p in WORKFLOWS.glob("*.yml")}, shipped)
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestOfferedFiles(unittest.TestCase):
     """CODEOWNERS and the workflow are offered once, and a repo that dropped them is not told to add them back."""
@@ -138,3 +135,6 @@ class TestOfferedFiles(unittest.TestCase):
         shutil.rmtree(self.repo / ".github")
         ran = subprocess.run(["node", "scripts/check-structure-contract.mjs"], cwd=self.repo, capture_output=True, text=True)
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+
+if __name__ == "__main__":
+    unittest.main()

@@ -61,10 +61,6 @@ class CheckRepo(unittest.TestCase):
         self.assertEqual(0, self.run_check().returncode)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CheckBudget(unittest.TestCase):
     """`validate.sh --check-budget`: docs/BUDGET.json fails a repo that measures over it."""
 
@@ -94,3 +90,6 @@ class CheckBudget(unittest.TestCase):
         self.assertEqual(0, self.run_check().returncode)
         self.add("docs/BUDGET.json", '{"testCount": 5, "docWords": 50, "skillWords": 50}')
         self.assertEqual(0, self.run_check().returncode)
+
+if __name__ == "__main__":
+    unittest.main()

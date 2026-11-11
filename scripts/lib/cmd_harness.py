@@ -33,7 +33,7 @@ def command_job(argv: list[str]) -> int:
     if problem:
         print(f"Stopped: {problem}, so OliverCode does not govern it. Run `olivercode sync-hooks` for the fleet or `olivercode bootstrap` for a new repo.")
         return 1
-    ran = subprocess.run(argv[2:], cwd=repo, env={**os.environ, "OLIVERCODE_JOB": "1"})
+    ran = subprocess.run(argv[2:], cwd=repo)
     if ran.returncode:
         failure_log.record("job", f"{' '.join(argv[2:3])} exited {ran.returncode}", repo.name)
     return ran.returncode

@@ -4,8 +4,7 @@ GitHub's limit belongs to the account, so several agents calling `gh` at once dr
 all stop at once. This module keeps the state in ~/.olivercode (outside every repo):
 
 - gh-limit.json records when a limit was seen and the time to hold off until
-- gh.lock serializes writes, with a pause between them
-- gh-cache/ holds read results for a short time, so agents asking for the same list make one call
+- a rolling cap on writes per hour, so a burst of board writes stops before GitHub throttles it
 
 `scripts/hooks/gh_guard.py` refuses a `gh` command while the limit holds, and `gh_watch.py` records a
 limit any agent hits, so one agent's failure protects all the others. Standard library only.
@@ -14,22 +13,17 @@ limit any agent hits, so one agent's failure protects all the others. Standard l
 from __future__ import annotations
 
 import fcntl
-import hashlib
 import json
 import os
 import re
-import subprocess
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
 HOLD_SECONDS = 1200
 # GitHub also throttles bursts of writes regardless of the points left (20 minutes of one write every 10
 # seconds tripped it on 2026-11-11), so the machine as a whole gets a rolling cap on writes.
 WRITES_PER_HOUR = int(os.environ.get("OLIVERCODE_GH_WRITES_PER_HOUR") or 90)
-WRITE_SPACING = 2.0
 LIMIT_TEXT = re.compile(r"rate limit (already )?exceeded|secondary rate limit|abuse detection|graphql_rate_limit", re.IGNORECASE)
-BLOCKED = 75
 
 
 def home() -> Path:
@@ -100,55 +94,3 @@ def reserve_write(now: float | None = None) -> str:
 
 def is_limit(text: str) -> bool:
     return bool(LIMIT_TEXT.search(text or ""))
-
-
-@contextmanager
-def write_lock():
-    """One board write at a time across processes, with a pause after the previous one."""
-    home().mkdir(parents=True, exist_ok=True)
-    with open(home() / "gh.lock", "a+") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        try:
-            fh.seek(0)
-            try:
-                last = float(fh.read().strip() or 0)
-            except ValueError:
-                last = 0.0
-            wait = last + WRITE_SPACING - time.time()
-            if wait > 0:
-                time.sleep(wait)
-            yield
-        finally:
-            fh.seek(0)
-            fh.truncate()
-            fh.write(str(time.time()))
-            fh.flush()
-            fcntl.flock(fh, fcntl.LOCK_UN)
-
-
-def _cache_file(args: list[str]) -> Path:
-    return home() / "gh-cache" / (hashlib.sha1("\0".join(args).encode()).hexdigest() + ".json")
-
-
-def run(args: list[str], write: bool = False, ttl: int = 0, runner=subprocess.run, **kw) -> subprocess.CompletedProcess:
-    """`gh ARGS` under the shared budget. A held limit returns exit 75 without calling GitHub, a write waits its turn,
-    a read with ttl seconds reuses a recent result, and a limit in the answer is recorded for every agent."""
-    why = refusal()
-    if why:
-        return subprocess.CompletedProcess(["gh", *args], BLOCKED, "", why)
-    cache = _cache_file(args) if ttl and not write else None
-    if cache and cache.is_file() and time.time() - cache.stat().st_mtime < ttl:
-        return subprocess.CompletedProcess(["gh", *args], 0, cache.read_text(encoding="utf-8"), "")
-    def call():
-        return runner(["gh", *args], capture_output=True, text=True, **kw)
-    if write:
-        with write_lock():
-            done = call()
-    else:
-        done = call()
-    if done.returncode != 0 and is_limit((done.stderr or "") + (done.stdout or "")):
-        note_limit(who="gh_budget.run")
-    elif cache and done.returncode == 0:
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(done.stdout, encoding="utf-8")
-    return done

@@ -8,7 +8,7 @@ The work a session produced, reviewed before it is called done. It runs at two s
 ## The review
 
 1. **Scope the range.** `git log --oneline <base>..HEAD`, where the base is the Reviewed-through commit in `docs/BACKLOG.md` or the session's first commit. Review only this session's commits when other sessions commit to the same repo
-2. **A reviewer agent**, one per about 3,000 changed lines, reads the full diff of each file with its surrounding code. Brief it tightly, since an open-ended brief is the real cost: name the exact commands to run, name the edge cases that matter, and allow one fresh fixture per code path. It hunts, in order:
+2. **One reviewer agent on `haiku`** for a diff over 3,000 changed lines, and the lead for a smaller one, reads the full diff of each file with its surrounding code. Brief it tightly, since an open-ended brief is the real cost: name the exact commands to run, name the edge cases that matter, and allow one fresh fixture per code path. It hunts, in order:
    - Correctness: logic errors, missing-file and empty handling, races, references broken by a rename, wiring whose selectors no longer match
    - Security: injection, auth and scope leaks, secrets in the diff, a guard that fails open
    - Regressions: what the old code did that the new code silently drops

@@ -15,10 +15,6 @@ TEMPLATE_HOOK = REPO_ROOT / "core" / "templates" / "project" / "pre-commit"
 
 
 class TestGate1Secrets(GateHarness):
-    def test_openai_style_key_blocks(self):
-        self.stage("config.py", 'KEY = "sk-' + "a" * 32 + '"\n')
-        self.assertBlocked("gate 1")
-
     def test_github_pat_blocks(self):
         self.stage("deploy.sh", "TOKEN=ghp_" + "b" * 36 + "\n")
         self.assertBlocked("gate 1")

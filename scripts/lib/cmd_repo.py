@@ -66,7 +66,7 @@ def _report_claude_dir(oc_root: Path) -> None:
     rules = claude_dir / "CLAUDE.md"
     if rules.is_symlink():
         target = rules.resolve()
-        owner = "OliverCode" if str(target).startswith(str(oc_root)) else f"elsewhere -> {target}"
+        owner = "OliverCode" if Path(target).is_relative_to(oc_root) else f"elsewhere -> {target}"
         print(f"  CLAUDE.md   symlink ({owner})")
     elif rules.is_file():
         print("  CLAUDE.md   REAL FILE — `install` backs it up and keeps it")
@@ -85,7 +85,7 @@ def _report_claude_dir(oc_root: Path) -> None:
         if entry.is_symlink():
             if not entry.exists():
                 broken.append(entry.name)
-            elif str(entry.resolve()).startswith(str(oc_root)):
+            elif entry.resolve().is_relative_to(oc_root):
                 ours.append(entry.name)
             else:
                 foreign.append((entry.name, entry.resolve()))

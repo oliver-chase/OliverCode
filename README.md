@@ -6,10 +6,10 @@ It installs shared Claude configuration, links the included skills, and installs
 
 ## Install
 
-Requirements: `git`, `bash`, `python3` and `perl`.
+Requirements: `git`, `bash`, `python3`, `perl`, and `gh` and `jq` for the backlog scripts.
 
 ```bash
-git clone https://github.com/oliver-chase/OliverCode.git
+git clone <your-fork-url> OliverCode
 cd OliverCode
 python3 scripts/olivercode install
 ```
@@ -39,34 +39,6 @@ python3 scripts/olivercode conform
 ## Commands
 
 The launcher's command table (`COMMANDS` in `scripts/lib/cli.py`) is the home of this list. `python3 scripts/olivercode guide` prints an overview built from it, and `--help` prints the table itself.
-
-| Command | Purpose |
-| --- | --- |
-| `olivercode install` | Link `CLAUDE.md`, `VOICE.md`, the skills and the Claude Code hooks into `~/.claude` |
-| `olivercode uninstall` | Remove what `install` wrote and restore what it backed up |
-| `olivercode update` | Pull this checkout, re-run `install`, then `sync-hooks` |
-| `olivercode health` | Check this machine: hooks, skill links, voice copies, remotes, file sizes |
-| `olivercode policy` | Write the default permission policy into a repo |
-| `olivercode checkpoint` | Record a repo's state before an unattended run |
-| `olivercode restore` | Return a repo to its checkpoint |
-| `olivercode context` | Report the words a session loads and fail over budget |
-| `olivercode maintain` | Check the machine and repair what is safe (`--fix`), or run it daily (`--schedule`) |
-| `olivercode learn` | Propose a check or memory entry for a gate failure that recurred three times |
-| `olivercode report` | Count how many times each gate blocked a commit in the last days |
-| `olivercode eval` | Replay the tasks in `tasks/` against an agent and compare two results |
-| `olivercode job` | Run a scheduled agent job in a repo OliverCode governs, from a checkpoint |
-| `olivercode gh-limit` | Show or clear the GitHub rate-limit hold shared by every agent |
-| `olivercode place` | Check that every repo, worktree and backup lives under `repoRoot` |
-| `olivercode clean` | Remove merged, clean worktrees (`--apply`) and list the ones kept |
-| `olivercode conform` | Check a repo, or every registered repo, against `docs/CONTRACT.md` |
-| `olivercode bootstrap` | Stamp the project template into a repo (`--dry-run` shows the plan) |
-| `olivercode sync-hooks` | Converge the hooks and `core.hooksPath` across the fleet |
-| `olivercode discover` | Scan for git repos and report what governance they have |
-| `olivercode backlog-setup` | Set up or repair a repo's GitHub Project board and backlog config |
-| `olivercode size` | Print a repo's line count, baseline and headroom |
-| `olivercode audit-fleet` | Run the audit skill's structure check on the skills folders |
-| `olivercode skills` | List the skills, optionally filtered with `--grep` |
-| `olivercode guide` | Print first steps, every command and every skill with its trigger phrases |
 
 ## Skills
 

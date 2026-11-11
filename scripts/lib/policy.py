@@ -188,7 +188,7 @@ def evaluate_bash(policy: dict, command: str, repo: str = "") -> Decision | None
     for name, rest in _simple_commands(command):
         if allow and name not in allow:
             return Decision("deny", "commands.allow", f"`{name}` is not in commands.allow of {POLICY_FILE}. Add it there if the repo should run it.")
-        sub = next((w for w in rest if not w.startswith("-")), "")
+        sub = _subcommand(name, rest)
         if name == "git" and sub == "push" and triggers.get("push") and not ask:
             ask = Decision("ask", "triggers.push", "A push leaves this machine, so the policy asks the owner first.")
         limit = triggers.get("deleteFiles")
@@ -204,20 +204,20 @@ def evaluate_bash(policy: dict, command: str, repo: str = "") -> Decision | None
     return ask
 
 
+def _subcommand(name: str, rest: list[str]) -> str:
+    """The first word after the command that is not a flag, skipping the values of git's -C and -c."""
+    skip = False
+    for w in rest:
+        if skip:
+            skip = False
+        elif name == "git" and w in ("-C", "-c"):
+            skip = True
+        elif not w.startswith("-"):
+            return w
+    return ""
+
+
 def log_block(decision: Decision, repo: str) -> None:
     """Write the decision to the failure log, in the format failure_log.record writes."""
-    try:
-        from lib import failure_log
-        failure_log.record("policy", f"{decision.kind} {decision.rule}", repo)
-        return
-    except ImportError:
-        pass
-    try:
-        base = Path(os.environ.get("OLIVERCODE_HOME") or Path.home() / ".olivercode")
-        path = Path(os.environ.get("OLIVERCODE_FAILURE_LOG") or base / "failures.log")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(f"{when}\t{repo}\tpolicy\t{decision.kind} {decision.rule}\n")
-    except OSError:
-        pass
+    from lib import failure_log
+    failure_log.record("policy", f"{decision.kind} {decision.rule}", repo)

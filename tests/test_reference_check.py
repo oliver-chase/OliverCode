@@ -109,10 +109,6 @@ class TestWhatCounts(unittest.TestCase):
         self.assertEqual(1, len(check_references(self.repo)[1]))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestMarkdownLinks(RepoCase):
     def links(self, text):
         (self.repo / "CLAUDE.md").write_text(text)
@@ -135,3 +131,6 @@ class TestMarkdownLinks(RepoCase):
         self.assertEqual(reference_check.report(self.repo, quiet=True), 0)
         self.links("[gone](docs/GONE.md)\n")
         self.assertEqual(reference_check.report(self.repo, quiet=True), 1)
+
+if __name__ == "__main__":
+    unittest.main()

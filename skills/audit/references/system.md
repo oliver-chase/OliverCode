@@ -14,11 +14,11 @@ for d in $(git ls-files | cut -d/ -f1 | sort -u); do printf "%-30s %5s files %7s
 ```
 
 3. Measure what loads: the `CLAUDE.md` chain and its imports, and each skill's description and body
-4. Split the files into reviewer areas of about 3,000 lines, keeping each area whole: code, tests, docs, skills, templates
+4. Run `python3 scripts/sweep.py <target>`, which lists unused code, orphans and oversized files with no model. A reader judges those rows and does not search for them again
 
 ## The reviewer brief
 
-Give each reviewer exactly this, filled in. One reviewer per area, all started at once.
+Give each reader this brief. At most three readers, each on `haiku`, all started at once: code, tests, and docs with skills and config. A scope of 3,000 lines or fewer needs none.
 
 > You are auditing one slice of `<target>`, line by line. Make no edits.
 >
@@ -26,14 +26,14 @@ Give each reviewer exactly this, filled in. One reviewer per area, all started a
 >
 > Apply these seven lenses, and verify each finding against the code before you report it: autonomy and user flow, self-containment, accuracy, one home per concept, over-engineering and unused parts, token cost in use, and voice. The checks for each are in `<path to lenses.md>`. Read `<path to VOICE.md>` first.
 >
-> Report only defects with evidence. Return a ranked list, each with an id (R1, R2 and so on), the lens, `file:line`, the defect in one sentence, the command or code that proves it and the smallest fix. Then add a second list headed "Simplify": every file, function, export, flag, config key, test or gate in your slice that could be deleted, merged, shrunk or replaced by a standard tool with the same behavior, each with the lines it removes and the evidence of use. Name any file over 400 lines and say whether it should split. Then list the files you read that are clean, and your totals of files and lines read. Keep it under 1,500 words.
+> Report only defects with evidence, of every kind: bugs, over-engineering, inefficiency, dead code, optimization and stale or wrong documentation. Return a ranked list, each with an id (R1, R2 and so on), the lens, `file:line`, the defect in one sentence, the command or code that proves it and the smallest fix. Then add a second list headed "Simplify": every file, function, export, flag, config key, test or gate in your slice that could be deleted, merged, shrunk or replaced by a standard tool with the same behavior, each with the lines it removes and the evidence of use. Name any file over 400 lines and say whether it should split. Then list the files you read that are clean, and your totals of files and lines read. Keep it under 1,500 words. The lead re-checks your claims, so cite the exact line and command.
 
 ## After the reviewers return
 
 - Re-check the biggest claims yourself, as the procedure says, and drop any that do not reproduce
-- Merge duplicates across reviewers, and add the findings that only show across areas: the same rule in two areas, and a feature whose code, docs and tests sit in three areas and are all unused
+- Merge duplicates across readers, and add the findings only visible across areas, such as one rule in two areas or a feature unused in code, docs and tests alike
 - Judge the shape, which no reviewer sees from one slice. List every skill with its size and trigger, then name each small skill that its nearest neighbor could absorb, and what a core with add-ons switched off by default would hold
-- Size the cut. For each proposed removal, measure its lines and files, and total them against today's size
+- Size the cut: lines and files per removal, totaled against today's size
 
 ## Filing
 

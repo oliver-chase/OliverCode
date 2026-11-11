@@ -94,10 +94,6 @@ def _git(path: Path, *args: str, timeout: int = 30) -> subprocess.CompletedProce
     return subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True, timeout=timeout)
 
 
-def _linked_to_repo_root(path: Path, cfg: Config) -> bool:
-    return path.is_symlink() and inside(path, cfg.root)
-
-
 def linked_worktrees(cfg: Config) -> list[tuple[Path, Path]]:
     """(worktree, owning repo) for every linked worktree git knows about, wherever it sits (including /tmp)."""
     found = []

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -49,8 +50,15 @@ def is_write(command: str) -> bool:
         words = shlex.split(command, comments=False)
     except ValueError:
         return False
-    if any(name in w for w in words for name in WRITE_SCRIPTS):
-        return True
+    for seg in re.split(r"&&|\|\||[;|\n]", command):
+        try:
+            head = shlex.split(seg)
+        except ValueError:
+            continue
+        if head and os.path.basename(head[0]).startswith(("python", "bash", "sh")):
+            head = head[1:]
+        if head and any(os.path.basename(head[0]).startswith(name) for name in WRITE_SCRIPTS):
+            return True
     for i, w in enumerate(words):
         if os.path.basename(w) != "gh":
             continue

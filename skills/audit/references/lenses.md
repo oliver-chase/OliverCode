@@ -60,12 +60,13 @@ Every claim is checked against the code, and the code wins.
 
 **Existing tools.** For each mechanism that distributes or enforces rules, name the standard tool that does the same job, such as the pre-commit framework, lefthook, a global `core.hooksPath`, GitHub rulesets or a package manager, and say why it is or is not used.
 
-## 6. Token cost in use
+## 6. Cost in use, in tokens and runtime
 
 - Always-loaded text: every `CLAUDE.md` in the chain, its imports, and every skill description. Count characters, and estimate tokens at four characters each
 - Per-trigger text: each skill body and the reference files a route loads. A route that loads files it does not use is a finding
 - Chains: two skills or files that load overlapping content for one task
 - Runtime cost of hooks and scripts that run on every session, tool call or stop: time them
+- Inefficiency: work repeated across calls, a read or API call that could be cached or batched, a loop a standard tool replaces, and a task a cheaper model does as well
 - Prose that re-explains what a script prints, and steps a script could do
 
 ## 7. Voice

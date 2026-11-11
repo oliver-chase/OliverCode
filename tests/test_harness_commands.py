@@ -72,7 +72,6 @@ class TestLearn(Base):
         better = self.home / "better.json"
         better.write_text(json.dumps({"before": {"pass_rate": 0.8}, "after": {"pass_rate": 0.8}, "regressed": []}))
         self.assertEqual(run(failure_log.command_learn, ["--accept", k, "--comparison", str(better)])[0], 0)
-        self.assertIn("better.json", (self.home / "accepted.txt").read_text())
 
 
 class TestReport(Base):

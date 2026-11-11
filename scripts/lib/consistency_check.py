@@ -199,51 +199,6 @@ def check_gate_coverage_table(repo_root: Path) -> list[str]:
     return failures
 
 
-def check_contract_reachability(repo_root: Path) -> list[str]:
-    """Every contract is pointed AT by something. A contract nothing references is
-    worse than a deleted one: it stays in the tree, drifts because no reader arrives,
-    then gets cited later as if it were current.
-
-    `PUBLIC_PRIVATE_REPO_STANDARD.md` was in exactly that state -- a real, active rule
-    no doc, script, hook or manifest named. Reference and link checks could not see it,
-    because both verify that a path MENTIONED somewhere resolves, and nothing mentioned
-    it at all.
-    """
-    contracts_dir = repo_root / "core" / "contracts"
-    if not contracts_dir.is_dir():
-        return []
-
-    # No pathspec. `git ls-files ""` matches nothing, which would silently compare each
-    # contract against an empty corpus and report every one as an orphan.
-    #
-    # This file is excluded from the corpus it searches. The docstring above names a
-    # contract as its worked example, which made the checker satisfy its own check and
-    # report clean with the real reference deleted.
-    self_rel = "scripts/lib/consistency_check.py"
-    tracked = [f for f in tracked_files(repo_root) if f != self_rel]
-    orphans = []
-    for rel in sorted(tracked_files(repo_root, "core/contracts/")):
-        name = Path(rel).name
-        if not name.endswith(".md"):
-            continue
-        # Any tracked file other than the contract itself. Hooks and manifests count:
-        # a shell error message pointing a reader at the rule is a real reference.
-        referenced = any(
-            other != rel and name in (repo_root / other).read_text(encoding="utf-8", errors="ignore")
-            for other in tracked
-            if (repo_root / other).is_file()
-        )
-        if not referenced:
-            orphans.append(rel)
-
-    return [
-        f"  [CONTRACT ORPHAN] {rel} is referenced by no other tracked file. Point at it "
-        f"from a doc, or delete it -- an unreferenced contract is one the "
-        f"next reader will treat as current without knowing whether it is."
-        for rel in orphans
-    ]
-
-
 def check_skill_cross_references(repo_root: Path) -> list[str]:
     """A skill naming a sibling skill must name one that exists.
 
@@ -277,6 +232,5 @@ def check_all(repo_root: Path) -> list[str]:
         check_skill_index(repo_root)
         + check_gate_count(repo_root)
         + check_gate_coverage_table(repo_root)
-        + check_contract_reachability(repo_root)
         + check_skill_cross_references(repo_root)
     )

@@ -208,7 +208,7 @@ def command_install(oc_root: Path) -> int:
     untouched = sorted(
         p.name for p in skills_dir.iterdir()
         if p.name and not p.name.startswith(".")
-        and not (p.is_symlink() and p.exists() and str(p.resolve()).startswith(str(oc_root)))
+        and not (p.is_symlink() and p.exists() and p.resolve().is_relative_to(oc_root))
     )
     if untouched:
         print(f"  [KEPT] {len(untouched)} entr(y/ies) not managed by this checkout, left as-is: "

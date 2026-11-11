@@ -51,13 +51,9 @@ class TestGuide(unittest.TestCase):
 
 
 class TestReadmeListsEveryCommand(unittest.TestCase):
-    def test_readme_and_setup_name_every_command_and_no_other(self):
-        names = set(_names())
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        listed = set(re.findall(r"^\| `olivercode (\S+)` \|", readme, re.M))
-        self.assertEqual(listed, names)
+    def test_setup_names_every_command(self):
         setup = (REPO_ROOT / "docs" / "SETUP.md").read_text(encoding="utf-8")
-        for n in names:
+        for n in _names():
             self.assertRegex(setup, rf"(?m)^- `{re.escape(n)}[ `]", f"docs/SETUP.md has no bullet for {n}")
 
     def test_readme_points_to_the_guide_and_the_skill_catalog_and_keeps_no_skill_list(self):

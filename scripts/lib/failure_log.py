@@ -115,9 +115,6 @@ def _accept(argv: list[str]) -> int:
         print("Stopped: the pass rate fell after the change, so the rule is not accepted by default. "
               f"Failing tasks: {', '.join(data.get('regressed', [])) or 'none named'}.")
         return 1
-    home().mkdir(parents=True, exist_ok=True)
-    with open(home() / "accepted.txt", "a", encoding="utf-8") as f:
-        f.write(f"{argv[0]}\t{comparison}\n")
     print(f"Accepted. Add the rule, then link {comparison} in the story.")
     return 0
 

@@ -55,8 +55,8 @@ Each gate stays only while it names a defect it blocks and a test that triggers 
 
 | Gate | Verdict | Defect it blocks | Test that triggers it |
 |------|---------|------------------|-----------------------|
-| Icons and emoji | Stays | An emoji or icon character committed into a file, which `docs/RULES.md` ("No icons") forbids | `TestGate2Emoji.test_emoji_blocks` in `tests/test_precommit_gates.py` |
-| Archived content | Stays | A superseded file parked under an archive-named folder or beside its replacement as `-old`, so the reader cannot tell which copy is live. Its first run flagged more than 30 live files, which is why the suffix list leaves out `copy` | `TestGateArchivedContent` in `tests/test_precommit_gates.py` stages an `Archive/` path and an `-old` file and expects a block |
+| Icons and emoji | Stays | An emoji or icon character committed into a file, which `docs/RULES.md` ("No icons") forbids | `TestGate2Emoji.test_emoji_blocks` in `tests/test_gate_content.py` |
+| Archived content | Stays | A superseded file parked under an archive-named folder or beside its replacement as `-old`, so the reader cannot tell which copy is live. The suffix list leaves out `copy`, which matched live files | `TestGateArchivedContent` in `tests/test_gate_content.py` stages an `Archive/` path and an `-old` file and expects a block |
 
 Which hook a repo receives:
 

@@ -32,6 +32,7 @@ Usage:
     check_skill_structure.py                 # scan every skill under the fleet root
     check_skill_structure.py <path-or-dir>   # scan one folder
     check_skill_structure.py --weight        # print the ranked weight table, then exit
+    check_skill_structure.py --routes        # route rows that load more than 2,000 words for one task
 Tests: python3 -m unittest test_check_skill_structure   (from this scripts/ folder)
 """
 

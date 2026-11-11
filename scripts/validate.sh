@@ -25,7 +25,7 @@ run_consistency() {
   # Three classes, each fail-closed:
   #  - doc-vs-code drift (skills index parity, gate-count claims)
   #  - unfalsifiable checks: a gate or script that cannot fail (scripts/lib/falsifiability_check.py)
-  #  - hook drift: the three pre-commit hooks are built from core/hooks/, and a hand
+  #  - hook drift: the pre-commit, pre-push and commit-msg hooks are built from core/hooks/, and a hand
   #    edit to a built hook fails (scripts/build-hooks.py)
   echo "=== validate: checking doc/code consistency ==="
   local out

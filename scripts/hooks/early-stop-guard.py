@@ -131,7 +131,7 @@ def _is_safe_path(path_str: str) -> bool:
         resolved = Path(path_str).resolve()
     except OSError:
         return False
-    return any(str(resolved).startswith(str(root.resolve())) for root in allowed_roots)
+    return any(resolved.is_relative_to(root.resolve()) for root in allowed_roots)
 
 
 def main() -> int:

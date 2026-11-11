@@ -40,6 +40,9 @@ class TestEvaluate(unittest.TestCase):
     def test_a_push_asks(self):
         self.assertEqual(("ask", "triggers.push"), tuple(getattr(policy.evaluate_bash(policy.DEFAULT, "git push"), a) for a in ("kind", "rule")))
 
+    def test_a_push_through_git_dash_C_still_asks(self):
+        self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "git -C /tmp/x push origin main").kind)
+
     def test_deleting_more_than_ten_files_asks_and_ten_does_not(self):
         self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "rm " + " ".join(f"f{i}" for i in range(11))).kind)
         self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "rm " + " ".join(f"f{i}" for i in range(10))))

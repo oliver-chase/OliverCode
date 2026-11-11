@@ -6,7 +6,6 @@ import subprocess
 import sys
 import time
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, temp_dir
@@ -47,25 +46,6 @@ class TestLimitHold(Isolated):
         gh_budget.note_limit()
         gh_budget.clear()
         self.assertEqual("", gh_budget.refusal())
-
-    def test_run_returns_75_without_calling_github_while_held(self):
-        gh_budget.note_limit()
-        runner = mock.Mock()
-        done = gh_budget.run(["issue", "list"], runner=runner)
-        self.assertEqual(gh_budget.BLOCKED, done.returncode)
-        runner.assert_not_called()
-
-    def test_a_limit_in_an_answer_is_recorded_for_the_other_agents(self):
-        failing = mock.Mock(return_value=subprocess.CompletedProcess([], 1, "", "GraphQL: API rate limit already exceeded"))
-        gh_budget.run(["project", "item-list"], runner=failing)
-        self.assertTrue(gh_budget.refusal())
-
-    def test_a_read_within_the_ttl_is_not_asked_again(self):
-        ok = mock.Mock(return_value=subprocess.CompletedProcess([], 0, '{"items": []}', ""))
-        gh_budget.run(["project", "item-list", "15"], ttl=60, runner=ok)
-        again = gh_budget.run(["project", "item-list", "15"], ttl=60, runner=ok)
-        self.assertEqual(1, ok.call_count)
-        self.assertEqual('{"items": []}', again.stdout)
 
 
 class TestWriteCap(Isolated):
@@ -124,3 +104,11 @@ class TestHooks(Isolated):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIsWrite(unittest.TestCase):
+    def test_reading_a_write_script_is_not_a_write_and_running_it_is(self):
+        sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
+        import gh_guard
+        self.assertFalse(gh_guard.is_write("cat skills/backlog/scripts/log_action.py"))
+        self.assertTrue(gh_guard.is_write("cd x && python3 skills/backlog/scripts/log_action.py --story 1"))

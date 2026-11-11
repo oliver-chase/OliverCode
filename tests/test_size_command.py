@@ -193,10 +193,6 @@ class TestBootstrapShipsTheRatchet(unittest.TestCase):
         self.assertIn("Size ratchet", (repo / ".githooks" / "pre-commit").read_text())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestSymlinkCountedOnce(unittest.TestCase):
     """A tracked symlink adds no lines, so the working-tree total equals the staged total."""
 
@@ -209,3 +205,6 @@ class TestSymlinkCountedOnce(unittest.TestCase):
         worktree = subprocess.run(["bash", str(SIZE_SH), "--total", str(repo)], capture_output=True, text=True, env=git_env()).stdout.strip()
         staged = subprocess.run(["bash", str(SIZE_SH), "--total", "--staged", str(repo)], capture_output=True, text=True, env=git_env()).stdout.strip()
         self.assertEqual((worktree, staged), ("3", "3"))
+
+if __name__ == "__main__":
+    unittest.main()

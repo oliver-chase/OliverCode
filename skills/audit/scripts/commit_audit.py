@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Count the commit findings in each repo and the change since the last run. Read-only.
+"""Count the commit findings in each repo and the change since the last run. It edits no repo and writes only its state file.
 
 Usage:
     commit_audit.py REPO [REPO ...] [--since 30.days] [--state FILE]
