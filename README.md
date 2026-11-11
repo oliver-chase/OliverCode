@@ -46,6 +46,8 @@ The launcher's command table (`COMMANDS` in `scripts/lib/cli.py`) is the home of
 | `olivercode uninstall` | Remove what `install` wrote and restore what it backed up |
 | `olivercode update` | Pull this checkout, re-run `install`, then `sync-hooks` |
 | `olivercode health` | Check this machine: hooks, skill links, voice copies, remotes, file sizes |
+| `olivercode place` | Check that every repo, worktree and backup lives under `repoRoot` |
+| `olivercode clean` | Remove merged, clean worktrees (`--apply`) and list the ones kept |
 | `olivercode conform` | Check a repo, or every registered repo, against `docs/CONTRACT.md` |
 | `olivercode bootstrap` | Stamp the project template into a repo (`--dry-run` shows the plan) |
 | `olivercode sync-hooks` | Converge the hooks and `core.hooksPath` across the fleet |

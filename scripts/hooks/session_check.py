@@ -2,13 +2,14 @@
 """Claude Code SessionStart hook: tells the session, once, what would silently fail here.
 
 `olivercode conform` only sees the repos in its registry and only when someone runs it.
-This runs in every session, in whatever folder it starts, and names five gaps:
+This runs in every session, in whatever folder it starts, and names six gaps:
 
 - the repo ships commit gates but git is not pointed at them (commits will be refused
   by commit_guard until it is fixed, so the session learns the fix up front)
 - the repo is a git repo with no commit gates of its own
 - a link that loads OliverCode's rules into ~/.claude is broken
 - the repo's backlog has stories sitting in QA, which need their independent QA agent now
+- a repo, worktree or backup sits outside repoRoot (scripts/lib/placement.py)
 - the Mac is strained: a test runner has held a core for over an hour, or the load is far above the core count
 
 It prints nothing when nothing is wrong, so a healthy session pays no context for it.
@@ -35,6 +36,7 @@ def notes(cwd: Path, claude_dir: Path) -> list[str]:
         if link.is_symlink() and not link.exists():
             out.append(f"~/.claude/{name} is a broken link, so OliverCode's rules did not load. "
                        "Run `scripts/olivercode install` from the OliverCode folder.")
+    out += placement_notes()
     root = repo_gates.repo_root(cwd)
     if root:
         if repo_gates.has_gates(root):
@@ -49,6 +51,21 @@ def notes(cwd: Path, claude_dir: Path) -> list[str]:
         if queue:
             out.append(queue)
     return out
+
+
+def placement_notes() -> list[str]:
+    """One note naming the repos, worktrees and backups outside repoRoot, or nothing."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from lib import placement
+        stray = placement.findings()
+    except Exception:  # noqa: BLE001 -- a placement bug never blocks a session
+        return []
+    if not stray:
+        return []
+    names = ", ".join(f"{f.path.name} ({f.kind})" for f in stray[:5]) + (f" and {len(stray) - 5} more" if len(stray) > 5 else "")
+    return [f"{len(stray)} repo/worktree/backup item(s) sit outside repoRoot: {names}. "
+            "Run `olivercode place` for the fix for each, and `olivercode clean` for merged worktrees."]
 
 
 def qa_queue(root: Path, run=subprocess.run) -> str:

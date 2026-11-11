@@ -24,6 +24,7 @@ HOOKS_DIR = Path(__file__).resolve().parent.parent / "hooks"
 MANAGED = (
     ("SessionStart", "startup", "session_check.py"),
     ("PreToolUse", "Bash", "commit_guard.py"),
+    ("PreToolUse", "Bash", "placement_guard.py"),
     ("Stop", None, "early-stop-guard.py"),
 )
 TIMEOUT_S = 10

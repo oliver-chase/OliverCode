@@ -157,6 +157,8 @@ class TestSessionCheck(RepoCase):
 
     def test_says_nothing_when_all_is_well(self):
         self.gates(point_git_at_them=True)
+        self.addCleanup(setattr, session, "placement_notes", session.placement_notes)
+        session.placement_notes = lambda: []  # this machine's own repos are not the subject here
         self.assertEqual(session.notes(self.repo, self.claude), [])
         self.assertEqual(session.notes(self.tmp, self.claude), [])  # not a git repo
 

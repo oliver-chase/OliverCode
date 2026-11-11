@@ -113,6 +113,15 @@ def command_health(fleet_root: Path | None = None) -> int:
     passed, failed, skipped = _check_placement_drift(OC_ROOT)
     t.add(passed, failed, skipped)
 
+    # Placement: every repo, worktree and backup under repoRoot (lib/placement.py).
+    print("\nPlacement (repoRoot):")
+    from lib import placement
+    stray = placement.findings()
+    for f in stray:
+        t.fail(f"{f.kind} out of place: {f.path}. {f.fix}")
+    if not stray:
+        t.ok("every repo, worktree and backup is under repoRoot")
+
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # failure classes.

@@ -291,3 +291,25 @@ def command_size(oc_root: Path, target: Path, lower: bool) -> int:
     print(f"Baseline: {recorded} lines, allowance {percent}% ({allowed} lines)")
     print(f"Headroom: {recorded + allowed - total} lines before the commit gate blocks")
     return 0
+
+
+def command_place() -> int:
+    """`olivercode place`: every repo, worktree and backup is under repoRoot or a named exception."""
+    from lib import placement
+    cfg = placement.config()
+    print(f"OliverCode placement (repoRoot {cfg.root})")
+    print("=" * 40)
+    found = placement.findings(cfg)
+    for f in found:
+        print(f"  [FAIL] {f.kind} out of place: {f.path}. {f.fix}")
+    if not found:
+        print("  [OK] every repo, worktree and backup is under repoRoot")
+    return 1 if found else 0
+
+
+def command_clean(apply: bool) -> int:
+    """`olivercode clean [--apply]`: remove merged, clean worktrees and say why the rest stay."""
+    from lib import placement
+    lines = placement.clean(apply=apply)
+    print("\n".join(lines) if lines else "No linked worktrees found.")
+    return 1 if any(line.startswith("FAILED") for line in lines) else 0

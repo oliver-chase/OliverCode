@@ -23,7 +23,7 @@ from lib.cmd_fleet import (  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.cmd_health import command_health, _check_placement_drift  # noqa: E402,F401
 from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
-from lib.cmd_repo import command_bootstrap, command_discover, command_size, command_skills  # noqa: E402
+from lib.cmd_repo import command_bootstrap, command_clean, command_discover, command_place, command_size, command_skills  # noqa: E402
 from lib.local_config import OC_ROOT  # noqa: E402,F401
 
 
@@ -73,6 +73,13 @@ def main() -> int:
         root, rest = _take_root_flag(argv)
         _reject_extra(cmd, rest)
         return command_health(root)
+    if cmd == "place":
+        _reject_extra(cmd, argv)
+        return command_place()
+    if cmd == "clean":
+        apply, rest = _take_flag(argv, "--apply")
+        _reject_extra(cmd, rest)
+        return command_clean(apply)
     if cmd == "conform":
         offline, rest = _take_flag(argv, "--offline")
         root, rest = _take_root_flag(rest)
