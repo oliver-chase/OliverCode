@@ -29,7 +29,7 @@ Every claim is checked against the code, and the code wins.
 - Every path, command, flag, count and behavior a doc or skill names: run it, list it or read it
 - Two files that state one fact differently: name both
 - Each bug carries its failure scenario and a repro that was run
-- Each closed issue the scope cites: its commit exists and the fix is in the code today
+- Each closed issue the scope cites: its commit exists and the fix is in the code today. An issue closed as not planned (`gh issue list --state closed --json number,stateReason`) is a decision: read its closing comment and report the reason, and report a defect only where the board or docs still claim the feature
 - A check that can never fail, and a test that stays green with the code it guards removed, are findings. Prove it by removing the guard and watching the test, then restore it
 
 ## 4. One home per concept

@@ -39,15 +39,15 @@ Every route loads `references/lenses.md`. A target with a user interface also lo
 2. **Sweep.** Run `python3 scripts/sweep.py <target>`, `python3 scripts/fleet_check.py --time <target>` and `bash scripts/size.sh <target>`. They find unused code, orphan files, oversized files, budget overruns and voice violations with no model, and their rows are the candidates the next step judges.
 3. **Read every line, cheaply.** A scope of 3,000 lines or fewer is read by the lead. A larger scope goes to at most three reader agents on `haiku`, split by area (code, tests, and docs with skills and config), briefed from `references/system.md`. A reader edits nothing. Never start one agent per 3,000 lines or one per file.
 4. **Verify.** The lead checks the findings and never starts a second round of agents. Rerun the evidence for every bug, every security claim and everything the report recommends deleting. Check accuracy by running each claimed path, command and count, and check test necessity by removing the guarded code in a scratch copy and watching whether the test fails. A claim that does not reproduce is dropped. Haiku finds and the lead checks.
-5. **Report** in the order below, written per `docs/VOICE.md` in the target repo or `~/.claude/VOICE.md`.
+5. **Report** in the order below, written per `docs/VOICE.md` in the target repo or `~/.claude/VOICE.md`. Write it to a file first and run `python3 scripts/check_report.py FILE`. Fix every line it prints and run it again. Print the report only when it prints `report: complete.`
 6. **File everything.** Bugs, over-engineering, inefficiency, dead code, optimization, stale documentation and voice all get filed, and no finding stays out because it is small. Search the backlog first, then file one epic and one story per boundary, bundling small fixes of one kind into one story. Each story carries its priority, size, the evidence and a command that shows the problem before the fix and its absence after. The repo's `CLAUDE.md` names its backlog. Use `backlog`, or `docs/BACKLOG.md` where the repo has no Project. When an earlier audit already filed stories, map each finding to one and file only what none covers.
-7. **Coverage check.** List every finding and every recommendation the report makes, each with the issue that holds it. A finding with no issue gets one now, and the report ends with this list.
+7. **Coverage check.** List every finding and every recommendation the report makes, each with the issue that holds it. A finding with no issue gets one now, and the report ends with this list as its ninth section, headed "Coverage".
 
 Fix nothing during the audit, with these exceptions: a request to fix, which runs the stories in order with deletions first and then the repo's validation, the changes route, which fixes its findings before the commit, and the plan route, which appends its findings to the plan.
 
 ## The report
 
-Every audit, on every route, prints these headings in this order, and a heading with nothing to say reads "Checked, nothing found" with what was checked.
+Every audit, on every route, prints these headings in this order. `check_report.py` enforces them, and a heading with nothing to say reads "Checked, nothing found" with what was checked.
 
 1. **What it is.** What the target is meant to be and for whom, in one or two sentences
 2. **Goal.** The result this audit aims at, with a size target in lines
