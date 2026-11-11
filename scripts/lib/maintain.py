@@ -42,7 +42,8 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 def _repos(cfg: placement.Config) -> list[Path]:
     if not cfg.root.is_dir():
         return []
-    return [p for p in sorted(cfg.root.iterdir()) if not p.name.startswith("_") and (p / ".git").is_dir()]
+    return [p for p in sorted(cfg.root.iterdir())
+            if not p.name.startswith("_") and ((p / ".git").is_dir() or (p / hygiene.NOSYNC).is_dir())]
 
 
 def dataless_files(repo: Path) -> list[Path]:

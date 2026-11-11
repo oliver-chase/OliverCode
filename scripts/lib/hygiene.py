@@ -130,15 +130,30 @@ def _exclude(repo: Path) -> None:
         f.write(("" if not exclude.stat().st_size or exclude.read_text().endswith("\n") else "\n") + EXCLUDE_LINE + "\n")
 
 
+def _link_copies(repo: Path) -> list[Path]:
+    """Copies of the `.git` link that a sync service made, such as ".git 2"."""
+    return [c for c in repo.glob(".git [0-9]*") if c.is_symlink() and os.readlink(c) == NOSYNC]
+
+
 def git_protected(repo: Path) -> bool:
-    """True when `.git` is a symlink to a `.git.nosync` folder that git ignores."""
-    return (repo / ".git").is_symlink() and (repo / NOSYNC).is_dir() and _excluded(repo)
+    """True when `.git` is a symlink to a `.git.nosync` folder that git ignores, with no sync copies of the link."""
+    return (repo / ".git").is_symlink() and (repo / NOSYNC).is_dir() and _excluded(repo) and not _link_copies(repo)
 
 
 def protect_git(repo: Path) -> str:
     """Move `.git` to `.git.nosync`, link it back and make git ignore it. Returns '' on success, else why nothing changed."""
     git, nosync = repo / ".git", repo / NOSYNC
+    if nosync.is_dir() and not git.exists() and not git.is_symlink():
+        # a sync service renamed the link to ".git 2": drop those copies and link again
+        for copy in _link_copies(repo):
+            copy.unlink()
+        git.symlink_to(NOSYNC)
+        if not _excluded(repo):
+            _exclude(repo)
+        return "" if _git(repo, "rev-parse", "--git-dir").strip() else "git did not work through the restored link"
     if git.is_symlink() and nosync.is_dir():
+        for copy in _link_copies(repo):
+            copy.unlink()
         if not _excluded(repo):
             _exclude(repo)
         return ""

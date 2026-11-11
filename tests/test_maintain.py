@@ -177,6 +177,16 @@ class TestSyncedRoot(Base):
         self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
         self.assertNotIn(".git.nosync", git(repo, "status", "--short").stdout)
 
+    def test_a_link_the_sync_renamed_is_restored(self):
+        repo, cfg = self.synced()
+        maintain.check_git_sync(cfg, True)
+        (repo / ".git").rename(repo / ".git 2")
+        self.assertTrue(maintain.check_git_sync(cfg, False)[0].fixable)
+        self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
+        self.assertTrue((repo / ".git").is_symlink())
+        self.assertFalse((repo / ".git 2").exists() or (repo / ".git 2").is_symlink())
+        self.assertEqual(git(repo, "log", "--oneline").stdout.count("\n"), 1)
+
     def test_a_running_git_operation_leaves_the_repo_alone(self):
         repo, cfg = self.synced()
         (repo / ".git" / "index.lock").write_text("")
