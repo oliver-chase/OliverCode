@@ -14,89 +14,73 @@ OliverCode is the baseline framework for every downstream repo, so it stays smal
 Removal rules decide what happens to a file that does none of those:
 
 - A duplicate explainer is merged
-- A roadmap, migration, status or history document is deleted, because git keeps the history, and none of them is active authority unless it is promoted into a current-state document
+- A roadmap, migration, status or history document is deleted, because git keeps the history
 - A project-specific helper moves to the repo that owns it
 - A generated report or cache is ignored and never tracked
 - A validator that duplicates another validator's failure class is collapsed into it
 
-A new file is allowed only when it reduces runtime complexity, replaces duplicated authority, tightens baseline verification or improves what downstream repos receive. Any other new file is rejected, and a new document replaces or merges with an older one so authority stays in one place.
+A new file is allowed only when it reduces runtime complexity, replaces duplicated authority, tightens baseline verification or improves what downstream repos receive, and a new document replaces or merges with an older one so authority stays in one place.
 
 Downstream managed repos inherit this baseline through the shared template and bootstrap path (`core/templates/project/QUALITY_BASELINE.md` and `shared/project-bootstrap-manifest.json`). They never reinterpret it locally. The requirements and the allowed differences are listed once in `docs/CONTRACT.md`, and any variance is explicit, temporary and recorded in the repo as that file describes.
 
 Other framework rules:
 
 - Claude Code is OliverCode's sole runtime and Anthropic its sole model provider. Multi-runtime or multi-provider framing returns only with a real implementation behind it
-- Project-specific runtime logic lives in the owning project repo
 - A rule without a gate regresses, so a finding class that keeps recurring becomes a check
 - The governance runner stays small enough to understand in one read
 - `core/templates/project/` is the single template home. CI workflows, documents, governance scripts and the built hooks all ship to downstream repos from there through the bootstrap manifest and `sync-hooks`, and a second template directory drifts from the masters
 - The hooks are written in `core/hooks/` and built into `core/templates/project/` and `.githooks/` by `scripts/build-hooks.py`. Edit the gate files there and never a built hook
-- `runtime/manifests/` does not exist as a tracked path. `.gitignore` reserves it for generated reports, inventory scans and status snapshots, so any manifest generation writes to an untracked location, and no validator consumes manifests
+- `runtime/manifests/` is never tracked: `.gitignore` reserves it for generated reports and snapshots, and no validator consumes manifests
 - Validation is `bash scripts/validate.sh` from the repo root, which wraps `.githooks/pre-commit` and the tests in `tests/`. OliverCode has no type checker or schema validator beyond its gates, because its main change risk is secret and PII leaks and document drift. Downstream repos declare their own validation command in the registry's `repo-profiles.json` (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md` says where that file lives)
 
-## Development lifecycle
+## Execution
 
-This sequence moves work from an idea to shipped code in every repo, without being asked. It applies to any non-trivial change, and a typo fix needs no spec. The other sections govern artifacts, and this one governs the order.
+Every non-trivial change in every repo follows this sequence without being asked, and no step is skippable. A typo fix needs no spec.
 
-1. **Gap analysis before specs.** Measure first by counting what exists, running what runs and reading the live code. A gap analysis that cites no command is a guess. The output is a list of differences between what is claimed and what is true, each with the evidence that proves it
-2. **Spec before build.** Every gap becomes a written spec before any code. A spec states the failure it prevents, what is in scope and what is explicitly out, and the watch-out, which is the way a plausible implementation gets it wrong. Specs live as issues in the repo's GitHub Project (see "Project structure"). Nothing is built that is not specced, and nothing is specced that cannot name its failure
-3. **Prioritize by the cost of being wrong.** Rank by what breaking it costs: silent data loss first (wrong output that looks right), then a security boundary that can be bypassed, then a visible failure that is loud and recoverable, then cost and performance, then ergonomics. A defect that surfaces as worse results blamed on something else outranks one that throws, because an exception gets fixed and silently thinner data gets shipped
-4. **Build, verify, commit, one loop per spec.** Write the failing test first, at a seam that reaches the real bug. Implement. Ablate by removing the guard, confirming the test goes red, then restoring it. Run the repo's own `check` or `validate` and read the exit code, never a grepped line, because a filtered log hides failing suites. Commit with the why, then push. One spec per commit, because a commit spanning two specs cannot be reverted cleanly
-5. **QA, when the owner asks for it, is a separate pass by a separate reader.** The author cannot QA their own work and confirms what they intended. QA then runs as its own adversarial pass with a brief to find what is wrong. It verifies by running and never by reading, and its findings are fixed before the work is called done. A finding in the author's own recent edits is the most valuable kind
-6. **Prefer boundary verification over volume.** A suite that grows without finding defects measures the wrong thing. Verify where the system meets reality (real networks, real files, real inputs), and say so when volume was not what found the bug
-7. **Simplify as part of finishing.** A change is not done until you have asked what it made redundant: merge duplicated helpers, delete dead code, collapse a constructor that four call sites hand-rolled. Removal is a deliverable. Never remove functionality to reduce size, and reduce the number of places a behavior is expressed
-8. **Consistency across repos is the point.** The same question gets the same answer in every repo: backlog policy, comment discipline, document shape, commit format and verification command name. A repo that deviates documents the deviation with its reason or removes it
+1. **Measure the gap.** Count what exists, run what runs and read the live code. A gap analysis that cites no command is a guess. Its output is a list of differences between what is claimed and what is true, each with the evidence
+2. **Write the spec.** Every gap becomes a spec before any code, as an issue in the repo's GitHub Project (see "Project structure"). A spec states the failure it prevents, what is in scope and out, and the watch-out, which is the way a plausible implementation gets it wrong. Nothing is built that is not specced
+3. **Rank by the cost of being wrong.** Silent data loss comes first (wrong output that looks right), then a bypassable security boundary, then a loud and recoverable failure, then cost and performance, then ergonomics. A defect that surfaces as worse results outranks one that throws, because an exception gets fixed and thinner data ships
+4. **Build one spec at a time.** Write the failing test first, at a seam that reaches the real bug. Implement, then ablate: remove the guard, confirm the test goes red and restore it. One spec per commit, so a commit reverts cleanly
+5. **Update the docs.** Every affected document moves to current state, and related documents get an audit for stale references
+6. **Quick pass.** Read the diff for stale references, conflict markers and ordering hazards. Confirm a removed file has no surviving canonical reference and that nothing staged is a secret, `.env*`, runtime state, private repo content, a cache or a generated local report
+7. **Validate.** Run the repo's own validation command, which its `CLAUDE.md` names, and read the exit code, because a grepped line hides a failing suite. A failing run never counts as completion. Verify where the system meets reality (real networks, files and inputs), since a suite that grows without finding defects measures the wrong thing
+8. **Gate.** Pre-commit enforcement runs automatically, and a blocked commit is fixed before committing. `docs/GATES.md` has the table of which gates each kind of repo runs
+9. **Commit and push** to the correct repo, with a message that gives the why. Afterward `git status --short --branch` is clean and the pushed short SHA is recorded
+10. **Simplify.** A change is not done until you have asked what it made redundant: merge duplicated helpers, delete dead code, collapse a constructor that four call sites hand-rolled. Removal is a deliverable, and a behavior should live in fewer places. Never remove functionality to reduce size
 
-For a rendered or executable artifact such as an HTML page, an SVG, a UI, a chart, a game or a script with observable output, running it means observing the actual render. A static check such as a linter, `node --check` or an XML parser confirms the file is well formed and does not confirm that it looks or behaves correctly. Render it in its real environment (a headless browser and screenshot for web artifacts, an SVG-to-PNG render, or executing the script and capturing its output), then look at what came back: read the screenshot and the console, and check the layout is intact and nothing is obscured. A screenshot that was produced and never looked at is not observation. Stop once you have looked and it is clean, and re-render only after a change.
+Every repo answers the same question the same way (backlog policy, comment discipline, document shape, commit format, verification command name), and a deviation is documented with its reason or removed.
+
+QA runs when the owner asks for it, as a separate adversarial pass by a separate reader, because the author confirms what they intended. It verifies by running and never by reading, and its findings are fixed before the work is called done. When the owner asks for an audit, its reviewers run in parallel, one per area. Every other helper agent runs alone.
+
+For a rendered or executable artifact (an HTML page, an SVG, a UI, a chart, a game, a script with observable output), a linter or parser confirms only that the file is well formed. Render it in its real environment, such as a headless browser with a screenshot, and look at the screenshot, the console and the layout. A screenshot that nobody looked at is not observation, and a re-render follows only a change.
 
 Working rules that hold in every session:
 
 - A broken, failing or slow system gets the `diagnosing-bugs` loop before any code changes, because a patch on a guess fixes only the symptom it guessed at
 - A comment says what defect the code prevents or why it has this shape, and stays only when the code cannot say it
 - Gate and lint findings get one pass: read the whole list, fix every finding, then re-run once
-- Read a file before its first edit, and again whenever another session, a hook or a generator could have changed it. Grep for callers before changing a function signature
+- Read a file before its first edit and again whenever another session, a hook or a generator could have changed it. Grep for callers before changing a function signature
 - A new top-level folder needs a reason in "Project structure"
-- Before a commit, review the staged files and the diff: a removed file has no surviving canonical reference, and the diff holds only intended current-state changes. Never stage secrets, `.env*`, runtime state, private repo content, caches or generated local reports. After a push, `git status --short --branch` is clean and the pushed short SHA is recorded
+- A deterministic script beats a model call, and a targeted grep or line range beats a whole-file read
 
-Token efficiency applies to these rules too:
+`.githooks/pre-commit` runs the gates on every commit git runs it for. Four things skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`.
 
-- Deterministic scripts beat model calls, because a gate that greps is cheaper, faster and more accurate than a model asked to check the same thing
-- Targeted greps and line ranges beat whole-file reads
+Seven Claude Code hooks run inside every session. `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
 
-## Execution
-
-Every change in any project follows this locked process, and no gate is skippable:
-
-1. Code: implement the change fully
-2. Docs: update every affected document to current state and audit related documents for stale references
-3. Quick pass: read the diff for stale references, conflict markers and ordering hazards
-4. Validate: verify the change end to end by running the repo's own validation command, which its `CLAUDE.md` names
-5. Gate: pre-commit enforcement runs automatically, and a blocked commit is fixed before committing. How many gates run depends on the repo, and `docs/GATES.md` has the table
-6. Commit: only on pass, with a descriptive message
-7. Push: to the correct repo
-
-When the owner asks for an audit, its reviewers run in parallel, one per area. Every other helper agent runs alone.
-
-`.githooks/pre-commit` runs the gates on every commit git runs it for. Four things skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
-
-Seven Claude Code hooks run inside every session, and `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
-
-- `scripts/hooks/session_check.py` (`SessionStart`) tells the session once what would fail silently in the folder it opened: a repo whose gates git skips, a git repo with no gates, or a broken rules link. It prints nothing when all is well
-- `scripts/hooks/commit_guard.py` (`PreToolUse` on Bash) refuses a `git commit` that would skip the repo's gates, whether gates are present while `core.hooksPath` does not run them, `--no-verify` is passed (including inside `bash -c` and `eval`), or `core.hooksPath` is overridden
-- `scripts/hooks/placement_guard.py` (`PreToolUse` on Bash) refuses a `git clone` outside `repoRoot` and a `git worktree add` outside `<repoRoot>/_worktrees`, and names the right path. `session_check.py` and `olivercode health` name the repos, worktrees and backups already outside it, `olivercode place` lists the fix for each and `olivercode clean` removes merged, clean worktrees
-- `scripts/hooks/policy_guard.py` (`PreToolUse` on Bash, Edit and Write) enforces the repo's `.olivercode/policy.json`: it denies a command outside `commands.allow` or matching `commands.deny`, denies an edit to a path in `paths.deny`, and asks the owner at a `git push`, a delete of more than ten files or the third failed attempt at one gate. Each decision goes to the failure log. A repo with no policy is unrestricted, `olivercode health` warns, and `olivercode policy init` writes the default. `olivercode checkpoint` records a repo before an unattended run and `olivercode restore` undoes the run. `olivercode context` and the session-start note fail when the always-loaded files exceed `contextWords` in `docs/BUDGET.json`
-- `scripts/hooks/gh_guard.py` (`PreToolUse` on Bash) and `scripts/hooks/gh_watch.py` (`PostToolUse`) give every agent on the machine one GitHub budget (`scripts/lib/gh_budget.py`, state in `~/.olivercode`). The watcher records a rate limit seen in any command's output, and the guard then refuses ordinary `gh` calls until the time it names. The backlog batch command is the exception: it writes a durable request to `~/.olivercode/gh-project-queue.json` during a hold and makes no network call until the hold lifts. It combines Project adds and field changes into aliased GraphQL mutations, so multi-item board work never uses one CLI call per field. The guard also caps GitHub writes at 90 an hour across all agents (`OLIVERCODE_GH_WRITES_PER_HOUR` changes it), because GitHub throttles bursts even with points left. It also holds every agent while the account has fewer than 500 GraphQL points left (`OLIVERCODE_GH_POINTS_FLOOR` changes it, 0 switches it off) and refuses a direct `gh project item-edit`, which spends about five points a card and belongs in the batch command. `gh api rate_limit` is free and always allowed, and `olivercode gh-limit clear` lifts the hold
+- `scripts/hooks/session_check.py` (`SessionStart`) tells the session once what would fail silently in the folder it opened: a repo whose gates git skips, a git repo with no gates, a broken rules link, or a repo, worktree or backup outside `repoRoot`. It prints nothing when all is well
+- `scripts/hooks/commit_guard.py` (`PreToolUse` on Bash) refuses a `git commit` that would skip the repo's gates: `--no-verify` (including inside `bash -c` and `eval`), an overridden `core.hooksPath`, or gates present that `core.hooksPath` does not run
+- `scripts/hooks/placement_guard.py` (`PreToolUse` on Bash) refuses a `git clone` outside `repoRoot` and a `git worktree add` outside `<repoRoot>/_worktrees`, and names the right path. `olivercode place` lists the fix for each stray and `olivercode clean` removes merged, clean worktrees
+- `scripts/hooks/policy_guard.py` (`PreToolUse` on Bash, Edit and Write) enforces the repo's `.olivercode/policy.json`: it denies a command outside `commands.allow` or matching `commands.deny`, denies an edit to a path in `paths.deny`, and asks the owner at a `git push`, a delete of more than ten files or the third failed attempt at one gate. Each decision goes to the failure log. A repo with no policy is unrestricted and `olivercode health` warns. `olivercode policy init`, `checkpoint`, `restore` and `context` support it, and `context` fails when the always-loaded files exceed `contextWords` in `docs/BUDGET.json`
+- `scripts/hooks/gh_guard.py` (`PreToolUse` on Bash) and `scripts/hooks/gh_watch.py` (`PostToolUse`) give every agent on the machine one GitHub budget (`scripts/lib/gh_budget.py`, state in `~/.olivercode`). The watcher records a rate limit seen in any command's output, and the guard refuses ordinary `gh` calls until the time it names. It also caps writes at 90 an hour (`OLIVERCODE_GH_WRITES_PER_HOUR`), holds every agent while fewer than 500 GraphQL points remain (`OLIVERCODE_GH_POINTS_FLOOR`, 0 switches it off) and refuses a direct `gh project item-edit`, which costs about five points a card. The backlog batch command is the exception: during a hold it queues a durable request in `~/.olivercode/gh-project-queue.json` and makes no network call. `gh api rate_limit` is free and always allowed, and `olivercode gh-limit clear` lifts the hold
 - `scripts/hooks/early-stop-guard.py` (`Stop`, `EARLY-STOP-1` in `docs/DECISIONS.md`) sends a turn back to work when it ends by promising work it did not do
 
 All seven are deterministic and fail open, so a hook's own bug never blocks a commit or a session. `olivercode health` fails when one is missing on a machine where install linked this checkout.
 
-Completion: run the repo's canonical validation before committing and stop on failure. A failing run never counts as completion. The mechanically enforced requirement is the pre-commit hook plus the repo's own `scripts/validate.sh`.
-
-Authority hierarchy: the deploy platform must not be the first place a build or type error is discovered. Each repo profile declares a `canonicalValidationCommand` and a `finalAuthority`. Run the canonical command locally before the commit and treat the declared final authority, which is a full build and not a lint pass, as the check that decides whether the change is sound. Pre-commit gates catch secrets, structure and hygiene. They do not catch a block-scoped `const` referenced before its declaration, which only a full type-checking build surfaces.
+Authority hierarchy: a build or type error must never first surface on the deploy platform. Each repo profile declares a `canonicalValidationCommand` and a `finalAuthority`, which is a full build and not a lint pass. Run the canonical command locally before the commit and treat the final authority as the check that decides soundness, because pre-commit gates catch secrets, structure and hygiene and miss a block-scoped `const` referenced before its declaration.
 
 Secrets stay out of git. Real credentials live in a gitignored `.secrets/` folder or in `.env.local`, `.env.example` is tracked and holds variable names without values, and `.githooks/pre-commit` is the enforcement gate.
 
-Hooks are installed by the launcher from OliverCode with `scripts/olivercode sync-hooks`. It deploys `core/templates/project/pre-commit` (or the private variant for a private repo) to each repo's `.githooks/` and sets `core.hooksPath`.
+Hooks reach each repo through `scripts/olivercode sync-hooks`, which deploys `core/templates/project/pre-commit` (or the private variant for a private repo) to the repo's `.githooks/` and sets `core.hooksPath`.
 
 ## Project structure
 
@@ -205,20 +189,11 @@ A repo exempts files, such as posted captions, in its `docs/EMOJI-GATE.json`. Th
 
 ## Public and private repos
 
-This section applies to every downstream repo under `<fleet-root>/` that consumes OliverCode's templates, and not to OliverCode itself, which sets the standard and does not consume its own downstream template. OliverCode's equivalent surfaces are `docs/SETUP.md`, the README's install section and `runtime/control-plane/` for its own private machine state.
+This section applies to every downstream repo under `<fleet-root>/` that consumes OliverCode's templates. OliverCode sets the standard and does not consume its own downstream template, and its equivalent surfaces are `docs/SETUP.md`, the README's install section and `runtime/control-plane/` for its own private machine state.
 
-Every repo separates three surfaces: the public tracked contract surface, the local runtime surface and the private operator overlay surface. Any repo with the full split profile is the reference implementation, and other repos may use simpler profiles that keep the same boundary model.
+Every repo separates three surfaces: the public tracked contract surface, the local runtime surface and the private operator overlay. Public repos own code, documents, templates, validators and bootstrap entrypoints. Private overlays own delegated tokens, `.runtime/`, per-agent state (`.claude-optimization/memory/` and `.claude-optimization/state/`), host scheduler wiring and machine-specific state. "File locations" says what goes in `.env.local` and `.secrets/*` and what each tracked `.example` file shows.
 
-1. Public repos own code, documents, templates, validators and bootstrap entrypoints
-2. Private overlays own delegated tokens, `.runtime/`, per-agent OS state (`.claude-optimization/memory/` and `.claude-optimization/state/`), host scheduler wiring and machine-specific state. What goes in `.env.local` and `.secrets/*`, and what each tracked `.example` file shows, follows "File locations"
-
-Repos may extend these baseline profiles and must support the vocabulary:
-
-- `repo-contract-only`: tracked code, documents and contracts only
-- `local-runtime`: a local runnable checkout using `.env.local`
-- `private-overlay`: a machine-specific private runtime overlay
-
-Canonical template files live in `OliverCode/core/templates/project/` and are applied manually. Hooks are converged by `scripts/olivercode sync-hooks`.
+Repos may extend these profiles and must support their vocabulary: `repo-contract-only` (tracked code, documents and contracts only), `local-runtime` (a runnable checkout using `.env.local`) and `private-overlay` (a machine-specific private runtime overlay). Canonical template files live in `OliverCode/core/templates/project/` and are applied manually, and `scripts/olivercode sync-hooks` converges the hooks.
 
 A public or shared repo describes the pattern and never your implementation. Never commit:
 
@@ -231,56 +206,27 @@ A public or shared repo describes the pattern and never your implementation. Nev
 
 ## Framework boundary
 
-Read this section before any structural change to a repo. When workspace structure or cross-project standards change, update this section, because the path map lives here and nowhere else, and keep the `~/.claude/CLAUDE.md` and `~/.claude/VOICE.md` symlinks pointing at this repo's `CLAUDE.md` and `docs/VOICE.md` (`scripts/olivercode health` verifies them).
+Read this section before any structural change to a repo. When workspace structure or cross-project standards change, update this section, because the path map lives here and nowhere else. Keep the `~/.claude/CLAUDE.md` and `~/.claude/VOICE.md` symlinks pointing at this repo's `CLAUDE.md` and `docs/VOICE.md` (`scripts/olivercode health` verifies them).
 
-OliverCode is the shared orchestration framework. It contains:
+OliverCode is the shared orchestration framework: standards (`docs/RULES.md`), skills (`skills/`), project templates (`core/templates/project/`), shared manifests and registries (`shared/`), framework documents (`docs/`), a thin launcher (`scripts/olivercode`) and pre-commit governance hooks (`.githooks/`). A clone works standalone with no runtime installed.
 
-- Reusable standards and policies (`docs/RULES.md`)
-- Reusable skill definitions (`skills/`)
-- Project templates (`core/templates/project/`) and shared manifests and registries (`shared/`)
-- Framework documents (`docs/`)
-- A thin launcher entrypoint (`scripts/olivercode`)
-- Pre-commit governance hooks (`.githooks/`)
+Claude Code is this machine's sole agent runtime. The canonical paths are product repos at `<fleet-root>/*`, the shared system root `OliverCode`, the Claude runtime at `~/.claude` and the shared skills at `OliverCode/skills`. Ownership follows from that map:
 
-OliverCode can be cloned, inspected and used standalone without any runtime installed.
-
-Claude Code is this machine's sole agent runtime. The canonical paths and their owners:
-
-- Product repos: `<fleet-root>/*`
-- Shared system root: `OliverCode`
-- Claude runtime and orchestration: `~/.claude`
-- Shared skills root: `OliverCode/skills`
-
-Ownership follows from that map:
-
-- Product-specific implementation documents and workflows belong in each project repo
-- Cross-project orchestration standards belong in `shared/*`
-- Shared skills and tools belong in `skills/*`
+- Product-specific implementation documents and workflows belong in each project repo and are never duplicated into runtime folders
+- Cross-project orchestration standards belong in `shared/*`, and shared skills and tools in `skills/*`
 - Project structure and hygiene rules belong in "Project structure"
 - Runtime state in `~/.claude` is operational data and not product source code
-- Product workflow documents are never duplicated into runtime folders
 
-`runtime/control-plane/` sits inside the OliverCode repo tree and is gitignored. It holds private per-machine runtime state such as session handoff, provider health and validation manifests, and it is never pushed to GitHub.
-
-OliverCode deliberately does not contain:
-
-- Runtime-environment launcher and automation (the thin `scripts/olivercode` CLI is the only launcher surface the framework ships)
-- Docker compose or container setup
-- Runtime state, logs, telemetry or handoff data
-- Private restore checklists or project-specific credentials
-- Generated runtime adapter files
-- Runtime-specific validation scripts and automation tools
-
-Those belong in the runtime environment (`runtime/control-plane/`).
+OliverCode deliberately contains no runtime launcher or automation beyond the thin `scripts/olivercode` CLI, no container setup, no runtime state, logs, telemetry or handoff data, no private restore checklists or project credentials, and no generated adapter files or runtime-specific validation scripts. Those belong in `runtime/control-plane/`, which sits inside the OliverCode tree, is gitignored and holds per-machine state such as session handoff, provider health and validation manifests. It is never pushed to GitHub.
 
 Two more layers exist on any machine running OliverCode, and neither is framework material:
 
-- **`~/.claude/` (user-global Claude Code settings, skills, agents).** Local and per machine: permissions, theme, model and any hook the operator writes stay theirs. `olivercode install` writes only the `CLAUDE.md` and `VOICE.md` links, a link per skill in `skills/`, its hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, and a `.pre-olivercode` backup of anything it replaced. `scripts/lib/claude_settings.py` merges those entries and leaves every other key as it was. The skill and agent layer within it, such as cross-repo work skills for marketing, hiring or meeting notes, is real durable content. OliverCode never edits anything else in `~/.claude/`
-- **Sibling agent state**, such as `.codex/`-class directories from other coding agents. OliverCode leaves it alone: it is never inventoried, migrated or used as a placement target. Delete it when the tool that created it is decommissioned, and never fold its contents into an OliverCode location
+- **`~/.claude/`.** Local and per machine: permissions, theme, model and any hook the operator writes stay theirs. `olivercode install` writes only the `CLAUDE.md` and `VOICE.md` links, a link per skill in `skills/`, its hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, and a `.pre-olivercode` backup of anything it replaced. `scripts/lib/claude_settings.py` merges those entries and leaves every other key as it was
+- **Sibling agent state**, such as `.codex/`-class directories from other coding agents. OliverCode never inventories, migrates or uses it as a placement target. Delete it when the tool that created it is decommissioned, and never fold its contents into an OliverCode location
 
-The dependency is one-directional. The runtime environment depends on OliverCode and reads standards, templates, skills and workflow definitions from it. OliverCode does not depend on the runtime environment and cannot reference runtime-specific paths, scripts or configuration in its documents. Architectural descriptions may mention the runtime environment as a deployment concept and never depend on it for correctness.
+The dependency is one-directional. The runtime environment reads standards, templates, skills and workflow definitions from OliverCode. OliverCode cannot reference runtime-specific paths, scripts or configuration in its documents, and an architectural description may mention the runtime as a deployment concept without depending on it for correctness.
 
-Standalone mode needs only a clone:
+Standalone mode needs only a clone and provides the framework documents, the launcher, the governance gates and the templates:
 
 ```bash
 git clone <your-fork> OliverCode
@@ -289,13 +235,11 @@ scripts/olivercode --help
 .githooks/pre-commit
 ```
 
-It provides the framework documents, the launcher surface, the governance gates and the reusable templates and manifests.
-
-Runtime mode adds `runtime/control-plane/` (gitignored), which holds per-machine state on top of OliverCode: the dependency declaration `health` reads, session and handoff state, and a bash shim at `runtime/control-plane/olivercode` that delegates to `scripts/olivercode` and carries no additional commands. The control plane never keeps its own copies of framework artifacts, and OliverCode stays fully usable without it.
+Runtime mode adds `runtime/control-plane/`: the dependency declaration `health` reads, session and handoff state, and a bash shim at `runtime/control-plane/olivercode` that delegates to `scripts/olivercode` and adds no commands. The control plane never keeps its own copies of framework artifacts.
 
 ## Skill placement
 
-Any agent installing, creating or moving a skill file consults this section first. OliverCode is orchestration, security and optimization only. The `skills/` folder holds engineering-method skills and the framework's own tooling (debugging, audits, planning, backlog) as real git-tracked content, indexed in `skills/INDEX.md`, which is the catalog. Anything else does not belong in this repo, whatever it is and wherever it should live instead, and a skill that shows up in `skills/` and is not engineering method or framework tooling is drift to remove.
+Any agent installing, creating or moving a skill file consults this section first. OliverCode is orchestration, security and optimization only. The `skills/` folder holds engineering-method skills and the framework's own tooling (debugging, audits, planning, backlog) as git-tracked content, indexed in `skills/INDEX.md`, which is the catalog. Any other skill in `skills/` is drift to remove, wherever it should live instead.
 
 Adding a skill takes three steps in the same session:
 
@@ -303,15 +247,15 @@ Adding a skill takes three steps in the same session:
 2. Add a row to `skills/INDEX.md` in the same change
 3. Run `scripts/olivercode install`, which links every skill in `skills/` into `~/.claude/skills/`
 
-An unlinked skill is invisible and an unindexed one is undiscoverable. Skills never live in a notes application's folders, because a skill's one home is a skill directory.
+An unlinked skill is invisible and an unindexed one is undiscoverable. A skill's one home is a skill directory, never a notes application's folder.
 
-`.claude/skills/olivercode-adoption` is the one project-level pointer, a tracked symlink to `skills/olivercode-adoption`, and it is not a second home. It breaks a chicken-and-egg problem: the skill that walks someone through installing OliverCode was invocable only after `olivercode install` had linked it into `~/.claude/skills/`, which is the step it exists to guide. A project-level skill is available the moment the repo is cloned and opened. Do not add a second one without the same justification, because every other skill reaches the user through `~/.claude/skills/`.
+`.claude/skills/olivercode-adoption` is the one project-level pointer, a tracked symlink to `skills/olivercode-adoption`. The skill that walks someone through installing OliverCode has to be invocable before `olivercode install` has linked it, and a project-level skill is available the moment the repo is opened. Every other skill reaches the user through `~/.claude/skills/`.
 
-Hooks are not skills and follow the same pattern: written once in `core/hooks/` (see "Framework baseline" above) and copied to every fleet and private repo by `sync-hooks`, with the public or private variant per `docs/GATES.md`, which also lists the dead-citation gate on staged skill and rule files.
+Hooks are not skills. They are written once in `core/hooks/` (see "Framework baseline") and copied to every fleet and private repo by `sync-hooks`, in the public or private variant per `docs/GATES.md`.
 
-When a repo-specific skill must win over a generic one: both can match the same task, for example a generic email-writing skill and a repo's own approval-gated outreach skill both matching "draft a cold email sequence". Matching is based on task phrasing and happens before any repo file is touched, so the generic skill can fire first even inside the repo the specific one was built for (`ACT-3` in `docs/DECISIONS.md`). No framework-level fix exists for that first mis-fire. The mitigation is a named, explicit directive in that repo's own `CLAUDE.md`, which loads for every session in that repo. It names the mandatory skill and the generic one to avoid, inside a section the agent reads early such as "Approval Boundaries". It catches the agent on its first repo-file touch and sends it back to the correct path even when it already invoked the wrong skill. If your repo has an approval-gated skill that a generic one could shadow, add this directive.
+A repo-specific skill can lose to a generic one. A generic email-writing skill and a repo's approval-gated outreach skill can both match "draft a cold email sequence", and matching happens on task phrasing before any repo file is touched (`ACT-3` in `docs/DECISIONS.md`). No framework-level fix exists for that first mis-fire. The mitigation is a directive in the repo's own `CLAUDE.md`, inside a section the agent reads early such as "Approval Boundaries", that names the mandatory skill and the generic one to avoid. It catches the agent on its first repo-file touch and sends it back to the correct path. A repo with an approval-gated skill that a generic one could shadow adds this directive.
 
-Drift check: `scripts/olivercode health` flags any of OliverCode's skills missing its symlink at `~/.claude/skills/<name>` and any symlink there that points somewhere other than `OliverCode/skills/<name>`. `scripts/olivercode conform` flags, for every fleet repo and private repo, any hook install state that makes git run no hooks, which means `core.hooksPath` unset, pointing at a missing directory, a hooks directory with no `pre-commit`, or a `pre-commit` that is not executable. It also flags a hook whose content diverges from the template. The first four make git skip hooks silently (`docs/SETUP.md` explains why), and `scripts/olivercode sync-hooks` repairs all five.
+Drift check: `scripts/olivercode health` flags a skill missing its symlink at `~/.claude/skills/<name>` and a symlink there that points anywhere but `OliverCode/skills/<name>`. `scripts/olivercode conform` flags any hook install state that makes git run no hooks: `core.hooksPath` unset or pointing at a missing directory, a hooks directory with no `pre-commit`, or a `pre-commit` that is not executable. It also flags a hook that diverges from the template. The first four skip hooks silently (`docs/SETUP.md` explains why), and `scripts/olivercode sync-hooks` repairs all five.
 
 ## Documents
 
@@ -336,16 +280,7 @@ A small tool gets a short README in the same order.
 
 ### Index READMEs
 
-Some READMEs catalog a set of things, such as a skill suite, a monorepo or a folder of tools. They answer six questions in order, each under its own heading:
-
-1. What is this, and who is it for?
-2. How do I get it?
-3. How is it organized? A directory tree answers this
-4. How do the parts relate? A table answers this wherever the content forms a matrix
-5. What is in each part? One table row per item describes it in its own terms
-6. How do I keep it current?
-
-Check every path, command and row against the repo before the README ships.
+A README that catalogs a set of things, such as a skill suite, a monorepo or a folder of tools, answers six questions in order, each under its own heading: what this is and who it is for, how to get it, how it is organized (a directory tree), how the parts relate (a table wherever the content forms a matrix), what is in each part (one table row per item) and how to keep it current. Check every path, command and row against the repo before the README ships.
 
 ### Files and where they live
 
@@ -377,13 +312,13 @@ Every repo's Project runs the same kanban baseline, defined once in `shared/kanb
 
 Every owner request that changes files becomes a story before work starts, except a change to one file of 20 changed lines or fewer that adds no behavior, which commits with the number of the open epic it fits. `skills/backlog/references/story-template.md` defines the body: a user story sentence, Given/When/Then scenarios, an epic link, Priority, Size and Work type. A request that matches an open story is added to it, and a request that arrives mid-task is filed and queued without reordering the board unless the owner says "stop", "do this first" or "drop that". `skills/backlog/scripts/check_story_format.py` verifies a body, and the `backlog` skill's "Save every ask" holds the procedure. `CLAUDE.md` and the project template's `CLAUDE.md` each carry one line pointing here.
 
-Every agent that commits or finishes work logs it on the story: its name, role (builder or QA), the commit, the files changed and the result. The lead logs a helper's result before reporting it. `.githooks/commit-msg` blocks a commit with no story reference, which is the part git enforces. The comment itself is procedure, because a hook cannot post to GitHub, and `docs/GATES.md` has the limit.
+Every agent that commits or finishes work logs it on the story: name, role (builder or QA), commit, files changed and result. The lead logs a helper's result before reporting it. `.githooks/commit-msg` blocks a commit with no story reference, the part git enforces. The comment is procedure, because a hook cannot post to GitHub (`docs/GATES.md` has the limit).
 
 There is no QA phase and no pull request. After one quick pass and validation, the builder commits, pushes and merges to the default branch and closes the story on its logged evidence (the commit, the files and the validation result), unasked. Independent QA runs only when the owner requests it. Then a different agent checks each Gherkin scenario against the files, logs the verdict with role `qa`, and a failure returns the story to In Progress with the findings. `skills/backlog/scripts/complete_story.py` closes a story either way, and it checks the QA sign-off only when the story had a QA pass.
 
-A scheduled job that commits data, such as a nightly sync, commits under one standing story that the repo names in `docs/backlog-config.json` as `nightlyStory`. That story carries Gherkin for what the job stages, and every sync commit cites it, so the story-reference gate passes and the history stays traceable. A sync commit stages only named data files and never a secret, and a refused commit is reported, never forced.
+A scheduled job that commits data, such as a nightly sync, commits under one standing story that the repo names in `docs/backlog-config.json` as `nightlyStory`. That story carries Gherkin for what the job stages and every sync commit cites it. A sync commit stages only named data files and never a secret, and a refused commit is reported and never forced.
 
-At the end of a story's work, merge its commits into the default branch and push, and open no pull request. A push sends every commit on the branch, so a checkout on a branch that carries unrelated commits merges only the story's commits, by cherry-pick in a separate worktree cut from the default branch. A repo whose `CLAUDE.md` says to ask before a push keeps that rule.
+A checkout on a branch that carries unrelated commits merges only the story's commits, by cherry-pick in a separate worktree cut from the default branch, because a push sends every commit on the branch. A repo whose `CLAUDE.md` says to ask before a push keeps that rule.
 
 `olivercode backlog-setup [DIR] [--apply]` is the one command that creates or repairs a repo's Project to this baseline, writes its `backlog-config.json` and installs the commit-msg hook, and `olivercode conform` lists any repo whose board differs. A repair never loses an item's field values: the command saves every item's Status, Priority, Size and Work type before it changes a field, and it restores and verifies them afterward. `docs/SETUP.md` ("Launcher commands") documents the options.
 
