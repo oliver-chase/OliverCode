@@ -21,12 +21,17 @@ import shlex  # noqa: E402
 
 # OliverCode scripts that call gh themselves, which the hook cannot see inside.
 GH_SCRIPTS = ("complete_story", "log_action", "check_board_hygiene", "check_qa_signoff", "check_kanban_baseline", "backlog-setup")
+# batch_project owns a durable queue and deliberately accepts work during a hold; it checks the hold
+# before its own network calls. The outer guard must not reject it before it can queue the request.
+QUEUE_SCRIPTS = ("batch_project",)
 
 
 def uses_gh(command: str) -> bool:
     try:
         words = shlex.split(command, comments=False)
     except ValueError:
+        return False
+    if any(name in w for w in words for name in QUEUE_SCRIPTS):
         return False
     if any(name in w for w in words for name in GH_SCRIPTS):
         return True

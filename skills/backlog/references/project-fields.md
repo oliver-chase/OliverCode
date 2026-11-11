@@ -40,14 +40,18 @@ REPO="$(jq -r '.repoOwner' "$CONFIG")/$(jq -r '.repoName' "$CONFIG")"
 STATUS_ID=$(jq -r '.fields.status.id' "$CONFIG")
 ```
 
-## Create + add + set (one field, repeat per field)
+## Create + add + set (queue fields, then one batch)
 
 ```bash
 url=$(gh issue create --repo "$REPO" --title "<title>" --body "<body>")
-item_id=$(gh project item-add "$(jq -r '.projectNumber' "$CONFIG")" --owner "$(jq -r '.projectOwner' "$CONFIG")" --url "$url" --format json | jq -r .id)
-gh project item-edit --id "$item_id" --project-id "$PROJECT_ID" \
-  --field-id "$STATUS_ID" --single-select-option-id "$(jq -r '.fields.status.options.Backlog' "$CONFIG")"
+number=${url##*/}
+jq -n --argjson n "$number" '{issues: [{number: $n, fields: {status: "Backlog", priority: "P2", size: "S", workType: "Story"}}]}' |
+  python3 "$OC/skills/backlog/scripts/batch_project.py" --config "$CONFIG" --input -
 ```
+
+`batch_project.py` validates config options, coalesces requests, adds missing cards, and updates up to
+15 fields per mutation. A hold only queues work in `~/.olivercode/gh-project-queue.json`; rerun it
+after the hold. Do not loop `gh project item-edit`.
 
 ## Search before creating
 

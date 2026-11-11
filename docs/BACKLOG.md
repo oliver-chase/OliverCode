@@ -6,6 +6,6 @@ This file is the live tracker that the `audit` skill maintains.
 
 ## Coverage
 
-Reviewed through: `8ab89fa` (2026-11-01, the harness and separation work and the #23 merges)
+Reviewed through: `a9c63e0` (2026-11-11, the audit sweep that filed the outstanding code and documentation gaps)
 
-No changes-route review has read the commits after `8ab89fa`. Their stories closed through independent QA, and the next review moves this line forward.
+The next Ready story is #275, which moves Project writes onto the shared GitHub queue. Read the live Project for status; this file is the audit coverage marker, not a second backlog.

@@ -75,6 +75,10 @@ class TestHooks(Isolated):
         out = self.hook(GUARD, {"tool_input": {"command": "python3 skills/backlog/scripts/complete_story.py --story 5"}})
         self.assertEqual("deny", out["permissionDecision"])
 
+    def test_the_batching_script_passes_a_hold_so_it_can_queue_without_a_gh_call(self):
+        gh_budget.note_limit()
+        self.assertIsNone(self.hook(GUARD, {"tool_input": {"command": "python3 skills/backlog/scripts/batch_project.py --input work.json"}}))
+
     def test_the_free_rate_limit_query_and_other_commands_always_pass(self):
         gh_budget.note_limit()
         self.assertIsNone(self.hook(GUARD, {"tool_input": {"command": "gh api rate_limit"}}))
