@@ -201,7 +201,7 @@ Enforcement: pre-commit hooks block commits that violate location rules, such as
 
 Zero emojis, icons or pictographs appear anywhere, in code, comments, commits, documents, PRs, issues, chat, CLI output or config files. Output is plain text. Emphasis comes from structure (headings, lists, bold, italics) and never from icons. This applies to all projects, all channels and all contributors, with no exceptions and no override mechanism.
 
-Instagram captions are posted copy and may hold emojis, so the caption ledgers under `data/` (`.csv`, `.json` and `.jsonl`) are not scanned. The icon and emoji gate in `docs/GATES.md` is the enforcement source of truth, including the exact blocked Unicode ranges, which are not restated here because a second copy would drift from the scanner.
+A repo exempts files, such as posted captions, in its `docs/EMOJI-GATE.json`. The icon and emoji gate in `docs/GATES.md` is the enforcement source of truth, including the exact blocked Unicode ranges, which are not restated here because a second copy would drift from the scanner.
 
 ## Public and private repos
 

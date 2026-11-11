@@ -144,10 +144,19 @@ fi
 
 # BSD grep has no -P, and `grep -nP` fails silently inside an if-condition, so this
 # gate must never use it. perl handles the \x{...} ranges natively.
+# A repo whose posted copy legitimately holds emojis lists those files under "exempt" in
+# docs/EMOJI-GATE.json, each with a line in "reasons". With no file the gate scans every staged file.
+EMOJI_EXEMPT="$(git show ":docs/EMOJI-GATE.json" 2>/dev/null | tr '\n' ' ' \
+  | sed -n 's/.*"exempt"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' \
+  | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true)"
 if [ -n "$STAGED_FILES" ]; then
   while IFS= read -r file; do
-    # Instagram captions are posted copy, and emojis belong in them. The ledgers under data/ hold those captions.
-    case "$file" in data/*.csv|data/*.json|data/*.jsonl) continue ;; esac
+    emoji_skip=0
+    while IFS= read -r emoji_glob; do
+      [ -n "$emoji_glob" ] || continue
+      case "$file" in $emoji_glob) emoji_skip=1; break ;; esac
+    done <<< "$EMOJI_EXEMPT"
+    [ "$emoji_skip" = 1 ] && continue
     EMOJI_HITS=$(staged_content "$file" 2>/dev/null | perl -CSD -ne 'print "$.: $_" if /'"$EMOJI_PATTERN"'/' || true)
     if [ -n "$EMOJI_HITS" ]; then
       echo "$EMOJI_HITS"

@@ -20,11 +20,19 @@ class TestGate2Emoji(GateHarness):
         result = self.assertBlocked("gate 2")
         self.assertIn("emojis or icons", result.stdout)
 
-    def test_a_caption_ledger_under_data_may_hold_emojis(self):
+    LEDGER_EXEMPTION = '{"exempt": ["data/*.csv", "data/*.json"], "reasons": {"data/*.csv": "Posted captions hold emojis."}}\n'
+
+    def test_a_repo_with_no_exemption_blocks_a_data_ledger(self):
+        self.stage("data/items.csv", "clips,caption\nx,first move \U0001F393\n")
+        self.assertBlocked("gate 2")
+
+    def test_a_declared_exemption_skips_only_those_files(self):
+        self.stage("docs/EMOJI-GATE.json", self.LEDGER_EXEMPTION)
         self.stage("data/items.csv", "clips,caption\nx,first move \U0001F393\n")
         self.assertAllowed()
 
-    def test_the_exemption_stops_at_data_ledgers(self):
+    def test_a_declared_exemption_stops_at_its_globs(self):
+        self.stage("docs/EMOJI-GATE.json", self.LEDGER_EXEMPTION)
         self.stage("docs/items.csv", "clips,caption\nx,first move \U0001F393\n")
         self.assertBlocked("gate 2")
 

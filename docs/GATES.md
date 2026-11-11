@@ -81,6 +81,10 @@ The private variant drops the PII gate on purpose, because a private repo holds 
 
 A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how far one commit may raise `lines` above the committed value. The hook reads the cap from the committed file, so the same commit cannot change it, and merge, revert and fixup messages get the same check. The size gate prints the raise and passes it, because a pre-commit gate cannot read the commit message. The commit-msg hook then refuses a raise over the cap unless the message carries a line `Size: L` or `Size: XL`, copied from the Size field of the story that needs the growth. A story of size M or smaller splits its work so each commit stays inside the cap, or lowers the total elsewhere in the same commit. The reviewer confirms the raise belongs to the story named. A repo that opts out of the commit-msg hook loses this check with it.
 
+### Icons and emoji
+
+`docs/EMOJI-GATE.json` lists exempt globs and a reason for each.
+
 ### Owner identifiers
 
 The gate keeps a repo free of the people and accounts behind it, with no name list to maintain. It builds its identifiers from `git log` authors (names split into words, plus each email local part), from the owner segment of the `origin` remote, and from the string values of account, shop, store, handle, username, owner, brand and seller keys in the files matched by `configGlobs`. Noreply addresses, bots, Claude, GitHub and Anthropic are ignored.
