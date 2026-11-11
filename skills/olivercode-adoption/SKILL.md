@@ -1,6 +1,6 @@
 ---
 name: olivercode-adoption
-description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set this up', 'onboard my repos', 'point my CLAUDE.md files at OliverCode'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
+description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set up OliverCode', 'onboard my repos', 'point my CLAUDE.md files at OliverCode'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
 ---
 
 # OliverCode adoption

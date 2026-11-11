@@ -232,15 +232,16 @@ HEAVY_ROUTE_WORDS = 2000   # measured on the fleet: the median route row loads 7
 
 
 def route_rows(skill_dir):
-    """[(words, files, row text)] for each table row of SKILL.md that names a reference file. The words are the
+    """[(words, files, row text)] for each table row or bullet of SKILL.md that names a reference file. The words are the
     size of the files that row loads together."""
     out = []
     for line in (skill_dir / "SKILL.md").read_text(encoding="utf-8").splitlines():
-        files = ROUTE_ROW_FILE.findall(line) if line.startswith("|") else []
+        files = ROUTE_ROW_FILE.findall(line) if line.startswith(("|", "- ", "* ")) else []
         if files:
             words = sum(len((skill_dir / f).read_text(encoding="utf-8", errors="ignore").split())
                         for f in files if (skill_dir / f).is_file())
-            out.append((words, files, line.strip("| ").split("|")[0].strip()))
+            label = line.strip("| ").split("|")[0].strip() if line.startswith("|") else line[2:].split("`")[0].strip(" :")
+            out.append((words, files, label))
     return out
 
 

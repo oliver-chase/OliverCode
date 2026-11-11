@@ -26,7 +26,7 @@ Ask each question below in order, against the live fleet and not from memory.
 
 A skill that ships inside OliverCode may read `$OC/` files and name its sibling skills.
 
-`python3 $OC/skills/audit/scripts/check_skill_structure.py` enforces the rules a script can check, including the 150-word description cap. The rest are judgment calls the audit skill reads.
+`python3 $OC/skills/audit/scripts/check_skill_structure.py` enforces the rules a script can check, including the 150-word description cap. The rest are judgment calls the audit skill reads, and rules 1, 2 and 8 are its self-containment lens (`audit/references/lenses.md`, section 2).
 
 1. **Generic at creation.** The skill's own files hold no personal fact in code or prose: no name, address, account ID, token or local path. A value the skill needs comes from one config file in the skill folder or from a question in the chat
 2. **No read outside the folder.** No `../`, no `$HOME/.claude/skills/<other>/...`, no vault path, no sibling skill's script or config. The skill carries any rule it needs as its own text
@@ -37,7 +37,7 @@ A skill that ships inside OliverCode may read `$OC/` files and name its sibling 
 5. **Describe what the skill does, nothing else.** A skill file holds no decision ID, date, issue number or person. It holds no history, ledger, change log, archive note, Known gaps section or maintainer section. It names no vault or fleet-tooling place. A comment says what the code does, never how it came to be. The reason for a rule goes in the family `DECISIONS.md`, the commit message or the issue
 6. **Placeholder names.** Exactly three names are fictional-safe: `Jane Doe`, `John Smith`, `Sally May`. Any example person name is one of them
 7. **Portable-zip limits.** The `name` field equals the folder name, in lowercase letters, digits and hyphens, at most 64 characters. The `description` field is at most 1024 characters and 150 words or fewer. It leads with the trigger phrases a person says
-8. **Name no outside place.** The skill's text never names the owner's vault, a vault folder or an earlier name of the skill. It may name a sibling skill it hands work to, by the skill's name only, never by a path into that skill's folder
+8. **Name no outside place.** The skill's text never names the owner's vault, a vault folder or an earlier name of the skill. A sibling skill it hands work to is named by the skill's name only (rule 2 covers paths)
 9. **The skill folder holds only what the skill uses.** Put the family `DECISIONS.md` and `README.md` in the family folder, beside the skill. Put a script's test beside it as `scripts/test_<script>.py`, or in `<family>/tests/<skill>/` when the skill ships as a zip without developer files
 10. **Names a person would say.** A skill, folder or file name uses the word a person says aloud. No number suffix, ticket id or decision id appears in a name or in text the person reads. A decision id may stay in a code comment and in `DECISIONS.md`
 11. **Count the files before you finish.** Run `find <skill> -type f | wc -l`. For each file, name what the skill does not need and cut it

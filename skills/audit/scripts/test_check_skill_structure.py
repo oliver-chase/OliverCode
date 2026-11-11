@@ -45,6 +45,10 @@ class RouteRows(unittest.TestCase):
                                            "| Build it | `references/used.md`, `references/big.md` |\n", encoding="utf-8")
             rows = C.route_rows(skill)
         self.assertEqual(rows, [(34, ["references/used.md", "references/big.md"], "Build it")])
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = make_skill(tmp, extra=())
+            (skill / "SKILL.md").write_text("---\nname: fixture-skill\n---\n- Build it: `references/used.md`\n", encoding="utf-8")
+            self.assertEqual(C.route_rows(skill)[0][1:], (["references/used.md"], "Build it"))
 
 
 class WeightRow(unittest.TestCase):

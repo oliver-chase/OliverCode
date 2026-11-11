@@ -1,4 +1,4 @@
-"""Behaviour tests for fleet_check.py: each Gherkin scenario of the lean-fleet pass runs against a scratch repo."""
+"""Behaviour tests for fleet_check.py: each behavior of the lean-fleet pass runs against a scratch repo."""
 
 import contextlib
 import io
