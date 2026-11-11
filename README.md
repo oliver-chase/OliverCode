@@ -50,6 +50,7 @@ The launcher's command table (`COMMANDS` in `scripts/lib/cli.py`) is the home of
 | `olivercode checkpoint` | Record a repo's state before an unattended run |
 | `olivercode restore` | Return a repo to its checkpoint |
 | `olivercode context` | Report the words a session loads and fail over budget |
+| `olivercode maintain` | Check the machine and repair what is safe (`--fix`), or run it daily (`--schedule`) |
 | `olivercode learn` | Propose a check or memory entry for a gate failure that recurred three times |
 | `olivercode report` | Count how many times each gate blocked a commit in the last days |
 | `olivercode eval` | Replay the tasks in `tasks/` against an agent and compare two results |
