@@ -25,17 +25,17 @@ bash scripts/validate.sh
 scripts/olivercode health
 ```
 
-Each command must exit 0 on a clean clone with no configuration. `health` notes that there is no control plane, and `conform` reports that no fleet is registered. Both are correct and exit 0. If `validate.sh` fails here, the fork is broken and your setup is fine, so stop.
+Each command must exit 0 on a clean clone with no configuration. `health` notes that there is no control plane and `conform` reports that no fleet is registered, and both are correct. If `validate.sh` fails here, the fork is broken and your setup is fine, so stop.
 
-One command checks all of this in a sandbox with a throwaway HOME:
+One command rehearses the whole guide in a sandbox with a throwaway HOME and never touches your real `~/.claude`:
 
 ```bash
 bash scripts/qa/rehearse-install.sh
 ```
 
-It runs the real `olivercode install` against a throwaway HOME, then walks this guide's load-bearing steps (fleet registration, `sync-hooks`, the secret probe, `health`, `update` and the backout), so the instructions below are verified by running them. It never touches your real `~/.claude`. When it passes, every failure further on is a setup problem. Run it after any change to the framework's own plumbing.
+It runs the real `install`, then walks fleet registration, `sync-hooks`, the secret probe, `health`, `update` and the backout. When it passes, every later failure is a setup problem. Run it after any change to the framework's plumbing.
 
-Enable CI in your fork. `.github/workflows/framework-ci.yml` ships ready to run and is paused on the origin repo (`docs/GATES.md`, "Validation", says why). Where CI is off, the local commands are the entire enforcement layer, so run `bash scripts/validate.sh` before you push.
+Enable CI in your fork: `.github/workflows/framework-ci.yml` ships ready and is paused on the origin repo (`docs/GATES.md`, "Validation", says why). Where CI is off, `bash scripts/validate.sh` before you push is the whole enforcement layer.
 
 ## Step 1: inventory before you touch anything
 
@@ -51,25 +51,17 @@ ls -la ~/.claude/skills/ 2>/dev/null            # existing skills, real dirs vs 
 scripts/olivercode discover --root ~/dev --root ~/work
 ```
 
-`discover` reports for each repo which agent-rules file it has, whether hooks are installed and which repos are ungoverned. It then inventories `~/.claude`, separating skills linked into this checkout from skills linked elsewhere, real untracked directories and broken links, and it ends with a profile skeleton with explicit `path` values, ready to paste into the registry file the command names.
+`discover` reports each repo's agent-rules file and hook state, inventories `~/.claude` and ends with a profile skeleton with explicit `path` values for the registry file the command names. An existing setup usually surfaces three things:
 
-An existing setup usually surfaces three things:
-
-- **Rules files not named `CLAUDE.md`.** `AGENTS.md`, `.cursorrules` and similar files do not auto-load in Claude Code, so they are invisible in practice however good their content. Step 4 merges them in
+- **Rules files not named `CLAUDE.md`.** `AGENTS.md`, `.cursorrules` and similar files do not auto-load in Claude Code, so they are invisible in practice. Step 4 merges them in
 - **Repos with `hooksPath=unset`.** They have no gates at all, silently
-- **Real directories in `~/.claude/skills/`.** They are untracked content with no backup anywhere. Usually they are vendor skills, which is fine. Anything else exists in exactly one place on one machine, so decide where it belongs before it is lost. `install` never touches these and reports how many it left alone
+- **Real directories in `~/.claude/skills/`.** They exist in one place on one machine with no backup. Usually they are vendor skills, and anything else needs a decision on where it belongs. `install` never touches them and reports how many it left alone
 
-Record for each existing rules file what it says and which of these it is:
-
-- **Machine-global** (applies everywhere) belongs in the OliverCode `CLAUDE.md`
-- **Repo-specific** (true for one product only) stays in that repo's `CLAUDE.md`
-- **Personal or business** (voice, sales, hiring) belongs in your own user-skills area and stays out of the framework (`docs/RULES.md`, "Skill placement")
-
-Most existing setups have all three tangled in one file, and separating them is the adoption.
+Sort each existing rules file into three kinds. Machine-global rules belong in the OliverCode `CLAUDE.md`. Repo-specific rules stay in that repo's `CLAUDE.md`. Personal or business rules (voice, sales, hiring) belong in your own user-skills area and stay out of the framework (`docs/RULES.md`, "Skill placement"). Most existing files hold all three tangled together, and separating them is the adoption.
 
 ## Step 2: back up, then install activation
 
-`install` backs up an existing `~/.claude/CLAUDE.md` to `CLAUDE.md.pre-olivercode` itself, so do not copy it by hand first. It does not copy `~/.claude/skills/`, because it never deletes anything there. Back that folder up yourself if you want a restore point:
+`install` backs up an existing `~/.claude/CLAUDE.md` to `CLAUDE.md.pre-olivercode` itself, so do not copy it first. It never deletes anything in `~/.claude/skills/`, and a restore point for that folder is yours to make:
 
 ```bash
 cp -R ~/.claude/skills ~/.claude/skills.pre-olivercode 2>/dev/null || true
@@ -78,33 +70,33 @@ scripts/olivercode install     # symlinks CLAUDE.md, VOICE.md + skills, backing 
 scripts/olivercode health
 ```
 
-`install` reports how many skills it linked and how many real directories it left untouched. `health` then checks that every symlink resolves into this checkout. Keep the backups until the whole process is done and verified.
+`install` reports how many skills it linked and how many real directories it left alone, and `health` checks that every symlink resolves into this checkout. Keep the backups until everything is verified.
 
 ## Step 3: merge your global rules in
 
-Your old `~/.claude/CLAUDE.md` content does not disappear. It gets sorted:
+Your old `~/.claude/CLAUDE.md` content gets sorted in this order:
 
-1. Rules that are machine-global go into your fork's `CLAUDE.md`, under its existing sections
+1. Machine-global rules go into your fork's `CLAUDE.md`, under its existing sections
 2. Rules about one repo move to that repo's own `CLAUDE.md`
 3. Personal or business rules become a skill, placed per `docs/RULES.md` ("Skill placement")
 4. Anything you cannot classify stays in the global file and is flagged for the human
 
-The one hard constraint on the global file is that it loads from `~/.claude/CLAUDE.md` in sessions whose working directory is almost never OliverCode. So every path in it must resolve from anywhere. Use `$OC/...` for OliverCode's own files, resolved and checked:
+The global file loads in sessions whose working directory is almost never OliverCode, so every path in it must resolve from anywhere. Use `$OC/...` for OliverCode's own files, resolved and checked:
 
 ```bash
 OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
 [ -f "$OC/docs/RULES.md" ] || echo "OliverCode not installed"
 ```
 
-A bare path such as `scripts/validate.sh` means the repo the agent is currently in. That is usually what you want, because every repo has its own, but say so explicitly or the next reader assumes it means OliverCode's.
+A bare path such as `scripts/validate.sh` means the repo the agent is currently in, because every repo has its own. Say so explicitly, or the next reader assumes it means OliverCode's.
 
 ## Step 4: rewrite each repo's CLAUDE.md
 
 For every repo, start from `core/templates/project/CLAUDE.md`. The file carries only what is specific to that repo, under a short block that says where the shared rules come from.
 
-- Every pointer is relative to the reader's working directory. A path such as `Some/Vault/Path/OliverCode/CLAUDE.md` does not resolve from inside the repo and is dead text, so verify each pointer with `ls` before you leave it in
-- Repo-specific content stays even when it makes the file longer. Duplicated framework rules come out, and repo truth stays
-- If a repo has an `AGENTS.md`, `.cursorrules` or a similarly named rules file, merge it into `CLAUDE.md`, because Claude Code auto-loads only `CLAUDE.md`. Then decide the original's fate explicitly and say which you chose. If another tool still reads it (Cursor, Copilot, Codex), keep it and replace its body with a one-line pointer to `CLAUDE.md` so the two cannot drift into disagreeing. If nothing reads it, delete it in the same commit as the merge, because git is the archive and a stale second rules file is what made the content invisible in the first place
+- Every pointer is relative to the reader's working directory. A path such as `Some/Vault/Path/OliverCode/CLAUDE.md` does not resolve from inside the repo, so verify each pointer with `ls`
+- Repo-specific content stays even when it makes the file longer, and duplicated framework rules come out
+- If a repo has an `AGENTS.md`, `.cursorrules` or a similar rules file, merge it into `CLAUDE.md`, because Claude Code auto-loads only `CLAUDE.md`. If another tool still reads the original (Cursor, Copilot, Codex), keep it with a one-line pointer to `CLAUDE.md` so the two cannot drift apart. If nothing reads it, delete it in the same commit, because git is the archive
 
 Never leave both files carrying live rules, because that duplication is what this step exists to end.
 
@@ -135,21 +127,14 @@ Hook enforcement fails open when `core.hooksPath` is unset (`docs/RULES.md`, "Ex
 
 ### Step 6b: stamp the project template into a repo (optional)
 
-This is not part of the required path. `sync-hooks` already installs the gates, which is what governs a repo. `bootstrap` goes further and stamps the full project template (the quality baseline, structure contract and supporting scripts declared in `shared/project-bootstrap-manifest.json`) so a repo matches the standard on day one.
-
-Use it for a new repo. For an existing one, look before you write:
+`sync-hooks` already installs the gates, which is what governs a repo. `bootstrap` goes further and stamps the full project template declared in `shared/project-bootstrap-manifest.json` (quality baseline, structure contract and supporting scripts), so a new repo matches the standard on day one. For an existing repo, look before you write:
 
 ```bash
 scripts/olivercode bootstrap <repo> --dry-run    # prints NEW/OVERWRITE per file, writes nothing
 scripts/olivercode bootstrap <repo>
 ```
 
-The manifest gives every file a mode, and the mode determines whether your existing content is safe:
-
-- `presence` files are created only if absent. Existing content is never touched, and the run reports it as kept
-- `strict` files are overwritten, because their contract is byte-identity with the template. The hooks and the shared baseline are strict, so a hand-edited version in the target repo is replaced
-
-Always run `--dry-run` against an existing repo first and read the OVERWRITE lines, because that list is exactly what you are agreeing to lose.
+The manifest gives every file a mode. `presence` files are created only if absent and existing content is kept. `strict` files are overwritten because their contract is byte-identity with the template, which covers the hooks and the shared baseline. Read the OVERWRITE lines of the dry run first, because that list is exactly what you agree to lose.
 
 ## Step 7: verify with evidence
 
@@ -211,24 +196,17 @@ git -C <repo> config --unset core.hooksPath          # per repo; .githooks/ can 
 
 ## Folder structure
 
-The framework assumes one layout: `sync-hooks` and `conform` look for fleet repos as siblings of the OliverCode checkout. Nothing else depends on where anything sits.
+`sync-hooks` and `conform` look for fleet repos as siblings of the OliverCode checkout, and nothing else depends on where anything sits.
 
 ```
 <workspace-root>/
 ├── OliverCode/              the fork: framework, skills, standards, gates
 │   └── runtime/control-plane/  (gitignored, optional) per-machine state
 ├── product-repo-a/          siblings of OliverCode
-├── product-repo-b/
-└── product-repo-c/
+└── product-repo-b/
 ```
 
-If your repos do not share a parent at all, which is the normal case when adopting into an existing setup, give each profile an explicit `path` in the registry file named in Step 5:
-
-```json
-"acme-api": { "name": "acme-api", "path": "~/work/clients/acme/api", ... }
-```
-
-`path` accepts absolute, `~`-relative or fleet-root-relative values, and `discover` emits it for you. Without it a repo is findable only at `<fleet-root>/<name>`, which makes a tidy sibling layout the easy path and leaves it optional. If your repos share a parent that is not OliverCode's, pass `--root`:
+A repo outside that layout gets an explicit `path` in the registry file named in Step 5. `path` accepts absolute, `~`-relative or fleet-root-relative values, and `discover` emits it for you. Without it a repo is findable only at `<fleet-root>/<name>`. When your repos share a parent that is not OliverCode's, pass `--root`:
 
 ```bash
 scripts/olivercode sync-hooks --root /path/to/where/your/repos/live
@@ -243,25 +221,9 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 - `watchRoots`: the folders `olivercode place` scans for strays (default `~/Developer`, `~/Desktop`, `~/Documents`), and `allowOutside` lists checkouts allowed to stay elsewhere, such as an Obsidian vault
 - `repoPaths`: a repo outside the fleet folder
 
-`OLIVERCODE_SKILLS_ROOT` overrides the file. An unset value means this machine has none, and nothing guesses it from the folder layout.
+`OLIVERCODE_SKILLS_ROOT` overrides the file, and an unset value means this machine has none. A layout the scripts cannot resolve degrades to WARN and skips, and a WARN is no coverage. If `sync-hooks` reports every repo as skipped, your `--root` is wrong and your fleet is fine.
 
-A layout the scripts cannot resolve degrades to WARN and skips. It never fails wrongly and it never checks anything, so a WARN is not coverage. If `sync-hooks` reports every repo as skipped, your `--root` is wrong and your fleet is fine.
-
-Inside each product repo, `docs/RULES.md` ("Project structure") is the structure contract. The short version:
-
-```
-<product-repo>/
-├── README.md
-├── CLAUDE.md                       agent rules; the only filename Claude Code auto-loads
-├── .githooks/                      installed by sync-hooks, activated by core.hooksPath
-├── docs/
-│   ├── repo-structure-contract.md  this repo's declared paths
-│   ├── backlog-config.json         names this repo's GitHub Project
-│   └── BACKLOG.md                  the live board, only if the repo has no backlog-config.json
-└── scripts/validate.sh             this repo's canonical validation
-```
-
-A top-level directory needs a contract reason, because that rule keeps a fleet legible to an agent that has never seen it.
+Inside each product repo, `docs/RULES.md` ("Project structure") is the structure contract.
 
 ## What a fork gets
 
@@ -269,19 +231,19 @@ Tracked and shared: standards, templates, skills, gates, the launcher, documents
 
 ## Restoring on a new machine
 
-A blank machine restoring an existing setup from its remotes follows this order. The steps above cover adopting OliverCode into a machine that already has work on it.
+A blank machine follows this order, and the steps above cover adopting OliverCode into a machine that already has work on it.
 
 - OliverCode comes first, because its `CLAUDE.md` holds the rules every session loads
-- The fleet registry comes back with its repo's clone once `olivercode.local.json` names that repo under `privateRepos` (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`)
+- The fleet registry returns with its repo's clone once `olivercode.local.json` names that repo under `privateRepos` (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`)
 - The private repos, the skills folder and any repo outside the fleet folder are per machine, so name them in `olivercode.local.json` before `sync-hooks` and `conform` run
 
-Clone OliverCode and each fleet repo side by side in one folder, then copy `olivercode.local.example.json` to `olivercode.local.json` and fill in this machine's paths. The rest follows the steps above: Step 0 proves the clone, Step 2 runs `install`, Step 6 installs enforcement and Step 7 proves a gate blocks. Steps 1, 3, 4 and 5 are already done, because the rules and the registry come back with the clones. `health` is the checkpoint and it must end HEALTHY. A registered repo that is not cloned here is listed once and is not a failure.
+Clone OliverCode and each fleet repo side by side, copy `olivercode.local.example.json` to `olivercode.local.json` and fill in this machine's paths. Then run Step 0 to prove the clone, Step 2 for `install`, Step 6 for enforcement and Step 7 to prove a gate blocks. Steps 1, 3, 4 and 5 are done, because the rules and the registry come back with the clones. `health` must end HEALTHY, and it lists a registered repo that is not cloned here once without failing.
 
 Four things need a person, because no script restores them:
 
-- **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`. `scripts/olivercode discover --root <dir>` finds whatever is present and cannot clone what is absent. The registry lists what should be there
-- **Marketplace plugins.** Third-party plugins install through Claude Code and never through this repo
-- **Application plugins.** An editor or notes app that tracks plugin settings in git gets those settings back with the clone, and the compiled plugin code does not return. Reinstall each plugin from its store
+- **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`, and `scripts/olivercode discover --root <dir>` finds what is present
+- **Marketplace plugins.** They install through Claude Code and never through this repo
+- **Application plugins.** An editor or notes app returns its plugin settings with the clone and not the compiled code, so reinstall each plugin from its store
 - **MCP server authorization.** This is interactive OAuth per server, in a Claude Code session
 
 Verify the restore:
@@ -296,39 +258,38 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 
 ## Launcher commands
 
-`python3 scripts/olivercode --help` prints the command list and each command's arguments, and this section holds what the help line cannot say. `scripts/olivercode` is the whole launcher surface. It invokes nothing outside this repo, contains no hardcoded vault, home or container paths, and derives every path from its own location (`__file__`), so it runs identically from cron, a hook or an interactive shell. It has no global alias and runs from inside the checkout. If a host sets up its own alias or PATH entry, verify that separately and never commit host-specific paths into this repo.
+`python3 scripts/olivercode --help` prints every command and its arguments, and this section holds what the help line cannot say. The launcher invokes nothing outside this repo, hardcodes no paths and derives every path from `__file__`, so it runs the same from cron, a hook or a shell. It has no global alias. If a host adds its own alias or PATH entry, verify that separately and never commit host paths.
 
-- `bootstrap` stamps the project template into a repo per `shared/project-bootstrap-manifest.json` and creates its required directories. `strict` files are overwritten, because byte-identity is their contract, and `presence` files are created only when missing, so repo-specific content is never clobbered. `--dry-run` shows the plan and writes nothing
-- `backlog-setup` brings one repo, new or existing, to the board baseline in `shared/kanban-baseline.json`, and without `--apply` it prints the plan and changes nothing. It creates the repo's GitHub Project when the backlog config names none, adds the missing Status lanes (QA included) and the Priority, Size, Work type and Area fields, and writes `docs/backlog-config.json` with the real field and option IDs. It also installs the story-reference `commit-msg` hook, and a second run changes nothing and says so. Before it touches a field it saves every item's Status, Priority, Size and Work type to `scratch/backlog-backups/`. Afterward it restores any value that moved and checks the count per option against that file, and it exits non-zero when they differ. An option outside the baseline stays on the board and the baseline check reports it. A new Project takes the repo's name. GitHub's API cannot switch off a board's built-in workflows, so the command lists them for you to turn off on the Project's Workflows page. The live check below proves the behavior
-- `discover` is a read-only scan for git repos under the given roots. It reports each one's agent-rules filename and hook state, inventories `~/.claude` (skills linked here, linked elsewhere, real directories and broken links) and emits a `repo-profiles.json` skeleton with explicit `path` values. It excludes the OliverCode checkout itself, because the framework governs the fleet and is not part of it. It is the mechanical form of Step 1
-- `install` symlinks this checkout's `CLAUDE.md`, its `docs/VOICE.md` (as `~/.claude/VOICE.md`, which `CLAUDE.md` imports) and every skill into `~/.claude`, creating `~/.claude/` and `~/.claude/skills/` if absent. It also merges OliverCode's Claude Code hooks (seven, listed in `docs/RULES.md` "Execution") into `~/.claude/settings.json`, creating the file if absent and leaving every other key alone (`docs/RULES.md`, "Execution"). It also sets `core.hooksPath` to `.githooks` in this checkout when the setting is unset, and warns without changing it when the setting points elsewhere. It is never destructive. A real file or any other link at a target path, including a dangling one or one into another OliverCode checkout, is moved to `<name>.pre-olivercode` (then `.2`, `.3` on later collisions) and the path is printed, because that file is usually the operator's whole existing ruleset (`BACKUP-COLLISION-1` in `docs/DECISIONS.md`). Only a link an OliverCode install wrote that now dangles because its checkout moved is replaced in place. It records the links it wrote in `~/.claude/.olivercode-install.json`, and a re-install of the same checkout reports ALREADY and makes no backup
-- `uninstall` is the reverse of `install` and step 1 of "Backing out". It removes each link in `~/.claude` that points into this checkout, and each dangling one an OliverCode install wrote, which the install record names. For an install made before the record existed, two or more of install's links must dangle into the same checkout-shaped folder, so a lone link to a drive that is not mounted stays, and a link into another live checkout stays too. It removes the record itself. It moves the newest `<name>.pre-olivercode` backup back once its path is free and lists older ones. It takes out only hook entries whose command is exactly the form install writes, so an operator hook that runs a script of the same name stays. A `settings.json` left empty is deleted, since Claude Code reads that the same as no file, unless it is a symlink, in which case it stays a link and keeps its file mode. Links pointing anywhere else, real skill folders, `~/.claude/` and `skills/` themselves and every other settings key stay. It leaves `core.hooksPath` alone, since `install` and `sync-hooks` set it, and it is idempotent
-- `conform [DIR]` checks one repo, or every registered repo when it gets no directory, against `docs/CONTRACT.md`, which lists each requirement, its fix and how a repo records an allowed difference. `--offline` skips the board and GitHub About checks, which are the only ones that call GitHub. It replaced the fleet hook, board and baseline checks that `health` used to run
-- `gh-limit [clear]` shows whether the shared GitHub rate-limit hold is on and until when, and `clear` lifts it early
-- `place` checks that every repo, worktree and backup under the watched folders lives under `repoRoot`, names the fix for each and exits non-zero on any stray
-- `clean` lists the worktrees that are merged and clean and so reclaimable, with the reason each other worktree is kept, and `--apply` removes the reclaimable ones with `git worktree remove`
+- `bootstrap` stamps the project template into a repo per `shared/project-bootstrap-manifest.json`. `strict` files are overwritten because byte-identity is their contract, and `presence` files are created only when missing. `--dry-run` writes nothing
+- `backlog-setup` brings one repo to the board baseline in `shared/kanban-baseline.json` and prints the plan unless `--apply` is given. It reuses a Project that carries the repo's name or creates one, adds the missing Status lanes and the Priority, Size, Work type and Area fields, writes `docs/backlog-config.json` with the real IDs and installs the story-reference `commit-msg` hook. Before it touches a field it saves every item's values to `scratch/backlog-backups/`, restores any value that moved and exits non-zero when the counts per option differ from that file. An option outside the baseline stays on the board and the baseline check reports it. GitHub's API cannot switch off a board's built-in workflows, so the command lists them for you to turn off on the Project's Workflows page
+- `discover` is a read-only scan for git repos under the given roots. It reports each repo's agent-rules file and hook state, inventories `~/.claude` and emits a `repo-profiles.json` skeleton. It excludes this checkout and is the mechanical form of Step 1
+- `install` symlinks this checkout's `CLAUDE.md`, `docs/VOICE.md` (as `~/.claude/VOICE.md`) and every skill into `~/.claude`. It merges the seven hooks listed in `docs/RULES.md` ("Execution") into `~/.claude/settings.json` without touching other keys, and sets `core.hooksPath` to `.githooks` here when unset. It never destroys anything: any other file or link at a target path moves to `<name>.pre-olivercode` (then `.2`, `.3`) and is printed, because that file is usually the owner's existing ruleset (`BACKUP-COLLISION-1` in `docs/DECISIONS.md`). A link an earlier install wrote that now dangles because its checkout moved is replaced in place. It records its links in `~/.claude/.olivercode-install.json`, and a re-install of the same checkout reports ALREADY
+- `uninstall` reverses `install`. It removes each link that points into this checkout and each dangling link the install record names, restores the newest `<name>.pre-olivercode` backup once its path is free, removes only hook entries in the exact form install writes and deletes a `settings.json` left empty (a symlinked one stays). Other links, real skill folders and every other key stay, `core.hooksPath` is untouched, and a second run changes nothing
+- `conform [DIR]` checks one repo, or every registered repo, against `docs/CONTRACT.md`. `--offline` skips the board and GitHub About checks, the only ones that call GitHub
+- `gh-limit [clear]` shows the shared GitHub rate-limit hold and until when, and `clear` lifts it early
+- `place` lists every repo, worktree and backup outside `repoRoot` with the fix for each and exits non-zero on any stray
+- `clean` lists merged, clean worktrees as reclaimable and says why it keeps each other one. `--apply` removes the reclaimable ones
 - `policy init [DIR]` writes `.olivercode/policy.json`, the allowed commands and paths and the triggers that ask the owner
 - `checkpoint [DIR]` records a repo's commit, uncommitted changes and untracked files before an unattended run
 - `restore [DIR]` returns a repo to its checkpoint and lists the files it removed
 - `context [DIR]` prints the words a session loads at start and exits non-zero over the `contextWords` budget
-- `maintain` checks the machine. `--fix` re-points a dangling `~/.claude` link, prunes a worktree whose folder is gone and downloads git files that iCloud evicted. Under a `repoRoot` inside iCloud Drive, Dropbox, OneDrive or Google Drive it moves each repo's `.git` to `.git.nosync` behind a symlink, which sync services skip, so the object store is never evicted, duplicated or half-synced, and a second machine clones from the remote. It deletes an untracked `name 2.ext` copy that matches `name.ext`, moves an older differing one to `_archive/stray-copies` and leaves a newer one. Drifted hooks, a checkout outside `repoRoot`, a doc that trails a file it names by more than 60 days and a failing `health` check are reported, logged and left alone (exit 1). `--schedule` installs a daily launchd job and `--unschedule` removes it
-- `learn` reads the failure log (`~/.olivercode/failures.log`). When one gate and reason appear three times it prints a proposed check or memory entry with the three lines as evidence, and otherwise `Nothing due`. `--reject KEY` and `--accept KEY` stop a proposal returning
-- `report [--days N]` counts how many times each gate blocked a commit in the last N days, from the failure log
-- `eval list|run|compare` replays the tasks in `tasks/` (each a starting state, a prompt and a shell check) against an agent command, records pass or fail, gate blocks and cost, and compares two results files
+- `maintain` checks the machine, and `--fix` repairs what cannot lose work: it re-points a dangling `~/.claude` link, prunes a worktree whose folder is gone and downloads git files that iCloud evicted. Under a `repoRoot` inside iCloud Drive, Dropbox, OneDrive or Google Drive it moves each repo's `.git` to `.git.nosync` behind a symlink that sync services skip, and it restores a link a sync service renamed. It deletes an untracked `name 2.ext` that matches `name.ext`, archives an older differing copy in `_archive/stray-copies` and leaves a newer one. It reports and logs drifted hooks, a checkout outside `repoRoot`, a doc that trails a file it names by more than 60 days and a failing `health` check, then exits 1. `--schedule` installs a daily launchd job and `--unschedule` removes it
+- `learn` reads `~/.olivercode/failures.log`. When one gate and reason appear three times it prints a proposed check or memory entry with the three lines as evidence, and otherwise `Nothing due`. `--reject KEY` and `--accept KEY` stop a proposal returning
+- `report [--days N]` counts how often each gate blocked a commit in the last N days
+- `eval list|run|compare` replays the tasks in `tasks/` (a starting state, a prompt and a shell check) against an agent command, records pass or fail, gate blocks and cost, and compares two results files
 - `job REPO -- COMMAND` runs a scheduled agent job from a checkpoint in a repo whose hooks git runs, so the commit gates apply and a block lands in the failure log
-- `health` also compares `VERSION` with the `upstream` remote's and prints the changelog entries a fork is missing. Both files are edited by hand
-- `voiceFile` in `olivercode.local.json` names the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of the neutral `docs/VOICE.md`
-- `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. It checks this machine only. What each repo must match is `conform`'s job. A repo, private repo or control plane that is not on this machine is noted once and not counted
-- `update` runs `git pull`, then `install` (so a new skill or Claude Code hook reaches this machine), then `sync-hooks`
+- `health` checks this machine: dependencies, entrypoint and placement drift, the hook entries in `~/.claude/settings.json`, skill links, voice copies, remote reachability and tracked-file size against GitHub's 100MB limit. It compares `VERSION` with the `upstream` remote's and prints the changelog entries a fork is missing. What each repo must match is `conform`'s job
+- `voiceFile` in `olivercode.local.json` names the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of `docs/VOICE.md`
+- `update` runs `git pull`, then `install`, then `sync-hooks`
 - `sync-hooks` converges pre-commit hooks and `core.hooksPath` across the fleet and the private repos
-- `audit-fleet` runs the `audit` skill's structure check (dangling references and description length) against OliverCode's own `skills/` and, when this machine names one, the skills folder (`skillsRoot`)
+- `audit-fleet` runs the `audit` skill's structure check against OliverCode's `skills/` and, when set, the skills folder (`skillsRoot`)
 - `size [DIR]` prints a repo's total lines, its `docs/SIZE-BASELINE.json` baseline and the headroom
-- `guide` prints first steps, every command from the launcher's own table and every skill with its trigger phrases from `skills/INDEX.md`
-- `skills` lists OliverCode's skills under `skills/` with name and description, read from each `SKILL.md`'s frontmatter and never from a hand-maintained copy
+- `guide` prints first steps, every command and every skill with its trigger phrases from `skills/INDEX.md`
+- `skills` lists the skills under `skills/` with the name and description from each `SKILL.md`
 
-`--root DIR` overrides where fleet repos are looked for. The default is the parent of the OliverCode checkout, which is the sibling layout. A fork whose repos live elsewhere needs it, and without it every repo silently reports as "not present on this machine". Unknown arguments are rejected with a nonzero exit, because silently ignoring one is a wrong success: `sync-hooks --root /elsewhere` once ignored the flag, synced the default fleet and reported that it had worked.
+`--root DIR` overrides where fleet repos are looked for, and the default is the parent of this checkout. A fork whose repos live elsewhere needs it, and without it every repo reports as "not present on this machine". Unknown arguments exit non-zero, because ignoring one reports a success that did not happen.
 
-The launcher is intentionally small, and `--help` lists its entire surface. Verify it with:
+Verify the launcher with:
 
 ```bash
 python3 scripts/olivercode --help
@@ -336,9 +297,9 @@ python3 scripts/olivercode health
 python3 scripts/olivercode bogus || true
 ```
 
-The copy at `runtime/control-plane/olivercode`, present only when the local control plane is installed, is a thin shim that delegates to this same CLI and carries no additional commands.
+`runtime/control-plane/olivercode`, present only when the local control plane is installed, is a shim that delegates to this CLI and adds no commands.
 
-GitHub keeps an option's item values only when `updateProjectV2Field` receives that option's `id`, so `backlog-setup` sends the ids and verifies the counts afterward. Run it against a throwaway Project after any change to `scripts/lib/backlog_setup.py`.
+GitHub keeps an option's item values only when `updateProjectV2Field` receives that option's `id`, so `backlog-setup` sends the ids and verifies the counts. Run it against a throwaway Project after any change to `scripts/lib/backlog_setup.py`.
 
 ## Troubleshooting
 
