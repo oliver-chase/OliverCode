@@ -20,6 +20,14 @@ class TestGate2Emoji(GateHarness):
         result = self.assertBlocked("gate 2")
         self.assertIn("emojis or icons", result.stdout)
 
+    def test_a_caption_ledger_under_data_may_hold_emojis(self):
+        self.stage("data/items.csv", "clips,caption\nx,first move \U0001F393\n")
+        self.assertAllowed()
+
+    def test_the_exemption_stops_at_data_ledgers(self):
+        self.stage("docs/items.csv", "clips,caption\nx,first move \U0001F393\n")
+        self.assertBlocked("gate 2")
+
     def test_plain_text_passes(self):
         self.stage("readme.md", "Status: done.\n")
         self.assertAllowed()
