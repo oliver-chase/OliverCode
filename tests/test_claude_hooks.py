@@ -164,6 +164,16 @@ class TestSessionCheck(RepoCase):
         os.symlink(self.tmp / "gone.md", self.claude / "CLAUDE.md")
         self.assertIn("broken link", " ".join(session.notes(self.tmp, self.claude)))
 
+    def test_machine_strain_names_a_runaway_test_runner_and_high_load(self):
+        ps = "  71592  99.3 22:54:46 node (vitest 1)\n  100  2.0 22:54:46 node server\n  200  90.0 00:10:00 node (vitest 2)"
+        found = session.machine_strain(ps, 2.0, 8)
+        self.assertEqual(len(found), 1)
+        self.assertIn("pid 71592", found[0])
+        self.assertIn("kill 71592", found[0])
+        self.assertIn("load is 13.0 on 8 cores", " ".join(session.machine_strain("", 13.0, 8)))
+        self.assertEqual(session.machine_strain("", 4.0, 8), [])
+        self.assertEqual(session._hours("1-02:00:00"), 26.0)
+
     def test_stories_waiting_in_qa_are_named_and_a_missing_config_or_gh_stays_silent(self):
         self.assertEqual(session.qa_queue(self.repo), "")  # no backlog config
         (self.repo / "docs").mkdir()
