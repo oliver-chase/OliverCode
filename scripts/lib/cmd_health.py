@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lib import claude_settings as _claude_settings
 from lib.health_checks import (
-    _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
+    _check_activation_links, _check_fleet_locations, _check_memory, _check_version, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
     _check_placement_drift, _check_vault_skill_links,
 )
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
@@ -137,6 +137,12 @@ def command_health(fleet_root: Path | None = None) -> int:
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # failure classes.
+    print("\nMemory and version:")
+    t.add(*_check_memory(OC_ROOT))
+    t.add(*_check_version(OC_ROOT))
+
+    print("\nActivation links:")
+    t.add(*_check_activation_links(_claude_dir()))
     t.add(*_check_vault_skill_links(_skills_root()))
     t.add(*_check_voice_copies(OC_ROOT, _claude_dir() / "skills"))
 

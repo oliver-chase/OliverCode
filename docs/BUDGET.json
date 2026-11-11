@@ -4,5 +4,6 @@
   "testSeconds": 60,
   "docWords": 20000,
   "skillWords": 12500,
-  "contextWords": 1800
+  "contextWords": 1800,
+  "memoryWords": 5000
 }

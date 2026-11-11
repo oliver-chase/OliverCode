@@ -18,6 +18,7 @@ from pathlib import Path
 OC_ROOT = Path(__file__).resolve().parent.parent
 GATES_DIR = OC_ROOT / "core" / "hooks" / "gates"
 HEADER = OC_ROOT / "core" / "hooks" / "header.sh"
+FAILURE_LOG = OC_ROOT / "core" / "hooks" / "failure-log.sh"
 # The secret patterns live once and fill both the commit gate and the push hook.
 SECRET_PATTERNS = OC_ROOT / "core" / "hooks" / "secret-patterns.sh"
 PRE_PUSH = OC_ROOT / "core" / "hooks" / "pre-push.sh"
@@ -32,9 +33,9 @@ COMMIT_MSG_HEADER = """#!/usr/bin/env bash
 set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-
 """
 COMMIT_MSG_TARGETS = ("core/templates/project/commit-msg",)
+COMMIT_MSG_HEADER += FAILURE_LOG.read_text(encoding="utf-8") + 'GATE_NAME="Commit message"\n'
 
 TITLES = {
     "secrets": "Secrets",
@@ -75,15 +76,18 @@ def banner(title: str) -> str:
 
 def build(spec: dict) -> str:
     total = sum(1 for g in spec["gates"] if g not in UNNUMBERED)
-    parts = [HEADER.read_text(encoding="utf-8").replace("{{VARIANT}}", spec["variant"])]
+    parts = [HEADER.read_text(encoding="utf-8").replace("{{VARIANT}}", spec["variant"]),
+             FAILURE_LOG.read_text(encoding="utf-8")]
     number = 0
     for gate in spec["gates"]:
         body = (GATES_DIR / f"{gate}.sh").read_text(encoding="utf-8")
         if gate in UNNUMBERED:
             parts.append(banner(TITLES[gate]))
+            parts.append(f'GATE_NAME="{TITLES[gate]}"\n')
         else:
             number += 1
             parts.append(banner(f"Gate {number}: {TITLES[gate]}"))
+            parts.append(f'GATE_NAME="{TITLES[gate]}"\n')
             body = body.replace("{{N}}", str(number)).replace("{{TOTAL}}", str(total))
         body = body.replace("{{SECRET_PATTERNS}}", SECRET_PATTERNS.read_text(encoding="utf-8"))
         parts.append(body + "\n")

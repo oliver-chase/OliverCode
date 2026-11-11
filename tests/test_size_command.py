@@ -195,3 +195,17 @@ class TestBootstrapShipsTheRatchet(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSymlinkCountedOnce(unittest.TestCase):
+    """A tracked symlink adds no lines, so the working-tree total equals the staged total."""
+
+    def test_worktree_and_staged_totals_agree_with_a_link(self):
+        repo = temp_dir(self, "olivercode-size-link-")
+        scratch_repo(repo)
+        (repo / "hook.sh").write_text("one\ntwo\nthree\n")
+        (repo / "link.sh").symlink_to("hook.sh")
+        git(repo, "add", "-A")
+        worktree = subprocess.run(["bash", str(SIZE_SH), "--total", str(repo)], capture_output=True, text=True, env=git_env()).stdout.strip()
+        staged = subprocess.run(["bash", str(SIZE_SH), "--total", "--staged", str(repo)], capture_output=True, text=True, env=git_env()).stdout.strip()
+        self.assertEqual((worktree, staged), ("3", "3"))

@@ -31,7 +31,29 @@ staged_content() {
 }
 
 VIOLATIONS=0
+
+# Failure log: each blocked commit adds one tab-separated line (time, repo, gate, reason) to a local
+# file outside every repo, so a failure that recurs can be counted. A gate announces itself through
+# GATE_NAME, and the first BLOCKED line any gate prints becomes the reason.
+OLIVERCODE_FAILURE_LOG="${OLIVERCODE_FAILURE_LOG:-$HOME/.olivercode/failures.log}"
+GATE_NAME="hook"
+BLOCK_REASON=""
+echo() {
+  if [ "${1:-}" != "-n" ] && [ -z "$BLOCK_REASON" ] && [[ "$*" == *BLOCKED* ]]; then BLOCK_REASON="$*"; fi
+  builtin echo "$@"
+}
+log_failure() {
+  local rc="${1:-0}"
+  [ "$rc" -eq 0 ] && return 0
+  mkdir -p "$(dirname "$OLIVERCODE_FAILURE_LOG")" 2>/dev/null || return 0
+  printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "${REPO_ROOT:-$PWD}")" "$GATE_NAME" \
+    "$(printf '%s' "${BLOCK_REASON:-exit $rc}" | tr '\t\n' '  ' | sed 's/^ *//' | cut -c1-200)" \
+    >> "$OLIVERCODE_FAILURE_LOG" 2>/dev/null || true
+}
+trap 'log_failure $?' EXIT
+
 # ─── Gate 1: Secrets ──────────────────────────────────────────────────────────
+GATE_NAME="Secrets"
 # Block commits containing API keys, tokens, JWTs, private keys.
 echo "[pre-commit] Gate 1/9: Secret scan..."
 
@@ -105,6 +127,7 @@ fi
 echo "  Gate 1 passed."
 
 # ─── Gate 2: Icons / Emojis ───────────────────────────────────────────────────
+GATE_NAME="Icons / Emojis"
 # Block ALL emojis and Unicode icons. Plain text only. No exceptions.
 echo "[pre-commit] Gate 2/9: Icon/Emoji scan..."
 
@@ -137,6 +160,7 @@ fi
 echo "  Gate 2 passed."
 
 # ─── Gate 3: PII ──────────────────────────────────────────────────────────────
+GATE_NAME="PII"
 # Block commits containing personal identifiers: home paths, usernames, hostnames.
 echo "[pre-commit] Gate 3/9: PII scan..."
 
@@ -182,6 +206,7 @@ fi
 echo "  Gate 3 passed."
 
 # ─── Gate 4: Workflow push auth safety ────────────────────────────────────────
+GATE_NAME="Workflow push auth safety"
 # HTTPS alone isn't the risk -- a `gh auth login` credential can carry `workflow`
 # scope over HTTPS just fine. The real risk is legacy git credential caching
 # (a bare PAT/password with no workflow scope) or an SSH key with no workflow
@@ -210,6 +235,7 @@ fi
 echo "  Gate 4 passed."
 
 # ─── Gate 5: Archived content ─────────────────────────────────────────────────
+GATE_NAME="Archived content"
 # A repo holds current state only. A superseded file gets deleted or replaced, never
 # parked in an Archive/ folder or beside its replacement as "-old" -- git already
 # holds every past version, so a second copy on disk is a copy nothing keeps in sync,
@@ -262,6 +288,7 @@ fi
 echo "  Gate 5 passed."
 
 # ─── Gate 6: Skill citations ──────────────────────────────────────────────────
+GATE_NAME="Skill citations"
 # GATE-SCOPE-1: matched by path shape (`*/SKILL.md`, `*/CLAUDE.md`, `*/references/*.md`),
 # never by bare filename, so a reference file gets the same check as a skill file.
 #
@@ -305,6 +332,7 @@ fi
 echo "  Gate 6 passed."
 
 # ─── Gate 7: Size ratchet ─────────────────────────────────────────────────────
+GATE_NAME="Size ratchet"
 # SIZE-RATCHET-1. A repo's total line count may fall but never rise past its baseline in
 # docs/SIZE-BASELINE.json, so new work cannot quietly rebuild what a cleanup removed. The count
 # is skills/audit/scripts/size.sh --total over the staged tree, the same counter `olivercode size`
@@ -374,6 +402,7 @@ else
 fi
 
 # ─── Gate 8: Owner identifiers ────────────────────────────────────────────────
+GATE_NAME="Owner identifiers"
 # OWNER-ID-1. A shipped file cannot name the people or accounts behind the repo. The gate derives
 # the identifiers itself, so no hand-kept list exists: the names and email local parts of
 # `git log` authors, the owner segment of the origin remote, and the string values of account and
@@ -392,7 +421,7 @@ id_array() {
     | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true
 }
 ID_LIST="$(mktemp "${TMPDIR:-/tmp}/oc-identifiers.XXXXXX")"
-trap 'rm -f "$ID_LIST"' EXIT
+trap 'rc=$?; rm -f "$ID_LIST"; log_failure $rc' EXIT
 {
   git log --format='%an%x09%ae' 2>/dev/null | sort -u | while IFS="$(printf '\t')" read -r id_name id_mail; do
     id_name_lc="$(printf '%s' "$id_name" | tr 'A-Z' 'a-z')"
@@ -430,7 +459,7 @@ else
   # A project names itself: its origin path, its repo name and its package name are not owner data, so a
   # line is matched after those strings are removed. A bare author name in prose still blocks.
   ID_SELF="$(mktemp "${TMPDIR:-/tmp}/oc-identifier-self.XXXXXX")"
-  trap 'rm -f "$ID_LIST" "$ID_SELF"' EXIT
+  trap 'rc=$?; rm -f "$ID_LIST" "$ID_SELF"; log_failure $rc' EXIT
   {
     id_self_remote="$(git remote get-url origin 2>/dev/null || true)"
     id_self_remote="${id_self_remote%.git}"
@@ -485,6 +514,7 @@ for number, line in enumerate(sys.stdin, 1):
 fi
 
 # ─── Gate 9: Duplicate text ───────────────────────────────────────────────────
+GATE_NAME="Duplicate text"
 # DUPLICATION-HOOK-1. A passage of 15 words or more may live in one markdown file only, so a rule
 # keeps one home across docs, skills, references and templates. The shared check
 # (scripts/duplication_check.py) reads every tracked markdown file and reports each passage that

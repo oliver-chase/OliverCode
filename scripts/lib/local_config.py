@@ -57,3 +57,10 @@ def skills_root() -> Path | None:
 def repo_paths() -> dict[str, Path]:
     """Fleet repos that do not sit beside OliverCode on this machine, by profile name."""
     return {name: Path(p).expanduser() for name, p in load_local().get("repoPaths", {}).items()}
+
+
+def voice_file(oc_root: Path = OC_ROOT) -> Path:
+    """The voice file install links as ~/.claude/VOICE.md: the owner's own file when `voiceFile` (or
+    OLIVERCODE_VOICE_FILE) names one that exists, else the neutral voice this checkout ships."""
+    own = _path(os.environ.get("OLIVERCODE_VOICE_FILE") or load_local().get("voiceFile"))
+    return own if own and own.is_file() else oc_root / "docs" / "VOICE.md"

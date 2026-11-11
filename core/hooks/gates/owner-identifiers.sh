@@ -16,7 +16,7 @@ id_array() {
     | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true
 }
 ID_LIST="$(mktemp "${TMPDIR:-/tmp}/oc-identifiers.XXXXXX")"
-trap 'rm -f "$ID_LIST"' EXIT
+trap 'rc=$?; rm -f "$ID_LIST"; log_failure $rc' EXIT
 {
   git log --format='%an%x09%ae' 2>/dev/null | sort -u | while IFS="$(printf '\t')" read -r id_name id_mail; do
     id_name_lc="$(printf '%s' "$id_name" | tr 'A-Z' 'a-z')"
@@ -54,7 +54,7 @@ else
   # A project names itself: its origin path, its repo name and its package name are not owner data, so a
   # line is matched after those strings are removed. A bare author name in prose still blocks.
   ID_SELF="$(mktemp "${TMPDIR:-/tmp}/oc-identifier-self.XXXXXX")"
-  trap 'rm -f "$ID_LIST" "$ID_SELF"' EXIT
+  trap 'rc=$?; rm -f "$ID_LIST" "$ID_SELF"; log_failure $rc' EXIT
   {
     id_self_remote="$(git remote get-url origin 2>/dev/null || true)"
     id_self_remote="${id_self_remote%.git}"

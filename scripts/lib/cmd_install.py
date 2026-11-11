@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 from lib.local_config import claude_dir as _claude_dir
+from lib.local_config import voice_file
 
 from lib import claude_settings as _claude_settings
 from lib import repo_gates as _repo_gates
@@ -150,7 +151,7 @@ def command_install(oc_root: Path) -> int:
     print(f"  [{status.upper()}] ~/.claude/CLAUDE.md")
     # CLAUDE.md imports the voice by this fixed path. A relative import from a symlinked
     # CLAUDE.md has no documented base directory, so it could silently load nothing.
-    status = _link(claude_dir / "VOICE.md", oc_root / "docs" / "VOICE.md")
+    status = _link(claude_dir / "VOICE.md", voice_file(oc_root))
     print(f"  [{status.upper()}] ~/.claude/VOICE.md")
 
     linked = already = 0
@@ -261,7 +262,7 @@ def command_uninstall(oc_root: Path) -> int:
 
     for name, rel in (("CLAUDE.md", Path("CLAUDE.md")), ("VOICE.md", Path("docs") / "VOICE.md")):
         path, note = claude_dir / name, ""
-        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or name in moved_links):
+        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or _points_into(path, voice_file(root).resolve()) or name in moved_links):
             if not path.exists():
                 note = f" (it pointed at {os.readlink(path)}, which is gone)"
             path.unlink()

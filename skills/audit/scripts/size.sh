@@ -56,7 +56,8 @@ for entry in entries:
     meta, _, path = entry.partition(b"\t")
     mode, sha, _stage = meta.split()
     path = os.fsdecode(path)
-    if os.path.isfile(path):
+    # A symlink holds no lines of its own, and following it counted its target twice in the working tree.
+    if os.path.isfile(path) and not os.path.islink(path):
         files.append((mode, sha.decode(), path))
 total = 0
 if staged:

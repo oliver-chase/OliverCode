@@ -1,0 +1,9 @@
+{
+  "id": "fix-range-bound",
+  "description": "A function misses the last number of its range.",
+  "files": {
+    "totals.py": "def total(n):\n    return sum(range(n))\n"
+  },
+  "prompt": "totals.total(3) should return 6, the sum of 1 to 3, but it returns 3. Fix totals.py.",
+  "check": "python3 -c \"import totals; assert totals.total(3) == 6\""
+}

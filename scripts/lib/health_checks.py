@@ -285,3 +285,103 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
             passed += 1
 
     return passed, failed, skipped
+
+
+def _check_activation_links(claude_dir: Path) -> tuple[int, int, int]:
+    """Every activation link in ~/.claude must resolve: CLAUDE.md, VOICE.md and each skill link.
+
+    A link that points at a moved or deleted checkout loads nothing and says nothing, so the
+    session runs without the rules. Install re-points them, so each failure prints that command.
+    A machine where install never ran has no links, which is a skip.
+    """
+    passed = failed = skipped = 0
+    links = [claude_dir / "CLAUDE.md", claude_dir / "VOICE.md"]
+    skills = claude_dir / "skills"
+    if skills.is_dir():
+        links += sorted(p for p in skills.iterdir() if p.is_symlink())
+    if not any(p.is_symlink() for p in links[:2]):
+        print("  [WARN] no activation links in ~/.claude, so install has not run here")
+        return 0, 0, 1
+    for link in links:
+        if not link.is_symlink():
+            continue
+        if link.exists():
+            passed += 1
+        else:
+            failed += 1
+            print(f"  [FAIL] {link} points at {os.readlink(link)}, which does not exist. "
+                  f"Run `olivercode install` from the OliverCode checkout to re-point it")
+    if not failed:
+        print(f"  [OK] all {passed} activation links resolve")
+    return passed, failed, skipped
+
+
+def _check_memory(oc_root: Path) -> tuple[int, int, int]:
+    """The memory files stay within memoryWords in docs/BUDGET.json, and an entry that names a gone path is stale.
+
+    Stale entries are listed and never deleted: the owner decides what to drop.
+    """
+    import json
+    import re
+
+    folder = oc_root / ".claude-optimization" / "memory"
+    files = sorted(folder.glob("*.md")) if folder.is_dir() else []
+    if not files:
+        print("  [INFO] no memory files on this machine, so memory is not checked")
+        return 0, 0, 0
+    passed = failed = skipped = 0
+    words = {f.name: len(f.read_text(encoding="utf-8").split()) for f in files}
+    budget_file = oc_root / "docs" / "BUDGET.json"
+    budget = json.loads(budget_file.read_text(encoding="utf-8")).get("memoryWords") if budget_file.is_file() else None
+    total = sum(words.values())
+    if budget and total > budget:
+        failed += 1
+        largest = ", ".join(f"{n} ({w})" for n, w in sorted(words.items(), key=lambda x: -x[1])[:3])
+        print(f"  [FAIL] memory holds {total} words, over the {budget} budget by {total - budget}. Largest: {largest}")
+    else:
+        passed += 1
+        print(f"  [OK] memory holds {total} words" + (f" of {budget}" if budget else ""))
+    stale = []
+    for f in files:
+        for ref in sorted(set(re.findall(r"`([~\w./-]+/[\w./-]+|[\w-]+\.(?:md|py|sh|json))`", f.read_text(encoding="utf-8")))):
+            if not any((base / ref).expanduser().exists() for base in (oc_root, Path.home())):
+                stale.append(f"{f.name}: {ref}")
+    if stale:
+        skipped += 1
+        print("  [WARN] stale memory entries name a path that is gone from here (nothing was deleted):")
+        for line in stale[:10]:
+            print(f"         {line}")
+    else:
+        passed += 1
+        print("  [OK] no memory entry names a missing path")
+    return passed, failed, skipped
+
+
+def _check_version(oc_root: Path) -> tuple[int, int, int]:
+    """Compare VERSION with the `upstream` remote's, and print the changelog entries a fork is missing.
+
+    Reads only refs already fetched, so health stays offline. A checkout with no upstream remote has nothing to compare.
+    """
+    version_file = oc_root / "VERSION"
+    if not version_file.is_file():
+        return 0, 0, 0
+    local = version_file.read_text().strip()
+
+    def show(path: str) -> str | None:
+        out = subprocess.run(["git", "-C", str(oc_root), "show", f"upstream/main:{path}"], capture_output=True, text=True)
+        return out.stdout if out.returncode == 0 else None
+
+    upstream = show("VERSION")
+    if upstream is None:
+        print(f"  [INFO] version {local}; no upstream remote fetched, so no version gap was checked")
+        return 0, 0, 0
+    upstream = upstream.strip()
+    if upstream == local:
+        print(f"  [OK] version {local} matches upstream")
+        return 1, 0, 0
+    have = set((oc_root / "CHANGELOG.md").read_text().splitlines()) if (oc_root / "CHANGELOG.md").is_file() else set()
+    missing = [l for l in (show("CHANGELOG.md") or "").splitlines() if l.strip() and l not in have]
+    print(f"  [WARN] version {local} differs from upstream {upstream}. Changelog entries you are missing:")
+    for line in missing[:15]:
+        print(f"         {line}")
+    return 0, 0, 1
