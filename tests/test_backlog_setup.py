@@ -91,6 +91,10 @@ class FakeGitHub:
         if q.startswith("mutation"):
             self.writes.append(q)
             return self.mutate(q, v)
+        if "projectsV2(" in q:
+            nodes = [{"id": p["id"], "number": p["number"], "title": p["title"], "closed": p.get("closed", False)}
+                     for p in self.projects.values() if v["t"].lower() in p["title"].lower()]
+            return {"repositoryOwner": {"projectsV2": {"nodes": nodes}}}
         if "repositoryOwner(login" in q:
             return {"repositoryOwner": {"id": "OWNER1"}}
         if "repository(owner" in q:
@@ -237,6 +241,38 @@ class TestNewRepo(SetupCase):
         flaky.rate_limit_after = None
         self.assertEqual(0, self.run_setup(fake=flaky))
         self.assertEqual(1, len(flaky.projects))
+
+
+class TestProjectAlreadyExists(SetupCase):
+    def seed(self, **extra):
+        project = self.fake.add_project(title="widgets")
+        project.update(extra)
+        return project
+
+    def test_a_dry_run_plans_the_config_for_the_existing_project_and_no_second_one(self):
+        self.seed()
+        self.assertEqual(0, self.run_setup(apply=False))
+        self.assertIn("existing 'widgets'", self.text)
+        self.assertNotIn("create the Project", self.text)
+        self.assertIn("write docs/backlog-config.json for the existing Project", self.text)
+        self.assertEqual([], self.fake.writes)
+
+    def test_apply_writes_the_config_for_that_project_and_creates_nothing(self):
+        project = self.seed()
+        self.run_setup()
+        self.assertEqual(1, len(self.fake.projects))
+        self.assertEqual(project["id"], self.config()["projectId"])
+
+    def test_a_closed_project_with_the_name_is_not_reused(self):
+        self.seed(closed=True)
+        self.run_setup(apply=False)
+        self.assertIn("create the Project 'widgets'", self.text)
+
+    def test_two_open_projects_with_the_name_stop_for_the_owner(self):
+        self.seed()
+        self.seed()
+        self.assertEqual(1, self.run_setup(apply=False))
+        self.assertIn("2 open Projects named 'widgets'", self.text)
 
 
 class TestExistingBoard(SetupCase):

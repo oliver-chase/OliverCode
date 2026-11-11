@@ -433,8 +433,15 @@ def _run_setup(target, apply, api, oc_root, out, now) -> int:
         board = read_board(api, config["projectId"])
         out(f"Project: {board['title']} (number {board['number']}, {len(board['items'])} item(s))")
     else:
-        changes.append(f"create the Project '{repo}' under {owner}")
-        out(f"Project: none named in {rel_cfg}")
+        found = find_project(api, owner, repo)
+        if found:
+            board = read_board(api, found["id"])
+            out(f"Project: none named in {rel_cfg}, so the existing '{found['title']}' (number {found['number']}, {len(board['items'])} item(s)) is used")
+            if not apply:
+                changes.append(f"write {rel_cfg} for the existing Project '{found['title']}' (number {found['number']})")
+        else:
+            changes.append(f"create the Project '{repo}' under {owner}")
+            out(f"Project: none named in {rel_cfg}")
     if apply and board is None:
         board = _create_project(api, owner, repo, cfg_path, out)
         config = load_config(cfg_path)
@@ -510,6 +517,18 @@ def _run_setup(target, apply, api, oc_root, out, now) -> int:
     if not apply and changes:
         out(f"Next: run `olivercode backlog-setup {target} --apply` to make these changes.")
     return verdict
+
+
+def find_project(api: Api, owner: str, repo: str) -> dict | None:
+    """The open Project the owner already has under the repo's name, or None. Two of them need the owner's choice."""
+    data = api.graphql("query($o:String!,$t:String!){repositoryOwner(login:$o){... on ProjectV2Owner{"
+                       "projectsV2(first:20,query:$t){nodes{id number title closed}}}}}", o=owner, t=repo)
+    nodes = (((data.get("repositoryOwner") or {}).get("projectsV2") or {}).get("nodes")) or []
+    same = [n for n in nodes if n and not n.get("closed") and n["title"].lower() == repo.lower()]
+    if len(same) > 1:
+        raise SetupError(f"{owner} has {len(same)} open Projects named '{repo}' (numbers {', '.join(str(n['number']) for n in same)}). "
+                         "Copy shared/backlog-config.example.json to docs/backlog-config.json and set the right one.")
+    return same[0] if same else None
 
 
 def _create_project(api, owner, repo, cfg_path, out) -> dict:
