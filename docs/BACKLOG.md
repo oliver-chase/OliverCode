@@ -8,4 +8,4 @@ This file is the live tracker that the `audit` skill maintains.
 
 Reviewed through: `a9c63e0` (2026-11-11, the audit sweep that filed the outstanding code and documentation gaps)
 
-The next Ready story is #275, which moves Project writes onto the shared GitHub queue. Read the live Project for status; this file is the audit coverage marker, not a second backlog.
+Story #275 delivered the shared GitHub queue for Project writes. Read the live Project for status; this file is the audit coverage marker, not a second backlog.
