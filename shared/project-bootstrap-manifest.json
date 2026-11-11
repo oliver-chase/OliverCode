@@ -3,14 +3,13 @@
   "status": "PROVISIONED",
   "status_note": "All template sources exist. core/templates/project/ is the single template home (see docs/RULES.md).",
   "requiredDirectories": [
-    ".github/workflows",
     ".githooks"
   ],
   "templatedFiles": [
     {
       "source": "core/templates/project/.github/CODEOWNERS",
       "target": ".github/CODEOWNERS",
-      "mode": "presence"
+      "mode": "offered"
     },
     {
       "source": "core/templates/project/QUALITY_BASELINE.md",
@@ -55,7 +54,7 @@
     {
       "source": "core/templates/project/.github/workflows/olivercode-governance.yml",
       "target": ".github/workflows/olivercode-governance.yml",
-      "mode": "presence"
+      "mode": "offered"
     },
     {
       "source": "core/templates/project/scripts/validate.sh",

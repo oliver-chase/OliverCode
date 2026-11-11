@@ -114,3 +114,27 @@ class ShippedWorkflows(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOfferedFiles(unittest.TestCase):
+    """CODEOWNERS and the workflow are offered once, and a repo that dropped them is not told to add them back."""
+
+    def setUp(self):
+        self.repo = temp_dir(self, "olivercode-offered-")
+        scratch_repo(self.repo)
+
+    def bootstrap(self):
+        return subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)], env=git_env(), capture_output=True, text=True)
+
+    def test_the_first_run_offers_them_and_a_later_run_does_not_restore_a_deleted_one(self):
+        self.bootstrap()
+        self.assertTrue((self.repo / ".github" / "CODEOWNERS").exists())
+        shutil.rmtree(self.repo / ".github")
+        self.bootstrap()
+        self.assertFalse((self.repo / ".github").exists())
+
+    def test_the_structure_contract_script_passes_in_a_repo_without_github(self):
+        self.bootstrap()
+        shutil.rmtree(self.repo / ".github")
+        ran = subprocess.run(["node", "scripts/check-structure-contract.mjs"], cwd=self.repo, capture_output=True, text=True)
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)

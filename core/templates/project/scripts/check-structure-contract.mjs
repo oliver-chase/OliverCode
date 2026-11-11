@@ -48,7 +48,6 @@ function requireScriptReferenceTracked(ref, message) {
 }
 
 const githubDir = join(ROOT, '.github')
-if (!existsSync(githubDir)) failures.push('missing .github directory')
 
 if (existsSync(githubDir)) {
   const allMarkdown = listFilesRecursive(githubDir).filter((f) => f.endsWith('.md'))

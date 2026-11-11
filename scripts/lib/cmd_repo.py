@@ -175,7 +175,8 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
 
     Honours the manifest's modes: `strict` files are overwritten (their contract is
     byte-identity with the template), `presence` files are only created when missing so
-    repo-specific content is never clobbered.
+    repo-specific content is never clobbered. `offered` files (a workflow, CODEOWNERS) are created
+    only in a repo that was never bootstrapped, so a repo that dropped them as unused is not told to add them back.
     """
     manifest_path = oc_root / "shared" / "project-bootstrap-manifest.json"
     if not manifest_path.is_file():
@@ -213,6 +214,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     fills["<Repo>"] = target.name
 
     new = overwritten = kept = 0
+    first_run = not (target / "QUALITY_BASELINE.md").exists()
     missing_src = []
     for entry in manifest.get("templatedFiles", []):
         src, dst_rel, mode = oc_root / entry["source"], entry["target"], entry.get("mode", "presence")
@@ -221,6 +223,9 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
             missing_src.append(entry["source"])
             continue
         exists = dst.exists()
+        if mode == "offered" and (exists or not first_run):
+            kept += 1
+            continue
         if exists and mode == "presence":
             kept += 1
             continue
