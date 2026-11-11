@@ -139,8 +139,6 @@ class TestHooks(Isolated):
         self.assertEqual((0, ""), (done.returncode, done.stdout))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestIsWrite(unittest.TestCase):
@@ -149,3 +147,7 @@ class TestIsWrite(unittest.TestCase):
         import gh_guard
         self.assertFalse(gh_guard.is_write("cat skills/backlog/scripts/log_action.py"))
         self.assertTrue(gh_guard.is_write("cd x && python3 skills/backlog/scripts/log_action.py --story 1"))
+
+
+if __name__ == "__main__":
+    unittest.main()
