@@ -1,66 +1,60 @@
-"""The secret gate (Gate 1) of the pre-commit hook in every variant, split from test_precommit_gates so the gate tests run in parallel."""
+"""The secret gate (Gate 1) of the pre-commit hook in every variant, split from test_precommit_gates so the gate tests run in parallel.
 
-import os
-import shutil
-import subprocess
-import tempfile
+Each blocking test stages every case under its own file name and runs the hook once. The gate prints one
+`BLOCKED: <file>` line per offending file, so each case is still checked on its own while the suite pays for one hook run.
+"""
+
 import unittest
-from pathlib import Path
 
-from _support import ISOLATION, REPO_ROOT, git, git_env, scratch_repo
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
-
-HOOK = REPO_ROOT / ".githooks" / "pre-commit"
-TEMPLATE_HOOK = REPO_ROOT / "core" / "templates" / "project" / "pre-commit"
 
 
 class TestGate1Secrets(GateHarness):
-    def test_github_pat_blocks(self):
-        self.stage("deploy.sh", "TOKEN=ghp_" + "b" * 36 + "\n")
-        self.assertBlocked("gate 1")
-        git(self.tmp, "rm", "-q", "--cached", "deploy.sh")
-        # Current credential formats, each built at run time and staged alone.
+    def assertEachBlocked(self, cases):
+        """Stage {path: content}, run the hook once and require a BLOCKED line for every path."""
+        for path, content in cases.items():
+            self.stage(path, content)
+        out = self.assertBlocked("gate 1").stdout
+        for path in cases:
+            self.assertIn(f"BLOCKED: {path} matches secret pattern", out, f"{path} was not blocked; output:\n{out}")
+
+    def test_each_credential_shape_blocks(self):
         modern = {
             "anthropic": "sk-" + "ant-api03-" + "A1b_" * 20,
-            "github fine-grained": "github" + "_pat_" + "11ABC" + "Ab3" * 20,
-            "github oauth": "gh" + "o_" + "c" * 36,
-            "aws secret with slashes": "aws_secret_access_key = " + "Ab/c+De" * 5 + "Ab/c+",
-            "slack webhook": "https://hooks." + "slack.com/services/T0ABC/B0DEF/" + "g" * 24,
+            "github-fine-grained": "github" + "_pat_" + "11ABC" + "Ab3" * 20,
+            "github-oauth": "gh" + "o_" + "c" * 36,
+            "aws-secret-with-slashes": "aws_secret_access_key = " + "Ab/c+De" * 5 + "Ab/c+",
+            "slack-webhook": "https://hooks." + "slack.com/services/T0ABC/B0DEF/" + "g" * 24,
             "gitlab": "gl" + "pat-" + "h" * 20,
-            "hugging face": "h" + "f_" + "i" * 34,
+            "hugging-face": "h" + "f_" + "i" * 34,
             "sendgrid": "S" + "G." + "j" * 22 + "." + "k" * 43,
-            "webhook secret": "wh" + "sec_" + "m" * 32,
-            "google oauth": "ya" + "29." + "n" * 40,
+            "webhook-secret": "wh" + "sec_" + "m" * 32,
+            "google-oauth": "ya" + "29." + "n" * 40,
         }
-        for name, value in modern.items():
-            with self.subTest(name):
-                self.stage("cred.txt", value + "\n")
-                self.assertBlocked("gate 1")
-                git(self.tmp, "rm", "-q", "--cached", "cred.txt")
-
-    def test_private_key_header_blocks(self):
-        self.stage("id.txt", "-----BEGIN RSA " + "PRIVATE KEY-----\n")
-        self.assertBlocked("gate 1")
-
-    def test_a_secret_in_a_large_file_blocks(self):
+        cases = {f"cred-{name}.txt": value + "\n" for name, value in modern.items()}
+        cases["deploy.sh"] = "TOKEN=ghp_" + "b" * 36 + "\n"
+        cases["id.txt"] = "-----BEGIN RSA " + "PRIVATE KEY-----\n"
         # A pipeline that exits early fails open on big files under pipefail.
-        self.stage("big.py", ('KEY = "sk-' + "d" * 32 + '"\n') * 2000)
-        self.assertBlocked("gate 1")
+        cases["big.py"] = ('KEY = "sk-' + "d" * 32 + '"\n') * 2000
+        self.assertEachBlocked(cases)
 
-    def test_no_path_is_exempt_and_a_placeholder_is_exempt_by_its_value_or_line(self):
+    def test_no_path_is_exempt_and_a_placeholder_word_does_not_excuse_a_real_key(self):
         key = "sk-" + "c" * 32
-        for path in ("tests/t.txt", "src/mock_client.py", ".env.example"):
-            with self.subTest(path):
-                self.stage(path, f'API_KEY="{key}"\n')
-                self.assertBlocked("gate 1")
-                git(self.tmp, "rm", "-q", "--cached", path)
-        # A placeholder word elsewhere on the line does not excuse a real key.
-        for line in (f'curl https://api.example.com -H "Authorization: Bearer {key}"',
-                     f"OPENAI_KEY={key}  # paste your_token here"):
-            with self.subTest(line):
-                self.stage("run.sh", line + "\n")
-                self.assertBlocked("gate 1")
-                git(self.tmp, "rm", "-q", "--cached", "run.sh")
+        cases = {path: f'API_KEY="{key}"\n' for path in ("tests/t.txt", "src/mock_client.py", ".env.example")}
+        cases["run1.sh"] = f'curl https://api.example.com -H "Authorization: Bearer {key}"\n'
+        cases["run2.sh"] = f"OPENAI_KEY={key}  # paste your_token here\n"
+        self.assertEachBlocked(cases)
+
+    def test_only_the_files_that_carry_a_secret_are_named(self):
+        # The combined prefilter skips a file that matches no pattern, so a clean neighbour is never named.
+        self.stage("clean.txt", "nothing secret here\n")
+        self.stage("dirty.txt", "TOKEN=ghp_" + "b" * 36 + "\n")
+        out = self.assertBlocked("gate 1").stdout
+        self.assertIn("BLOCKED: dirty.txt", out)
+        self.assertNotIn("BLOCKED: clean.txt", out)
+
+    def test_a_placeholder_value_or_an_allow_line_passes(self):
+        key = "sk-" + "c" * 32
         self.stage(".env.example", 'API_KEY="sk-' + "EXAMPLE" + "0" * 20 + '"\n'
                    f'TOKEN="{key}"  # secret-scan: allow\n')
         self.assertAllowed()
