@@ -22,7 +22,8 @@ from lib.cmd_fleet import (  # noqa: E402
 )
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.cmd_harness import command_job  # noqa: E402
-from lib.failure_log import command_learn  # noqa: E402
+from lib.evals import command_eval  # noqa: E402
+from lib.failure_log import command_learn, command_report  # noqa: E402
 from lib.cmd_health import command_health, _check_placement_drift  # noqa: E402,F401
 from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
 from lib.cmd_repo import (
@@ -113,6 +114,10 @@ def main() -> int:
         return command_skills(argv)
     if cmd == "learn":
         return command_learn(argv)
+    if cmd == "report":
+        return command_report(argv)
+    if cmd == "eval":
+        return command_eval(argv)
     if cmd == "job":
         return command_job(argv)
     if cmd == "guide":

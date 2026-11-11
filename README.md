@@ -51,6 +51,8 @@ The launcher's command table (`COMMANDS` in `scripts/lib/cli.py`) is the home of
 | `olivercode restore` | Return a repo to its checkpoint |
 | `olivercode context` | Report the words a session loads and fail over budget |
 | `olivercode learn` | Propose a check or memory entry for a gate failure that recurred three times |
+| `olivercode report` | Count how many times each gate blocked a commit in the last days |
+| `olivercode eval` | Replay the tasks in `tasks/` against an agent and compare two results |
 | `olivercode job` | Run a scheduled agent job in a repo OliverCode governs, from a checkpoint |
 | `olivercode place` | Check that every repo, worktree and backup lives under `repoRoot` |
 | `olivercode clean` | Remove merged, clean worktrees (`--apply`) and list the ones kept |

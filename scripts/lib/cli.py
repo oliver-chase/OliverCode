@@ -25,7 +25,9 @@ COMMANDS = [
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
     ("olivercode audit-fleet", "Run the audit skill's structure check, which includes the description cap, against this machine's skills folder + OliverCode's own skills"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
-    ("olivercode learn [--reject KEY | --accept KEY]", "Propose one check or memory entry for a gate failure that has recurred three times"),
+    ("olivercode learn [--reject KEY | --accept KEY --comparison FILE]", "Propose one check or memory entry for a gate failure that has recurred three times. Accepting needs a passing comparison"),
+    ("olivercode report [--days N]", "Print how many times each gate blocked a commit in the last N days"),
+    ("olivercode eval list|run|compare", "Replay the tasks in tasks/ against an agent and compare two results files"),
     ("olivercode job REPO -- COMMAND", "Run a scheduled agent job in a repo OliverCode governs, and log a failed run"),
     ("olivercode guide", "Print a plain-language overview: first steps, every command, and every skill with the phrases that load it"),
 ]

@@ -1,4 +1,4 @@
-"""The local failure log that the commit hooks write, and the learning proposals built on it.
+"""The local failure log that the commit hooks write, and the learning proposals and gate-block report built on it.
 
 One line per blocked commit or audit finding: time, repo, gate, reason, tab separated. The file sits in
 ~/.olivercode (OLIVERCODE_HOME overrides it), outside every repo, so no commit can carry it.
@@ -6,9 +6,12 @@ One line per blocked commit or audit finding: time, repo, gate, reason, tab sepa
 
 from __future__ import annotations
 
+import json
 import os
 import re
-from datetime import datetime, timezone
+import subprocess
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 RECUR = 3
@@ -82,7 +85,7 @@ def command_learn(argv: list[str]) -> int:
     if argv[:1] == ["--accept"]:
         return _accept(argv[1:])
     if argv:
-        print("Usage: olivercode learn [--reject KEY | --accept KEY]")
+        print("Usage: olivercode learn [--reject KEY | --accept KEY --comparison FILE]")
         return 1
     due = proposals()
     if not due:
@@ -93,20 +96,39 @@ def command_learn(argv: list[str]) -> int:
     print("Evidence:")
     for line in lines:
         print(f"  {line}")
-    print(f"Accept with: olivercode learn --accept \"{k}\"")
+    print(f"Accept with: olivercode learn --accept \"{k}\" --comparison <file from olivercode eval compare>")
     print(f"Reject with: olivercode learn --reject \"{k}\"")
     return 0
 
 
 def _accept(argv: list[str]) -> int:
-    """Record an accepted proposal. The owner adds the rule or memory entry by hand."""
-    if len(argv) != 1:
-        print("Usage: olivercode learn --accept KEY")
+    """Accept a proposal only with a comparison whose pass rate did not fall."""
+    if len(argv) != 3 or argv[1] != "--comparison":
+        print("Stopped: accepting a rule needs the comparison. Run `olivercode eval compare BEFORE AFTER --out FILE` and pass `--comparison FILE`.")
+        return 1
+    comparison = Path(argv[2]).expanduser()
+    if not comparison.is_file():
+        print(f"Stopped: {comparison} does not exist. Run `olivercode eval compare` first.")
+        return 1
+    data = json.loads(comparison.read_text(encoding="utf-8"))
+    if data.get("after", {}).get("pass_rate", 0) < data.get("before", {}).get("pass_rate", 1):
+        print("Stopped: the pass rate fell after the change, so the rule is not accepted by default. "
+              f"Failing tasks: {', '.join(data.get('regressed', [])) or 'none named'}.")
         return 1
     home().mkdir(parents=True, exist_ok=True)
     with open(home() / "accepted.txt", "a", encoding="utf-8") as f:
-        f.write(argv[0] + "\n")
-    rejected_note = "Accepted. Add the check or memory entry, and this proposal is not offered again."
-    reject(argv[0])
-    print(rejected_note)
+        f.write(f"{argv[0]}\t{comparison}\n")
+    print(f"Accepted. Add the rule, then link {comparison} in the story.")
+    return 0
+
+
+def command_report(argv: list[str]) -> int:
+    """`olivercode report [--days N]`: how many times each gate blocked in the last N days."""
+    days = int(argv[1]) if argv[:1] == ["--days"] and len(argv) == 2 else 7
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    blocks = Counter(g for when, _r, g, _x in entries() if when >= f"{since:%Y-%m-%dT%H:%M:%SZ}")
+    print(f"Harness report, last {days} days")
+    print("Gate blocks:" + ("" if blocks else " none logged"))
+    for gate, n in blocks.most_common():
+        print(f"  {gate}: {n}")
     return 0

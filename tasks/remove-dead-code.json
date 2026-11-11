@@ -1,0 +1,9 @@
+{
+  "id": "remove-dead-code",
+  "description": "Delete an unused function and keep the program working.",
+  "files": {
+    "main.py": "def used():\n    return 'ok'\n\ndef unused():\n    return 'never called'\n\nprint(used())\n"
+  },
+  "prompt": "Delete the function nothing calls from main.py. The program must still print ok.",
+  "check": "! grep -q unused main.py && test \"$(python3 main.py)\" = ok"
+}

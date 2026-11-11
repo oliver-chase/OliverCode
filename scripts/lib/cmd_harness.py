@@ -8,7 +8,8 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
-from lib import checkpoint, failure_log
+from lib import failure_log
+from lib.local_config import OC_ROOT
 
 
 def governed(repo: Path) -> str:
@@ -32,7 +33,6 @@ def command_job(argv: list[str]) -> int:
     if problem:
         print(f"Stopped: {problem}, so OliverCode does not govern it. Run `olivercode sync-hooks` for the fleet or `olivercode bootstrap` for a new repo.")
         return 1
-    checkpoint.take(repo)  # an unattended run starts from a state the owner can restore
     ran = subprocess.run(argv[2:], cwd=repo, env={**os.environ, "OLIVERCODE_JOB": "1"})
     if ran.returncode:
         failure_log.record("job", f"{' '.join(argv[2:3])} exited {ran.returncode}", repo.name)
