@@ -23,13 +23,13 @@ HOOKS_DIR = Path(__file__).resolve().parent.parent / "hooks"
 # (event, matcher or None, script). Stop takes no matcher.
 MANAGED = (
     ("SessionStart", "startup", "session_check.py"),
-    ("PreToolUse", "Bash", "commit_guard.py"),
-    ("PreToolUse", "Bash", "placement_guard.py"),
-    ("PreToolUse", "Bash|Edit|Write|MultiEdit", "policy_guard.py"),
-    ("PreToolUse", "Bash", "gh_guard.py"),
+    ("PreToolUse", "Bash|Edit|Write|MultiEdit", "pretool_guard.py"),
     ("PostToolUse", "Bash", "gh_watch.py"),
     ("Stop", None, "early-stop-guard.py"),
 )
+# Entries an earlier install wrote, one per guard. They are still recognised, so a re-install or an
+# uninstall takes them out, and the one pretool_guard.py entry replaces all four.
+LEGACY = ("commit_guard.py", "placement_guard.py", "policy_guard.py", "gh_guard.py")
 TIMEOUT_S = 10
 
 
@@ -40,7 +40,7 @@ def _command(script: str, hooks_dir: Path) -> str:
 # The exact form _command() writes, from any checkout path. It is the only form install has
 # ever written, so nothing looser is needed to recognise an older install.
 _MANAGED_COMMAND = re.compile(
-    r'python3 "(.+)/scripts/hooks/(' + "|".join(re.escape(s) for _, _, s in MANAGED) + r')"')
+    r'python3 "(.+)/scripts/hooks/(' + "|".join(re.escape(s) for s in [m[2] for m in MANAGED] + list(LEGACY)) + r')"')
 
 
 def _is_managed(handler: dict) -> bool:

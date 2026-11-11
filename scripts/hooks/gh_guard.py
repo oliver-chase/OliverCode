@@ -81,18 +81,23 @@ def per_field_edit(command: str) -> bool:
     return bool(re.search(r"\bgh\s+project\s+item-edit\b", command))
 
 
+def refusal(command: str) -> str:
+    """Why a `gh` command is refused, or '' when it may run. A write that passes the other checks is counted."""
+    if not uses_gh(command):
+        return ""
+    why = gh_budget.refusal() or gh_budget.points_refusal()
+    if not why and per_field_edit(command):
+        why = ("A per-field `gh project item-edit` spends about five points a card. Put every card and field in one "
+               "input file and run skills/backlog/scripts/batch_project.py, which sets them in a few calls.")
+    return why or (gh_budget.reserve_write() if is_write(command) else "")
+
+
 def main() -> int:
     try:
         command = (json.load(sys.stdin).get("tool_input") or {}).get("command") or ""
     except (json.JSONDecodeError, AttributeError):
         return 0
-    if not uses_gh(command):
-        return 0
-    why = gh_budget.refusal() or gh_budget.points_refusal()
-    if not why and per_field_edit(command):
-        why = ("A per-field `gh project item-edit` spends about five points a card. Put every card and field in one "
-               "input file and run skills/backlog/scripts/batch_project.py, which sets them in a few calls.")
-    why = why or (gh_budget.reserve_write() if is_write(command) else "")
+    why = refusal(command)
     if why:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                  "permissionDecisionReason": why}}))
