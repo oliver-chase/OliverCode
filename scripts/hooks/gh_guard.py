@@ -76,6 +76,11 @@ def is_write(command: str) -> bool:
     return False
 
 
+def per_field_edit(command: str) -> bool:
+    """A direct `gh project item-edit`, which sets one field of one card and spends about five points each."""
+    return bool(re.search(r"\bgh\s+project\s+item-edit\b", command))
+
+
 def main() -> int:
     try:
         command = (json.load(sys.stdin).get("tool_input") or {}).get("command") or ""
@@ -83,7 +88,11 @@ def main() -> int:
         return 0
     if not uses_gh(command):
         return 0
-    why = gh_budget.refusal() or (gh_budget.reserve_write() if is_write(command) else "")
+    why = gh_budget.refusal() or gh_budget.points_refusal()
+    if not why and per_field_edit(command):
+        why = ("A per-field `gh project item-edit` spends about five points a card. Put every card and field in one "
+               "input file and run skills/backlog/scripts/batch_project.py, which sets them in a few calls.")
+    why = why or (gh_budget.reserve_write() if is_write(command) else "")
     if why:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                  "permissionDecisionReason": why}}))

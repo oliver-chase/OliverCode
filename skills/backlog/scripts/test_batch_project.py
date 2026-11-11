@@ -30,7 +30,8 @@ class Runner:
         elif "issue(number" in q:
             data = {"repository": {f"i{i}": {"id": f"C{i}"} for i in range(q.count(":issue("))}}
         elif "addProject" in q:
-            data = {f"a{i}": {"projectV2Item": {"id": f"I{i}"}} for i in range(q.count("addProject"))}
+            # GitHub names the add payload field `item`, so the fake refuses the old name like the API does.
+            data = {f"a{i}": {"item": {"id": f"I{i}"}} for i in range(q.count("addProject"))} if "{item{id}}" in q else {"errors": "projectV2Item"}
         else:
             data = {f"u{i}": {"projectV2Item": {"id": f"I{i}"}} for i in range(q.count("updateProject"))}
         return subprocess.CompletedProcess(args, 0, json.dumps({"data": data}), "")

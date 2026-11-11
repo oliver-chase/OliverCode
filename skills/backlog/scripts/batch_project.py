@@ -102,7 +102,7 @@ def discovery(cfg, issues, runner):
 
 def mutation_add(project, numbers):
     bits = " ".join(f"a{n}:addProjectV2ItemById(input:{{projectId:\"{project}\",contentId:\"{content}\"}})"
-                    f"{{projectV2Item{{id}}}}" for n, content in numbers)
+                    f"{{item{{id}}}}" for n, content in numbers)
     return f"mutation{{{bits}}}"
 
 
@@ -126,7 +126,7 @@ def drain(cfg, issues, runner):
         content = [(n, data[f"i{n}"]["id"]) for n, issue in enumerate(missing)]
         added = request(runner, mutation_add(cfg["projectId"], content))["data"]
         for n, issue in enumerate(missing):
-            item_ids[issue["number"]] = added[f"a{n}"]["projectV2Item"]["id"]
+            item_ids[issue["number"]] = added[f"a{n}"]["item"]["id"]
     updates = [(item_ids[issue["number"]], field, value) for issue in issues
                for field, value in issue["fields"].items()]
     for start in range(0, len(updates), CHUNK):

@@ -18,14 +18,16 @@ WATCH = REPO_ROOT / "scripts" / "hooks" / "gh_watch.py"
 
 
 class Isolated(unittest.TestCase):
+    hook_env: dict = {}
+
     def setUp(self):
         self.home = temp_dir(self)
-        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_GH_POINTS_FLOOR": "0"})
         patcher.start()
         self.addCleanup(patcher.stop)
 
     def hook(self, script, payload):
-        env = {**os.environ, "OLIVERCODE_HOME": str(self.home)}
+        env = {**os.environ, "OLIVERCODE_HOME": str(self.home), **self.hook_env}
         done = subprocess.run([sys.executable, str(script)], input=json.dumps(payload), capture_output=True, text=True, env=env)
         return json.loads(done.stdout)["hookSpecificOutput"] if done.stdout.strip() else None
 
@@ -60,7 +62,38 @@ class TestWriteCap(Isolated):
             self.assertEqual("", gh_budget.reserve_write())
 
 
+class TestPointsReserve(Isolated):
+    def test_points_under_the_floor_hold_every_caller_until_the_reset(self):
+        with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
+            why = gh_budget.points_refusal(fetch=lambda: {"remaining": 120, "reset": time.time() + 600})
+        self.assertIn("120", why)
+
+    def test_points_above_the_floor_pass_and_the_reading_is_cached(self):
+        calls = []
+        fetch = lambda: calls.append(1) or {"remaining": 4000, "reset": time.time() + 600}
+        with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
+            self.assertEqual("", gh_budget.points_refusal(fetch=fetch))
+            self.assertEqual("", gh_budget.points_refusal(fetch=fetch))
+        self.assertEqual(1, len(calls))
+
+    def test_a_failed_reading_fails_open(self):
+        def boom():
+            raise OSError("no gh")
+        with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
+            self.assertEqual("", gh_budget.points_refusal(fetch=boom))
+
+    def test_the_guard_denies_a_gh_call_when_the_cached_reading_is_low(self):
+        (self.home / "gh-points.json").write_text(json.dumps({"at": time.time(), "remaining": 50, "reset": time.time() + 600}))
+        self.hook_env = {"OLIVERCODE_GH_POINTS_FLOOR": "500"}
+        out = self.hook(GUARD, {"tool_input": {"command": "gh issue list"}})
+        self.assertIn("50 GraphQL points", out["permissionDecisionReason"])
+
+
 class TestHooks(Isolated):
+    def test_a_per_field_item_edit_is_denied_and_points_at_the_batch_script(self):
+        out = self.hook(GUARD, {"tool_input": {"command": "gh project item-edit --id X --field-id F"}})
+        self.assertIn("batch_project.py", out["permissionDecisionReason"])
+
     def test_a_gh_command_passes_when_nothing_is_held(self):
         self.assertIsNone(self.hook(GUARD, {"tool_input": {"command": "gh issue list"}}))
 

@@ -16,6 +16,7 @@ import fcntl
 import json
 import os
 import re
+import subprocess
 import time
 from pathlib import Path
 
@@ -23,6 +24,9 @@ HOLD_SECONDS = 1200
 # GitHub also throttles bursts of writes regardless of the points left (20 minutes of one write every 10
 # seconds tripped it on 2026-11-11), so the machine as a whole gets a rolling cap on writes.
 WRITES_PER_HOUR = int(os.environ.get("OLIVERCODE_GH_WRITES_PER_HOUR") or 90)
+# Stop before GitHub does: below this many GraphQL points every agent holds until the reset. 0 switches it off.
+POINTS_FLOOR = int(os.environ.get("OLIVERCODE_GH_POINTS_FLOOR") or 500)
+POINTS_TTL = 60
 LIMIT_TEXT = re.compile(r"rate limit (already )?exceeded|secondary rate limit|abuse detection|graphql_rate_limit", re.IGNORECASE)
 
 
@@ -90,6 +94,38 @@ def reserve_write(now: float | None = None) -> str:
             return ""
         finally:
             fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def _fetch_points() -> dict:
+    out = subprocess.run(["gh", "api", "rate_limit", "--jq", ".resources.graphql|[.remaining,.reset]|@tsv"],
+                         capture_output=True, text=True, timeout=5, check=True).stdout.split()
+    return {"remaining": int(out[0]), "reset": int(out[1])}
+
+
+def points_refusal(fetch=None, now: float | None = None) -> str:
+    """Stop gh calls while the account's GraphQL points are under the floor, before GitHub refuses them. The reading
+    is cached for a minute in ~/.olivercode so a hook that runs on every call usually reads one file. Fails open."""
+    floor = int(os.environ.get("OLIVERCODE_GH_POINTS_FLOOR") or POINTS_FLOOR)
+    if floor <= 0:
+        return ""
+    now = now or time.time()
+    path = home() / "gh-points.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    if now - data.get("at", 0) > POINTS_TTL:
+        try:
+            data = {"at": now, **(fetch or _fetch_points)()}
+            home().mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data), encoding="utf-8")
+        except Exception:  # noqa: BLE001 -- fail open
+            return ""
+    if data.get("remaining", floor) < floor and data.get("reset", 0) > now:
+        when = time.strftime("%H:%M", time.localtime(data["reset"]))
+        return (f"GitHub has {data['remaining']} GraphQL points left, under the shared reserve of {floor}, so every agent "
+                f"on this machine holds gh calls until about {when}. Queue the pending work in your report.")
+    return ""
 
 
 def is_limit(text: str) -> bool:
