@@ -114,14 +114,34 @@ def synced_marker(root: Path, home: Path | None = None) -> str:
 NOSYNC = ".git.nosync"
 
 
+EXCLUDE_LINE = "/" + NOSYNC
+
+
+def _excluded(repo: Path) -> bool:
+    exclude = repo / NOSYNC / "info" / "exclude"
+    return exclude.is_file() and EXCLUDE_LINE in exclude.read_text(errors="ignore").splitlines()
+
+
+def _exclude(repo: Path) -> None:
+    """Tell git to ignore `.git.nosync`, which it would otherwise list as untracked content for `git add .` to pick up."""
+    exclude = repo / NOSYNC / "info" / "exclude"
+    exclude.parent.mkdir(exist_ok=True)
+    with open(exclude, "a", encoding="utf-8") as f:
+        f.write(("" if not exclude.stat().st_size or exclude.read_text().endswith("\n") else "\n") + EXCLUDE_LINE + "\n")
+
+
 def git_protected(repo: Path) -> bool:
-    """True when `.git` is a symlink to a `.git.nosync` folder."""
-    return (repo / ".git").is_symlink() and (repo / NOSYNC).is_dir()
+    """True when `.git` is a symlink to a `.git.nosync` folder that git ignores."""
+    return (repo / ".git").is_symlink() and (repo / NOSYNC).is_dir() and _excluded(repo)
 
 
 def protect_git(repo: Path) -> str:
-    """Move `.git` to `.git.nosync` and link it back. Returns '' on success, else why the repo was left unchanged."""
+    """Move `.git` to `.git.nosync`, link it back and make git ignore it. Returns '' on success, else why nothing changed."""
     git, nosync = repo / ".git", repo / NOSYNC
+    if git.is_symlink() and nosync.is_dir():
+        if not _excluded(repo):
+            _exclude(repo)
+        return ""
     if git.is_symlink() or not git.is_dir():
         return "not a plain .git folder"
     if nosync.exists():
@@ -131,6 +151,7 @@ def protect_git(repo: Path) -> str:
     git.rename(nosync)
     git.symlink_to(NOSYNC)
     if _git(repo, "rev-parse", "--git-dir").strip():
+        _exclude(repo)
         return ""
     git.unlink()
     nosync.rename(git)

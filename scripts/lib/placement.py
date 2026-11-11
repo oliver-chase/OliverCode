@@ -109,6 +109,8 @@ def linked_worktrees(cfg: Config) -> list[tuple[Path, Path]]:
         for line in out.splitlines():
             if line.startswith("worktree "):
                 path = Path(line[9:])
+                if path.name == ".git.nosync":  # git names the main checkout after a protected repo's git folder
+                    path = path.parent
                 if path.resolve() != repo.resolve():
                     found.append((path, repo))
     return found

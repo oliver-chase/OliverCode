@@ -164,6 +164,19 @@ class TestSyncedRoot(Base):
         self.assertEqual(git(repo, "log", "--oneline").stdout.count("\n"), 1)
         self.assertEqual(maintain.check_git_sync(cfg, True), [])
 
+    def test_the_git_folder_is_ignored_and_the_main_checkout_is_not_a_stray_worktree(self):
+        repo, cfg = self.synced()
+        maintain.check_git_sync(cfg, True)
+        self.assertNotIn(".git.nosync", git(repo, "status", "--short").stdout)
+        self.assertEqual(placement.linked_worktrees(cfg), [])
+
+    def test_a_repo_protected_before_the_ignore_rule_existed_is_repaired(self):
+        repo, cfg = self.synced()
+        maintain.check_git_sync(cfg, True)
+        (repo / ".git.nosync" / "info" / "exclude").write_text("")
+        self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
+        self.assertNotIn(".git.nosync", git(repo, "status", "--short").stdout)
+
     def test_a_running_git_operation_leaves_the_repo_alone(self):
         repo, cfg = self.synced()
         (repo / ".git" / "index.lock").write_text("")
