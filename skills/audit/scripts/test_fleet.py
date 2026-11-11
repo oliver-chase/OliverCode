@@ -47,6 +47,19 @@ class FindSkills(unittest.TestCase):
         self.assertEqual(_fleet.find_skills(Path("/nonexistent-fleet-root")), [])
 
 
+class Tracked(unittest.TestCase):
+    def test_a_folder_that_is_not_a_git_repo_exits_with_one_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit) as caught:
+                _fleet.tracked(tmp)
+        self.assertIn("is not a git repo", str(caught.exception))
+
+    def test_test_files_are_found_by_every_naming_rule(self):
+        for rel in ("tests/a.py", "x/test_a.py", "a_test.py", "a.test.js", "a.spec.ts"):
+            self.assertTrue(_fleet.is_test(rel), rel)
+        self.assertFalse(_fleet.is_test("scripts/latest.py"))
+
+
 class FleetRoot(unittest.TestCase):
     def test_the_environment_variable_points_the_fleet_elsewhere(self):
         self.assertEqual(_fleet.fleet_root({_fleet.ROOT_ENV: "/tmp/elsewhere"}), Path("/tmp/elsewhere"))

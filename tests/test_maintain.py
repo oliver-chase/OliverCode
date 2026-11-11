@@ -4,14 +4,15 @@ import contextlib
 import io
 import os
 import plistlib
+import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import git, load_script, scratch_repo, temp_dir
+from _support import git, git_env, load_script, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import failure_log, maintain, placement  # noqa: E402
+from lib import failure_log, hygiene, maintain, placement  # noqa: E402
 
 
 def quiet(fn, *a, **k):
@@ -93,6 +94,89 @@ class TestIcloud(Base):
             return len(paths)
         with mock.patch.object(maintain, "dataless_files", fake_dataless), mock.patch.object(maintain, "download", fake_download):
             self.assertTrue(maintain.check_icloud(self.cfg, True)[0].fixed)
+
+
+class TestCopies(Base):
+    def make(self):
+        repo = self.root / "app"
+        scratch_repo(repo)
+        (repo / "a.txt").write_text("a")
+        git(repo, "add", "."); git(repo, "commit", "-q", "-m", "x")
+        return repo
+
+    def test_identical_copy_is_deleted_and_older_copy_is_archived(self):
+        repo = self.make()
+        (repo / "a 2.txt").write_text("a")
+        (repo / "b.txt").write_text("new"); (repo / "b 2.txt").write_text("old")
+        os.utime(repo / "b 2.txt", (1, 1))
+        found = maintain.check_copies(self.cfg, True)
+        self.assertTrue(found[0].fixed)
+        self.assertFalse((repo / "a 2.txt").exists())
+        self.assertEqual((self.cfg.archive / "stray-copies" / "app" / "b 2.txt").read_text(), "old")
+
+    def test_a_newer_differing_copy_is_kept_for_the_owner(self):
+        repo = self.make()
+        (repo / "a 2.txt").write_text("changed")
+        os.utime(repo / "a.txt", (1, 1))
+        found = maintain.check_copies(self.cfg, True)
+        self.assertFalse(found[0].fixed)
+        self.assertEqual((repo / "a 2.txt").read_text(), "changed")
+
+    def test_checking_only_deletes_nothing_and_a_clean_repo_reports_nothing(self):
+        repo = self.make()
+        self.assertEqual(maintain.check_copies(self.cfg, False), [])
+        (repo / "a 2.txt").write_text("a")
+        self.assertTrue(maintain.check_copies(self.cfg, False)[0].fixable)
+        self.assertTrue((repo / "a 2.txt").exists())
+
+    def test_an_evicted_copy_is_never_read_and_stays(self):
+        repo = self.make()
+        (repo / "a 2.txt").write_text("a")
+        with mock.patch.object(hygiene, "evicted", return_value=True):
+            found = maintain.check_copies(self.cfg, True)
+        self.assertFalse(found[0].fixed)
+        self.assertTrue((repo / "a 2.txt").exists())
+
+    def test_a_name_with_a_number_and_no_original_is_not_a_copy(self):
+        repo = self.make()
+        (repo / "Chapter 2.txt").write_text("x")
+        self.assertEqual(maintain.check_copies(self.cfg, False), [])
+
+
+class TestSyncedRoot(Base):
+    def test_a_root_under_a_sync_service_is_reported_and_a_plain_root_is_not(self):
+        synced = self.cfg.root / "Dropbox" / "Repos"
+        synced.mkdir(parents=True)
+        cfg = placement.Config(root=synced, worktrees=synced / "_worktrees", archive=synced / "_archive", watch=[], allow=[])
+        self.assertIn("Dropbox", maintain.check_synced_root(cfg)[0].text)
+        self.assertEqual(maintain.check_synced_root(self.cfg), [])
+
+    def test_documents_is_synced_when_icloud_mirrors_it(self):
+        home = temp_dir(self, resolve=True)
+        root = home / "Documents" / "Repos"; root.mkdir(parents=True)
+        self.assertEqual(hygiene.synced_marker(root, home), "")
+        (home / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / "Documents").mkdir(parents=True)
+        self.assertEqual(hygiene.synced_marker(root, home), "iCloud Desktop & Documents")
+
+
+class TestStaleDocs(Base):
+    def commit(self, repo, when, *paths):
+        git(repo, "add", *paths)
+        subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "x"], env=git_env(GIT_COMMITTER_DATE=when), check=True, capture_output=True)
+
+    def test_a_doc_that_trails_the_file_it_names_is_flagged_and_a_fresh_one_is_not(self):
+        repo = self.root / "app"
+        scratch_repo(repo)
+        (repo / "docs").mkdir()
+        (repo / "docs" / "A.md").write_text("See `run.sh`.")
+        (repo / "docs" / "B.md").write_text("See `run.sh`.")
+        (repo / "run.sh").write_text("1")
+        self.commit(repo, "2026-01-01T00:00:00", "docs/A.md", "run.sh")
+        (repo / "run.sh").write_text("2")
+        self.commit(repo, "2026-06-01T00:00:00", "run.sh", "docs/B.md")
+        found = hygiene.stale_docs(repo)
+        self.assertEqual(len(found), 1)
+        self.assertIn("docs/A.md names run.sh", found[0])
 
 
 class TestReport(Base):

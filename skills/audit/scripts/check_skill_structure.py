@@ -26,7 +26,7 @@ each skill. The columns are:
   in-fam, cross-fam  skill references that stay in the family, and that leave it
 A file counts as named when another file holds its file name, its module stem for a script, or
 a `<folder>/<placeholder>` pattern for its folder. The table sorts by `unref`, then size. A README,
-DECISIONS.md, `_REQUIRES` and test files never count as unreferenced.
+DECISIONS.md and test files never count as unreferenced.
 
 Usage:
     check_skill_structure.py                 # scan every skill under the fleet root
@@ -147,7 +147,7 @@ def file_ref_scan(skill_dirs):
 
 
 # SKILL-WEIGHT-1: files that exist for the tooling and serve no step in the skill.
-WEIGHT_EXEMPT_NAMES = {"SKILL.md", "README.md", "DECISIONS.md", "_REQUIRES"}
+WEIGHT_EXEMPT_NAMES = {"SKILL.md", "README.md", "DECISIONS.md"}
 WEIGHT_SKIP_DIRS = {"__pycache__", "node_modules", ".git", "dist"}
 SCRIPT_SUFFIXES = {".py", ".js", ".sh"}
 
@@ -202,13 +202,12 @@ def weight_row(skill_dir):
     untested = [str(f.relative_to(skill_dir)) for f in files if f.relative_to(skill_dir).parts[0] == "scripts"
                 and f.suffix in SCRIPT_SUFFIXES and not f.name.startswith("test_") and not exercised(f.stem)]
     skill_md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    desc = re.search(r"^description:\s*(.*?)(?=^\w[\w-]*:|^---)", skill_md, re.S | re.M)
     return {
         "skill": skill_dir.name,
         "files": len(files),
         "bytes": sum(f.stat().st_size for f in files),
         "skill_lines": len(skill_md.splitlines()),
-        "desc_words": len(desc.group(1).lstrip(">|-").split()) if desc else 0,
+        "desc_words": _fleet.description_words(skill_md),
         "unref": unref,
         "uncalled": uncalled,
         "unloaded": unloaded,

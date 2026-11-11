@@ -14,9 +14,10 @@ Tests: python3 -m unittest test_sweep   (from this scripts/ folder)
 """
 
 import re
-import subprocess
 import sys
 from pathlib import Path
+
+from _fleet import is_test, tracked as git_tracked
 
 CODE = {".py", ".sh", ".js", ".ts"}
 TEXT = CODE | {".md", ".json", ".yml", ".yaml", ".toml", ".html", ""}
@@ -27,13 +28,7 @@ LIMIT = 400
 
 
 def tracked(repo):
-    out = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True, check=True).stdout
-    return [f for f in out.splitlines() if (Path(repo) / f).is_file() and Path(f).suffix in TEXT]
-
-
-def is_test(rel):
-    name = Path(rel).name
-    return name.startswith("test_") or rel.startswith("tests/") or "/tests/" in rel
+    return [f for f in git_tracked(repo) if Path(f).suffix in TEXT]
 
 
 def sweep(repo):
@@ -63,7 +58,8 @@ def sweep(repo):
             base = Path(rel).name
             parent = rel.startswith(("scripts/", "docs/", "core/")) or "/scripts/" in rel or "/references/" in rel
             if parent and base not in ("SKILL.md", "README.md", "CLAUDE.md", "__init__.py"):
-                refs = [o for o in files if o != rel and not is_test(o) and (base in text[o] or Path(base).stem in text[o])]
+                imported = re.compile(r"\b(?:import|from)\s+%s\b" % re.escape(Path(base).stem))
+                refs = [o for o in files if o != rel and not is_test(o) and (base in text[o] or imported.search(text[o]))]
                 if not refs:
                     rows.append(("orphan", rel, "nothing outside its own tests names it"))
         if Path(rel).suffix in CODE and not is_test(rel):

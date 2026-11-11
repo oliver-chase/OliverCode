@@ -34,7 +34,7 @@ count_lines() {
 kind() {
   case "$1" in
     */tests/*|tests/*|*test_*.py|*_test.py|*.test.*|*.spec.*) echo tests ;;
-    */SKILL.md|SKILL.md|*/skills/*|skills/*|*/agents/*|agents/*) echo skills ;;
+    */SKILL.md|SKILL.md|*/skills/*|skills/*|references/*|*/references/*|*/agents/*|agents/*) echo skills ;;
     *.md|*.txt|*.rst|docs/*|*/docs/*) echo docs ;;
     *.py|*.sh|*.js|*.ts|*.swift|*.applescript|*.scpt|*.zsh|*.rb|*.go|scripts/*|*/scripts/*) echo code ;;
     *.json|*.yml|*.yaml|*.toml|*.csv|*.plist|*.example|.githooks/*|*.cfg|*.ini) echo config ;;

@@ -20,11 +20,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _fleet import is_test
 from fleet_check import CONTRAST  # one contrast-framing pattern for the audit and the fleet check
 
 STORY = re.compile(r"(^|[^\w/#&])#0*[1-9][0-9]*\b|[\w.-]+/[\w.-]+#0*[1-9][0-9]*\b")
 CODE = re.compile(r"\.(py|sh|js|mjs|ts|tsx)$")
-TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$")
 COAUTHOR_OK = re.compile(r"^Co-Authored-By: [^<>]+ <[^<>@ ]+@[^<> ]+>$")
 CLASSES = ("no-story", "pr-merge", "code-no-test", "coauthor-form", "voice")
 SEP, END = "\x1e", "\x1f"
@@ -48,8 +48,8 @@ def findings(repo, since):
             found["pr-merge"].append(short)
         if not merge and not STORY.search(text):
             found["no-story"].append(short)
-        code = [f for f in files if CODE.search(f) and not TEST.search(f)]
-        if not merge and code and not any(TEST.search(f) for f in files) \
+        code = [f for f in files if CODE.search(f) and not is_test(f)]
+        if not merge and code and not any(is_test(f) for f in files) \
                 and not re.search(r"^\s*no test:\s*\S", text, re.I | re.M):
             found["code-no-test"].append(short)
         if any(re.match(r"\s*co-authored-by:", l, re.I) and not COAUTHOR_OK.match(l) for l in text.splitlines()):

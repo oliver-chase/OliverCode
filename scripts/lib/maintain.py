@@ -1,9 +1,9 @@
 """`olivercode maintain`: check this machine's harness and repair what is safe to repair.
 
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
-a dangling activation link, prunes a worktree whose folder is gone, and downloads git files that iCloud evicted
-from disk. A problem that is not safe to change on its own (hooks that drifted, a checkout outside repoRoot, a
-failing health check) is reported, written to the failure log so `learn` can see it recur, and left alone.
+a dangling activation link, prunes a worktree whose folder is gone, downloads git files that iCloud evicted
+from disk, and clears numbered sync-conflict copies (hygiene.py). A problem that is not safe to change on its own (hooks
+that drifted, a checkout outside repoRoot, a repoRoot inside a synced folder, a doc that trails its code, a failing health check) is reported, written to the failure log so `learn` can see it recur, and left alone.
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
 """
 
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import failure_log, placement
+from lib import failure_log, hygiene, placement
 from lib.local_config import OC_ROOT, claude_dir
 
 LABEL = "com.olivercode.maintain"
@@ -119,6 +119,36 @@ def check_placement(cfg: placement.Config) -> list[Problem]:
     return [Problem("placement", f"{f.kind} out of place: {f.path}. {f.fix}") for f in placement.findings(cfg)]
 
 
+def check_copies(cfg: placement.Config, fix: bool) -> list[Problem]:
+    """Numbered sync-conflict copies: identical ones are deleted, older ones archived, newer ones left for the owner."""
+    found = []
+    for repo in _repos(cfg):
+        copies = hygiene.stray_copies(repo)
+        if not copies:
+            continue
+        keep = [c for c in copies if c.verdict == "newer"]
+        problem = Problem("copies", f"{repo.name}: {len(copies)} numbered sync copy(ies), {len(keep)} newer than the original", fixable=not keep)
+        if fix:
+            hygiene.clear_copies(repo, cfg.archive, copies)
+            problem.fixed = not keep and not hygiene.stray_copies(repo)
+            problem.fixable = True
+        found.append(problem)
+    return found
+
+
+def check_synced_root(cfg: placement.Config) -> list[Problem]:
+    """A repo root inside a synced folder is what creates the copies, so it is the owner's to move."""
+    marker = hygiene.synced_marker(cfg.root)
+    if not marker:
+        return []
+    return [Problem("synced-root", f"repoRoot {cfg.root} is inside {marker}. Set repoRoot in olivercode.local.json to a folder outside any synced folder, then run `olivercode place`")]
+
+
+def check_docs(cfg: placement.Config) -> list[Problem]:
+    """A document that trails the code it names is advisory: only the owner knows which side is right."""
+    return [Problem("docs", f"{repo.name}: {line}") for repo in _repos(cfg) for line in hygiene.stale_docs(repo)]
+
+
 def check_health() -> list[Problem]:
     """Anything `olivercode health` fails on that the steps above did not repair."""
     from lib.cmd_health import command_health
@@ -131,7 +161,8 @@ def check_health() -> list[Problem]:
 
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
     cfg = cfg or placement.config()
-    problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_icloud(cfg, fix), *check_placement(cfg)]
+    problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
+                *check_synced_root(cfg), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
     return problems

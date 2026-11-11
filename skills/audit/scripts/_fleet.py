@@ -2,6 +2,7 @@
 
 import os
 import re
+import subprocess
 from pathlib import Path
 
 ROOT_ENV = "SKILL_FLEET_ROOT"
@@ -16,6 +17,20 @@ def fleet_root(environ=None):
 
 
 FLEET_ROOT = fleet_root()
+TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.(?:test|spec)\.[^/]*$")
+
+
+def is_test(rel):
+    """Whether a repo-relative path is a test file. size.sh keeps the same rule in shell."""
+    return bool(TEST.search(rel))
+
+
+def tracked(repo):
+    """Tracked files of a git repo that exist on disk. Exits with one line when `repo` is not a git repo."""
+    done = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True)
+    if done.returncode:
+        raise SystemExit(f"{repo} is not a git repo, so there is no tracked-file list")
+    return [f for f in done.stdout.splitlines() if (Path(repo) / f).is_file()]
 
 
 def scan_root(argv, default=FLEET_ROOT):

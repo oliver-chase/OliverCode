@@ -13,7 +13,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fleet_check  # noqa: E402
 
-BASELINE = json.loads((Path(__file__).resolve().parents[3] / "shared" / "kanban-baseline.json").read_text(encoding="utf-8"))
+BASELINE_FILE = Path(__file__).resolve().parents[3] / "shared" / "kanban-baseline.json"
+BASELINE = json.loads(BASELINE_FILE.read_text(encoding="utf-8")) if BASELINE_FILE.is_file() else None
 
 
 def make_repo(tmp, files):
@@ -67,6 +68,33 @@ class Budgets(unittest.TestCase):
             self.assertIn("not measured", out)
 
 
+class AloneBoard(unittest.TestCase):
+    def test_a_missing_baseline_checker_is_reported_and_the_rest_still_prints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(tmp, {"docs/backlog-config.json": json.dumps(
+                {"repoOwner": "o", "repoName": "r", "projectNumber": 1, "projectOwner": "o"})})
+            with mock.patch.object(fleet_check, "BASELINE_SCRIPT", Path(tmp) / "absent.py"):
+                _, out = run(str(repo))
+            self.assertIn("board: not checked", out)
+            self.assertIn("voice:", out)
+
+
+class Target(unittest.TestCase):
+    def test_a_skill_folder_counts_its_references_as_skill_words(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(tmp, {"SKILL.md": "one two\n", "references/a.md": "three four five\n", "README.md": "six\n"})
+            _, out = run("--time", str(repo))
+            self.assertIn("skillWords: 5", out)
+            self.assertIn("docWords: 1", out)
+            self.assertIn("testSeconds: not measured (no tests/test_*.py to run)", out)
+
+    def test_a_folder_that_is_not_a_git_repo_stops_with_one_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit) as caught:
+                run(tmp)
+        self.assertIn("is not a git repo", str(caught.exception))
+
+
 class Voice(unittest.TestCase):
     def test_names_the_file_and_line_of_each_violation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -108,21 +136,7 @@ class Voice(unittest.TestCase):
             self.assertIn("voice: no violations found", out)
 
 
-class PullRequestMerges(unittest.TestCase):
-    def test_a_pull_request_merge_is_named(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = make_repo(tmp, {"README.md": "ok\n"})
-            env = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1", "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
-                   "GIT_AUTHOR_NAME": "a", "GIT_AUTHOR_EMAIL": "a" + "@x.invalid", "GIT_COMMITTER_NAME": "a",
-                   "GIT_COMMITTER_EMAIL": "a" + "@x.invalid"}
-            for msg in ("Add the readme (#1)", "Merge pull request #3 from a/topic"):
-                subprocess.run(["git", "-C", str(repo), "commit", "-q", "--no-verify", "--allow-empty", "-m", msg],
-                               check=True, env=env)
-            _, out = run(str(repo))
-            self.assertIn("1 pull-request merge", out)
-            self.assertIn("Merge pull request #3", out)
-
-
+@unittest.skipUnless(BASELINE, "the board baseline sits in the OliverCode repo, beside skills/")
 class Board(unittest.TestCase):
     def drift(self, lanes):
         with tempfile.TemporaryDirectory() as tmp:

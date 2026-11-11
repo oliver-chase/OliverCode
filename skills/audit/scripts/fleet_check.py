@@ -22,6 +22,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from _fleet import is_test, tracked
+
 BUDGET_FILE = "docs/BUDGET.json"
 BASELINE_SCRIPT = Path(__file__).resolve().parents[2] / "backlog" / "scripts" / "check_kanban_baseline.py"
 
@@ -33,11 +35,6 @@ SMALL = {"a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "
 CURLY = "‘’“”"
 
 
-def tracked(repo):
-    out = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True, check=True).stdout
-    return [f for f in out.splitlines() if (Path(repo) / f).is_file()]
-
-
 def read(repo, rel):
     try:
         return (Path(repo) / rel).read_text(encoding="utf-8")
@@ -45,20 +42,16 @@ def read(repo, rel):
         return ""
 
 
-def is_test(rel):
-    return rel.endswith(".py") and (Path(rel).name.startswith("test_") or rel.startswith("tests/") or "/tests/" in rel)
-
-
 def measure(repo, files):
     docs = skills = tests = 0
     for rel in files:
         if rel.endswith(".md"):
             words = len(read(repo, rel).split())
-            if rel.startswith("skills/") or "/skills/" in rel:
+            if rel.startswith(("skills/", "references/")) or "/skills/" in rel or "/references/" in rel or Path(rel).name == "SKILL.md":
                 skills += words
             else:
                 docs += words
-        elif is_test(rel):
+        elif rel.endswith(".py") and is_test(rel):
             tests += len(re.findall(r"^\s*(?:async\s+)?def test_", read(repo, rel), re.M))
     return {"testCount": tests, "docWords": docs, "skillWords": skills}
 
@@ -82,13 +75,14 @@ def run_tests(repo, per_module=None):
     return round(time.monotonic() - start, 1)
 
 
-def budget_lines(measured, budget):
+def budget_lines(measured, budget, timed=False):
     """One line per measure against its budget, and how many are over."""
     lines, over = [], 0
     for key in ("testCount", "testSeconds", "docWords", "skillWords"):
         value, limit = measured.get(key), budget.get(key)
         if value is None:
-            lines.append(f"{key}: not measured" + (" (pass --time)" if key == "testSeconds" else ""))
+            hint = (" (no tests/test_*.py to run)" if timed else " (pass --time)") if key == "testSeconds" else ""
+            lines.append(f"{key}: not measured{hint}")
         elif limit is None:
             lines.append(f"{key}: {value}, no budget set")
         elif value > limit:
@@ -136,16 +130,19 @@ def board_drift(repo, fields_file):
     config_path = Path(repo) / "docs" / "backlog-config.json"
     if not fields_file and not config_path.is_file():
         return None
-    spec = importlib.util.spec_from_file_location("check_kanban_baseline", BASELINE_SCRIPT)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
     config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None
     name = f"{config['repoOwner']}/{config['repoName']}" if config else "the saved board"
     try:
+        spec = importlib.util.spec_from_file_location("check_kanban_baseline", BASELINE_SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
         fields = json.loads(Path(fields_file).read_text(encoding="utf-8")) if fields_file else mod.read_fields_from_gh(config)
     except (SystemExit, OSError, ValueError) as exc:
         return name, None, str(exc)
-    return name, mod.check_baseline(fields, mod.load_baseline(), config), ""
+    try:
+        return name, mod.check_baseline(fields, mod.load_baseline(), config), ""
+    except (SystemExit, OSError, ValueError) as exc:
+        return name, None, str(exc)
 
 
 def main(argv=None):
@@ -164,7 +161,7 @@ def main(argv=None):
     per_module = {}
     measured["testSeconds"] = run_tests(repo, per_module) if args.time else None
     print(f"== Budgets ({BUDGET_FILE if budget else 'no budget file'})")
-    lines, over = budget_lines(measured, budget)
+    lines, over = budget_lines(measured, budget, args.time)
     print("\n".join(lines))
     if per_module:
         slowest = sorted(per_module.items(), key=lambda kv: kv[1], reverse=True)[:3]
@@ -179,15 +176,6 @@ def main(argv=None):
         kinds[kind] = kinds.get(kind, 0) + 1
     print("voice: " + (", ".join(f"{v} {k}" for k, v in sorted(kinds.items())) if kinds else "no violations found"))
     problems += len(findings)
-
-    print("== Merges")
-    # Branches merge after independent QA with no pull request (docs/RULES.md, "The backlog").
-    merges = subprocess.run(["git", "-C", str(repo), "log", "--since=90.days", "--format=%h %s",
-                             "--grep=^Merge pull request #"], capture_output=True, text=True).stdout.splitlines()
-    for line in merges:
-        print(f"merge: {line}")
-    print(f"merges: {len(merges)} pull-request merge(s) in 90 days" if merges else "merges: no pull-request merges")
-    problems += len(merges)
 
     print("== Board")
     drift = board_drift(repo, args.fields_file)

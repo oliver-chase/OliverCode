@@ -29,6 +29,16 @@ class SweepTest(unittest.TestCase):
         self.assertNotIn(("unused-def", "used"), rows)
         self.assertTrue(any(k == "oversized" for k, _, _ in sweep.sweep(root)))
 
+    def test_flags_an_orphan_whose_stem_is_an_everyday_word(self):
+        root = git_repo({
+            "scripts/word.py": "x = 1\n",
+            "scripts/used.py": "x = 1\n",
+            "scripts/run.sh": "python3 used.py\n",
+            "README.md": "Count the word total. Run scripts/run.sh.\n",
+        })
+        orphans = {w for k, w, _ in sweep.sweep(root) if k == "orphan"}
+        self.assertEqual(orphans, {"scripts/word.py"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -115,7 +115,7 @@ class WeightRow(unittest.TestCase):
     def test_exempt_names_never_count(self):
         with tempfile.TemporaryDirectory() as tmp:
             skill = make_skill(tmp, extra=())
-            for name in ("README.md", "DECISIONS.md", "_REQUIRES", "test_used.py"):
+            for name in ("README.md", "DECISIONS.md", "test_used.py"):
                 (skill / name).write_text("x\n", encoding="utf-8")
             row = C.weight_row(skill)
         self.assertEqual(row["unref"], [])

@@ -9,9 +9,9 @@ An audit tells the owner what a target is meant to be, what it is today and what
 
 ## Opening message
 
-Send this first, in one turn, exactly as written, with no other line before or after it. A request that names its target, such as "audit this" inside a repo, skips it and audits that repo whole.
+Send this first, in one turn, exactly as written, with no other line before or after it. A request that names its target, whether a repo, a skill, a skills or docs folder, a commit range or a plan file, skips it and audits that target.
 
-> I read every line of what you point me at, check it against seven lenses (new-user flow, self-containment, accuracy, one home per idea, unused parts, cost to load and run, voice), verify each finding, and file every one in your backlog.
+> I read every line of what you point me at, check it against seven lenses (autonomy and user flow, self-containment, accuracy, one home per concept, over-engineering and unused parts, cost in use, voice), verify each finding, and file every one in your backlog.
 >
 > You can answer in any of these ways:
 > 1. Say "audit this" inside a repo, and I will audit the whole repo.
@@ -52,7 +52,7 @@ Every audit, on every route, prints these headings in this order. `check_report.
 1. **What it is.** What the target is meant to be and for whom, in one or two sentences
 2. **Goal.** The result this audit aims at, with a size target in lines
 3. **Size today.** The `size.sh` table, the verdict on whether it is the right size, the ratios and the `fleet_check.py --time` budget lines. State what loads in every session and what loads on use
-4. **Findings.** One table per lens (the seven in `references/lenses.md`, plus test necessity and accuracy) with `file:line`, the evidence, the smallest fix and the issue that holds it
+4. **Findings.** One table per lens (the seven in `references/lenses.md`, plus test necessity) with `file:line`, the evidence, the smallest fix and the issue that holds it
 5. **Cuts and simplifications.** A table of every deletion, merge and tool swap: what goes, lines removed, feature kept, issue, and the total against today's size. Estimates are labeled
 6. **Outcomes.** What the target is after the fixes, before and after in files, lines, skills and bytes, whether a new user reaches a result by talking, and whether the fixes reach the goal. When they only trim, name the structural move that would reach it
 7. **Added to the board.** The epic and every story with number, title, priority, size and status, then the open items that work against the goal for the owner to keep, defer or close
