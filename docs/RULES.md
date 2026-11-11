@@ -79,14 +79,15 @@ When the owner asks for an audit, its reviewers run in parallel, one per area. E
 
 `.githooks/pre-commit` runs the gates on every commit git runs it for. Four things skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`, so a hook change updates one table.
 
-Four Claude Code hooks run inside every session, and `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
+Five Claude Code hooks run inside every session, and `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
 
 - `scripts/hooks/session_check.py` (`SessionStart`) tells the session once what would fail silently in the folder it opened: a repo whose gates git skips, a git repo with no gates, or a broken rules link. It prints nothing when all is well
 - `scripts/hooks/commit_guard.py` (`PreToolUse` on Bash) refuses a `git commit` that would skip the repo's gates, whether gates are present while `core.hooksPath` does not run them, `--no-verify` is passed (including inside `bash -c` and `eval`), or `core.hooksPath` is overridden
 - `scripts/hooks/placement_guard.py` (`PreToolUse` on Bash) refuses a `git clone` outside `repoRoot` and a `git worktree add` outside `<repoRoot>/_worktrees`, and names the right path. `session_check.py` and `olivercode health` name the repos, worktrees and backups already outside it, `olivercode place` lists the fix for each and `olivercode clean` removes merged, clean worktrees
+- `scripts/hooks/policy_guard.py` (`PreToolUse` on Bash, Edit and Write) enforces the repo's `.olivercode/policy.json`: it denies a command outside `commands.allow` or matching `commands.deny`, denies an edit to a path in `paths.deny`, and asks the owner at a `git push`, a delete of more than ten files or the third failed attempt at one gate. Each decision goes to the failure log. A repo with no policy is unrestricted, `olivercode health` warns, and `olivercode policy init` writes the default. `olivercode checkpoint` records a repo before an unattended run and `olivercode restore` undoes the run. `olivercode context` and the session-start note fail when the always-loaded files exceed `contextWords` in `docs/BUDGET.json`
 - `scripts/hooks/early-stop-guard.py` (`Stop`, `EARLY-STOP-1` in `docs/DECISIONS.md`) sends a turn back to work when it ends by promising work it did not do
 
-All four are deterministic and fail open, so a hook's own bug never blocks a commit or a session. `olivercode health` fails when one is missing on a machine where install linked this checkout.
+All five are deterministic and fail open, so a hook's own bug never blocks a commit or a session. `olivercode health` fails when one is missing on a machine where install linked this checkout.
 
 Completion: run the repo's canonical validation before committing and stop on failure. A failing run never counts as completion. The mechanically enforced requirement is the pre-commit hook plus the repo's own `scripts/validate.sh`.
 

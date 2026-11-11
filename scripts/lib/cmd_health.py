@@ -122,6 +122,18 @@ def command_health(fleet_root: Path | None = None) -> int:
     if not stray:
         t.ok("every repo, worktree and backup is under repoRoot")
 
+    # Permission policy and the context budget (lib/policy.py, lib/context_budget.py).
+    print("\nPolicy and context budget:")
+    from lib import context_budget, policy
+    gaps = [r for r in [OC_ROOT, *(p for _n, _pr, p in _iter_fleet(load_repo_profiles(OC_ROOT)[0], fleet_root or OC_ROOT.parent))]
+            if (r / ".git").exists() and not (r / policy.POLICY_FILE).is_file()]
+    for r in gaps:
+        t.warn(f"{r.name} has no permission policy, so no command or path is limited. Run `olivercode policy init {r}` for the default")
+    if not gaps:
+        t.ok("every governed repo has a permission policy")
+    within, text = context_budget.report(OC_ROOT)
+    t.ok(text.splitlines()[0]) if within else t.fail(text.splitlines()[0])
+
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # failure classes.

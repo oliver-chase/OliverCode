@@ -46,6 +46,10 @@ The launcher's command table (`COMMANDS` in `scripts/lib/cli.py`) is the home of
 | `olivercode uninstall` | Remove what `install` wrote and restore what it backed up |
 | `olivercode update` | Pull this checkout, re-run `install`, then `sync-hooks` |
 | `olivercode health` | Check this machine: hooks, skill links, voice copies, remotes, file sizes |
+| `olivercode policy` | Write the default permission policy into a repo |
+| `olivercode checkpoint` | Record a repo's state before an unattended run |
+| `olivercode restore` | Return a repo to its checkpoint |
+| `olivercode context` | Report the words a session loads and fail over budget |
 | `olivercode place` | Check that every repo, worktree and backup lives under `repoRoot` |
 | `olivercode clean` | Remove merged, clean worktrees (`--apply`) and list the ones kept |
 | `olivercode conform` | Check a repo, or every registered repo, against `docs/CONTRACT.md` |

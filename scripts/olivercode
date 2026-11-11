@@ -23,7 +23,10 @@ from lib.cmd_fleet import (  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.cmd_health import command_health, _check_placement_drift  # noqa: E402,F401
 from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
-from lib.cmd_repo import command_bootstrap, command_clean, command_discover, command_place, command_size, command_skills  # noqa: E402
+from lib.cmd_repo import (
+    command_bootstrap, command_checkpoint, command_clean, command_context, command_discover, command_place, command_policy,
+    command_restore, command_size, command_skills,
+)  # noqa: E402
 from lib.local_config import OC_ROOT  # noqa: E402,F401
 
 
@@ -73,6 +76,14 @@ def main() -> int:
         root, rest = _take_root_flag(argv)
         _reject_extra(cmd, rest)
         return command_health(root)
+    if cmd == "policy":
+        return command_policy(argv)
+    if cmd in ("checkpoint", "restore", "context"):
+        if len(argv) > 1:
+            _reject_extra(cmd, argv[1:])
+        target = Path(argv[0]).expanduser() if argv else Path.cwd()
+        run = {"checkpoint": command_checkpoint, "restore": command_restore, "context": command_context}[cmd]
+        return run(target) if _require_dir(target) else 1
     if cmd == "place":
         _reject_extra(cmd, argv)
         return command_place()

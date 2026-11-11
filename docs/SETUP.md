@@ -306,6 +306,10 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 - `conform [DIR]` checks one repo, or every registered repo when it gets no directory, against `docs/CONTRACT.md`, which lists each requirement, its fix and how a repo records an allowed difference. `--offline` skips the board and GitHub About checks, which are the only ones that call GitHub. It replaced the fleet hook, board and baseline checks that `health` used to run
 - `place` checks that every repo, worktree and backup under the watched folders lives under `repoRoot`, names the fix for each and exits non-zero on any stray. `health` runs the same check
 - `clean` lists the worktrees that are merged and clean and so reclaimable, with the reason each other worktree is kept, and `--apply` removes the reclaimable ones with `git worktree remove`
+- `policy init [DIR]` writes `.olivercode/policy.json`, the allowed commands and paths and the triggers that ask the owner
+- `checkpoint [DIR]` records a repo's commit, uncommitted changes and untracked files before an unattended run
+- `restore [DIR]` returns a repo to its checkpoint and lists the files it removed
+- `context [DIR]` prints the words a session loads at start and exits non-zero over the `contextWords` budget
 - `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. It checks this machine only. What each repo must match is `conform`'s job. A repo, private repo or control plane that is not on this machine is noted once and not counted
 - `update` runs `git pull`, then `install` (so a new skill or Claude Code hook reaches this machine), then `sync-hooks`. Run it on each device to bring it current
 - `sync-hooks` converges pre-commit hooks and `core.hooksPath` across the fleet and the private repos. It also runs at the end of `update`

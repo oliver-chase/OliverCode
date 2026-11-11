@@ -313,3 +313,41 @@ def command_clean(apply: bool) -> int:
     lines = placement.clean(apply=apply)
     print("\n".join(lines) if lines else "No linked worktrees found.")
     return 1 if any(line.startswith("FAILED") for line in lines) else 0
+
+
+def command_policy(argv: list[str]) -> int:
+    """`olivercode policy init [DIR]`: write the default permission policy into a repo."""
+    from lib import policy
+    if not argv or argv[0] != "init" or len(argv) > 2:
+        print("Usage: olivercode policy init [DIR]")
+        return 1
+    target = Path(argv[1] if len(argv) > 1 else ".").expanduser().resolve()
+    if not target.is_dir():
+        print(f"Error: {target} is not a directory.")
+        return 1
+    if (target / policy.POLICY_FILE).exists():
+        print(f"{target / policy.POLICY_FILE} already exists; left as it is.")
+        return 0
+    print(f"Wrote {policy.write_default(target)}")
+    return 0
+
+
+def command_checkpoint(target: Path) -> int:
+    from lib import checkpoint
+    text = checkpoint.take(target.resolve())
+    print(text)
+    return 1 if text.startswith("Stopped") else 0
+
+
+def command_restore(target: Path) -> int:
+    from lib import checkpoint
+    text = checkpoint.restore(target.resolve())
+    print(text)
+    return 1 if text.startswith("Stopped") else 0
+
+
+def command_context(target: Path) -> int:
+    from lib import context_budget
+    ok, text = context_budget.report(target.resolve())
+    print(text)
+    return 0 if ok else 1

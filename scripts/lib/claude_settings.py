@@ -25,6 +25,7 @@ MANAGED = (
     ("SessionStart", "startup", "session_check.py"),
     ("PreToolUse", "Bash", "commit_guard.py"),
     ("PreToolUse", "Bash", "placement_guard.py"),
+    ("PreToolUse", "Bash|Edit|Write|MultiEdit", "policy_guard.py"),
     ("Stop", None, "early-stop-guard.py"),
 )
 TIMEOUT_S = 10
