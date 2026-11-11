@@ -10,6 +10,7 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Failure log: each blocked commit adds one tab-separated line (time, repo, gate, reason) to a local
 # file outside every repo, so a failure that recurs can be counted. A gate announces itself through
 # GATE_NAME, and the first BLOCKED line any gate prints becomes the reason.
+[ -n "${HOOK_DIR:-}" ] || { printf 'failure-log: build this fragment into a hook\n' >&2; exit 1; }
 OLIVERCODE_FAILURE_LOG="${OLIVERCODE_FAILURE_LOG:-$HOME/.olivercode/failures.log}"
 GATE_NAME="hook"
 BLOCK_REASON=""
@@ -58,7 +59,8 @@ if grep -qF "$COMMENT_CHAR Please enter the commit message" "$MSG_FILE"; then
 else
   MESSAGE="$(cat "$MSG_FILE")"
 fi
-SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}')"
+# sed quits at the first non-blank line, so a long message can close the pipe before printf finishes.
+SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}' || true)"
 
 # SIZE-RAISE-1. A commit that raises "lines" in docs/SIZE-BASELINE.json by more than
 # raiseCapPercent of the committed value (default 2) must declare a story sized L or XL with a

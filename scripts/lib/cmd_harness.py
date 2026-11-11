@@ -1,4 +1,4 @@
-"""Launcher commands `job` and `release`: run an agent job under the gates, and cut a version."""
+"""Launcher command `job`: run an agent job under the gates."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
-from lib import failure_log
-from lib.local_config import OC_ROOT
+from lib import checkpoint, failure_log
 
 
 def governed(repo: Path) -> str:
@@ -33,25 +32,8 @@ def command_job(argv: list[str]) -> int:
     if problem:
         print(f"Stopped: {problem}, so OliverCode does not govern it. Run `olivercode sync-hooks` for the fleet or `olivercode bootstrap` for a new repo.")
         return 1
+    checkpoint.take(repo)  # an unattended run starts from a state the owner can restore
     ran = subprocess.run(argv[2:], cwd=repo, env={**os.environ, "OLIVERCODE_JOB": "1"})
     if ran.returncode:
         failure_log.record("job", f"{' '.join(argv[2:3])} exited {ran.returncode}", repo.name)
     return ran.returncode
-
-
-def command_release(argv: list[str]) -> int:
-    """`olivercode release major|minor|patch STORY...`: raise VERSION and add a CHANGELOG entry naming the closed stories."""
-    if len(argv) < 2 or argv[0] not in ("major", "minor", "patch") or not all(re.fullmatch(r"#?\d+", s) for s in argv[1:]):
-        print("Usage: olivercode release major|minor|patch STORY [STORY...]")
-        return 1
-    version_file = OC_ROOT / "VERSION"
-    major, minor, patch = (int(x) for x in version_file.read_text().strip().split("."))
-    major, minor, patch = {"major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1)}[argv[0]]
-    new = f"{major}.{minor}.{patch}"
-    version_file.write_text(new + "\n")
-    stories = ", ".join(f"#{s.lstrip('#')}" for s in argv[1:])
-    log = OC_ROOT / "CHANGELOG.md"
-    head, _, rest = log.read_text().partition("\n## ")
-    log.write_text(f"{head}\n## {new} ({date.today().isoformat()})\n\nClosed {stories}.\n" + (f"\n## {rest}" if rest else ""))
-    print(f"Version {new}. Commit VERSION and CHANGELOG.md with the release.")
-    return 0

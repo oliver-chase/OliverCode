@@ -310,6 +310,10 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 - `checkpoint [DIR]` records a repo's commit, uncommitted changes and untracked files before an unattended run
 - `restore [DIR]` returns a repo to its checkpoint and lists the files it removed
 - `context [DIR]` prints the words a session loads at start and exits non-zero over the `contextWords` budget
+- `learn` reads the failure log (`~/.olivercode/failures.log`, one line per blocked commit or audit finding) and, when the same gate and reason appear three times, prints one proposed check or memory entry with the three lines as evidence. It prints `Nothing due` otherwise. `--reject KEY` and `--accept KEY` stop that proposal returning, and the owner writes the rule or memory entry by hand
+- `job REPO -- COMMAND` runs a scheduled agent job from a checkpoint in a repo whose hooks git runs, so the commit gates apply and a block lands in the failure log. It stops and names a repo that OliverCode does not govern
+- `health` also compares `VERSION` with the `upstream` remote's and prints the changelog entries a fork is missing. Both files are edited by hand
+- `voiceFile` in `olivercode.local.json` names the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of the neutral `docs/VOICE.md`
 - `health` runs the dependency, entrypoint and placement-drift checks, plus the Claude Code hook entries in `~/.claude/settings.json` and the topology checks: skill links, voice copies (each installed suite's `docs/VOICE.md` must match this repo's), remote reachability and tracked-file size against GitHub's 100MB limit. It checks this machine only. What each repo must match is `conform`'s job. A repo, private repo or control plane that is not on this machine is noted once and not counted
 - `update` runs `git pull`, then `install` (so a new skill or Claude Code hook reaches this machine), then `sync-hooks`. Run it on each device to bring it current
 - `sync-hooks` converges pre-commit hooks and `core.hooksPath` across the fleet and the private repos. It also runs at the end of `update`

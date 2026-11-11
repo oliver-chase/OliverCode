@@ -1,9 +1,0 @@
-{
-  "id": "add-usage-section",
-  "description": "Add a documentation section.",
-  "files": {
-    "README.md": "# Tool\n\nDoes one thing.\n"
-  },
-  "prompt": "Add a section titled '## Usage' to README.md with one example command.",
-  "check": "grep -q '^## Usage' README.md"
-}

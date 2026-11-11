@@ -1,9 +1,0 @@
-{
-  "id": "write-a-test",
-  "description": "Add a unit test for an existing function.",
-  "files": {
-    "calc.py": "def add(a, b):\n    return a + b\n"
-  },
-  "prompt": "Write a unittest file named test_calc.py with two tests for calc.add, one of them with negative numbers.",
-  "check": "python3 -m unittest discover -s . -p 'test_*.py' 2>&1 | grep -q '^OK'"
-}

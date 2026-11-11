@@ -35,6 +35,7 @@ VIOLATIONS=0
 # Failure log: each blocked commit adds one tab-separated line (time, repo, gate, reason) to a local
 # file outside every repo, so a failure that recurs can be counted. A gate announces itself through
 # GATE_NAME, and the first BLOCKED line any gate prints becomes the reason.
+[ -n "${HOOK_DIR:-}" ] || { printf 'failure-log: build this fragment into a hook\n' >&2; exit 1; }
 OLIVERCODE_FAILURE_LOG="${OLIVERCODE_FAILURE_LOG:-$HOME/.olivercode/failures.log}"
 GATE_NAME="hook"
 BLOCK_REASON=""

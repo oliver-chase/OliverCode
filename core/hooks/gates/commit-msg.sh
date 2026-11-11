@@ -28,7 +28,8 @@ if grep -qF "$COMMENT_CHAR Please enter the commit message" "$MSG_FILE"; then
 else
   MESSAGE="$(cat "$MSG_FILE")"
 fi
-SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}')"
+# sed quits at the first non-blank line, so a long message can close the pipe before printf finishes.
+SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}' || true)"
 
 # SIZE-RAISE-1. A commit that raises "lines" in docs/SIZE-BASELINE.json by more than
 # raiseCapPercent of the committed value (default 2) must declare a story sized L or XL with a
