@@ -26,6 +26,8 @@ MANAGED = (
     ("PreToolUse", "Bash", "commit_guard.py"),
     ("PreToolUse", "Bash", "placement_guard.py"),
     ("PreToolUse", "Bash|Edit|Write|MultiEdit", "policy_guard.py"),
+    ("PreToolUse", "Bash", "gh_guard.py"),
+    ("PostToolUse", "Bash", "gh_watch.py"),
     ("Stop", None, "early-stop-guard.py"),
 )
 TIMEOUT_S = 10

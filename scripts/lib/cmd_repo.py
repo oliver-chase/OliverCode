@@ -356,3 +356,18 @@ def command_context(target: Path) -> int:
     ok, text = context_budget.report(target.resolve())
     print(text)
     return 0 if ok else 1
+
+
+def command_gh_limit(argv: list[str]) -> int:
+    """`olivercode gh-limit [clear]`: the shared GitHub rate-limit hold."""
+    from lib import gh_budget
+    if argv == ["clear"]:
+        gh_budget.clear()
+        print("GitHub hold cleared.")
+        return 0
+    if argv:
+        print("Usage: olivercode gh-limit [clear]")
+        return 1
+    why = gh_budget.refusal()
+    print(why or "No GitHub rate-limit hold is on.")
+    return 1 if why else 0

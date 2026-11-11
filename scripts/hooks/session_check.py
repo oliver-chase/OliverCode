@@ -36,7 +36,7 @@ def notes(cwd: Path, claude_dir: Path) -> list[str]:
         if link.is_symlink() and not link.exists():
             out.append(f"~/.claude/{name} is a broken link, so OliverCode's rules did not load. "
                        "Run `scripts/olivercode install` from the OliverCode folder.")
-    out += placement_notes() + context_notes()
+    out += placement_notes() + context_notes() + gh_notes()
     root = repo_gates.repo_root(cwd)
     if root:
         if repo_gates.has_gates(root):
@@ -77,6 +77,17 @@ def context_notes() -> list[str]:
     except Exception:  # noqa: BLE001 -- a budget bug never blocks a session
         return []
     return [] if ok else [text.replace("\n", " ")]
+
+
+def gh_notes() -> list[str]:
+    """A note while the shared GitHub rate-limit hold is on, else nothing."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+        import gh_budget
+        why = gh_budget.refusal()
+    except Exception:  # noqa: BLE001 -- never blocks a session
+        return []
+    return [why] if why else []
 
 
 def qa_queue(root: Path, run=subprocess.run) -> str:

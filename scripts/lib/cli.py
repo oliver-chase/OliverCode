@@ -20,6 +20,7 @@ COMMANDS = [
     ("olivercode checkpoint [DIR]", "Record a repo's commit, uncommitted changes and untracked files before an unattended run"),
     ("olivercode restore [DIR]", "Return a repo to its checkpoint and list the files the run added and this removed"),
     ("olivercode context [DIR]", "Report the words a session loads at start and fail over the contextWords budget"),
+    ("olivercode gh-limit [clear]", "Show whether the shared GitHub rate-limit hold is on and until when. clear lifts the hold early"),
     ("olivercode health [--root DIR]", "Run health checks on this machine: Claude Code hooks, skill links, voice copies, remotes and file sizes"),
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
     ("olivercode sync-hooks [--root DIR]", "Converge hooks + core.hooksPath across the fleet and the private repos"),
