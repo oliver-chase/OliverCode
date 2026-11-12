@@ -53,6 +53,11 @@ class TestRequirements(ConformBase):
         self.assertIn("README.md", row.detail)
         self.assertIn("olivercode bootstrap", row.fix)
 
+    def test_a_backlog_config_at_the_path_claude_md_names_passes_layout(self):
+        (self.repo / "docs" / "backlog-config.json").rename(self.repo / "backlog-config.json")
+        (self.repo / "CLAUDE.md").write_text("Run `bash scripts/validate.sh`. The board config is `backlog-config.json`.\n")
+        self.assertEqual("pass", self.rows()["layout"].status, self.rows()["layout"].detail)
+
     def test_a_claude_md_that_does_not_name_the_validation_command_fails(self):
         (self.repo / "CLAUDE.md").write_text("Rules.\n")
         self.assertEqual("fail", self.rows()["validation"].status)

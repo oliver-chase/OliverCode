@@ -35,7 +35,8 @@ def _fail(requirement: str, detail: str, fix: str) -> Row:
 
 
 def layout(repo: Path, **_) -> Row:
-    missing = [rel for rel in REQUIRED_FILES if not (repo / rel).is_file()]
+    missing = [rel for rel in REQUIRED_FILES if not (repo / rel).is_file()
+               and not (rel == "docs/backlog-config.json" and backlog_setup.config_path(repo).is_file())]
     if missing:
         return _fail("layout", f"missing {', '.join(missing)}", f"olivercode bootstrap {repo}")
     return Row("layout", "pass")

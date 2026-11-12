@@ -35,8 +35,8 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
     """Every skill in this machine's skills folder must be symlinked into ~/.claude/skills/.
 
     A skill with no matching symlink is invisible to the Skill tool and nothing says
-    why. Walks the way `check_skill_structure.py` does, so a skill nested under any
-    family subfolder is still found. The folder comes from local_config; a machine
+    why. Walks nested skill folders, so a skill under any family subfolder is
+    still found. The folder comes from local_config; a machine
     with none set has nothing to check here.
     """
     print("\nSkill links:")
@@ -294,7 +294,7 @@ def _check_activation_links(claude_dir: Path) -> tuple[int, int, int]:
     session runs without the rules. Install re-points them, so each failure prints that command.
     A machine where install never ran has no links, which is a skip.
     """
-    passed = failed = skipped = 0
+    passed = failed = 0
     links = [claude_dir / "CLAUDE.md", claude_dir / "VOICE.md"]
     skills = claude_dir / "skills"
     if skills.is_dir():
@@ -313,7 +313,7 @@ def _check_activation_links(claude_dir: Path) -> tuple[int, int, int]:
                   f"Run `olivercode install` from the OliverCode checkout to re-point it")
     if not failed:
         print(f"  [OK] all {passed} activation links resolve")
-    return passed, failed, skipped
+    return passed, failed, 0
 
 
 def _check_memory(oc_root: Path) -> tuple[int, int, int]:

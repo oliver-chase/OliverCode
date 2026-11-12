@@ -265,10 +265,9 @@ run_smoke_tests() {
     (cd "$tests_dir" && ls test_*.py | sed 's/\.py$//' | xargs -P "$jobs" -I{} \
       sh -c 'python3 -m unittest -b "$1" > "$2/$1.log" 2>&1 || echo "$1" >> "$2/failed"' _ {} "$log_dir")
     # Skill script tests.
-    local skill_test dir_of name_of
+    local skill_test
     for skill_test in "$REPO_ROOT"/skills/*/scripts/test_*.py; do
       [[ -e "$skill_test" ]] || continue
-      dir_of="$(dirname "$skill_test")"
       printf '%s\n' "$skill_test"
     done | xargs -P "$jobs" -I{} \
       sh -c 'd="$(dirname "$1")"; m="$(basename "$1" .py)"; n="$(basename "$(dirname "$d")")-$m"; (cd "$d" && python3 -m unittest -b "$m") > "$2/$n.log" 2>&1 || echo "$n" >> "$2/failed"' _ {} "$log_dir"

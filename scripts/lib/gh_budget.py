@@ -25,7 +25,7 @@ HOLD_SECONDS = 1200
 # seconds tripped it on 2026-11-11), so the machine as a whole gets a rolling cap on writes.
 WRITES_PER_HOUR = int(os.environ.get("OLIVERCODE_GH_WRITES_PER_HOUR") or 90)
 # Stop before GitHub does: below this many GraphQL points every agent holds until the reset. 0 switches it off.
-POINTS_FLOOR = int(os.environ.get("OLIVERCODE_GH_POINTS_FLOOR") or 500)
+POINTS_FLOOR = 500  # OLIVERCODE_GH_POINTS_FLOOR overrides it, read on each call so a test or session can change it
 POINTS_TTL = 60
 LIMIT_TEXT = re.compile(r"rate limit (already )?exceeded|secondary rate limit|abuse detection|graphql_rate_limit", re.IGNORECASE)
 
