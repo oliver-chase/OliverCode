@@ -20,12 +20,11 @@ Back up before the first mutation. Do not delete a backup until the user confirm
 ## Run this before anything else
 
 ```bash
-OC="$(git rev-parse --show-toplevel)"   # the OliverCode checkout you are in
+OC="$(git rev-parse --show-toplevel)"
 bash "$OC/scripts/qa/rehearse-install.sh"
 ```
 
-If it fails, stop and report that the fork is broken and their machine is fine. Everything below assumes
-a sound checkout.
+If it fails, stop and report the fork as broken. Everything below assumes a sound checkout.
 
 ## The two decisions only a human can make
 
