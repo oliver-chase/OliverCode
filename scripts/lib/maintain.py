@@ -124,7 +124,7 @@ def check_copies(cfg: placement.Config, fix: bool) -> list[Problem]:
     """Numbered sync-conflict copies: identical ones are deleted, older ones archived, newer ones left for the owner."""
     found = []
     for repo in _repos(cfg):
-        copies = hygiene.stray_copies(repo)
+        copies = hygiene.stray_copies(repo, fetch=hygiene.download if fix else None)
         if not copies:
             continue
         keep = [c for c in copies if c.verdict == "newer"]

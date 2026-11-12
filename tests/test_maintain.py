@@ -137,6 +137,31 @@ class TestCopies(Base):
         self.assertFalse(found[0].fixed)
         self.assertTrue((repo / "a 2.txt").exists())
 
+    def test_an_evicted_pair_is_downloaded_then_compared_and_a_dry_run_downloads_nothing(self):
+        repo = self.make()
+        (repo / "a 2.txt").write_text("a")
+        state = {"evicted": True}
+        fetched = []
+        def fake_fetch(paths):
+            fetched.extend(paths)
+            state["evicted"] = False
+        with mock.patch.object(hygiene, "evicted", side_effect=lambda p: state["evicted"]), \
+                mock.patch.object(hygiene, "download", fake_fetch):
+            self.assertEqual("newer", hygiene.stray_copies(repo)[0].verdict)  # no fetch given: left alone
+            self.assertEqual([], fetched)
+            problem = maintain.check_copies(self.cfg, True)[0]
+        self.assertTrue(problem.fixed)
+        self.assertEqual(2, len(fetched))
+        self.assertFalse((repo / "a 2.txt").exists())
+
+    def test_a_file_that_stays_evicted_after_the_download_is_kept(self):
+        repo = self.make()
+        (repo / "a 2.txt").write_text("a")
+        with mock.patch.object(hygiene, "evicted", return_value=True), mock.patch.object(hygiene, "download", lambda paths: None):
+            problem = maintain.check_copies(self.cfg, True)[0]
+        self.assertFalse(problem.fixed)
+        self.assertTrue((repo / "a 2.txt").exists())
+
     def test_a_name_with_a_number_and_no_original_is_not_a_copy(self):
         repo = self.make()
         (repo / "Chapter 2.txt").write_text("x")

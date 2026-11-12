@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -63,14 +64,32 @@ def original_of(rel: str) -> str | None:
     return f"{parent}/{original}" if parent else original
 
 
-def stray_copies(repo: Path) -> list[Copy]:
-    """Untracked numbered copies whose original exists, each judged against that original."""
-    found = []
+def download(paths: list[Path], seconds: int = 30) -> None:
+    """Read each file once so the sync service downloads it, eight at a time. A file that takes too long stays evicted."""
+    def read(path: Path) -> None:
+        try:
+            subprocess.run(["cat", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=seconds)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(read, paths))
+
+
+def stray_copies(repo: Path, fetch=None) -> list[Copy]:
+    """Untracked numbered copies whose original exists, each judged against that original.
+    `fetch(paths)` downloads evicted files first. Without it, or when a file stays evicted, the copy is left for the owner."""
+    pairs = []
     for rel in _git(repo, "ls-files", "--others", "--exclude-standard", "-z").split("\0"):
         original = original_of(rel) if rel else None
         path, source = repo / rel, repo / (original or "")
-        if not original or not path.is_file() or not source.is_file():
-            continue
+        if original and path.is_file() and source.is_file():
+            pairs.append((path, source))
+    if fetch:
+        gone = [p for pair in pairs for p in pair if evicted(p)]
+        if gone:
+            fetch(gone)
+    found = []
+    for path, source in pairs:
         if evicted(path) or evicted(source):
             verdict = "newer"  # unreadable without a download, so it stays for the owner
         elif path.read_bytes() == source.read_bytes():
