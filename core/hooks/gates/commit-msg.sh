@@ -113,9 +113,10 @@ fi
 
 # TEST-WITH-CODE-1. A commit that adds or changes code also changes a test, or says why not on a
 # line "No test: <reason>". Code is a .py, .sh, .js, .mjs, .ts or .tsx file outside a test path; a
-# test is anything under tests/ or named test_*, *_test.* or *.test.*. An .html page is markup and
+# test is anything under tests/ or named test_*, *_test.* or *.test.*, and a check script directly under
+# scripts/ named check-* or live-check*, which is itself the test it runs. An .html page is markup and
 # does not count: script worth a test belongs in a .js file, which does.
-TEST_PATH='(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$'
+TEST_PATH='(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$|^scripts/(live-check|check-)[^/]*$'
 CODE_CHANGED="$(git diff --cached --name-only --diff-filter=AM | grep -E '\.(py|sh|js|mjs|ts|tsx)$' | grep -vE "$TEST_PATH" || true)"
 TEST_CHANGED="$(git diff --cached --name-only --diff-filter=AMD | grep -E "$TEST_PATH" || true)"
 if [ -n "$CODE_CHANGED" ] && [ -z "$TEST_CHANGED" ] \

@@ -19,7 +19,7 @@ if [ -n "$SECRET_CANDIDATES" ]; then
   while IFS= read -r file; do
     [ -n "$file" ] || continue
     # No path is exempt: a fake key in a test file still reaches the remote. secret_filter
-    # (secret-patterns.sh) names what a line may carry to pass. The staged copy is read once
+    # (the shared secret patterns above) names what a line may carry to pass. The staged copy is read once
     # into a file and every pattern scans that file.
     staged_content "$file" > "$secret_tmp" 2>/dev/null
     for pattern in "${SECRET_PATTERNS[@]}"; do

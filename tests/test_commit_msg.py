@@ -55,6 +55,16 @@ class TestCommitMsg(CommitMsgCase):
         self.assertEqual(0, git(self.repo, "commit", "-m", "Change the tool (#5)", check=False).returncode)
         self.assertEqual(0, self.commit("Docs only (#5)").returncode)
 
+    def test_a_check_script_under_scripts_is_its_own_test(self):
+        self.first_commit()
+        (self.repo / "scripts").mkdir()
+        (self.repo / "scripts" / "live-check.mjs").write_text("process.exit(0)\n")
+        git(self.repo, "add", "scripts/live-check.mjs")
+        self.assertEqual(0, git(self.repo, "commit", "-m", "Add a live check (#5)", check=False).returncode)
+        (self.repo / "scripts" / "build.mjs").write_text("process.exit(0)\n")
+        git(self.repo, "add", "scripts/build.mjs")
+        self.assertEqual(1, git(self.repo, "commit", "-m", "Add a build (#5)", check=False).returncode)
+
     def test_a_co_author_line_has_one_form(self):
         self.first_commit()
         good = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

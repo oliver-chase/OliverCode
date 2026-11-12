@@ -15,6 +15,8 @@ echo() {
 }
 log_failure() {
   local rc="${1:-0}"
+  # Every gate's exit trap calls this, so it also removes the pre-commit snapshot.
+  [ -z "${OC_SNAPSHOT:-}" ] || rm -rf "$OC_SNAPSHOT"
   [ "$rc" -eq 0 ] && return 0
   if [ -n "$OC_LOG_NAMED" ]; then
     mkdir -p "$(dirname "$OLIVERCODE_FAILURE_LOG")" 2>/dev/null || return 0

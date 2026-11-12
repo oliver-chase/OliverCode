@@ -26,8 +26,17 @@ cd "$REPO_ROOT"
 # read the quoted name would never open the file. A gate also reads what the commit records, which is
 # the staged content, because the working copy can hold something else by the time the commit lands.
 # A path that is not in the index falls back to the working copy.
+# Every staged file is written once into a snapshot folder, so the gates read plain files and never start
+# one `git show` per file per gate. That cost made a tree scan of 200 files run for minutes.
+OC_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/oc-staged.XXXXXX")"
+printf '%s\n' "$STAGED_FILES" | sed '/^$/d' \
+  | git -C "$REPO_ROOT" checkout-index --prefix="$OC_SNAPSHOT/" --stdin >/dev/null 2>&1 || true
 staged_content() {
-  git -C "$REPO_ROOT" show ":$1" 2>/dev/null || cat -- "$1"
+  if [ -f "$OC_SNAPSHOT/$1" ] && [ ! -L "$OC_SNAPSHOT/$1" ]; then
+    cat -- "$OC_SNAPSHOT/$1"
+  else
+    git -C "$REPO_ROOT" show ":$1" 2>/dev/null || cat -- "$1"
+  fi
 }
 
 VIOLATIONS=0

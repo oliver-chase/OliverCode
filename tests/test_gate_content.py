@@ -79,10 +79,10 @@ class TestGate3PII(GateHarness):
         self.stage("run.sh", "NOTIFY=person@example.com\n")
         self.assertBlocked("gate 3")
 
-    def test_markdown_is_exempt(self):
-        # Docs legitimately quote host paths as examples; .md is skipped by design.
-        self.stage("doc.md", "Example path: /Users/someone/projects\n")
-        self.assertAllowed()
+    def test_markdown_is_scanned(self):
+        # A home path in a doc names a person as surely as one in code, so docs use a placeholder.
+        self.stage("doc.md", "Example path: /Users/" + "someone/projects\n")
+        self.assertBlocked("pii")
 
     def test_placeholder_path_passes(self):
         self.stage("run.sh", "cd <vault-root>/projects\n")

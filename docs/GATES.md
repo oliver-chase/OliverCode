@@ -38,7 +38,7 @@ Gate coverage differs by repo, and this list is the one home for the counts.
 |------|---------------|:---:|:---:|:---:|
 | Secrets | API keys, tokens, JWTs and private keys in any staged file. A placeholder passes by its value, such as `EXAMPLE` or a run of `x`, or on a line that carries `secret-scan: allow` | 1 | 1 | 1 |
 | Icons and emoji | Unicode emoji and icon characters | 2 | 2 | 2 |
-| PII | Host paths, email addresses and personal data in staged code and config. Markdown, tests and mocks are skipped, and a repo lists files that must hold a pattern under `exempt` in `docs/PII-GATE.json`, each with a reason | 3 | 3 | — |
+| PII | Host paths, email addresses and personal data in staged code and config. Tests and mocks are skipped, and a repo lists files that must hold a pattern under `exempt` in `docs/PII-GATE.json`, each with a reason | 3 | 3 | — |
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential, checked through `gh api user -i` and not the remote URL scheme | 4 | 4 | — |
 | Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 5 | 5 | 3 |
 | Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 6 | 6 | 4 |
@@ -89,7 +89,7 @@ A raise is capped. `raiseCapPercent` in the baseline file (default 2) limits how
 
 The gate keeps a repo free of the people and accounts behind it, with no name list to maintain. It builds its identifiers from `git log` authors (names split into words, plus each email local part), from the owner segment of the `origin` remote, and from the string values of account, shop, store, handle, username, owner, brand and seller keys in the files matched by `configGlobs`. Noreply addresses, bots, Claude, GitHub and Anthropic are ignored.
 
-`docs/IDENTIFIER-GATE.json` holds two lists. `configGlobs` names config files to read, and ships empty. `localData` names files that may hold an identifier, each with a line in `localDataReasons`. Built in as local data are `.secrets/`, `scratch/`, `.githooks/`, `docs/backlog-config.json` and the config file itself. `docs/DECISIONS.md` is scanned like any other file. The PII gate still skips markdown and tests, and this gate scans them.
+`docs/IDENTIFIER-GATE.json` holds two lists. `configGlobs` names config files to read, and ships empty. `localData` names files that may hold an identifier, each with a line in `localDataReasons`. Built in as local data are `.secrets/`, `scratch/`, `.githooks/`, `docs/backlog-config.json` and the config file itself. `docs/DECISIONS.md` is scanned like any other file. The PII gate skips tests, and this gate scans them.
 
 ### Duplicate text
 
@@ -114,7 +114,7 @@ Git shows a commit message only to the `commit-msg` hook, so these checks are a 
 | Story reference | A commit whose message has no `#<number>`, such as `(#53)` or `Story: #53`. Merge, revert and `fixup!`, `squash!` and `amend!` messages are exempt, and so is a repo's first commit. A reference inside a `#` comment line does not count, and the hook blocks when it cannot read the message file |
 | Story exists | A reference to a story absent from its repo: `#N` is checked in the repo that `docs/backlog-config.json` names and `owner/repo#N` in the repo it spells out, through `gh api`. Yes answers are cached in `.git/story-exists-cache`. The check fails open with a warning when `gh` or GitHub is unavailable, and a repo without the config skips it |
 | Test with code | A commit that adds or changes a `.py`, `.sh`, `.js`, `.mjs`, `.ts` or `.tsx` file outside a test path and changes no test, unless the message has a line `No test: <reason>` |
-| Co-author form | A `Co-Authored-By` line in any other form than `Co-Authored-By: Name <email>`, or a Claude co-author without `<noreply@anthropic.com>`. Merges and cherry-picks are checked too, and a commit with no co-author line passes |
+| Co-author form | A `Co-Authored-By` line in any other form than `Co-Authored-By: Name <email>`, or a Claude co-author without Anthropic's noreply address. Merges and cherry-picks are checked too, and a commit with no co-author line passes |
 | Size raise | A commit that raises `lines` in `docs/SIZE-BASELINE.json` by more than `raiseCapPercent` (default 2) of the committed value, without a `Size: L` or `Size: XL` line in the message. See "Size ratchet" above |
 
 A repo opts out only when its owner creates a file named `commit-msg.optout` in the repo's `.githooks` folder. The hook and `sync-hooks` never create or remove that file, and every commit it lets through prints that the check is off.
