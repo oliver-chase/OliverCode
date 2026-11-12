@@ -68,7 +68,7 @@ Working rules that hold in every session:
 Claude Code hook entries run inside every session. `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
 
 - `scripts/hooks/session_check.py` (`SessionStart`) tells the session once what would fail silently in the folder it opened: a repo whose gates git skips, a git repo with no gates, a broken rules link, or a repo, worktree or backup outside `repoRoot`. It prints nothing when all is well
-- `scripts/hooks/pretool_guard.py` (`PreToolUse` on Bash, Edit, Write and MultiEdit) runs four guards in one process, so a tool call starts one Python and not four. A deny from any guard wins over an ask, and each guard fails open on its own bug. Each guard is also a script that runs alone:
+- `scripts/hooks/pretool_guard.py` (`PreToolUse` on Bash, Edit, Write and MultiEdit) runs four guards in one process, so a tool call starts one Python process. A deny from any guard wins over an ask, and each guard fails open on its own bug. Each guard is also a script that runs alone:
   - `commit_guard.py` refuses a `git commit` that would skip the repo's gates: `--no-verify` (including inside `bash -c` and `eval`), an overridden `core.hooksPath`, or gates present that `core.hooksPath` does not run
   - `placement_guard.py` refuses a `git clone` outside `repoRoot` and a `git worktree add` outside `<repoRoot>/_worktrees`, and names the right path. `olivercode place` lists the fix for each stray and `olivercode clean` removes merged, clean worktrees
   - `policy_guard.py` enforces the repo's `.olivercode/policy.json`: it denies a command outside `commands.allow` or matching `commands.deny`, denies an edit to a path in `paths.deny`, and asks the owner at a `git push`, a delete of more than ten files or the third failed attempt at one gate. Each decision goes to the failure log. A repo with no policy is unrestricted and `olivercode health` warns. `olivercode policy init` writes it, and `olivercode health` fails when the always-loaded files exceed `contextWords` in `docs/BUDGET.json`
@@ -217,7 +217,7 @@ Claude Code is this machine's sole agent runtime. The canonical paths are produc
 - Product-specific implementation documents and workflows belong in each project repo and are never duplicated into runtime folders
 - Cross-project orchestration standards belong in `shared/*`, and shared skills and tools in `skills/*`
 - Project structure and hygiene rules belong in "Project structure"
-- Runtime state in `~/.claude` is operational data and not product source code
+- Runtime state in `~/.claude` is operational data, kept out of product source code
 
 OliverCode deliberately contains no runtime launcher or automation beyond the thin `scripts/olivercode` CLI, no container setup, no runtime state, logs, telemetry or handoff data, no private restore checklists or project credentials, and no generated adapter files or runtime-specific validation scripts. Those belong in `runtime/control-plane/`, which sits inside the OliverCode tree, is gitignored and holds per-machine state such as session handoff, provider health and validation manifests. It is never pushed to GitHub.
 

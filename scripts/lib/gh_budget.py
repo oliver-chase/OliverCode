@@ -22,8 +22,8 @@ import time
 from pathlib import Path
 
 HOLD_SECONDS = 1200
-# GitHub also throttles bursts of writes regardless of the points left (20 minutes of one write every 10
-# seconds tripped it on 2026-11-11), so the machine as a whole gets a rolling cap on writes.
+# GitHub also throttles a steady burst of writes whatever the points left, so the machine as a whole gets a
+# rolling cap on writes.
 WRITES_PER_HOUR = int(os.environ.get("OLIVERCODE_GH_WRITES_PER_HOUR") or 90)
 # Every gh call, read or write, counts against a per-minute cap so parallel agents slow down together.
 CALLS_PER_MINUTE = int(os.environ.get("OLIVERCODE_GH_CALLS_PER_MINUTE") or 30)

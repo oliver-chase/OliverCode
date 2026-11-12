@@ -29,7 +29,8 @@ BASELINE_SCRIPT = Path(__file__).resolve().parents[2] / "backlog" / "scripts" / 
 
 CONTRAST = re.compile(
     r"\b(?:not\b[^.\n]{1,60}?,?\s*\bbut\b|rather than\b|instead of\b|less\b[^.\n]{1,40}?,\s*more\b|it is not about\b)"
-    r"|,\s+not\s+(?:a|an|the|by|at|in|on|to|for|from|this|that|its|their|my|our|your)\b", re.I)
+    r"|,\s+not\s+(?:a|an|the|by|at|in|on|to|for|from|this|that|its|their|my|our|your)\b"
+    r"|\band\s+not\s+(?:a|an|the|by|at|in|on|to|for|from|with)\b", re.I)
 QUOTED = re.compile(r'"[^"\n]*"')
 SMALL = {"a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "vs", "is", "at", "by"}
 CURLY = "‘’“”"

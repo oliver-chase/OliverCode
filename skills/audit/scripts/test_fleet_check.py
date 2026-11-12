@@ -121,6 +121,12 @@ class Voice(unittest.TestCase):
             self.assertIn("A.md:1: contrast framing", out)
             self.assertIn("A.md:2: contrast framing", out)
             self.assertNotIn("A.md:3", out)
+        # "and not the ..." is the same framing without a comma.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(tmp, {"A.md": "It reads the scopes and not the remote URL.\nIt runs and nothing else.\n"})
+            _, out = run(str(repo))
+            self.assertIn("A.md:1: contrast framing", out)
+            self.assertNotIn("A.md:2", out)
 
     def test_flags_title_case_headings_and_curly_quotes(self):
         with tempfile.TemporaryDirectory() as tmp:

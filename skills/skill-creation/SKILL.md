@@ -20,7 +20,7 @@ Send this first, in one turn, exactly as written, with no other opening line and
 > 2. Share an example of the input and the output you want, such as a file, a message or a list.
 > 3. List the skills or notes you use for this job today, so I can check for overlap.
 
-Work through the steps below in order, against the live fleet and not from memory.
+Work through the steps below in order, against the live fleet.
 
 ## Baseline: every new skill meets this
 

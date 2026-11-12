@@ -2,7 +2,7 @@
 
 How to take a clone or fork of OliverCode and make it govern your own repos, how to restore that setup on a blank machine, what every `olivercode` command does and what to do when something fails. The steps are written for the agent doing the work with a human approving.
 
-The governing rule for the whole process is to optimize and never amputate. You point existing rules at a shared home and do not delete them. Anything you cannot map to an OliverCode concept stays exactly where it is, and a rule you do not understand is a rule you keep.
+The governing rule for the whole process is to optimize and never amputate. You point existing rules at a shared home and keep them. Anything you cannot map to an OliverCode concept stays exactly where it is, and a rule you do not understand is a rule you keep.
 
 You do not have to read this. Open the repo in Claude Code and say "Set this up for me". The `olivercode-adoption` skill ships project-level, so it is available on a fresh clone, and it drives every step below and surfaces only the decisions that need you. This document is the reference it works from.
 
@@ -243,7 +243,7 @@ Four things need a person, because no script restores them:
 
 - **The other repos.** Each fleet repo is its own clone under `<fleet-root>/`, and `scripts/olivercode discover --root <dir>` finds what is present
 - **Marketplace plugins.** They install through Claude Code and never through this repo
-- **Application plugins.** An editor or notes app returns its plugin settings with the clone and not the compiled code, so reinstall each plugin from its store
+- **Application plugins.** An editor or notes app returns only its plugin settings with the clone, so reinstall each plugin from its store
 - **MCP server authorization.** This is interactive OAuth per server, in a Claude Code session
 
 Verify the restore:
@@ -317,7 +317,7 @@ Product runtime authority lives in the owning project repo, which the registry's
 
 ### The workflow push auth gate blocks a staged workflow file
 
-The gate checks the actual credential's scopes (`gh api user -i`) and not the remote URL scheme. Run `gh auth login --scopes workflow`, or `gh auth refresh -s workflow` if you are already logged in.
+The gate checks the actual credential's scopes (`gh api user -i`). Run `gh auth login --scopes workflow`, or `gh auth refresh -s workflow` if you are already logged in.
 
 ### Commits are passing gates that should have blocked them
 

@@ -82,9 +82,7 @@ def _tracked_files(repo_root: Path) -> list[str]:
 
     `--others --exclude-standard` matters: a brand-new file is untracked until the
     commit that adds it, so a tracked-only listing cannot see broken references in
-    the very change being made. Caught for real -- a new doc's dangling ref passed
-    validate.sh while the file was untracked and only failed after it was committed,
-    which is exactly backwards for a pre-commit gate.
+    the very change being made.
     """
     return sorted(set(tracked_files(repo_root, "--cached", "--others", "--exclude-standard")))
 
