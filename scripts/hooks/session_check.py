@@ -127,7 +127,7 @@ def machine_strain(ps_text: str, load: float, cores: int) -> list[str]:
             out.append(f"A test runner (pid {pid}, `{command[:60]}`) has run for {etime} at {cpu}% CPU. "
                        f"If no session of yours is using it, stop it with `kill {pid}`.")
     if cores and load > 1.5 * cores:
-        out.append(f"The Mac's load is {load:.1f} on {cores} cores, so content-flow jobs may time out. "
+        out.append(f"The Mac's load is {load:.1f} on {cores} cores, so scheduled jobs may time out. "
                    "Hold heavy runs until it falls.")
     return out
 

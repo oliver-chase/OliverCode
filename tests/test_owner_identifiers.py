@@ -100,9 +100,9 @@ class IdentifierGate(IdentifierSetup):
 
     def test_config_values_for_account_keys_count(self):
         self.stage(CONFIG, gate_config(configGlobs=["shop/*.json"]))
-        self.stage("shop/config.json", '{"shopName": "Daydream Prints", "other": "plainvalue"}\n')
+        self.stage("shop/config.json", '{"shopName": "Acme Prints", "other": "plainvalue"}\n')
         git(self.tmp, "commit", "-q", "--no-verify", "-m", "shop")
-        self.stage("README.txt", "welcome to daydream prints\n")
+        self.stage("README.txt", "welcome to acme prints\n")
         self.assertIn("README.txt:1", self.assertBlocked("owner identifier").stdout)
         self.stage("README.txt", "the word plainvalue is fine\n")
         self.assertAllowed()
