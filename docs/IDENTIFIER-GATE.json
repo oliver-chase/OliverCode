@@ -2,9 +2,11 @@
   "_comment": "The owner-identifier gate's lists for this repo: config files to read, and local-data files allowed to hold an identifier, each with a reason.",
   "configGlobs": [],
   "localData": [
-    "LICENSE"
+    "LICENSE",
+    "docs/AUDIT-ACCEPTED.md"
   ],
   "localDataReasons": {
-    "LICENSE": "The MIT license text must name its copyright holder."
+    "LICENSE": "The MIT license text must name its copyright holder.",
+    "docs/AUDIT-ACCEPTED.md": "It names the history addresses the owner accepted, which done_check matches by value."
   }
 }
