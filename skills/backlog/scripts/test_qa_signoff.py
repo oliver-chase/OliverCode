@@ -136,7 +136,7 @@ class QaSignoff(unittest.TestCase):
 class CompleteStory(unittest.TestCase):
     """complete_story.py closes a story only after the QA check passes, through a fake gh runner."""
 
-    def run_it(self, comments, items="PVTI_1"):
+    def run_it(self, comments, items="PVTI_1", extra=None):
         calls = []
 
         def runner(args):
@@ -156,7 +156,7 @@ class CompleteStory(unittest.TestCase):
         out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
         cfg = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         cfg.write(json.dumps({"repoOwner": "o", "repoName": "r", "projectId": "PVT_x", "projectNumber": 1,
-                              "fields": {"status": {"id": "F1", "options": {"Complete": "OPT_DONE"}}}}))
+                              "fields": {"status": {"id": "F1", "options": {"Complete": "OPT_DONE"}}}, **(extra or {})}))
         cfg.close()
         self.addCleanup(os.unlink, cfg.name)
         code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0"],
@@ -174,6 +174,9 @@ class CompleteStory(unittest.TestCase):
         code, _, calls = self.run_it("qa-none.json")  # a builder entry and no QA pass: closes on the builder's evidence
         self.assertEqual(code, 0)
         self.assertIn("state=closed", "\n".join(calls))
+        code, text, calls = self.run_it("qa-none.json", extra={"qaRequiredFromIssue": 50})  # the owner requires QA from #50
+        self.assertEqual(code, 1)
+        self.assertNotIn("state=closed", "\n".join(calls))
         code, text, calls = self.run_it("qa-fail.json")  # a QA pass that failed blocks the close
         self.assertEqual(code, 1)
         self.assertIn("not completed", text)

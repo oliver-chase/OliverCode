@@ -64,6 +64,16 @@ class BatchProject(unittest.TestCase):
         self.assertEqual([], runner.calls)
         self.assertIn("queued 1", out.getvalue())
 
+    def test_a_job_that_can_never_succeed_leaves_the_queue(self):
+        def failing(args):
+            return subprocess.CompletedProcess(args, 1, "", "Could not resolve to an Issue")
+        for number in (999999, 5):
+            self.input.write_text(json.dumps({"issues": [{"number": number, "fields": {"status": "Ready"}}]}))
+            err = io.StringIO()
+            code = bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=failing if number == 999999 else Runner(), err=err, out=io.StringIO())
+            self.assertEqual(1 if number == 999999 else 0, code)
+        self.assertEqual([], json.loads((Path(self.tmp.name) / "gh-project-queue.json").read_text()))
+
     def test_unknown_config_value_refuses_before_queueing(self):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Nope"}}]}))
         self.assertEqual(2, bp.main(["--config", str(self.cfg), "--input", str(self.input)], err=io.StringIO()))

@@ -171,11 +171,15 @@ def main(argv=None, runner=run_gh, out=sys.stdout, err=sys.stderr):
         try:
             result = drain(cfg, merged, runner)
         except RuntimeError as exc:
-            return (exc, queue)
+            # A rate limit or hold keeps the work for a later run. Any other failure, such as a number that
+            # is not an issue, would fail every later run the same way, so those jobs leave the queue.
+            if gh_budget.is_limit(str(exc)) or gh_budget.refusal():
+                return (exc, queue)
+            return (exc, other)
         return (result, other)
     result = with_queue(take)
     if isinstance(result, RuntimeError):
-        print(f"batch_project: queued work remains: {result}", file=err)
+        print(f"batch_project: {result}; a job that cannot succeed was dropped, rate-limited work stays queued", file=err)
         return 1
     count, updates = result
     print(f"batch_project: applied {updates} field update(s) across {count} queued issue(s)", file=out)

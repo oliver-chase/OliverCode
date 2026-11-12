@@ -61,7 +61,9 @@ def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
         print(f"complete_story: #{args.story} has no builder entry; log one with log_action.py --role builder", file=out)
         print(f"complete_story: #{args.story} not completed", file=out)
         return 1
-    if "qa" in roles:  # a story that had a QA pass closes only on its sign-off
+    required_from = cfg.get("qaRequiredFromIssue")
+    qa_required = isinstance(required_from, int) and args.story >= required_from
+    if "qa" in roles or qa_required:  # a story with a QA pass, or one the config requires QA for, closes only on its sign-off
         check_out = io.StringIO()
         code = qa.main(["--story", str(args.story), "--config", args.config], runner=runner, out=check_out, err=err)
         if code != 0:
