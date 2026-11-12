@@ -44,7 +44,7 @@ def main() -> int:
 
     if cmd == "discover":
         roots: list[Path] = []
-        rest = argv
+        register, rest = _take_flag(argv, "--register")
         while "--root" in rest:
             root, rest = _take_root_flag(rest)
             roots.append(root)
@@ -52,7 +52,7 @@ def main() -> int:
         if not roots:
             print("Error: discover requires at least one --root DIR.")
             return 1
-        return command_discover(OC_ROOT, roots)
+        return command_discover(OC_ROOT, roots, register)
     if cmd == "bootstrap":
         dry, rest = _take_flag(argv, "--dry-run")
         if len(rest) != 1:

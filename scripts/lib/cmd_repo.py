@@ -110,17 +110,17 @@ def _report_claude_dir(oc_root: Path) -> None:
             print(f"    {name}")
 
 
-def command_discover(oc_root: Path, roots: list[Path]) -> int:
+def command_discover(oc_root: Path, roots: list[Path], register: bool = False) -> int:
     """Find git repos under the given roots and report what governance they already have.
 
     Adoption docs assume you know where your repos are. Someone folding this into an
     existing, un-tidy setup often does not: repos spread over several directories,
     agent-rules files under three different names, hooks installed in some places and
-    not others. This is the inventory step made mechanical -- read-only, and it emits
-    a profile skeleton with explicit `path` values so a scattered layout is registrable
-    without hand-writing JSON.
+    not others. This is the inventory step made mechanical. It changes no repo. Without
+    --register it prints a profile per repo, and with it writes each repo that is not yet
+    registered into the registry, with the validation command the repo itself names.
     """
-    print("OliverCode discover — read-only scan")
+    print("OliverCode discover — " + ("scan and register" if register else "read-only scan"))
     print("=" * 40)
     found: list[tuple[str, Path, str, str]] = []
     for root in roots:
@@ -153,14 +153,41 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
     print("auto-load in Claude Code — merge them into CLAUDE.md (docs/SETUP.md Step 4).")
 
     _report_claude_dir(oc_root)
-    print(f"\nProfile skeleton — paste into {registry_file(oc_root)} under \"profiles\",")
-    print("and replace <command> with each repo's validation command:\n")
     skeleton = {
-        name: {"name": name, "path": str(repo), "canonicalValidationCommand": "<command>"}
+        name: {"name": name, "path": str(repo), "canonicalValidationCommand": _validation_command(repo)}
         for name, repo, _, _ in found
     }
-    print(json.dumps(skeleton, indent=2))
+    path = registry_file(oc_root)
+    if not register:
+        print(f"\nProfiles for {path}. Run again with --register to add the new ones there:\n")
+        print(json.dumps(skeleton, indent=2))
+        return 0
+    data = json.loads(path.read_text()) if path.is_file() else {"profiles": {}}
+    profiles = data.setdefault("profiles", {})
+    added = [name for name in skeleton if name not in profiles]
+    for name in added:
+        profiles[name] = skeleton[name]
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    print(f"\nRegistered {len(added)} repo(s) in {path}: {', '.join(added) or 'none new'}.")
+    unknown = [n for n in added if profiles[n]["canonicalValidationCommand"] == "<command>"]
+    if unknown:
+        print(f"Set canonicalValidationCommand by hand for: {', '.join(unknown)}. Nothing in those repos names one.")
+    print("Next: `olivercode conform` checks each registered repo.")
     return 0
+
+
+def _validation_command(repo: Path) -> str:
+    """The validation command a repo names itself: scripts/validate.sh, then an npm validate or check script."""
+    if (repo / "scripts" / "validate.sh").is_file():
+        return "bash scripts/validate.sh"
+    try:
+        scripts = json.loads((repo / "package.json").read_text()).get("scripts", {})
+    except (OSError, ValueError):
+        scripts = {}
+    for name in ("validate", "check"):
+        if name in scripts:
+            return f"npm run {name}"
+    return "<command>"
 
 
 def _backlog_setup_origin(repo: Path):

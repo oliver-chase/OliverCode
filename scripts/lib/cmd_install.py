@@ -224,7 +224,7 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    print(f"Next: register the repo in {registry_file(oc_root)}, then `olivercode conform` to verify.")
+    print(f"Next: `olivercode discover --root <folder holding your repos> --register` adds them to {registry_file(oc_root)}, then `olivercode conform` checks them.")
     return 1 if broken or broken_settings else 0
 
 

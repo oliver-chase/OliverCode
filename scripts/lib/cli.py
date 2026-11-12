@@ -10,7 +10,7 @@ COMMANDS = [
     ("olivercode bootstrap DIR [--dry-run]", "Stamp the project template into a repo, per the bootstrap manifest"),
     ("olivercode size [DIR] [--lower]", "Print a repo's total lines, its docs/SIZE-BASELINE.json baseline and the headroom. --lower rewrites the baseline to the current total when that is no higher, and refuses to raise it"),
     ("olivercode backlog-setup [DIR] [--apply]", "Set up or repair a repo's GitHub Project board, backlog config and commit-msg hook. Dry run unless --apply"),
-    ("olivercode discover --root DIR", "Scan for git repos and report what governance they already have"),
+    ("olivercode discover --root DIR [--register]", "Scan for git repos and report what governance they already have. --register adds the new ones to the registry with the validation command each repo names"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
     ("olivercode conform [DIR] [--root DIR] [--offline]", "Check a repo, or every registered repo, against docs/CONTRACT.md. Prints pass, fail, exception, manual or skip per requirement with the fix command, and exits non-zero on any fail. --offline skips the checks that call GitHub"),

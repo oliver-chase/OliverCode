@@ -15,7 +15,7 @@ need detail, but do not make the user read it.
 them. A rule you cannot classify is a rule you keep and flag. Never delete a user's config
 because it looks redundant — redundancy is their call.
 
-Back up before the first mutation. Do not delete a backup until the user confirms the result.
+`install` backs up what it replaces. Keep each backup until the user confirms the result.
 
 ## Run this before anything else
 

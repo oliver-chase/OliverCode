@@ -6,7 +6,11 @@ It installs shared Claude configuration, links the included skills, and installs
 
 ## Install
 
+Clone your fork, open the folder in Claude Code and say what you want, for example `Set this up for me.` Claude installs OliverCode, registers your repos and checks that the gates block.
+
 Requirements: `git`, `bash`, `python3`, `perl`, and `gh` and `jq` for the backlog scripts.
+
+Manual install:
 
 ```bash
 git clone <your-fork-url> OliverCode
@@ -14,7 +18,7 @@ cd OliverCode
 python3 scripts/olivercode install
 ```
 
-The install command links `CLAUDE.md`, `VOICE.md` and the skills into `~/.claude`, installs the Claude Code hooks, and preserves backups of files it replaces. It is safe to run again. For guided setup, open the clone in Claude Code and say `Set this up for me.`
+The install command links `CLAUDE.md`, `VOICE.md` and the skills into `~/.claude`, installs the Claude Code hooks, and preserves backups of files it replaces. It is safe to run again.
 
 Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal and troubleshooting.
 

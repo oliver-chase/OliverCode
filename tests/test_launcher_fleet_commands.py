@@ -5,6 +5,7 @@ Every test runs against a scratch checkout and a scratch HOME. Nothing reaches t
 git reads no machine config (tests/_support.py).
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -84,8 +85,8 @@ class TestCommandDiscover(ScratchHome):
         self.fleet = self.tmp / "fleet"
         self.fleet.mkdir()
 
-    def discover(self, *roots):
-        return quiet(launcher.command_discover, self.oc, list(roots))
+    def discover(self, *roots, register=False):
+        return quiet(launcher.command_discover, self.oc, list(roots), register)
 
     def test_reports_each_repo_with_its_rules_file_and_hooks_state(self):
         governed = scratch_repo(self.fleet / "governed")
@@ -103,6 +104,25 @@ class TestCommandDiscover(ScratchHome):
         _, out = self.discover(self.fleet)
         self.assertIn('"canonicalValidationCommand": "<command>"', out)
         self.assertIn(f'"path": "{self.fleet / "widgets"}"', out)
+
+    def test_register_adds_new_repos_with_their_own_validation_command_and_keeps_existing_ones(self):
+        (self.oc / "shared").mkdir(parents=True, exist_ok=True)
+        registry = self.oc / "shared" / "repo-profiles.json"
+        registry.write_text(json.dumps({"profiles": {"kept": {"name": "kept", "canonicalValidationCommand": "make test"}}}))
+        scripted = scratch_repo(self.fleet / "scripted")
+        (scripted / "scripts").mkdir()
+        (scripted / "scripts" / "validate.sh").write_text("exit 0\n")
+        node = scratch_repo(self.fleet / "node")
+        (node / "package.json").write_text(json.dumps({"scripts": {"check": "tsc"}}))
+        scratch_repo(self.fleet / "kept")
+        scratch_repo(self.fleet / "plain")
+        code, out = self.discover(self.fleet, register=True)
+        self.assertEqual(code, 0)
+        profiles = json.loads(registry.read_text())["profiles"]
+        self.assertEqual("make test", profiles["kept"]["canonicalValidationCommand"])
+        self.assertEqual("bash scripts/validate.sh", profiles["scripted"]["canonicalValidationCommand"])
+        self.assertEqual("npm run check", profiles["node"]["canonicalValidationCommand"])
+        self.assertIn("by hand for: plain", out)
 
     def test_skips_a_linked_worktree(self):
         scratch_repo(self.fleet / "real")

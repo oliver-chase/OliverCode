@@ -51,7 +51,7 @@ ls -la ~/.claude/skills/ 2>/dev/null            # existing skills, real dirs vs 
 scripts/olivercode discover --root ~/dev --root ~/work
 ```
 
-`discover` reports each repo's agent-rules file and hook state, inventories `~/.claude` and ends with a profile skeleton with explicit `path` values for the registry file the command names. An existing setup usually surfaces three things:
+`discover` reports each repo's agent-rules file and hook state, inventories `~/.claude` and ends with a profile per repo, which Step 5 registers. An existing setup usually surfaces three things:
 
 - **Rules files not named `CLAUDE.md`.** `AGENTS.md`, `.cursorrules` and similar files do not auto-load in Claude Code, so they are invisible in practice. Step 4 merges them in
 - **Repos with `hooksPath=unset`.** They have no gates at all, silently
@@ -104,7 +104,7 @@ Never leave both files carrying live rules, because that duplication is what thi
 
 Enforcement has to know which repos it governs before it can reach them, so registration comes first.
 
-Edit the registry's `repo-profiles.json` with your real repo names and validation commands. `olivercode discover` prints which file this checkout reads (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`). `_<field>_note` keys beside a worked example document the schema in place. `scripts/olivercode discover --root <dir>` emits a profile skeleton per repo with `name`, `path` and `canonicalValidationCommand`.
+Run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads (`REGISTRY-PRIVATE-1` in `docs/DECISIONS.md`) with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none. `_<field>_note` keys beside a worked example document the schema in place.
 
 Confirm the fleet registered before continuing:
 
@@ -262,7 +262,7 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 
 - `bootstrap` stamps the project template into a repo per `shared/project-bootstrap-manifest.json`. `strict` files are overwritten because byte-identity is their contract, and `presence` files are created only when missing. `--dry-run` writes nothing
 - `backlog-setup` brings one repo to the board baseline in `shared/kanban-baseline.json` and prints the plan unless `--apply` is given. It reuses a Project that carries the repo's name or creates one, adds the missing Status lanes and the Priority, Size, Work type and Area fields, writes `docs/backlog-config.json` with the real IDs and installs the story-reference `commit-msg` hook. Before it touches a field it saves every item's values to `scratch/backlog-backups/`, restores any value that moved and exits non-zero when the counts per option differ from that file. An option outside the baseline stays on the board and the baseline check reports it. GitHub's API cannot switch off a board's built-in workflows, so the command lists them for you to turn off on the Project's Workflows page
-- `discover` is a read-only scan for git repos under the given roots. It reports each repo's agent-rules file and hook state, inventories `~/.claude` and emits a `repo-profiles.json` skeleton. It excludes this checkout and is the mechanical form of Step 1
+- `discover` is a read-only scan for git repos under the given roots. It reports each repo's agent-rules file and hook state, inventories `~/.claude` and prints a profile per repo. `--register` writes each repo not yet registered into the registry, with the validation command the repo names (`scripts/validate.sh`, then an npm `validate` or `check`). It excludes this checkout and is the mechanical form of Step 1
 - `install` symlinks this checkout's `CLAUDE.md`, `docs/VOICE.md` (as `~/.claude/VOICE.md`) and every skill into `~/.claude`. It merges the four hook entries listed in `docs/RULES.md` ("Execution") into `~/.claude/settings.json` without touching other keys, and sets `core.hooksPath` to `.githooks` here when unset. It never destroys anything: any other file or link at a target path moves to `<name>.pre-olivercode` (then `.2`, `.3`) and is printed, because that file is usually the owner's existing ruleset (`BACKUP-COLLISION-1` in `docs/DECISIONS.md`). A link an earlier install wrote that now dangles because its checkout moved is replaced in place. It records its links in `~/.claude/.olivercode-install.json`, and a re-install of the same checkout reports ALREADY
 - `uninstall` reverses `install`. It removes each link that points into this checkout and each dangling link the install record names, restores the newest `<name>.pre-olivercode` backup once its path is free, removes only hook entries in the exact form install writes and deletes a `settings.json` left empty (a symlinked one stays). Other links, real skill folders and every other key stay, `core.hooksPath` is untouched, and a second run changes nothing
 - `conform [DIR]` checks one repo, or every registered repo, against `docs/CONTRACT.md`. `--offline` skips the board and GitHub About checks, the only ones that call GitHub
