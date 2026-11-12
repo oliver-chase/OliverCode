@@ -1,10 +1,10 @@
 ---
 name: backlog
 description: >
-  Owns a repo's GitHub Project as its live backlog, for any repo whose CLAUDE.md names a backlog-config.json.
-  Files a Story or Epic (search first, never duplicate) with Status, Priority and Size set, closes an item with evidence, and sweeps the board for field gaps, status drift, duplicates and missing QA sign-off.
-  Trigger on "file this", "add a story", "add an epic", "close this out", "backlog status", "what needs triage", "groom the backlog", or "board hygiene".
-  Also trigger when a skill names real new scope that needs tracking before it gets built.
+  Owns the GitHub Project of a repo whose CLAUDE.md names a backlog-config.json. Files a Story or Epic,
+  closes an item with evidence and sweeps the board for gaps, drift and duplicates. Trigger on "file this",
+  "add a story", "add an epic", "close this out", "backlog status", "groom the backlog", "board hygiene",
+  or new scope a skill names that needs tracking.
 ---
 
 # Backlog
