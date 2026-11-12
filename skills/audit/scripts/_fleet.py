@@ -26,10 +26,12 @@ def is_test(rel):
 
 
 def tracked(repo):
-    """Tracked files of a git repo that exist on disk. Exits with one line when `repo` is not a git repo."""
+    """Tracked files of a git repo that exist on disk. Outside git, every file under `repo` except hidden ones."""
     done = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True)
     if done.returncode:
-        raise SystemExit(f"{repo} is not a git repo, so there is no tracked-file list")
+        root = Path(repo)
+        return sorted(str(p.relative_to(root)) for p in root.rglob("*")
+                      if p.is_file() and not any(part.startswith(".") for part in p.relative_to(root).parts))
     return [f for f in done.stdout.splitlines() if (Path(repo) / f).is_file()]
 
 

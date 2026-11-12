@@ -34,6 +34,7 @@ count_lines() {
 kind() {
   case "$1" in
     */tests/*|tests/*|*test_*.py|*_test.py|*.test.*|*.spec.*) echo tests ;;
+    skills/*/scripts/*|*/skills/*/scripts/*) echo code ;;
     */SKILL.md|SKILL.md|*/skills/*|skills/*|references/*|*/references/*|*/agents/*|agents/*) echo skills ;;
     *.md|*.txt|*.rst|docs/*|*/docs/*) echo docs ;;
     *.py|*.sh|*.js|*.mjs|*.ts|*.tsx|*.jsx|*.html|*.css|*.swift|*.applescript|*.scpt|*.zsh|*.rb|*.go|scripts/*|*/scripts/*) echo code ;;
@@ -82,7 +83,7 @@ fi
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 while IFS= read -r f; do
-  [ -f "$f" ] || continue
+  [ -f "$f" ] && [ ! -L "$f" ] || continue
   lines=$(count_lines "$f")
   bytes=$(wc -c <"$f" | tr -d ' ')
   printf '%s\t%s\t%s\n' "$(kind "$f")" "$lines" "$bytes" >>"$tmp"

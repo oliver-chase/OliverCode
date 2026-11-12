@@ -37,6 +37,10 @@ class StoryFormat(unittest.TestCase):
         self.assertEqual(["Gherkin Feature"], [p for p, _ in problems])
         self.assertIn("Feature:", problems[0][1])
 
+    def test_angle_brackets_inside_backticks_are_not_a_placeholder(self):
+        good = body("story-good.body") + "\nRun `size.sh <target>` before and after.\n"
+        self.assertEqual([], [p for p, _ in sf.check_body(good) if "placeholder" in p])
+
     def test_a_story_without_an_epic_link_is_rejected(self):
         self.assertEqual(["Epic link"], parts("story-no-epic.body"))
 

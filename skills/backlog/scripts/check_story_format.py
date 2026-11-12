@@ -86,7 +86,7 @@ def check_body(body, kind=None):
     elif work_type != kind:
         problems.append((f"Work type is {work_type} but this body is checked as a {kind.lower()}",
                          f"set `Work type: {kind}`"))
-    ph = PLACEHOLDER.search(body)
+    ph = PLACEHOLDER.search(re.sub(r"`[^`]*`", "", body))
     if ph:
         problems.append((f"Unfilled placeholder {ph.group(0)}", "replace every <...> with the real text"))
     return problems

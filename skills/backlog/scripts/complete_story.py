@@ -9,7 +9,6 @@ posts TEXT as a comment and closes the issue. Exits 0 when all three writes succ
 failed call, 2 on a usage error.
 """
 import argparse
-import io
 import json
 import sys
 
@@ -52,7 +51,7 @@ def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
         print(f"complete_story: cannot read the config: {exc}", file=err)
         return 2
     try:
-        data, _ = qa.fetch(repo, args.story, runner)
+        data, body = qa.fetch(repo, args.story, runner)
     except (RuntimeError, ValueError) as exc:
         print(f"complete_story: cannot read #{args.story}: {exc}", file=err)
         return 1
@@ -64,12 +63,12 @@ def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
     required_from = cfg.get("qaRequiredFromIssue")
     qa_required = isinstance(required_from, int) and args.story >= required_from
     if "qa" in roles or qa_required:  # a story with a QA pass, or one the config requires QA for, closes only on its sign-off
-        check_out = io.StringIO()
-        code = qa.main(["--story", str(args.story), "--config", args.config], runner=runner, out=check_out, err=err)
-        if code != 0:
-            out.write(check_out.getvalue())
+        ok, lines = qa.check(qa.flatten(data), body)
+        if not ok:
+            for line in lines:
+                print(f"check_qa_signoff: {line}", file=out)
             print(f"complete_story: #{args.story} not completed", file=out)
-            return code
+            return 1
     try:
         item = item_id(cfg, args.story, runner)
         if not item:

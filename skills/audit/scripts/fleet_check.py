@@ -56,16 +56,19 @@ def measure(repo, files):
     return {"testCount": tests, "docWords": docs, "skillWords": skills}
 
 
-def run_tests(repo, per_module=None):
+def run_tests(repo, per_module=None, failed=None):
     """Wall seconds to run every `tests/test_*.py` module, each in its own process as validate.sh does,
-    or None when the repo has no such module. A dict passed as `per_module` gets each module's seconds."""
+    or None when the repo has no such module. A dict passed as `per_module` gets each module's seconds,
+    and a list passed as `failed` gets each module that failed."""
     tests_dir = Path(repo) / "tests"
     modules = sorted(p.stem for p in tests_dir.glob("test_*.py")) if tests_dir.is_dir() else []
     if not modules:
         return None
     def run_one(module):
         began = time.monotonic()
-        subprocess.run([sys.executable, "-m", "unittest", "-b", module], cwd=tests_dir, capture_output=True)
+        done = subprocess.run([sys.executable, "-m", "unittest", "-b", module], cwd=tests_dir, capture_output=True)
+        if done.returncode and failed is not None:
+            failed.append(module)
         if per_module is not None:
             per_module[module] = time.monotonic() - began
 
@@ -135,6 +138,8 @@ def board_drift(repo, fields_file):
         name = f"{config['repoOwner']}/{config['repoName']}" if config else "the saved board"
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return "docs/backlog-config.json", None, f"unreadable backlog config: {exc}"
+    if not Path(BASELINE_SCRIPT).is_file():
+        return name, None, "the backlog skill is not installed beside this one"
     try:
         spec = importlib.util.spec_from_file_location("check_kanban_baseline", BASELINE_SCRIPT)
         mod = importlib.util.module_from_spec(spec)
@@ -161,15 +166,17 @@ def main(argv=None):
     budget_path = repo / BUDGET_FILE
     budget = json.loads(budget_path.read_text(encoding="utf-8")) if budget_path.is_file() else {}
     measured = measure(repo, files)
-    per_module = {}
-    measured["testSeconds"] = run_tests(repo, per_module) if args.time else None
+    per_module, failed = {}, []
+    measured["testSeconds"] = run_tests(repo, per_module, failed) if args.time else None
     print(f"== Budgets ({BUDGET_FILE if budget else 'no budget file'})")
     lines, over = budget_lines(measured, budget, args.time)
     print("\n".join(lines))
     if per_module:
         slowest = sorted(per_module.items(), key=lambda kv: kv[1], reverse=True)[:3]
         print("slowest test files: " + ", ".join(f"{m} {t:.1f}s" for m, t in slowest))
-    problems += over
+    if failed:
+        print("failing test files: " + ", ".join(sorted(failed)))
+    problems += over + len(failed)
 
     print("== Voice")
     findings = voice_findings(repo, files)

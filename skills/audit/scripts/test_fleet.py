@@ -48,11 +48,12 @@ class FindSkills(unittest.TestCase):
 
 
 class Tracked(unittest.TestCase):
-    def test_a_folder_that_is_not_a_git_repo_exits_with_one_line(self):
+    def test_a_folder_that_is_not_a_git_repo_lists_its_visible_files(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(SystemExit) as caught:
-                _fleet.tracked(tmp)
-        self.assertIn("is not a git repo", str(caught.exception))
+            (Path(tmp) / "skills" / "a").mkdir(parents=True)
+            (Path(tmp) / "skills" / "a" / "SKILL.md").write_text("x\n")
+            (Path(tmp) / ".hidden").write_text("x\n")
+            self.assertEqual(["skills/a/SKILL.md"], _fleet.tracked(tmp))
 
     def test_test_files_are_found_by_every_naming_rule(self):
         for rel in ("tests/a.py", "x/test_a.py", "a_test.py", "a.test.js", "a.spec.ts"):

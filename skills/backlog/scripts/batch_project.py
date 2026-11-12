@@ -175,15 +175,29 @@ def main(argv=None, runner=run_gh, out=sys.stdout, err=sys.stderr):
             # is not an issue, would fail every later run the same way, so those jobs leave the queue.
             if gh_budget.is_limit(str(exc)) or gh_budget.refusal():
                 return (exc, queue)
-            return (exc, other)
-        return (result, other)
+            # Apply each issue alone so only the ones that fail leave the queue. A limit keeps the rest queued.
+            count = updates = 0
+            dropped = []
+            for i, issue in enumerate(merged):
+                try:
+                    c, u = drain(cfg, [issue], runner)
+                except RuntimeError as one:
+                    if gh_budget.is_limit(str(one)) or gh_budget.refusal():
+                        return (one, other + [{"cfg": cfg, "issues": merged[i:]}])
+                    dropped.append(f"#{issue['number']}: {one}")
+                    continue
+                count, updates = count + c, updates + u
+            return ((count, updates, dropped), other)
+        return ((*result, []), other)
     result = with_queue(take)
     if isinstance(result, RuntimeError):
-        print(f"batch_project: {result}; a job that cannot succeed was dropped, rate-limited work stays queued", file=err)
+        print(f"batch_project: {result}; rate-limited work stays queued", file=err)
         return 1
-    count, updates = result
+    count, updates, dropped = result
     print(f"batch_project: applied {updates} field update(s) across {count} queued issue(s)", file=out)
-    return 0
+    for line in dropped:
+        print(f"batch_project: dropped {line}; it cannot succeed, so it left the queue", file=err)
+    return 1 if dropped else 0
 
 
 if __name__ == "__main__":

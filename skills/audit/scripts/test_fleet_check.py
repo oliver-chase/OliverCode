@@ -88,11 +88,12 @@ class Target(unittest.TestCase):
             self.assertIn("docWords: 1", out)
             self.assertIn("testSeconds: not measured (no tests/test_*.py to run)", out)
 
-    def test_a_folder_that_is_not_a_git_repo_stops_with_one_line(self):
+    def test_a_folder_that_is_not_a_git_repo_is_measured_from_its_files(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(SystemExit) as caught:
-                run(tmp)
-        self.assertIn("is not a git repo", str(caught.exception))
+            Path(tmp, "README.md").write_text("one\n")
+            code, out = run(tmp)
+        self.assertEqual(0, code)
+        self.assertIn("docWords: 1, no budget set", out)
 
 
 class Voice(unittest.TestCase):

@@ -74,6 +74,24 @@ class BatchProject(unittest.TestCase):
             self.assertEqual(1 if number == 999999 else 0, code)
         self.assertEqual([], json.loads((Path(self.tmp.name) / "gh-project-queue.json").read_text()))
 
+    def test_one_bad_number_leaves_the_queue_and_the_good_work_queued_with_it_applies(self):
+        bp.gh_budget.note_limit(seconds=60)
+        self.input.write_text(json.dumps({"issues": [{"number": 5, "fields": {"status": "Ready"}}]}))
+        bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=Runner(), out=io.StringIO())
+        bp.gh_budget.clear()
+        good = Runner()
+        def runner(args):
+            if "999999" in args[-1]:
+                return subprocess.CompletedProcess(args, 1, "", "Could not resolve to an Issue")
+            return good(args)
+        self.input.write_text(json.dumps({"issues": [{"number": 999999, "fields": {"status": "Ready"}}]}))
+        out, err = io.StringIO(), io.StringIO()
+        code = bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=runner, out=out, err=err)
+        self.assertEqual(1, code)
+        self.assertIn("across 1 queued issue(s)", out.getvalue())
+        self.assertIn("dropped #999999", err.getvalue())
+        self.assertEqual([], json.loads((Path(self.tmp.name) / "gh-project-queue.json").read_text()))
+
     def test_unknown_config_value_refuses_before_queueing(self):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Nope"}}]}))
         self.assertEqual(2, bp.main(["--config", str(self.cfg), "--input", str(self.input)], err=io.StringIO()))

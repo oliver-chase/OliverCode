@@ -79,7 +79,7 @@ When the owner asks for a sweep, read the config path from the repo's `CLAUDE.md
 
 The script is `python3 scripts/check_board_hygiene.py --config CONFIG`, with `--dimension` (repeatable).
 
-Every finding is mechanical. Report them as one grouped list, or "Nothing due" when clean.
+A body line `QA: mechanical` lets a builder comment saying "validate.sh exits 0" stand in for QA. Every finding is mechanical. Report them as one grouped list, or "Nothing due" when clean.
 
 ### Clear the findings
 

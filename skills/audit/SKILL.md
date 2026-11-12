@@ -5,7 +5,7 @@ description: "The one audit for anything: a whole repo or suite, a skill or skil
 
 # Audit
 
-An audit tells the owner what a target is meant to be, what it is today and what to change, with every claim checked against the files. Every route runs the same procedure and writes the same report, and a whole repo then goes on to done (`references/done.md`). Script paths are relative to this skill's folder.
+An audit tells the owner what a target is meant to be, what it is today and what to change, with every claim checked against the files. Every route runs the same procedure and writes the same report, and a whole repo then goes on to done (`references/done.md`). Script paths are relative to this skill's folder. It runs alone; only the board check needs the backlog skill beside it.
 
 ## Opening message
 
@@ -27,6 +27,7 @@ Load the file of the route the request names. A request that fits two routes run
 |---|---|---|
 | A repo, a suite, a system, or nothing ("audit this") | Whole target, then to done | `references/system.md`, `references/done.md` |
 | A skill, a skill family or a skills folder | Skills | `references/skills.md` |
+| The Claude config (`~/.claude`) | Skills, then Docs | `references/skills.md`, `references/docs.md` |
 | The docs, a README, or "are these accurate" | Docs | `references/docs.md` |
 | This session's work, a commit range, "QA this" | Changes | `references/changes.md` |
 | A plan file, or a plan about to run | Plan | `references/plan.md` |
@@ -63,6 +64,7 @@ Every audit prints these headings in this order, which `check_report.py` enforce
 6. **Outcomes.** What the target is after the fixes, before and after in files, lines, skills and bytes, whether a new user reaches a result by talking, and whether the fixes reach the goal. When they only trim, name the structural move that would reach it
 7. **Added to the board.** The epic and every story with number, title, priority, size and status, then the open items that work against the goal for the owner to keep, defer or close
 8. **Read and unknown.** What was read, what the ledger skipped, what the lead re-checked and what could not be verified
+9. **Coverage.** Each finding with the issue that holds it
 
 ## Rules
 
