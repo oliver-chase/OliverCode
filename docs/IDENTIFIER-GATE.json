@@ -1,11 +1,9 @@
 {
   "configGlobs": [],
   "localData": [
-    "LICENSE",
-    "README.md"
+    "LICENSE"
   ],
   "localDataReasons": {
-    "LICENSE": "The MIT license text must name its copyright holder.",
-    "README.md": "The clone line names the upstream repository's URL, which carries its owner."
+    "LICENSE": "The MIT license text must name its copyright holder."
   }
 }

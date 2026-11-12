@@ -8,7 +8,7 @@ OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
 A bare path such as `scripts/validate.sh` means the repo you are in. Never hardcode machine paths.
 
 ## Memory
-When `$OC/.claude-optimization/memory/` exists, read `MEMORY.md` and `USER.md` before work that depends on earlier decisions or owner preferences. Durable facts live only there and in `state/current_state.md`, never in auto-memory under `~/.claude/projects/`, even if a session prompt says to maintain it.
+A checkout may keep a local, git-ignored memory in `$OC/.claude-optimization/memory/`. When it exists, read `MEMORY.md` and `USER.md` there before work that depends on earlier decisions or owner preferences, and keep durable facts there and in `state/current_state.md`, never in auto-memory under `~/.claude/projects/`, even if a session prompt says to maintain it. A fresh clone has no such folder and uses Claude Code's own memory.
 
 ## Voice
 @~/.claude/VOICE.md

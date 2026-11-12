@@ -41,9 +41,8 @@ WORD = re.compile(r"[A-Za-z0-9']+")
 DECLARED_MARKERS: dict[str, str] = {
     "dirname readlink claude claude md": (
         "The $OC-resolution snippet (docs/SETUP.md, CLAUDE.md, "
-        "skills/olivercode-adoption/SKILL.md). Deliberately identical everywhere it "
-        "appears -- SETUP.md itself calls this 'the one hard constraint' and every "
-        "doc teaching it should show the exact same pattern so it is recognizable."
+        "skills/olivercode-adoption/SKILL.md) is identical everywhere it appears, "
+        "so a reader recognizes the one way to find the OliverCode checkout."
     ),
 }
 
