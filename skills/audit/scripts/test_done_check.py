@@ -61,6 +61,17 @@ class DoneCheckTest(unittest.TestCase):
         only_email = {"portability.py": (1, "personal-email  someone-at-example  x\nportability: 1 blocker(s)\n")}
         self.assertEqual(self.names(done_check.checks(repo("Sharing: personal - mine\n"), run=fake(only_email))), set())
 
+    def test_history_secret_matches_across_hash_lengths(self):
+        accepted = "Accepted: history-secret 7961cefa - revoked\nAccepted: history-secret 1234567 - revoked\n"
+        for printed in ("7961cef", "7961cefa", "7961cefa0", "12345678"):
+            out = {"portability.py": (1, f"history-secret  {printed}  y\n")}
+            root = repo("Sharing: personal - mine\n", accepted)
+            self.assertEqual(self.names(done_check.checks(root, run=fake(out))), set(), printed)
+        for printed in ("7961ce", "7961ceb", "abcdef0"):
+            out = {"portability.py": (1, f"history-secret  {printed}  y\n")}
+            root = repo("Sharing: personal - mine\n", accepted)
+            self.assertIn("portability", self.names(done_check.checks(root, run=fake(out))), printed)
+
     def test_epic_must_be_closed(self):
         out = {"issue view": (0, "OPEN\n"), "issue list": (0, "2\n")}
         results = done_check.checks(repo("Sharing: portable\n"), epics=[5], run=fake(out))

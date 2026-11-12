@@ -8,7 +8,8 @@ board difference; sweep.py and catalog.py --check find nothing; a sharing verdic
 portable" or "Sharing: personal" with a reason, in the README or docs/SHARING.md) and portability.py
 finds no blocker that the verdict says matters; and, with --epic, the epic and every story citing it are
 closed (--epic repeats for each epic). A row the owner decided to keep is listed in docs/AUDIT-ACCEPTED.md as
-`Accepted: <kind> <where> - <reason>` and is not counted. Tests: python3 -m unittest test_done_check
+`Accepted: <kind> <where> - <reason>` and is not counted. A history-secret row matches when either commit hash
+starts with the other (7 characters or more), since git shortens hashes after a prune. Tests: python3 -m unittest test_done_check
 """
 
 import re
@@ -32,6 +33,14 @@ def sh(cmd, cwd):
 def accepted(repo):
     f = Path(repo) / "docs" / "AUDIT-ACCEPTED.md"
     return {(k, w) for k, w in ACCEPTED.findall(f.read_text(encoding="utf-8"))} if f.exists() else set()
+
+
+def is_accepted(kind, where, skip):
+    if (kind, where) in skip:
+        return True
+    if kind != "history-secret" or not re.fullmatch(r"[0-9a-f]{7,}", where):
+        return False
+    return any(k == kind and len(w) >= 7 and (w.startswith(where) or where.startswith(w)) for k, w in skip)
 
 
 def rows(output, width=2):
@@ -72,7 +81,7 @@ def checks(repo, epics=(), validate=None, run=sh):
     v = verdict(repo)
     out.append(("sharing verdict recorded", v is not None, "" if v else 'add "Sharing: portable" or "Sharing: personal - reason" to README.md or docs/SHARING.md'))
     _, text = run([sys.executable, str(HERE / "portability.py"), str(repo)], repo)
-    blockers = [(k, w) for k, w in rows(text) if (k, w) not in skip and (v != "personal" or k in PERSONAL_BLOCKERS)]
+    blockers = [(k, w) for k, w in rows(text) if not is_accepted(k, w, skip) and (v != "personal" or k in PERSONAL_BLOCKERS)]
     out.append(("portability", not blockers, f"{len(blockers)} blocker(s), first {blockers[0][0]} {blockers[0][1]}" if blockers else ""))
     for epic in epics:
         rc, text = run(["gh", "issue", "view", str(epic), "--json", "state", "--jq", ".state"], repo)
