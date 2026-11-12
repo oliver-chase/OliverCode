@@ -31,7 +31,7 @@ Give each reader this brief, with the readers and the cap from the procedure, al
 
 ## After the reviewers return
 
-- Re-check the biggest claims yourself, as the procedure says, and drop any that do not reproduce
+- Re-check the biggest claims yourself and drop any that do not reproduce
 - Merge duplicates across readers, and add findings only visible across areas, such as one rule in two areas
 - Judge the shape, which no reviewer sees from one slice: name each small skill that its nearest neighbor could absorb, and what a core with add-ons off by default would hold
 
