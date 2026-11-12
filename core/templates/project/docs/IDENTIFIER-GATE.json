@@ -1,4 +1,5 @@
 {
+  "_comment": "The owner-identifier gate's per-repo lists: config files to read for account names, and local-data files allowed to hold an identifier, each with a reason.",
   "configGlobs": [],
   "localData": [],
   "localDataReasons": {}

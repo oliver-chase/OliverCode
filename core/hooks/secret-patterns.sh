@@ -1,3 +1,4 @@
+# The secret patterns both the pre-commit secrets gate and the pre-push scan build in, so the two never drift.
 SECRET_PATTERNS=(
   '[A-Za-z0-9_]{20,}:[A-Za-z0-9_\-]{30,}'   # Colon-separated tokens (bot tokens)
   'sk-[A-Za-z0-9]{20,}'                        # OpenAI/Anthropic-style keys

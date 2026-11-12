@@ -1,4 +1,5 @@
 {
+  "_comment": "Files the PII gate skips because they hold the patterns it blocks, each with a reason.",
   "exempt": [
     ".githooks/pre-commit",
     "core/templates/project/pre-commit",

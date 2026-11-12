@@ -1,4 +1,5 @@
 {
+  "_comment": "This repo's line-count baseline, which the size ratchet keeps from rising past its allowance.",
   "lines": 23347,
   "allowancePercent": 5,
   "updated": "2026-11-12"

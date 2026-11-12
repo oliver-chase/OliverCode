@@ -1,4 +1,5 @@
 {
+  "_comment": "Files the emoji gate skips, each with a reason.",
   "exempt": [],
   "reasons": {}
 }

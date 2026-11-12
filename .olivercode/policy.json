@@ -1,4 +1,5 @@
 {
+  "_comment": "This repo's permission policy: the commands and paths an agent may use, and the actions that ask the owner first.",
   "version": 1,
   "commands": {
     "allow": [],

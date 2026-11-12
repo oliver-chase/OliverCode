@@ -1,4 +1,5 @@
 {
+  "_comment": "The example of this machine's local config: where repos live, the private repos and per-repo paths. Copy it to olivercode.local.json.",
   "repoRoot": "~/path/to/your/repos",
   "allowOutside": [],
   "privateRepos": {
