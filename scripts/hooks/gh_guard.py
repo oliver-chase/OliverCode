@@ -26,19 +26,37 @@ GH_SCRIPTS = ("complete_story", "log_action", "check_board_hygiene", "check_qa_s
 QUEUE_SCRIPTS = ("batch_project",)
 
 
+LEADERS = ("env", "time", "timeout", "nice", "sudo", "command", "exec")
+
+
+def segments(command: str) -> list[list[str]]:
+    """The words of each command the shell would run, with leading wrappers, variable assignments and an
+    interpreter removed, so the first word is the program or script that runs."""
+    out = []
+    for seg in re.split(r"&&|\|\||[;|\n`]|\$\(", command):
+        try:
+            words = shlex.split(seg, comments=False)
+        except ValueError:
+            continue
+        while words and (os.path.basename(words[0]) in LEADERS or re.fullmatch(r"[A-Za-z_]\w*=.*", words[0])
+                         or re.fullmatch(r"-\S+|\d+[smh]?", words[0])):
+            words = words[1:]
+        if words and os.path.basename(words[0]).startswith(("python", "bash", "sh", "zsh")):
+            words = [w for w in words[1:] if not w.startswith("-")] or words
+        if words:
+            out.append(words)
+    return out
+
+
 def uses_gh(command: str) -> bool:
-    try:
-        words = shlex.split(command, comments=False)
-    except ValueError:
-        return False
-    if any(name in w for w in words for name in QUEUE_SCRIPTS):
-        return False
-    if any(name in w for w in words for name in GH_SCRIPTS):
-        return True
-    for i, w in enumerate(words):
-        if os.path.basename(w) == "gh" and (i == 0 or words[i - 1] in ("&&", "||", ";", "|", "(", "$(", "env", "time")):
-            rest = words[i + 1:i + 3]
-            return rest[:2] != ["api", "rate_limit"]
+    """A command that runs gh or a script that calls gh. Naming one, as `sed` or `grep` on its file does, is not running it."""
+    for words in segments(command):
+        head = os.path.basename(words[0])
+        if head == "gh":
+            if words[1:3] != ["api", "rate_limit"]:
+                return True
+        elif not head.startswith(QUEUE_SCRIPTS) and head.startswith(GH_SCRIPTS):
+            return True
     return False
 
 
@@ -89,7 +107,7 @@ def refusal(command: str) -> str:
     if not why and per_field_edit(command):
         why = ("A per-field `gh project item-edit` spends about five points a card. Put every card and field in one "
                "input file and run skills/backlog/scripts/batch_project.py, which sets them in a few calls.")
-    return why or (gh_budget.reserve_write() if is_write(command) else "")
+    return why or gh_budget.reserve_call() or (gh_budget.reserve_write() if is_write(command) else "")
 
 
 def main() -> int:

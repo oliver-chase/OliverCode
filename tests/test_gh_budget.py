@@ -62,6 +62,19 @@ class TestWriteCap(Isolated):
             self.assertEqual("", gh_budget.reserve_write())
 
 
+class TestCallCap(Isolated):
+    def test_calls_up_to_the_cap_pass_and_the_next_names_the_seconds_to_wait(self):
+        with mock.patch.object(gh_budget, "CALLS_PER_MINUTE", 2):
+            now = time.time()
+            self.assertEqual(["", ""], [gh_budget.reserve_call(now=now) for _ in range(2)])
+            self.assertIn("Try again in 60 seconds", gh_budget.reserve_call(now=now))
+
+    def test_a_call_older_than_a_minute_no_longer_counts(self):
+        with mock.patch.object(gh_budget, "CALLS_PER_MINUTE", 1):
+            gh_budget.reserve_call(now=time.time() - 61)
+            self.assertEqual("", gh_budget.reserve_call())
+
+
 class TestPointsReserve(Isolated):
     def test_points_under_the_floor_hold_every_caller_until_the_reset(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
@@ -139,6 +152,26 @@ class TestHooks(Isolated):
         self.assertEqual((0, ""), (done.returncode, done.stdout))
 
 
+
+
+class TestUsesGh(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
+        import gh_guard
+        self.uses = gh_guard.uses_gh
+
+    def test_reading_or_searching_a_script_that_calls_gh_is_not_a_gh_call(self):
+        self.assertFalse(self.uses("sed -n 1,20p skills/backlog/scripts/complete_story.py"))
+        self.assertFalse(self.uses("grep -n def skills/backlog/scripts/check_qa_signoff.py && ls"))
+
+    def test_running_it_through_an_interpreter_or_wrapper_is(self):
+        self.assertTrue(self.uses("cd x && python3 skills/backlog/scripts/complete_story.py --story 1"))
+        self.assertTrue(self.uses("timeout 30 gh issue list"))
+        self.assertTrue(self.uses("echo $(gh issue list)"))
+
+    def test_the_batching_script_does_not_hide_a_gh_call_beside_it(self):
+        self.assertFalse(self.uses("python3 skills/backlog/scripts/batch_project.py --input w.json"))
+        self.assertTrue(self.uses("python3 skills/backlog/scripts/batch_project.py --input w.json && gh issue close 1"))
 
 
 class TestIsWrite(unittest.TestCase):

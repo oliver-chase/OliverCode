@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 import re
 import subprocess
@@ -24,6 +25,8 @@ HOLD_SECONDS = 1200
 # GitHub also throttles bursts of writes regardless of the points left (20 minutes of one write every 10
 # seconds tripped it on 2026-11-11), so the machine as a whole gets a rolling cap on writes.
 WRITES_PER_HOUR = int(os.environ.get("OLIVERCODE_GH_WRITES_PER_HOUR") or 90)
+# Every gh call, read or write, counts against a per-minute cap so parallel agents slow down together.
+CALLS_PER_MINUTE = int(os.environ.get("OLIVERCODE_GH_CALLS_PER_MINUTE") or 30)
 # Stop before GitHub does: below this many GraphQL points every agent holds until the reset. 0 switches it off.
 POINTS_FLOOR = 500  # OLIVERCODE_GH_POINTS_FLOOR overrides it, read on each call so a test or session can change it
 POINTS_TTL = 60
@@ -69,31 +72,50 @@ def refusal() -> str:
             "Queue the pending board writes in your report and make no further gh calls; `olivercode gh-limit clear` lifts the hold early.")
 
 
-def reserve_write(now: float | None = None) -> str:
-    """Count one GitHub write against the rolling hourly cap shared by every agent. Returns '' when the write may
-    go ahead (and records it), or the text that stops it, naming when the oldest write falls out of the hour."""
-    now = now or time.time()
+def _reserve(name: str, window: int, cap: int, now: float) -> float:
+    """Record one call in a rolling window shared by every agent. Returns 0 when it may go ahead, or the time the
+    oldest call leaves the window when the cap is reached (and records nothing)."""
     home().mkdir(parents=True, exist_ok=True)
-    with open(home() / "gh-writes.json", "a+") as fh:
+    with open(home() / name, "a+") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
         try:
             fh.seek(0)
             try:
-                stamps = [t for t in json.loads(fh.read() or "[]") if now - t < 3600]
+                stamps = [t for t in json.loads(fh.read() or "[]") if now - t < window]
             except ValueError:
                 stamps = []
-            if len(stamps) >= WRITES_PER_HOUR:
-                when = time.strftime("%H:%M", time.localtime(stamps[0] + 3600))
-                return (f"This machine has made {len(stamps)} GitHub writes in the last hour, the cap that keeps every agent under "
-                        f"GitHub's burst limit. Queue the rest in your report and write again after about {when}.")
+            if len(stamps) >= cap:
+                return stamps[0] + window
             stamps.append(now)
             fh.seek(0)
             fh.truncate()
             fh.write(json.dumps(stamps))
             fh.flush()
-            return ""
+            return 0.0
         finally:
             fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def reserve_write(now: float | None = None) -> str:
+    """Count one GitHub write against the rolling hourly cap shared by every agent. Returns '' when the write may
+    go ahead (and records it), or the text that stops it, naming when the oldest write falls out of the hour."""
+    free_at = _reserve("gh-writes.json", 3600, WRITES_PER_HOUR, now or time.time())
+    if not free_at:
+        return ""
+    when = time.strftime("%H:%M", time.localtime(free_at))
+    return (f"This machine has made {WRITES_PER_HOUR} GitHub writes in the last hour, the cap that keeps every agent under "
+            f"GitHub's burst limit. Queue the rest in your report and write again after about {when}.")
+
+
+def reserve_call(now: float | None = None) -> str:
+    """Count one gh call of any kind against a per-minute cap shared by every agent, so a burst from several agents
+    slows down before GitHub refuses it. Returns '' when the call may go ahead, or the text naming the wait."""
+    now = now or time.time()
+    free_at = _reserve("gh-calls.json", 60, CALLS_PER_MINUTE, now)
+    if not free_at:
+        return ""
+    return (f"This machine has made {CALLS_PER_MINUTE} gh calls in the last minute, the cap that keeps every agent under "
+            f"GitHub's limit. Try again in {math.ceil(free_at - now)} seconds.")
 
 
 def _fetch_points() -> dict:
