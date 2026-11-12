@@ -143,6 +143,15 @@ class TestCopies(Base):
         self.assertEqual(maintain.check_copies(self.cfg, False), [])
 
 
+class TestSlowRepo(Base):
+    def test_a_git_call_that_times_out_skips_the_repo_and_does_not_stop_the_run(self):
+        scratch_repo(self.root / "app")
+        slow = subprocess.TimeoutExpired(["git"], 60)
+        with mock.patch.object(hygiene.subprocess, "run", side_effect=slow):
+            self.assertEqual([], hygiene.stray_copies(self.root / "app"))
+            self.assertEqual([], maintain.check_copies(self.cfg, True))
+
+
 class TestSyncedRoot(Base):
     def synced(self):
         root = self.root / "Dropbox" / "Repos"

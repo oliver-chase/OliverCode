@@ -45,7 +45,11 @@ def evicted(path: Path) -> bool:
 
 
 def _git(repo: Path, *args: str) -> str:
-    ran = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
+    """git's output, or '' when it fails or takes over a minute, so one slow repo never stops a whole run."""
+    try:
+        ran = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
     return ran.stdout if ran.returncode == 0 else ""
 
 
