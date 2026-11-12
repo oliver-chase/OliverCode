@@ -9,7 +9,7 @@ cd "$REPO_ROOT"
 
 if [[ -x .githooks/pre-commit ]]; then
   echo "=== validate: pre-commit gates ==="
-  bash .githooks/pre-commit
+  OLIVERCODE_SCAN_TREE=1 bash .githooks/pre-commit
 fi
 
 if [[ -f scripts/build-hooks.py ]]; then

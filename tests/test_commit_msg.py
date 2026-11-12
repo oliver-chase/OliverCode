@@ -231,3 +231,22 @@ class TestStoryExists(CommitMsgCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCommitMsgEdges(CommitMsgCase):
+    def test_a_merge_message_is_exempt_from_the_voice_check(self):
+        self.first_commit()
+        self.assertEqual(0, self.commit("Merge branch 'use-x-instead-of-y'").returncode)
+
+    def test_a_null_committed_baseline_counts_as_zero(self):
+        self.first_commit()
+        base = self.repo / "docs"
+        base.mkdir()
+        (base / "SIZE-BASELINE.json").write_text('{"lines": null}\n')
+        git(self.repo, "add", "docs")
+        git(self.repo, "commit", "-m", "Add baseline (#5)", "--no-verify")
+        (base / "SIZE-BASELINE.json").write_text('{"lines": 5000}\n')
+        git(self.repo, "add", "docs")
+        result = git(self.repo, "commit", "-m", "Raise it (#5)", check=False)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("size baseline", result.stdout + result.stderr)

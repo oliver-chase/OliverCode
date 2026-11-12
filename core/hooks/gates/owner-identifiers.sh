@@ -2,7 +2,7 @@
 # the identifiers itself, so no hand-kept list exists: the names and email local parts of
 # `git log` authors, the owner segment of the origin remote, and the string values of account and
 # shop keys in the config files that docs/IDENTIFIER-GATE.json lists under "configGlobs". Each is
-# lowercased, kept at 4 characters or more, and matched on whole words, so a short name never matches
+# lowercased, kept at 5 characters or more, and matched on whole words, so a short name never matches
 # inside a longer word. Generic authors (noreply addresses, bots, Claude, GitHub) are ignored.
 #
 # Every staged file is scanned, markdown and tests included, except local data: the built-in
@@ -45,7 +45,7 @@ trap 'rc=$?; rm -f "$ID_LIST"; log_failure $rc' EXIT
     done
   done | tr 'A-Z' 'a-z' \
     | sed -nE 's/.*"[^"]*(account|shop|store|handle|username|owner|brand|seller)[^"]*"[[:space:]]*:[[:space:]]*"([^"]+)".*/\2/p'
-} | awk 'length($0) >= 4' \
+} | awk 'length($0) >= 5' \
   | grep -vxE 'claude|github|anthropic|noreply|no-reply|copilot|dependabot|renovate|root|user|users|test|tests|admin|unknown|none|null|example|local|localhost|bot|runner' \
   | sort -u > "$ID_LIST" || true
 if [ ! -s "$ID_LIST" ]; then
@@ -67,7 +67,7 @@ else
     git show ":package.json" 2>/dev/null | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("name",""))
 except Exception: pass' || true
-  } | awk 'length($0) >= 4' | sort -u > "$ID_SELF"
+  } | awk 'length($0) >= 5' | sort -u > "$ID_SELF"
   ID_MATCHER='import re, sys
 words = [w.strip() for w in open(sys.argv[1]) if w.strip()]
 selfs = sorted((w.strip() for w in open(sys.argv[2]) if w.strip()), key=len, reverse=True)

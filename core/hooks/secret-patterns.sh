@@ -18,7 +18,7 @@ SECRET_PATTERNS=(
   'AIza[0-9A-Za-z_-]{35}'                      # Google API key
   'npm_[0-9A-Za-z]{36}'                        # npm access token
   '-----BEGIN [A-Z ]*PRIVATE KEY-----'         # Private keys (RSA/EC/DSA/OPENSSH/PKCS8) — matches "BEGIN <TYPE> PRIVATE KEY"
-  '(TOKEN|SECRET|KEY|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|AUTH|CREDENTIAL|token|secret|key|password|passwd|api_?key|access_?key|auth|credential)["'\'':= ]+[A-Za-z0-9]{20,}'  # Secret-named var assigned a 20+ char alphanumeric value (a bare hex-blob pattern false-positives on every git SHA/lockfile hash)
+  '(TOKEN|SECRET|KEY|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|AUTH|CREDENTIAL|token|secret|key|password|passwd|api_?key|access_?key|auth|credential|[Pp]assword|[Tt]oken|[Ss]ecret|[Aa]pi[Kk]ey|[Aa]ccess[Kk]ey|[Cc]redential)["'\'':= ]+[A-Za-z0-9]{20,}'  # Secret-named var assigned a 20+ char alphanumeric value (a bare hex-blob pattern false-positives on every git SHA/lockfile hash)
 )
 
 # secret_filter PATTERN: reads `grep -n` hits on stdin and prints those that hold a real secret.
@@ -26,7 +26,7 @@ SECRET_PATTERNS=(
 # Exempt: the public supabase anon-key meta tag, a line marked "secret-scan: allow", and a hit
 # whose every matched value is a placeholder (EXAMPLE, placeholder, your_key, a run of x).
 SECRET_ANON_META='<meta name="supabase-anon-key" content="eyJ'
-SECRET_PLACEHOLDER='EXAMPLE|[Ee]xample|[Pp]laceholder|PLACEHOLDER|[Yy]our[_-]?([Aa]pi[_-]?)?([Kk]ey|[Tt]oken|[Ss]ecret)|YOUR_|x{8,}|X{8,}'
+SECRET_PLACEHOLDER='EXAMPLE|[Ee]xample|[Pp]laceholder|PLACEHOLDER|[Yy]our[_-]?([Aa]pi[_-]?)?([Kk]ey|[Tt]oken|[Ss]ecret)|YOUR_|(^|[^A-Za-z0-9])[xX]{8,}([^A-Za-z0-9]|$)'
 secret_filter() {
   local pattern="$1" hit
   while IFS= read -r hit; do

@@ -2,8 +2,8 @@
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: PII scan..."
 
 PII_PATTERNS=(
-  '/Users/[a-z]+/'                              # macOS home directory paths
-  '/home/[a-z]+/'                               # Linux home directory paths
+  '/Users/[A-Za-z0-9._-]+/'                              # macOS home directory paths
+  '/home/[A-Za-z0-9._-]+/'                                # Linux home directory paths
   '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'  # Email addresses (any domain)
 )
 

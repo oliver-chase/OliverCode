@@ -10,7 +10,6 @@ if [ -n "$STAGED_FILES" ]; then
   SECRET_GREP_ARGS=()
   for pattern in "${SECRET_PATTERNS[@]}"; do SECRET_GREP_ARGS+=(-e "$pattern"); done
   while IFS= read -r file; do
-    [ "$file" = .gitignore ] && continue
     count=$(staged_content "$file" 2>/dev/null | grep -cE "${SECRET_GREP_ARGS[@]}" || true)
     if [ "${count:-0}" -gt 0 ]; then SECRET_CANDIDATES="${SECRET_CANDIDATES}${file}"$'\n'; fi
   done <<< "$STAGED_FILES"

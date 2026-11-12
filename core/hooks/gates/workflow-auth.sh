@@ -14,13 +14,13 @@ if [[ -n "$WORKFLOW_STAGED" ]]; then
     fi
   fi
   if [[ "$HAS_WORKFLOW_SCOPE" == false ]]; then
-    echo "  BLOCKED: workflow file(s) staged but no workflow-scoped credential found."
-    echo "  GitHub rejects workflow updates unless credentials include workflow scope."
-    echo "  Fix: gh auth login --scopes workflow  (or add the scope: gh auth refresh -s workflow)"
+    # Advisory: an SSH key or a fine-grained token can push workflows with no scope header to read.
+    echo "  WARNING: workflow file(s) staged and no workflow-scoped gh credential found."
+    echo "  GitHub rejects the push without workflow scope: gh auth refresh -s workflow"
     echo "$WORKFLOW_STAGED" | sed 's/^/    /'
-    exit 1
+  else
+    echo "  [OK] gh credential has workflow scope."
   fi
-  echo "  [OK] gh credential has workflow scope."
 fi
 
 echo "  Gate {{N}} passed."

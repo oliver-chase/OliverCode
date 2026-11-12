@@ -66,3 +66,21 @@ class TestGate1Secrets(GateHarness):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGateSecretsNames(GateHarness):
+    def test_mixed_case_names_and_gitignore_are_scanned(self):
+        value = "Ab3" * 8
+        cases = {"a.py": f'Password = "{value}"\n', "b.py": f'apiKey: "{value}"\n',
+                 "c.py": f'Token="{value}"\n', ".gitignore": f'secret = "{value}"\n'}
+        for path, content in cases.items():
+            self.stage(path, content)
+        out = self.assertBlocked("gate 1").stdout
+        for path in cases:
+            self.assertIn(f"BLOCKED: {path} matches secret pattern", out)
+
+    def test_a_run_of_x_exempts_only_a_value_made_of_x(self):
+        self.stage("ok.py", 'api_key = "' + "x" * 24 + '"\n')
+        self.assertAllowed()
+        self.stage("bad.py", 'api_key = "' + "Ab3" * 4 + "x" * 9 + "Cd4" * 3 + '"\n')
+        self.assertBlocked("gate 1")

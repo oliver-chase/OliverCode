@@ -208,3 +208,15 @@ class TestLinkedWorktree(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPublicRepoLocalAndPii(GateHarness):
+    def test_the_public_variant_runs_the_repo_local_gate(self):
+        local = self.write(".githooks/pre-commit.local", "#!/usr/bin/env bash\nexit 1\n")
+        local.chmod(0o755)
+        self.stage("notes.txt", "Plain notes.\n")
+        self.assertBlocked("repo-local")
+
+    def test_a_home_path_with_digits_or_dots_is_pii(self):
+        self.stage("a.py", 'P = "/Users/jane.doe2/work"\n')
+        self.assertBlocked("pii")

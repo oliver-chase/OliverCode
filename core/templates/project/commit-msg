@@ -76,6 +76,8 @@ if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
   OLD_JSON="$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)"
   OLD_LINES="$(baseline_field lines "$OLD_JSON")"
   CAP_PCT="$(baseline_field raiseCapPercent "$OLD_JSON")"
+  # A baseline whose committed "lines" is null counts as 0, so the first real number is a raise.
+  if [ -z "$OLD_LINES" ] && [ -n "$OLD_JSON" ]; then OLD_LINES=0; fi
   if [ -n "$NEW_LINES" ] && [ -n "$OLD_LINES" ] && [ "$NEW_LINES" -gt "$OLD_LINES" ]; then
     CAP=$(( OLD_LINES * ${CAP_PCT:-2} / 100 ))
     RAISE=$(( NEW_LINES - OLD_LINES ))
@@ -102,17 +104,6 @@ if [ -n "$BAD_COAUTHOR" ]; then
   exit 1
 fi
 
-# VOICE-1. A commit message follows docs/VOICE.md: no bullet that ends in a period and no contrast
-# framing ("rather than", "instead of", "not X but Y", ", not a ..."). Lines starting with # are dropped
-# by git before the hook sees the message, and a trailer such as Co-Authored-By is never a bullet.
-VOICE_BREAKS="$(printf '%s\n' "$MESSAGE" | grep -nE '^[[:space:]]*[-*][[:space:]]+.*[^.]\.$|rather than|instead of|it is not about|[Ll]ess [^.]{1,40}, more |[Nn]ot [^.]{1,60} but |, not (a|an|the) ' || true)"
-if [ -n "$VOICE_BREAKS" ]; then
-  echo "[commit-msg] BLOCKED: the message breaks the voice rules (docs/VOICE.md):"
-  printf '%s\n' "$VOICE_BREAKS" | sed -n '1,5s/^/    /p'
-  echo "  End bullets without a period and state the plain fact without contrast framing."
-  exit 1
-fi
-
 # Merge, revert and autosquash commits carry the message of work that already has a reference.
 # The first commit of a repo has no story to name yet.
 case "$SUBJECT" in
@@ -123,6 +114,17 @@ if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
 fi
 if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
   exit 0
+fi
+
+# VOICE-1. A commit message follows docs/VOICE.md: no bullet that ends in a period and no contrast
+# framing ("rather than", "instead of", "not X but Y", ", not a ..."). Lines starting with # are dropped
+# by git before the hook sees the message, and a trailer such as Co-Authored-By is never a bullet.
+VOICE_BREAKS="$(printf '%s\n' "$MESSAGE" | grep -nE '^[[:space:]]*[-*][[:space:]]+.*[^.]\.$|rather than|instead of|it is not about|[Ll]ess [^.]{1,40}, more |[Nn]ot [^.]{1,60} but |, not (a|an|the) ' || true)"
+if [ -n "$VOICE_BREAKS" ]; then
+  echo "[commit-msg] BLOCKED: the message breaks the voice rules (docs/VOICE.md):"
+  printf '%s\n' "$VOICE_BREAKS" | sed -n '1,5s/^/    /p'
+  echo "  End bullets without a period and state the plain fact without contrast framing."
+  exit 1
 fi
 
 # A reference is a standalone # and a positive number that ends the token: "(#53)", "#53 fix",
@@ -158,7 +160,7 @@ fi
 # not checked. When gh is missing or the call fails for any reason but a 404 (offline, rate limit, no
 # login) the hook prints a warning and lets the commit through, so an offline commit is never blocked.
 CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || true)/docs/backlog-config.json"
-if [ -r "$CONFIG_FILE" ]; then
+if [ -r "$CONFIG_FILE" ] && ! grep -Eq '"repoOwner"[[:space:]]*:[[:space:]]*"your-' "$CONFIG_FILE"; then
   config_value() { sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_FILE" | head -1; }
   HOME_REPO="$(config_value repoOwner)/$(config_value repoName)"
   CACHE_FILE="$(git rev-parse --git-dir)/story-exists-cache"

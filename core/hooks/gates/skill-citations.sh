@@ -15,7 +15,7 @@ if [ -n "$STAGED_FILES" ]; then
       */SKILL.md|SKILL.md|*/CLAUDE.md|CLAUDE.md|*/references/*.md) ;;
       *) continue ;;
     esac
-    hits=$(staged_content "$file" 2>/dev/null | grep -ohE '(^|[^A-Za-z0-9&])#[0-9]{1,5}([^0-9]|$)' | grep -oE '[0-9]{1,5}' || true)
+    hits=$(staged_content "$file" 2>/dev/null | grep -ohE '(^|[^A-Za-z0-9&/#])#0*[1-9][0-9]{0,4}([^A-Za-z0-9_-]|$)' | grep -oE '[0-9]+' | sed 's/^0*//' || true)
     [ -n "$hits" ] && CITED_NUMS="$CITED_NUMS
 $hits"
   done <<< "$STAGED_FILES"

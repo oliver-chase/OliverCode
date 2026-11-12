@@ -59,7 +59,7 @@ VARIANTS = {
         "variant": "public repos",
         "gates": ["secrets", "emojis", "pii", "workflow-auth",
                   "archived-content", "skill-citations", "size-ratchet",
-                  "owner-identifiers", "duplication"],
+                  "owner-identifiers", "duplication", "repo-local"],
     },
     "core/templates/project/pre-commit-private": {
         "variant": "private repos",

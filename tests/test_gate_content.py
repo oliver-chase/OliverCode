@@ -96,13 +96,13 @@ class TestGateWorkflowAuth(GateHarness):
         super().setUp()
         self.stage(".github/workflows/ci.yml", "on: push\n")
 
-    def test_a_credential_without_workflow_scope_blocks(self):
-        result = self.assertBlocked("gate 4", **self.stub_gh(self.SCOPES.format("repo, gist")))
-        self.assertIn("no workflow-scoped credential", result.stdout)
+    def test_a_credential_without_workflow_scope_warns(self):
+        result = self.assertAllowed(**self.stub_gh(self.SCOPES.format("repo, gist")))
+        self.assertIn("no workflow-scoped gh credential", result.stdout)
 
-    def test_no_signed_in_gh_blocks(self):
-        result = self.assertBlocked("gate 4", **self.stub_gh("exit 1\n"))
-        self.assertIn("no workflow-scoped credential", result.stdout)
+    def test_no_signed_in_gh_warns(self):
+        result = self.assertAllowed(**self.stub_gh("exit 1\n"))
+        self.assertIn("no workflow-scoped gh credential", result.stdout)
 
     def test_a_credential_with_workflow_scope_passes(self):
         result = self.assertAllowed(**self.stub_gh(self.SCOPES.format("repo, workflow")))
