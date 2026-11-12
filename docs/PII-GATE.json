@@ -1,0 +1,12 @@
+{
+  "exempt": [
+    ".githooks/pre-commit",
+    "core/templates/project/pre-commit",
+    "core/hooks/*"
+  ],
+  "reasons": {
+    ".githooks/pre-commit": "The hook holds the PII patterns it blocks.",
+    "core/templates/project/pre-commit": "The template hook holds the PII patterns it blocks.",
+    "core/hooks/*": "The gate sources hold the PII patterns they block."
+  }
+}

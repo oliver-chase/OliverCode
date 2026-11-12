@@ -160,10 +160,13 @@ fi
 # passed the check above, so the hook asks GitHub about each reference: a plain #N is looked up in the repo
 # named by docs/backlog-config.json (repoOwner, repoName), and owner/repo#N in the repo it spells out.
 # A yes is cached in .git/story-exists-cache so later commits skip the call. A repo without the config is
-# not checked. When gh is missing or the call fails for any reason but a 404 (offline, rate limit, no
+# not checked, and one that still holds the shipped placeholders says how to fill it. When gh is missing or the call fails for any reason but a 404 (offline, rate limit, no
 # login) the hook prints a warning and lets the commit through, so an offline commit is never blocked.
 CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || true)/docs/backlog-config.json"
-if [ -r "$CONFIG_FILE" ] && ! grep -Eq '"repoOwner"[[:space:]]*:[[:space:]]*"your-' "$CONFIG_FILE"; then
+if [ -r "$CONFIG_FILE" ] && grep -Eq '"repoOwner"[[:space:]]*:[[:space:]]*"your-' "$CONFIG_FILE"; then
+  echo "[commit-msg] Note: docs/backlog-config.json still holds placeholders, so story numbers were not checked against GitHub."
+  echo "  Fill it with the repo's real owner, name and Project IDs: run \`olivercode backlog-setup --apply\`, or copy them from \`gh project field-list <number> --owner <owner> --format json\`."
+elif [ -r "$CONFIG_FILE" ]; then
   config_value() { sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_FILE" | head -1; }
   HOME_REPO="$(config_value repoOwner)/$(config_value repoName)"
   CACHE_FILE="$(git rev-parse --git-dir)/story-exists-cache"

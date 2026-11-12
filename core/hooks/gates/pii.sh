@@ -1,5 +1,10 @@
 # Block commits containing personal identifiers: home paths, usernames, hostnames.
+# A repo whose own files must hold a pattern, such as a gate that names the patterns it blocks, lists
+# those files under "exempt" in docs/PII-GATE.json, each with a line in "reasons".
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: PII scan..."
+PII_EXEMPT="$(git show ":docs/PII-GATE.json" 2>/dev/null | tr '\n' ' ' \
+  | sed -n 's/.*"exempt"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' \
+  | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true)"
 
 PII_PATTERNS=(
   '/Users/[A-Za-z0-9._-]+/'                              # macOS home directory paths
@@ -11,8 +16,14 @@ for pattern in "${PII_PATTERNS[@]}"; do
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
       case "$file" in
-        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|*.md|.githooks/pre-commit|core/templates/project/pre-commit|core/hooks/*) continue ;;
+        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|*.md|docs/PII-GATE.json) continue ;;
       esac
+      pii_skip=0
+      while IFS= read -r pii_glob; do
+        [ -n "$pii_glob" ] || continue
+        case "$file" in $pii_glob) pii_skip=1; break ;; esac
+      done <<< "$PII_EXEMPT"
+      [ "$pii_skip" = 1 ] && continue
       # Strip known non-PII strings before matching. `git@github.com` is the SSH form npm
       # writes into package-lock.json for a git dependency, a protocol user on a public host,
       # so a lockfile with a git dependency stays committable.

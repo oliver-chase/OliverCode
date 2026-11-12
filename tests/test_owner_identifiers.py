@@ -42,11 +42,14 @@ class IdentifierGate(IdentifierSetup):
         self.assertIn("docs/guide.md:1", out)
         self.assertIn("tests/test_x.py:1", out)
 
-    def test_the_email_local_part_and_a_second_name_word_count(self):
-        self.stage("a.txt", "Vantrel wrote this\n")
+    def test_the_full_name_and_the_email_local_part_count_and_a_single_name_word_does_not(self):
+        self.stage("a.txt", f"{FAKE.capitalize()} Vantrel wrote this\n")
         self.assertBlocked("owner identifier")
-        # A local part that matches no name word counts on its own.
         git(self.tmp, "rm", "-q", "--cached", "a.txt")
+        self.stage("c.txt", "Vantrel wrote this\n")
+        self.assertIn("passed", self.assertAllowed().stdout)
+        git(self.tmp, "rm", "-q", "--cached", "c.txt")
+        # A local part that matches no name counts on its own.
         git(self.tmp, "commit", "-q", "--no-verify", "--allow-empty", "-m", "other author",
             "--author", "Ola Pen <quillomarr@example.invalid>")
         self.stage("b.txt", "quillomarr\n")
@@ -67,6 +70,14 @@ class IdentifierGate(IdentifierSetup):
         git(self.tmp, "remote", "add", "origin", "https://github.com/acme-widgets/widget-lib.git")
         self.stage("README.md", "github:acme-widgets/widget-lib is maintained by acme-widgets staff\n")
         self.assertIn("README.md:1", self.assertBlocked("owner identifier").stdout)
+
+    def test_an_author_name_made_of_ordinary_words_blocks_only_the_phrase(self):
+        git(self.tmp, "commit", "-q", "--no-verify", "--allow-empty", "-m", "other author",
+            "--author", "Scratch Person <sp@example.invalid>")
+        self.stage("a.txt", "Each person reads the scratch file.\n")
+        self.assertIn("passed", self.assertAllowed().stdout)
+        self.stage("b.txt", "Written by Scratch Person.\n")
+        self.assertIn("b.txt:1", self.assertBlocked("owner identifier").stdout)
 
     def test_matching_is_on_whole_words(self):
         self.stage("a.txt", f"{FAKE}ish and un{FAKE} are other words\n")

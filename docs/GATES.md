@@ -38,7 +38,7 @@ Gate coverage differs by repo, and this list is the one home for the counts.
 |------|---------------|:---:|:---:|:---:|
 | Secrets | API keys, tokens, JWTs and private keys in any staged file. A placeholder passes by its value, such as `EXAMPLE` or a run of `x`, or on a line that carries `secret-scan: allow` | 1 | 1 | 1 |
 | Icons and emoji | Unicode emoji and icon characters | 2 | 2 | 2 |
-| PII | Host paths, email addresses and personal data in staged code and config. Markdown, tests, mocks and hook sources are skipped | 3 | 3 | — |
+| PII | Host paths, email addresses and personal data in staged code and config. Markdown, tests and mocks are skipped, and a repo lists files that must hold a pattern under `exempt` in `docs/PII-GATE.json`, each with a reason | 3 | 3 | — |
 | Workflow push auth | Staged `.github/workflows/` files without a workflow-scoped credential, checked through `gh api user -i` and not the remote URL scheme | 4 | 4 | — |
 | Archived content | A staged path under a directory named `Archive`, `legacy`, `deprecated`, `outdated`, `backup` or `old`, or a file suffixed `.bak`, `-old`, `-backup`, `-deprecated` or `-superseded`. A repo holds current state only and git is the archive, so a superseded file is deleted or replaced and never parked. A repo can exempt a path through its optional `pre-commit.local` hook, described below | 5 | 5 | 3 |
 | Skill citations | A staged `SKILL.md`, `CLAUDE.md` or `references/*.md` that cites an issue number that does not exist (`GATE-CITATION-1` and `GATE-SCOPE-1` in `docs/DECISIONS.md`). Conditional: it runs where `gh` is installed and authenticated, and reports no finding where either is missing | 6 | 6 | 4 |

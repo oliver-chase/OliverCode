@@ -217,6 +217,13 @@ class TestPublicRepoLocalAndPii(GateHarness):
         self.stage("notes.txt", "Plain notes.\n")
         self.assertBlocked("repo-local")
 
+    def test_a_file_listed_in_the_pii_exempt_file_passes_and_others_still_block(self):
+        self.stage("docs/PII-GATE.json", '{"exempt": ["fixtures/*"], "reasons": {"fixtures/*": "sample data"}}\n')
+        self.stage("fixtures/home.py", 'P = "/Users/' + 'sample/work"\n')
+        self.assertAllowed()
+        self.stage("other.py", 'P = "/Users/' + 'sample/work"\n')
+        self.assertBlocked("pii")
+
     def test_a_home_path_with_digits_or_dots_is_pii(self):
-        self.stage("a.py", 'P = "/Users/jane.doe2/work"\n')
+        self.stage("a.py", 'P = "/Users/' + 'jane.doe2/work"\n')
         self.assertBlocked("pii")

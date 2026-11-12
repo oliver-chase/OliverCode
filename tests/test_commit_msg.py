@@ -234,6 +234,13 @@ class TestStoryExists(CommitMsgCase):
         self.assertEqual(0, offline.returncode)
         self.assertIn("WARNING", offline.stdout + offline.stderr)
 
+    def test_a_placeholder_config_passes_and_says_how_to_fill_it(self):
+        (self.repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "your-github-owner", "repoName": "your-repo"}\n')
+        done = self.commit("Add a feature (#99)")
+        self.assertEqual(0, done.returncode)
+        self.assertIn("still holds placeholders", done.stdout + done.stderr)
+        self.assertEqual([], self.calls())
+
 
 if __name__ == "__main__":
     unittest.main()
