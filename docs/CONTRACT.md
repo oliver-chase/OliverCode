@@ -16,7 +16,7 @@ A conforming repo matches every requirement below, and nothing else about it is 
 | `size` | The size baseline in `docs/SIZE-BASELINE.json`, with the counter the ratchet gate runs ("Size ratchet" in `docs/GATES.md`) | olivercode conform | `olivercode bootstrap <repo>`, then `olivercode size <repo> --lower` |
 | `tests` | Tests per 100 lines of code, measured by `skills/audit/scripts/size.sh`. The minimum is not yet set, because no fleet-wide ratio is measured | conform prints it as manual: `bash skills/audit/scripts/size.sh <repo>` measures the ratio | Add tests in the story that changes the code |
 | `docs` | The doc set and README order ("Documents" in `docs/RULES.md`) and a filled-in GitHub About | olivercode conform checks the GitHub About, and `bash scripts/validate.sh` checks references | `gh repo edit --description ... --add-topic ...` |
-| `audit` | The audit and cleanup routine: the `audit` skill runs on the commits of a multi-commit session and keeps the live tracker current | Manual: conform lists it and runs nothing | The `audit` skill |
+| `audit` | The audit and cleanup routine: the `audit` skill runs when the owner asks for it and keeps the live tracker current | Manual: conform lists it and runs nothing | The `audit` skill |
 
 ## What may differ
 

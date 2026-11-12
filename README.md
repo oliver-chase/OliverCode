@@ -76,6 +76,10 @@ The rehearsal uses disposable directories. It verifies a fresh install, managed 
 | `skills/` | Reusable engineering and framework skills |
 | `shared/` | Example registries and bootstrap data |
 | `.githooks/` | OliverCode's own Git hooks |
+| `.github/` | The framework CI workflow, paused while Actions billing is off |
+| `.claude/` | The adoption skill link, so a fresh clone opened in Claude Code can set itself up |
+| `.olivercode/` | This repo's permission policy (`olivercode policy init`) |
+| `VERSION`, `CHANGELOG.md` | The release number and what each release changed |
 | `scripts/olivercode` | Command-line entry point |
 | `scripts/lib/` | Command implementations and checks |
 | `scripts/hooks/` | Claude Code hook implementations |

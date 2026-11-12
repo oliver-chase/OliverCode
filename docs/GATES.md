@@ -17,7 +17,7 @@ Beyond the commit hook, `validate.sh` fails closed on these classes, each of whi
 - **Internal reference integrity** (`scripts/link-check.sh`): markdown links and backtick repo paths
 - **Documentation duplication** (`scripts/lib/duplication_check.py`, `GATE-DUPLICATION-1` in `docs/DECISIONS.md`)
 - **Unfalsifiable checks**, meaning a gate or script that cannot fail whatever the input (`scripts/lib/falsifiability_check.py`, `GATE-FALSIFIABILITY-1` in `docs/DECISIONS.md`)
-- **Budget** (`docs/BUDGET.json`): `testCount`, `docWords` and `skillWords` are measured by `skills/audit/scripts/fleet_check.py` and fail when over
+- **Budget** (`docs/BUDGET.json`): `skills/audit/scripts/fleet_check.py` measures every key the file holds and fails on one that is over. The file's `_comment` says what each key counts
 - **Hook drift**: OliverCode's hook, the public template and the private template run the same gates, each gate's body lives once in `core/hooks/gates/`, and `scripts/build-hooks.py` assembles the three hooks from one ordered gate list. `validate.sh` fails when a committed hook differs from the build
 
 `validate.sh` also reports fleet hook state on every run, through `olivercode conform --offline`, which reads local files and makes no network call. That report is advisory and never fatal, because hook enforcement fails open: a repo with an unset or broken `core.hooksPath` is silently ungoverned. A repo that must diverge from the template declares `hookVariant` in its profile, which `shared/repo-profiles.json` documents.
@@ -28,11 +28,7 @@ While CI is paused the local commands are the enforcement. `bash scripts/validat
 
 ## Commit gates
 
-Gate coverage differs by repo, and this list is the one home for the counts.
-
-* OliverCode runs nine gates on itself
-* An adopted repo runs the same nine
-* A repo deployed with the private variant runs seven
+Gate coverage differs by repo. Each row below gives the gate's number in OliverCode's hook, in an adopted repo's hook and in the private variant, and a dash where that hook does not run it.
 
 | Gate | What it blocks | OliverCode | Adopted repo | Private variant |
 |------|---------------|:---:|:---:|:---:|
@@ -66,7 +62,7 @@ Which hook a repo receives:
 | `core/templates/project/pre-commit-private` | Every repo in `privateRepos` in `olivercode.local.json`, plus any fleet repo whose profile sets `"private": true` | Each repo declares itself, so `sync-hooks` maintains it like any other target |
 | A repo's own hook | That repo | The profile declares `hookVariant: "<reason>"`, which makes `sync-hooks` skip it and `conform` pass it with a note |
 
-The private variant drops the PII gate on purpose, because a private repo holds personal data by design and the gate would block every legitimate commit. It is deployed as a file named `pre-commit`, the only name git invokes. `sync-hooks` writes no second copy and deletes a leftover `pre-commit-private`.
+The private variant drops the PII and workflow push auth gates on purpose, because a private repo holds personal data by design and the PII gate would block every legitimate commit. It is deployed as a file named `pre-commit`, the only name git invokes. `sync-hooks` writes no second copy and deletes a leftover `pre-commit-private`.
 
 `hookVariant` has a real cost, set out in `_hookVariant_note` in `shared/repo-profiles.json`. `scripts/build-hooks.py` generates OliverCode's own hook and the two templates, never a variant repo's. When a third repo declares a variant, give `build-hooks.py` an entry for it, using the template's gate list plus that repo's own gates.
 

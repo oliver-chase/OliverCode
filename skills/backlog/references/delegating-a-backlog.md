@@ -29,9 +29,9 @@ Send each QA report to a fixer as the spec, then a second reviewer re-checks onl
 1. Fast-forward when the branch is based on the current main, otherwise merge in a throwaway worktree and fix conflicts there.
 2. Run the full validation on the merged result, then push.
 3. Never run `git pull --rebase` on a main that holds merge commits: it replays every merge and conflicts.
-4. A worktree has no `.venv`; the validation script finds the main checkout's.
+4. A worktree may lack a virtual environment; use the main checkout's.
 
 ## Pitfalls seen
 
 - A wait loop that matches its own command line never ends; wait on a log line or a file
-- Add `--quick` checks for speed, and the full validation before every merge
+- Run fast checks while working and full validation before a merge

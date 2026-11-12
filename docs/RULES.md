@@ -63,9 +63,9 @@ Working rules that hold in every session:
 - A new top-level folder needs a reason in "Project structure"
 - A deterministic script beats a model call, and a targeted grep or line range beats a whole-file read
 
-`.githooks/pre-commit` runs the gates on every commit git runs it for. Four things skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`.
+`.githooks/pre-commit` runs the gates on every commit git runs it for. These skip a gate: `--no-verify`, which the commit guard refuses inside Claude Code; an unset `core.hooksPath`, which `olivercode conform` reports; a `commit-msg.optout` file the owner creates in `.githooks`; and `ALLOW_FORCE_PUSH=1` on a force push. The gate list and what each one blocks live only in `docs/GATES.md`.
 
-Four Claude Code hook entries run inside every session. `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
+Claude Code hook entries run inside every session. `olivercode install` writes them into `~/.claude/settings.json`, each pointing at this checkout's script:
 
 - `scripts/hooks/session_check.py` (`SessionStart`) tells the session once what would fail silently in the folder it opened: a repo whose gates git skips, a git repo with no gates, a broken rules link, or a repo, worktree or backup outside `repoRoot`. It prints nothing when all is well
 - `scripts/hooks/pretool_guard.py` (`PreToolUse` on Bash, Edit, Write and MultiEdit) runs four guards in one process, so a tool call starts one Python and not four. A deny from any guard wins over an ask, and each guard fails open on its own bug. Each guard is also a script that runs alone:
@@ -76,7 +76,7 @@ Four Claude Code hook entries run inside every session. `olivercode install` wri
 - `scripts/hooks/gh_watch.py` (`PostToolUse`) records a rate limit seen in any command's output for `gh_guard.py`. The backlog batch command is the exception to a hold: it queues a durable request in `~/.olivercode/gh-project-queue.json` and makes no network call. `gh api rate_limit` is free and always allowed, and `olivercode gh-limit clear` lifts the hold
 - `scripts/hooks/early-stop-guard.py` (`Stop`, `EARLY-STOP-1` in `docs/DECISIONS.md`) sends a turn back to work when it ends by promising work it did not do
 
-All four entries are deterministic and fail open, so a hook's own bug never blocks a commit or a session. `olivercode health` fails when one is missing on a machine where install linked this checkout, and `olivercode install` replaces the four per-guard entries of an earlier install with the one `pretool_guard.py` entry.
+Every entry is deterministic and fails open, so a hook's own bug never blocks a commit or a session. `olivercode health` fails when one is missing on a machine where install linked this checkout, and `olivercode install` replaces the per-guard entries of an earlier install with the one `pretool_guard.py` entry.
 
 Authority hierarchy: a build or type error must never first surface on the deploy platform. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it locally before the commit, because pre-commit gates catch secrets, structure and hygiene and miss a block-scoped `const` referenced before its declaration.
 
