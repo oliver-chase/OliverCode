@@ -69,6 +69,8 @@ class TestCommitMsg(CommitMsgCase):
 
     def test_a_message_follows_the_voice(self):
         self.first_commit()
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "VOICE.md").write_text("voice\n")
         for bad in ("Work (#5)\n\n- did a thing.", "Use the cache rather than the API (#5)",
                     "Work (#5)\n\nIt is a guide, not a rule."):
             with self.subTest(bad):
@@ -76,6 +78,10 @@ class TestCommitMsg(CommitMsgCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn("voice", result.stdout + result.stderr)
         self.assertEqual(0, self.commit("Work (#5)\n\n- did a thing\n\nA full sentence ends with a period.").returncode)
+
+    def test_a_repo_without_a_voice_doc_is_not_held_to_the_voice(self):
+        self.first_commit()
+        self.assertEqual(0, self.commit("Use the cache rather than the API (#5)\n\nNo test: text only").returncode)
 
     def test_the_initial_commit_is_exempt(self):
         self.assertEqual(0, git(self.repo, "commit", "-m", "first", check=False).returncode)
