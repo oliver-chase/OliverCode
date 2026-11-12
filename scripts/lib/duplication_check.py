@@ -61,6 +61,8 @@ def _declared(snippet: str, repo_markers: list[str] = ()) -> bool:
 
 
 def _tracked_md(repo_root: Path) -> list[str]:
+    # Bootstrap copies this file alone into a project repo as scripts/duplication_check.py, where
+    # lib.gitfiles does not exist, so it keeps its own git ls-files call.
     out = subprocess.run(
         ["git", "-C", str(repo_root), "ls-files", "*.md"],
         capture_output=True,

@@ -107,6 +107,12 @@ class SizeError(Exception):
         self.kind, self.detail = kind, detail
 
 
+def size_allowance(baseline: dict) -> int:
+    """The lines a repo may grow past its recorded baseline: allowancePercent (default 5) of "lines". The shell gate in
+    core/hooks/gates/size-ratchet.sh applies the same rule."""
+    return (baseline.get("lines") or 0) * baseline.get("allowancePercent", 5) // 100
+
+
 def size_report(repo: Path, oc_root: Path) -> tuple[int, dict]:
     """(the repo's line total, its docs/SIZE-BASELINE.json) from the counter the size-ratchet gate uses; raises SizeError when either cannot be read."""
     path = repo / "docs" / "SIZE-BASELINE.json"

@@ -56,7 +56,7 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 - **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
 - **Step 5, register.** Add each repo's confirmed validation command
-- **Step 6, enforcement.** Tell the user plainly that hook enforcement fails open, and point at `docs/SETUP.md` ("Troubleshooting")
+- **Step 6, enforcement.** Tell the user plainly when hook enforcement fails open (`docs/GATES.md`), and point at `docs/SETUP.md` ("Troubleshooting")
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
 - **Step 8, reconcile.** Ask before deleting any backup
 

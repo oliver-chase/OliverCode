@@ -316,7 +316,7 @@ def command_size(oc_root: Path, target: Path, lower: bool) -> int:
     if recorded is None:
         print("Baseline: unset (run `olivercode size --lower` to record the current total)")
         return 0
-    allowed = recorded * percent // 100
+    allowed = repo_gates.size_allowance(baseline)
     print(f"Baseline: {recorded} lines, allowance {percent}% ({allowed} lines)")
     print(f"Headroom: {recorded + allowed - total} lines before the commit gate blocks")
     return 0

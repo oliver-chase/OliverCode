@@ -307,10 +307,9 @@ GATE_NAME="Size ratchet"
 # is skills/audit/scripts/size.sh --total over the staged tree, the same counter `olivercode size`
 # uses. A baseline with "lines": null, or no baseline file, skips the gate.
 #
-# A story that must grow the repo raises "lines" in the same commit, by at most raiseCapPercent
-# of the committed baseline (default 2). This gate prints the raise and passes it. A pre-commit
-# gate cannot read the commit message, so the commit-msg hook refuses a raise over the cap unless
-# the message carries a "Size: L" or "Size: XL" line copied from the story.
+# A story that must grow the repo raises "lines" in the same commit. This gate prints the raise and
+# passes it, and the commit-msg hook holds the cap on it (SIZE-RAISE-1 there), since a pre-commit gate
+# cannot read the message.
 echo "[pre-commit] Gate 5/7: Size ratchet..."
 SIZE_JSON="$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)"
 size_field_of() {

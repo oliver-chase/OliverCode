@@ -110,7 +110,7 @@ def size(repo: Path, *, oc_root: Path = OC_ROOT, **_) -> Row:
     recorded = baseline.get("lines")
     if recorded is None:
         return _fail("size", "the baseline records no line count", fix)
-    allowed = recorded * (100 + baseline.get("allowancePercent", 5)) // 100
+    allowed = recorded + repo_gates.size_allowance(baseline)
     if total > allowed:
         return _fail("size", f"{total} lines is above the baseline of {recorded} plus its allowance", fix)
     return Row("size", "pass")

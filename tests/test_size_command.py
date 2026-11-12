@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, git_env, load_script, scratch_repo, temp_dir
 from test_size_ratchet import BASELINE, LAUNCHER, SIZE_SH, baseline_text, total_of
 
 
@@ -213,6 +213,15 @@ class TestSymlinkCountedOnce(unittest.TestCase):
         worktree = subprocess.run(["bash", str(SIZE_SH), "--total", str(repo)], capture_output=True, text=True, env=git_env()).stdout.strip()
         staged = subprocess.run(["bash", str(SIZE_SH), "--total", "--staged", str(repo)], capture_output=True, text=True, env=git_env()).stdout.strip()
         self.assertEqual((worktree, staged), ("3", "3"))
+
+
+class SizeAllowance(unittest.TestCase):
+    def test_the_allowance_is_the_percent_of_the_baseline_with_five_by_default(self):
+        load_script("scripts/olivercode")  # puts scripts/ on sys.path
+        from lib import repo_gates
+        self.assertEqual(50, repo_gates.size_allowance({"lines": 1000}))
+        self.assertEqual(20, repo_gates.size_allowance({"lines": 1000, "allowancePercent": 2}))
+        self.assertEqual(0, repo_gates.size_allowance({"lines": None}))
 
 if __name__ == "__main__":
     unittest.main()
