@@ -170,6 +170,8 @@ def command_install(oc_root: Path) -> int:
         (skills_dir / name).unlink()
     if retired:
         print(f"  [REMOVED] links to skills this checkout no longer has: {', '.join(retired)}")
+    from lib import failure_log  # the hooks log blocked commits only where this folder exists
+    failure_log.home().mkdir(parents=True, exist_ok=True)
     _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, rel in _managed_links(oc_root).items()
                                if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == (oc_root / rel).resolve()})
 

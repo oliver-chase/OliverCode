@@ -24,6 +24,14 @@ class TestFailureLog(GateHarness):
         self.assertEqual(gate, "Secrets")
         self.assertIn("BLOCKED", reason)
 
+    def test_a_machine_without_olivercode_gets_no_log(self):
+        home = self.log.parent / (self.tmp.name + "-stranger")
+        home.mkdir()
+        self.addCleanup(home.rmdir)
+        self.stage("a.py", 'K = "sk-' + "e" * 32 + '"\n')
+        self.assertBlocked("gate 1", HOME=str(home), OLIVERCODE_FAILURE_LOG="", OLIVERCODE_HOME="")
+        self.assertFalse((home / ".olivercode").exists())
+
     def test_a_passing_commit_writes_nothing(self):
         self.stage("notes.txt", "Plain notes.\n")
         self.assertAllowed(OLIVERCODE_FAILURE_LOG=str(self.log))

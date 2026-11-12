@@ -53,7 +53,7 @@ if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
     if [ "$RAISE" -gt "$CAP" ] && ! printf '%s\n' "$MESSAGE" | grep -Eiq '^[[:space:]]*size:[[:space:]]*(L|XL)[[:space:]]*$'; then
       echo "[commit-msg] BLOCKED: this commit raises the size baseline by $RAISE lines, over the cap of $CAP."
       echo "  A raise that large needs a story sized L or XL. Add a line \"Size: L\" or \"Size: XL\" copied from the story's Size field,"
-      echo "  or split the work so each commit stays inside the cap (docs/GATES.md, \"Size ratchet\")."
+      echo "  or split the work so each commit stays inside the cap."
       exit 1
     fi
   fi
@@ -107,13 +107,14 @@ if ! printf '%s\n' "$MESSAGE" | grep -Eq "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_E
   echo "[commit-msg] BLOCKED: the commit message names no story."
   echo "  Add the story number, for example \"Fix the sync (#53)\" or a line \"Story: #53\"."
   echo "  Merge, revert, fixup/squash commits and a repo's first commit are exempt."
-  echo "  To turn the check off for a repo, the owner creates $HOOK_DIR/commit-msg.optout (docs/GATES.md)."
+  echo "  To turn the check off for a repo, the owner creates $HOOK_DIR/commit-msg.optout."
   exit 1
 fi
 
 # TEST-WITH-CODE-1. A commit that adds or changes code also changes a test, or says why not on a
 # line "No test: <reason>". Code is a .py, .sh, .js, .mjs, .ts or .tsx file outside a test path; a
-# test is anything under tests/ or named test_*, *_test.* or *.test.*.
+# test is anything under tests/ or named test_*, *_test.* or *.test.*. An .html page is markup and
+# does not count: script worth a test belongs in a .js file, which does.
 TEST_PATH='(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$'
 CODE_CHANGED="$(git diff --cached --name-only --diff-filter=AM | grep -E '\.(py|sh|js|mjs|ts|tsx)$' | grep -vE "$TEST_PATH" || true)"
 TEST_CHANGED="$(git diff --cached --name-only --diff-filter=AMD | grep -E "$TEST_PATH" || true)"
