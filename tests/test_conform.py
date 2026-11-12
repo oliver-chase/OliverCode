@@ -178,6 +178,13 @@ class TestCommand(ConformBase):
         self.assertEqual(1, code)
         self.assertIn("[FAIL] layout", out)
 
+    def test_hooks_only_checks_the_hooks_and_nothing_else(self):
+        (self.repo / "README.md").unlink()
+        code, out = quiet(launcher.command_conform, REPO_ROOT, self.repo, None, True, True)
+        self.assertEqual(0, code, out)
+        self.assertIn("[OK] hooks", out)
+        self.assertNotIn("layout", out)
+
     def test_with_no_directory_it_prints_one_block_per_registered_repo(self):
         profiles = {"widgets": {}, "absent": {}}
         with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(profiles, None)), \

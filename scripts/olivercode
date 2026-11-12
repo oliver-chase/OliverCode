@@ -92,10 +92,11 @@ def main() -> int:
         return command_clean(apply)
     if cmd == "conform":
         offline, rest = _take_flag(argv, "--offline")
+        hooks_only, rest = _take_flag(rest, "--hooks-only")
         root, rest = _take_root_flag(rest)
         if len(rest) > 1:
             _reject_extra(cmd, rest[1:])
-        return command_conform(OC_ROOT, Path(rest[0]).resolve() if rest else None, root, offline)
+        return command_conform(OC_ROOT, Path(rest[0]).resolve() if rest else None, root, offline, hooks_only)
     if cmd == "update":
         _reject_extra(cmd, argv)
         return command_update()

@@ -176,10 +176,10 @@ def exceptions(repo: Path, today: date | None = None) -> tuple[dict[str, tuple[s
 
 
 def check_repo(repo: Path, *, oc_root: Path = OC_ROOT, offline: bool = False, private: bool = False,
-               variant: str = "", api=None, today: date | None = None) -> list[Row]:
+               variant: str = "", api=None, today: date | None = None, hooks_only: bool = False) -> list[Row]:
     granted, bad = exceptions(repo, today)
     rows = []
-    for check in CHECKS:
+    for check in ((hooks,) if hooks_only else CHECKS):
         row = check(repo, oc_root=oc_root, offline=offline, private=private, variant=variant, api=api)
         if row.status == "fail" and row.requirement in granted:
             reason, expires = granted[row.requirement]

@@ -257,6 +257,50 @@ class TestSyncedRoot(Base):
         self.assertEqual(hygiene.synced_marker(root, home), "iCloud Desktop & Documents")
 
 
+class TestSynced(Base):
+    """On 2026-11-12 iCloud evicted every repo in ~/Documents/Repos and the posting jobs failed with "Resource deadlock avoided"."""
+
+    def setUp(self):
+        super().setUp()
+        self.home = temp_dir(self, resolve=True)
+        p = mock.patch.object(placement, "has_file_provider_xattr", return_value=False); p.start(); self.addCleanup(p.stop)
+
+    def cfg_at(self, root):
+        root.mkdir(parents=True, exist_ok=True)
+        return placement.Config(root=root, worktrees=root / "_worktrees", archive=root / "_archive", watch=[], allow=[])
+
+    def test_every_synced_place_flags_repo_root_with_the_move(self):
+        for place in placement.SYNCED_PLACES:
+            with self.subTest(place=place):
+                problems = maintain.check_synced(self.cfg_at(self.home / place / "Repos"), fleet=[], home=self.home)
+                self.assertEqual([p.step for p in problems], ["synced"])
+                self.assertIn(f"~/{place}", problems[0].text)
+                self.assertIn("~/Developer/Repos", problems[0].text)
+                self.assertFalse(problems[0].fixable)
+
+    def test_a_fleet_repo_in_documents_is_flagged_and_a_safe_one_is_not(self):
+        cfg = self.cfg_at(self.home / "Developer" / "Repos")
+        stray = self.home / "Documents" / "notes"; stray.mkdir(parents=True)
+        safe = cfg.root / "app"; safe.mkdir()
+        problems = maintain.check_synced(cfg, fleet=[stray, safe], home=self.home)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("notes", problems[0].text)
+        self.assertIn("~/Developer/Repos/notes", problems[0].text)
+
+    def test_a_file_provider_folder_is_synced_wherever_it_sits(self):
+        root = self.home / "Elsewhere" / "Repos"
+        placement.has_file_provider_xattr.side_effect = lambda path: path == root.parent
+        self.assertEqual(placement.synced_place(root, self.home), str(root.parent))
+
+    def test_a_safe_root_reports_nothing_and_maintain_exits_one_on_a_synced_root(self):
+        self.assertEqual(maintain.check_synced(self.cfg_at(self.home / "Developer" / "Repos"), fleet=[], home=self.home), [])
+        cfg = self.cfg_at(self.home / "Documents" / "Repos")
+        with mock.patch("pathlib.Path.home", return_value=self.home):
+            problems = maintain.run(False, cfg, health=False)
+        self.assertIn("synced", [p.step for p in problems])
+        self.assertEqual(quiet(maintain.report, problems, False), 1)
+
+
 class TestStaleDocs(Base):
     def commit(self, repo, when, *paths):
         git(repo, "add", *paths)

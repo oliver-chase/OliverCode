@@ -59,10 +59,11 @@ run_hook_state() {
   # registered has nothing to check and must still pass -- that property is what
   # rehearse-install.sh guards.
   #
-  # --offline skips the board and About checks, which call GitHub and which validation has no need to run.
+  # --hooks-only checks only that git runs each repo's gates, the one fact this step exists for, so it never
+  # reads a repo's files. A repo in a synced folder took over 30 minutes to count.
   echo "=== validate: checking fleet conformance ==="
   local out checked
-  out="$(python3 "${SCRIPT_DIR}/olivercode" conform --offline 2>&1)" && local rc=0 || local rc=$?
+  out="$(python3 "${SCRIPT_DIR}/olivercode" conform --offline --hooks-only 2>&1)" && local rc=0 || local rc=$?
 
   # Say which case it is: a fork with no fleet must not get a green line asserting a fleet was verified.
   checked="$(printf '%s\n' "$out" | sed -n 's/^Checked \([0-9]*\) repo.*/\1/p')"
@@ -70,7 +71,7 @@ run_hook_state() {
     echo "  [SKIP] no fleet repos registered — nothing to check."
     echo "         Register repos in the registry's repo-profiles.json (see docs/SETUP.md)."
   elif [[ "$rc" -eq 0 ]]; then
-    echo "  [OK] all $checked registered repo(s) conform to docs/CONTRACT.md"
+    echo "  [OK] git runs the gates in all $checked registered repo(s). \`olivercode conform\` checks the rest of docs/CONTRACT.md"
   else
     printf '%s\n' "$out" | grep -E '^\s+\[FAIL\]|^         Fix:' || true
     echo "  [WARN] a repo above does not conform — the Fix line under each failure repairs it."

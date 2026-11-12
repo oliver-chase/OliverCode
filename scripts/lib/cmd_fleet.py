@@ -17,7 +17,7 @@ from lib.repo_profiles import iter_fleet as _iter_fleet
 from lib.repo_profiles import load_repo_profiles, registry_file, registry_gap
 
 
-def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None, offline: bool) -> int:
+def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None, offline: bool, hooks_only: bool = False) -> int:
     """`olivercode conform [DIR]`: one repo, or the registered fleet, against docs/CONTRACT.md."""
     print("OliverCode conformance")
     print("=" * 40)
@@ -46,7 +46,7 @@ def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None,
             print(f"  [SKIP] no fleet registered in {registry_file(oc_root)}")
     failed = 0
     for name, path, private_repo, variant in repos:
-        failed += _conform.render(name, _conform.check_repo(path, oc_root=oc_root, offline=offline, private=private_repo, variant=variant))
+        failed += _conform.render(name, _conform.check_repo(path, oc_root=oc_root, offline=offline, private=private_repo, variant=variant, hooks_only=hooks_only))
     print(f"\nChecked {len(repos)} repo(s): {failed} requirement(s) failed")
     return 1 if failed else 0
 

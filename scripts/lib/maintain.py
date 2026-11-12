@@ -3,7 +3,7 @@
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
 a dangling activation link, prunes a worktree whose folder is gone, downloads git files that iCloud evicted
 from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). A problem that is not safe to change on its own (hooks
-that drifted, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
+that drifted, a repo inside a synced folder, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
 """
 
@@ -153,6 +153,26 @@ def check_git_sync(cfg: placement.Config, fix: bool) -> list[Problem]:
     return found
 
 
+def check_synced(cfg: placement.Config, fleet: list[Path] | None = None, home: Path | None = None) -> list[Problem]:
+    """A repo inside a synced folder loses working files whenever the sync service evicts them, so it is reported with the move."""
+    if fleet is None:
+        from lib.repo_profiles import iter_fleet, load_repo_profiles
+        fleet = [p for _n, _pr, p in iter_fleet(load_repo_profiles(OC_ROOT)[0], cfg.root)]
+    found = []
+    place = placement.synced_place(cfg.root, home)
+    if place:
+        found.append(Problem("synced", f"repoRoot {cfg.root} is inside {place}, which can evict its files. "
+                                       f"Clone each repo into {placement.SAFE_ROOT}, copy over its untracked files and set repoRoot to it"))
+    for repo in fleet:
+        if place and placement.inside(repo, cfg.root):
+            continue
+        where = placement.synced_place(repo, home) if repo.exists() else ""
+        if where:
+            found.append(Problem("synced", f"{repo.name}: {repo} is inside {where}, which can evict its files. "
+                                           f"Clone it into {placement.SAFE_ROOT}/{repo.name} and copy over its untracked files"))
+    return found
+
+
 def check_docs(cfg: placement.Config) -> list[Problem]:
     """A document that trails the code it names is advisory: only the owner knows which side is right."""
     return [Problem("docs", f"{repo.name}: {line}") for repo in _repos(cfg) for line in hygiene.stale_docs(repo)]
@@ -169,9 +189,10 @@ def check_health() -> list[Problem]:
 
 
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
+    fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's registry
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
-                *check_git_sync(cfg, fix), *check_placement(cfg), *check_docs(cfg)]
+                *check_git_sync(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
     return problems

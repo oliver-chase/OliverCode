@@ -13,7 +13,7 @@ COMMANDS = [
     ("olivercode discover --root DIR [--register]", "Scan for git repos and report what governance they already have. --register adds the new ones to the registry with the validation command each repo names"),
     ("olivercode install", "Symlink CLAUDE.md, VOICE.md + skills into ~/.claude and add its hooks to settings.json (backs up anything it replaces)"),
     ("olivercode uninstall", "Remove the links and settings.json hooks install wrote, restoring what it backed up"),
-    ("olivercode conform [DIR] [--root DIR] [--offline]", "Check a repo, or every registered repo, against docs/CONTRACT.md. Prints pass, fail, exception, manual or skip per requirement with the fix command, and exits non-zero on any fail. --offline skips the checks that call GitHub"),
+    ("olivercode conform [DIR] [--root DIR] [--offline] [--hooks-only]", "Check a repo, or every registered repo, against docs/CONTRACT.md. Prints pass, fail, exception, manual or skip per requirement with the fix command, and exits non-zero on any fail. --offline skips the checks that call GitHub, and --hooks-only checks only that git runs the gates"),
     ("olivercode place", "Check that every repo, worktree and backup on this machine lives under repoRoot (olivercode.local.json). Exits non-zero on any stray and names the fix"),
     ("olivercode clean [--apply]", "List the worktrees that are merged and clean and so reclaimable, and the ones kept with the reason. --apply removes the reclaimable ones with git worktree remove"),
     ("olivercode policy init [DIR]", "Write the default permission policy (.olivercode/policy.json) into a repo. The policy_guard hook then denies commands and paths outside it and asks the owner at a push, a mass delete or a third failed gate"),

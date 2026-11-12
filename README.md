@@ -13,6 +13,7 @@ Requirements: `git`, `bash`, `python3`, `perl`, and `gh` and `jq` for the backlo
 Manual install:
 
 ```bash
+mkdir -p ~/Developer/Repos && cd ~/Developer/Repos
 git clone <your-fork-url> OliverCode
 cd OliverCode
 python3 scripts/olivercode install

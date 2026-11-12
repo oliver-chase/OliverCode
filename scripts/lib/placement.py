@@ -62,6 +62,37 @@ def inside(path: Path, parent: Path) -> bool:
         return False
 
 
+# Folders a sync service mirrors and can evict, matching digioperator's scripts/relocate.py. On 2026-11-12 iCloud
+# evicted every repo in ~/Documents/Repos when the disk filled, and the posting jobs failed with "Resource deadlock avoided".
+SYNCED_PLACES = ("Documents", "Desktop", "Library/Mobile Documents", "Library/CloudStorage", "Dropbox", "OneDrive", "Google Drive")
+FILE_PROVIDER_XATTR = "com.apple.file-provider-domain-id"
+SAFE_ROOT = "~/Developer/Repos"
+
+
+def has_file_provider_xattr(path: Path) -> bool:
+    """True when macOS marks the folder as managed by a File Provider (iCloud Drive, Dropbox, OneDrive, Google Drive)."""
+    try:
+        ran = subprocess.run(["xattr", str(path)], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return FILE_PROVIDER_XATTR in ran.stdout
+
+
+def synced_place(path: Path, home: Path | None = None) -> str:
+    """The synced folder that holds path, or "" when none: a known synced place under home, or a File Provider folder."""
+    home = home or Path.home()
+    real = Path(path).expanduser().resolve()
+    for place in SYNCED_PLACES:
+        if inside(real, home / place):
+            return f"~/{place}"
+    for folder in (real, *real.parents):
+        if folder == Path(folder.anchor):
+            break
+        if has_file_provider_xattr(folder):
+            return str(folder)
+    return ""
+
+
 def is_worktree(path: Path) -> bool:
     """A linked worktree has a `.git` file that points into the owner's .git/worktrees."""
     git = path / ".git"

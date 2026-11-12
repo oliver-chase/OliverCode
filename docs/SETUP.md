@@ -18,7 +18,10 @@ Your fleet's names and config live in one registry file, and no placeholder laye
 
 ## Step 0: prove the clone is sound
 
+Clone into `~/Developer/Repos`, the folder that holds every repo. Keep it out of `~/Documents`, `~/Desktop` and any iCloud Drive, Dropbox, OneDrive or Google Drive folder, because a sync service evicts working files when the disk fills and git and scheduled jobs then stall.
+
 ```bash
+mkdir -p ~/Developer/Repos && cd ~/Developer/Repos
 git clone <your-fork> OliverCode && cd OliverCode
 python3 scripts/olivercode --help
 bash scripts/validate.sh
@@ -217,7 +220,7 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 
 - `privateRepos`: private repos that get the private hook variant and a hook check
 - `skillsRoot`: the skill checks
-- `repoRoot`: the one folder that holds every repo (default the folder that holds OliverCode). Worktrees go in `_worktrees` and backups in `_archive` under it
+- `repoRoot`: the one folder that holds every repo, `~/Developer/Repos` in the example and otherwise the folder that holds OliverCode. Worktrees go in `_worktrees` and backups in `_archive` under it. It must sit outside every synced folder, because a sync service evicted every repo in `~/Documents/Repos` once already, and `docs/DECISIONS.md` (`REPOS-OUTSIDE-SYNC-1`) records the incident
 - `watchRoots`: the folders `olivercode place` scans for strays (default `~/Developer`, `~/Desktop`, `~/Documents`), and `allowOutside` lists checkouts allowed to stay elsewhere, such as an Obsidian vault
 - `repoPaths`: a repo outside the fleet folder
 
@@ -270,7 +273,7 @@ A restore is finished when `health` is HEALTHY, a planted secret is refused by a
 - `place` lists every repo, worktree and backup outside `repoRoot` with the fix for each and exits non-zero on any stray
 - `clean` lists merged, clean worktrees as reclaimable and says why it keeps each other one. `--apply` removes the reclaimable ones
 - `policy init [DIR]` writes `.olivercode/policy.json`, the allowed commands and paths and the triggers that ask the owner
-- `maintain` checks the machine, and `--fix` repairs what cannot lose work: it re-points a dangling `~/.claude` link, prunes a worktree whose folder is gone and downloads git files that iCloud evicted. Under a `repoRoot` inside iCloud Drive, Dropbox, OneDrive or Google Drive it moves each repo's `.git` to `.git.nosync` behind a symlink that sync services skip, and it restores a link a sync service renamed and clears the `.git 2` folders it left beside it. It deletes an untracked `name 2.ext` that matches `name.ext`, archives an older differing copy in `_archive/stray-copies` and leaves a newer one. It reports and logs drifted hooks, a checkout outside `repoRoot`, a doc that trails a file it names by more than 60 days and a failing `health` check, then exits 1. `--schedule` installs a daily launchd job and `--unschedule` removes it
+- `maintain` checks the machine, and `--fix` repairs what cannot lose work: it re-points a dangling `~/.claude` link, prunes a worktree whose folder is gone and downloads git files that iCloud evicted. Under a `repoRoot` inside iCloud Drive, Dropbox, OneDrive or Google Drive it moves each repo's `.git` to `.git.nosync` behind a symlink that sync services skip, and it restores a link a sync service renamed and clears the `.git 2` folders it left beside it. It deletes an untracked `name 2.ext` that matches `name.ext`, archives an older differing copy in `_archive/stray-copies` and leaves a newer one. It reports and logs drifted hooks, a `repoRoot` or fleet repo inside a synced folder (`~/Documents`, `~/Desktop`, `~/Library/Mobile Documents`, `~/Library/CloudStorage`, Dropbox, OneDrive, Google Drive, or any folder with the `com.apple.file-provider-domain-id` attribute) with the move to `~/Developer/Repos`, a checkout outside `repoRoot`, a doc that trails a file it names by more than 60 days and a failing `health` check, then exits 1. `--schedule` installs a daily launchd job and `--unschedule` removes it
 - `report [--days N]` counts how often each gate blocked a commit in the last N days
 - `health` checks this machine: dependencies, entrypoint and placement drift, the hook entries in `~/.claude/settings.json`, skill links, voice copies, remote reachability and tracked-file size against GitHub's 100MB limit. It compares `VERSION` with the `upstream` remote's and prints the changelog entries a fork is missing. What each repo must match is `conform`'s job
 - `voiceFile` in `olivercode.local.json` names the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of `docs/VOICE.md`
