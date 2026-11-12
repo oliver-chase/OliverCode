@@ -160,7 +160,7 @@ def command_audit_fleet(oc_root: Path) -> int:
     trees, a different job with a different unit. repo-profiles.json lists repos, which
     hold no skill trees, so reusing it here would scan the wrong places.
 
-    Non-interactive: writes findings to a log file and prints one line per check,
+    Non-interactive: prints one line per check and writes no file,
     never fixes anything: a scheduled job with nobody watching never auto-fixes.
     The audit ships in this checkout, so it runs on any machine; the personal skills
     folder is checked only when this machine names one.

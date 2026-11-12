@@ -61,6 +61,18 @@ class TestRequirements(ConformBase):
         (self.repo / "scripts" / "validate.sh").unlink()
         self.assertEqual("fail", self.rows()["validation"].status)
 
+    def test_npm_run_validate_named_in_claude_md_passes_when_package_json_has_it(self):
+        (self.repo / "scripts" / "validate.sh").unlink()
+        (self.repo / "CLAUDE.md").write_text("Run `npm run validate` before committing.\n")
+        (self.repo / "package.json").write_text('{"scripts": {"validate": "node test.js"}}')
+        self.assertEqual("pass", self.rows()["validation"].status)
+
+    def test_npm_run_check_without_the_package_script_fails(self):
+        (self.repo / "scripts" / "validate.sh").unlink()
+        (self.repo / "CLAUDE.md").write_text("Run `npm run check` before committing.\n")
+        (self.repo / "package.json").write_text('{"scripts": {}}')
+        self.assertEqual("fail", self.rows()["validation"].status)
+
     def test_unset_hooks_path_fails_with_the_sync_fix(self):
         subprocess.run(["git", "-C", str(self.repo), "config", "--unset", "core.hooksPath"], check=True)
         row = self.rows()["hooks"]

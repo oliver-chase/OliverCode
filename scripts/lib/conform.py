@@ -42,13 +42,21 @@ def layout(repo: Path, **_) -> Row:
 
 
 def validation(repo: Path, **_) -> Row:
+    """Passes when CLAUDE.md names scripts/validate.sh, `npm run validate` or `npm run check` and that command exists."""
     fix = f"add scripts/validate.sh to {repo.name} and name `bash scripts/validate.sh` in its CLAUDE.md"
-    if not (repo / "scripts" / "validate.sh").is_file():
-        return _fail("validation", "scripts/validate.sh is missing", fix)
     claude = repo / "CLAUDE.md"
-    if not claude.is_file() or "scripts/validate.sh" not in claude.read_text(errors="ignore"):
-        return _fail("validation", "CLAUDE.md does not name scripts/validate.sh", fix)
-    return Row("validation", "pass")
+    text = claude.read_text(errors="ignore") if claude.is_file() else ""
+    try:
+        npm = json.loads((repo / "package.json").read_text()).get("scripts", {}) if (repo / "package.json").is_file() else {}
+    except (OSError, ValueError):
+        npm = {}
+    if "scripts/validate.sh" in text and (repo / "scripts" / "validate.sh").is_file():
+        return Row("validation", "pass")
+    if any(f"npm run {name}" in text and name in npm for name in ("validate", "check")):
+        return Row("validation", "pass")
+    if not text:
+        return _fail("validation", "CLAUDE.md is missing", fix)
+    return _fail("validation", "CLAUDE.md names no validation command that exists (scripts/validate.sh, npm run validate or npm run check)", fix)
 
 
 def board(repo: Path, *, offline: bool, api=None, oc_root: Path = OC_ROOT, **_) -> Row:

@@ -170,19 +170,18 @@ def worktrees(cfg: Config | None = None) -> list[Worktree]:
     candidates = [path for path, _ in linked_worktrees(cfg)]
     for base in cfg.watch:
         candidates += [r for r in checkouts(base) if is_worktree(r)]
-    if True:
-        for repo in candidates:
-            if repo.resolve() in seen or not repo.is_dir():
-                continue
-            seen.add(repo.resolve())
-            try:
-                dirty = bool(_git(repo, "status", "--short").stdout.strip())
-                merged = _git(repo, "merge-base", "--is-ancestor", "HEAD", "origin/main").returncode == 0
-                common = Path(_git(repo, "rev-parse", "--git-common-dir").stdout.strip()).resolve().parent
-                branch = _git(repo, "branch", "--show-current").stdout.strip()
-            except (OSError, subprocess.SubprocessError):
-                continue
-            found.append(Worktree(repo, branch, dirty, merged, common))
+    for repo in candidates:
+        if repo.resolve() in seen or not repo.is_dir():
+            continue
+        seen.add(repo.resolve())
+        try:
+            dirty = bool(_git(repo, "status", "--short").stdout.strip())
+            merged = _git(repo, "merge-base", "--is-ancestor", "HEAD", "origin/main").returncode == 0
+            common = Path(_git(repo, "rev-parse", "--git-common-dir").stdout.strip()).resolve().parent
+            branch = _git(repo, "branch", "--show-current").stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            continue
+        found.append(Worktree(repo, branch, dirty, merged, common))
     return found
 
 

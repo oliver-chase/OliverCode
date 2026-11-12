@@ -126,8 +126,10 @@ def command_discover(oc_root: Path, roots: list[Path]) -> int:
     for root in roots:
         for git_dir in sorted(root.rglob(".git")):
             repo = git_dir.parent
+            if git_dir.is_file():
+                continue  # a linked worktree points back to its repo through a .git file
             # Don't descend into vendored or nested-checkout noise.
-            if any(part in {"node_modules", ".next", "vendor", "worktrees"} for part in repo.parts):
+            if any(part in {"node_modules", ".next", "vendor", "worktrees", "_worktrees"} for part in repo.parts):
                 continue
             if repo.resolve() == oc_root.resolve():
                 continue  # the framework repo governs the fleet; it is not part of it
@@ -251,7 +253,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     if dry_run:
         print("\nRe-run without --dry-run to apply.")
     else:
-        print("\nNext: `olivercode sync-hooks` installs the hooks and sets core.hooksPath,")
+        print("\nNext: run `olivercode sync-hooks`, which installs the hooks and sets core.hooksPath.")
         if not target_origin:
             print("The repo has no origin remote, so .github/CODEOWNERS still names <your-github-owner>.")
         if not own_origin:

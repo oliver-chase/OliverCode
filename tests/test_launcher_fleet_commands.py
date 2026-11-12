@@ -104,6 +104,14 @@ class TestCommandDiscover(ScratchHome):
         self.assertIn('"canonicalValidationCommand": "<command>"', out)
         self.assertIn(f'"path": "{self.fleet / "widgets"}"', out)
 
+    def test_skips_a_linked_worktree(self):
+        scratch_repo(self.fleet / "real")
+        wt = self.fleet / "_worktrees" / "real-wt"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: ../../real/.git/worktrees/real-wt\n")
+        _, out = self.discover(self.fleet)
+        self.assertNotIn("real-wt", out)
+
     def test_skips_the_framework_checkout_and_vendored_noise(self):
         scratch_repo(self.oc)
         scratch_repo(self.fleet / "node_modules" / "dep")

@@ -121,7 +121,11 @@ def _accept(argv: list[str]) -> int:
 
 def command_report(argv: list[str]) -> int:
     """`olivercode report [--days N]`: how many times each gate blocked in the last N days."""
-    days = int(argv[1]) if argv[:1] == ["--days"] and len(argv) == 2 else 7
+    try:
+        days = int(argv[1]) if argv[:1] == ["--days"] and len(argv) == 2 else 7
+    except ValueError:
+        print("Usage: olivercode report [--days N]")
+        return 1
     since = datetime.now(timezone.utc) - timedelta(days=days)
     blocks = Counter(g for when, _r, g, _x in entries() if when >= f"{since:%Y-%m-%dT%H:%M:%SZ}")
     print(f"Harness report, last {days} days")

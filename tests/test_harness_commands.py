@@ -83,6 +83,11 @@ class TestReport(Base):
         self.assertIn("Secrets: 2", text)
         self.assertIn("Size ratchet: 1", text)
 
+    def test_a_non_number_for_days_prints_the_usage_line(self):
+        code, text = run(failure_log.command_report, ["--days", "x"])
+        self.assertEqual(code, 1)
+        self.assertIn("Usage: olivercode report [--days N]", text)
+
 
 class TestEvals(Base):
     def test_the_five_starter_tasks_load_and_name_no_private_path(self):
