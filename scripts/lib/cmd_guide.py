@@ -1,4 +1,4 @@
-"""`olivercode guide`: a plain-language overview built from the launcher's own command table and skills/INDEX.md, so it cannot drift from either."""
+"""`olivercode guide`: a plain-language overview built from the launcher's own command table and the skills' own descriptions, so it cannot drift from either."""
 
 from __future__ import annotations
 
@@ -7,19 +7,14 @@ from pathlib import Path
 
 from lib.cli import COMMANDS
 
-_ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|(.*)\|([^|]*)\|\s*$")
-
-
 def skill_triggers(oc_root: Path) -> list[tuple[str, str]]:
-    """Each (skill, trigger phrases) row of skills/INDEX.md, in file order."""
-    index = oc_root / "skills" / "INDEX.md"
-    if not index.is_file():
-        return []
+    """Each (skill, what it does) pair from the skills' own frontmatter descriptions, sorted by name."""
     rows = []
-    for line in index.read_text(encoding="utf-8").splitlines():
-        m = _ROW.match(line)
-        if m and m.group(1) != "Skill":
-            rows.append((m.group(1), m.group(3).strip()))
+    for md in sorted((oc_root / "skills").glob("*/SKILL.md")):
+        m = re.search(r"^description:\s*(.*?)(?=^\w[\w-]*:|^---)", md.read_text(encoding="utf-8"), re.S | re.M)
+        if m:
+            text = " ".join(m.group(1).strip().lstrip(">|-").strip().strip("\"'").split())
+            rows.append((md.parent.name, text.split(". ")[0].rstrip(".") + "."))
     return rows
 
 
@@ -35,5 +30,5 @@ def command_guide(oc_root: Path) -> int:
     print("\nSkills: say the phrase to Claude Code and the skill loads")
     for name, phrases in skill_triggers(oc_root):
         print(f"  {name}\n      {phrases}")
-    print("\nMore: README.md, docs/SETUP.md (setup and commands), skills/INDEX.md (skills)")
+    print("\nMore: README.md, docs/SETUP.md (setup and commands), docs/CATALOG.md (every part)")
     return 0

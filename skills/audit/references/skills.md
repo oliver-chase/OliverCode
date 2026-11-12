@@ -25,6 +25,7 @@ A fleet with checks of its own runs them too. Its `<repo>/.githooks/pre-commit.l
 - **A missing connector.** Each skill that calls an optional connector has a real fallback: it prints the content to paste, skips the step and says so, or gives the manual step
 - **Manual steps.** Each step a person does either could be automated or says why it stays manual
 - **Output.** Each result names where it landed, in which format
+- **Documentation.** Lens 8 for the skill: a person can learn from its own files what it does, how to start it, what it reads and writes and how it fails
 
 ## A session that just ran
 

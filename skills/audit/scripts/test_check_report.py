@@ -19,6 +19,9 @@ Smaller.
 | Unused parts | dead file | #24 |
 | Cost in use | whole file read | #29 |
 | Voice | contrast framing | #28 |
+| Documentation coverage | two scripts undocumented | #27 |
+| Functionality gaps | Checked, nothing found | |
+| Portability and sharing | personal email in history | #30 |
 | Test necessity | three duplicates | #24 |
 ## 5. Cuts and simplifications
 | Cut | Lines | Issue |

@@ -62,12 +62,4 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 
 ## Output
 
-- **Moved:** each rule, from where, to where, verified present at the destination
-- **Kept in place:** what stayed and why
-- **Ambiguous:** what you could not classify, with the question they need to answer
-- **Enforcement:** the probe result, quoted
-- **Backups:** where they are, and that they are still there
-
-## Known traps
-
-`docs/SETUP.md` holds them: the `$OC` guard in Step 3, the sibling layout and the `path` field in "Folder structure", a WARN that is not coverage, and "Troubleshooting".
+Report what moved (from where, to where, verified at the destination), what stayed and why, what you could not classify with the question they need to answer, the quoted enforcement probe, and where the backups are.

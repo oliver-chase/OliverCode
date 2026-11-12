@@ -14,19 +14,20 @@ for d in $(git ls-files | cut -d/ -f1 | sort -u); do printf "%-30s %5s files %7s
 ```
 
 3. Measure what loads: the `CLAUDE.md` chain and its imports, and each skill's description and body
-4. A reader judges the sweep rows from the procedure and does not search for them again
+4. Run `python3 scripts/catalog.py <target> --check` and `python3 scripts/portability.py <target>`, and hand their rows to the docs and self-containment readers
+5. A reader judges the sweep rows from the procedure and does not search for them again
 
 ## The reviewer brief
 
-Give each reader this brief, with the readers and the cap from the procedure, all started at once: code, tests, and docs with skills and config.
+Give each reader this brief, with the readers and the cap from the procedure, all started at once, one per facet: each skill, each part of the tool (hooks and gates, scripts, config), the tests and the docs.
 
 > You are auditing one slice of `<target>`, line by line. Make no edits.
 >
 > The target is meant to be: `<one sentence>`. Your slice: every tracked file under `<paths>`, listed with `git ls-files <paths>`. Read every line of every file in full.
 >
-> Apply the seven lenses in `<path to lenses.md>`, and verify each finding against the code before you report it. Read `<path to VOICE.md>` first.
+> Apply the ten lenses in `<path to lenses.md>`, and verify each finding against the code before you report it. Read `<path to VOICE.md>` first.
 >
-> Report only defects with evidence, of every kind: bugs, over-engineering, inefficiency, dead code, optimization and stale or wrong documentation. Return a ranked list, each with an id (R1, R2 and so on), the lens, `file:line`, the defect in one sentence, the command or code that proves it and the smallest fix. Then add a second list headed "Simplify": every file, function, export, flag, config key, test or gate in your slice that could be deleted, merged, shrunk or replaced by a standard tool with the same behavior, each with the lines it removes and the evidence of use. Name any file over 400 lines and say whether it should split. Then list the files you read that are clean, and your totals of files and lines read. Keep it under 1,500 words. The lead re-checks your claims, so cite the exact line and command.
+> Report only defects with evidence, of every kind: bugs, over-engineering, inefficiency, dead code, optimization, missing, stale or wrong documentation, and functionality gaps. Return a ranked list, each with an id (R1, R2 and so on), the lens, `file:line`, the defect in one sentence, the command or code that proves it and the smallest fix. Then add a second list headed "Simplify": every file, function, export, flag, config key, test or gate in your slice that could be deleted, merged, shrunk or replaced by a standard tool with the same behavior, each with the lines it removes and the evidence of use. Name any file over 400 lines and say whether it should split. Then list the files you read that are clean, and your totals of files and lines read. Keep it under 1,500 words. The lead re-checks your claims, so cite the exact line and command.
 
 ## After the reviewers return
 

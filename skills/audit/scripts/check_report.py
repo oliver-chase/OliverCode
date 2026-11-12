@@ -16,6 +16,9 @@ LENSES = {
     "over-engineering and unused parts": r"over-engineer|unused",
     "cost in use": r"cost in use|cost to",
     "voice": r"voice",
+    "documentation coverage": r"documentation|doc coverage",
+    "functionality gaps": r"gap",
+    "portability and sharing": r"portab|sharing|shareable",
     "test necessity": r"test necessity",
 }
 ISSUE = re.compile(r"#\d+")

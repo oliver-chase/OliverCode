@@ -20,54 +20,37 @@ Send this first, in one turn, exactly as written, with no other opening line and
 > 2. Share an example of the input and the output you want, such as a file, a message or a list.
 > 3. List the skills or notes you use for this job today, so I can check for overlap.
 
-Ask each question below in order, against the live fleet and not from memory.
+Work through the steps below in order, against the live fleet and not from memory.
 
 ## Baseline: every new skill meets this
 
-A skill that ships inside OliverCode may read `$OC/` files and name its sibling skills.
+`python3 $OC/skills/audit/scripts/check_skill_structure.py` enforces the name, description limits (150 words, 1,024 characters) and references. The rest are judgment calls that the audit skill reads, and rules 1 and 2 are its self-containment lens. A skill that ships inside OliverCode may read `$OC/` files and name its sibling skills.
 
-`python3 $OC/skills/audit/scripts/check_skill_structure.py` enforces the rules a script can check, including the 150-word description cap. The rest are judgment calls the audit skill reads, and rules 1, 2 and 8 are its self-containment lens (`audit/references/lenses.md`, section 2).
-
-1. **Generic at creation.** The skill's own files hold no personal fact in code or prose: no name, address, account ID, token or local path. A value the skill needs comes from one config file in the skill folder or from a question in the chat
-2. **No read outside the folder.** No `../`, no `$HOME/.claude/skills/<other>/...`, no vault path, no sibling skill's script or config. The skill carries any rule it needs as its own text
-3. **Person setup.** The skill asks the person in the chat for what it needs, such as a file, a name or an ID. It asks once per chat and asks the fewest questions. It saves only what nothing else can hold
-   - A value that must last between sessions, such as a tracker path or a Slack ID, goes in `.env.local`. Other state lives in a file the person names, or in a Slack message or draft. The skill says which at the top
-   - A skill that ships an `.env.local.example` has a setup mode that walks a person through each value
-4. **One connector-missing line.** The skill checks a connector with one call. If the connector is missing, it says what to enable and the fallback in one line, then continues
-5. **Describe what the skill does, nothing else.** A skill file holds no decision ID, date, issue number or person. It holds no history, ledger, change log, archive note, Known gaps section or maintainer section. It names no vault or fleet-tooling place. A comment says what the code does, never how it came to be. The reason for a rule goes in the family `DECISIONS.md`, the commit message or the issue
-6. **Placeholder names.** Exactly three names are fictional-safe: `Jane Doe`, `John Smith`, `Sally May`. Any example person name is one of them
-7. **Portable-zip limits.** The `name` field equals the folder name, in lowercase letters, digits and hyphens, at most 64 characters. The `description` field is at most 1024 characters and 150 words or fewer. It leads with the trigger phrases a person says
-8. **Name no outside place.** The skill's text never names the owner's vault, a vault folder or an earlier name of the skill. A sibling skill it hands work to is named by the skill's name only (rule 2 covers paths)
-9. **The skill folder holds only what the skill uses.** Put the family `DECISIONS.md` and `README.md` in the family folder, beside the skill. Put a script's test beside it as `scripts/test_<script>.py`, or in `<family>/tests/<skill>/` when the skill ships as a zip without developer files
-10. **Names a person would say.** A skill, folder or file name uses the word a person says aloud. No number suffix, ticket id or decision id appears in a name or in text the person reads. A decision id may stay in a code comment and in `DECISIONS.md`
-11. **Count the files before you finish.** Run `find <skill> -type f | wc -l`. For each file, name what the skill does not need and cut it
-12. **Open with a message that says what to send.** A skill that needs input its trigger does not carry has a `## Opening message` section in `SKILL.md`. The section starts with one line: send this first, in one turn, exactly as written. The message says why the result matters, what the skill does and when the person approves. Then it says what input helps and lists the ways to answer. It holds no personal fact, and an answer given to it is never asked again
-13. **A step a command can do is a command.** Opening a file, counting rows, comparing two structures or finding a marker is a script that prints the answer, and the text tells the model to run it and act on the output
-14. **A script has a test that goes red without its guard.** Build the test, remove the guard once, check that the test fails, then restore it. `check_skill_structure.py --weight` lists the scripts no test names
-15. **A skill with several tasks loads one reference per task.** A route row names one file. A setup file loads only when a one-line `check` command says setup is not done
-16. **One data file per kind, no dated copies.** A skill that records data appends to one file per kind of thing, and a reading taken over time rolls up to one row a week inside that file once it passes 1,000 rows and 90 days. It writes no file per day, week or run. The skill names its data file and its roll-up point
+1. **Generic at creation.** No name, address, account ID, token or local path in code or prose. A value the skill needs comes from one config file in its folder or from a question in the chat
+2. **No read outside the folder.** No `../`, no other skill's script or config, no vault path. The skill carries any rule it needs as its own text and names a sibling by name only
+3. **Ask once, ask little.** Ask the person in the chat for a file, name or ID, once per chat. A value that must last between sessions goes in `.env.local`, and a skill that ships an `.env.local.example` has a setup mode that walks through each value
+4. **One connector-missing line.** Check a connector with one call. When it is missing, say what to enable and the fallback, then continue
+5. **Say what the skill does.** No decision ID, date, issue number, person, history, ledger, change log or Known gaps section. Reasons go in `DECISIONS.md`, the commit message or the issue
+6. **Placeholder names.** `Jane Doe`, `John Smith` and `Sally May` are the only example person names
+7. **The folder holds only what the skill uses.** A script's test sits beside it as `scripts/test_<script>.py`. Count the files with `find <skill> -type f | wc -l` and cut each one the skill does not need
+8. **Names a person says.** No number suffix, ticket ID or decision ID in a skill, folder or file name
+9. **Open with a message that says what to send.** A skill that needs input its trigger does not carry has a `## Opening message` section that starts "Send this first, in one turn, exactly as written". The message says why the result matters, what the skill does, when the person approves and which answers help
+10. **A script does what a command can do.** Opening a file, counting rows and comparing structures are scripts that print the answer. Each script has a test that goes red when its guard is removed: remove the guard once, watch the test fail, restore it
+11. **One reference per task.** A route row names one file, and a setup file loads only when a one-line `check` says setup is not done
+12. **One data file per kind.** No file per day, week or run. A reading taken over time rolls up to one row a week once the file passes 1,000 rows and 90 days, and the skill names the file and the roll-up point
 
 ## 0. Write the target in four lines
 
-Before any file, write four lines and ask for a yes. Line 1: what the skill does in one sentence. Line 2: which values it needs from the person and where each one lives. Line 3: what the folder holds. Line 4: each platform limit you tested and each you guess. Test each guessed limit before the layout depends on it.
+Before any file, write four lines and ask for a yes: what the skill does, which values it needs and where each lives, what the folder holds, and each platform limit tested or guessed. Test each guessed limit before the layout depends on it.
 
 ## 1. Does an existing skill already cover this?
 
-Search the loaded skill list's names and descriptions for the trigger phrase. Extend an existing skill that covers it with a new reference file or mode. One signal justifies a new sibling: a materially different verb or output type. Run `backlog`'s search step for the working name too. An Epic or Story may already exist. List the family folders live before you pick one, and match sibling naming inside the family.
+Search the loaded skill names and descriptions for the trigger phrase, and run `backlog`'s search for the working name. Extend an existing skill with a reference or mode. A materially different verb or output type justifies a new sibling, named like its family.
 
-## 2. Does it keep state?
+## 2. State and connectors
 
-A tracker, a record store or a growing list needs a home that the connectors and the person's machine can reach, named at the top of `SKILL.md`: a file the person names, a download-out loop, or a Slack post. A skill that appends checks what is there first. A real match merges or updates, a near-duplicate is skipped and flagged, and only a new entry is appended.
+A tracker or growing list needs a home the person's machine can reach, named at the top of `SKILL.md`. A skill that appends checks for a match first: merge a real match, skip and flag a near-duplicate, append only a new entry. List each connector with what the skill does without it.
 
-## 3. Which connectors?
+## 3. Build and close
 
-List each connector the skill uses and what the skill does without it. Write the connector-missing line for each one. A skill with no fallback for a required connector states that it needs the connector, at the top.
-
-## 4. Close by running the checks
-
-The new skill's `SKILL.md` exists by now, with its symlink created and its `skills/INDEX.md` row written. Run, in order:
-
-1. `python3 $OC/skills/audit/scripts/check_skill_structure.py` on the skill folder. Clean means every reference resolves, and every description is within the word cap
-2. A clean-room run. Copy the skill alone into an empty skills folder and run its main script or setup mode. A missing file or an unset key at that point is a gap the other checks cannot see
-
-Fix the exact gap each check names, then run it again. Never finish with a named gap open.
+Create the skill, its symlink and its `skills/INDEX.md` row, then run `check_skill_structure.py` on the folder and a clean-room run: copy the skill alone into an empty skills folder and run its main script or setup mode. Fix the exact gap each check names and run it again. Never finish with a gap open.
