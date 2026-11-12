@@ -11,6 +11,10 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(catalog.script_info("#!/bin/bash\n# scripts/x.sh - Checks the thing.\n# More detail.\nset -e\n", ".sh")[0], "Checks the thing.")
         self.assertEqual(catalog.skill_info('---\nname: a\ndescription: "Does X. Trigger on y."\n---\n'), "Does X.")
 
+    def test_a_script_with_no_docstring_gets_no_job_from_later_text(self):
+        text = '#!/usr/bin/env python3\n# a comment\nimport os\nx = """not the module docstring."""\n'
+        self.assertEqual("", catalog.script_info(text, ".py")[0])
+
     def test_check_flags_missing_description_and_stale_catalog_then_write_fixes_it(self):
         root = git_repo({"skills/a/SKILL.md": '---\nname: a\ndescription: "Does X."\n---\n',
                          "scripts/run.py": '"""Runs it."""\n', "scripts/bare.py": "x = 1\n", "config/c.json": '{"_comment": "Settings."}\n'})

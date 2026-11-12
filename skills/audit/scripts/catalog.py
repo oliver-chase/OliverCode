@@ -34,7 +34,7 @@ def script_info(text, suffix):
     """(job, usage) from a module docstring or the leading comment block."""
     body = ""
     if suffix == ".py":
-        m = re.search(r'^(?:#!.*\n)?(?:#.*\n)*\s*(?:"""|\'\'\')(.*?)(?:"""|\'\'\')', text, re.S)
+        m = re.search(r'\A(?:#!.*\n)?(?:#.*\n)*\s*(?:"""|\'\'\')((?s:.*?))(?:"""|\'\'\')', text)
         body = m.group(1) if m else ""
     else:
         lines = []

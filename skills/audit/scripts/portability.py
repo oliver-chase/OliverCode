@@ -25,7 +25,7 @@ SECRET_NAME = re.compile(r"(^|/)(\.env(\.(?!example|sample|template)[^/]+)?|id_r
 HOME = re.compile(r"/(?:Users|home)/([A-Za-z0-9._-]+)/")
 PLACEHOLDER_USERS = {"you", "name", "user", "username", "example", "me", "yourname", "your-name", "runner", "shared", "someone", "nobody", "alice", "bob", "jane", "pat", "foo", "test", "x"}
 SAFE_EMAIL = re.compile(r"noreply|no-reply|@example\.|\.invalid$|\.test$|@localhost|@users\.noreply\.github\.com", re.I)
-SECRET_VALUE = r"(api[_-]?key|secret|token|passw(or)?d)[\"']?[ ]*[:=][ ]*[\"'][A-Za-z0-9/+_=-]{20,}[\"']|BEGIN [A-Z ]*PRIVATE KEY"
+SECRET_VALUE = r"(api[_-]?key|secret|token|passw(or)?d)[\"']?[ ]*[:=][ ]*[\"']?[A-Za-z0-9/+_=-]{20,}|BEGIN [A-Z ]*PRIVATE KEY"
 PERSONAL = re.compile(r"Apple (Notes|Photos|Reminders)|iCloud|Obsidian|Instagram|personal vault|\bmy (family|kids|health|finances)\b", re.I)
 QUIET = {"LICENSE", "LICENSE.md", "CHANGELOG.md", "AUTHORS", ".mailmap", "COPYING"}
 
@@ -73,8 +73,9 @@ def scan(repo):
         for needle in sorted(needles):
             if needle in t:
                 rows.append(("owner-identity", f, needle))
-    for sha in git(repo, "log", "--all", "-E", "-G", SECRET_VALUE, "--format=%h", "-n", "10").split():
-        rows.append(("history-secret", sha, "a diff adds a secret-shaped value; revoke it first, then decide on a history rewrite"))
+    shas = git(repo, "log", "--all", "-E", "-i", "-G", SECRET_VALUE, "--format=%h").split()
+    for sha in shas[:10]:
+        rows.append(("history-secret", sha, f"a diff adds a secret-shaped value ({len(shas)} commits in all); revoke it first, then decide on a history rewrite"))
     names = {Path(f).name for f in files}
     if not any(n.startswith(("LICENSE", "COPYING")) for n in names):
         rows.append(("missing", "LICENSE", "no license"))

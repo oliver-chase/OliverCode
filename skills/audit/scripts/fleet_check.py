@@ -130,8 +130,11 @@ def board_drift(repo, fields_file):
     config_path = Path(repo) / "docs" / "backlog-config.json"
     if not fields_file and not config_path.is_file():
         return None
-    config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None
-    name = f"{config['repoOwner']}/{config['repoName']}" if config else "the saved board"
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None
+        name = f"{config['repoOwner']}/{config['repoName']}" if config else "the saved board"
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return "docs/backlog-config.json", None, f"unreadable backlog config: {exc}"
     try:
         spec = importlib.util.spec_from_file_location("check_kanban_baseline", BASELINE_SCRIPT)
         mod = importlib.util.module_from_spec(spec)

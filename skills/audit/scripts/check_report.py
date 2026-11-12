@@ -66,7 +66,10 @@ def check(text):
         problems.append("sections are out of order. Fix: use the order in SKILL.md, with Coverage last")
     if found[-1] is not None and order[-1] != found[-1]:
         problems.append("Coverage is not the last section")
-    body = "\n".join(parts.get(found[3] or "", []))
+    # A lens counts when a finding row or a "Checked" line names it in its first cell or leading words, so a
+    # passing mention deep inside an unrelated row does not satisfy it.
+    body = "\n".join(l.strip("| ").split("|")[0] if l.lstrip().startswith("|") else l[:80]
+                     for l in parts.get(found[3] or "", []))
     for lens, rx in LENSES.items():
         if not re.search(rx, body, re.I):
             problems.append(f"findings never mention the lens: {lens}. Fix: add a row, or \"Checked, nothing found\" with what was checked")

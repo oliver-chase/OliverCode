@@ -177,3 +177,15 @@ class Board(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BoardDriftEdges(unittest.TestCase):
+    def test_a_config_missing_its_owner_reports_instead_of_crashing(self):
+        import json, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "docs").mkdir()
+            (Path(tmp) / "docs" / "backlog-config.json").write_text(json.dumps({"repoName": "x"}))
+            name, drift, error = fleet_check.board_drift(tmp, None)
+            self.assertIsNone(drift)
+            self.assertIn("unreadable", error)

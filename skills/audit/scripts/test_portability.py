@@ -69,6 +69,18 @@ class PortabilityTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(root), "commit", "-qam", "remove"], check=True, capture_output=True, env=env)
         self.assertIn("history-secret", kinds(root))
 
+    def test_history_secrets_match_any_case_and_unquoted_and_past_ten_commits(self):
+        files = {"README.md": "# T\n", "LICENSE": "x\n"}
+        root = repo(files, email=NOREPLY)
+        env = dict(ENV, GIT_AUTHOR_EMAIL=NOREPLY, GIT_COMMITTER_EMAIL=NOREPLY)
+        for i in range(12):
+            (root / "c.env").write_text("Api" + "Key=" + chr(97 + i) * 24 + "\n")
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True, capture_output=True, env=env)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", str(i)], check=True, capture_output=True, env=env)
+        rows = [r for r in portability.scan(root)[0] if r[0] == "history-secret"]
+        self.assertEqual(10, len(rows))
+        self.assertIn("12 commits", rows[0][2])
+
     def test_signals_name_personal_account_terms(self):
         root = repo({"README.md": "Reads Apple Notes and iCloud.\n", "LICENSE": "x\n"}, email=NOREPLY)
         self.assertIn("apple notes", portability.scan(root)[1])

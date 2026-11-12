@@ -32,7 +32,7 @@ SEP, END = "\x1e", "\x1f"
 
 def commits(repo, since):
     out = subprocess.run(["git", "-C", str(repo), "log", f"--since={since}", f"--format={SEP}%H%n%P%n%B{END}", "--name-only"],
-                         capture_output=True, text=True, check=True).stdout
+                         capture_output=True, text=True).stdout  # a repo with no commits has no history to audit
     for block in out.split(SEP)[1:]:
         head, _, names = block.partition(END)
         sha, parents, text = (head.split("\n", 2) + ["", ""])[:3]
