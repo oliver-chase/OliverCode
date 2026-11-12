@@ -114,18 +114,15 @@ class FixtureBoardConfig(unittest.TestCase):
 
 
 class Command(unittest.TestCase):
-    def run_cli(self, *args):
-        return subprocess.run([sys.executable, str(HERE / "check_kanban_baseline.py"), *args],
-                              capture_output=True, text=True)
-
-    def test_exit_status_follows_the_board(self):
+    def test_the_difference_count_follows_the_board(self):
         with tempfile.TemporaryDirectory() as tmp:
-            ok = self.run_cli("--fields-file", saved("board-correct", tmp))
-            bad = self.run_cli("--fields-file", saved("board-pr-lane", tmp))
-        self.assertEqual(0, ok.returncode)
-        self.assertIn("matches", ok.stdout)
-        self.assertEqual(1, bad.returncode)
-        self.assertIn("1 difference", bad.stdout)
+            lines = []
+            ok = kb.run(json.loads(Path(saved("board-correct", tmp)).read_text()), out=lines.append)
+            bad = kb.run(json.loads(Path(saved("board-pr-lane", tmp)).read_text()), out=lines.append)
+        self.assertEqual(0, ok)
+        self.assertIn("matches", lines[0])
+        self.assertEqual(1, bad)
+        self.assertIn("1 difference", "\n".join(lines))
 
     def test_verify_baseline_mode_reads_a_file_and_never_calls_gh(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -141,11 +138,6 @@ class Command(unittest.TestCase):
             self.assertFalse((Path(tmp) / "gh-was-called").exists())
         self.assertEqual(1, result.returncode, result.stderr)
         self.assertIn("missing option QA", result.stdout)
-
-    def test_no_source_is_a_one_line_stop(self):
-        result = self.run_cli()
-        self.assertEqual(1, result.returncode)
-        self.assertIn("--fields-file", result.stderr)
 
 
 if __name__ == "__main__":

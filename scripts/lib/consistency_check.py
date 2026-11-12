@@ -4,45 +4,18 @@ One failure class: a tracked doc asserts something the code contradicts. Collaps
 into a single checker per docs/RULES.md's removal rule -- a validator that
 duplicates another's failure class gets merged into it.
 
-Each `check_*` below states what drifts and why nothing else catches it. Gate counts
-are per-repo-type, so a claim resolves to its own hook before being compared:
-GATE-COUNT-1 in docs/DECISIONS.md.
+Each `check_*` below states what drifts and why nothing else catches it.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
-from lib.gitfiles import tracked_files
 from lib.skills_catalog import skill_dirs
 
 INDEX_ROW = re.compile(r"^\|\s*`([a-z0-9-]+)`\s*\|", re.MULTILINE)
 FRONTMATTER_NAME = re.compile(r"^name:\s*(.+?)\s*$", re.MULTILINE)
-GATE_DECL = re.compile(r"Gate (\d+)/(\d+)")
-# "8 gates", "the 8 gates of", "-- 6 gates:" etc. Bare "N gates" is the claim shape.
-# Word forms are matched too: prose drifts to "the six gates" and a digits-only pattern
-# would pass it silently, which is the exact class this checker exists to stop.
-_NUMBER_WORDS = {
-    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-}
-# Up to three modifier words may sit between the number and "gates". Without this the
-# pattern would miss a headline claim such as "8 pre-commit gates", where the
-# number is not adjacent to the noun. Modifiers must be alphabetic, so "6 of the 8
-# gates" binds to the 8 and the 6 is not read as a total.
-GATE_CLAIM = re.compile(
-    r"\b(\d+|" + "|".join(_NUMBER_WORDS) + r")\s+(?:[a-z][a-z-]*\s+){0,3}gates\b",
-    re.IGNORECASE,
-)
-
-
-def _claimed_count(token: str) -> int | None:
-    """Normalize a digit or number-word to an int; None if neither."""
-    if token.isdigit():
-        return int(token)
-    return _NUMBER_WORDS.get(token.lower())
 
 
 def check_skill_index(repo_root: Path) -> list[str]:
@@ -85,120 +58,6 @@ def check_skill_index(repo_root: Path) -> list[str]:
     return failures
 
 
-# Every hook variant, and how a doc line signals which one it is talking about.
-# Gate coverage is NOT uniform per repo type. docs/GATES.md holds the table, and
-# the tests pin the totals — restating numbers here would just be a third copy to drift.
-HOOKS = {
-    "olivercode": Path(".githooks/pre-commit"),
-    "template": Path("core/templates/project/pre-commit"),
-    "template-private": Path("core/templates/project/pre-commit-private"),
-}
-# Checked most-specific first: "private" wins over a bare mention of "template".
-_HOOK_CUES = (
-    ("template-private", ("private variant", "pre-commit-private", "private template")),
-    # "registered"/"governed" repo are what the launcher and validate.sh call a fleet
-    # repo in their own output, so docs reach for them naturally.
-    ("template", ("template", "adopted repo", "fleet repo", "product repo",
-                  "downstream", "core/templates", "project repo",
-                  "registered repo", "governed repo")),
-)
-
-
-def _hook_totals(repo_root: Path) -> tuple[dict[str, int], list[str]]:
-    """Real gate total per hook variant, read from the hooks themselves."""
-    totals: dict[str, int] = {}
-    problems: list[str] = []
-    for name, rel in HOOKS.items():
-        path = repo_root / rel
-        if not path.is_file():
-            if name == "olivercode":
-                problems.append(f"  [GATES] {rel} is missing")
-            continue  # a fork need not ship every variant
-        declared = {int(t) for _, t in GATE_DECL.findall(path.read_text(encoding="utf-8"))}
-        if not declared:
-            problems.append(f"  [GATES] {rel} declares no 'Gate N/M' banners to count")
-        elif len(declared) > 1:
-            problems.append(
-                f"  [GATES] {rel} is internally inconsistent: banners claim totals "
-                f"{sorted(declared)}. Every banner in one hook must print the same total."
-            )
-        else:
-            totals[name] = declared.pop()
-    return totals, problems
-
-
-def _hook_for_line(rel: str, line: str) -> str:
-    """Which hook a gate-count claim refers to, from the doc path and the claim's own line."""
-    haystack = " ".join((rel, line)).lower()
-    for hook, cues in _HOOK_CUES:
-        if any(cue in haystack for cue in cues):
-            return hook
-    return "olivercode"
-
-
-def check_gate_count(repo_root: Path) -> list[str]:
-    """No tracked doc may claim a gate count the corresponding hook contradicts.
-
-    Resolves each claim to the hook it is ABOUT, so a doc that tells forkers their repos
-    get eight gates is compared with the template's six and not with OliverCode's own
-    eight. GATE-COUNT-1 in docs/DECISIONS.md has the reasoning.
-    """
-    totals, failures = _hook_totals(repo_root)
-    if not totals:
-        return failures
-
-    for rel in tracked_files(repo_root, "*.md"):
-        lines = (repo_root / rel).read_text(encoding="utf-8").splitlines()
-        for line in lines:
-            for token in GATE_CLAIM.findall(line):
-                claimed = _claimed_count(token)
-                if claimed is None:
-                    continue
-                hook = _hook_for_line(rel, line)
-                actual = totals.get(hook)
-                if actual is not None and claimed != actual:
-                    failures.append(
-                        f"  [GATES] {rel} claims {token} gates for the {hook} hook, which "
-                        f"has {actual}. If the claim is about a different hook, name it on "
-                        f"the same line (\"adopted repo\", \"private variant\"); the cue list "
-                        f"is _HOOK_CUES in scripts/lib/consistency_check.py."
-                    )
-    return failures
-
-
-def check_gate_coverage_table(repo_root: Path) -> list[str]:
-    """docs/GATES.md's per-repo Total row must match the real hooks.
-
-    That table is the single home for gate coverage and every other doc points at it,
-    so a stale row propagates everywhere by design.
-    """
-    doc = repo_root / "docs" / "GATES.md"
-    if not doc.is_file():
-        return ["  [GATES] docs/GATES.md is missing — it holds the gate coverage table"]
-
-    row = next(
-        (l for l in doc.read_text(encoding="utf-8").splitlines()
-         if l.lstrip().startswith("| **Total**")),
-        None,
-    )
-    if row is None:
-        return [
-            "  [GATES] docs/GATES.md has no '| **Total** |' row in its gate coverage "
-            "table — that row is what pins the per-repo counts to the hooks"
-        ]
-
-    stated = [int(n) for n in re.findall(r"\*\*(\d+)\*\*", row)]
-    totals, failures = _hook_totals(repo_root)
-    expected = [totals.get(h) for h in ("olivercode", "template", "template-private")]
-    expected = [e for e in expected if e is not None]
-    if stated != expected:
-        failures.append(
-            f"  [GATES] docs/GATES.md's coverage table totals {stated} but the hooks "
-            f"have {expected} (OliverCode, adopted repo, private variant)"
-        )
-    return failures
-
-
 def check_skill_cross_references(repo_root: Path) -> list[str]:
     """A skill naming a sibling skill must name one that exists.
 
@@ -230,7 +89,5 @@ def check_skill_cross_references(repo_root: Path) -> list[str]:
 def check_all(repo_root: Path) -> list[str]:
     return (
         check_skill_index(repo_root)
-        + check_gate_count(repo_root)
-        + check_gate_coverage_table(repo_root)
         + check_skill_cross_references(repo_root)
     )

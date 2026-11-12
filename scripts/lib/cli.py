@@ -17,9 +17,6 @@ COMMANDS = [
     ("olivercode place", "Check that every repo, worktree and backup on this machine lives under repoRoot (olivercode.local.json). Exits non-zero on any stray and names the fix"),
     ("olivercode clean [--apply]", "List the worktrees that are merged and clean and so reclaimable, and the ones kept with the reason. --apply removes the reclaimable ones with git worktree remove"),
     ("olivercode policy init [DIR]", "Write the default permission policy (.olivercode/policy.json) into a repo. The policy_guard hook then denies commands and paths outside it and asks the owner at a push, a mass delete or a third failed gate"),
-    ("olivercode checkpoint [DIR]", "Record a repo's commit, uncommitted changes and untracked files before an unattended run"),
-    ("olivercode restore [DIR]", "Return a repo to its checkpoint and list the files the run added and this removed"),
-    ("olivercode context [DIR]", "Report the words a session loads at start and fail over the contextWords budget"),
     ("olivercode gh-limit [clear]", "Show whether the shared GitHub rate-limit hold is on and until when. clear lifts the hold early"),
     ("olivercode health [--root DIR]", "Run health checks on this machine: Claude Code hooks, skill links, voice copies, remotes and file sizes"),
     ("olivercode update", "Pull this checkout's tracking branch, re-run install, then sync fleet hooks"),
@@ -27,10 +24,7 @@ COMMANDS = [
     ("olivercode audit-fleet", "Run the audit skill's structure check, which includes the description cap, against this machine's skills folder + OliverCode's own skills"),
     ("olivercode skills [--grep TERM]", "List every skill in skills/, optionally filtered by name/description"),
     ("olivercode maintain [--fix | --schedule | --unschedule]", "Check this machine and repair what is safe: dangling links, dead worktrees, iCloud-evicted git files. --schedule runs it daily"),
-    ("olivercode learn [--reject KEY | --accept KEY --comparison FILE]", "Propose one check or memory entry for a gate failure that has recurred three times. Accepting needs a passing comparison"),
     ("olivercode report [--days N]", "Print how many times each gate blocked a commit in the last N days"),
-    ("olivercode eval list|run|compare", "Replay the tasks in tasks/ against an agent and compare two results files"),
-    ("olivercode job REPO -- COMMAND", "Run a scheduled agent job in a repo OliverCode governs, and log a failed run"),
     ("olivercode guide", "Print a plain-language overview: first steps, every command, and every skill with the phrases that load it"),
 ]
 

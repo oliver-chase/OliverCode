@@ -56,15 +56,9 @@ class BootstrapOutput(unittest.TestCase):
         self.assertTrue({"scripts/validate.sh", "docs/backlog-config.json"} <= named)
         for rel in named:
             self.assertTrue((self.repo / rel).is_file(), rel)
-        # The owner and the orchestration repo are filled in, and no template names an npm script.
+        # The owner is filled in, and no template names an npm script.
         self.assertIn("* @jane-doe", (self.repo / ".github/CODEOWNERS").read_text())
         self.assertNotIn("<Repo>", (self.repo / "CLAUDE.md").read_text())
-        workflow = (self.repo / ".github/workflows/olivercode-governance.yml").read_text()
-        own = subprocess.run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"],
-                             capture_output=True, text=True).stdout.strip()
-        if own:  # a checkout with no origin has no orchestration repo to name
-            self.assertNotIn("your-org/your-orchestration", workflow)
-            self.assertIn("repository: " + re.sub(r"^.*[:/]([^/:]+/[^/]+?)(?:\.git)?/?$", r"\1", own), workflow)
         for rel in ("docs/repo-structure-contract.md",):
             self.assertNotIn("npm run -s qa", (self.repo / rel).read_text())
             self.assertNotIn("npm run qa:", (self.repo / rel).read_text())

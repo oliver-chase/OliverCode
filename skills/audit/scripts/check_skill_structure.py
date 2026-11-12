@@ -7,8 +7,6 @@ Two dangling-reference checks run by default and block a commit:
   - dangling-file-reference (SKILL-FILE-REF-1): a backticked file name or run
     script that a skill's text cites and its own folder does not hold. A removed or never-declared file
     leaves exactly this behind, and the agent that loads the skill guesses or stalls.
-It also prints the in-family and cross-family reference counts. Both counts are information,
-never findings.
 
 Description cap (SKILL-DESC-1): a skill whose `description` runs over 150 words fails, since every
 description loads in every session. Writing quality is judged against the voice file, which no script can check.
@@ -23,7 +21,6 @@ each skill. The columns are:
   uncalled           scripts no other file in the skill names
   untested           scripts no test file in `<family>/tests/<skill>/` or beside the script names
   unloaded           references/*.md files no other file in the skill names
-  in-fam, cross-fam  skill references that stay in the family, and that leave it
 A file counts as named when another file holds its file name, its module stem for a script, or
 a `<folder>/<placeholder>` pattern for its folder. The table sorts by `unref`, then size. A README,
 DECISIONS.md and test files never count as unreferenced.
@@ -44,11 +41,6 @@ import _fleet
 
 SKILLS_ROOT = _fleet.FLEET_ROOT
 DESCRIPTION_WORD_LIMIT = 150
-# Skills that live outside this fleet but are real: whatever is installed on this machine.
-# A name that is in neither place is dangling.
-EXTERNAL_SKILL_DIRS = [
-    Path.home() / ".claude" / "skills",
-]
 _NAME = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
 # A strong shape says "this is a skill": the word skill beside the name, or the install path.
 STRONG_REF_RES = [
@@ -67,18 +59,10 @@ def find_skill_dirs():
     return _fleet.find_skills(SKILLS_ROOT)
 
 
-def family_of(skill_dir):
-    """The family folder a skill sits in, or "" for a skill directly under the fleet root."""
-    parent = skill_dir.resolve().parent
-    return "" if parent == _fleet.FLEET_ROOT.resolve() or parent == Path(SKILLS_ROOT).resolve() else parent.name
-
-
 def skill_ref_scan(skill_dirs):
-    """Return (dangling, in_family, cross_family), each {skill: {name}}. A name resolves when
-    its folder is in this fleet or in EXTERNAL_SKILL_DIRS."""
-    fleet = {d.name: family_of(d) for d in skill_dirs}
-    external = {c.name for root in EXTERNAL_SKILL_DIRS if root.is_dir() for c in root.iterdir()}
-    dangling, in_family, cross_family = {}, {}, {}
+    """Return {skill: {name}} for each name a skill cites as a skill that no folder in the scanned fleet holds."""
+    fleet = {d.name for d in skill_dirs}
+    dangling = {}
     for d in skill_dirs:
         files = [d / "SKILL.md"]
         refs = d / "references"
@@ -91,12 +75,9 @@ def skill_ref_scan(skill_dirs):
                     name = m.group(1)
                     if name == d.name:
                         continue
-                    if name in fleet:
-                        bucket = in_family if fleet[name] == fleet[d.name] else cross_family
-                        bucket.setdefault(d.name, set()).add(name)
-                    elif name not in external and rx is not VERB_REF_RE:
+                    if name not in fleet and rx is not VERB_REF_RE:
                         dangling.setdefault(d.name, set()).add(name)
-    return dangling, in_family, cross_family
+    return dangling
 
 
 # SKILL-FILE-REF-1: a skill travels alone, so every file of its own that its text names must sit inside
@@ -217,13 +198,7 @@ def weight_row(skill_dir):
 
 def weight_table(skill_dirs):
     """Ranked rows: most unreferenced files first, then the larger skill."""
-    _dangling, in_family, cross_family = skill_ref_scan(skill_dirs)
-    rows = []
-    for d in skill_dirs:
-        row = weight_row(d)
-        row["in_family"] = len(in_family.get(d.name, ()))
-        row["cross_family"] = len(cross_family.get(d.name, ()))
-        rows.append(row)
+    rows = [weight_row(d) for d in skill_dirs]
     return sorted(rows, key=lambda r: (-len(r["unref"]), -r["bytes"], r["skill"]))
 
 
@@ -255,11 +230,11 @@ def print_route_report(skill_dirs):
 
 
 def print_weight_table(rows):
-    head = f"{'skill':34} {'files':>5} {'KB':>6} {'skill-lines':>11} {'desc-words':>10} {'unref':>5} {'uncalled':>8} {'unloaded':>8} {'untested':>8} {'in-fam':>6} {'cross-fam':>9}"
+    head = f"{'skill':34} {'files':>5} {'KB':>6} {'skill-lines':>11} {'desc-words':>10} {'unref':>5} {'uncalled':>8} {'unloaded':>8} {'untested':>8}"
     print(head)
     for r in rows:
         print(f"{r['skill'][:34]:34} {r['files']:>5} {r['bytes'] / 1024:>6.1f} {r['skill_lines']:>11} {r['desc_words']:>10} "
-              f"{len(r['unref']):>5} {len(r['uncalled']):>8} {len(r['unloaded']):>8} {len(r['untested']):>8} {r['in_family']:>6} {r['cross_family']:>9}")
+              f"{len(r['unref']):>5} {len(r['uncalled']):>8} {len(r['unloaded']):>8} {len(r['untested']):>8}")
     print(f"\n{len(rows)} skill(s). Scripts no test file names, by skill:")
     for r in rows:
         if r["untested"]:
@@ -282,9 +257,9 @@ def main(argv=None):
         print_route_report(skill_dirs)
         sys.exit(0)
 
-    dangling, in_family, cross_family = skill_ref_scan(skill_dirs)
+    dangling = skill_ref_scan(skill_dirs)
     findings = {
-        n: [("dangling-skill-reference", f"`{x}` names no skill in this fleet or in ~/.claude/skills")
+        n: [("dangling-skill-reference", f"`{x}` names no skill in this fleet")
             for x in sorted(names)]
         for n, names in dangling.items()
     }
@@ -296,9 +271,6 @@ def main(argv=None):
         if words > DESCRIPTION_WORD_LIMIT:
             findings.setdefault(d.name, []).append(
                 ("description-over-cap", f"description is {words} words (cap {DESCRIPTION_WORD_LIMIT})"))
-    print(f"Skill references: {sum(map(len, in_family.values()))} in-family across "
-          f"{len(in_family)} skill(s), {sum(map(len, cross_family.values()))} cross-family "
-          f"across {len(cross_family)} skill(s).\n")
 
     total = 0
     for name in sorted(findings):

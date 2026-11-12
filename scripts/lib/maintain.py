@@ -3,7 +3,7 @@
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
 a dangling activation link, prunes a worktree whose folder is gone, downloads git files that iCloud evicted
 from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). A problem that is not safe to change on its own (hooks
-that drifted, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log so `learn` can see it recur, and left alone.
+that drifted, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
 """
 

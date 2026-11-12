@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 """Compares a GitHub Project's field list with the kanban baseline in shared/kanban-baseline.json.
 Never edits a board. Each difference prints with its fix. `backlog/SKILL.md` states the baseline.
-
-Usage:
-    check_kanban_baseline.py --fields-file fields.json           # JSON in the shape `gh project field-list --format json` returns
-    check_kanban_baseline.py --config CFG                        # reads the field list from gh for the config's Project
-    check_kanban_baseline.py --fields-file F --config CFG        # also checks Area against the config's Area options
-The same check runs as `check_board_hygiene.py --verify-baseline`.
-Exit status is 1 when the board differs from the baseline.
+It runs as `check_board_hygiene.py --verify-baseline`.
 """
 
-import argparse
 import json
 import re
 import subprocess
@@ -112,20 +105,3 @@ def run(fields, config=None, baseline_path=BASELINE_PATH, out=print):
             out(f"  - {p}")
     out(NOT_VISIBLE)
     return len(problems)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--fields-file", type=Path, help="field list JSON; without it the list is read from gh")
-    parser.add_argument("--config", type=Path, help="the repo's backlog-config.json: names the Project and the Area options")
-    parser.add_argument("--baseline", type=Path, default=BASELINE_PATH)
-    args = parser.parse_args()
-    if not args.fields_file and not args.config:
-        sys.exit("Pass --fields-file with a saved field list, or --config to read the Project's field list from gh.")
-    config = json.loads(args.config.read_text(encoding="utf-8")) if args.config else None
-    fields = json.loads(args.fields_file.read_text(encoding="utf-8")) if args.fields_file else read_fields_from_gh(config)
-    sys.exit(1 if run(fields, config, args.baseline) else 0)
-
-
-if __name__ == "__main__":
-    main()

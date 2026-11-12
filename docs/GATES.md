@@ -24,11 +24,11 @@ Beyond the commit hook, `validate.sh` fails closed on these classes, each of whi
 
 OliverCode ships `.github/workflows/framework-ci.yml`, which runs health, `validate.sh` and the install rehearsal as gating steps on push and pull request. The workflow is paused on the origin repo and on managed repos while GitHub Actions billing is blocked. Enable it in your own fork, where your billing applies.
 
-While CI is paused the local commands are the enforcement. `bash scripts/validate.sh` also runs the bloat and code quality checks (`CI-STRICT-1` in `docs/DECISIONS.md`). `validate.sh --rehearse` rehearses the install in sandboxes (`scripts/qa/rehearse-install.sh`), and nothing runs it automatically, so it is advisory. A governance CI workflow template for downstream repos exists at `core/templates/project/.github/workflows/olivercode-governance.yml`.
+While CI is paused the local commands are the enforcement. `bash scripts/validate.sh` also runs the bloat and code quality checks (`CI-STRICT-1` in `docs/DECISIONS.md`). `validate.sh --rehearse` rehearses the install in sandboxes (`scripts/qa/rehearse-install.sh`), and nothing runs it automatically, so it is advisory.
 
 ## Commit gates
 
-Gate coverage differs by repo. This table is the one home for that, and anywhere else that names a count points here (`GATE-COUNT-1` in `docs/DECISIONS.md`).
+Gate coverage differs by repo, and this list is the one home for the counts.
 
 * OliverCode runs nine gates on itself
 * An adopted repo runs the same nine

@@ -181,7 +181,6 @@ class DanglingSkillReferenceFinding(unittest.TestCase):
             write_skill(tmp, "fam/beta-skill", "Short body.\n")
             code, out = run_gate(tmp)
         self.assertEqual(code, 0, out)
-        self.assertIn("1 in-family", out)
 
     def test_verb_shape_never_flags_an_unknown_name(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -234,22 +233,8 @@ class DanglingFileReferenceFinding(unittest.TestCase):
             self.assertEqual(run_gate(tmp)[0], 1)
 
 
-class FamilyOf(unittest.TestCase):
-    def test_a_family_skill_and_a_root_skill(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            for rel in ("fam/a", "solo"):
-                (Path(tmp) / rel).mkdir(parents=True)
-            saved, C.SKILLS_ROOT = C.SKILLS_ROOT, Path(tmp)
-            try:
-                self.assertEqual(C.family_of(Path(tmp) / "fam" / "a"), "fam")
-                self.assertEqual(C.family_of(Path(tmp) / "solo"), "")
-            finally:
-                C.SKILLS_ROOT = saved
-
-
 class ScanOneSkill(unittest.TestCase):
     def test_a_single_skill_folder_scans_without_error(self):
-        # Guards family_of() reading an empty path when the scan root is the skill folder itself.
         skill = Path(C.__file__).resolve().parents[1]
         saved = C.SKILLS_ROOT
         try:

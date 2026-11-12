@@ -1,4 +1,4 @@
-"""Tests for the permission policy, its hook, checkpoint and restore, and the context budget."""
+"""Tests for the permission policy, its hook and the context budget."""
 
 import json
 import os
@@ -11,7 +11,7 @@ from unittest import mock
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import checkpoint, context_budget, policy  # noqa: E402
+from lib import context_budget, policy  # noqa: E402
 
 GUARD = REPO_ROOT / "scripts" / "hooks" / "policy_guard.py"
 
@@ -146,43 +146,6 @@ class TestHook(unittest.TestCase):
     def test_garbage_input_fails_open(self):
         done = subprocess.run([sys.executable, str(GUARD)], input="nope", capture_output=True, text=True)
         self.assertEqual((0, ""), (done.returncode, done.stdout))
-
-
-class TestCheckpoint(unittest.TestCase):
-    def setUp(self):
-        self.tmp = temp_dir(self, resolve=True)
-        self.repo = scratch_repo(self.tmp / "app", branch="main")
-        (self.repo / "a.txt").write_text("one\n")
-        git(self.repo, "add", "a.txt")
-        git(self.repo, "commit", "-q", "-m", "first")
-        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.tmp / "home")})
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def test_restore_undoes_a_run_that_committed_edited_and_added_files(self):
-        before = git(self.repo, "rev-parse", "HEAD").stdout.strip()
-        (self.repo / "kept.txt").write_text("was here\n")
-        checkpoint.take(self.repo)
-        (self.repo / "a.txt").write_text("changed\n")
-        git(self.repo, "commit", "-aq", "-m", "run")
-        (self.repo / "new").mkdir()
-        (self.repo / "new" / "b.txt").write_text("stray\n")
-        text = checkpoint.restore(self.repo)
-        self.assertEqual(before, git(self.repo, "rev-parse", "HEAD").stdout.strip())
-        self.assertEqual("one\n", (self.repo / "a.txt").read_text())
-        self.assertFalse((self.repo / "new").exists())
-        self.assertTrue((self.repo / "kept.txt").exists())
-        self.assertIn("Removed new/b.txt", text)
-
-    def test_uncommitted_changes_at_checkpoint_come_back(self):
-        (self.repo / "a.txt").write_text("dirty\n")
-        checkpoint.take(self.repo)
-        (self.repo / "a.txt").write_text("worse\n")
-        checkpoint.restore(self.repo)
-        self.assertEqual("dirty\n", (self.repo / "a.txt").read_text())
-
-    def test_restore_without_a_checkpoint_stops(self):
-        self.assertTrue(checkpoint.restore(self.repo).startswith("Stopped"))
 
 
 class TestContextBudget(unittest.TestCase):

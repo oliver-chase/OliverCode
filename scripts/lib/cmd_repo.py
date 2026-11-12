@@ -177,7 +177,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
 
     Honours the manifest's modes: `strict` files are overwritten (their contract is
     byte-identity with the template), `presence` files are only created when missing so
-    repo-specific content is never clobbered. `offered` files (a workflow, CODEOWNERS) are created
+    repo-specific content is never clobbered. `offered` files (CODEOWNERS) are created
     only in a repo that was never bootstrapped, so a repo that dropped them as unused is not told to add them back.
     """
     manifest_path = oc_root / "shared" / "project-bootstrap-manifest.json"
@@ -210,9 +210,6 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     target_origin = _backlog_setup_origin(target)
     if target_origin:
         fills["<your-github-owner>"] = target_origin[0]
-    own_origin = _backlog_setup_origin(oc_root)
-    if own_origin:
-        fills["your-org/your-orchestration"] = f"{own_origin[0]}/{own_origin[1]}"
     fills["<Repo>"] = target.name
 
     new = overwritten = kept = 0
@@ -256,8 +253,6 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
         print("\nNext: run `olivercode sync-hooks`, which installs the hooks and sets core.hooksPath.")
         if not target_origin:
             print("The repo has no origin remote, so .github/CODEOWNERS still names <your-github-owner>.")
-        if not own_origin:
-            print("This checkout has no origin remote, so the governance workflow still names your-org/your-orchestration.")
     return 1 if missing_src else 0
 
 
@@ -337,27 +332,6 @@ def command_policy(argv: list[str]) -> int:
         return 0
     print(f"Wrote {policy.write_default(target)}")
     return 0
-
-
-def command_checkpoint(target: Path) -> int:
-    from lib import checkpoint
-    text = checkpoint.take(target.resolve())
-    print(text)
-    return 1 if text.startswith("Stopped") else 0
-
-
-def command_restore(target: Path) -> int:
-    from lib import checkpoint
-    text = checkpoint.restore(target.resolve())
-    print(text)
-    return 1 if text.startswith("Stopped") else 0
-
-
-def command_context(target: Path) -> int:
-    from lib import context_budget
-    ok, text = context_budget.report(target.resolve())
-    print(text)
-    return 0 if ok else 1
 
 
 def command_gh_limit(argv: list[str]) -> int:

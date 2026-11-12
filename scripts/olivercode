@@ -21,16 +21,14 @@ from lib.cmd_fleet import (  # noqa: E402
     command_audit_fleet, command_backlog_setup, command_conform, command_sync_hooks, command_update,
 )
 from lib.cmd_guide import command_guide  # noqa: E402
-from lib.cmd_harness import command_job  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
-from lib.evals import command_eval  # noqa: E402
-from lib.failure_log import command_learn, command_report  # noqa: E402
+from lib.failure_log import command_report  # noqa: E402
 from lib.cmd_health import command_health, _check_placement_drift  # noqa: E402,F401
 from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
 from lib.cmd_repo import (
-    command_bootstrap, command_checkpoint, command_clean, command_context, command_discover, command_gh_limit, command_place,
+    command_bootstrap, command_clean, command_discover, command_gh_limit, command_place,
     command_policy,
-    command_restore, command_size, command_skills,
+    command_size, command_skills,
 )  # noqa: E402
 from lib.local_config import OC_ROOT  # noqa: E402,F401
 
@@ -85,12 +83,6 @@ def main() -> int:
         return command_gh_limit(argv)
     if cmd == "policy":
         return command_policy(argv)
-    if cmd in ("checkpoint", "restore", "context"):
-        if len(argv) > 1:
-            _reject_extra(cmd, argv[1:])
-        target = Path(argv[0]).expanduser() if argv else Path.cwd()
-        run = {"checkpoint": command_checkpoint, "restore": command_restore, "context": command_context}[cmd]
-        return run(target) if _require_dir(target) else 1
     if cmd == "place":
         _reject_extra(cmd, argv)
         return command_place()
@@ -118,14 +110,8 @@ def main() -> int:
         return command_skills(argv)
     if cmd == "maintain":
         return command_maintain(argv)
-    if cmd == "learn":
-        return command_learn(argv)
     if cmd == "report":
         return command_report(argv)
-    if cmd == "eval":
-        return command_eval(argv)
-    if cmd == "job":
-        return command_job(argv)
     if cmd == "guide":
         _reject_extra(cmd, argv)
         return command_guide(OC_ROOT)

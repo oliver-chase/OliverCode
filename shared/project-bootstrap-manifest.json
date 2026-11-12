@@ -1,7 +1,4 @@
 {
-  "version": 2,
-  "status": "PROVISIONED",
-  "status_note": "All template sources exist. core/templates/project/ is the single template home (see docs/RULES.md).",
   "requiredDirectories": [
     ".githooks"
   ],
@@ -50,11 +47,6 @@
       "source": "core/templates/project/.secrets/README.md",
       "target": ".secrets/README.md",
       "mode": "presence"
-    },
-    {
-      "source": "core/templates/project/.github/workflows/olivercode-governance.yml",
-      "target": ".github/workflows/olivercode-governance.yml",
-      "mode": "offered"
     },
     {
       "source": "core/templates/project/scripts/validate.sh",
