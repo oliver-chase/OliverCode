@@ -187,6 +187,21 @@ class TestSyncedRoot(Base):
         self.assertFalse((repo / ".git 2").exists() or (repo / ".git 2").is_symlink())
         self.assertEqual(git(repo, "log", "--oneline").stdout.count("\n"), 1)
 
+    def test_stray_git_folders_are_removed_or_archived_and_an_object_store_is_kept(self):
+        repo, cfg = self.synced()
+        maintain.check_git_sync(cfg, True)
+        (repo / ".git 2").mkdir()
+        (repo / ".git 3").mkdir()
+        (repo / ".git 3" / "index 7").write_text("old index")
+        (repo / ".git 4" / "objects").mkdir(parents=True)
+        self.assertTrue(maintain.check_git_sync(cfg, False)[0].fixable)
+        maintain.check_git_sync(cfg, True)
+        self.assertFalse((repo / ".git 2").exists())
+        self.assertFalse((repo / ".git 3").exists())
+        self.assertEqual("old index", (cfg.archive / "stray-copies" / "app" / ".git 3" / "index 7").read_text())
+        self.assertTrue((repo / ".git 4" / "objects").is_dir())
+        self.assertEqual(1, git(repo, "log", "--oneline").stdout.count("\n"))
+
     def test_a_running_git_operation_leaves_the_repo_alone(self):
         repo, cfg = self.synced()
         (repo / ".git" / "index.lock").write_text("")

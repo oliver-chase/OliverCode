@@ -146,7 +146,7 @@ def check_git_sync(cfg: placement.Config, fix: bool) -> list[Problem]:
             continue
         problem = Problem("gitsync", f"{repo.name}: .git is inside {marker}", fixable=True)
         if fix:
-            why = hygiene.protect_git(repo)
+            why = hygiene.protect_git(repo, cfg.archive)
             problem.fixed = not why
             problem.text += f" ({why})" if why else ""
         found.append(problem)

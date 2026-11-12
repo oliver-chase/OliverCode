@@ -135,25 +135,51 @@ def _link_copies(repo: Path) -> list[Path]:
     return [c for c in repo.glob(".git [0-9]*") if c.is_symlink() and os.readlink(c) == NOSYNC]
 
 
+def _stray_git_dirs(repo: Path) -> list[Path]:
+    """`.git N` folders a sync service left beside the link: small ones that hold no object store, refs or hooks."""
+    found = []
+    for c in repo.glob(".git [0-9]*"):
+        if not c.is_dir() or c.is_symlink():
+            continue
+        inside = list(c.rglob("*"))
+        size = sum(p.stat().st_size for p in inside if p.is_file() and not p.is_symlink())
+        if not any(p.name in ("objects", "refs", "hooks") for p in inside) and size < 1_000_000:
+            found.append(c)
+    return found
+
+
+def _clear_strays(repo: Path, archive: Path | None) -> None:
+    """Drop the link copies and the empty stray folders. A stray folder holding files moves to the archive, or stays."""
+    for copy in _link_copies(repo):
+        copy.unlink()
+    for folder in _stray_git_dirs(repo):
+        if not any(p.is_file() or p.is_symlink() for p in folder.rglob("*")):
+            shutil.rmtree(folder)
+        elif archive is not None:
+            dest = archive / "stray-copies" / repo.name / folder.name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(folder), str(dest))
+
+
 def git_protected(repo: Path) -> bool:
-    """True when `.git` is a symlink to a `.git.nosync` folder that git ignores, with no sync copies of the link."""
-    return (repo / ".git").is_symlink() and (repo / NOSYNC).is_dir() and _excluded(repo) and not _link_copies(repo)
+    """True when `.git` is a symlink to a `.git.nosync` folder that git ignores, with no sync copies left beside it."""
+    return ((repo / ".git").is_symlink() and (repo / NOSYNC).is_dir() and _excluded(repo)
+            and not _link_copies(repo) and not _stray_git_dirs(repo))
 
 
-def protect_git(repo: Path) -> str:
-    """Move `.git` to `.git.nosync`, link it back and make git ignore it. Returns '' on success, else why nothing changed."""
+def protect_git(repo: Path, archive: Path | None = None) -> str:
+    """Move `.git` to `.git.nosync`, link it back and make git ignore it. Returns '' on success, else why nothing changed.
+    Copies a sync service left beside the link are cleared, and `archive` receives any that hold files."""
     git, nosync = repo / ".git", repo / NOSYNC
     if nosync.is_dir() and not git.exists() and not git.is_symlink():
         # a sync service renamed the link to ".git 2": drop those copies and link again
-        for copy in _link_copies(repo):
-            copy.unlink()
+        _clear_strays(repo, archive)
         git.symlink_to(NOSYNC)
         if not _excluded(repo):
             _exclude(repo)
         return "" if _git(repo, "rev-parse", "--git-dir").strip() else "git did not work through the restored link"
     if git.is_symlink() and nosync.is_dir():
-        for copy in _link_copies(repo):
-            copy.unlink()
+        _clear_strays(repo, archive)
         if not _excluded(repo):
             _exclude(repo)
         return ""
