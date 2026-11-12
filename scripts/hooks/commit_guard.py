@@ -24,13 +24,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import repo_gates  # noqa: E402
+from lib import policy  # noqa: E402
 
 # The whole command is tokenized once, so a separator inside a quoted message stays part of
 # that message; splitting on the raw text first dropped any commit whose message held a
 # `;`, `|` or `&&`, which is most of them.
 OPERATOR_CHARS = ";&|()\n"
-WRAPPERS = {"env", "command", "builtin", "exec", "nohup", "sudo", "time"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # git's global options whose value is the next word; read as a subcommand, the value hid the commit.
 GLOBAL_VALUE_OPTIONS = {"--git-dir", "--work-tree", "--namespace", "--super-prefix"}
@@ -81,14 +82,7 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
         # A shell function definition wraps its body: `f() { git commit -n; }; f`.
         while words and (words[0] in ("{", "}") or words[0].endswith("()")):
             words = words[1:]
-        env = []
-        while words and (ASSIGNMENT.match(words[0]) or words[0] in WRAPPERS):
-            wrapper = words[0] in WRAPPERS
-            if not wrapper:
-                env.append(words[0])
-            words = words[1:]
-            while wrapper and words and words[0].startswith("-"):
-                words = words[1:]  # a wrapper's own flags, such as `env -i` or `sudo -E`
+        env, words = policy.unwrap(words)  # past `env`, `sudo`, `nice -n 5`, `timeout 9` and the like
         if words and words[0] == "export":
             exported += [w for w in words[1:] if ASSIGNMENT.match(w)]
             continue

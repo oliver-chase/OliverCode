@@ -34,7 +34,7 @@ def decide(data: dict) -> tuple[policy.Decision | None, str]:
     if file_path:
         return policy.evaluate_path(rules, root, file_path), root.name
     command = tool_input.get("command") or ""
-    return (policy.evaluate_bash(rules, command, root.name) if command else None), root.name
+    return (policy.evaluate_bash(rules, command, root.name, root) if command else None), root.name
 
 
 def main() -> int:

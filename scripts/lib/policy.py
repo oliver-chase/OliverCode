@@ -21,7 +21,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 POLICY_FILE = ".olivercode/policy.json"
-WRAPPERS = {"env", "command", "builtin", "exec", "nohup", "sudo", "time", "nice", "timeout"}
+# A wrapper runs the command that follows it. VALUE_OPTIONS lists the options that take a value, and
+# OPERANDS the positional arguments (a duration) that sit between the wrapper and its command.
+VALUE_OPTIONS = {"env": {"-u", "-C", "-S"}, "command": set(), "builtin": set(), "exec": {"-a"}, "nohup": set(),
+                 "sudo": {"-u", "-g", "-h", "-p", "-C", "-T", "-r", "-t", "-U"}, "time": {"-f", "-o"},
+                 "nice": {"-n"}, "timeout": {"-s", "-k"}, "gtimeout": {"-s", "-k"}}
+OPERANDS = {"timeout": 1, "gtimeout": 1}
+WRAPPERS = set(VALUE_OPTIONS)
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 OPERATOR_CHARS = ";&|()\n"
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -29,14 +35,8 @@ ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 DEFAULT = {
     "version": 1,
     "commands": {
-        "allow": ["git", "gh", "python3", "python", "bash", "sh", "zsh", "ls", "cat", "grep", "rg", "sed", "awk",
-                  "find", "head", "tail", "wc", "sort", "uniq", "diff", "cmp", "mkdir", "cp", "mv", "rm", "touch",
-                  "echo", "printf", "cd", "pwd", "test", "jq", "date", "sleep", "xargs", "chmod", "ln", "readlink",
-                  "dirname", "basename", "du", "df", "ps", "lsof", "tee", "tr", "cut", "node", "npm", "npx",
-                  "pytest", "make", "true", "false", "export", "set", "source", "unset", "[", "[[", "if", "for",
-                  "while", "do", "done", "then", "fi", "else", "case", "esac", "in", "time", "tar", "mktemp"],
-        "deny": [r"git\s+push\s+.*--force", r"git\s+push\s+.*\s-f(\s|$)", r"rm\s+-[a-zA-Z]*r[a-zA-Z]*f?\s+(/|~|\$HOME)(\s|$)",
-                 r"curl\s+.*\|\s*(ba|z)?sh"],
+        "allow": [],
+        "deny": [r"curl\s+.*\|\s*(ba|z)?sh"],
     },
     "paths": {
         "allow": ["**"],
@@ -68,6 +68,28 @@ def write_default(root: Path) -> Path:
     return path
 
 
+def unwrap(words: list[str]) -> tuple[list[str], list[str]]:
+    """(environment assignments, the words from the command a wrapper runs). `nice -n 5 timeout 9 git x`
+    gives ([], ["git", "x"]), so a guard sees the command and not the wrapper's own arguments."""
+    env: list[str] = []
+    while words:
+        w = words[0]
+        if ASSIGNMENT.match(w):
+            env.append(w)
+            words = words[1:]
+        elif w in WRAPPERS:
+            name, words = w, words[1:]
+            while words and words[0].startswith("-"):
+                option, words = words[0], words[1:]
+                if option in VALUE_OPTIONS[name] and words:
+                    words = words[1:]
+            for _ in range(OPERANDS.get(name, 0)):
+                words = words[1:]
+        else:
+            break
+    return env, words
+
+
 def _segments(command: str):
     lex = shlex.shlex(command, posix=True, punctuation_chars=OPERATOR_CHARS)
     lex.whitespace = " \t\r"
@@ -87,16 +109,8 @@ def _segments(command: str):
 
 def _head(words: list[str]) -> tuple[str, list[str]]:
     """The command a simple command runs, past assignments and wrappers, with the words that follow it."""
-    i = 0
-    while i < len(words):
-        w = words[i]
-        if ASSIGNMENT.match(w) or w in WRAPPERS or (w.startswith("-") and i > 0 and words[i - 1] in WRAPPERS):
-            i += 1
-            continue
-        break
-    if i >= len(words):
-        return "", []
-    return os.path.basename(words[i]), words[i + 1:]
+    _, words = unwrap(words)
+    return (os.path.basename(words[0]), words[1:]) if words else ("", [])
 
 
 def _simple_commands(command: str, depth: int = 0):
@@ -136,23 +150,35 @@ def _glob(pattern: str) -> re.Pattern:
     return re.compile(out + r"\Z")
 
 
+def _matches(pattern: str, rel: str) -> bool:
+    """A deny pattern matches at the repo root and at any depth below it."""
+    return bool(_glob(pattern).match(rel) or _glob("**/" + pattern).match(rel))
+
+
 def evaluate_path(policy: dict, root: Path, file_path: str) -> Decision | None:
-    """A decision for an edit of file_path, or None when the policy allows it."""
-    # The path as written, with links left alone: a link under .githooks is edited as .githooks/...
-    try:
-        rel = Path(os.path.abspath(file_path)).relative_to(Path(os.path.abspath(root))).as_posix()
-    except ValueError:
-        try:
-            rel = Path(os.path.abspath(file_path)).relative_to(root.resolve()).as_posix()
-        except ValueError:
-            return None
+    """A decision for an edit of file_path, or None when the policy allows it. A relative path is read
+    from the repo root, and a symlink is checked under its own name and under the file it points to."""
+    base = Path(os.path.abspath(root))
+    target = Path(file_path).expanduser()
+    target = Path(os.path.abspath(target if target.is_absolute() else base / target))
+    rels = []
+    for candidate in (target, Path(os.path.realpath(target))):
+        for anchor in (base, Path(os.path.realpath(base))):
+            try:
+                rels.append(candidate.relative_to(anchor).as_posix())
+                break
+            except ValueError:
+                continue
+    if not rels:
+        return None
     paths = policy.get("paths", {})
-    for pattern in paths.get("deny", []):
-        if _glob(pattern).match(rel):
-            return Decision("deny", f"paths.deny {pattern}", f"The policy in {POLICY_FILE} denies edits to {rel} (paths.deny {pattern}).")
+    for rel in rels:
+        for pattern in paths.get("deny", []):
+            if _matches(pattern, rel):
+                return Decision("deny", f"paths.deny {pattern}", f"The policy in {POLICY_FILE} denies edits to {rel} (paths.deny {pattern}).")
     allow = paths.get("allow", [])
-    if allow and not any(_glob(p).match(rel) for p in allow):
-        return Decision("deny", "paths.allow", f"{rel} is not listed in paths.allow of {POLICY_FILE}.")
+    if allow and not any(_glob(p).match(rels[0]) for p in allow):
+        return Decision("deny", "paths.allow", f"{rels[0]} is not listed in paths.allow of {POLICY_FILE}.")
     return None
 
 
@@ -176,8 +202,49 @@ def _recent_failures(repo: str, minutes: int = 30) -> dict[str, int]:
     return counts
 
 
-def evaluate_bash(policy: dict, command: str, repo: str = "") -> Decision | None:
-    """A decision for a Bash command line: deny a command outside the policy, ask at a trigger, else None."""
+REDIRECT = re.compile(r"^(?:\d*>>?|&>>?|>\|)$")
+WRITERS_ALL = {"tee", "touch", "rm", "mv", "truncate", "chmod", "chown"}
+WRITERS_LAST = {"cp", "install", "ln"}
+HOME_FORMS = {"", "~", "$HOME", "${HOME}"}
+
+
+def _write_targets(name: str, rest: list[str]) -> list[str]:
+    """Paths a simple command writes: redirect targets, tee/touch/rm/mv targets, the destination of cp, install
+    and ln, `sed -i` files and `dd of=`."""
+    targets, i = [], 0
+    while i < len(rest):
+        w = rest[i]
+        if REDIRECT.match(w) and i + 1 < len(rest):
+            targets.append(rest[i + 1])
+            i += 1
+        elif ">" in w and len(w) > 1 and not w.endswith(">"):
+            targets.append(re.split(r">+\|?", w)[-1])
+        elif name == "dd" and w.startswith("of="):
+            targets.append(w[3:])
+        i += 1
+    words = [w for w in rest if not w.startswith("-") and not REDIRECT.match(w) and not w.startswith(">")]
+    if name in WRITERS_ALL or (name == "sed" and any(w.startswith("-i") or w == "--in-place" for w in rest)):
+        targets += words
+    elif name in WRITERS_LAST and words:
+        targets.append(words[-1])
+    return targets
+
+
+def _recursive_rm_of_home_or_root(rest: list[str]) -> bool:
+    """A recursive rm whose target is `/`, `/*`, `~`, `~/` or `$HOME`, however the flags are split."""
+    recursive = any(w == "--recursive" or (w.startswith("-") and not w.startswith("--") and ("r" in w or "R" in w)) for w in rest)
+    targets = [w for w in rest if not w.startswith("-") and w[:1] in "/~$"]
+    return recursive and any(w.rstrip("/").removesuffix("/*").rstrip("*").rstrip("/") in HOME_FORMS for w in targets)
+
+
+def _force_push(rest: list[str]) -> bool:
+    flags = [w for w in rest if w.startswith("-")]
+    return any(w == "--force" or (not w.startswith("--") and "f" in w[1:]) for w in flags)
+
+
+def evaluate_bash(policy: dict, command: str, repo: str = "", root: Path | None = None) -> Decision | None:
+    """A decision for a Bash command line: deny a command outside the policy, a recursive delete of the
+    home or root folder, a force push or a write to a denied path, ask at a trigger, else None."""
     commands = policy.get("commands", {})
     allow, deny = commands.get("allow", []), commands.get("deny", [])
     triggers = policy.get("triggers", {})
@@ -189,13 +256,23 @@ def evaluate_bash(policy: dict, command: str, repo: str = "") -> Decision | None
         if allow and name not in allow:
             return Decision("deny", "commands.allow", f"`{name}` is not in commands.allow of {POLICY_FILE}. Add it there if the repo should run it.")
         sub = _subcommand(name, rest)
+        if name == "rm" and _recursive_rm_of_home_or_root(rest):
+            return Decision("deny", "rm home or root", "A recursive delete of the root or home folder is always denied.")
+        if name == "git" and sub == "push" and _force_push(rest):
+            return Decision("deny", "git push --force", "A force push rewrites shared history, so the policy denies it. Use --force-with-lease and ask the owner.")
+        if root is not None:
+            for target in _write_targets(name, rest):
+                hit = evaluate_path(policy, root, target)
+                if hit and hit.kind == "deny":
+                    return Decision("deny", hit.rule, hit.reason.replace("denies edits to", "denies writes from Bash to"))
         if name == "git" and sub == "push" and triggers.get("push") and not ask:
             ask = Decision("ask", "triggers.push", "A push leaves this machine, so the policy asks the owner first.")
         limit = triggers.get("deleteFiles")
         if limit and not ask:
             targets = [w for w in rest if not w.startswith("-")]
-            if (name == "rm" and len(targets) > limit) or (name == "git" and sub == "rm" and len(targets) - 1 > limit):
-                ask = Decision("ask", "triggers.deleteFiles", f"This deletes more than {limit} files, so the policy asks the owner first.")
+            recursive = any(w.startswith("-") and not w.startswith("--") and ("r" in w or "R" in w) for w in rest)
+            if (name == "rm" and (recursive or len(targets) > limit)) or (name == "git" and sub == "rm" and len(targets) - 1 > limit):
+                ask = Decision("ask", "triggers.deleteFiles", "This deletes a folder or more than " + str(limit) + " files, so the policy asks the owner first.")
         needed = triggers.get("gateFailures")
         if needed and name == "git" and sub == "commit" and repo and not ask:
             gate, count = max(_recent_failures(repo).items(), key=lambda kv: kv[1], default=("", 0))

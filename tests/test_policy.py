@@ -23,19 +23,41 @@ def run_guard(repo, tool_input, log):
     return json.loads(done.stdout)["hookSpecificOutput"] if done.stdout.strip() else None
 
 
+ALLOW_GIT = {"commands": {"allow": ["git", "ls", "head"], "deny": []}}
+
+
 class TestEvaluate(unittest.TestCase):
-    def test_an_unlisted_command_is_denied_with_its_rule(self):
-        d = policy.evaluate_bash(policy.DEFAULT, "zzz --go")
+    def test_an_unlisted_command_is_denied_with_its_rule_when_the_policy_has_an_allow_list(self):
+        d = policy.evaluate_bash(ALLOW_GIT, "zzz --go")
         self.assertEqual(("deny", "commands.allow"), (d.kind, d.rule))
 
     def test_a_listed_command_passes(self):
-        self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "git status && ls -la | head"))
+        self.assertIsNone(policy.evaluate_bash(ALLOW_GIT, "git status && ls -la | head"))
 
     def test_a_wrapped_command_is_read(self):
-        self.assertEqual("deny", policy.evaluate_bash(policy.DEFAULT, "bash -c 'zzz now'").kind)
+        self.assertEqual("deny", policy.evaluate_bash(ALLOW_GIT, "bash -c 'zzz now'").kind)
 
-    def test_a_force_push_is_denied_by_pattern(self):
-        self.assertEqual("deny", policy.evaluate_bash(policy.DEFAULT, "git push --force origin main").kind)
+    def test_the_default_policy_allows_ordinary_commands(self):
+        for command in ("which git", "curl -s example.test", "docker ps", "timeout 600 pytest -q", "nice -n 5 pytest -q", "sudo -u root ls"):
+            self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, command), command)
+
+    def test_a_wrapper_does_not_hide_the_command_it_runs(self):
+        for command in ("timeout 9 zzz", "nice -n 5 zzz", "env -i FOO=1 zzz"):
+            self.assertEqual("deny", policy.evaluate_bash(ALLOW_GIT, command).kind, command)
+
+    def test_a_force_push_is_denied_in_every_spelling_and_a_lease_is_not(self):
+        for command in ("git push --force origin main", "git push -f origin main", "git push origin main -f", "git push -fu origin main"):
+            self.assertEqual("deny", policy.evaluate_bash(policy.DEFAULT, command).kind, command)
+        self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "git push --force-with-lease").kind)
+
+    def test_a_recursive_delete_of_the_home_or_root_folder_is_always_denied(self):
+        for command in ("rm -rf /", "rm -rf /*", "rm -rf ~/", "rm -r -f /", "rm -rf $HOME/", "rm -Rf ~", "rm --recursive /"):
+            self.assertEqual("deny", policy.evaluate_bash(policy.DEFAULT, command).kind, command)
+
+    def test_deleting_a_folder_asks_and_a_single_file_does_not(self):
+        self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "rm -rf node_modules").kind)
+        self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "rm -rf ~/Documents").kind)
+        self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "rm notes.txt"))
 
     def test_a_push_asks(self):
         self.assertEqual(("ask", "triggers.push"), tuple(getattr(policy.evaluate_bash(policy.DEFAULT, "git push"), a) for a in ("kind", "rule")))
@@ -47,11 +69,28 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "rm " + " ".join(f"f{i}" for i in range(11))).kind)
         self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "rm " + " ".join(f"f{i}" for i in range(10))))
 
-    def test_a_denied_path_is_refused_and_an_ordinary_one_passes(self):
+    def test_a_denied_path_is_refused_at_any_depth_and_an_ordinary_one_passes(self):
         root = Path("/repo")
         self.assertEqual("deny", policy.evaluate_path(policy.DEFAULT, root, "/repo/.githooks/pre-commit").kind)
         self.assertEqual("deny", policy.evaluate_path(policy.DEFAULT, root, "/repo/.env").kind)
+        self.assertEqual("deny", policy.evaluate_path(policy.DEFAULT, root, "/repo/config/.env").kind)
+        self.assertEqual("deny", policy.evaluate_path(policy.DEFAULT, root, "/repo/apps/api/.secrets/key").kind)
         self.assertIsNone(policy.evaluate_path(policy.DEFAULT, root, "/repo/src/a.py"))
+
+    def test_a_symlink_to_a_denied_file_is_refused(self):
+        root = temp_dir(self, resolve=True)
+        (root / ".env").write_text("A=1\n")
+        (root / "notes.txt").symlink_to(root / ".env")
+        self.assertEqual("deny", policy.evaluate_path(policy.DEFAULT, root, str(root / "notes.txt")).kind)
+
+    def test_bash_cannot_write_a_denied_path_but_may_write_others(self):
+        root = Path("/repo")
+        for command in ("echo x > .githooks/pre-commit", "echo x >> .env", "tee config/.env", "cp a.txt .secrets/key",
+                        "sed -i s/a/b/ .githooks/pre-commit", "dd if=a of=.env", "rm .env", "echo x>.env"):
+            d = policy.evaluate_bash(policy.DEFAULT, command, "", root)
+            self.assertEqual("deny", d and d.kind, command)
+        for command in ("echo x > notes.txt", "cat .env", "grep a .githooks/pre-commit", "cp .env /tmp/backup"):
+            self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, command, "", root), command)
 
     def test_a_path_outside_paths_allow_is_refused(self):
         rules = {"paths": {"allow": ["src/**"], "deny": []}}
@@ -78,11 +117,17 @@ class TestHook(unittest.TestCase):
         self.assertIsNone(run_guard(self.repo, {"command": "zzz now"}, self.log))
 
     def test_a_command_outside_the_policy_is_blocked_and_logged(self):
-        policy.write_default(self.repo)
+        (self.repo / policy.POLICY_FILE).parent.mkdir(exist_ok=True)
+        (self.repo / policy.POLICY_FILE).write_text(json.dumps(ALLOW_GIT))
         out = run_guard(self.repo, {"command": "zzz now"}, self.log)
         self.assertEqual("deny", out["permissionDecision"])
         self.assertIn("commands.allow", out["permissionDecisionReason"])
         self.assertIn("\tapp\tpolicy\tdeny commands.allow", self.log.read_text())
+
+    def test_a_bash_write_to_a_denied_path_is_blocked(self):
+        policy.write_default(self.repo)
+        out = run_guard(self.repo, {"command": "echo x > .githooks/pre-commit"}, self.log)
+        self.assertEqual("deny", out["permissionDecision"])
 
     def test_an_edit_to_a_denied_path_is_blocked(self):
         policy.write_default(self.repo)

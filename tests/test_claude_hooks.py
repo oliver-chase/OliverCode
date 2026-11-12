@@ -66,6 +66,8 @@ class TestCommitGuard(RepoCase):
         "echo msg | git commit --no-verify -F -", "true || git commit -n -m x",
         'bash -c "git commit --no-verify -m x"', "sh -c 'git commit -n -m x'", 'eval "git commit --no-verify -m x"',
         "git --namespace ns commit -n -m x",
+        "nice git commit --no-verify -m x", "nice -n 5 git commit -n -m x", "timeout 10 git commit --no-verify -m x",
+        "sudo -u root git commit -n -m x", "env -i nice timeout 9 git commit --no-verify -m x",
         "git -c alias.ci='commit -n' ci -m x", 'git -c "alias.ci=commit --no-verify" ci -m x',
         "git -c alias.ci='commit -m y' ci -n", "git -c alias.CI='commit -n' ci -m x",
         "git -c Alias.CI='commit -n' ci -m x", "git -c alias.ci='!git commit -n' CI -m x",
