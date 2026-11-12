@@ -18,7 +18,7 @@ def advice(load, cores):
     if load > 2 * cores:
         return 0, False
     if load > cores:
-        return max(1, MAX_READERS // 4), False
+        return max(1, MAX_READERS // 2), False
     return MAX_READERS, True
 
 

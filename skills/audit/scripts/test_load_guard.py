@@ -8,7 +8,7 @@ class LoadGuardTest(unittest.TestCase):
         self.assertEqual(load_guard.advice(2, 8), (12, True))
 
     def test_a_busy_machine_gets_fewer_readers_and_no_mutations(self):
-        self.assertEqual(load_guard.advice(10, 8), (3, False))
+        self.assertEqual(load_guard.advice(10, 8), (6, False))
 
     def test_an_overloaded_machine_waits(self):
         self.assertEqual(load_guard.advice(350, 8), (0, False))
