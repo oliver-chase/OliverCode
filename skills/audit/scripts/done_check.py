@@ -62,7 +62,7 @@ def checks(repo, epics=(), validate=None, run=sh):
     rc, text = run(cmd, repo)
     out.append(("validation", rc == 0, "" if rc == 0 else text.strip().splitlines()[-1][:120] if text.strip() else "failed"))
     rc, text = run([sys.executable, str(HERE / "fleet_check.py"), "--time", str(repo)], repo)
-    bad = [l for l in text.splitlines() if "over the budget" in l or l.startswith("voice:") or "difference(s)" in l]
+    bad = [l for l in text.splitlines() if "over the budget" in l or (l.startswith("voice:") and "no violations" not in l) or "difference(s)" in l]
     out.append(("budgets, voice and board", not bad, "; ".join(bad)[:200]))
     _, text = run([sys.executable, str(HERE / "sweep.py"), str(repo)], repo)
     left = [r for r in re.findall(r"^(\S+)\s+(\S+)", text, re.M) if r not in skip]

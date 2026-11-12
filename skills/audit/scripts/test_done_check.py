@@ -42,6 +42,10 @@ class DoneCheckTest(unittest.TestCase):
                "sweep.py": (0, "unused-def  a.py:3  dead\n")}
         self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))), {"budgets, voice and board", "sweep"})
 
+    def test_the_clean_voice_line_that_fleet_check_prints_passes(self):
+        out = {"fleet_check": (0, "== Voice\nvoice: no violations found\n== Board\nboard: matches the baseline\n")}
+        self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))), set())
+
     def test_an_accepted_row_is_not_counted(self):
         out = {"sweep.py": (0, "unused-def  a.py:3  dead\n")}
         root = repo("Sharing: portable\n", "Accepted: unused-def a.py:3 - runtime entry\n")
