@@ -5,7 +5,7 @@ description: "The one audit for anything: a whole repo or suite, a skill or skil
 
 # Audit
 
-An audit tells the owner what a target is meant to be, what it is today and what to change, with every claim checked against the files. Every route runs the same procedure and writes the same report. On a whole repo or suite it then carries every finding to done (`references/done.md`). Every script path below is relative to this skill's folder, so run scripts from there.
+An audit tells the owner what a target is meant to be, what it is today and what to change, with every claim checked against the files. Every route runs the same procedure and writes the same report, and a whole repo then goes on to done (`references/done.md`). Script paths are relative to this skill's folder.
 
 ## Opening message
 
@@ -37,10 +37,10 @@ Every route loads `references/lenses.md`. A target with a user interface also lo
 
 1. **Scope.** List every tracked file in scope with its size: `git ls-files <scope> | xargs wc -lc`. The list is the read contract, and the report names it.
 2. **Sweep.** Run `python3 scripts/sweep.py <target>`, `python3 scripts/fleet_check.py --time <target>` and `bash scripts/size.sh <target>`. They find unused code, orphan files, oversized files, budget overruns and voice violations with no model, and their rows are the candidates the next step judges.
-3. **Read every line, cheaply.** A scope of 3,000 lines or fewer is read by the lead. A larger scope goes to reader agents on `haiku`, one per facet (each skill, each part of the tool, the tests, the docs), with small facets batched to about 3,000 lines and at most 12 readers, briefed from `references/system.md`. A reader edits nothing. Never start one agent per file.
-4. **Verify.** The lead checks the findings and never starts a second round of agents. Rerun the evidence for every bug, every security claim and everything the report recommends deleting. Check accuracy by running each claimed path, command and count, and check test necessity by removing the guarded code in a scratch copy and watching whether the test fails. A claim that does not reproduce is dropped. Haiku finds and the lead checks.
+3. **Read every line, inside a time box.** Run `python3 scripts/load_guard.py` first: it prints how many readers to start and whether mutation checks may run, and it exits 2 to wait when the machine is overloaded. The lead reads a scope of 3,000 lines or fewer with no agents, and a repo that size finishes in ten minutes. A larger scope goes to `haiku` readers, one per facet (each skill, each part of the tool, the tests, the docs), with facets batched to about 3,000 lines and at most 12 readers, briefed from `references/system.md`. On a repeat audit, read only the files changed since the last audited commit (`git diff --name-only <sha>..HEAD`) and their facets. A reader only reads: no edits, no tests, no mutations, and it stops after 15 minutes.
+4. **Verify.** The lead checks the findings and never starts a second round of agents. Rerun the evidence for every bug, security claim and recommended deletion. Check accuracy by running each claimed path, command and count. Only the lead runs tests or mutations: one at a time, on the single test file that guards the code, at most 10 per audit, and only while `load_guard.py` prints `mutations: yes`. Check test necessity by removing the guarded code in a scratch copy and watching whether that test fails. A claim that does not reproduce is dropped.
 5. **Report** in the order below, written per `docs/VOICE.md` in the target repo or `~/.claude/VOICE.md`. Write it to a file first and run `python3 scripts/check_report.py FILE`. Fix every line it prints and run it again. Print the report only when it prints `report: complete.`
-6. **File everything.** Bugs, over-engineering, inefficiency, dead code, optimization, stale documentation and voice all get filed, and no finding stays out because it is small. Search the backlog first, then file one epic and one story per boundary, bundling small fixes of one kind into one story. Each story carries its priority (below), size, the evidence and a command that shows the problem before the fix and its absence after. The repo's `CLAUDE.md` names its backlog. Use `backlog`, or `docs/BACKLOG.md` where the repo has no Project. When an earlier audit already filed stories, map each finding to one and file only what none covers.
+6. **File everything.** Every finding gets filed, however small. Search the backlog first, then file one epic and one story per boundary, bundling small fixes of one kind into one story. Each story carries its priority (below), size, the evidence and a command that shows the problem before the fix and its absence after. The repo's `CLAUDE.md` names its backlog. Use `backlog`, or `docs/BACKLOG.md` where the repo has no Project. When an earlier audit already filed stories, map each finding to one and file only what none covers.
 7. **Coverage check.** List every finding and every recommendation the report makes, each with the issue that holds it. A finding with no issue gets one now, and the report ends with this list as its ninth section, headed "Coverage".
 
 ## Priorities
@@ -62,12 +62,12 @@ Every audit, on every route, prints these headings in this order. `check_report.
 5. **Cuts and simplifications.** A table of every deletion, merge and tool swap: what goes, lines removed, feature kept, issue, and the total against today's size. Estimates are labeled
 6. **Outcomes.** What the target is after the fixes, before and after in files, lines, skills and bytes, whether a new user reaches a result by talking, and whether the fixes reach the goal. When they only trim, name the structural move that would reach it
 7. **Added to the board.** The epic and every story with number, title, priority, size and status, then the open items that work against the goal for the owner to keep, defer or close
-8. **Read and unknown.** What was read, what the lead re-checked and what could not be verified
+8. **Read and unknown.** What was read, the commit audited through, what the lead re-checked and what could not be verified
 
 ## Rules
 
-- An audit aims at a smaller, simpler target that keeps its features. Over-engineering, dead code, oversized files and tests that cannot fail weigh as much as bugs. The epic states a size target in lines
+- An audit aims at a smaller, simpler target that keeps its features, and weighs over-engineering, dead code, oversized files and tests that cannot fail as heavily as bugs. The epic states a size target in lines
 - Every finding and recommendation is filed. An owner decision is filed as a story that names what it blocks
 - A finding is a defect with evidence. A style preference outside the voice, a hypothetical and a "consider" are not findings
 - Owner data in a shipped file is a finding even when no list of names exists: a person's or business's name, an ID, a color, a motif or a niche written as the default
-- Count each voice violation by kind, and name the file of every competing writing rule. The `fleet_check.py` voice lines give the file and line of each violation it can find, and its board lines name every difference from `shared/kanban-baseline.json`
+- Count each voice violation by kind and name the file of every competing writing rule. `fleet_check.py` prints each violation it finds and every board difference from `shared/kanban-baseline.json`

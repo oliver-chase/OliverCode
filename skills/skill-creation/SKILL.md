@@ -53,4 +53,4 @@ A tracker or growing list needs a home the person's machine can reach, named at 
 
 ## 3. Build and close
 
-Create the skill, its symlink and its `skills/INDEX.md` row, then run `check_skill_structure.py` on the folder and a clean-room run: copy the skill alone into an empty skills folder and run its main script or setup mode. Fix the exact gap each check names and run it again. Never finish with a gap open.
+Create the skill, its symlink and its `skills/INDEX.md` row, then run `$OC/skills/audit/scripts/check_skill_structure.py` on the folder and a clean-room run: copy the skill alone into an empty skills folder and run its main script or setup mode. Fix the exact gap each check names and run it again. Never finish with a gap open.

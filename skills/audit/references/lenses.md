@@ -1,6 +1,6 @@
 # The ten lenses
 
-Every route applies all ten. State each lens's result in the report, including "checked, nothing found" with what was checked.
+Every route applies all ten. State each lens's result, including "checked, nothing found" with what was checked.
 
 ## 1. Autonomy and user flow
 
@@ -8,9 +8,9 @@ A person who has never seen the target gets from download to a first result by t
 
 - Walk the real first run on a clean checkout: copy it into a temp folder with a fresh `HOME`, then follow only what the README and the entry skill say
 - The entry point asks where the person is and skips what does not apply
-- Walk each missing prerequisite step by step: what it is, why it is needed, what it costs, and the exact clicks or the command the agent runs
+- Walk each missing prerequisite step by step: what it is, why, what it costs, and the clicks or command the agent runs
 - A step that tells the person to run a command, edit a file or set a key is a finding, and so is a dead end where one step's output has no next step
-- Every question that offers a default also shows the bring-your-own choice, and every result names where it landed
+- Every question that offers a default shows the bring-your-own choice, and every result names where it landed
 
 ## 2. Self-containment
 
@@ -26,14 +26,14 @@ The target runs on a clean machine with no owner paths, no other repo and no own
 Every claim is checked against the code, and the code wins.
 
 - Run, list or read every path, command, flag, count and behavior a doc or skill names, and name any two files that state one fact differently
-- Each bug carries its failure scenario and a repro that was run
+- Each bug carries its failure scenario and a repro that the lead ran
 - Each closed issue the scope cites has a commit, and the fix is in the code today. An issue closed as not planned (`gh issue list --state closed --json number,stateReason`) is a decision: read its closing comment and report the reason, and report a defect only where the board or docs still claim the feature
-- A check that can never fail, and a test that stays green with the code it guards removed, are findings. Prove it by removing the guard and watching the test, then restore it
+- A check that can never fail, and a test that stays green with the code it guards removed, are findings. The lead proves it in step 4 by removing the guard in a scratch copy and watching that one test, then restoring it
 
 ## 4. One home per concept
 
 - The same rule, list, schema, command chain or explanation in two or more files. Name the one home and where each copy points
-- Near-duplicates a byte check misses: the same rule reworded, two functions doing one job, two tests covering one behavior
+- Near-duplicates a byte check misses: a reworded rule, two functions doing one job, two tests covering one behavior
 - Competing standards: a second writing, style, layout or process rule beside the one that owns it
 - A copy that a self-contained part needs is kept when a recorded reason and a check that keeps the copies identical both exist
 
@@ -46,9 +46,9 @@ Every claim is checked against the code, and the code wins.
 
 **Usage evidence.** For each command, scheduler, gate or flag ask "has it ever run?" and record evidence a person could check: an installed job (`ls ~/Library/LaunchAgents`, `crontab -l`), a state or log file, a registered repo, a commit or release that used it, or a nonzero count in a log. A part referenced only by docs, its own tests or an unfilled registry entry counts as unused.
 
-**Test necessity.** For each test module report tests of counts, totals and exact message wording, one behavior covered at two levels, tests of process tooling that cover no product behavior, and tests a mutation would not fail (mutate a scratch copy, never the repo). Give a verdict on tests per 100 lines of code and a cut list in lines.
+**Test necessity.** For each test module report tests of counts, totals and exact message wording, one behavior covered at two levels, tests of process tooling that cover no product behavior, and tests a mutation would not fail (the lead mutates a scratch copy, never the repo). Give a verdict on tests per 100 lines of code and a cut list in lines.
 
-**Existing tools.** For each mechanism that distributes or enforces rules, name the standard tool that does the same job (the pre-commit framework, lefthook, a global `core.hooksPath`, GitHub rulesets, a package manager) and say why it is or is not used.
+**Existing tools.** For each mechanism that distributes or enforces rules, name the standard tool that does the same job (pre-commit framework, lefthook, a global `core.hooksPath`, GitHub rulesets, a package manager) and why it is or is not used.
 
 ## 6. Cost in use, in tokens and runtime
 
@@ -90,4 +90,4 @@ Decide first whether the target should be shareable, from what it is, and record
 - **Portable after fixes** is a portable target with blockers, each one a story. Say which verdict you reached and why, and let the owner overturn it
 - Run `python3 scripts/portability.py <target>`. It lists tracked secret files, home paths, owner identities in the tree, personal emails and secret-shaped values in the history, and a missing license, README or `.gitignore` entry
 - Commits: every author and committer address is a noreply or project address. History that holds a secret or owner data gets an owner-decision story, since removing it rewrites shared history (`git filter-repo`), and the credential is revoked first. Add a `.mailmap` for old identities
-- Repo settings: a private repo meant to be shared names the steps to publish it, and a public repo has a license and a security contact
+- Settings: a private repo meant to be shared names the steps to publish it, and a public repo has a license and a security contact
