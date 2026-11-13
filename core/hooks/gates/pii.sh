@@ -16,7 +16,7 @@ for pattern in "${PII_PATTERNS[@]}"; do
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
       case "$file" in
-        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|docs/PII-GATE.json) continue ;;
+        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|docs/PII-GATE.json|.githooks/*) continue ;;
       esac
       pii_skip=0
       while IFS= read -r pii_glob; do

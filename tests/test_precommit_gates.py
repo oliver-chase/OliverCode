@@ -227,3 +227,7 @@ class TestPublicRepoLocalAndPii(GateHarness):
     def test_a_home_path_with_digits_or_dots_is_pii(self):
         self.stage("a.py", 'P = "/Users/' + 'jane.doe2/work"\n')
         self.assertBlocked("pii")
+
+    def test_the_hook_files_are_not_scanned_for_pii(self):
+        self.stage(".githooks/pre-commit", "# an address such as git@github.com is explained here\n")
+        self.assertAllowed()
