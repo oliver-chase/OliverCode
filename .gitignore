@@ -9,8 +9,6 @@ venv/
 .env.*
 !.env.example
 !.env.local.example
-/settings.json
-/settings.local.json
 .claude/settings.local.json
 
 *~
@@ -44,12 +42,10 @@ logs/
 .pytest_cache/
 
 # OliverCode public/private runtime boundary
-.env.local
 .secrets/*
 !.secrets/README.md
 
 # Runtime control plane (local-only agent orchestration state)
-runtime/control-plane/
 runtime/control-plane/**
 
 # Generated runtime manifests (inventory reports, generated status, observability artifacts)

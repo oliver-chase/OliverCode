@@ -182,11 +182,6 @@ class DanglingSkillReferenceFinding(unittest.TestCase):
             code, out = run_gate(tmp)
         self.assertEqual(code, 0, out)
 
-    def test_verb_shape_never_flags_an_unknown_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_skill(tmp, "fam/alpha-skill", "Run `force-set` to reset.\n")
-            self.assertEqual(run_gate(tmp)[0], 0)
-
 
 class DescriptionCap(unittest.TestCase):
     def long_skill(self, tmp, words):

@@ -17,7 +17,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _fleet import scan_root
 
 HERE = Path(__file__).resolve().parent
 VERDICT = re.compile(r"^\W*Sharing:?\W*\s*(portable|personal)\b", re.I | re.M)

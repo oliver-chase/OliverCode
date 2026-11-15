@@ -48,11 +48,6 @@ STRONG_REF_RES = [
     re.compile(rf"\bskills?\s+`({_NAME})`"),
     re.compile(rf"\.claude/skills/({_NAME})"),
 ]
-# A verb shape counts a reference to a real skill. It never flags a dangling one: a
-# subcommand such as `force-set` has the same shape as a skill name.
-VERB_REF_RE = re.compile(
-    rf"\b(?:load|invoke|route to|hand off to|defer to|use|run|call|see|per)s?\s+`({_NAME})`", re.I
-)
 
 
 def find_skill_dirs():
@@ -67,15 +62,15 @@ def skill_ref_scan(skill_dirs):
         files = [d / "SKILL.md"]
         refs = d / "references"
         if refs.is_dir():
-            files.extend(f for f in sorted(refs.glob("*.md")) if not f.name.startswith("CONTEXT-"))
+            files.extend(sorted(refs.glob("*.md")))
         for f in files:
             text = f.read_text(encoding="utf-8", errors="ignore")
-            for rx in STRONG_REF_RES + [VERB_REF_RE]:
+            for rx in STRONG_REF_RES:
                 for m in rx.finditer(text):
                     name = m.group(1)
                     if name == d.name:
                         continue
-                    if name not in fleet and rx is not VERB_REF_RE:
+                    if name not in fleet:
                         dangling.setdefault(d.name, set()).add(name)
     return dangling
 

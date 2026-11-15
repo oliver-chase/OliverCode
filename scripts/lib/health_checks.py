@@ -11,7 +11,7 @@ from pathlib import Path
 
 from lib.local_config import claude_dir as _claude_dir
 
-from lib.repo_profiles import configured_location, iter_fleet, registry_file
+from lib.repo_profiles import configured_location, iter_fleet
 from lib.skill_links import broken_links, link_states
 from lib.skills_catalog import skill_dirs
 
@@ -242,7 +242,6 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
     passed = 0
     failed = 0
     skipped = 0
-    templates_dir = oc_root / "core" / "templates" / "project"
 
     # (a)/(b) Every OliverCode skill must have a live, correctly-targeted symlink at
     # ~/.claude/skills/<name> -- that's the mechanism making it invocable from any repo.

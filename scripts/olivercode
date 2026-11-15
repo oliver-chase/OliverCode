@@ -23,7 +23,7 @@ from lib.cmd_fleet import (  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
 from lib.failure_log import command_report  # noqa: E402
-from lib.cmd_health import command_health, _check_placement_drift  # noqa: E402,F401
+from lib.cmd_health import command_health  # noqa: E402
 from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
 from lib.cmd_repo import (
     command_bootstrap, command_clean, command_discover, command_gh_limit, command_place,
