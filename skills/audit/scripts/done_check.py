@@ -12,6 +12,7 @@ closed (--epic repeats for each epic). A row the owner decided to keep is listed
 starts with the other (7 characters or more), since git shortens hashes after a prune. Tests: python3 -m unittest test_done_check
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -62,26 +63,47 @@ def verdict(repo):
     return None
 
 
+def crashed(text):
+    """The last line of a helper's traceback, so a crash fails its check where the text alone would read as clean."""
+    if "Traceback (most recent call last)" not in text:
+        return []
+    return ["helper crashed: " + text.strip().splitlines()[-1][:120]]
+
+
+def default_validation(repo):
+    """scripts/validate.sh, or the package's validate script, or its check script."""
+    if (repo / "scripts/validate.sh").exists():
+        return "bash scripts/validate.sh"
+    try:
+        scripts = json.loads((repo / "package.json").read_text(encoding="utf-8")).get("scripts", {})
+    except (OSError, ValueError):
+        scripts = {}
+    return "npm run check" if "validate" not in scripts and "check" in scripts else "npm run validate"
+
+
 def checks(repo, epics=(), validate=None, run=sh):
     repo = Path(repo)
     skip = accepted(repo)
     out = []
-    cmd = validate or ("bash scripts/validate.sh" if (repo / "scripts/validate.sh").exists() else "npm run validate")
+    cmd = validate or default_validation(repo)
     rc, text = run(cmd, repo)
     out.append(("validation", rc == 0, "" if rc == 0 else text.strip().splitlines()[-1][:120] if text.strip() else "failed"))
     rc, text = run([sys.executable, str(HERE / "fleet_check.py"), "--time", str(repo)], repo)
-    bad = [l for l in text.splitlines() if "over the budget" in l or (l.startswith("voice:") and "no violations" not in l) or "difference(s)" in l]
+    bad = [l for l in text.splitlines() if "over the budget" in l or (l.startswith("voice:") and "no violations" not in l) or "difference(s)" in l
+           or l.startswith("board: not checked (")]
+    bad += crashed(text)
     out.append(("budgets, voice and board", not bad, "; ".join(bad)[:200]))
     _, text = run([sys.executable, str(HERE / "sweep.py"), str(repo)], repo)
-    left = [r for r in re.findall(r"^(\S+)\s+(\S+)", text, re.M) if r not in skip]
-    out.append(("sweep", not left, f"{len(left)} row(s), first {left[0][1]}" if left else ""))
+    left = [r for r in re.findall(r"^(\S+)\s+(\S+)", text, re.M) if r not in skip and r[0] != "Traceback"]
+    out.append(("sweep", not left and not crashed(text), "; ".join(crashed(text)) or (f"{len(left)} row(s), first {left[0][1]}" if left else "")))
     rc, text = run([sys.executable, str(HERE / "catalog.py"), str(repo), "--check"], repo)
     out.append(("documentation catalog", rc == 0, text.strip().splitlines()[0][:120] if rc else ""))
     v = verdict(repo)
     out.append(("sharing verdict recorded", v is not None, "" if v else 'add "Sharing: portable" or "Sharing: personal - reason" to README.md or docs/SHARING.md'))
     _, text = run([sys.executable, str(HERE / "portability.py"), str(repo)], repo)
     blockers = [(k, w) for k, w in rows(text) if not is_accepted(k, w, skip) and (v != "personal" or k in PERSONAL_BLOCKERS)]
-    out.append(("portability", not blockers, f"{len(blockers)} blocker(s), first {blockers[0][0]} {blockers[0][1]}" if blockers else ""))
+    out.append(("portability", not blockers and not crashed(text),
+                "; ".join(crashed(text)) or (f"{len(blockers)} blocker(s), first {blockers[0][0]} {blockers[0][1]}" if blockers else "")))
     for epic in epics:
         rc, text = run(["gh", "issue", "view", str(epic), "--json", "state", "--jq", ".state"], repo)
         out.append((f"epic #{epic} closed", rc == 0 and text.strip() == "CLOSED", text.strip()[:80]))

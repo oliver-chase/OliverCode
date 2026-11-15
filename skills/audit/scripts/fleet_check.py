@@ -58,16 +58,18 @@ def measure(repo, files):
 
 
 def run_tests(repo, per_module=None, failed=None):
-    """Wall seconds to run every `tests/test_*.py` module, each in its own process as validate.sh does,
-    or None when the repo has no such module. A dict passed as `per_module` gets each module's seconds,
-    and a list passed as `failed` gets each module that failed."""
-    tests_dir = Path(repo) / "tests"
-    modules = sorted(p.stem for p in tests_dir.glob("test_*.py")) if tests_dir.is_dir() else []
+    """Wall seconds to run every `tests/test_*.py` and `skills/*/scripts/test_*.py` module, each in its own
+    process from its own folder as validate.sh does, or None when the repo has no such module. A dict passed
+    as `per_module` gets each module's seconds, and a list passed as `failed` gets each module that failed."""
+    root = Path(repo)
+    found = sorted(root.glob("tests/test_*.py")) + sorted(root.glob("skills/*/scripts/test_*.py"))
+    modules = [(p.parent, p.stem) for p in found]
     if not modules:
         return None
-    def run_one(module):
+    def run_one(entry):
+        folder, module = entry
         began = time.monotonic()
-        done = subprocess.run([sys.executable, "-m", "unittest", "-b", module], cwd=tests_dir, capture_output=True)
+        done = subprocess.run([sys.executable, "-m", "unittest", "-b", module], cwd=folder, capture_output=True)
         if done.returncode and failed is not None:
             failed.append(module)
         if per_module is not None:

@@ -42,6 +42,18 @@ class DoneCheckTest(unittest.TestCase):
                "sweep.py": (0, "unused-def  a.py:3  dead\n")}
         self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))), {"budgets, voice and board", "sweep"})
 
+    def test_a_helper_crash_or_an_unread_board_fails_its_check(self):
+        trace = "Traceback (most recent call last):\n  File x\nKeyError: 'k'\n"
+        out = {"fleet_check": (1, "board: not checked (gh failed)\n"), "sweep.py": (1, trace), "portability.py": (1, trace),
+               "catalog.py": (1, "CATALOG: stale\n")}
+        self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))),
+                         {"budgets, voice and board", "sweep", "portability", "documentation catalog"})
+
+    def test_a_package_with_only_a_check_script_runs_it(self):
+        root = repo("Sharing: portable\n")
+        (root / "package.json").write_text('{"scripts": {"check": "x"}}')
+        self.assertEqual("npm run check", done_check.default_validation(root))
+
     def test_the_clean_voice_line_that_fleet_check_prints_passes(self):
         out = {"fleet_check": (0, "== Voice\nvoice: no violations found\n== Board\nboard: matches the baseline\n")}
         self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))), set())
