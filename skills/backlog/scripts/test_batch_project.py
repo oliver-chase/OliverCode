@@ -73,6 +73,15 @@ class BatchProject(unittest.TestCase):
             code = bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=failing if number == 999999 else Runner(), err=err, out=io.StringIO())
             self.assertEqual(1 if number == 999999 else 0, code)
         self.assertEqual([], json.loads((Path(self.tmp.name) / "gh-project-queue.json").read_text()))
+        # A transient error keeps the job queued for the next run, and says so.
+        def unavailable(args):
+            return subprocess.CompletedProcess(args, 1, "", "HTTP 503: Service Unavailable")
+        self.input.write_text(json.dumps({"issues": [{"number": 7, "fields": {"status": "Ready"}}]}))
+        err = io.StringIO()
+        bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=unavailable, err=err, out=io.StringIO())
+        self.assertIn("kept #7", err.getvalue())
+        queued = json.loads((Path(self.tmp.name) / "gh-project-queue.json").read_text())
+        self.assertEqual([7], [i["number"] for job in queued for i in job["issues"]])
 
     def test_one_bad_number_leaves_the_queue_and_the_good_work_queued_with_it_applies(self):
         bp.gh_budget.note_limit(seconds=60)

@@ -41,6 +41,9 @@ def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
     p.add_argument("--config", required=True)
     p.add_argument("--evidence", required=True, help="the comment: files touched and what shipped")
     args = p.parse_args(argv)
+    if not args.evidence.strip():
+        print("complete_story: --evidence is empty; name the files touched and what shipped", file=err)
+        return 2
     try:
         with open(args.config, encoding="utf-8") as h:
             cfg = json.load(h)
@@ -74,13 +77,23 @@ def main(argv=None, runner=qa.gh_api, out=sys.stdout, err=sys.stderr):
         if not item:
             print(f"complete_story: #{args.story} is not on the project board, so nothing changed", file=out)
             return 1
-        call(runner, ["graphql", "-f", f"query={MOVE}", "-f", f"p={cfg['projectId']}", "-f", f"i={item}",
-                      "-f", f"f={status['id']}", "-f", f"v={option}"])
-        call(runner, [f"repos/{repo}/issues/{args.story}/comments", "-f", f"body={args.evidence}"])
-        call(runner, ["-X", "PATCH", f"repos/{repo}/issues/{args.story}", "-f", "state=closed"])
     except (RuntimeError, ValueError, KeyError) as exc:
-        print(f"complete_story: a write failed after the check passed: {exc}", file=err)
+        print(f"complete_story: cannot find #{args.story} on the board: {exc}", file=err)
         return 1
+    # Three writes in order. When one fails, the message names the ones that landed, so a rerun finishes the rest.
+    steps = [
+        ("status set to Complete", ["graphql", "-f", f"query={MOVE}", "-f", f"p={cfg['projectId']}", "-f", f"i={item}",
+                                    "-f", f"f={status['id']}", "-f", f"v={option}"]),
+        ("evidence comment posted", [f"repos/{repo}/issues/{args.story}/comments", "-f", f"body={args.evidence}"]),
+        ("issue closed", ["-X", "PATCH", f"repos/{repo}/issues/{args.story}", "-f", "state=closed"]),
+    ]
+    for i, (label, call_args) in enumerate(steps):
+        try:
+            call(runner, call_args)
+        except (RuntimeError, ValueError) as exc:
+            landed = ", ".join(s for s, _ in steps[:i]) or "nothing"
+            print(f"complete_story: #{args.story}: {label.split(' ', 1)[0]} write failed ({exc}); already done: {landed}", file=err)
+            return 1
     print(f"#{args.story} is Complete, commented and closed", file=out)
     return 0
 

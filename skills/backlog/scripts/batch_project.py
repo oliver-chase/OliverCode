@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -115,6 +116,10 @@ def mutation_updates(cfg, updates):
     return f"mutation{{{' '.join(bits)}}}"
 
 
+# GitHub's answer when a number is no issue in the repo, which no retry changes.
+PERMANENT = re.compile(r"Could not resolve to an? (Issue|PullRequest)|NOT_FOUND")
+
+
 def drain(cfg, issues, runner):
     item_ids = discovery(cfg, issues, runner)
     missing = [issue for issue in issues if not item_ids[issue["number"]]]
@@ -170,24 +175,31 @@ def main(argv=None, runner=run_gh, out=sys.stdout, err=sys.stderr):
         merged = merge_issues([issue for item in matching for issue in item["issues"]])
         try:
             result = drain(cfg, merged, runner)
-        except RuntimeError as exc:
-            # A rate limit or hold keeps the work for a later run. Any other failure, such as a number that
-            # is not an issue, would fail every later run the same way, so those jobs leave the queue.
-            if gh_budget.is_limit(str(exc)) or gh_budget.refusal():
+        except (RuntimeError, KeyError, TypeError) as exc:
+            # A rate limit or hold keeps the work for a later run.
+            if isinstance(exc, RuntimeError) and (gh_budget.is_limit(str(exc)) or gh_budget.refusal()):
                 return (exc, queue)
-            # Apply each issue alone so only the ones that fail leave the queue. A limit keeps the rest queued.
+            # Apply each issue alone. Only a failure that would repeat on every run, a number that is no issue or a
+            # field the config no longer has, leaves the queue; any other error keeps the issue for the next run.
             count = updates = 0
-            dropped = []
+            dropped, kept = [], []
             for i, issue in enumerate(merged):
                 try:
                     c, u = drain(cfg, [issue], runner)
+                except (KeyError, TypeError) as one:
+                    dropped.append(f"#{issue['number']}: the config has no {one}")
+                    continue
                 except RuntimeError as one:
                     if gh_budget.is_limit(str(one)) or gh_budget.refusal():
-                        return (one, other + [{"cfg": cfg, "issues": merged[i:]}])
-                    dropped.append(f"#{issue['number']}: {one}")
+                        return (one, other + [{"cfg": cfg, "issues": kept + merged[i:]}])
+                    if PERMANENT.search(str(one)):
+                        dropped.append(f"#{issue['number']}: {one}")
+                    else:
+                        kept.append(issue)
+                        print(f"batch_project: kept #{issue['number']} queued after: {one}", file=err)
                     continue
                 count, updates = count + c, updates + u
-            return ((count, updates, dropped), other)
+            return ((count, updates, dropped), other + ([{"cfg": cfg, "issues": kept}] if kept else []))
         return ((*result, []), other)
     result = with_queue(take)
     if isinstance(result, RuntimeError):

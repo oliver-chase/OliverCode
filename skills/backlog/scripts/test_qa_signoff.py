@@ -136,11 +136,13 @@ class QaSignoff(unittest.TestCase):
 class CompleteStory(unittest.TestCase):
     """complete_story.py closes a story only after the QA check passes, through a fake gh runner."""
 
-    def run_it(self, comments, items="PVTI_1", extra=None):
+    def run_it(self, comments, items="PVTI_1", extra=None, fail=None):
         calls = []
 
         def runner(args):
             calls.append(args)
+            if fail and any(fail in a for a in args):
+                return subprocess.CompletedProcess([], 1, "", "HTTP 422: Validation Failed")
             text = ""
             if "--slurp" in args:
                 text = json.dumps([json.loads((FIX / comments).read_text())])
@@ -159,12 +161,17 @@ class CompleteStory(unittest.TestCase):
                               "fields": {"status": {"id": "F1", "options": {"Complete": "OPT_DONE"}}}, **(extra or {})}))
         cfg.close()
         self.addCleanup(os.unlink, cfg.name)
+        self.err = io.StringIO()
         code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0"],
-                       runner=runner, out=out, err=io.StringIO())
+                       runner=runner, out=out, err=self.err)
         out.flush()
         return code, out.buffer.getvalue().decode(), [" ".join(c) for c in calls]
 
     def test_complete_writes_only_after_the_check_passes_and_the_item_is_found(self):
+        # A failed comment write names the write that already landed, so a rerun finishes the rest.
+        code, _, _ = self.run_it("qa-pass.json", fail="body=")
+        self.assertEqual(code, 1)
+        self.assertIn("already done: status set to Complete", self.err.getvalue())
         code, _, calls = self.run_it("qa-pass.json")
         self.assertEqual(code, 0)
         joined = "\n".join(calls)

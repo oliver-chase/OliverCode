@@ -24,7 +24,7 @@ Work through the steps below in order, against the live fleet.
 
 ## Baseline: every new skill meets this
 
-`python3 $OC/skills/audit/scripts/check_skill_structure.py` enforces the 150-word description limit and that every skill and file a skill cites exists. The rest are judgment calls that the audit skill reads, and rules 1 and 2 are its self-containment lens. A skill that ships inside OliverCode may read `$OC/` files and name its sibling skills.
+`python3 $OC/skills/audit/scripts/check_skill_structure.py` enforces the 150-word description cap and that each cited skill and file exists. The rest are judgment calls that the audit skill reads, and rules 1 and 2 are its self-containment lens. A skill that ships inside OliverCode may read `$OC/` files and name its sibling skills.
 
 1. **Generic at creation.** No name, address, account ID, token or local path in code or prose. A value the skill needs comes from one config file in its folder or from a question in the chat
 2. **No read outside the folder.** No `../`, no other skill's script or config, no vault path. The skill carries any rule it needs as its own text and names a sibling by name only
