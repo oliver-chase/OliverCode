@@ -32,6 +32,11 @@ class CommitMsgCase(unittest.TestCase):
         """The initial commit is exempt, so most tests start from a repo with a history."""
         git(self.repo, "commit", "-m", "first commit with no reference")
 
+    def in_merge(self):
+        """Puts the repo in the state git is in while it commits a merge, with MERGE_HEAD set."""
+        head = git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        (self.repo / ".git" / "MERGE_HEAD").write_text(head + "\n")
+
 
 class TestCommitMsg(CommitMsgCase):
     def test_a_code_change_needs_a_test_change_or_a_stated_reason(self):
@@ -116,10 +121,15 @@ class TestCommitMsg(CommitMsgCase):
 
     def test_revert_fixup_and_squash_messages_are_exempt(self):
         self.first_commit()
-        for message in ('Revert "Add a feature"', "fixup! Add a feature", "squash! Add a feature",
-                        "Merge branch 'x'"):
+        for message in ('Revert "Add a feature"', "fixup! Add a feature", "squash! Add a feature"):
             with self.subTest(message=message):
                 self.assertEqual(0, self.commit(message).returncode)
+
+    def test_a_subject_that_only_starts_with_merge_is_checked(self):
+        self.first_commit()
+        self.assertEqual(1, self.commit("Merge the login fix").returncode)
+        self.in_merge()
+        self.assertEqual(0, self.commit("Merge branch 'x'").returncode)
 
     def test_a_message_that_opens_with_a_reference_passes(self):
         self.first_commit()
@@ -252,13 +262,11 @@ class TestStoryExists(CommitMsgCase):
         self.assertEqual([], self.calls())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestCommitMsgEdges(CommitMsgCase):
     def test_a_merge_message_is_exempt_from_the_voice_check(self):
         self.first_commit()
+        self.in_merge()
         self.assertEqual(0, self.commit("Merge branch 'use-x-instead-of-y'").returncode)
 
     def test_a_null_committed_baseline_counts_as_zero(self):
@@ -273,3 +281,7 @@ class TestCommitMsgEdges(CommitMsgCase):
         result = git(self.repo, "commit", "-m", "Raise it (#5)", check=False)
         self.assertEqual(1, result.returncode)
         self.assertIn("size baseline", result.stdout + result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

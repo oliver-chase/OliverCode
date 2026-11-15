@@ -78,7 +78,7 @@ class TestRaiseCap(unittest.TestCase):
         self.assertIn("over the cap", result.stdout + result.stderr)
 
     def test_a_merge_prefixed_message_inside_the_cap_still_passes(self):
-        self.assertEqual(0, self.commit(1010, "Merge x").returncode)
+        self.assertEqual(0, self.commit(1010, "Merge x (#5)").returncode)
 
     def test_the_cap_percent_comes_from_the_baseline_file(self):
         (self.repo / BASELINE).write_text(baseline_text(1000, 5).replace('"updated"', '"raiseCapPercent": 10,\n  "updated"'))

@@ -206,8 +206,6 @@ class TestLinkedWorktree(unittest.TestCase):
         self.assertIn("secret pattern", out)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestPublicRepoLocalAndPii(GateHarness):
@@ -228,6 +226,16 @@ class TestPublicRepoLocalAndPii(GateHarness):
         self.stage("a.py", 'P = "/Users/' + 'jane.doe2/work"\n')
         self.assertBlocked("pii")
 
+    def test_a_bare_home_folder_or_a_file_named_like_a_mock_is_still_scanned(self):
+        self.stage("a.py", 'HOME_DIR = "/Users/' + 'jane"\n')
+        self.assertBlocked("pii")
+        self.stage("docs/mockup-notes.md", "Reach me at jane" + "@example.org\n")
+        self.assertBlocked("pii")
+
     def test_the_hook_files_are_not_scanned_for_pii(self):
         self.stage(".githooks/pre-commit", "# an address such as git@github.com is explained here\n")
         self.assertAllowed()
+
+
+if __name__ == "__main__":
+    unittest.main()

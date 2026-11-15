@@ -113,10 +113,11 @@ if [ -n "$BAD_COAUTHOR" ]; then
   exit 1
 fi
 
-# Merge, revert and autosquash commits carry the message of work that already has a reference.
+# Revert and autosquash commits carry the message of work that already has a reference, and a real merge is
+# known by MERGE_HEAD, so a subject that only starts with "Merge" still passes every check.
 # The first commit of a repo has no story to name yet.
 case "$SUBJECT" in
-  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+  "Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
 esac
 if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
   exit 0

@@ -7,8 +7,8 @@ PII_EXEMPT="$(git show ":docs/PII-GATE.json" 2>/dev/null | tr '\n' ' ' \
   | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true)"
 
 PII_PATTERNS=(
-  '/Users/[A-Za-z0-9._-]+/'                              # macOS home directory paths
-  '/home/[A-Za-z0-9._-]+/'                                # Linux home directory paths
+  '(^|[^[:alnum:]._/-])/Users/[A-Za-z0-9._-]+([/"'\'' ]|$)'                   # macOS home directory paths, with or without a trailing slash
+  '(^|[^[:alnum:]._/-])/home/[A-Za-z0-9._-]+([/"'\'' ]|$)'                    # Linux home directory paths
   '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'  # Email addresses (any domain)
 )
 
@@ -16,7 +16,7 @@ for pattern in "${PII_PATTERNS[@]}"; do
   if [ -n "$STAGED_FILES" ]; then
     while IFS= read -r file; do
       case "$file" in
-        *.env.example|*mock*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|docs/PII-GATE.json|.githooks/*) continue ;;
+        *.env.example|*/mocks/*|*.mock.*|*_mock.*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|docs/PII-GATE.json|.githooks/*) continue ;;
       esac
       pii_skip=0
       while IFS= read -r pii_glob; do

@@ -12,8 +12,9 @@ PRECOMMIT="${REPO_ROOT}/.githooks/pre-commit"
 
 run_precommit() {
   if [[ -x "$PRECOMMIT" ]]; then
-    echo "=== validate: running pre-commit gates ==="
-    bash "$PRECOMMIT"
+    echo "=== validate: running pre-commit gates over the whole tree ==="
+    # The hook reads staged files by default, so on a clean tree it would scan nothing.
+    OLIVERCODE_SCAN_TREE=1 bash "$PRECOMMIT"
     echo "=== validate: pre-commit passed ==="
   else
     echo "=== validate: pre-commit hook not found at $PRECOMMIT ==="

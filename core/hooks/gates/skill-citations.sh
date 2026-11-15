@@ -26,7 +26,8 @@ if [ -n "$CITED_NUMS" ] && command -v gh >/dev/null 2>&1 && gh auth status >/dev
   if [ -n "$ALL_ISSUES" ]; then
     while IFS= read -r n; do
       [ -z "$n" ] && continue
-      if ! printf '%s\n' "$ALL_ISSUES" | grep -qx "$n"; then
+      # A here-string, since grep -q in a pipe ends early and pipefail then reads the writer's SIGPIPE as a miss.
+      if ! grep -qx "$n" <<< "$ALL_ISSUES"; then
         echo "  BLOCKED: #$n is cited in a staged skill file but resolves to no real issue."
         CITATION_FAILED=1
       fi

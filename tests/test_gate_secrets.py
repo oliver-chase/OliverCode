@@ -33,6 +33,7 @@ class TestGate1Secrets(GateHarness):
         }
         cases = {f"cred-{name}.txt": value + "\n" for name, value in modern.items()}
         cases["deploy.sh"] = "TOKEN=ghp_" + "b" * 36 + "\n"
+        cases["db.env"] = 'DB_PASSWORD="Abc!' + "defghijk" * 3 + '"\n'  # a symbol early in the value
         cases["id.txt"] = "-----BEGIN RSA " + "PRIVATE KEY-----\n"
         # A pipeline that exits early fails open on big files under pipefail.
         cases["big.py"] = ('KEY = "sk-' + "d" * 32 + '"\n') * 2000
@@ -64,8 +65,6 @@ class TestGate1Secrets(GateHarness):
         self.assertAllowed()
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestGateSecretsNames(GateHarness):
@@ -84,3 +83,7 @@ class TestGateSecretsNames(GateHarness):
         self.assertAllowed()
         self.stage("bad.py", 'api_key = "' + "Ab3" * 4 + "x" * 9 + "Cd4" * 3 + '"\n')
         self.assertBlocked("gate 1")
+
+
+if __name__ == "__main__":
+    unittest.main()
