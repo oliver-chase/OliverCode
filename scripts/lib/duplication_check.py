@@ -51,7 +51,8 @@ def _repo_markers(repo_root: Path) -> list[str]:
     """The markers a repo declares in docs/DUPLICATION-ALLOW.json. Only an entry with a reason counts."""
     try:
         data = json.loads((repo_root / "docs" / "DUPLICATION-ALLOW.json").read_text(encoding="utf-8"))
-        return [m.lower() for m, why in data["markers"].items() if isinstance(why, str) and why.strip()]
+        # Read as words, the way passages are read, so a marker with punctuation still matches.
+        return [" ".join(WORD.findall(m.lower())) for m, why in data["markers"].items() if isinstance(why, str) and why.strip()]
     except (OSError, ValueError, KeyError, AttributeError):
         return []
 

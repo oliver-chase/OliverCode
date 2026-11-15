@@ -85,6 +85,13 @@ class TestClean(unittest.TestCase):
         path = self.add("done")
         self.assertIn(f"REMOVE {path}", " ".join(placement.clean(self.cfg)))
         self.assertTrue(path.exists())
+        # An ignored .env exists nowhere else, so a worktree holding one is kept.
+        common = Path(subprocess.run(["git", "-C", str(path), "rev-parse", "--git-common-dir"], capture_output=True, text=True).stdout.strip())
+        exclude = (common if common.is_absolute() else path / common) / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text(".env\n")
+        (path / ".env").write_text("TOKEN=local\n")
+        self.assertIn(f"KEEP   {path}", " ".join(placement.clean(self.cfg)))
 
     def test_apply_removes_a_merged_clean_worktree(self):
         path = self.add("done")

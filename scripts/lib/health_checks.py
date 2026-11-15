@@ -258,7 +258,7 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
         states = link_states({n: skills_dir / n for n in oc_skill_names}, claude_skills_dir)
         installed = [n for n, st in states.items() if st == "ok"]
         missing = [n for n, st in states.items() if st in ("absent", "real")]
-        wrong_target = [n for n, st in states.items() if st in ("broken", "elsewhere")]
+        wrong_target = [n for n, st in states.items() if st == "elsewhere"]
         if oc_skill_names and not installed:
             # Zero symlinks resolve into THIS checkout: it isn't the machine's installed
             # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
@@ -343,7 +343,9 @@ def _check_memory(oc_root: Path) -> tuple[int, int, int]:
     stale = []
     for f in files:
         for ref in sorted(set(re.findall(r"`([~\w./-]+/[\w./-]+|[\w-]+\.(?:md|py|sh|json))`", f.read_text(encoding="utf-8")))):
-            if not any((base / ref).expanduser().exists() for base in (oc_root, Path.home())):
+            # A ~/ path names a home path whatever the base, so it is expanded before any join.
+            candidates = [Path(ref).expanduser()] if ref.startswith("~") else [base / ref for base in (oc_root, Path.home())]
+            if not any(c.exists() for c in candidates):
                 stale.append(f"{f.name}: {ref}")
     if stale:
         skipped += 1

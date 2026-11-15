@@ -132,7 +132,6 @@ def check_copies(cfg: placement.Config, fix: bool) -> list[Problem]:
         if fix:
             hygiene.clear_copies(repo, cfg.archive, copies)
             problem.fixed = not keep and not hygiene.stray_copies(repo)
-            problem.fixable = True
         found.append(problem)
     return found
 

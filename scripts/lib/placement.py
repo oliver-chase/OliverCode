@@ -66,6 +66,8 @@ def inside(path: Path, parent: Path) -> bool:
 SYNCED_PLACES = ("Documents", "Desktop", "Library/Mobile Documents", "Library/CloudStorage", "Dropbox", "OneDrive", "Google Drive")
 FILE_PROVIDER_XATTR = "com.apple.file-provider-domain-id"
 SAFE_ROOT = "~/Developer/Repos"
+# Ignored files a worktree may hold that exist nowhere else: environment files, secrets and local settings.
+LOCAL_ONLY = re.compile(r"(^|/)(\.env[^/]*|\.secrets/|[^/]*\.local(\.[^/]*)?)$|(^|/)\.secrets/")
 
 
 def has_file_provider_xattr(path: Path) -> bool:
@@ -205,8 +207,12 @@ def worktrees(cfg: Config | None = None) -> list[Worktree]:
             continue
         seen.add(repo.resolve())
         try:
-            dirty = bool(_git(repo, "status", "--short").stdout.strip())
-            merged = _git(repo, "merge-base", "--is-ancestor", "HEAD", "origin/main").returncode == 0
+            # Ignored files count when they hold local secrets or settings, which a worktree removal would delete.
+            status = _git(repo, "status", "--short", "--ignored").stdout.splitlines()
+            dirty = any(not line.startswith("!!") or LOCAL_ONLY.search(line[3:]) for line in status if line.strip())
+            head = _git(repo, "rev-parse", "--abbrev-ref", "origin/HEAD")
+            default = head.stdout.strip() if head.returncode == 0 and head.stdout.strip() != "origin/HEAD" else "origin/main"
+            merged = _git(repo, "merge-base", "--is-ancestor", "HEAD", default).returncode == 0
             common = Path(_git(repo, "rev-parse", "--git-common-dir").stdout.strip()).resolve().parent
             branch = _git(repo, "branch", "--show-current").stdout.strip()
         except (OSError, subprocess.SubprocessError):

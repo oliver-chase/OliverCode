@@ -139,10 +139,13 @@ def points_refusal(fetch=None, now: float | None = None) -> str:
     if now - data.get("at", 0) > POINTS_TTL:
         try:
             data = {"at": now, **(fetch or _fetch_points)()}
+        except Exception:  # noqa: BLE001 -- fail open, and remember the failure for the same minute so every call does not retry it
+            data = {"at": now}
+        try:
             home().mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(data), encoding="utf-8")
-        except Exception:  # noqa: BLE001 -- fail open
-            return ""
+        except OSError:
+            pass
     if data.get("remaining", floor) < floor and data.get("reset", 0) > now:
         when = time.strftime("%H:%M", time.localtime(data["reset"]))
         return (f"GitHub has {data['remaining']} GraphQL points left, under the shared reserve of {floor}, so every agent "
