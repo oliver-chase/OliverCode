@@ -1,4 +1,6 @@
+import re
 import unittest
+from pathlib import Path
 
 import check_report
 
@@ -45,6 +47,10 @@ def problems(text):
 class ReportCheckTest(unittest.TestCase):
     def test_a_complete_report_passes(self):
         self.assertEqual(problems(GOOD), [])
+        # Each lens in references/lenses.md has its own pattern here, so a renamed or added lens fails this test.
+        headings = re.findall(r"^## \d+\. (.+)$", (Path(__file__).parent.parent / "references" / "lenses.md").read_text(), re.M)
+        for heading in headings:
+            self.assertTrue(any(re.search(rx, heading, re.I) for rx in check_report.LENSES.values()), heading)
 
     def test_a_missing_section_fails(self):
         self.assertTrue(any("missing section: goal" in p for p in problems(GOOD.replace("## 2. Goal\nSmaller.\n", ""))))
