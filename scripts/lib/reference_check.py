@@ -141,7 +141,8 @@ def check_references(repo_root: Path) -> tuple[int, list[str]]:
     return checked, failures
 
 
-MD_LINK = re.compile(r"\]\(([^)]*\.md)\)")
+# The file part of a markdown link, with any #anchor after it, so x.md#part is checked as x.md.
+MD_LINK = re.compile(r"\]\(([^)#\s]*\.md)(?:#[^)]*)?\)")
 LINK_ROOTS = ("docs", "core", "shared", "skills", "README.md", "CLAUDE.md")  # every tracked home of plain [text](path.md) links
 
 

@@ -114,10 +114,10 @@ class TestMarkdownLinks(RepoCase):
         return reference_check.check_markdown_links(self.repo)
 
     def test_a_link_to_a_missing_file_fails_and_a_link_to_a_real_one_passes(self):
-        checked, failures = self.links("[ok](docs/REAL.md) [gone](docs/GONE.md) [web](https://example.com/a.md) [top](#x)\n")
+        checked, failures = self.links("[ok](docs/REAL.md) [gone](docs/GONE.md#part) [web](https://example.com/a.md) [top](#x)\n")
         self.assertEqual(checked, 2)
         self.assertEqual(len(failures), 1)
-        self.assertIn("docs/GONE.md", failures[0])
+        self.assertIn("docs/GONE.md", failures[0])  # an anchored link is checked by its file part
 
     def test_links_into_the_local_runtime_layer_pass_and_archived_docs_are_skipped(self):
         (self.repo / "docs" / "archive").mkdir()
