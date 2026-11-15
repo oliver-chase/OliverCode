@@ -8,13 +8,15 @@ from pathlib import Path
 from lib.cli import COMMANDS
 
 def skill_triggers(oc_root: Path) -> list[tuple[str, str]]:
-    """Each (skill, what it does) pair from the skills' own frontmatter descriptions, sorted by name."""
+    """Each (skill, what it does and the phrases that load it) pair from the skills' own descriptions, sorted by name."""
     rows = []
     for md in sorted((oc_root / "skills").glob("*/SKILL.md")):
         m = re.search(r"^description:\s*(.*?)(?=^\w[\w-]*:|^---)", md.read_text(encoding="utf-8"), re.S | re.M)
         if m:
             text = " ".join(m.group(1).strip().lstrip(">|-").strip().strip("\"'").split())
-            rows.append((md.parent.name, text.split(". ")[0].rstrip(".") + "."))
+            sentences = [s.strip().rstrip(".") + "." for s in re.split(r"(?<=\.)\s+", text) if s.strip()]
+            trigger = next((s for s in sentences[1:] if s.lower().startswith(("trigger", "use when", "use it when"))), "")
+            rows.append((md.parent.name, " ".join(filter(None, (sentences[0] if sentences else "", trigger)))))
     return rows
 
 

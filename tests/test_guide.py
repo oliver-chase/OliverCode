@@ -33,6 +33,8 @@ class TestGuide(unittest.TestCase):
             self.assertIn(name, text)
             self.assertTrue(phrases)
             self.assertIn(phrases, text)
+            # Each skill shows the phrases that load it, as cli.py's guide line promises.
+            self.assertRegex(phrases, r"(?i)\b(trigger|use when)", name)
 
     def test_help_points_to_the_guide(self):
         out = io.StringIO()
