@@ -50,7 +50,7 @@ fi
 # An owner opts a repo out by creating .githooks/commit-msg.optout. The hook never creates it,
 # and every commit it lets through says so.
 if [ -e "$HOOK_DIR/commit-msg.optout" ]; then
-  echo "[commit-msg] Story reference check is off: $HOOK_DIR/commit-msg.optout exists."
+  echo "[commit-msg] Every commit-msg check is off (story, voice, test and size cap): $HOOK_DIR/commit-msg.optout exists."
   exit 0
 fi
 
