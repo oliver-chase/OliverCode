@@ -100,7 +100,7 @@ class ShippedWorkflows(unittest.TestCase):
         for path in files:
             self.assertEqual(["workflow_dispatch"], workflow_triggers(path.read_text()), path.name)
 
-    def test_the_manifest_ships_each_workflow_and_keeps_no_unread_policy_key(self):
+    def test_the_manifest_ships_each_workflow(self):
         manifest = json.loads((REPO_ROOT / "shared" / "project-bootstrap-manifest.json").read_text())
         shipped = {Path(e["source"]).name for e in manifest["templatedFiles"]
                    if e["source"].startswith("core/templates/project/.github/workflows/")}
