@@ -57,11 +57,13 @@ class CommitAudit(unittest.TestCase):
                                                 capture_output=True, text=True, env=ENV).stdout)  # read-only
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class CommitAuditEdges(unittest.TestCase):
     def test_a_folder_with_no_history_has_no_commits(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual([], list(commit_audit.commits(tmp, "30 days ago")))
+
+
+if __name__ == "__main__":
+    unittest.main()

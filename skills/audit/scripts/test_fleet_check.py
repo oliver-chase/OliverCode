@@ -182,8 +182,6 @@ class Board(unittest.TestCase):
             self.assertIn("voice:", out)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class BoardDriftEdges(unittest.TestCase):
@@ -196,3 +194,7 @@ class BoardDriftEdges(unittest.TestCase):
             name, drift, error = fleet_check.board_drift(tmp, None)
             self.assertIsNone(drift)
             self.assertIn("unreadable", error)
+
+
+if __name__ == "__main__":
+    unittest.main()
