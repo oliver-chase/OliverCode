@@ -97,7 +97,11 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
     (hooks_dir / "pre-commit-private").unlink(missing_ok=True)
 
     _install_pre_push(repo_path, templates_dir)
+    _set_hooks_path(repo_path)
 
+
+def _set_hooks_path(repo_path: Path) -> None:
+    """Point git at the repo's .githooks, so every hook sync-hooks installs runs."""
     subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
 
 
@@ -112,6 +116,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
     fleet_root = fleet_root or oc_root.parent
     updated = 0
     skipped = 0
+    failed_repos: list[str] = []
 
     profiles, _ = load_repo_profiles(oc_root)
     for name, profile, repo_path in _iter_fleet(profiles, fleet_root):
@@ -124,8 +129,14 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
             # Declared variant: overwriting its pre-commit would destroy a considered customization.
             # `health` reports it as a WARN. Remove the profile field
             # to bring the repo back under the template.
-            _install_pre_push(repo_path, templates_dir)
-            print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced")
+            try:
+                _install_pre_push(repo_path, templates_dir)
+                _set_hooks_path(repo_path)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                print(f"  [FAIL] {name}: {exc}")
+                failed_repos.append(name)
+                continue
+            print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced, hooksPath set")
             skipped += 1
             continue
         # A private repo gets the private variant, which drops the PII gate (it holds
@@ -133,22 +144,33 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
         # profile, so every private repo gets its hook from sync-hooks and none is
         # installed by hand and left to go stale on the next template change.
         is_private = bool(profile.get("private"))
-        _install_hook_pair(repo_path, templates_dir, private_repo=is_private)
+        # One repo whose git config fails is reported, and the rest still sync.
+        try:
+            _install_hook_pair(repo_path, templates_dir, private_repo=is_private)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(f"  [FAIL] {name}: {exc}")
+            failed_repos.append(name)
+            continue
         variant_note = "private-variant " if is_private else ""
         print(f"  [OK] {name}: {variant_note}hooks synced, hooksPath set")
         updated += 1
 
     for name, root in _private_repos().items():
         if (root / ".git").exists():
-            _install_hook_pair(root, templates_dir, private_repo=True)
+            try:
+                _install_hook_pair(root, templates_dir, private_repo=True)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                print(f"  [FAIL] {name}: {exc}")
+                failed_repos.append(name)
+                continue
             print(f"  [OK] {name}: private-variant hook synced, hooksPath set")
             updated += 1
         else:
             print(f"  [SKIP] {name}: no .git at {root}")
             skipped += 1
 
-    print(f"\n{updated} target(s) synced, {skipped} skipped.")
-    return 0
+    print(f"\n{updated} target(s) synced, {skipped} skipped" + (f", {len(failed_repos)} failed: {', '.join(failed_repos)}." if failed_repos else "."))
+    return 1 if failed_repos else 0
 
 
 def command_audit_fleet(oc_root: Path) -> int:

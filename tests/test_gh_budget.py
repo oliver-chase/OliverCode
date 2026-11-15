@@ -180,6 +180,10 @@ class TestIsWrite(unittest.TestCase):
         import gh_guard
         self.assertFalse(gh_guard.is_write("cat skills/backlog/scripts/log_action.py"))
         self.assertTrue(gh_guard.is_write("cd x && python3 skills/backlog/scripts/log_action.py --story 1"))
+        for command in ("gh -R o/r issue close 3", 'bash -c "gh pr merge 1"', "olivercode backlog-setup --apply"):
+            self.assertTrue(gh_guard.is_write(command), command)
+            self.assertTrue(gh_guard.uses_gh(command), command)
+        self.assertFalse(gh_guard.is_write("gh -R o/r issue list"))
 
 
 if __name__ == "__main__":

@@ -193,7 +193,8 @@ class TestCommandSyncHooks(ScratchHome):
     def test_a_repo_missing_from_this_machine_is_skipped(self):
         code, out = self.sync({"ghost": {}})
         self.assertEqual(code, 0)
-        self.assertIn("ghost", out)
+        self.assertIn("[SKIP] ghost: not present on this machine", out)
+        self.assertFalse((self.fleet / "ghost").exists())
 
     def test_a_declared_variant_keeps_its_pre_commit_and_still_gets_pre_push(self):
         repo = scratch_repo(self.fleet / "custom")
@@ -203,6 +204,8 @@ class TestCommandSyncHooks(ScratchHome):
         self.assertEqual((repo / ".githooks" / "pre-commit").read_text(), "custom\n")
         self.assertTrue((repo / ".githooks" / "pre-push").is_file())
         self.assertIn("declared hook variant (bespoke)", out)
+        hooks_path = subprocess.run(["git", "-C", str(repo), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
+        self.assertEqual(".githooks", hooks_path)
 
     def test_a_private_repo_outside_the_fleet_is_synced_with_the_private_variant(self):
         repo = scratch_repo(self.tmp / "elsewhere" / "notes")

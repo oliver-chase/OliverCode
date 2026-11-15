@@ -43,9 +43,18 @@ def segments(command: str) -> list[list[str]]:
             words = words[1:]
         if words and os.path.basename(words[0]).startswith(("python", "bash", "sh", "zsh")):
             words = [w for w in words[1:] if not w.startswith("-")] or words
+            # `bash -c "gh pr merge 1"`: the command string is a command line of its own.
+            if len(words) == 1 and " " in words[0]:
+                out.extend(segments(words[0]))
+                continue
         if words:
             out.append(words)
     return out
+
+
+def _launcher_backlog_setup(words: list[str]) -> bool:
+    """`olivercode backlog-setup`, which calls gh from inside the launcher."""
+    return os.path.basename(words[0]) == "olivercode" and words[1:2] == ["backlog-setup"]
 
 
 def uses_gh(command: str) -> bool:
@@ -55,7 +64,7 @@ def uses_gh(command: str) -> bool:
         if head == "gh":
             if words[1:3] != ["api", "rate_limit"]:
                 return True
-        elif not head.startswith(QUEUE_SCRIPTS) and head.startswith(GH_SCRIPTS):
+        elif (not head.startswith(QUEUE_SCRIPTS) and head.startswith(GH_SCRIPTS)) or _launcher_backlog_setup(words):
             return True
     return False
 
@@ -67,12 +76,23 @@ WRITE_WORDS = {("issue", "create"), ("issue", "close"), ("issue", "edit"), ("iss
 WRITE_SCRIPTS = ("complete_story", "log_action", "backlog-setup")
 
 
+# gh's global flags whose value is the next word, which would otherwise read as the subcommand.
+GH_VALUE_FLAGS = {"-R", "--repo", "--hostname"}
+
+
 def is_write(command: str) -> bool:
     """A command that changes GitHub: a gh write subcommand, a gh api call that is not a GET, or a script that writes."""
     try:
         words = shlex.split(command, comments=False)
     except ValueError:
         return False
+    # A command string handed to a shell is judged as the command line it is.
+    for i, w in enumerate(words[:-1]):
+        if os.path.basename(w).startswith(("bash", "sh", "zsh")) and words[i + 1].startswith("-") and "c" in words[i + 1] \
+                and i + 2 < len(words) and is_write(words[i + 2]):
+            return True
+    if any(_launcher_backlog_setup(seg) for seg in segments(command)) and "--apply" in words:
+        return True
     for seg in re.split(r"&&|\|\||[;|\n]", command):
         try:
             head = shlex.split(seg)
@@ -85,7 +105,14 @@ def is_write(command: str) -> bool:
     for i, w in enumerate(words):
         if os.path.basename(w) != "gh":
             continue
-        rest = [x for x in words[i + 1:i + 6] if not x.startswith("-")]
+        rest, skip = [], False
+        for x in words[i + 1:i + 8]:
+            if skip:
+                skip = False
+            elif x in GH_VALUE_FLAGS:
+                skip = True
+            elif not x.startswith("-"):
+                rest.append(x)
         if tuple(rest[:2]) in WRITE_WORDS:
             return True
         if rest[:1] == ["api"] and any(x in words for x in ("-X", "--method", "-f", "-F", "--field", "--raw-field")) \
