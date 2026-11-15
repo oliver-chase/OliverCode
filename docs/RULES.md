@@ -110,7 +110,7 @@ Discoverability:
 1. Each repo's GitHub Project is the one place to list open stories, epics and unassigned entries, and the `backlog` skill's sweep covers it
 2. Archive indexes for deferred functionality carry clear re-enable instructions
 
-Shared quality baseline: managed files stay byte-identical across all repos where `shared/project-bootstrap-manifest.json` marks them strict. The managed files are `CODEOWNERS`, `QUALITY_BASELINE.md`, the hooks and the template governance scripts, all under `core/templates/project/`. A change to a managed file is made first in OliverCode and then synced to every project, because OliverCode is the single source of truth.
+Shared quality baseline: managed files stay byte-identical across all repos where `shared/project-bootstrap-manifest.json` marks them strict. The strict files are `QUALITY_BASELINE.md`, the hooks, the template's structure check, `size.sh` and `duplication_check.py`, and the manifest lists each with its source. A change to a managed file is made first in OliverCode and then synced to every project, because OliverCode is the single source of truth.
 
 Required base paths in every repo:
 
@@ -286,7 +286,7 @@ A README that catalogs a set of things, such as a skill suite, a monorepo or a f
 
 ### Files and where they live
 
-Documents live in `docs/` and use CAPS-KEBAB names such as `GATES.md`. The root holds only `README.md`, `CLAUDE.md`, `LICENSE` and a declared quality baseline. A repo with enough surface keeps this set:
+Documents live in `docs/` and use CAPS-KEBAB names such as `GATES.md`. The root holds only `README.md`, `CLAUDE.md`, `LICENSE`, `VERSION`, `CHANGELOG.md`, the example local config and a declared quality baseline. A repo with enough surface keeps this set:
 
 | File | What it holds |
 |---|---|

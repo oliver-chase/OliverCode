@@ -112,7 +112,7 @@ Run `scripts/olivercode discover --root <dir> --register` for each folder that h
 Confirm the fleet registered before continuing:
 
 ```bash
-scripts/olivercode conform --offline     # must list your repos by name, not "no fleet registered"
+scripts/olivercode conform --offline     # lists your repos by name; "no fleet registered" means none are registered yet
 ```
 
 ## Step 6: install enforcement
@@ -137,7 +137,7 @@ scripts/olivercode bootstrap <repo> --dry-run    # prints NEW/OVERWRITE per file
 scripts/olivercode bootstrap <repo>
 ```
 
-The manifest gives every file a mode. `presence` files are created only if absent and existing content is kept. `strict` files are overwritten because their contract is byte-identity with the template, which covers the hooks and the shared baseline. Read the OVERWRITE lines of the dry run first, because that list is exactly what you agree to lose.
+The manifest gives every file a mode. `presence` files are created only if absent and existing content is kept. `strict` files are overwritten because their contract is byte-identity with the source, which covers the hooks, the shared baseline, `size.sh` and `duplication_check.py`. `offered` files, such as `CODEOWNERS`, are named in the dry run and written only when you ask. Read the OVERWRITE lines of the dry run first, because that list is exactly what you agree to lose.
 
 ## Step 7: verify with evidence
 

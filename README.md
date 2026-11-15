@@ -29,10 +29,11 @@ From a project directory:
 
 ```bash
 python3 /path/to/OliverCode/scripts/olivercode bootstrap .
-python3 /path/to/OliverCode/scripts/olivercode sync-hooks .
+python3 /path/to/OliverCode/scripts/olivercode discover --root /path/to/your/repos --register
+python3 /path/to/OliverCode/scripts/olivercode sync-hooks
 ```
 
-`bootstrap` adds the managed project files. `sync-hooks` installs the current hooks and sets Git's `core.hooksPath`. The project declares its own validation command and keeps project-specific behavior in its own repository.
+`bootstrap` adds the managed project files, `discover --register` adds the repo to the fleet, and `sync-hooks` installs the current hooks in every registered repo and sets Git's `core.hooksPath`. The project declares its own validation command and keeps project-specific behavior in its own repository.
 
 Check the installation and registered projects with:
 
@@ -52,7 +53,7 @@ Say what you want to Claude Code and the matching skill loads, for example "audi
 ## What runs automatically
 
 - Git runs `.githooks/pre-commit` on every commit while `core.hooksPath` points to it
-- Claude Code runs the session, commit and early-stop hooks installed by `install`
+- Claude Code runs the session-start, tool-guard, GitHub rate and early-stop hooks installed by `install`
 - `bash scripts/validate.sh` checks OliverCode's gates, documents, references and tests
 
 Hooks enforce the rules that must block work. The standards and skills guide the rest. [`docs/GATES.md`](docs/GATES.md) lists each gate and its scope.
@@ -99,6 +100,8 @@ The rehearsal uses disposable directories. It verifies a fresh install, managed 
 | [`docs/VOICE.md`](docs/VOICE.md) | Writing rules loaded in every session |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Decisions that need more than a code comment |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Review marker for the live GitHub Project backlog |
+| [`docs/SHARING.md`](docs/SHARING.md) | Whether the repository can be shared, and why |
+| [`docs/CATALOG.md`](docs/CATALOG.md) | Every script and config file with its job, generated from the files |
 | [`skills/INDEX.md`](skills/INDEX.md) | Included skill catalog |
 
 ## Contributing

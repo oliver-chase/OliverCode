@@ -61,8 +61,7 @@ def check_skill_index(repo_root: Path) -> list[str]:
 def check_skill_cross_references(repo_root: Path) -> list[str]:
     """A skill naming a sibling skill must name one that exists.
 
-    Deliberately narrow: only `skills/<name>` shaped references and backticked names
-    that match the skill-name shape AND are cited alongside other real skill names.
+    Deliberately narrow: only `skills/<name>` and `skills/<name>/SKILL.md` references.
     External slash-commands (/code-review, /simplify) are NOT checked -- they come from
     plugins that vary per machine, so gating them would fail on a fork that simply has
     a different toolset. A dangling `/ux-ui` did ship here, but the fix for that class

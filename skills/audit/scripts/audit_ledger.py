@@ -2,7 +2,7 @@
 """The audit ledger: which files an audit already read, so the next audit reads only what changed.
 
 Usage:
-    audit_ledger.py [repo] --pending            # files new or changed since the ledger, with their lines
+    audit_ledger.py [repo] --pending            # files new or changed since the ledger, then their count and total lines
     audit_ledger.py [repo] --mark FILE          # record the files listed in FILE (one path per line) at HEAD
     audit_ledger.py [repo] --mark-all           # record every tracked file at HEAD (after a full audit)
     audit_ledger.py [repo] --seed SHA           # record every file as it was at SHA (an audit done earlier)
