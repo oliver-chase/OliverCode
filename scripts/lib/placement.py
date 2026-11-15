@@ -62,8 +62,7 @@ def inside(path: Path, parent: Path) -> bool:
         return False
 
 
-# Folders a sync service mirrors and can evict, matching digioperator's scripts/relocate.py. On 2026-11-12 iCloud
-# evicted every repo in ~/Documents/Repos when the disk filled, and the posting jobs failed with "Resource deadlock avoided".
+# Folders a sync service mirrors and can evict when the disk fills, which takes a repo's working files away.
 SYNCED_PLACES = ("Documents", "Desktop", "Library/Mobile Documents", "Library/CloudStorage", "Dropbox", "OneDrive", "Google Drive")
 FILE_PROVIDER_XATTR = "com.apple.file-provider-domain-id"
 SAFE_ROOT = "~/Developer/Repos"
@@ -261,8 +260,8 @@ def violation(command_words: list[str], cwd: Path, cfg: Config | None = None) ->
             return ""
         dest = (cwd / _p(positional[0])).resolve()
         if not inside(dest, cfg.worktrees):
-            return (f"Worktrees live under {cfg.worktrees}. Use `git worktree add {cfg.worktrees}/{dest.name} ...` "
-                    f"instead of {dest}.")
+            return (f"Worktrees live under {cfg.worktrees}, so this one goes in {cfg.worktrees}/{dest.name}: "
+                    f"`git worktree add {cfg.worktrees}/{dest.name} ...`.")
     elif rest[:1] == ["clone"]:
         args, skip, positional = rest[1:], False, []
         for a in args:
@@ -277,7 +276,7 @@ def violation(command_words: list[str], cwd: Path, cfg: Config | None = None) ->
         name = re.sub(r"\.git$", "", positional[0].rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1])
         dest = (cwd / _p(positional[1])).resolve() if len(positional) > 1 else (cwd / name).resolve()
         if not inside(dest, cfg.root):
-            return f"Repos live under {cfg.root}. Clone into {cfg.root}/{dest.name} instead of {dest}."
+            return f"Repos live under {cfg.root}, so clone into {cfg.root}/{dest.name}."
     return ""
 
 
