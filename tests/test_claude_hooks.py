@@ -79,6 +79,7 @@ class TestCommitGuard(RepoCase):
         "git -c alias.ci='!f() { git commit ${1} -m x; }; f' ci -n",
         "git -c alias.ci='!f() { git commit \"${@}\"; }; f' ci -n -m x",
         "git -c alias.ci='!git -c alias.ci=\"commit -n\" ci' ci -m x", "V='commit -n' git --config-env=alias.ci=V ci -m x",
+        "/usr/bin/git commit -n -m x", "echo `git commit -n -m x`",
     )
     OVERRIDES = (
         "git -c core.hooksPath=/dev/null commit -m x", "git -ccore.hooksPath=/dev/null commit -m x",
@@ -89,6 +90,7 @@ class TestCommitGuard(RepoCase):
         "git config core.hooksPath /dev/null && git commit -m x", "git config --local core.hookspath /dev/null; git commit -m x",
         "git config --unset core.hooksPath && git commit -m x",
         "git -c alias.ci='-c core.hooksPath=/dev/null commit' ci -m x",
+        "GIT_CONFIG_GLOBAL=/tmp/hooks.cfg git commit -m x",
     )
     ALLOWED = (
         "git commit --no-edit -m x", "git commit --no-verify=1 -m x",  # git rejects a value on --no-verify

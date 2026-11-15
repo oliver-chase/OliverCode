@@ -29,18 +29,30 @@ VALUE_OPTIONS = {"env": {"-u", "-C", "-S"}, "command": set(), "builtin": set(), 
 OPERANDS = {"timeout": 1, "gtimeout": 1}
 WRAPPERS = set(VALUE_OPTIONS)
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
-OPERATOR_CHARS = ";&|()\n"
+OPERATOR_CHARS = ";&|()`\n"
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# A redirect such as 2>&1, >&2 or &>file holds `&`, which the lexer would read as an operator. A descriptor
+# copy writes no file and is dropped, and &> and &>> become the file redirects > and >>.
+FD_COPY = re.compile(r"\d*[<>]&(?:\d+-?|-)(?=\s|$|[;&|)])")
+FD_FILE = re.compile(r"&(>>?)")
+# A heredoc's body is data for the command, unless a shell reads it as its script (_shell_heredoc_bodies).
+HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1[^\n]*\n.*?^[ \t]*\2[ \t]*$", re.S | re.M)
 
 DEFAULT = {
     "version": 1,
     "commands": {
         "allow": [],
-        "deny": [r"curl\s+.*\|\s*(ba|z)?sh"],
+        # A downloaded script piped into a shell, and a command that points git's hooks anywhere but .githooks.
+        "deny": [
+            r"(curl|wget)\s+.*\|\s*(ba|z)?sh",
+            r"git\s+-c\s+core\.hooksPath=(?!(\./)?\.githooks\b)",
+            r"git\s+config\s+(\S+\s+)*--unset(-all)?\s+core\.hooksPath",
+            r"git\s+config\s+(\S+\s+)*core\.hooksPath\s+(?!(\./)?\.githooks\b)[^\s;&|]",
+        ],
     },
     "paths": {
         "allow": ["**"],
-        "deny": [".git/**", ".env", ".env.*", ".secrets/**", ".githooks/**"],
+        "deny": [".git/**", ".env", ".env.*", ".secrets/**", ".githooks/**", ".olivercode/**"],
     },
     "triggers": {"gateFailures": 3, "deleteFiles": 10, "push": True},
 }
@@ -54,11 +66,16 @@ class Decision:
 
 
 def load(root: Path) -> dict | None:
-    """The repo's policy, or None when it has none or the file cannot be read."""
+    """The repo's policy, or None when it has none. A policy file that does not parse gives the default policy,
+    so a broken file never lifts every rule."""
     try:
-        return json.loads((root / POLICY_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = (root / POLICY_FILE).read_text(encoding="utf-8")
+    except OSError:
         return None
+    try:
+        return json.loads(text)
+    except ValueError:
+        return DEFAULT
 
 
 def write_default(root: Path) -> Path:
@@ -91,6 +108,8 @@ def unwrap(words: list[str]) -> tuple[list[str], list[str]]:
 
 
 def _segments(command: str):
+    command = HEREDOC.sub(lambda m: m.group(0).split("\n", 1)[0], command)
+    command = FD_FILE.sub(r"\1", FD_COPY.sub("", command))
     lex = shlex.shlex(command, posix=True, punctuation_chars=OPERATOR_CHARS)
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
@@ -113,19 +132,41 @@ def _head(words: list[str]) -> tuple[str, list[str]]:
     return (os.path.basename(words[0]), words[1:]) if words else ("", [])
 
 
+def _shell_heredoc_bodies(command: str):
+    """The body of each heredoc that a shell reads as its script, such as `bash <<EOF`."""
+    for match in HEREDOC.finditer(command):
+        rest = match.group(0).partition("\n")[2]
+        head = command[command.rfind("\n", 0, match.start()) + 1 : match.start()]
+        try:
+            feeding = list(_segments(head))
+        except ValueError:
+            continue
+        if feeding and _head(feeding[-1])[0] in SHELLS:
+            yield rest.rsplit("\n", 1)[0]
+
+
 def _simple_commands(command: str, depth: int = 0):
     try:
         segments = list(_segments(command))
     except ValueError:
         return
+    # A heredoc is data, except when a shell reads it as its script, so that body is judged like a command.
+    if depth < 2:
+        for body in _shell_heredoc_bodies(command):
+            yield from _simple_commands(body, depth + 1)
     for words in segments:
         name, rest = _head(words)
         if not name:
             continue
         yield name, rest
-        if name in SHELLS and depth < 2 and "-c" in rest:
-            idx = rest.index("-c")
-            if idx + 1 < len(rest):
+        if depth >= 2:
+            continue
+        if name == "eval":
+            yield from _simple_commands(" ".join(rest), depth + 1)
+        elif name in SHELLS:
+            # -c alone or in a flag cluster such as -lc or -ic: the next word is the command string.
+            idx = next((i for i, w in enumerate(rest) if w[:1] == "-" and w[1:2] != "-" and "c" in w[1:]), None)
+            if idx is not None and idx + 1 < len(rest):
                 yield from _simple_commands(rest[idx + 1], depth + 1)
 
 
@@ -230,16 +271,22 @@ def _write_targets(name: str, rest: list[str]) -> list[str]:
     return targets
 
 
+def _recursive(rest: list[str]) -> bool:
+    """An rm flag that recurses: --recursive, or r or R in a short-flag cluster."""
+    return any(w == "--recursive" or (w.startswith("-") and not w.startswith("--") and ("r" in w or "R" in w)) for w in rest)
+
+
 def _recursive_rm_of_home_or_root(rest: list[str]) -> bool:
     """A recursive rm whose target is `/`, `/*`, `~`, `~/` or `$HOME`, however the flags are split."""
-    recursive = any(w == "--recursive" or (w.startswith("-") and not w.startswith("--") and ("r" in w or "R" in w)) for w in rest)
+    recursive = _recursive(rest)
     targets = [w for w in rest if not w.startswith("-") and w[:1] in "/~$"]
     return recursive and any(w.rstrip("/").removesuffix("/*").rstrip("*").rstrip("/") in HOME_FORMS for w in targets)
 
 
 def _force_push(rest: list[str]) -> bool:
+    """--force, -f in a flag cluster, or a refspec that starts with +, which forces that one ref."""
     flags = [w for w in rest if w.startswith("-")]
-    return any(w == "--force" or (not w.startswith("--") and "f" in w[1:]) for w in flags)
+    return any(w == "--force" or (not w.startswith("--") and "f" in w[1:]) for w in flags) or any(w.startswith("+") for w in rest)
 
 
 def evaluate_bash(policy: dict, command: str, repo: str = "", root: Path | None = None) -> Decision | None:
@@ -270,8 +317,7 @@ def evaluate_bash(policy: dict, command: str, repo: str = "", root: Path | None 
         limit = triggers.get("deleteFiles")
         if limit and not ask:
             targets = [w for w in rest if not w.startswith("-")]
-            recursive = any(w.startswith("-") and not w.startswith("--") and ("r" in w or "R" in w) for w in rest)
-            if (name == "rm" and (recursive or len(targets) > limit)) or (name == "git" and sub == "rm" and len(targets) - 1 > limit):
+            if (name == "rm" and (_recursive(rest) or len(targets) > limit)) or (name == "git" and sub == "rm" and len(targets) - 1 > limit):
                 ask = Decision("ask", "triggers.deleteFiles", "This deletes a folder or more than " + str(limit) + " files, so the policy asks the owner first.")
         needed = triggers.get("gateFailures")
         if needed and name == "git" and sub == "commit" and repo and not ask:

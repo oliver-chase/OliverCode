@@ -4,7 +4,10 @@
   "commands": {
     "allow": [],
     "deny": [
-      "curl\\s+.*\\|\\s*(ba|z)?sh"
+      "(curl|wget)\\s+.*\\|\\s*(ba|z)?sh",
+      "git\\s+-c\\s+core\\.hooksPath=(?!(\\./)?\\.githooks\\b)",
+      "git\\s+config\\s+(\\S+\\s+)*--unset(-all)?\\s+core\\.hooksPath",
+      "git\\s+config\\s+(\\S+\\s+)*core\\.hooksPath\\s+(?!(\\./)?\\.githooks\\b)[^\\s;&|]"
     ]
   },
   "paths": {
@@ -16,7 +19,8 @@
       ".env",
       ".env.*",
       ".secrets/**",
-      ".githooks/**"
+      ".githooks/**",
+      ".olivercode/**"
     ]
   },
   "triggers": {

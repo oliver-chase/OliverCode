@@ -25,7 +25,10 @@ def decide(data: dict) -> tuple[policy.Decision | None, str]:
     tool_input = data.get("tool_input") or {}
     file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
     base = Path(file_path).parent if file_path and Path(file_path).is_absolute() else cwd
-    root = repo_gates.repo_root(base if base.is_dir() else cwd)
+    # A write into a folder that does not exist yet belongs to the repo of its nearest existing folder.
+    while not base.is_dir() and base != base.parent:
+        base = base.parent
+    root = repo_gates.repo_root(base)
     if not root:
         return None, ""
     rules = policy.load(root)

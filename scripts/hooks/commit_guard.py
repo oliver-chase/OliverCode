@@ -31,7 +31,7 @@ from lib import policy  # noqa: E402
 # The whole command is tokenized once, so a separator inside a quoted message stays part of
 # that message; splitting on the raw text first dropped any commit whose message held a
 # `;`, `|` or `&&`, which is most of them.
-OPERATOR_CHARS = ";&|()\n"
+OPERATOR_CHARS = ";&|()`\n"
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # git's global options whose value is the next word; read as a subcommand, the value hid the commit.
 GLOBAL_VALUE_OPTIONS = {"--git-dir", "--work-tree", "--namespace", "--super-prefix"}
@@ -95,10 +95,10 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
             if flags and flags[0] + 1 < len(words):
                 found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here, aliases_in, depth + 1, seen)]
             continue
-        if words and words[0] == "eval":
+        if words and Path(words[0]).name == "eval":
             found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here, aliases_in, depth + 1, seen)]
             continue
-        if not words or words[0] != "git":
+        if not words or Path(words[0]).name != "git":
             continue
         keys, i, where = [], 1, here
         aliases = dict(aliases_in or {})  # `git -c alias.ci='commit -n' ci` runs a commit under another name
@@ -205,6 +205,9 @@ def _overrides_hooks_path(keys: list[str], env: list[str]) -> bool:
         if name.startswith("GIT_CONFIG_KEY_") and value.lower() == "core.hookspath":
             return True
         if name == "GIT_CONFIG_PARAMETERS" and "core.hookspath" in value.lower():
+            return True
+        # A whole config file swapped in for the commit can set core.hooksPath where no key shows it.
+        if name in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG") and value not in ("", "/dev/null"):
             return True
     return False
 
