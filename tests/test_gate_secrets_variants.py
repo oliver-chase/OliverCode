@@ -1,13 +1,9 @@
 """The secret gate in every pre-commit variant and its reading of staged content, split from test_precommit_gates so the gate tests run in parallel."""
 
 import os
-import shutil
-import subprocess
-import tempfile
 import unittest
-from pathlib import Path
 
-from _support import ISOLATION, REPO_ROOT, git, git_env, scratch_repo
+from _support import REPO_ROOT
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
 
 HOOK = REPO_ROOT / ".githooks" / "pre-commit"

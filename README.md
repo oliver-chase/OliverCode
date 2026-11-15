@@ -107,3 +107,11 @@ The rehearsal uses disposable directories. It verifies a fresh install, managed 
 ## Contributing
 
 Read [`CLAUDE.md`](CLAUDE.md) and [`docs/RULES.md`](docs/RULES.md) before changing the framework. Run `bash scripts/validate.sh`, review the staged diff, then commit and push with the relevant story reference.
+
+## Status
+
+Version 0.1.0 (`VERSION`). It runs on macOS and Linux with `git`, `bash`, `python3` and `perl`, and `gh` with `jq` for the backlog scripts. `bash scripts/validate.sh` proves the gates, docs, references and tests in one run.
+
+## License
+
+MIT, in [`LICENSE`](LICENSE).

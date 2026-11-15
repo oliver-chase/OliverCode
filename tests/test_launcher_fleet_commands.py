@@ -10,7 +10,6 @@ import os
 import shutil
 import subprocess
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, git, load_script, scratch_repo, quiet, temp_dir

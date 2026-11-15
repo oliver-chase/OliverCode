@@ -1,13 +1,10 @@
 """The emoji, PII, workflow-auth, archived-content and skill-citation gates of the pre-commit hook, split from test_precommit_gates so the gate tests run in parallel."""
 
 import os
-import shutil
-import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
-from _support import ISOLATION, REPO_ROOT, git, git_env, scratch_repo
+from _support import REPO_ROOT
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
 
 HOOK = REPO_ROOT / ".githooks" / "pre-commit"

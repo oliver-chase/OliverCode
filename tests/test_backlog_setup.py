@@ -11,7 +11,6 @@ import itertools
 import json
 import re
 import unittest
-from pathlib import Path
 
 from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
 

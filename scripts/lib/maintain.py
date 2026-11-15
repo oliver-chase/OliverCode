@@ -15,7 +15,6 @@ import os
 import plistlib
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,20 +49,6 @@ def dataless_files(repo: Path) -> list[Path]:
     """Files in the repo's .git that iCloud evicted: they read as empty until downloaded, and git hangs on them."""
     ran = subprocess.run(["find", str((repo / ".git").resolve()), "-type", "f", "-flags", "+dataless"], capture_output=True, text=True)
     return [Path(line) for line in ran.stdout.splitlines() if line]
-
-
-def _read(path: Path, seconds: int) -> bool:
-    try:
-        subprocess.run(["cat", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=seconds)
-        return True
-    except subprocess.TimeoutExpired:
-        return False
-
-
-def download(paths: list[Path], seconds: int = DOWNLOAD_SECONDS) -> int:
-    """Read each file once so macOS downloads it, eight at a time. Returns how many were read."""
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        return sum(pool.map(lambda p: _read(p, seconds), paths))
 
 
 def check_links(fix: bool, install=None) -> list[Problem]:
@@ -109,7 +94,7 @@ def check_icloud(cfg: placement.Config, fix: bool) -> list[Problem]:
             continue
         problem = Problem("icloud", f"{repo.name}: {len(files)} git file(s) evicted by iCloud", fixable=True)
         if fix:
-            download(files)
+            hygiene.download(files, DOWNLOAD_SECONDS)
             problem.fixed = not dataless_files(repo)
         found.append(problem)
     return found

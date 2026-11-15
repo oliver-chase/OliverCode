@@ -4,9 +4,7 @@ import contextlib
 import io
 import json
 import os
-import sys
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir

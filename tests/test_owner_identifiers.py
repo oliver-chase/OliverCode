@@ -6,7 +6,7 @@ appears in this file.
 
 import json
 
-from _support import REPO_ROOT, git
+from _support import git
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
 
 CONFIG = "docs/IDENTIFIER-GATE.json"

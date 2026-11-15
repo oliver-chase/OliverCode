@@ -92,7 +92,7 @@ class TestIcloud(Base):
         def fake_download(paths, seconds=0):
             state["left"] = []
             return len(paths)
-        with mock.patch.object(maintain, "dataless_files", fake_dataless), mock.patch.object(maintain, "download", fake_download):
+        with mock.patch.object(maintain, "dataless_files", fake_dataless), mock.patch.object(maintain.hygiene, "download", fake_download):
             self.assertTrue(maintain.check_icloud(self.cfg, True)[0].fixed)
 
 

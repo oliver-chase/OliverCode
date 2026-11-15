@@ -3,7 +3,6 @@
 A `$OC/...` path names a file in this repo, so a broken one must fail too.
 """
 import unittest
-from pathlib import Path
 
 from _support import load_script, scratch_repo, temp_dir
 

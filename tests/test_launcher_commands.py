@@ -21,7 +21,7 @@ from _support import REPO_ROOT, git, load_script, scratch_repo
 
 LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import claude_settings, cli, cmd_fleet, cmd_install  # noqa: E402  (load_script put scripts/ on the path)
+from lib import claude_settings, cli, cmd_install  # noqa: E402  (load_script put scripts/ on the path)
 
 
 class TestInstall(unittest.TestCase):

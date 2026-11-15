@@ -5,7 +5,6 @@ Each test bootstraps into a scratch repo with HOME and git config isolated, and 
 """
 
 import json
-import os
 import re
 import shutil
 import subprocess

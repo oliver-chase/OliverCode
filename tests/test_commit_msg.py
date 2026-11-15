@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import unittest
 from unittest import mock
-from pathlib import Path
 
 from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
 

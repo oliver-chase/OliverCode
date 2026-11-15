@@ -4,7 +4,6 @@ import json
 import subprocess
 import unittest
 from datetime import date
-from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, load_script, scratch_repo, quiet, temp_dir

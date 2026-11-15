@@ -5,13 +5,9 @@ the wrong variant, git runs weaker gates or none and says nothing. `olivercode c
 fleet-wide detector, so it must not report OK in any of those states.
 """
 
-import contextlib
-import io
 import os
 import shutil
 import unittest
-from pathlib import Path
-from unittest import mock
 
 from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
 

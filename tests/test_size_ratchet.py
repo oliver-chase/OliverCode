@@ -5,14 +5,10 @@ Offline: scratch repos from _support, no network, no gh.
 """
 
 import json
-import shutil
 import subprocess
-import sys
-import tempfile
 import unittest
-from pathlib import Path
 
-from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, git_env
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
 
 LAUNCHER = REPO_ROOT / "scripts" / "olivercode"

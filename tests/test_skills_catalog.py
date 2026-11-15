@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _support import REPO_ROOT, load_script
+from _support import load_script
 
 catalog = load_script("scripts/lib/skills_catalog.py", "skills_catalog")
 
