@@ -53,6 +53,8 @@ class CommitAudit(unittest.TestCase):
                 self.assertIn(line, first)
             commit("More (#6)", "more.py")
             self.assertIn("code-no-test: 2 (+1 since last run)", run())
+            commit("Speed (#7)\n\nIt caches the page rather than fetching it.")                       # voice, by contrast framing alone
+            self.assertIn("voice: 2", run())
             self.assertEqual("", subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
                                                 capture_output=True, text=True, env=ENV).stdout)  # read-only
 

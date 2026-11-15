@@ -11,7 +11,8 @@ PERSONAL = "pat" + AT + "personalmail.test2.org"
 
 ENV = {"GIT_AUTHOR_NAME": "Pat Example", "GIT_COMMITTER_NAME": "Pat Example",
        "GIT_AUTHOR_EMAIL": PERSONAL, "GIT_COMMITTER_EMAIL": PERSONAL,
-       "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}
+       "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+       "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
 
 
 def repo(files, email=None):
@@ -44,6 +45,11 @@ class PortabilityTest(unittest.TestCase):
                     email=NOREPLY)
         got = kinds(root)
         self.assertTrue({"secret-file", "home-path", "missing"} <= got)
+        # A key file by name, and a private key that only the history holds.
+        keyed = repo({"deploy/id_rsa": "x\n", "README.md": "-----BEGIN RSA " + "PRIVATE KEY-----\n"}, email=NOREPLY)
+        (keyed / "README.md").write_text("# T\n")
+        subprocess.run(["git", "-C", str(keyed), "commit", "-qam", "drop"], check=True, capture_output=True, env={**ENV, "GIT_AUTHOR_EMAIL": NOREPLY, "GIT_COMMITTER_EMAIL": NOREPLY})
+        self.assertTrue({"secret-file", "history-secret"} <= kinds(keyed))
 
     def test_placeholder_home_paths_and_example_env_pass(self):
         root = repo({"README.md": "cd /" + "Users/you/repo\n", ".env.example": "A=\n", "LICENSE": "x\n"},

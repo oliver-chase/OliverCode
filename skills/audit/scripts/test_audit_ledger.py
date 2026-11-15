@@ -6,7 +6,8 @@ from pathlib import Path
 import audit_ledger
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_COMMITTER_NAME": "t", "GIT_AUTHOR_EMAIL": "t" + "@example.test",
-       "GIT_COMMITTER_EMAIL": "t" + "@example.test", "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}
+       "GIT_COMMITTER_EMAIL": "t" + "@example.test", "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+       "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
 
 
 def repo(files):
