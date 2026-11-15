@@ -7,7 +7,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-if [[ -x .githooks/pre-commit ]]; then
+# bash runs the hook whether or not its executable bit survived a copy, so the gates never skip silently.
+if [[ -f .githooks/pre-commit ]]; then
   echo "=== validate: pre-commit gates ==="
   OLIVERCODE_SCAN_TREE=1 bash .githooks/pre-commit
 fi

@@ -53,12 +53,13 @@ def pending(repo):
 
 
 def mark(repo, paths, rev="HEAD"):
-    now, have = blobs(repo, rev), read_ledger(repo)
-    for p in paths:
-        if p in now:
-            have[p] = now[p]
-    write_ledger(repo, {p: h for p, h in have.items() if p in blobs(repo)})
-    return len(paths)
+    """Record each listed path that exists at `rev`, and return how many were recorded."""
+    now, have, live = blobs(repo, rev), read_ledger(repo), blobs(repo)
+    recorded = [p for p in paths if p in now]
+    for p in recorded:
+        have[p] = now[p]
+    write_ledger(repo, {p: h for p, h in have.items() if p in live})
+    return len(recorded)
 
 
 def main(argv):
@@ -80,7 +81,8 @@ def main(argv):
         return 0
     if "--seed" in args:
         rev = args[args.index("--seed") + 1]
-        write_ledger(repo, {p: h for p, h in blobs(repo, rev).items() if p in blobs(repo)})
+        live = blobs(repo)
+        write_ledger(repo, {p: h for p, h in blobs(repo, rev).items() if p in live})
         print(f"seeded from {rev}")
         return 0
     print(__doc__.strip())

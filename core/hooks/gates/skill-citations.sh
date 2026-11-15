@@ -22,7 +22,8 @@ $hits"
 fi
 CITED_NUMS=$(printf '%s\n' "$CITED_NUMS" | grep -E '^[0-9]+$' | sort -un || true)
 if [ -n "$CITED_NUMS" ] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  ALL_ISSUES=$(cd "$REPO_ROOT" && gh issue list --state all --limit 5000 --json number --jq '.[].number' 2>/dev/null) || ALL_ISSUES=""
+  # Issues and pull requests share one number space, and a skill may cite either.
+  ALL_ISSUES=$(cd "$REPO_ROOT" && { gh issue list --state all --limit 5000 --json number --jq '.[].number' && gh pr list --state all --limit 5000 --json number --jq '.[].number'; } 2>/dev/null) || ALL_ISSUES=""
   if [ -n "$ALL_ISSUES" ]; then
     while IFS= read -r n; do
       [ -z "$n" ] && continue

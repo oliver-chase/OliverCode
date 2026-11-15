@@ -58,7 +58,8 @@ for entry in entries:
     mode, sha, _stage = meta.split()
     path = os.fsdecode(path)
     # A symlink holds no lines of its own, and following it counted its target twice in the working tree.
-    if os.path.isfile(path) and not os.path.islink(path):
+    # Under --staged the index copy counts, even when the working file was deleted after staging.
+    if (staged and mode != b"120000") or (os.path.isfile(path) and not os.path.islink(path)):
         files.append((mode, sha.decode(), path))
 total = 0
 if staged:

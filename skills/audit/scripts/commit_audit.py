@@ -31,8 +31,12 @@ SEP, END = "\x1e", "\x1f"
 
 
 def commits(repo, since):
-    out = subprocess.run(["git", "-C", str(repo), "log", f"--since={since}", f"--format={SEP}%H%n%P%n%B{END}", "--name-only"],
-                         capture_output=True, text=True).stdout  # a repo with no commits has no history to audit
+    done = subprocess.run(["git", "-C", str(repo), "log", f"--since={since}", f"--format={SEP}%H%n%P%n%B{END}", "--name-only"],
+                          capture_output=True, text=True)
+    # A folder with no repo or no commits has no history to audit, and any other failure is reported, never read as zero.
+    if done.returncode and not any(s in done.stderr for s in ("does not have any commits", "not a git repository")):
+        raise RuntimeError(done.stderr.strip() or f"git log failed in {repo}")
+    out = done.stdout
     for block in out.split(SEP)[1:]:
         head, _, names = block.partition(END)
         sha, parents, text = (head.split("\n", 2) + ["", ""])[:3]
@@ -72,7 +76,13 @@ def main(argv=None):
     now = {}
     for repo in args.repos:
         name = repo.resolve().name
-        found = findings(repo, args.since)
+        try:
+            found = findings(repo, args.since)
+        except RuntimeError as exc:
+            print(f"== {name}: not read ({exc}), so its last counts are kept")
+            if name in last:
+                now[name] = last[name]
+            continue
         now[name] = {c: len(v) for c, v in found.items()}
         print(f"== {name} (since {args.since})")
         for c in CLASSES:

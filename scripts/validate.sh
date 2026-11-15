@@ -283,6 +283,7 @@ run_smoke_tests() {
         cat "$log_dir/$module.log"
       done < "$log_dir/failed"
       echo "=== validate: python smoke tests FAILED ==="
+      rm -rf "$log_dir"  # exit skips the RETURN trap
       exit 1
     fi
     echo "  Ran $ran tests across $(ls "$log_dir"/*.log | wc -l | tr -d ' ') modules, all passed"

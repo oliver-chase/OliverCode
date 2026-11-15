@@ -43,7 +43,7 @@ class LedgerTest(unittest.TestCase):
 
     def test_marking_only_some_files_leaves_the_rest_pending(self):
         root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
-        audit_ledger.mark(root, ["a.py"])
+        self.assertEqual(1, audit_ledger.mark(root, ["a.py", "gone.py"]))  # only a path at HEAD is recorded and counted
         self.assertEqual(audit_ledger.pending(root), ["b.py"])
 
     def test_seeding_from_an_earlier_commit_marks_files_as_they_were_then(self):
