@@ -61,14 +61,15 @@ def _check_shape(settings) -> None:
 
 
 def _strip_managed(hooks: dict) -> dict:
-    """Each event's hook groups with OliverCode's handlers taken out. A group left with no
-    handler is dropped, and an event left with no group maps to an empty list."""
+    """Each event's hook groups with OliverCode's handlers taken out. A group that held only OliverCode's
+    handlers is dropped, and an event left with no group maps to an empty list."""
     out = {}
     for event, groups in hooks.items():
         out[event] = []
         for group in groups:
             kept = [h for h in group.get("hooks", []) if not _is_managed(h)]
-            if kept:
+            # A group the operator left empty stays as it was, so install does not rewrite the file on every run.
+            if kept or not group.get("hooks"):
                 out[event].append({**group, "hooks": kept})
     return out
 

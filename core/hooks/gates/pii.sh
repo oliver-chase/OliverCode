@@ -1,4 +1,4 @@
-# Block commits containing personal identifiers: home paths, usernames, hostnames.
+# Block commits containing personal identifiers: home folder paths and email addresses.
 # A repo whose own files must hold a pattern, such as a gate that names the patterns it blocks, lists
 # those files under "exempt" in docs/PII-GATE.json, each with a line in "reasons".
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: PII scan..."

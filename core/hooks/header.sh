@@ -27,7 +27,7 @@ cd "$REPO_ROOT"
 # the staged content, because the working copy can hold something else by the time the commit lands.
 # A path that is not in the index falls back to the working copy.
 # Every staged file is written once into a snapshot folder, so the gates read plain files and never start
-# one `git show` per file per gate. That cost made a tree scan of 200 files run for minutes.
+# one `git show` per file per gate.
 OC_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/oc-staged.XXXXXX")"
 printf '%s\n' "$STAGED_FILES" | sed '/^$/d' \
   | git -C "$REPO_ROOT" checkout-index --prefix="$OC_SNAPSHOT/" --stdin >/dev/null 2>&1 || true

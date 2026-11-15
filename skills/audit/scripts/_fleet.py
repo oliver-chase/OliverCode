@@ -61,7 +61,12 @@ def find_skills(root):
     return skills
 
 
-def description_words(skill_md_text):
-    """Words in the frontmatter `description`, whether it is a quoted line or a folded block."""
+def description_text(skill_md_text):
+    """The frontmatter `description`, whether it is a quoted line or a folded block. The one parser for it."""
     m = re.search(r"^description:\s*(.*?)(?=^\w[\w-]*:|^---)", skill_md_text, re.S | re.M)
-    return len(m.group(1).lstrip(">|-").split()) if m else 0
+    return m.group(1).strip() if m else ""
+
+
+def description_words(skill_md_text):
+    """Words in the frontmatter `description`."""
+    return len(description_text(skill_md_text).lstrip(">|-").split())

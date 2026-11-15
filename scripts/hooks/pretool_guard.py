@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code PreToolUse hook (Bash, Edit, Write, MultiEdit): the commit, placement, policy and GitHub guards in one process.
 
-Four separate hooks each started Python and parsed the same input on every Bash call. This one parses the
-input once and asks each guard in turn: commit_guard (a commit that would skip the repo's gates),
+One hook parses the input once per tool call and asks each guard in turn: commit_guard (a commit that would skip the repo's gates),
 placement_guard (a clone or worktree outside its home), policy_guard (the repo's policy.json) and gh_guard
 (the shared GitHub budget). A deny from any guard wins over an ask. Each guard fails open on its own bug, so
 one broken guard never disables the others and never blocks a command. The guards stay runnable on their own.

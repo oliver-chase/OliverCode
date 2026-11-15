@@ -2,9 +2,7 @@
 """Build the two pre-commit templates from one ordered gate list, and the pre-push and commit-msg templates.
 
 OliverCode's own .githooks are links to these templates. The public and private templates run the same
-gates. Kept by hand, they drifted: a fix reached one copy and missed another, and
-two blocked-commit messages pointed at paths that did not exist. Each gate's body
-now lives once in core/hooks/gates/, and this script assembles every variant.
+gates, so each gate's body lives once in core/hooks/gates/ and this script assembles every variant.
 
 Usage:
     scripts/build-hooks.py           write the hooks

@@ -64,7 +64,6 @@ def placement_notes() -> list[str]:
 def gh_notes() -> list[str]:
     """A note while the shared GitHub rate-limit hold is on, else nothing."""
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
         import gh_budget
         why = gh_budget.refusal()
     except Exception:  # noqa: BLE001 -- never blocks a session

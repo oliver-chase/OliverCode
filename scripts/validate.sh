@@ -50,18 +50,16 @@ sys.exit(1 if failures else 0)
 }
 
 run_hook_state() {
-  # Hook enforcement fails OPEN -- an unset or broken core.hooksPath means git
-  # runs no hooks and prints nothing. `olivercode conform` detects it, but nobody ran it
-  # from a log anyone read, so a repo could sit ungoverned
-  # for a week. Surfacing it here puts the signal where agents already look: CLAUDE.md
-  # tells them to run validate.sh before every commit.
+  # Hook enforcement fails open: an unset or broken core.hooksPath means git runs no hooks and prints
+  # nothing. This step reports it where agents already look, since CLAUDE.md has them run validate.sh
+  # before every commit.
   #
   # Advisory, never fatal. A fork, a fresh clone, or a checkout with no fleet
   # registered has nothing to check and must still pass -- that property is what
   # rehearse-install.sh guards.
   #
   # --hooks-only checks only that git runs each repo's gates, the one fact this step exists for, so it never
-  # reads a repo's files. A repo in a synced folder took over 30 minutes to count.
+  # reads a repo's files, which in a synced folder can take many minutes.
   echo "=== validate: checking fleet conformance ==="
   local out checked
   out="$(python3 "${SCRIPT_DIR}/olivercode" conform --offline --hooks-only 2>&1)" && local rc=0 || local rc=$?
@@ -307,8 +305,8 @@ main() {
       echo "Options:"
       echo "  (no args)              Run pre-commit gates, doc/code consistency,"
       echo "                         reference integrity, bloat, code quality, doc duplication,"
-      echo "                         smoke tests (tests/ and the skills' own script tests, if present)
-                         and fleet conformance"
+      echo "                         smoke tests (tests/ and the skills' own script tests, if present)"
+      echo "                         and fleet conformance"
       echo "  --tree                 Run everything above, with the gates over every tracked file"
       echo "  --check-consistency    Run doc/code consistency checks only"
       echo "  --check-budget [dir]   Run the size budget check (docs/BUDGET.json) on this or another checkout"

@@ -40,6 +40,13 @@ class TestReport(Base):
         self.assertIn("Secrets: 2", text)
         self.assertIn("Size ratchet: 1", text)
         self.assertNotIn("maintain", text)
+        # A log past twice its kept size keeps only its newest lines.
+        path = failure_log.log_path()
+        path.write_text("".join(f"line {i}\n" for i in range(2 * failure_log.KEEP_LINES)))
+        failure_log.record("Secrets", "BLOCKED", "r")
+        lines = path.read_text().splitlines()
+        self.assertEqual(failure_log.KEEP_LINES, len(lines))
+        self.assertIn("Secrets", lines[-1])
 
     def test_a_non_number_for_days_prints_the_usage_line(self):
         for args in (["--days", "x"], ["--weeks", "2"]):

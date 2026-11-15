@@ -28,6 +28,21 @@ def record(gate: str, reason: str, repo: str = "") -> None:
     clean = " ".join(reason.split())[:200]
     with open(path, "a", encoding="utf-8") as f:
         f.write(f"{when}\t{repo or Path.cwd().name}\t{gate}\t{clean}\n")
+    trim(path)
+
+
+# A log keeps its newest lines, so it never grows past a fixed size however long the machine runs.
+KEEP_LINES = 1000
+
+
+def trim(path: Path, keep: int = KEEP_LINES) -> None:
+    """Cut a log to its newest `keep` lines once it holds twice that, so most appends cost no rewrite."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        return
+    if len(lines) > 2 * keep:
+        path.write_text("".join(lines[-keep:]), encoding="utf-8")
 
 
 def entries() -> list[tuple[str, str, str, str]]:

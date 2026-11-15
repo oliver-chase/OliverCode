@@ -1,9 +1,8 @@
 # GATE-SCOPE-1: matched by path shape (`*/SKILL.md`, `*/CLAUDE.md`, `*/references/*.md`),
 # never by bare filename, so a reference file gets the same check as a skill file.
 #
-# GATE-CITATION-1: a staged skill file can cite `#N` as a real GitHub issue
-# that was never filed -- two commits did exactly this before anything
-# caught it. Checked only when `gh` is installed and already authenticated;
+# GATE-CITATION-1: a staged skill file cannot cite `#N` as a GitHub issue or pull request that does not exist.
+# Checked only when `gh` is installed and already authenticated;
 # any network, auth, or rate-limit problem skips the check silently rather
 # than blocking a commit on infrastructure the content gate does not own.
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Skill citations..."

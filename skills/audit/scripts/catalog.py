@@ -15,6 +15,7 @@ import re
 import sys
 from pathlib import Path
 
+import _fleet
 from _fleet import is_test, scan_root, tracked
 
 OUT = "docs/CATALOG.md"
@@ -61,8 +62,8 @@ def script_info(text, suffix):
 
 
 def skill_info(text):
-    m = re.search(r"^description:\s*(.*?)(?=^\w[\w-]*:|^---)", text, re.S | re.M)
-    return first_sentence(re.sub(r"^[>|-]\s*", "", m.group(1).strip().strip('"\''))) if m else ""
+    desc = _fleet.description_text(text)
+    return first_sentence(re.sub(r"^[>|-]\s*", "", desc.strip('"\''))) if desc else ""
 
 
 def config_info(text, suffix):

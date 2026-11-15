@@ -220,7 +220,7 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 
 - `privateRepos`: private repos that get the private hook variant and a hook check
 - `skillsRoot`: the skill checks
-- `repoRoot`: the one folder that holds every repo, `~/Developer/Repos` in the example and otherwise the folder that holds OliverCode. Worktrees go in `_worktrees` and backups in `_archive` under it. It must sit outside every synced folder, because a sync service evicted every repo in `~/Documents/Repos` once already, and `docs/DECISIONS.md` (`REPOS-OUTSIDE-SYNC-1`) records the incident
+- `repoRoot`: the one folder that holds every repo, `~/Developer/Repos` in the example and otherwise the folder that holds OliverCode. Worktrees go in `_worktrees` and backups in `_archive` under it. It must sit outside every synced folder, because a sync service can evict a repo's working files when the disk fills (`REPOS-OUTSIDE-SYNC-1` in `docs/DECISIONS.md`)
 - `watchRoots`: the folders `olivercode place` scans for strays (default `~/Developer`, `~/Desktop`, `~/Documents`), and `allowOutside` lists checkouts allowed to stay elsewhere, such as an Obsidian vault
 - `repoPaths`: a repo outside the fleet folder
 

@@ -128,8 +128,7 @@ if [ -n "$CODE_CHANGED" ] && [ -z "$TEST_CHANGED" ] \
   exit 1
 fi
 
-# STORY-EXISTS-1. A number must name a story that exists. #165 cited in a repo whose board stops at #40
-# passed the check above, so the hook asks GitHub about each reference: a plain #N is looked up in the repo
+# STORY-EXISTS-1. A number must name a story that exists, so the hook asks GitHub about each reference: a plain #N is looked up in the repo
 # named by docs/backlog-config.json (repoOwner, repoName), and owner/repo#N in the repo it spells out.
 # A yes is cached in .git/story-exists-cache so later commits skip the call. A repo without the config is
 # not checked, and one that still holds the shipped placeholders says how to fill it. When gh is missing or the call fails for any reason but a 404 (offline, rate limit, no

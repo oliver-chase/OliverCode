@@ -111,13 +111,14 @@ rc=0
 # The repo's own config wins over a test fixture that happens to sort first.
 cfg="$(git ls-files 2>/dev/null | grep -x 'docs/backlog-config.json' || git ls-files 2>/dev/null | grep -v fixture | grep -m1 'backlog-config.json' || true)"
 if [ -n "$cfg" ] && command -v gh >/dev/null 2>&1; then
-  repo="$(python3 -c "import json,sys; c=json.load(open('$cfg')); print(c['repoOwner']+'/'+c['repoName'])")"
+  # The path goes in as an argument, so a quote in it cannot break the Python source.
+  repo="$(python3 -c "import json,sys; c=json.load(open(sys.argv[1])); print(c['repoOwner']+'/'+c['repoName'])" "$cfg")"
   echo
   echo "== Remaining work ($repo)"
   gh issue list --repo "$repo" --state open --limit 500 --json number,labels \
     --jq '"open issues: \(length)"' 2>/dev/null || { echo "open issues: unavailable (gh failed)"; rc=1; }
-  proj="$(python3 -c "import json; c=json.load(open('$cfg')); print(c['projectNumber'])")"
-  owner="$(python3 -c "import json; c=json.load(open('$cfg')); print(c['projectOwner'])")"
+  proj="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['projectNumber'])" "$cfg")"
+  owner="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['projectOwner'])" "$cfg")"
   gh project item-list "$proj" --owner "$owner" --limit 500 --format json \
     --jq '.items | group_by(.status) | map("\(.[0].status // "No status"): \(length)") | .[]' 2>/dev/null \
     || { echo "board status counts: unavailable"; rc=1; }
