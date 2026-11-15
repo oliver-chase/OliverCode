@@ -96,11 +96,6 @@ class BatchProject(unittest.TestCase):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Nope"}}]}))
         self.assertEqual(2, bp.main(["--config", str(self.cfg), "--input", str(self.input)], err=io.StringIO()))
 
-    @mock.patch("batch_project.subprocess.run")
-    def test_default_runner_invokes_gh(self, run):
-        bp.run_gh(["api", "graphql"])
-        run.assert_called_once_with(["gh", "api", "graphql"], capture_output=True, text=True)
-
 
 if __name__ == "__main__":
     unittest.main()

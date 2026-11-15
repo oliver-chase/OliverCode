@@ -18,7 +18,7 @@ fi
 if [ "${OLIVERCODE_SCAN_TREE:-}" = 1 ]; then
   STAGED_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off ls-files)
 else
-  STAGED_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off diff --cached --name-only --diff-filter=ACM)
+  STAGED_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off diff --cached --name-only --no-renames --diff-filter=ACM)
 fi
 cd "$REPO_ROOT"
 

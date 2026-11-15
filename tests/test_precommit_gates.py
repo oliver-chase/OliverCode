@@ -226,6 +226,15 @@ class TestPublicRepoLocalAndPii(GateHarness):
         self.stage("a.py", 'P = "/Users/' + 'jane.doe2/work"\n')
         self.assertBlocked("pii")
 
+    def test_a_renamed_file_is_scanned(self):
+        self.stage("notes.txt", "a plain line of notes that is long enough to be renamed as one file\n")
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "notes")
+        git(self.tmp, "mv", "notes.txt", "moved.txt")
+        with open(self.tmp / "moved.txt", "a", encoding="utf-8") as f:
+            f.write("TOKEN=ghp_" + "b" * 36 + "\n")
+        git(self.tmp, "add", "moved.txt")
+        self.assertBlocked("secret")
+
     def test_a_bare_home_folder_or_a_file_named_like_a_mock_is_still_scanned(self):
         self.stage("a.py", 'HOME_DIR = "/Users/' + 'jane"\n')
         self.assertBlocked("pii")

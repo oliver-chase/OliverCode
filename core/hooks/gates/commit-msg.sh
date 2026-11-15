@@ -118,8 +118,8 @@ fi
 # scripts/ named check-* or live-check*, which is itself the test it runs. An .html page is markup and
 # does not count: script worth a test belongs in a .js file, which does.
 TEST_PATH='(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$|^scripts/(live-check|check-)[^/]*$'
-CODE_CHANGED="$(git diff --cached --name-only --diff-filter=AM | grep -E '\.(py|sh|js|mjs|ts|tsx)$' | grep -vE "$TEST_PATH" || true)"
-TEST_CHANGED="$(git diff --cached --name-only --diff-filter=AMD | grep -E "$TEST_PATH" || true)"
+CODE_CHANGED="$(git diff --cached --name-only --no-renames --diff-filter=AM | grep -E '\.(py|sh|js|mjs|ts|tsx)$' | grep -vE "$TEST_PATH" || true)"
+TEST_CHANGED="$(git diff --cached --name-only --no-renames --diff-filter=AMD | grep -E "$TEST_PATH" || true)"
 if [ -n "$CODE_CHANGED" ] && [ -z "$TEST_CHANGED" ] \
     && ! printf '%s\n' "$MESSAGE" | grep -Eiq '^[[:space:]]*no test:[[:space:]]*[^[:space:]]'; then
   echo "[commit-msg] BLOCKED: this commit changes code and no test:"
