@@ -35,14 +35,17 @@ class TestReport(Base):
         failure_log.record("Secrets", "BLOCKED", "r")
         failure_log.record("Secrets", "BLOCKED", "r")
         failure_log.record("Size ratchet", "BLOCKED", "r")
+        failure_log.record("maintain", "links: a dangling link", "machine")
         text = run(failure_log.command_report, [])[1]
         self.assertIn("Secrets: 2", text)
         self.assertIn("Size ratchet: 1", text)
+        self.assertNotIn("maintain", text)
 
     def test_a_non_number_for_days_prints_the_usage_line(self):
-        code, text = run(failure_log.command_report, ["--days", "x"])
-        self.assertEqual(code, 1)
-        self.assertIn("Usage: olivercode report [--days N]", text)
+        for args in (["--days", "x"], ["--weeks", "2"]):
+            code, text = run(failure_log.command_report, args)
+            self.assertEqual(code, 1, args)
+            self.assertIn("Usage: olivercode report [--days N]", text)
 
 
 class TestMemoryAndVersion(Base):

@@ -41,12 +41,15 @@ def entries() -> list[tuple[str, str, str, str]]:
 def command_report(argv: list[str]) -> int:
     """`olivercode report [--days N]`: how many times each gate blocked in the last N days."""
     try:
-        days = int(argv[1]) if argv[:1] == ["--days"] and len(argv) == 2 else 7
+        if argv and (argv[:1] != ["--days"] or len(argv) != 2):
+            raise ValueError
+        days = int(argv[1]) if argv else 7
     except ValueError:
         print("Usage: olivercode report [--days N]")
         return 1
     since = datetime.now(timezone.utc) - timedelta(days=days)
-    blocks = Counter(g for when, _r, g, _x in entries() if when >= f"{since:%Y-%m-%dT%H:%M:%SZ}")
+    # maintain logs each unrepaired machine finding on every run, so it is a finding count and never a block.
+    blocks = Counter(g for when, _r, g, _x in entries() if when >= f"{since:%Y-%m-%dT%H:%M:%SZ}" and g != "maintain")
     print(f"Harness report, last {days} days")
     print("Gate blocks:" + ("" if blocks else " none logged"))
     for gate, n in blocks.most_common():
