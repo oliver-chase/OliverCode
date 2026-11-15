@@ -27,6 +27,10 @@ class CatalogTest(unittest.TestCase):
         (root / "scripts/run.py").write_text('"""Changed job."""\n')
         self.assertTrue(any("stale" in p for p in catalog.check(root)))
 
+    def test_an_extensionless_launcher_is_listed_by_its_shebang(self):
+        rows = catalog.entries(git_repo({"scripts/tool": '#!/usr/bin/env python3\n"""Runs the tool."""\n'}))
+        self.assertEqual([("`scripts/tool`", "Runs the tool.", "")], rows["Scripts"])
+
     def test_tests_and_lockfiles_are_not_parts(self):
         rows = catalog.entries(git_repo({"tests/test_a.py": "x = 1\n", "package-lock.json": "{}\n"}))
         self.assertEqual(sum(len(v) for v in rows.values()), 0)
