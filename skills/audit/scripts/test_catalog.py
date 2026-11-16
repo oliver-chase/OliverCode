@@ -28,8 +28,11 @@ class CatalogTest(unittest.TestCase):
         self.assertTrue(any("stale" in p for p in catalog.check(root)))
 
     def test_an_extensionless_launcher_is_listed_by_its_shebang(self):
-        rows = catalog.entries(git_repo({"scripts/tool": '#!/usr/bin/env python3\n"""Runs the tool."""\n'}))
-        self.assertEqual([("`scripts/tool`", "Runs the tool.", "")], rows["Scripts"])
+        rows = catalog.entries(git_repo({"scripts/tool": '#!/usr/bin/env python3\n"""Runs the tool."""\n',
+                                         "scripts/check.mjs": "// Checks the build.\nimport x from 'y';\n",
+                                         ".githooks/pre-commit": "#!/usr/bin/env bash\n# Runs the commit gates.\nset -e\n"}))
+        self.assertEqual({("`.githooks/pre-commit`", "Runs the commit gates.", ""), ("`scripts/check.mjs`", "Checks the build.", ""),
+                          ("`scripts/tool`", "Runs the tool.", "")}, set(rows["Scripts"]))
 
     def test_tests_and_lockfiles_are_not_parts(self):
         rows = catalog.entries(git_repo({"tests/test_a.py": "x = 1\n", "package-lock.json": "{}\n"}))

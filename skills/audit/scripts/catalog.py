@@ -19,7 +19,7 @@ import _fleet
 from _fleet import is_test, scan_root, tracked
 
 OUT = "docs/CATALOG.md"
-SCRIPT = {".py", ".sh", ".js"}
+SCRIPT = {".py", ".sh", ".js", ".mjs", ".cjs"}
 CONFIG = {".json", ".toml", ".yml", ".yaml"}
 LOCKS = ("package-lock.json", "yarn.lock", "pnpm-lock.yaml")
 NONE = "(no description)"
@@ -90,7 +90,7 @@ def entries(repo):
         text = (Path(repo) / rel).read_text(encoding="utf-8", errors="ignore") if suffix in SCRIPT | CONFIG | {".md"} else ""
         if p.name == "SKILL.md":
             rows["Skills"].append((f"`{p.parent.name}`", skill_info(text) or NONE, ""))
-        elif suffix in SCRIPT and not is_test(rel) and p.name != "__init__.py" and ("scripts" in p.parts or "hooks" in p.parts) and rel != OUT:
+        elif suffix in SCRIPT and not is_test(rel) and p.name != "__init__.py" and ({"scripts", "hooks", ".githooks"} & set(p.parts)) and rel != OUT:
             job, usage = script_info(text, suffix)
             rows["Scripts"].append((f"`{rel}`", job or NONE, f"`{usage}`" if usage else ""))
         elif p.suffix in CONFIG and not p.name.endswith(LOCKS) and not is_test(rel) and not p.name.startswith(".") and rel != OUT:
@@ -107,7 +107,11 @@ def shebang_suffix(path):
         return ""
     if not first.startswith("#!"):
         return ""
-    return ".py" if "python" in first else ".sh" if ("bash" in first or first.rstrip().endswith("/sh")) else ""
+    if "python" in first:
+        return ".py"
+    if "node" in first:
+        return ".js"
+    return ".sh" if ("bash" in first or first.rstrip().endswith("/sh")) else ""
 
 
 def render(rows):
