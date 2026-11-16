@@ -37,7 +37,7 @@ ddc8c6dd066f58002e66420e12270f74d9ae0d95 core/templates/project/docs/IDENTIFIER-
 e04ffd33e8547c3b1d8e67745ee75d190bdc4394 core/templates/project/pre-commit
 eb427c8606260f87b8b4ea8c7f2fcef4c3a7d38d core/templates/project/pre-commit-private
 f1a906c620244ff09ee82e6a56e6622d0f5c77b6 core/templates/project/pre-push
-d6cf27bea80f2b0177cf731a27dc6bd56a587da7 core/templates/project/scripts/check-structure-contract.mjs
+b3f79109d6c82248cf2ccb696a2da01e422bebea core/templates/project/scripts/check-structure-contract.mjs
 fe943a0d550ec195c8085f0a36310c98e6b269b1 core/templates/project/scripts/validate.sh
 5c9b82fce689ce6c3f6ec67318a46b755a96f12d docs/AUDIT-ACCEPTED.md
 24e1df545af229af7805cec6b148cd8750f2fa5f docs/BACKLOG.md
@@ -114,7 +114,7 @@ da081bb8f734877a63834a131ab244ec9235bb9a skills/audit/references/skills.md
 27b57d5878abb88939843cb159f7d760b99374a5 skills/audit/references/system.md
 6afaca7ff4aa862a92cdca521828094ccd9e83b0 skills/audit/scripts/_fleet.py
 6b0a6581f5e2f58e0caef8c0ada6972b9c89e826 skills/audit/scripts/audit_ledger.py
-a061904a3ebd6aa769062b4cba6da544308bdcf5 skills/audit/scripts/catalog.py
+ea2fe754c277b870f8c653115c8e7a1314c07e24 skills/audit/scripts/catalog.py
 f5cd8da39bf4aeffde7b250c37da5c9777f3b6e0 skills/audit/scripts/check_report.py
 5ef6b3327ff17c60185148980d4fc70c191a4d65 skills/audit/scripts/check_skill_structure.py
 a8017c352008aa63d6960b8f9125879981902495 skills/audit/scripts/commit_audit.py
@@ -125,7 +125,7 @@ ed4d34ffdef5d8177b39c4f029eb0eb3396b242a skills/audit/scripts/fleet_check.py
 b0627c0703e2729c1286d38eb20801bcedad1b09 skills/audit/scripts/size.sh
 dbdd212c53e052961fee02dc95fea4666ab09e63 skills/audit/scripts/sweep.py
 ff26ab18714c16675da56c116d238958d2bb1dee skills/audit/scripts/test_audit_ledger.py
-3ff4c824b0842fbfc8ebdd4045ea21432f72c59d skills/audit/scripts/test_catalog.py
+4f9817b0286c251acb7919fbb4d1d1097a72d1c1 skills/audit/scripts/test_catalog.py
 9f227a29d3d8cfa7a446e932239ad458c8640d72 skills/audit/scripts/test_check_report.py
 dc3b1d8745fffd6ca104e3aefb25a6363f7f4801 skills/audit/scripts/test_check_skill_structure.py
 1c9dc3eed587e2c3020481c3d2f8f60f013f36e7 skills/audit/scripts/test_commit_audit.py
