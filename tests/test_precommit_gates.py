@@ -5,8 +5,7 @@ staged files from git, so every test copies a template repo that already holds t
 stages a fixture, and runs the hook against it. Each class builds its template once.
 Nothing touches this checkout.
 
-Gates that consult the machine run against stand-ins: the workflow-auth gate and the
-skill-citation check get a stub `gh` on PATH. Every `exit 1` in a gate has a test that fails when it
+Gates that consult the machine run against stand-ins: the skill-citation check gets a stub `gh` on PATH. Every `exit 1` in a gate has a test that fails when it
 becomes `true`.
 """
 
@@ -20,7 +19,6 @@ from pathlib import Path
 from _support import ISOLATION, REPO_ROOT, git, git_env, scratch_repo
 
 HOOK = REPO_ROOT / ".githooks" / "pre-commit"
-TEMPLATE_HOOK = REPO_ROOT / "core" / "templates" / "project" / "pre-commit"
 _SAVED_GIT_ENV = {}
 
 
@@ -84,6 +82,21 @@ class GateHarness(unittest.TestCase):
         gh.chmod(0o755)
         return {"PATH": f"{gh.parent}{os.pathsep}{os.environ['PATH']}"}
 
+    def path_without(self, *names):
+        """A PATH that holds every tool the real PATH does, minus the commands named, so only a gate's own guard can fail the run."""
+        bin_dir = self.tmp / ("without-" + "-".join(names))
+        bin_dir.mkdir()
+        for entry in os.environ["PATH"].split(os.pathsep):
+            if not os.path.isdir(entry):
+                continue
+            for name in os.listdir(entry):
+                target = Path(entry) / name
+                if name in names or name.startswith(tuple(f"{n}3" for n in names)) or (bin_dir / name).exists():
+                    continue
+                if os.access(target, os.X_OK) and not target.is_dir():
+                    (bin_dir / name).symlink_to(target)
+        return str(bin_dir)
+
     def run_hook(self, **env_overrides):
         # validate.sh --tree exports OLIVERCODE_SCAN_TREE, and a test must check staged
         # files only.
@@ -146,11 +159,7 @@ class TestTreeScan(GateHarness):
         self.assertEqual(0, self.run_hook().returncode)
 
     def test_a_tree_scan_finds_the_committed_secret(self):
-        result = subprocess.run(
-            ["bash", str(self.tmp / ".githooks" / "pre-commit")],
-            cwd=self.tmp, capture_output=True, text=True,
-            env={**os.environ, "OLIVERCODE_SCAN_TREE": "1"},
-        )
+        result = self.run_hook(OLIVERCODE_SCAN_TREE="1")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("secret pattern", result.stdout)
 
@@ -215,6 +224,30 @@ class TestPublicRepoLocalAndPii(GateHarness):
         self.stage("notes.txt", "Plain notes.\n")
         self.assertBlocked("repo-local")
 
+    def suite_checks(self, command):
+        self.stage("docs/SUITE-CHECKS.json", '{"checks": [{"name": "doc rule", "files": ["docs/*.md", "research/*.md"], "command": "%s"}]}\n' % command)
+
+    def test_a_staged_doc_that_breaks_a_listed_suite_check_is_blocked(self):
+        self.write("check.sh", "#!/usr/bin/env bash\ngrep -q TODO \"$@\" && exit 1; exit 0\n").chmod(0o755)
+        self.suite_checks("bash check.sh")
+        self.stage("research/notes.md", "TODO fill this in\n")
+        out = self.assertBlocked("repo-local").stdout
+        self.assertIn("suite check doc rule failed", out)
+
+    def test_a_clean_doc_and_an_unmatched_file_pass_the_suite_check(self):
+        self.write("check.sh", "#!/usr/bin/env bash\nexit 1\n").chmod(0o755)
+        self.suite_checks("bash check.sh")
+        self.stage("notes.txt", "A plain file the check does not cover.\n")
+        self.assertAllowed()
+        self.write("ok.sh", "#!/usr/bin/env bash\nexit 0\n").chmod(0o755)
+        self.suite_checks("bash ok.sh")
+        self.stage("docs/clean.md", "Clean text.\n")
+        self.assertIn("Suite checks", self.assertAllowed().stdout)
+
+    def test_an_unreadable_suite_check_list_blocks(self):
+        self.stage("docs/SUITE-CHECKS.json", "{not json")
+        self.assertBlocked("repo-local")
+
     def test_a_file_listed_in_the_pii_exempt_file_passes_and_others_still_block(self):
         self.stage("docs/PII-GATE.json", '{"exempt": ["fixtures/*"], "reasons": {"fixtures/*": "sample data"}}\n')
         self.stage("fixtures/home.py", 'P = "/Users/' + 'sample/work"\n')
@@ -244,7 +277,3 @@ class TestPublicRepoLocalAndPii(GateHarness):
     def test_the_hook_files_are_not_scanned_for_pii(self):
         self.stage(".githooks/pre-commit", "# an address such as git@github.com is explained here\n")
         self.assertAllowed()
-
-
-if __name__ == "__main__":
-    unittest.main()

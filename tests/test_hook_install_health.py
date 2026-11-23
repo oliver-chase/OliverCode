@@ -8,6 +8,7 @@ fleet-wide detector, so it must not report OK in any of those states.
 import os
 import shutil
 import unittest
+from unittest import mock
 
 from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
 
@@ -15,6 +16,7 @@ TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import cmd_fleet  # noqa: E402  (load_script put scripts/ on the path)
 repo_gates = load_script("scripts/lib/repo_gates.py")
+from lib import conform  # noqa: E402
 
 
 class TestHookProblems(unittest.TestCase):
@@ -28,6 +30,34 @@ class TestHookProblems(unittest.TestCase):
 
     def problems(self, private=False):
         return repo_gates.hook_problems(self.repo, TEMPLATES, private)
+
+    def commit_hooks(self):
+        self.install()
+        git(self.repo, "config", "core.hooksPath", ".githooks")
+        git(self.repo, "add", ".githooks")
+        git(self.repo, "commit", "-qn", "-m", "hooks")
+
+    def test_a_hand_edited_tracked_hook_is_flagged_dirty(self):
+        self.commit_hooks()
+        self.assertEqual([], self.problems())
+        with open(self.hooks / "pre-push", "a") as f:
+            f.write("# hand edit\n")
+        self.assertIn("pre-push is tracked but differs from HEAD", " ".join(self.problems()))
+
+    def test_a_committed_hook_that_differs_from_the_template_is_flagged(self):
+        self.commit_hooks()
+        with open(self.hooks / "pre-push", "a") as f:
+            f.write("# drift\n")
+        git(self.repo, "commit", "-qan", "-m", "drift")
+        self.assertEqual(["pre-push diverges from the pre-push template"], self.problems())
+
+    def test_the_committed_blob_is_what_is_compared(self):
+        self.commit_hooks()
+        with open(self.hooks / "pre-push", "a") as f:
+            f.write("# drift\n")
+        git(self.repo, "commit", "-qan", "-m", "drift")
+        shutil.copy(TEMPLATES / "pre-push", self.hooks / "pre-push")
+        self.assertIn("differs from HEAD", " ".join(self.problems()))
 
     def test_unset_hooks_path_is_reported(self):
         self.assertIn("unset", self.problems()[0])
@@ -107,10 +137,41 @@ class TestInstallHookPair(unittest.TestCase):
                     self.assertEqual(self.hook(name), (TEMPLATES / name).read_bytes())
                     self.assertTrue(os.access(self.repo / ".githooks" / name, os.X_OK))
 
+    def test_a_dangling_pre_commit_link_counts_as_gates_that_do_not_run(self):
+        hooks = self.repo / ".githooks"
+        hooks.mkdir(exist_ok=True)
+        os.symlink("../missing/pre-commit", hooks / "pre-commit")
+        git(self.repo, "config", "core.hooksPath", ".githooks")
+        self.assertTrue(repo_gates.has_gates(self.repo))
+        self.assertIn("holds no pre-commit file", repo_gates.gate_problem(self.repo))
+
     def test_gate_problem_names_an_unset_hooks_path_and_clears_after_install(self):
         self.assertIn("core.hooksPath is unset", repo_gates.gate_problem(self.repo))
         cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=False)
         self.assertEqual("", repo_gates.gate_problem(self.repo))
 
-if __name__ == "__main__":
-    unittest.main()
+
+class TestSessionNotesForStoppedGates(unittest.TestCase):
+    """An unset core.hooksPath is a FAIL row in conform and a note in the session, so policy cannot turn off silently."""
+
+    def test_unset_hooks_path_fails_conform_and_the_session_names_the_fix(self):
+        session_check = load_script("scripts/hooks/session_check.py", "session_check_510")
+        repo = temp_dir(self, "olivercode-stopped-gates-", resolve=True)
+        scratch_repo(repo)
+        cmd_fleet._install_hook_pair(repo, TEMPLATES, private_repo=False)
+        claude = temp_dir(self, "olivercode-claude-")
+        quiet_helpers = {name: mock.patch.object(session_check, name, return_value=[])
+                         for name in ("placement_notes", "gh_notes", "checkout_notes")}  # the checkout under test is this worktree, which trails origin/main whenever main moves
+        for patcher in quiet_helpers.values():
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.assertEqual([], session_check.notes(repo, claude), "gates are on, so nothing to say")
+        row = conform.hooks(repo, oc_root=REPO_ROOT)
+        self.assertEqual("pass", row.status)
+
+        git(repo, "config", "--unset", "core.hooksPath")
+        row = conform.hooks(repo, oc_root=REPO_ROOT)
+        self.assertEqual(("fail", "olivercode sync-hooks --commit --story N"), (row.status, row.fix))
+        note = " ".join(session_check.notes(repo, claude))
+        self.assertIn("core.hooksPath is unset", note)
+        self.assertIn("olivercode sync-hooks", note)

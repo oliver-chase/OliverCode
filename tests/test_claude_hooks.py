@@ -7,18 +7,19 @@ real temporary git repo.
 
 import json
 import os
-import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo
+from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import claude_settings  # noqa: E402
+from lib import placement  # noqa: E402
 
 guard = load_script("scripts/hooks/commit_guard.py")
 session = load_script("scripts/hooks/session_check.py")
@@ -26,12 +27,8 @@ session = load_script("scripts/hooks/session_check.py")
 
 class RepoCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-claudehooks-")).resolve()
-        self.repo = self.tmp / "repo"
-        scratch_repo(self.repo)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        self.tmp = temp_dir(self, "olivercode-claudehooks-", resolve=True)
+        self.repo = scratch_repo(self.tmp / "repo")
 
     def gates(self, point_git_at_them: bool):
         hooks = self.repo / ".githooks"
@@ -132,6 +129,13 @@ class TestCommitGuard(RepoCase):
     def test_skipping_hooks_in_a_repo_with_no_gates_skips_nothing_and_is_allowed(self):
         self.assertEqual(guard.reason("git commit --no-verify -m x", self.repo), "")
 
+    def test_each_skip_refusal_is_one_line_under_200_characters_and_names_the_gates_doc(self):
+        self.gates(point_git_at_them=True)
+        for why in (guard.reason("git commit --no-verify -m x", self.repo), guard.reason("git -c core.hooksPath=/dev/null commit -m x", self.repo)):
+            self.assertTrue(why)
+            self.assertLessEqual(len(why), 200, why)
+            self.assertIn("docs/GATES.md", why)
+
     def test_the_hook_prints_a_deny_decision(self):
         self.gates(point_git_at_them=False)
         out = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "commit_guard.py")],
@@ -154,15 +158,36 @@ class TestSessionCheck(RepoCase):
 
     def test_names_gates_that_git_skips(self):
         self.gates(point_git_at_them=False)
-        self.assertIn("Commits are refused", " ".join(session.notes(self.repo, self.claude)))
+        text = " ".join(session.notes(self.repo, self.claude))
+        self.assertIn("Commits are refused", text)
+        self.assertIn("the gates are not running", text)
+        self.assertIn("olivercode sync-hooks", text)
+        self.assertIn("core.hooksPath is unset", text)
+        self.assertIn("config core.hooksPath .githooks", text)
+        git(self.repo, "config", "core.hooksPath", ".git/hooks")  # set, but not to the repo's gates
+        text = " ".join(session.notes(self.repo, self.claude))
+        self.assertIn("never run", text)
+        self.assertIn("config core.hooksPath .githooks", text)
 
     def test_names_a_repo_with_no_gates(self):
         self.assertIn("no commit gates", " ".join(session.notes(self.repo, self.claude)))
+
+    def test_a_headless_start_runs_no_placement_scan(self):
+        self.addCleanup(setattr, session, "checkout_notes", session.checkout_notes)
+        session.checkout_notes = lambda: []  # the checkout under test trails origin/main whenever main moves
+        with mock.patch.object(placement, "findings", return_value=[]) as scan, mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": "1"}):
+            session.notes(self.tmp, self.claude)
+        scan.assert_not_called()
+        with mock.patch.object(placement, "findings", return_value=[]) as scan, mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": ""}):
+            session.notes(self.tmp, self.claude)
+        scan.assert_called_once()
 
     def test_says_nothing_when_all_is_well(self):
         self.gates(point_git_at_them=True)
         self.addCleanup(setattr, session, "placement_notes", session.placement_notes)
         session.placement_notes = lambda: []  # this machine's own repos are not the subject here
+        self.addCleanup(setattr, session, "checkout_notes", session.checkout_notes)
+        session.checkout_notes = lambda: []  # the checkout under test is this worktree, which trails origin/main whenever main moves
         self.assertEqual(session.notes(self.repo, self.claude), [])
         self.assertEqual(session.notes(self.tmp, self.claude), [])  # not a git repo
 
@@ -176,11 +201,35 @@ class TestSettingsMerge(unittest.TestCase):
 
     def test_adds_its_hooks_and_keeps_everything_of_the_owners(self):
         merged = claude_settings.merge(self.OWNER, Path("/oc/scripts/hooks"))
-        self.assertEqual((merged["model"], merged["permissions"]), ("opus", self.OWNER["permissions"]))
+        self.assertEqual((merged["model"], merged["permissions"]["deny"]), ("opus", self.OWNER["permissions"]["deny"]))
+        self.assertEqual(merged["permissions"]["allow"], list(claude_settings.ALLOW))
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertIn("~/mine.sh", commands)
         for _, _, script in claude_settings.MANAGED:
             self.assertEqual(sum(script in c for c in commands), 1, script)
+
+    def test_allow_entries_keep_the_owners_and_health_names_a_missing_one(self):
+        owner = {"permissions": {"allow": ["Bash(ls)", claude_settings.ALLOW[0]]}}
+        allow = claude_settings.merge(owner)["permissions"]["allow"]
+        self.assertEqual(allow, ["Bash(ls)", *claude_settings.ALLOW])
+        path = temp_dir(self, "olivercode-settings-") / "settings.json"
+        path.write_text(json.dumps(owner))
+        self.assertEqual(claude_settings.missing_allow(path), list(claude_settings.ALLOW[1:]))
+        claude_settings.install(path)
+        self.assertEqual(claude_settings.missing_allow(path), [])
+        for rule in ("mcp__ccd_sidebar__set_pinned", "mcp__ccd_session__start_session", "Bash(git worktree remove *)", "Bash(bash scripts/validate.sh*)"):
+            self.assertIn(rule, claude_settings.ALLOW)
+
+    def test_show_allow_names_each_rule_with_what_it_permits(self):
+        path = temp_dir(self, "olivercode-settings-") / "settings.json"
+        path.write_text(json.dumps({"permissions": {"allow": [claude_settings.ALLOW[0]]}}))
+        lines = claude_settings.allow_lines(path)
+        self.assertEqual(len(lines), len(claude_settings.ALLOW))
+        self.assertIn("[PRESENT]", lines[0])
+        self.assertTrue(all("[WILL ADD]" in line for line in lines[1:]))
+        self.assertEqual(set(claude_settings.ALLOW_WHY), set(claude_settings.ALLOW))
+        path.write_text("{}")
+        self.assertTrue(all("[WILL ADD]" in line for line in claude_settings.allow_lines(path)))
 
     def test_reinstalling_or_moving_the_checkout_never_duplicates(self):
         once = claude_settings.merge(self.OWNER, Path("/old/place/scripts/hooks"))
@@ -190,8 +239,7 @@ class TestSettingsMerge(unittest.TestCase):
         self.assertEqual(claude_settings.merge(moved, Path("/new/place/scripts/hooks")), moved)
 
     def test_a_settings_shape_the_merge_would_guess_at_is_refused_and_left_alone(self):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-settings-"))
-        self.addCleanup(shutil.rmtree, tmp, True)
+        tmp = temp_dir(self, "olivercode-settings-")
         path = tmp / "settings.json"
         for bad in ({"hooks": None}, {"hooks": []}, {"hooks": {"Stop": ["a string"]}}, ["not", "an", "object"]):
             path.write_text(json.dumps(bad))
@@ -200,8 +248,7 @@ class TestSettingsMerge(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text()), bad)
 
     def test_install_writes_once_and_then_reports_already(self):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-settings-"))
-        self.addCleanup(shutil.rmtree, tmp, True)
+        tmp = temp_dir(self, "olivercode-settings-")
         path = tmp / "settings.json"
         path.write_text(json.dumps(self.OWNER))
         self.assertEqual(claude_settings.install(path), "updated")
@@ -213,8 +260,7 @@ class TestSettingsRemove(unittest.TestCase):
     OWNER = TestSettingsMerge.OWNER
 
     def setUp(self):
-        tmp = Path(tempfile.mkdtemp(prefix="olivercode-settings-"))
-        self.addCleanup(shutil.rmtree, tmp, True)
+        tmp = temp_dir(self, "olivercode-settings-")
         self.path = tmp / "settings.json"
 
     def test_install_then_remove_gives_back_the_owners_settings(self):
@@ -225,10 +271,57 @@ class TestSettingsRemove(unittest.TestCase):
 
     def test_an_owner_hook_sharing_a_group_with_oliver_codes_stays(self):
         mine = {"type": "command", "command": "~/mine.sh"}
-        ours = {"type": "command", "command": 'python3 "/oc/scripts/hooks/commit_guard.py"'}
+        ours = {"type": "command", "command": 'python3 "/oc/scripts/hooks/pretool_guard.py"'}
         settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine, ours]}]}}
         self.assertEqual(claude_settings.without(settings),
                          {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine]}]}})
+
+    def test_install_removes_the_retired_manager_entries_from_any_checkout(self):
+        retired = [{"type": "command", "command": f'python3 "/old/checkout/scripts/hooks/{n}"'} for n in claude_settings.RETIRED]
+        mine = {"type": "command", "command": "~/mine.sh"}
+        settings = {"hooks": {"PreToolUse": [{"hooks": retired}, {"matcher": "Bash", "hooks": [mine]}],
+                              "UserPromptSubmit": [{"hooks": [retired[3]]}]}}
+        merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        for name in claude_settings.RETIRED:
+            self.assertFalse(any(name in c for c in commands), name)
+        self.assertIn("~/mine.sh", commands)
+        self.assertFalse({n for _, _, n in claude_settings.MANAGED} & set(claude_settings.RETIRED))
+
+    def test_dead_names_a_managed_entry_whose_script_does_not_exist(self):
+        root = temp_dir(self, "olivercode-dead-", resolve=True)
+        (root / "scripts" / "hooks").mkdir(parents=True)
+        (root / "scripts" / "hooks" / "here.py").write_text("")
+        cmds = [f'python3 "{root}/scripts/hooks/{n}"' for n in ("session_check.py", "gh_watch.py")]
+        path = root / "settings.json"
+        path.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c}]} for c in cmds]}}))
+        self.assertEqual(claude_settings.dead(path), cmds)
+        (root / "scripts" / "hooks" / "gh_watch.py").write_text("")
+        self.assertEqual(claude_settings.dead(path), cmds[:1])
+        self.assertEqual(claude_settings.dead(root / "absent.json"), [])
+
+    def test_a_reinstall_removes_a_cut_hook(self):
+        cut = {"type": "command", "command": 'python3 "/oc/scripts/hooks/trace_watch.py"'}
+        settings = {"hooks": {"PostToolUse": [{"hooks": [cut]}]}}
+        merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        self.assertNotIn(cut["command"], commands)
+
+    def test_install_drops_an_entry_whose_script_is_gone_and_keeps_the_rest(self):
+        hooks_dir = temp_dir(self, "olivercode-hooksdir-", resolve=True)
+        (hooks_dir / "still_here.py").write_text("")
+        gone = {"type": "command", "command": f'python3 "{hooks_dir}/gone.py"'}
+        kept = [{"type": "command", "command": c} for c in (
+            f'python3 "{hooks_dir}/still_here.py"',  # the script exists, so it stays
+            'python3 "/elsewhere/scripts/hooks/gone.py"',  # another checkout's folder
+            f'python3 "{hooks_dir}/gone.py" --flag',  # not the form install writes
+            "~/mine.sh")]
+        settings = {"hooks": {"PostToolUse": [{"hooks": [gone]}, {"matcher": "Bash", "hooks": [gone, *kept]}]}}
+        merged = claude_settings.merge(settings, hooks_dir)
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        self.assertNotIn(gone["command"], commands)
+        self.assertTrue(all(h["command"] in commands for h in kept))
+        self.assertEqual(merged["hooks"]["PostToolUse"][0], {"matcher": "Bash", "hooks": kept})
 
     def test_a_file_with_none_of_oliver_codes_hooks_is_not_rewritten(self):
         text = '{"model":"opus","hooks":{}}'
@@ -281,7 +374,3 @@ class TestSettingsRemove(unittest.TestCase):
             with self.assertRaises(ValueError):
                 claude_settings.remove(self.path)
             self.assertEqual(json.loads(self.path.read_text()), bad)
-
-
-if __name__ == "__main__":
-    unittest.main()

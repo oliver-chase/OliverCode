@@ -55,6 +55,11 @@ class TestDispatch(unittest.TestCase):
             out = run_main(BASH)
         self.assertEqual(("deny", "Repos live under /x."), (out["permissionDecision"], out["permissionDecisionReason"]))
 
+    def test_a_memory_rule_is_refused_with_its_reason(self):
+        with quiet_guards(), mock.patch.object(pretool.memory_guard, "reason", return_value="Rules belong in a skill."):
+            out = run_main({**BASH, "tool_input": {"command": "bash scripts/validate.sh"}})
+        self.assertEqual(("deny", "Rules belong in a skill."), (out["permissionDecision"], out["permissionDecisionReason"]))
+
     def test_a_deny_wins_over_an_ask(self):
         ask = policy.Decision("ask", "push", "A push needs the owner.")
         with quiet_guards(policy_guard__decide=(ask, "repo"), commit_guard__reason="Commit without --no-verify."), \
@@ -97,19 +102,7 @@ class TestDispatch(unittest.TestCase):
 
 class TestRegistration(unittest.TestCase):
     def test_one_entry_replaces_the_four_pre_tool_guards(self):
-        pre = [m for m in claude_settings.MANAGED if m[0] == "PreToolUse"]
-        self.assertEqual([("PreToolUse", "Bash|Edit|Write|MultiEdit", "pretool_guard.py")], pre)
+        # One process per Bash, Edit or Write call. The start-session guard matches only its own tool.
+        pre = [m for m in claude_settings.MANAGED if m[0] == "PreToolUse" and m[1] and "Bash" in m[1]]
+        self.assertEqual([("PreToolUse", "Bash|Edit|Write|MultiEdit|Agent|Task", "pretool_guard.py")], pre)
 
-    def test_an_earlier_install_of_the_four_entries_is_replaced_and_uninstalled(self):
-        old = {"hooks": {"PreToolUse": [
-            {"matcher": "Bash", "hooks": [{"type": "command", "command": f'python3 "/old/scripts/hooks/{name}"'}]}
-            for name in claude_settings.LEGACY]}}
-        merged = claude_settings.merge(old, claude_settings.HOOKS_DIR)
-        commands = [h["command"] for g in merged["hooks"]["PreToolUse"] for h in g["hooks"]]
-        self.assertEqual(1, len(commands))
-        self.assertTrue(commands[0].endswith('pretool_guard.py"'))
-        self.assertNotIn("PreToolUse", claude_settings.without(old).get("hooks", {}))
-
-
-if __name__ == "__main__":
-    unittest.main()

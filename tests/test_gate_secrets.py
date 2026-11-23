@@ -1,4 +1,4 @@
-"""The secret gate (Gate 1) of the pre-commit hook in every variant, split from test_precommit_gates so the gate tests run in parallel.
+"""The secret gate (Gate 1) of the pre-commit hook in every variant.
 
 Each blocking test stages every case under its own file name and runs the hook once. The gate prints one
 `BLOCKED: <file>` line per offending file, so each case is still checked on its own while the suite pays for one hook run.
@@ -35,8 +35,9 @@ class TestGate1Secrets(GateHarness):
         cases["deploy.sh"] = "TOKEN=ghp_" + "b" * 36 + "\n"
         cases["db.env"] = 'DB_PASSWORD="Abc!' + "defghijk" * 3 + '"\n'  # a symbol early in the value
         cases["id.txt"] = "-----BEGIN RSA " + "PRIVATE KEY-----\n"
-        # A pipeline that exits early fails open on big files under pipefail.
-        cases["big.py"] = ('KEY = "sk-' + "d" * 32 + '"\n') * 2000
+        # A pipeline that exits early fails open on big files under pipefail, so the secret leads
+        # more than a pipe buffer (64 KB) of clean lines.
+        cases["big.py"] = 'KEY = "sk-' + "d" * 32 + '"\n' + "value = 1  # an ordinary line\n" * 3000
         self.assertEachBlocked(cases)
 
     def test_no_path_is_exempt_and_a_placeholder_word_does_not_excuse_a_real_key(self):
@@ -60,30 +61,33 @@ class TestGate1Secrets(GateHarness):
                    f'TOKEN="{key}"  # secret-scan: allow\n')
         self.assertAllowed()
 
+    def test_a_lowercase_slug_value_passes_and_a_real_looking_secret_beside_it_still_blocks(self):
+        self.stage("catalog.json", '{"key": "wedding-invite-wildflower-5x7", "name": "Wildflower"}\n')
+        self.assertAllowed()
+        secret = "Ab3dE9fGh1" + "Jk5mNp7QrS2tUv4"  # mixed case, no hyphen: not a slug
+        self.stage("catalog2.json", '{"key": "wedding-invite-wildflower-5x7", "api_' + 'key": "' + secret + '"}\n')
+        out = self.assertBlocked("gate 1").stdout
+        self.assertIn("BLOCKED: catalog2.json matches secret pattern", out)
+
+    def test_a_uuid_or_a_hyphenated_passphrase_after_a_key_name_blocks(self):
+        self.assertEachBlocked({
+            "uuid.py": 'api_' + 'key = "' + "123e4567-e89b-12d3-a456-426614174000" + '"\n',
+            "pass.py": 'pass' + 'word = "correct-horse-battery"\n',
+        })
+
     def test_ordinary_prose_passes(self):
         self.stage("notes.md", "This file mentions a token conceptually.\n")
         self.assertAllowed()
 
-
+    def test_mixed_case_names_and_gitignore_are_scanned(self):
+        value = "Ab3" * 8
+        self.assertEachBlocked({"a.py": f'Password = "{value}"\n', "b.py": f'apiKey: "{value}"\n',
+                                "c.py": f'Token="{value}"\n', ".gitignore": f'secret = "{value}"\n'})
 
 
 class TestGateSecretsNames(GateHarness):
-    def test_mixed_case_names_and_gitignore_are_scanned(self):
-        value = "Ab3" * 8
-        cases = {"a.py": f'Password = "{value}"\n', "b.py": f'apiKey: "{value}"\n',
-                 "c.py": f'Token="{value}"\n', ".gitignore": f'secret = "{value}"\n'}
-        for path, content in cases.items():
-            self.stage(path, content)
-        out = self.assertBlocked("gate 1").stdout
-        for path in cases:
-            self.assertIn(f"BLOCKED: {path} matches secret pattern", out)
-
     def test_a_run_of_x_exempts_only_a_value_made_of_x(self):
         self.stage("ok.py", 'api_key = "' + "x" * 24 + '"\n')
         self.assertAllowed()
         self.stage("bad.py", 'api_key = "' + "Ab3" * 4 + "x" * 9 + "Cd4" * 3 + '"\n')
         self.assertBlocked("gate 1")
-
-
-if __name__ == "__main__":
-    unittest.main()
