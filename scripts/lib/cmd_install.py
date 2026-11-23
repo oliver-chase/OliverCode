@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from lib import launchd
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
 from lib.local_config import OC_ROOT, design_file, fleet_registry_path, load_local, save_local, voice_file
@@ -152,7 +153,7 @@ REMOVED_PAGES = (".olivercode/city.html",)
 
 def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[str]:
     """Unload and delete the launchd jobs of commands the engine no longer has. Returns the labels it removed."""
-    folder = (home or Path.home()) / "Library" / "LaunchAgents"
+    folder = launchd.agents_dir(home)
     gone = []
     for label in REMOVED_JOBS:
         plist = folder / f"{label}.plist"
@@ -327,6 +328,14 @@ def command_install(oc_root: Path) -> int:
     live = _live_copy.problem(oc_root)
     if live:
         print(f"  [FAIL] {live}")
+        return 1
+    from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, gh_problem
+    if sys.version_info[:2] < MIN_PYTHON:
+        print(f"  [FAIL] Python is {sys.version_info[0]}.{sys.version_info[1]} and OliverCode needs {MIN_PYTHON_TEXT} or newer: {PYTHON_FIX}")
+        return 1
+    old_gh = gh_problem()
+    if old_gh:
+        print(f"  [FAIL] {old_gh}")
         return 1
     claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"

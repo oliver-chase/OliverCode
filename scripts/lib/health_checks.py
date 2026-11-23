@@ -16,7 +16,7 @@ from pathlib import Path
 
 from lib import claude_settings as _claude_settings
 from lib import failure_log
-from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, python_version
+from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, gh_problem, python_version
 from lib.local_config import claude_dir as _claude_dir
 from lib.local_config import design_file, fleet_registry_path
 
@@ -422,6 +422,17 @@ def _check_python() -> tuple[int, int, int]:
 
 def _gh_auth_status() -> subprocess.CompletedProcess:
     return subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=30)
+
+
+def _check_gh_version(problem=gh_problem) -> tuple[int, int, int]:
+    """The `gh` a shell finds must meet MIN_GH, because four commands page the REST API with `--paginate --slurp`."""
+    print("\nGitHub CLI version:")
+    old = problem()
+    if old:
+        print(f"  [FAIL] {old}")
+        return 0, 1, 0
+    print("  [OK] gh is new enough, or not installed (its own check reports that)")
+    return 1, 0, 0
 
 
 def _check_gh_auth(runner=None) -> tuple[int, int, int]:

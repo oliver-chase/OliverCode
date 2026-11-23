@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from lib import backlog_setup, claude_settings, engine_only as engine_gate, local_config, open_issues, placement, repo_gates, repo_name_guard
+from lib import backlog_setup, claude_settings, launchd, engine_only as engine_gate, local_config, open_issues, placement, repo_gates, repo_name_guard
 from lib.gitfiles import tracked_files
 from lib.local_config import OC_ROOT
 
@@ -75,8 +75,11 @@ def validation(repo: Path, **_) -> Row:
 ENGINE_GATE = "scripts/lib/engine_only.py"
 
 
+SWEEP_LABEL = "com.olivercode.board-sweep"
+
+
 def sweep_loaded() -> bool:
-    return (Path.home() / "Library" / "LaunchAgents" / "com.olivercode.board-sweep.plist").is_file()
+    return launchd.plist_path(SWEEP_LABEL).is_file()
 
 
 def board(repo: Path, *, offline: bool, api=None, oc_root: Path = OC_ROOT, **_) -> Row:
@@ -87,11 +90,12 @@ def board(repo: Path, *, offline: bool, api=None, oc_root: Path = OC_ROOT, **_) 
     detail = "; ".join(line.split("] ", 1)[-1].strip() for line in lines if "Fix:" not in line)
     if failed:
         return _fail("board", detail, backlog_setup.FIX.format(path=repo))
-    off = backlog_setup.workflow_problems(repo, api or backlog_setup.Api())
     if not sweep_loaded():
         # GitHub has no API for the built-in workflows, so the board sweep job keeps the board in step with its issues (#798).
         why = "the board sweep job is not loaded on this machine, so closed issues stay open on the board and new issues stay off it"
-        return _fail("board", "; ".join([why, *off]), "Run `olivercode board sync --schedule`")
+        # A fresh machine has no job yet, so the row names the command and leaves the verdict to the machine that schedules it.
+        how = "run `olivercode board sync --schedule`" if launchd.supported() else "run `olivercode board sync --schedule` for the crontab line to add, since launchd needs macOS"
+        return Row("board", "skip", "; ".join([why, how]))
     return Row("board", "skip" if skipped else "pass", detail if skipped else "")
 
 

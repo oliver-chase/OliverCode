@@ -336,7 +336,7 @@ RETIRED_JOBS = ("issues-page", "idle-sessions")  # without the com.olivercode. p
 
 def check_retired_jobs(fix: bool, agents: Path | None = None) -> list[Problem]:
     """A launchd job whose command no longer exists fails every run, and removing its plist loses nothing."""
-    agents = agents or Path.home() / "Library" / "LaunchAgents"
+    agents = agents or launchd.agents_dir()
     found = []
     for label in RETIRED_JOBS:
         label = f"com.olivercode.{label}"
@@ -354,7 +354,7 @@ def check_retired_jobs(fix: bool, agents: Path | None = None) -> list[Problem]:
 
 def check_job_python(agents: Path | None = None) -> list[Problem]:
     """The installed daily job must run a python3 at the minimum; the plist names the one it runs (#621)."""
-    plist_file = (agents or Path.home() / "Library" / "LaunchAgents") / f"{LABEL}.plist"
+    plist_file = (agents or launchd.agents_dir()) / f"{LABEL}.plist"
     try:
         exe = plistlib.loads(plist_file.read_bytes())["ProgramArguments"][0]
     except (OSError, KeyError, IndexError, ValueError):
@@ -551,7 +551,7 @@ def plist() -> dict:
 
 
 def _agent_path() -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+    return launchd.plist_path(LABEL)
 
 
 def schedule(on: bool) -> int:

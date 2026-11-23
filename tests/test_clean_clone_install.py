@@ -42,7 +42,8 @@ class TestCleanCloneInstall(unittest.TestCase):
 
     def test_no_tracked_file_holds_this_machines_home_path(self):
         home = (REAL_HOME or "").rstrip("/")
-        self.assertTrue(home, "HOME was not set")
+        if len(home) < 2:
+            self.skipTest("this machine's HOME is unset or the filesystem root, so it names no owner")
         self.assertEqual(owner_leaks(self.clone, [home]), [])
 
     def test_the_leak_scan_names_a_file_that_holds_a_marker(self):

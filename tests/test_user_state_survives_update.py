@@ -43,9 +43,9 @@ class SettingsHaveOnePerUserHome(WithIgnore):
 
     def test_every_per_user_file_is_ignored_and_untracked_in_this_checkout(self):
         for rel in USER_FILES:
-            ignored = subprocess.run(["git", "-C", str(REPO_ROOT), "check-ignore", "-q", "--no-index", rel])
+            ignored = subprocess.run(["git", "-C", str(self.clone), "check-ignore", "-q", "--no-index", rel])
             self.assertEqual(ignored.returncode, 0, f"{rel} is not git-ignored")
-            tracked = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch", rel], capture_output=True)
+            tracked = subprocess.run(["git", "-C", str(self.clone), "ls-files", "--error-unmatch", rel], capture_output=True)
             self.assertNotEqual(tracked.returncode, 0, f"{rel} is tracked")
 
 

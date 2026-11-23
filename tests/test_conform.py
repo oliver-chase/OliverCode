@@ -170,18 +170,25 @@ class TestRequirements(ConformBase):
         self.assertIn("QUALITY_BASELINE.md", row.detail)
 
 class TestNetworkChecks(ConformBase):
-    def board(self, result, loaded=True, off=()):
+    def board(self, result, loaded=True):
         with mock.patch.object(conform.backlog_setup, "boards_health", return_value=result), \
-                mock.patch.object(conform, "sweep_loaded", return_value=loaded), \
-                mock.patch.object(conform.backlog_setup, "workflow_problems", return_value=list(off)):
+                mock.patch.object(conform, "sweep_loaded", return_value=loaded):
             return conform.board(self.repo, offline=False)
 
-    def test_a_board_with_no_loaded_sweep_job_fails_naming_what_is_off_with_the_fix(self):
-        row = self.board((1, 0, 0), loaded=False, off=["Item closed is off"])
-        self.assertEqual("fail", row.status)
+    def test_a_board_with_no_loaded_sweep_job_skips_naming_the_command(self):
+        row = self.board((1, 0, 0), loaded=False)
+        self.assertEqual("skip", row.status)
         self.assertIn("sweep job is not loaded", row.detail)
-        self.assertIn("Item closed is off", row.detail)
-        self.assertEqual("Run `olivercode board sync --schedule`", row.fix)
+        self.assertIn("olivercode board sync --schedule", row.detail)
+
+    def test_the_sweep_plist_path_comes_from_launchd(self):
+        home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        with mock.patch.object(Path, "home", return_value=home):
+            self.assertFalse(conform.sweep_loaded())
+            plist = conform.launchd.plist_path(conform.SWEEP_LABEL)
+            plist.parent.mkdir(parents=True)
+            plist.write_text("x")
+            self.assertTrue(conform.sweep_loaded())
 
     def test_a_board_that_differs_fails_with_the_backlog_setup_fix(self):
         row = self.board((0, 1, 0))

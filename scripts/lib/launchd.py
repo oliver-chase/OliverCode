@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import shlex
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,33 @@ from pathlib import Path
 from lib import failure_log
 from lib.cli import newer_python
 from lib.local_config import OC_ROOT
+
+
+def supported() -> bool:
+    """launchd exists only on macOS."""
+    return sys.platform == "darwin"
+
+
+def agents_dir(home: Path | None = None) -> Path:
+    """The folder holding a user's launchd plists."""
+    return (home or Path.home()) / "Library" / "LaunchAgents"
+
+
+def plist_path(label: str, home: Path | None = None) -> Path:
+    return agents_dir(home) / f"{label}.plist"
+
+
+def cron_line(plist: dict) -> str:
+    """The crontab line that does what the plist's job does, from its interval or calendar timing."""
+    if "StartInterval" in plist:
+        minutes = max(1, plist["StartInterval"] // 60)
+        when = f"*/{minutes} * * * *" if minutes < 60 else f"0 */{max(1, minutes // 60)} * * *"
+    else:
+        cal = plist.get("StartCalendarInterval", {})
+        when = f"{cal.get('Minute', 0)} {cal.get('Hour', 0)} * * *"
+    command = " ".join(shlex.quote(a) for a in plist["ProgramArguments"])
+    log = shlex.quote(plist.get("StandardOutPath", "/dev/null"))
+    return f"{when} {command} >> {log} 2>&1"
 
 
 def job_path() -> str:
@@ -30,7 +58,9 @@ def job(label: str, args: list[str], log: str, **timing) -> dict:
 
 def schedule(on: bool, label: str, build, removed: str, installed: str) -> int:
     """Replace the job LABEL with the plist BUILD returns, or remove it when ON is false."""
-    domain, path = f"gui/{os.getuid()}", Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+    domain, path = f"gui/{os.getuid()}", plist_path(label)
+    if not supported():
+        return _schedule_without_launchd(on, label, build, removed)
     subprocess.run(["launchctl", "bootout", f"{domain}/{label}"], capture_output=True)
     if not on:
         path.unlink(missing_ok=True)
@@ -52,6 +82,16 @@ def schedule(on: bool, label: str, build, removed: str, installed: str) -> int:
         return 1
     print(f"Installed {label}: {installed}")
     return 0
+
+
+def _schedule_without_launchd(on: bool, label: str, build, removed: str) -> int:
+    """Off macOS nothing is installed: print the crontab line to add, or the one to remove, and exit 1."""
+    if not on:
+        print(f"Scheduling uses launchd, which only macOS has, so nothing is installed here. Delete the {removed} line ({label}) from `crontab -e` if you added one.")
+        return 1
+    print(f"Scheduling uses launchd, which only macOS has, so the {removed} is not installed. Add this line with `crontab -e`:")
+    print(cron_line(build()))
+    return 1
 
 
 def command_with_schedule(argv: list[str], usage: str, schedule_job, run) -> int:

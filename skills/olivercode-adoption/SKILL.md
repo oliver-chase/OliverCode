@@ -20,7 +20,9 @@ because it looks redundant — redundancy is their call.
 ## Run this before anything else
 
 ```bash
-OC="$(git rev-parse --show-toplevel)"
+OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
+[ -f "$OC/docs/RULES.md" ] || OC="$(git -C "$(dirname "$(readlink -f ~/.claude/skills/olivercode-adoption/SKILL.md 2>/dev/null)" 2>/dev/null)" rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$OC/docs/RULES.md" ] || echo "Cannot find the OliverCode checkout. Ask the user where it is and set OC to that folder."
 bash "$OC/scripts/qa/rehearse-install.sh"
 ```
 
@@ -59,7 +61,7 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
 - **Step 5, register.** Run `olivercode init-fleet` first and tell the user the new private repo it reports, then add each repo's confirmed validation command
 - **Step 6, enforcement.** Tell the user plainly when hook enforcement fails open (`docs/GATES.md`), and point at `docs/SETUP.md` ("Troubleshooting")
-- **Step 6c, board workflows.** After `backlog-setup --apply` creates or repairs a board, give the user the board's page `https://github.com/users/OWNER/projects/N/workflows` (the command prints it) and walk them through both toggles, because GitHub has no API for them. Open the page, pick "Item closed" in the left list, turn it on, set Status to Complete and save. Pick "Auto-add to project", choose the repo, set the filter to `is:issue is:open` and save. Reload the page and confirm both show on. Add the step to the owner queue until the user confirms, and repeat it for every new repo
+- **Step 6c, board sync.** A new board needs no web toggles. Filing a story adds its card, and closing it sets Status to Complete. Run `olivercode board sync --schedule` so the sweep keeps every board in step with its issues. On Linux it prints the crontab line to add and exits 1, because launchd needs macOS
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
 - **Step 3b, sleep.** Apply the sleep line `olivercode health` prints, because a Mac that sleeps stops every session while the owner is away. Name the System Settings path or the `caffeinate -dimsu` command it gives
 - **Step 8, reconcile.** Ask before deleting any backup

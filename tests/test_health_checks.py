@@ -388,3 +388,19 @@ class StaleWorktreeHook(HealthBase):
         git(plain, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.assertEqual("", health.stale_hook(plain))
         self.assertEqual("", health.stale_hook(self.wt, base="origin/nothing"))
+
+class TestGhVersion(unittest.TestCase):
+    def test_an_old_gh_fails_naming_the_version_and_a_command(self):
+        from lib import cli
+        run = mock.Mock(return_value=mock.Mock(stdout="gh version 2.40.1 (2024-01-01)\n"))
+        problem = cli.gh_problem(run)
+        self.assertIn("2.48", problem)
+        self.assertIn(cli.GH_FIX, problem)
+        result, out = quiet(health._check_gh_version, lambda: problem)
+        self.assertEqual((0, 1, 0), result)
+
+    def test_a_new_or_missing_gh_passes(self):
+        from lib import cli
+        self.assertIsNone(cli.gh_problem(mock.Mock(return_value=mock.Mock(stdout="gh version 2.60.0 (x)"))))
+        self.assertIsNone(cli.gh_problem(mock.Mock(side_effect=FileNotFoundError)))
+

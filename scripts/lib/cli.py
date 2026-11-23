@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,36 @@ from pathlib import Path
 # suite is run and passes on 3.12. Health, the launcher and the install fix text all read this one value.
 MIN_PYTHON = (3, 12)
 MIN_PYTHON_TEXT = ".".join(map(str, MIN_PYTHON))
-PYTHON_FIX = f"brew install python@{MIN_PYTHON_TEXT}, then put its bin folder first on PATH (brew --prefix python@{MIN_PYTHON_TEXT})/libexec/bin"
+# The oldest gh whose `api --paginate --slurp` the code calls (2.48).
+MIN_GH = (2, 48)
+MIN_GH_TEXT = ".".join(map(str, MIN_GH))
+if sys.platform == "darwin":
+    PYTHON_FIX = f"brew install python@{MIN_PYTHON_TEXT}, then put its bin folder first on PATH (brew --prefix python@{MIN_PYTHON_TEXT})/libexec/bin"
+    GH_FIX = "brew upgrade gh"
+else:
+    PYTHON_FIX = (f"sudo apt install python{MIN_PYTHON_TEXT} (Debian or Ubuntu) or sudo dnf install python{MIN_PYTHON_TEXT} (Fedora), "
+                  f"then put python{MIN_PYTHON_TEXT} first on PATH")
+    GH_FIX = "update gh from https://github.com/cli/cli/blob/trunk/docs/install_linux.md"
+
+
+def gh_version(run=subprocess.run) -> tuple[int, int] | None:
+    """The (major, minor) of the installed gh, or None when it is missing or unreadable."""
+    try:
+        text = run(["gh", "--version"], capture_output=True, text=True, timeout=10).stdout
+        found = re.search(r"gh version (\d+)\.(\d+)", text)
+        return (int(found.group(1)), int(found.group(2))) if found else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def gh_problem(run=subprocess.run) -> str | None:
+    """Why the installed gh is too old, or None when it is new enough or absent (a missing gh has its own message)."""
+    found = gh_version(run)
+    if found is None or found >= MIN_GH:
+        return None
+    return f"gh is {found[0]}.{found[1]} and OliverCode needs {MIN_GH_TEXT} or newer for `--paginate --slurp`: {GH_FIX}"
+
+
 _SEARCH_DIRS = ("/opt/homebrew/bin", "/opt/homebrew/opt/python@3.12/libexec/bin", "/usr/local/bin")
 
 

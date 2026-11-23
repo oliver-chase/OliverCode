@@ -217,7 +217,7 @@ Install links `olivercode` into `~/.local/bin` and adds that folder to the PATH 
 
 ### Board workflows are set at install
 
-Every board has two workflows that GitHub offers no API for, so an agent cannot switch them on. "Item closed" sets Status to Complete when an issue closes, and "Auto-add to project" adds each new issue that matches the filter `is:issue is:open`. A board with either one off drifts from the repo, with closed stories still open on the board and new stories missing from it. `olivercode backlog-setup --apply` prints both steps and the board's workflows page, `https://github.com/users/OWNER/projects/N/workflows`, after it makes or repairs a board. Open that page, pick each workflow in the left list, set the value, save and reload to check it. `olivercode conform` reads the workflow list and names the board and the workflow that is off. When GitHub does not return the list, conform says nothing about the workflows and the step stays on the owner's list. The `olivercode-adoption` skill walks a new user through the clicks.
+A board needs no web toggles. Filing a story adds its card through `batch_project.py`, closing one sets Status to Complete, and `olivercode board sync --schedule` keeps every board in step with its issues. The `olivercode backlog-setup --apply` output still names the two built-in GitHub workflows ("Item closed" and "Auto-add to project"), and turning them on is optional.
 
 ### The deploy template
 

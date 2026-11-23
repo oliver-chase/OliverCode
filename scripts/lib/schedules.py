@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from lib import gitfiles, repo_state
+from lib import gitfiles, launchd, repo_state
 from lib.local_config import load_local
 
 THIRD_PARTY = ("com.google.", "com.apple.", "com.microsoft.", "com.adobe.", "org.mozilla.")
@@ -284,7 +284,7 @@ def refreshes(tasks_dir: Path | None = None, agents_dir: Path | None = None, hom
     home = home or Path.home()
     prefixes = tuple(prefixes if prefixes is not None else label_prefixes())
     tasks_dir = tasks_dir or home / ".claude" / "scheduled-tasks"
-    agents_dir = agents_dir or home / "Library" / "LaunchAgents"
+    agents_dir = agents_dir or launchd.agents_dir(home)
     out = []
     for name, text, _ in (found if found is not None else jobs(tasks_dir, agents_dir, home, prefixes)):
         if not (REFRESH_WORDS.search(name + " " + text) and PAGE_WORDS.search(text)):
@@ -299,7 +299,7 @@ def check(tasks_dir: Path | None = None, agents_dir: Path | None = None, runs=No
     """Findings for every scheduled task and launchd job. `runs` is a dict of task to Run lists, a callable returning one, or None to read the app's files. `crons` is a dict of task to (cron, enabled), or None to read the app's file."""
     home = home or Path.home()
     tasks_dir = tasks_dir or home / ".claude" / "scheduled-tasks"
-    agents_dir = agents_dir or home / "Library" / "LaunchAgents"
+    agents_dir = agents_dir or launchd.agents_dir(home)
     retired = tuple(retired if retired is not None else retired_names())
     prefixes = tuple(prefixes if prefixes is not None else label_prefixes())
     if repo_root is None:
@@ -363,7 +363,7 @@ def check(tasks_dir: Path | None = None, agents_dir: Path | None = None, runs=No
 def summary(tasks_dir: Path | None = None, agents_dir: Path | None = None, home: Path | None = None) -> int:
     """How many tasks and jobs `check` reads, for the OK line."""
     home = home or Path.home()
-    return len(jobs(tasks_dir or home / ".claude" / "scheduled-tasks", agents_dir or home / "Library" / "LaunchAgents", home, label_prefixes()))
+    return len(jobs(tasks_dir or home / ".claude" / "scheduled-tasks", agents_dir or launchd.agents_dir(home), home, label_prefixes()))
 
 
 if __name__ == "__main__":
