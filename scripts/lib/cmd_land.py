@@ -141,23 +141,6 @@ def _main_checkout(wt: Path) -> Path | None:
     return Path(common).parent if common else None
 
 
-GUARDED = ("core/hooks/", "scripts/hooks/")
-
-
-def changed_paths(wt: Path) -> list[str]:
-    """The paths the branch changes against origin/main, [] when git cannot say."""
-    for base in ("origin/main", "origin/master"):
-        ran = _git(wt, "diff", "--name-only", f"{base}...HEAD")
-        if ran.returncode == 0:
-            return ran.stdout.split()
-    return []
-
-
-def needs_review(size: str, paths: list[str]) -> bool:
-    """An M or larger story, or any story that changes core/hooks or scripts/hooks, gets one fresh reader before it lands (#891)."""
-    return size not in ("", "XS", "S") or any(p.startswith(GUARDED) for p in paths)
-
-
 def squash(wt: Path, story: str, log) -> bool:
     """Replace a branch's commits on top of origin/main with one commit holding the same tree, so main gains one commit per story (#898).
     Its message is the first commit's subject with the story number. A branch of one commit keeps its own message. Returns False when the squash failed."""

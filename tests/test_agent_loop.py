@@ -56,12 +56,12 @@ class TestRunLog(unittest.TestCase):
         (repo / "scripts").mkdir()
         (repo / "scripts" / "validate.sh").write_text("exit 0\n")
         usage = {"input": 3, "output": 4, "cache_read": 100, "cache_write": 50}
-        replies = Scripted({**reply("one"), "usage": usage, "cost_usd": 0.5}, {**reply("two"), "usage": usage, "cost_usd": None})
+        replies = Scripted({**reply("one"), "usage": usage, "cost_usd": 0.5}, {**reply("two"), "usage": usage, "cost_usd": None}, reply("PASS"))
         checks = iter([(False, "bad"), (True, "")])
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             agent_loop.run_loop("do it", repo, "story-878", run=replies, check=lambda cwd: next(checks), say=lambda *_: None, model_name="sonnet")
         rows = [json.loads(line) for line in (home / "run-log.jsonl").read_text().splitlines()]
-        self.assertEqual([1, 2], [r["round"] for r in rows])
+        self.assertEqual([1, 2, 1], [r["round"] for r in rows])  # the reader's own row comes last
         self.assertEqual(("story-878", "sonnet", 3, 4, 100, 50, 0.5), tuple(rows[0][k] for k in ("story", "model", "input", "output", "cache_read", "cache_write", "cost_usd")))
         self.assertIsNone(rows[1]["cost_usd"])
 
@@ -70,7 +70,7 @@ class TestRunLog(unittest.TestCase):
         (repo / "scripts").mkdir()
         (repo / "scripts" / "validate.sh").write_text("exit 0\n")
         with mock.patch.object(agent_loop.failure_log, "home", side_effect=OSError("read-only")):
-            out = agent_loop.run_loop("do it", repo, "s", run=Scripted(reply()), check=lambda cwd: (True, ""), say=lambda *_: None)
+            out = agent_loop.run_loop("do it", repo, "s", run=Scripted(reply(), reply("PASS")), check=lambda cwd: (True, ""), say=lambda *_: None)
         self.assertTrue(out["done"])
 
 
@@ -88,14 +88,14 @@ class TestExitOne(unittest.TestCase):
     def loop(self, run, **kw):
         return agent_loop.run_loop("do it", self.repo, "story-1", run=run, check=lambda cwd: (True, ""), say=lambda *_: None, model_name="haiku", **kw)
 
-    def rows(self):
-        return [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
+    def rows(self):  # the builder's rounds only, since the reader writes its own rows
+        return [r for r in (json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()) if "round" in r and not r["story"].endswith("-review")]
 
     def test_the_turn_cap_resumes_the_same_session_once_and_logs_both_calls(self):
-        run = Scripted({**reply("", code=1, session_id="sess"), "stop": "max_turns", "stderr": ""}, reply("committed", session_id="sess"))
+        run = Scripted({**reply("", code=1, session_id="sess"), "stop": "max_turns", "stderr": ""}, reply("committed", session_id="sess"), reply("PASS"))
         out = self.loop(run)
         self.assertTrue(out["done"])
-        self.assertEqual(["", "sess"], [r or "" for r in run.resumes])
+        self.assertEqual(["", "sess"], [r or "" for r in run.resumes[:2]])  # the builder's two calls, then the reader's
         self.assertIn("Continue from where you left off", run.prompts[1])
         rows = self.rows()
         self.assertEqual(("max_turns", False, ""), (rows[0]["stop"], rows[0]["resumed"], rows[1]["stop"]))
@@ -103,7 +103,7 @@ class TestExitOne(unittest.TestCase):
 
     def test_a_second_turn_cap_ends_the_round_and_the_reason_names_the_cause(self):
         capped = {**reply("", code=1, session_id="sess"), "stop": "max_turns", "stderr": "boom"}
-        run = Scripted(capped, capped)
+        run = Scripted(capped, capped)  # the reader never runs, since the story never passed validation
         out = self.loop(run)
         self.assertFalse(out["done"])
         self.assertEqual(2, len(run.prompts))
@@ -111,10 +111,10 @@ class TestExitOne(unittest.TestCase):
         self.assertIn("stderr: boom", out["reason"])
 
     def test_a_timeout_resumes_the_session_the_run_started(self):
-        run = Scripted(model.ModelTimeout("claude -p ran past 900 seconds and was stopped.", "sid-9"), reply("committed", session_id="sid-9"))
+        run = Scripted(model.ModelTimeout("claude -p ran past 900 seconds and was stopped.", "sid-9"), reply("committed", session_id="sid-9"), reply("PASS"))
         out = self.loop(run)
         self.assertTrue(out["done"])
-        self.assertEqual(["", "sid-9"], [r or "" for r in run.resumes])
+        self.assertEqual(["", "sid-9"], [r or "" for r in run.resumes[:2]])  # the builder's two calls, then the reader's
         self.assertEqual("timeout", self.rows()[0]["stop"])
 
     def test_a_second_timeout_gives_up(self):
@@ -145,14 +145,14 @@ class TestRunLog(unittest.TestCase):
         no_transcript.start()
         self.addCleanup(no_transcript.stop)
 
-    def rows(self):
-        return [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
+    def rows(self):  # the builder's rounds only, since the reader writes its own rows
+        return [r for r in (json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()) if "round" in r and not r["story"].endswith("-review")]
 
     def test_the_first_round_logs_the_first_call_size_and_never_the_session_total(self):
         said = []
         usage = {"input": 3, "output": 4, "cache_read": 0, "cache_write": 99_000}
         with mock.patch.object(agent_loop, "start_size", return_value=31_000) as start:
-            out = agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "usage": usage}), check=lambda cwd: (True, ""), say=said.append)
+            out = agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "usage": usage}, reply("PASS")), check=lambda cwd: (True, ""), say=said.append)
         row = self.rows()[0]
         self.assertEqual(("c1",), start.call_args[0])
         self.assertEqual((31_000, 99_000, 3, 4), (row["start_tokens"], row["cache_write"], row["input"], row["output"]))
@@ -162,11 +162,11 @@ class TestRunLog(unittest.TestCase):
         self.assertFalse(any("limit" in line for line in said))
 
     def test_a_first_round_with_no_transcript_logs_no_start_size_rather_than_a_guess(self):
-        agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "usage": {"cache_write": 99_000}}), check=lambda cwd: (True, ""), say=lambda line: None)
+        agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "usage": {"cache_write": 99_000}}, reply("PASS")), check=lambda cwd: (True, ""), say=lambda line: None)
         self.assertNotIn("start_tokens", self.rows()[0])
 
     def test_a_later_round_logs_no_start_size(self):
-        run = Scripted({**reply(), "usage": {"cache_write": 900}}, {**reply(), "usage": {"cache_write": 50}})
+        run = Scripted({**reply(), "usage": {"cache_write": 900}}, {**reply(), "usage": {"cache_write": 50}}, reply("PASS"))
         with mock.patch.object(agent_loop, "start_size", return_value=900):
             agent_loop.run_loop("do it", self.repo, "story-1", run=run, check=lambda cwd, results=iter([(False, "x"), (True, "")]): next(results), say=lambda line: None)
         self.assertEqual([900, None], [r.get("start_tokens") for r in self.rows()])
@@ -174,7 +174,7 @@ class TestRunLog(unittest.TestCase):
     def test_the_run_log_names_which_setup_each_start_ran(self):
         """#911: the two start sizes are told apart by the setup that ran, current or project."""
         with mock.patch.object(agent_loop, "start_size", return_value=900):
-            agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "settings": "project", "usage": {"cache_write": 900}}),
+            agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "settings": "project", "usage": {"cache_write": 900}}, reply("PASS")),
                                 check=lambda cwd: (True, ""), say=lambda line: None)
         row = self.rows()[0]
         self.assertEqual(("project", 900), (row["settings"], row["start_tokens"]))
@@ -212,6 +212,10 @@ class TestLoop(unittest.TestCase):
         self.repo = temp_dir(self)
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts" / "validate.sh").write_text("exit 0\n")
+        self.home = temp_dir(self)  # the run log goes here, never to the owner's real home
+        env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
+        env.start()
+        self.addCleanup(env.stop)
 
     def loop(self, run, results, **kw):
         checks = iter(results)
@@ -222,10 +226,10 @@ class TestLoop(unittest.TestCase):
                          [agent_loop.model_for(s) for s in ("XS", "S", "M", "L")] + [agent_loop.model_for("M", [{"name": "design"}])])
 
     def test_a_small_story_moves_up_one_level_after_a_second_failed_validation(self):
-        run = Scripted(reply(), reply(), reply())
+        run = Scripted(reply(), reply(), reply(), reply("PASS"))
         out = self.loop(run, [(False, "a"), (False, "b"), (True, "")], model_name="haiku", rounds=3)
         self.assertTrue(out["done"])
-        self.assertEqual(["haiku", "haiku", "sonnet"], run.models)
+        self.assertEqual(["haiku", "haiku", "sonnet", "sonnet"], run.models)  # three builder rounds, then the Sonnet reader
 
     def test_the_ladder_stops_at_the_largest_model(self):
         self.assertEqual(("sonnet", "opus", "opus"), (agent_loop.escalate("haiku", 2), agent_loop.escalate("sonnet", 2), agent_loop.escalate("opus", 5)))
@@ -234,7 +238,7 @@ class TestLoop(unittest.TestCase):
     def test_an_m_story_gets_one_fresh_reader_that_sees_the_story_the_diff_and_the_test_output(self):
         run = Scripted(reply("built"), reply("PASS"))
         with mock.patch.object(agent_loop, "branch_diff", return_value="THE-DIFF"), mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
-            out = self.loop(run, [(True, "all green")], size="M")
+            out = self.loop(run, [(True, "all green")])
         self.assertTrue(out["done"])
         self.assertEqual(2, len(run.prompts))
         for text in ("do it", "THE-DIFF", "all green"):
@@ -245,14 +249,14 @@ class TestLoop(unittest.TestCase):
         home = temp_dir(self)
         run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("PASS"))
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
-            self.loop(run, [(True, ""), (True, "")], size="L")
+            self.loop(run, [(True, ""), (True, "")])
         rows = [json.loads(l) for l in (home / "run-log.jsonl").read_text().splitlines()]
         self.assertEqual([("s1", "findings", "scripts/a.py: no test"), ("s1", "pass", "")], [(r["story"], r["review"], r["findings"]) for r in rows if "review" in r])
 
     def test_a_finding_sends_the_story_back_once_with_the_finding_and_the_reader_reads_again(self):
         run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("PASS"))
-        with mock.patch.object(agent_loop, "branch_diff", return_value="THE-DIFF"), mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
-            out = self.loop(run, [(True, ""), (True, "")], size="M")
+        with mock.patch.object(agent_loop, "branch_diff", return_value="THE-DIFF"):
+            out = self.loop(run, [(True, ""), (True, "")])
         self.assertEqual((True, 2), (out["done"], out["rounds"]))
         self.assertEqual(4, len(run.prompts))
         for text in ("do it", "THE-DIFF", "scripts/a.py: no test"):
@@ -261,7 +265,7 @@ class TestLoop(unittest.TestCase):
 
     def test_a_second_finding_holds_the_story_and_nothing_is_pushed(self):
         run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("scripts/b.py: still wrong"))
-        out = self.loop(run, [(True, ""), (True, "")], size="M")
+        out = self.loop(run, [(True, ""), (True, "")])
         self.assertFalse(out["done"])
         self.assertEqual("scripts/b.py: still wrong", out["held"])
         self.assertIn("nothing is pushed", out["reason"])
@@ -269,25 +273,89 @@ class TestLoop(unittest.TestCase):
 
     def test_a_finding_in_the_last_round_still_gets_its_one_fix_session(self):
         run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("PASS"))
-        out = self.loop(run, [(True, ""), (True, "")], size="M", rounds=1)
+        out = self.loop(run, [(True, ""), (True, "")], rounds=1)
         self.assertEqual((True, 4), (out["done"], len(run.prompts)))
 
     def test_a_finding_after_a_failed_validation_still_gets_one_fix_session(self):
         run = Scripted(reply("built"), reply("fixed"), reply("scripts/a.py: no test"), reply("fixed again"), reply("PASS"))
-        out = self.loop(run, [(False, "gate"), (True, ""), (True, "")], size="M")
+        out = self.loop(run, [(False, "gate"), (True, ""), (True, "")])
         self.assertEqual((True, 5), (out["done"], len(run.prompts)))
         self.assertIn("scripts/a.py: no test", run.prompts[3])
 
-    def test_a_small_story_that_touches_no_hook_runs_no_reader(self):
-        run = Scripted(reply("built"))
-        self.loop(run, [(True, "")], size="S")
-        self.assertEqual(1, len(run.prompts))
+    def test_an_xs_story_on_any_path_gets_a_fresh_reader_before_it_lands(self):
+        run = Scripted(reply("built"), reply("PASS"))
+        out = self.loop(run, [(True, "")])
+        self.assertEqual((True, 2), (out["done"], len(run.prompts)))
 
-    def test_which_stories_need_a_reader(self):
-        from lib import cmd_land
-        self.assertEqual([True, True, True, False, False],
-                         [cmd_land.needs_review("M", []), cmd_land.needs_review("S", ["core/hooks/x.py"]), cmd_land.needs_review("XS", ["scripts/hooks/y.py"]),
-                          cmd_land.needs_review("S", ["scripts/lib/z.py"]), cmd_land.needs_review("", [])])
+    def test_only_a_reply_whose_first_word_is_pass_passes(self):
+        for text, verdict in (("PASS", "pass"), ("PASS, the diff does what the story says.", "pass"), ("PASSING concerns", "findings"),
+                              ("Passing is not a verdict", "findings"), ("scripts/a.py: wrong", "findings")):
+            with self.subTest(text=text):
+                out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
+                self.assertEqual(verdict, out["verdict"])
+
+    def test_a_reader_that_fails_once_is_asked_again_and_its_pass_lands_the_story(self):
+        run = Scripted(reply("built"), model.ModelError("no reader"), reply("PASS"))
+        out = self.loop(run, [(True, "")])
+        self.assertEqual((True, 3), (out["done"], len(run.prompts)))
+
+    def test_a_reader_that_gives_no_verdict_twice_holds_the_story_and_nothing_is_pushed(self):
+        run = Scripted(reply("built"), reply(""), reply("PASS", code=1))
+        out = self.loop(run, [(True, "")])
+        self.assertEqual((False, 3), (out["done"], len(run.prompts)))
+        self.assertIn("nothing is pushed", out["reason"])
+        self.assertEqual("claude exited 1.", out["held"])
+
+    def test_a_diff_over_the_limit_is_cut_and_the_marker_names_each_file_the_reader_did_not_see(self):
+        full = ("diff --git a/scripts/a.py b/scripts/a.py\n+ok\n" "diff --git a/scripts/b.py b/scripts/b.py\n+" + "y" * agent_loop.DIFF_LIMIT + "\n"
+                "diff --git a/scripts/c.py b/scripts/c.py\n+z\n")
+        cut = agent_loop.cut_diff(full)
+        self.assertTrue(cut.startswith(full[:agent_loop.DIFF_LIMIT]))
+        self.assertIn("The reader did not see these files in full: scripts/b.py, scripts/c.py.", cut)
+        self.assertEqual(full[:agent_loop.DIFF_LIMIT], agent_loop.cut_diff(full[:agent_loop.DIFF_LIMIT]))
+
+    def test_the_reader_is_never_weaker_than_the_builder_and_the_run_log_names_its_model(self):
+        self.assertEqual(["sonnet", "sonnet", "opus"], [agent_loop.reader_for(m) for m in ("haiku", "sonnet", "opus")])
+        run = Scripted(reply("built"), reply("PASS"))
+        self.loop(run, [(True, "")], model_name="haiku")
+        self.assertEqual(["haiku", "sonnet"], run.models)
+        rows = [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
+        self.assertEqual(["sonnet"], [r["model"] for r in rows if r.get("story") == "s1-review"])
+
+    def test_the_reader_gets_its_own_system_prompt_and_no_builder_rules(self):
+        seen = {}
+
+        def run(prompt, cwd, **kw):
+            seen.update(prompt=prompt, **kw)
+            return reply("PASS")
+
+        agent_loop.review("the story", self.repo, "s1", "gate", run=run, say=lambda *_: None)
+        self.assertEqual(agent_loop.READER_SYSTEM, seen["system"])
+        self.assertNotIn("never poll", seen["system"])
+        self.assertNotIn("Commit by explicit path", seen["system"])
+        self.assertNotIn("Builder rules", seen["prompt"])
+
+    def test_a_restart_after_three_rounds_starts_the_next_build_one_level_up(self):
+        run = Scripted(reply("built"), reply("fixed"), reply("again"))
+        out = self.loop(run, [(False, "a"), (False, "b"), (False, "c")], model_name="haiku", rounds=3)
+        self.assertFalse(out["done"])
+        self.assertEqual(["haiku", "haiku", "sonnet"], run.models[:3])
+        self.assertEqual("sonnet", agent_loop.restart_model("s1", "haiku"))
+
+    def test_a_build_that_stopped_before_its_third_round_does_not_escalate_a_restart(self):
+        rows = [{"story": "story-7", "round": r, "model": "haiku"} for r in (1, 2, 1)]
+        (self.home / "run-log.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        self.assertEqual("haiku", agent_loop.restart_model("story-7", "haiku"))
+        self.assertEqual("haiku", agent_loop.restart_model("story-8", "haiku"))
+
+    def test_the_brief_names_the_builder_and_reader_the_runner_starts(self):
+        from lib import cmd_dispatch
+        for size, labels, expect in (("S", [], "Run on Haiku, and a fresh Sonnet reader"), ("M", [], "Run on Sonnet, and a fresh Sonnet reader"),
+                                     ("M", [{"name": "design"}], "Run on Opus, and a fresh Opus reader")):
+            with self.subTest(size=size, labels=labels):
+                brief = cmd_dispatch.headless_brief(9, {"title": "t", "body": f"Size: {size}", "labels": labels}, "dispatch")
+                self.assertIn(expect, brief)
+                self.assertNotIn("for QA", brief)
 
     def test_a_builder_that_landed_and_removed_its_worktree_ends_the_loop_without_validation(self):
         def lands(prompt, cwd, **kw):
@@ -308,13 +376,15 @@ class TestLoop(unittest.TestCase):
         self.assertFalse(out["done"])
 
     def test_a_passing_validation_ends_the_loop_in_one_round(self):
-        out = self.loop(Scripted(reply("All done.")), [(True, "")])
+        out = self.loop(Scripted(reply("All done."), reply("PASS")), [(True, "")])
         self.assertEqual((True, 1, 10, "All done."), (out["done"], out["rounds"], out["tokens"], out["summary"]))
 
     def test_the_loop_runs_on_sonnet_by_default_and_tells_the_model_not_to_poll(self):
         seen = {}
 
         def run(prompt, cwd, **kw):
+            if kw["session"].endswith("-review"):
+                return reply("PASS")
             seen.update(kw)
             return reply()
 
@@ -327,12 +397,12 @@ class TestLoop(unittest.TestCase):
         self.assertEqual("haiku", seen["model"])
 
     def test_a_failing_gate_starts_one_short_fix_session_with_the_story_the_diff_and_the_last_60_lines(self):
-        run = Scripted(reply(session_id="c1"), reply(session_id="c2"))
+        run = Scripted(reply(session_id="c1"), reply(session_id="c2"), reply("PASS"))
         tail = "\n".join(f"line {i}" for i in range(100))
         with mock.patch.object(agent_loop, "branch_diff", return_value="THE DIFF"):
             out = self.loop(run, [(False, agent_loop.gate_tail(tail)), (True, "")])
         self.assertEqual((True, 2), (out["done"], out["rounds"]))
-        self.assertEqual(["", ""], run.resumes)  # the fix session is fresh, so it does not carry the builder's context
+        self.assertEqual(["", ""], run.resumes[:2])  # the fix session is fresh, so it does not carry the builder's context
         for part in ("do it", "THE DIFF", "line 99", "line 40"):
             self.assertIn(part, run.prompts[1])
         self.assertNotIn("line 39\n", run.prompts[1])

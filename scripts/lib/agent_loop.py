@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -26,8 +27,12 @@ DIFF_LIMIT = 40_000
 VALIDATE_TIMEOUT = 3600
 DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment and cold review
 LADDER = ("haiku", "sonnet", "opus")
+RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round starts its next build one level up (#1015)
+READER = "sonnet"  # the least capable model that reads a commit: no story is read by anything weaker (#1015)
 SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
+READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
+                 "and make no tool call and no change.")
 
 
 def validation_command(cwd: str | Path) -> list[str] | None:
@@ -56,12 +61,23 @@ def gate_tail(output: str) -> str:
 
 
 def branch_diff(cwd: str | Path) -> str:
-    """The story's whole diff against origin's default branch, cut at DIFF_LIMIT characters."""
+    """The story's whole diff against origin's default branch, cut at DIFF_LIMIT characters with a marker that names the files it cut (#1015)."""
     for base in ("origin/main", "origin/master"):
         ran = subprocess.run(["git", "-C", str(cwd), "diff", f"{base}...HEAD"], capture_output=True, text=True)
         if ran.returncode == 0:
-            return ran.stdout[:DIFF_LIMIT]
+            return cut_diff(ran.stdout)
     return ""
+
+
+def cut_diff(full: str) -> str:
+    """The diff, or its first DIFF_LIMIT characters followed by the files the cut left unseen in full, so no reader passes a diff it did not see (#1015)."""
+    if len(full) <= DIFF_LIMIT:
+        return full
+    starts = [(m.start(), m.group(1)) for m in re.finditer(r"^diff --git a/(\S+) b/", full, re.M)]
+    ends = [start for start, _ in starts[1:]] + [len(full)]
+    unseen = [name for (_, name), end in zip(starts, ends) if end > DIFF_LIMIT]  # the file the cut lands in is partly seen, so it is named too
+    which = ", ".join(unseen) if unseen else "the rest of the diff"
+    return f"{full[:DIFF_LIMIT]}\n[The diff was cut at {DIFF_LIMIT} characters. The reader did not see these files in full: {which}.]\n"
 
 
 def fix_brief(task: str, cwd: str | Path, tail: str) -> str:
@@ -85,9 +101,32 @@ def escalate(model_name: str, failures: int) -> str:
     return LADDER[min(LADDER.index(model_name) + 1, len(LADDER) - 1)]
 
 
+def restart_model(session: str, base: str) -> str:
+    """The model a story's next build starts on (#1015): one level above `base` when its last build reached RESTART_ROUND, which the run log keeps,
+    so an escalation survives a restart. `base` for a story whose last build did not get that far, or whose log cannot be read."""
+    reached = 0
+    try:
+        lines = (failure_log.home() / "run-log.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return base
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("story") == session and isinstance(row.get("round"), int):
+            reached = 1 if row["round"] == 1 else max(reached, row["round"])  # a round 1 starts a new build
+    return escalate(base, 2) if reached >= RESTART_ROUND else base
+
+
+def reader_for(builder: str) -> str:
+    """The model that reads a story's commit (#1015): the builder's own model when it is Sonnet or larger, else Sonnet, so a Haiku build is never read by a weaker reader."""
+    return LADDER[max(LADDER.index(READER), LADDER.index(builder) if builder in LADDER else 0)]
+
+
 REVIEW_BRIEF = ("You are a fresh reader. You see only the story, the diff and the test output below, and you make no tool call. Check that the diff does what the story's "
-                "scenarios say and breaks nothing the diff itself shows. Answer PASS on the first line when it does. Otherwise list each finding on its own line "
-                "with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
+                "scenarios say and breaks nothing the diff itself shows. If the diff says it was cut, name the files you could not check. Answer PASS on the first line "
+                "when it does. Otherwise list each finding on its own line with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
 FIX_BRIEF = ("A fresh reader checked your story's commit and reports a problem below. Fix it, commit by explicit path and stop: the runner validates "
@@ -99,22 +138,30 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
     return FIX_BRIEF.format(task=task, diff=branch_diff(cwd), finding=finding)
 
 
-def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print) -> dict:
-    """One fresh headless reader on the diff, the story and the test output (#891). Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str}
-    and appends one line for it to the run log. A reader that fails never stops a landing."""
+def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER) -> dict:
+    """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
+    A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
+    Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
     prompt = REVIEW_BRIEF.format(task=task, diff=branch_diff(cwd), tail=tail)
-    try:
-        reply = run(prompt, str(cwd), allowed_tools="Read", max_turns=1, session=f"{session}-review", system=SYSTEM, model="sonnet")
-    except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
-        say(f"Review: no reader ran. {exc}")
-        return {"verdict": "none", "text": str(exc)}
-    text = (reply.get("text") or "").strip()
-    verdict = "pass" if text.upper().startswith("PASS") else "findings" if text else "none"
-    log_round(f"{session}-review", 1, "sonnet", reply)
-    log_review(session, verdict, text)
-    say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
-    return {"verdict": verdict, "text": text}
+    failure = ""
+    for attempt in (1, 2):
+        try:
+            reply = run(prompt, str(cwd), allowed_tools="Read", max_turns=1, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
+        except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
+            failure = str(exc)
+        else:
+            text = (reply.get("text") or "").strip()
+            if reply.get("code", 0) == 0 and text:
+                verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
+                log_round(f"{session}-review", 1, model_name, reply)
+                log_review(session, verdict, text)
+                say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
+                return {"verdict": verdict, "text": text}
+            failure = f"claude exited {reply['code']}." if reply.get("code", 0) != 0 else "The reader replied with nothing."
+        say(f"Review: no verdict on attempt {attempt}. {failure}")
+    log_review(session, "none", failure)
+    return {"verdict": "none", "text": failure}
 
 
 def log_review(story: str, verdict: str, text: str) -> None:
@@ -178,13 +225,14 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print, size: str = "") -> dict:
+             run=None, check=None, say=print) -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
-    finds a problem, so nothing is pushed (#975). `run` and `check` default to model.run_cli and validate."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, size)
+    finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
+    `run` and `check` default to model.run_cli and validate."""
+    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, size) -> dict:
+def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say) -> dict:
     run, check = run or model.run_cli, check or validate
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
@@ -228,17 +276,18 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, si
                     "rounds": n, "tokens": tokens, "summary": summary}
         passed, tail = check(cwd)
         if passed:
-            from lib import cmd_land  # land imports this module's neighbours, so the import waits until a story passes
-            if cmd_land.needs_review(size, cmd_land.changed_paths(Path(cwd))):
-                verdict = review(task, cwd, session, tail, run=run, say=say)
-                if verdict["verdict"] == "findings":
-                    findings += 1
-                    if findings == 1:  # one fix session, then the reader reads again (#975)
-                        say(f"Round {n}: the reader found a problem. One fix session, then the reader reads again.")
-                        prompt, claude_session, fix_owed = review_brief(task, cwd, verdict["text"]), "", True
-                        continue
-                    return {"done": False, "held": verdict["text"], "reason": f"The fresh reader reports a problem, so nothing is pushed: {verdict['text'][:300]}",
-                            "rounds": n, "tokens": tokens, "summary": summary}
+            verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name))
+            if verdict["verdict"] == "none":  # the reader gave no verdict twice, so the story is held for a retry and nothing lands (#1015)
+                return {"done": False, "held": verdict["text"], "reason": f"The fresh reader gave no verdict, so nothing is pushed: {verdict['text'][:300]}",
+                        "rounds": n, "tokens": tokens, "summary": summary}
+            if verdict["verdict"] == "findings":
+                findings += 1
+                if findings == 1:  # one fix session, then the reader reads again (#975)
+                    say(f"Round {n}: the reader found a problem. One fix session, then the reader reads again.")
+                    prompt, claude_session, fix_owed = review_brief(task, cwd, verdict["text"]), "", True
+                    continue
+                return {"done": False, "held": verdict["text"], "reason": f"The fresh reader reports a problem, so nothing is pushed: {verdict['text'][:300]}",
+                        "rounds": n, "tokens": tokens, "summary": summary}
             return {"done": True, "reason": "The repo's validation passes.", "rounds": n, "tokens": tokens, "summary": summary}
         failures += 1
         say(f"Round {n}: validation failed.")

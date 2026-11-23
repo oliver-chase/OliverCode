@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 
-from lib import candidates, cmd_owner
+from lib import agent_loop, candidates, cmd_owner
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -220,9 +220,11 @@ def long_wait(body: str, today: datetime.date | None = None) -> str:
     return ""
 
 
-def models(size: str) -> tuple[str, str]:
-    """(builder model, QA) for a story size: XS and S use Haiku for both, M and bigger a Sonnet builder and a lighter QA pass."""
-    return ("haiku", "haiku") if size in SMALL else ("sonnet", "a lighter pass")
+def models(size: str, labels=(), session: str = "") -> tuple[str, str]:
+    """(builder model, reader model) a story starts on (#1015): the builder is the one agent_loop starts with, after a restart escalation, and the
+    reader is never weaker than Sonnet. The brief names both, so it says what the runner does."""
+    builder = agent_loop.restart_model(session, agent_loop.model_for(size, labels))
+    return builder, agent_loop.reader_for(builder)
 
 
 def plan(issues: list[dict], today: datetime.date | None = None) -> dict:
@@ -244,7 +246,7 @@ def plan(issues: list[dict], today: datetime.date | None = None) -> dict:
             waits[i["number"]] = (f"waits on {when}: rewrite it to " + ("do it now" if rank[i["number"]][0] in ("P0", "P1") else "close it")
                                   + " (do it now or close it)")
     return {"groups": sorted(groups, key=lambda g: rank[g[0]]), "rewrite": sorted(n for n in areas if not areas[n]), "waits": waits,
-            "models": {i["number"]: models(cmd_groom.size_of(i)) for i in todo if areas[i["number"]]}}
+            "models": {i["number"]: models(cmd_groom.size_of(i), i.get("labels") or (), f"story-{i['number']}") for i in todo if areas[i["number"]]}}
 
 
 def render(found: dict) -> str:

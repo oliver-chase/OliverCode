@@ -126,11 +126,12 @@ class Io:
 
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names and the owner's decisions, and the
-        model follows the story size, with a small story getting a third round on the next model up (#890)."""
+        model is the one the brief names (#1015), with a small story getting a third round (#890)."""
         n, size = issue["number"], cmd_groom.size_of(issue)
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), owner_decisions.brief_section(n)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
-        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=agent_loop.model_for(size, issue.get("labels")), size=size,
+        builder, _reader = intake.models(size, issue.get("labels") or (), f"story-{n}")
+        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder,
                                    rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0))
 
     def commits(self, worktree: Path) -> int:

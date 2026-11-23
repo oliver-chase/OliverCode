@@ -32,7 +32,7 @@ HEADLESS_RULES = """Builder rules:
 - Commit and stop. The runner validates the commit, lands it with `olivercode land`, logs the story and closes it, so you never validate, land, log or close
 - Leave production deploys, payments, credentials and the owner's rules files (CLAUDE.md, VOICE.md, DESIGN.md) to the owner
 - Read an issue and its comments over REST with `gh api repos/OWNER/REPO/issues/N` and `.../issues/N/comments`, which spend no GraphQL points. `gh issue` and `gh project` spend the shared 5,000-point GraphQL hour
-- {model}, and when you wait for a result end your turn and never poll
+- {model}. When you wait for a result, end your turn and never poll
 - Report the branch and the commits
 - Start no session. When you need a decision, choose the option you recommend and write the reason in the commit message"""
 
@@ -40,9 +40,8 @@ HEADLESS_RULES = """Builder rules:
 def headless_brief(n: int, story: dict, agent: str, worktree=None, extras: str = "", note: str = "") -> str:
     """The one brief a headless builder gets, for `dispatch` and `drain` alike (#877): the story, what it names, and rules that end at the commit.
     `extras` is text between the story and the rules (code excerpts, owner decisions) and `note` says why an earlier builder stopped."""
-    size = cmd_groom.size_of(story)
-    builder, qa = intake.models(size)
-    model = f"Run on {builder.capitalize()} with {'Haiku' if qa == 'haiku' else qa} for QA"
+    builder, reader = intake.models(cmd_groom.size_of(story), story.get("labels") or (), f"story-{n}")  # the same names the runner starts (#1015)
+    model = f"Run on {builder.capitalize()}, and a fresh {reader.capitalize()} reader reads the commit before it lands"
     body = (story.get("body") or "").strip()
     extras = extras.replace(" and validate before the last commit. `olivercode land` then lands the branch and each story is closed.", ". The runner validates and lands the branch and closes each story.")
     text = f"Story #{n}: {story['title']}\n\n{body}\n\n{extras + chr(10) if extras else ''}{HEADLESS_RULES.format(n=n, model=model, agent=agent)}\n"
