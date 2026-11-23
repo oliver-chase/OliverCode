@@ -37,11 +37,9 @@ class InitFleet(unittest.TestCase):
         names = {p.name for p in cmd_initfleet.TEMPLATE.iterdir()}
         self.assertEqual(names, {"repo-profiles.json", "owner-rules.json", "owner-queue.jsonl", "review-config.json", "CLAUDE.md"})
         text = " ".join(p.read_text() for p in cmd_initfleet.TEMPLATE.iterdir()).lower()
-        import subprocess
-        who = subprocess.run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"], capture_output=True, text=True).stdout
-        owner = who.strip().rstrip("/").split("/")[-2].split(":")[-1].lower() if "/" in who else ""
-        if owner:
-            self.assertNotIn(owner, text)
+        # The template holds no repo URL or address, so it names no owner.
+        for forbidden in ("github.com/", "@"):
+            self.assertNotIn(forbidden, text)
 
     def run_cmd(self, runner, *extra):
         dest = temp_dir(self) / "fleet"

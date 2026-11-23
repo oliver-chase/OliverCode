@@ -15,12 +15,8 @@ from lib import candidates, failure_log, gh_budget, intake, lesson_cover, story_
 
 
 def origin_as_github() -> dict:
-    """Environment that makes a checkout whose origin is a local path (a clean clone) read as its own GitHub repo, so a child process names a target for its candidates."""
-    origin = subprocess.run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"], capture_output=True, text=True).stdout.strip()
-    if not origin or "github.com" in origin:
-        return {}
-    cfg = json.loads((REPO_ROOT / "docs" / "backlog-config.json").read_text(encoding="utf-8"))
-    return {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.https://github.com/{cfg['repoOwner']}/{cfg['repoName']}.git.insteadOf", "GIT_CONFIG_VALUE_0": origin}
+    """Environment that gives a child process an injected GitHub origin, so it names a target for its candidates whatever the checkout's own remote is."""
+    return {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "remote.origin.url", "GIT_CONFIG_VALUE_0": "https://github.com/acme/widget.git"}
 
 
 class Runner:

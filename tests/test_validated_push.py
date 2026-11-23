@@ -48,8 +48,8 @@ class ValidatedPush(unittest.TestCase):
         shutil.copytree(self._template / "work", self.work, symlinks=True)
         self.git("remote", "set-url", "origin", str(self.remote))
 
-    def git(self, *args):
-        return subprocess.run(["git", *args], cwd=self.work, env=self.env, capture_output=True, text=True)
+    def git(self, *args, env=None):
+        return subprocess.run(["git", *args], cwd=self.work, env={**self.env, **(env or {})}, capture_output=True, text=True)
 
     def tree(self):
         return self.git("rev-parse", "HEAD^{tree}").stdout.strip()
@@ -61,8 +61,7 @@ class ValidatedPush(unittest.TestCase):
             f.write(line + "\n")
 
     def push(self, ref="main", **env):
-        self.env.update(env)
-        result = self.git("push", "origin", ref)
+        result = self.git("push", "origin", ref, env=env)  # the extra settings last for this push only
         result.output = result.stdout + result.stderr
         return result
 
@@ -78,7 +77,9 @@ class ValidatedPush(unittest.TestCase):
 
     def test_a_record_for_another_tree_refuses(self):
         self.write_record("1" * 40)
-        self.assertNotEqual(self.push().returncode, 0)
+        result = self.push()
+        self.assertNotEqual(result.returncode, 0, result.output)
+        self.assertIn("no passing full validation", result.output)
 
     def test_a_record_of_a_failed_validation_refuses(self):
         # Lesson S-no-validate: a push happens only after the repo's validation passes.
@@ -89,7 +90,9 @@ class ValidatedPush(unittest.TestCase):
 
     def test_a_record_older_than_seven_days_refuses(self):
         self.write_record(self.tree(), datetime.now(timezone.utc) - timedelta(days=8))
-        self.assertNotEqual(self.push().returncode, 0)
+        result = self.push()
+        self.assertNotEqual(result.returncode, 0, result.output)
+        self.assertIn("no passing full validation", result.output)
 
     def test_a_non_main_push_needs_no_validation_record_once_the_branch_override_is_set(self):
         self.git("checkout", "-q", "-b", "feat")
@@ -122,7 +125,10 @@ class ValidatedPush(unittest.TestCase):
     def test_the_launcher_recorded_by_a_pass_is_found(self):
         del self.env["OLIVERCODE_LAUNCHER"]
         (self.home / "launcher").write_text(str(LAUNCHER) + "\n")
-        self.assertNotEqual(self.push().returncode, 0)
+        result = self.push()
+        self.assertNotEqual(result.returncode, 0, result.output)
+        self.assertIn("no passing full validation", result.output)
+        self.assertNotIn("no olivercode launcher resolves", result.output)
 
     def oc_checkout(self):
         """A home whose ~/.claude/CLAUDE.md links into a checkout holding scripts/olivercode, as `olivercode land` finds it."""

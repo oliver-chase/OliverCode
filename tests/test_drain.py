@@ -684,10 +684,6 @@ class StoppedRun(unittest.TestCase):
         self.assertEqual((0, []), (code, ended))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CloseByScript(unittest.TestCase):
     def test_a_refused_close_leaves_the_story_open_with_one_comment_naming_the_gate(self):
         io = FakeIo([issue(1)])
@@ -706,3 +702,7 @@ class CloseByScript(unittest.TestCase):
         self.assertTrue(closed)
         self.assertEqual([1], io.closed)
         self.assertEqual(1, io.started.count(1))
+
+
+if __name__ == "__main__":
+    unittest.main()

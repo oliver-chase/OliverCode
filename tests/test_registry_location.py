@@ -6,6 +6,7 @@ copy, or every fleet command would silently see an empty fleet.
 """
 
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -52,6 +53,20 @@ class RegistryLocation(unittest.TestCase):
     def test_the_tracked_registry_ships_empty(self):
         tracked = json.loads((local_config.OC_ROOT / "shared" / "repo-profiles.json").read_text())
         self.assertEqual(tracked["profiles"], {})
+
+
+class TestSaveLocalGuard(unittest.TestCase):
+    def test_no_file_in_use_refuses_the_write(self):
+        with mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": os.devnull}):
+            with self.assertRaisesRegex(RuntimeError, "no local config file"):
+                local_config.save_local({"x": 1})
+
+    def test_a_named_scratch_file_is_written(self):
+        scratch = temp_dir(self) / "local.json"
+        with mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(scratch)}):
+            local_config.save_local({"x": 1})
+        self.assertEqual({"x": 1}, json.loads(scratch.read_text()))
+
 
 class SymlinkedExample(unittest.TestCase):
     """A configured registry that is a symlink to the tracked example counts as unset (#845)."""

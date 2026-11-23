@@ -34,70 +34,55 @@ class Isolated(unittest.TestCase):
 
 
 class TestLimitHold(Isolated):
-    def _nothing_is_held_at_first(self):
+    def test_nothing_is_held_at_first(self):
         self.assertEqual("", gh_budget.refusal())
 
-    def _a_noted_limit_holds_every_caller_until_the_time_named(self):
+    def test_a_noted_limit_holds_every_caller_until_the_time_named(self):
         until = gh_budget.note_limit(seconds=600)
         self.assertIn(time.strftime("%H:%M", time.localtime(until)), gh_budget.refusal())
 
-    def _a_longer_hold_is_never_shortened(self):
+    def test_a_longer_hold_is_never_shortened(self):
         long = gh_budget.note_limit(seconds=1000)
         self.assertEqual(long, gh_budget.note_limit(seconds=10))
 
-    def _clear_lifts_the_hold(self):
+    def test_clear_lifts_the_hold(self):
         gh_budget.note_limit()
         gh_budget.clear()
         self.assertEqual("", gh_budget.refusal())
 
-    def test_nothing_is_held_at_first(self):
-        for step in (self._nothing_is_held_at_first, self._a_noted_limit_holds_every_caller_until_the_time_named, self._a_longer_hold_is_never_shortened, self._clear_lifts_the_hold,):
-            self.setUp()
-            step()
-
 
 class TestWriteCap(Isolated):
-    def _writes_up_to_the_cap_pass_and_the_next_is_refused_with_a_time(self):
+    def test_writes_up_to_the_cap_pass_and_the_next_is_refused_with_a_time(self):
         with mock.patch.object(gh_budget, "WRITES_PER_HOUR", 3):
             self.assertEqual(["", "", ""], [gh_budget.reserve_write() for _ in range(3)])
             self.assertIn("3 GitHub writes in the last hour", gh_budget.reserve_write())
 
-    def _a_write_older_than_an_hour_no_longer_counts(self):
+    def test_a_write_older_than_an_hour_no_longer_counts(self):
         with mock.patch.object(gh_budget, "WRITES_PER_HOUR", 1):
             gh_budget.reserve_write(now=time.time() - 3700)
             self.assertEqual("", gh_budget.reserve_write())
 
-    def test_writes_up_to_the_cap_pass_and_the_next_is_refused_with_a_time(self):
-        for step in (self._writes_up_to_the_cap_pass_and_the_next_is_refused_with_a_time, self._a_write_older_than_an_hour_no_longer_counts,):
-            self.setUp()
-            step()
-
 
 class TestCallCap(Isolated):
-    def _calls_up_to_the_cap_pass_and_the_next_names_the_seconds_to_wait(self):
+    def test_calls_up_to_the_cap_pass_and_the_next_names_the_seconds_to_wait(self):
         with mock.patch.object(gh_budget, "CALLS_PER_MINUTE", 2):
             now = time.time()
             self.assertEqual(["", ""], [gh_budget.reserve_call(now=now) for _ in range(2)])
             self.assertIn("Try again in 60 seconds", gh_budget.reserve_call(now=now))
 
-    def _a_call_older_than_a_minute_no_longer_counts(self):
+    def test_a_call_older_than_a_minute_no_longer_counts(self):
         with mock.patch.object(gh_budget, "CALLS_PER_MINUTE", 1):
             gh_budget.reserve_call(now=time.time() - 61)
             self.assertEqual("", gh_budget.reserve_call())
 
-    def test_calls_up_to_the_cap_pass_and_the_next_names_the_seconds_to_wait(self):
-        for step in (self._calls_up_to_the_cap_pass_and_the_next_names_the_seconds_to_wait, self._a_call_older_than_a_minute_no_longer_counts,):
-            self.setUp()
-            step()
-
 
 class TestPointsReserve(Isolated):
-    def _points_under_the_floor_hold_every_caller_until_the_reset(self):
+    def test_points_under_the_floor_hold_every_caller_until_the_reset(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             why = gh_budget.points_refusal(fetch=lambda: {"remaining": 120, "reset": time.time() + 600})
         self.assertIn("120", why)
 
-    def _points_above_the_floor_pass_and_the_reading_is_cached(self):
+    def test_points_above_the_floor_pass_and_the_reading_is_cached(self):
         calls = []
         fetch = lambda: calls.append(1) or {"remaining": 4000, "reset": time.time() + 600}
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
@@ -105,7 +90,7 @@ class TestPointsReserve(Isolated):
             self.assertEqual("", gh_budget.points_refusal(fetch=fetch))
         self.assertEqual(1, len(calls))
 
-    def _a_reading_older_than_the_ttl_is_fetched_again(self):
+    def test_a_reading_older_than_the_ttl_is_fetched_again(self):
         calls = []
         fetch = lambda: calls.append(1) or {"remaining": 4000, "reset": time.time() + 600}
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
@@ -116,16 +101,11 @@ class TestPointsReserve(Isolated):
             gh_budget.points_refusal(fetch=fetch, now=now + gh_budget.POINTS_TTL + 1)
         self.assertEqual(2, len(calls))
 
-    def _a_failed_reading_fails_open(self):
+    def test_a_failed_reading_fails_open(self):
         def boom():
             raise OSError("no gh")
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             self.assertEqual("", gh_budget.points_refusal(fetch=boom))
-
-    def test_points_under_the_floor_hold_every_caller_until_the_reset(self):
-        for step in (self._points_under_the_floor_hold_every_caller_until_the_reset, self._points_above_the_floor_pass_and_the_reading_is_cached, self._a_reading_older_than_the_ttl_is_fetched_again, self._a_failed_reading_fails_open,):
-            self.setUp()
-            step()
 
     def test_the_guard_denies_a_gh_call_when_the_cached_reading_is_low(self):
         (self.home / "gh-points.json").write_text(json.dumps({"at": time.time(), "remaining": 50, "reset": time.time() + 600}))
@@ -148,16 +128,16 @@ class TestHooks(Isolated):
         out = self.hook(GUARD, {"tool_input": {"command": "gh project item-edit --id X --field-id F"}})
         self.assertIn("batch_project.py", out["permissionDecisionReason"])
 
-    def _a_gh_command_passes_when_nothing_is_held(self):
+    def test_a_gh_command_passes_when_nothing_is_held(self):
         self.assertIsNone(self.hook(GUARD, {"tool_input": {"command": "gh issue list"}}))
 
-    def _a_gh_command_is_denied_while_held_and_says_until_when(self):
+    def test_a_gh_command_is_denied_while_held_and_says_until_when(self):
         gh_budget.note_limit()
         out = self.hook(GUARD, {"tool_input": {"command": "cd x && gh project item-list 15"}})
         self.assertEqual("deny", out["permissionDecision"])
         self.assertIn("until about", out["permissionDecisionReason"])
 
-    def _a_mixed_git_and_gh_command_refuses_only_the_gh_step_while_held(self):
+    def test_a_mixed_git_and_gh_command_refuses_only_the_gh_step_while_held(self):
         gh_budget.note_limit()
         out = self.hook(GUARD, {"tool_input": {"command": "git add a.txt && gh issue close 5 && git status\ncd x; gh pr list"}})
         self.assertEqual("ask", out["permissionDecision"])
@@ -168,11 +148,6 @@ class TestHooks(Isolated):
         self.assertEqual(2, run.stderr.count("until about"))
         for command in ("git status | gh issue list", "git log $(gh issue list)", "gh issue list"):  # not safely splittable, or no git step
             self.assertEqual("deny", self.hook(GUARD, {"tool_input": {"command": command}})["permissionDecision"], command)
-
-    def test_a_gh_command_passes_when_nothing_is_held(self):
-        for step in (self._a_gh_command_passes_when_nothing_is_held, self._a_gh_command_is_denied_while_held_and_says_until_when, self._a_mixed_git_and_gh_command_refuses_only_the_gh_step_while_held,):
-            self.setUp()
-            step()
 
     def test_a_script_that_calls_gh_is_denied_while_held(self):
         gh_budget.note_limit()
@@ -200,30 +175,25 @@ class TestHooks(Isolated):
                 self.assertTrue(gh_budget.refusal())
                 gh_budget.clear()
 
-    def _printing_the_guards_own_source_records_nothing(self):
+    def test_printing_the_guards_own_source_records_nothing(self):
         source = 'LIMIT_TEXT = re.compile(r"rate limit (already )?exceeded|secondary rate limit|abuse detection")'
         self.hook(WATCH, {"tool_input": {"command": "grep -n LIMIT_TEXT scripts/lib/gh_budget.py"},
                           "tool_response": {"stdout": source}})
         self.assertEqual("", gh_budget.refusal())
 
-    def _printing_a_file_that_quotes_a_gh_error_records_nothing(self):
+    def test_printing_a_file_that_quotes_a_gh_error_records_nothing(self):
         quoted = '   146\t                          "tool_response": {"stderr": "gh: API rate limit already exceeded for user ID 1."}})'
         self.hook(WATCH, {"tool_input": {"command": "cat -n tests/test_gh_budget.py"}, "tool_response": {"stdout": quoted}})
         self.assertEqual("", gh_budget.refusal())
 
-    def _a_script_that_hits_the_limit_still_holds_the_other_agents(self):
+    def test_a_script_that_hits_the_limit_still_holds_the_other_agents(self):
         self.hook(WATCH, {"tool_input": {"command": "python3 scripts/batch_project.py --input -"},
                           "tool_response": {"stderr": "gh: API rate limit already exceeded for user ID 1."}})
         self.assertTrue(gh_budget.refusal())
 
-    def _ordinary_output_records_nothing(self):
+    def test_ordinary_output_records_nothing(self):
         self.hook(WATCH, {"tool_input": {"command": "gh issue list"}, "tool_response": {"stdout": "#1 a story"}})
         self.assertEqual("", gh_budget.refusal())
-
-    def test_printing_the_guards_own_source_records_nothing(self):
-        for step in (self._printing_the_guards_own_source_records_nothing, self._printing_a_file_that_quotes_a_gh_error_records_nothing, self._a_script_that_hits_the_limit_still_holds_the_other_agents, self._ordinary_output_records_nothing,):
-            self.setUp()
-            step()
 
     def test_writes_count_against_the_cap_and_reads_do_not(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_WRITES_PER_HOUR": "1"}):
@@ -276,7 +246,7 @@ class TestCostLog(Isolated):
         self.assertIn("REST: 3 of the 5,000 hourly requests", next(l for l in lines if l.startswith("REST:")))
         self.assertTrue(any(l.split()[:3] == ["0", "3", "s2"] for l in lines), lines)
 
-    def _a_session_over_its_share_is_held_while_others_are_active(self):
+    def test_a_session_over_its_share_is_held_while_others_are_active(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             for n, (key, session, spent) in enumerate((("a", "busy", 3000), ("b", "quiet", 10))):
                 gh_budget.note_before(key, fetch=self.points(5000), now=100 + 2 * n)
@@ -284,16 +254,11 @@ class TestCostLog(Isolated):
             self.assertIn("over its share", gh_budget.share_refusal("busy", now=110))
             self.assertEqual("", gh_budget.share_refusal("quiet", now=110))
 
-    def _one_active_session_may_use_the_whole_budget(self):
+    def test_one_active_session_may_use_the_whole_budget(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             gh_budget.note_before("a", fetch=self.points(5000), now=100)
             gh_budget.note_after("a", "solo", "gh x", fetch=self.points(2000), now=101)
             self.assertEqual("", gh_budget.share_refusal("solo", now=102))
-
-    def test_a_session_over_its_share_is_held_while_others_are_active(self):
-        for step in (self._a_session_over_its_share_is_held_while_others_are_active, self._one_active_session_may_use_the_whole_budget,):
-            self.setUp()
-            step()
 
     def test_a_line_older_than_a_day_is_dropped_when_a_new_one_is_written(self):
         gh_budget.note_before("a", fetch=self.points(5000), now=100)
@@ -329,25 +294,20 @@ class TestGuardCheck(Isolated):
         import gh_guard
         self.guard = gh_guard
 
-    def _a_gh_call_that_may_run_is_costed_under_its_tool_call_id(self):
+    def test_a_gh_call_that_may_run_is_costed_under_its_tool_call_id(self):
         with mock.patch.object(gh_budget, "note_before") as noted:
             self.assertEqual("", self.guard.check({"tool_input": {"command": "gh issue list"}, "session_id": "s", "tool_use_id": "t1"}))
         noted.assert_called_once_with("t1")
 
-    def _a_rest_call_is_costed_too(self):
+    def test_a_rest_call_is_costed_too(self):
         with mock.patch.object(gh_budget, "note_before") as noted:
             self.assertEqual("", self.guard.check({"tool_input": {"command": "gh api repos/o/r/issues/5"}, "session_id": "s", "tool_use_id": "t4"}))
         noted.assert_called_once_with("t4")
 
-    def _a_command_that_runs_no_gh_is_not_costed(self):
+    def test_a_command_that_runs_no_gh_is_not_costed(self):
         with mock.patch.object(gh_budget, "note_before") as noted:
             self.guard.check({"tool_input": {"command": "grep -n LIMIT_TEXT scripts/lib/gh_budget.py"}, "tool_use_id": "t2"})
         noted.assert_not_called()
-
-    def test_a_gh_call_that_may_run_is_costed_under_its_tool_call_id(self):
-        for step in (self._a_gh_call_that_may_run_is_costed_under_its_tool_call_id, self._a_rest_call_is_costed_too, self._a_command_that_runs_no_gh_is_not_costed,):
-            self.setUp()
-            step()
 
     def test_a_held_call_is_refused_and_not_costed(self):
         gh_budget.note_limit()
@@ -362,21 +322,16 @@ class TestUsesGh(unittest.TestCase):
         import gh_guard
         self.uses = gh_guard.uses_gh
 
-    def _a_heredoc_body_is_text_and_not_a_gh_call(self):
+    def test_a_heredoc_body_is_text_and_not_a_gh_call(self):
         command = "python3 - <<'EOF'\ngh issue list\ncheck_board_hygiene.py --config x\nEOF"
         self.assertFalse(self.uses(command))
 
-    def _a_gh_call_after_a_heredoc_is_still_seen(self):
+    def test_a_gh_call_after_a_heredoc_is_still_seen(self):
         command = "cat <<EOF\nplain text\nEOF\ngh issue list"
         self.assertTrue(self.uses(command))
 
-    def _a_gh_call_before_a_heredoc_is_still_seen(self):
+    def test_a_gh_call_before_a_heredoc_is_still_seen(self):
         self.assertTrue(self.uses("gh issue create --body-file - <<'EOF'\nbody\nEOF"))
-
-    def test_a_heredoc_body_is_text_and_not_a_gh_call(self):
-        for step in (self._a_heredoc_body_is_text_and_not_a_gh_call, self._a_gh_call_after_a_heredoc_is_still_seen, self._a_gh_call_before_a_heredoc_is_still_seen,):
-            self.setUp()
-            step()
 
     def test_reading_or_searching_a_script_that_calls_gh_is_not_a_gh_call(self):
         self.assertFalse(self.uses("sed -n 1,20p skills/backlog/scripts/complete_story.py"))

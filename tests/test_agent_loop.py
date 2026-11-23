@@ -74,7 +74,8 @@ class TestRunLog(unittest.TestCase):
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             agent_loop.run_loop("do it", repo, "story-878", run=replies, check=lambda cwd: next(checks), say=lambda *_: None, model_name="sonnet")
         rows = [json.loads(line) for line in (home / "run-log.jsonl").read_text().splitlines()]
-        self.assertEqual([1, 2, 1], [r["round"] for r in rows])  # the reader's own row comes last
+        self.assertEqual([1, 2, 1], [r["round"] for r in rows if "round" in r])  # the reader's own row comes last
+        self.assertEqual(("story-878", "pass"), (rows[-1]["story"], rows[-1]["review"]))  # then its verdict, which holds no round
         self.assertEqual(("story-878", "sonnet", 3, 4, 100, 50, 0.5), tuple(rows[0][k] for k in ("story", "model", "input", "output", "cache_read", "cache_write", "cost_usd")))
         self.assertIsNone(rows[1]["cost_usd"])
 
@@ -144,7 +145,7 @@ class TestExitOne(unittest.TestCase):
         self.assertEqual(("error_during_execution", "auth expired"), (self.rows()[0]["stop"], self.rows()[0]["stderr_tail"]))
 
 
-class TestRunLog(unittest.TestCase):
+class TestRunLogUsage(unittest.TestCase):
     """#878, #909, #976: a run-log line holds the CLI's usage, cost and stop reason and the start size, which is the first call's context and never the session's total."""
 
     def setUp(self):

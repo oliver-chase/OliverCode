@@ -182,6 +182,11 @@ class TestSessionCheck(RepoCase):
         super().setUp()
         self.claude = self.tmp / "claude"
         self.claude.mkdir()
+        # This machine's own repos and this checkout's distance from origin/main are not the subject: each test injects none.
+        self.machine = {name: mock.patch.object(session, name, return_value=[]) for name in ("placement_notes", "checkout_notes")}
+        for patcher in self.machine.values():
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_names_gates_that_git_skips(self):
         self.gates(point_git_at_them=False)
@@ -200,8 +205,8 @@ class TestSessionCheck(RepoCase):
         self.assertIn("no commit gates", " ".join(session.notes(self.repo, self.claude)))
 
     def test_a_headless_start_runs_no_placement_scan(self):
-        self.addCleanup(setattr, session, "checkout_notes", session.checkout_notes)
-        session.checkout_notes = lambda: []  # the checkout under test trails origin/main whenever main moves
+        self.machine["placement_notes"].stop()  # this test runs the real note, whose scan it counts
+        self.addCleanup(self.machine["placement_notes"].start)
         with mock.patch.object(placement, "findings", return_value=[]) as scan, mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": "1"}):
             session.notes(self.tmp, self.claude)
         scan.assert_not_called()

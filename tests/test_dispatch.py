@@ -302,10 +302,6 @@ class TestDispatchRun(DispatchCase):
         self.assertIn("stayed open", out)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestFileExcerpts(unittest.TestCase):
     """#887: the brief holds the functions and callers a story's Files area names."""
 
@@ -339,3 +335,7 @@ class TestBriefRules(unittest.TestCase):
         self.assertIn("Reuse before you write", brief)
         self.assertIn("already exists here, is in the standard library", brief)
         self.assertIn("`shortcut: <limit>, <when to upgrade>`", brief)
+
+
+if __name__ == "__main__":
+    unittest.main()

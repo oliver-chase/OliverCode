@@ -56,10 +56,6 @@ class TestOwnerQueue(unittest.TestCase):
         self.assertIn("set_pinned for x9 with pinned=false", out)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestPreparedOwnerSteps(unittest.TestCase):
     def run_cmd(self, *argv):
         buf = io.StringIO()
@@ -117,3 +113,7 @@ class TestPreparedOwnerSteps(unittest.TestCase):
             self.run_cmd("add", "--session", "s1", "--step", "Key", "--command", "gh auth login", "--error", "refused")
             _, closed = self.run_cmd("done", "1")
             self.assertNotIn("Resume:", closed)
+
+
+if __name__ == "__main__":
+    unittest.main()
