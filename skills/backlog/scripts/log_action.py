@@ -37,13 +37,16 @@ def gh_api(args):
 
 
 def commit_pushed(commit, root=None):
-    """None when `commit` is on origin/main in the checkout at `root`, else the reason it is not (#533)."""
+    """None when `commit` is on the repo's default branch at origin in the checkout at `root`, else the reason it is not (#533, #1012)."""
     git = ["git"] + (["-C", str(root)] if root else [])
     done = subprocess.run(git + ["branch", "-r", "--contains", commit], capture_output=True, text=True)
     if done.returncode != 0:
         return f"commit {commit} is not in this checkout; fetch it, or run this from the repo that holds it"
-    if not any(line.strip() == "origin/main" for line in done.stdout.splitlines()):
-        return f"commit {commit} is not on origin/main; push it first: git push origin HEAD:main"
+    head = subprocess.run(git + ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True).stdout.strip()
+    base = head or "origin/main"
+    holds = {line.strip() for line in done.stdout.splitlines()}
+    if not (holds & ({base} if head else {"origin/main", "origin/master", "origin/develop"})):
+        return f"commit {commit} is not on {base}; push it first: git push origin HEAD:{base.removeprefix('origin/')}"
     return None
 
 

@@ -224,30 +224,30 @@ def check_docs(cfg: placement.Config) -> list[Problem]:
     return [Problem("docs", f"{repo.name}: {line}") for repo in _repos(cfg) for line in hygiene.stale_docs(repo)]
 
 
-def main_checkout_lag(root: Path, fetch: bool = False) -> tuple[int, str]:
+def main_checkout_lag(root: Path, fetch: bool = False, branch: str = "main") -> tuple[int, str]:
     """(commits the checkout trails origin/main by, its state): 'clean' when it is on main with no edits and no local commits, so
     a fast-forward is safe, else 'edited', 'diverged' or 'off main'. Fetches first when asked."""
     if fetch:
         _git(root, "fetch", "-q", "origin")
-    behind = _git(root, "rev-list", "--count", "HEAD..origin/main")
+    behind = _git(root, "rev-list", "--count", f"HEAD..origin/{branch}")
     if behind.returncode:
         return 0, "unknown"
-    if _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != "main":
+    if _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != branch:
         state = "off main"
     elif _git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
         state = "edited"
-    elif _git(root, "rev-list", "--count", "origin/main..HEAD").stdout.strip() != "0":
+    elif _git(root, "rev-list", "--count", f"origin/{branch}..HEAD").stdout.strip() != "0":
         state = "diverged"
     else:
         state = "clean"
     return int(behind.stdout.strip() or 0), state
 
 
-def fast_forward(root: Path, fetch: bool = False) -> tuple[int, str, bool]:
+def fast_forward(root: Path, fetch: bool = False, branch: str = "main") -> tuple[int, str, bool]:
     """Fast-forward the checkout to origin/main when it is clean. Returns (commits behind before, state, whether it moved);
     an edited, diverged or off-main checkout is left alone."""
-    behind, state = main_checkout_lag(root, fetch=fetch)
-    moved = bool(behind) and state == "clean" and _git(root, "merge", "-q", "--ff-only", "origin/main").returncode == 0
+    behind, state = main_checkout_lag(root, fetch=fetch, branch=branch)
+    moved = bool(behind) and state == "clean" and _git(root, "merge", "-q", "--ff-only", f"origin/{branch}").returncode == 0
     return behind, state, moved
 
 

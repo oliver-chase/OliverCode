@@ -48,6 +48,19 @@ class TestValidateTimeout(unittest.TestCase):
         self.assertIn("ran past", tail)
 
 
+class TestValidationCommand(unittest.TestCase):
+    """#1012: the repo's own validation runs, whatever it is called."""
+
+    def test_an_npm_script_stands_in_for_validate_sh(self):
+        repo = temp_dir(self)
+        self.assertIsNone(agent_loop.validation_command(repo))
+        (repo / "package.json").write_text('{"scripts": {"check": "true"}}')
+        self.assertEqual(["npm", "run", "check"], agent_loop.validation_command(repo))
+        (repo / "package.json").write_text('{"scripts": {"check": "true", "verify": "true"}}')
+        (repo / "CLAUDE.md").write_text("Before committing run `npm run verify`.")
+        self.assertEqual(["npm", "run", "verify"], agent_loop.validation_command(repo))
+
+
 class TestRunLog(unittest.TestCase):
     """What a headless run costs (docs/SETUP.md), #878: one JSON line per round under the OliverCode home folder."""
 
@@ -364,7 +377,7 @@ class TestLoop(unittest.TestCase):
 
         out = agent_loop.run_loop("do it", self.repo, "s1", run=lands, say=lambda *_: None)  # the default check, which needs a command
         self.assertEqual((True, 1, "Landed."), (out["done"], out["rounds"], out["summary"]))
-        self.assertEqual((False, "The repo has no validation command to run."), agent_loop.validate(self.repo))
+        self.assertEqual((False, agent_loop.NO_VALIDATION), agent_loop.validate(self.repo))
 
     def test_a_worktree_that_lost_its_validate_script_is_not_read_as_done(self):
         """#1011: the directory is still there, so a missing script means nothing checked the result."""

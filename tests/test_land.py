@@ -393,6 +393,29 @@ class TestCleanup(Base):
         self.assertIn("scripts/validate.sh", out)
 
 
+class TestLandsOnAnyDefaultBranch(Base):
+    """#1012: land reads the repo's default branch and validation, and fast-forwards the story's own repo."""
+
+    def test_a_master_repo_with_an_npm_check_script_lands_on_master_and_leaves_engine_alone(self):
+        origin, engine = self.root / "origin.git", self.root / "engine"
+        git(self.main, "branch", "-m", "master"); git(self.main, "push", "-q", "origin", "master")
+        git(origin, "symbolic-ref", "HEAD", "refs/heads/master"); git(self.main, "remote", "set-head", "origin", "master")
+        git(self.main, "push", "-q", "origin", "--delete", "main")
+        git(self.wt, "fetch", "-q", "--prune", "origin"); git(self.main, "fetch", "-q", "--prune", "origin")
+        git(self.wt, "rm", "-q", "scripts/validate.sh")
+        (self.wt / "package.json").write_text('{"scripts": {"check": "exit 0"}}')
+        git(self.wt, "add", "."); git(self.wt, "commit", "-qm", "Use npm (#9)")
+        shutil.copytree(self.main, engine, symlinks=True, ignore=shutil.ignore_patterns("*.lock"))
+        engine_head = git(engine, "rev-parse", "HEAD").stdout
+        with mock.patch.object(cmd_land, "OC_ROOT", engine), mock.patch.object(cmd_land, "_validate_once", return_value=True) as ran:
+            code, out = self.land()
+        self.assertEqual(0, code, out)
+        self.assertIn("RESULT pushed", out)
+        self.assertEqual(git(origin, "rev-parse", "master").stdout, git(self.main, "rev-parse", "HEAD").stdout, out)
+        ran.assert_called()
+        self.assertEqual(engine_head, git(engine, "rev-parse", "HEAD").stdout, "the OliverCode checkout was moved")
+
+
 class TestUnfinishedWork(Base):
     def test_work_that_fails_validation_gets_a_handover_and_no_pushed_branch(self):
         (self.wt / "scripts" / "validate.sh").write_text("exit 1\n")

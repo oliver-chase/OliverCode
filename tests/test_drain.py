@@ -47,6 +47,8 @@ class FakeIo:
     def worktree(self, n): return Path(f"/wt/{n}")
     repo = Path("/repo")
     def pending(self, n): return False
+    no_validation = False
+    def validation(self): return None if self.no_validation else ["bash", "scripts/validate.sh"]
 
     def build(self, i, wt, note):
         n = i["number"]
@@ -121,6 +123,18 @@ class DrainCase(unittest.TestCase):
         self.assertIn("Skipped #3: it names no Files area.", out)
         self.assertEqual(1, out.count("Skipped #1:"))
         self.assertEqual(code, 0)
+
+    def test_a_repo_with_no_validation_is_refused_before_any_builder_starts(self):
+        io = FakeIo([issue(1)], cap=1)
+        io.no_validation = True
+        code, out, st = self.run_drain(io)
+        self.assertEqual((io.started, st["blocked"]), ([], [1]))
+        self.assertIn("Fix: add scripts/validate.sh", io.comments[0][1])
+
+    def test_a_reason_a_restart_cannot_fix_blocks_the_story_without_a_new_session(self):
+        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "fatal": True, "reason": "nothing checked the result"}]})
+        code, out, st = self.run_drain(io)
+        self.assertEqual((io.started, st["blocked"], st["sessions"]), ([1], [1], 1))
 
     def test_restarts_an_early_exit_then_lands(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "claude exited 1"}]})

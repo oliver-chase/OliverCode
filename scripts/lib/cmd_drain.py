@@ -70,6 +70,10 @@ class Io:
         """The repo's default branch, which every ancestry and count check reads (#877)."""
         return cmd_dispatch._default_branch(self.repo)
 
+    def validation(self) -> list[str] | None:
+        """The repo's own validation command, which a story needs before a builder starts (#1012)."""
+        return agent_loop.validation_command(self.repo)
+
     def list_open(self) -> list[dict] | None:
         """The open stories, each with its board Status and Size attached, or None when either read fails (#1014)."""
         issues = fetch_open(self.slug)
@@ -350,6 +354,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             io.comment(n, f"Close refused by complete_story.py: {reason}")
             raise CloseRefused(reason)
         return True, 0
+    if io.validation() is None:  # no builder starts in a repo that nothing can validate (#1012)
+        io.comment(n, f"Drain blocked: {agent_loop.NO_VALIDATION}")
+        return False, 0
     try:
         worktree = io.worktree(n)
     except RuntimeError as exc:
@@ -362,6 +369,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         tokens += out.get("tokens", 0)
         if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
             io.comment(n, held_comment(worktree, out["held"]))
+            return False, tokens
+        if out.get("fatal"):  # a reason a restart cannot fix blocks the story and starts no new session (#1012)
+            io.comment(n, f"Drain blocked: {out['reason']}")
             return False, tokens
         if out["done"]:
             try:
@@ -496,7 +506,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
         print(f"Refused: {rest[0]} is not a repo with docs/backlog-config.json.")
         return 1
     cfg = backlog_config(repo)
-    slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
+    slug = cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)
     io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
     if not take_run(io, slug, f"drain {repo.name}"):
         return 0

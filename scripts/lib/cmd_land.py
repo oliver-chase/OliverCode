@@ -17,7 +17,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import failure_log, maintain, validated
+from lib import agent_loop, failure_log, maintain, validated
 from lib.validate_gates import PROGRESS  # the lines that also print on the terminal while a land validates (#776)
 from lib.local_config import OC_ROOT
 
@@ -40,10 +40,10 @@ def _run(wt: Path, log, *cmd: str, env: dict | None = None) -> bool:
 def _validate_once(wt: Path, log, say=print) -> bool:
     """One validation run: every line goes to the log, and each gate's start, finish and budget line also prints at that moment."""
     try:
-        proc = subprocess.Popen(["bash", "scripts/validate.sh"], cwd=wt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        proc = subprocess.Popen(agent_loop.validation_command(wt) or ["false"], cwd=wt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                 errors="replace")
     except OSError as exc:
-        log.write(f"bash: {exc}\n")
+        log.write(f"validate: {exc}\n")
         return False
     for line in proc.stdout:
         log.write(line)
@@ -99,8 +99,9 @@ def prepare_worktree(wt: Path, main: Path | None = None) -> list[str]:
     return problems
 
 
-def add_worktree(repo: Path, wt: Path, n: str, base: str = "origin/main") -> list[str]:
+def add_worktree(repo: Path, wt: Path, n: str, base: str = "") -> list[str]:
     """`olivercode worktree add N`: create story/N from base, then prepare it. Returns what failed, empty when it is ready to commit."""
+    base = base or f"origin/{default_branch(repo)}"
     made = subprocess.run(["git", "-C", str(repo), "worktree", "add", str(wt), "-b", f"story/{n}", base], capture_output=True, text=True)
     if made.returncode:
         return [f"the worktree was not created: {(made.stderr or made.stdout).strip()}"]
@@ -111,10 +112,11 @@ RESUME_NOTE = ("Earlier partial work is present on branch story/{n}. Run `git st
                "and continue from it without redoing it.")
 
 
-def resume_worktree(repo: Path, wt: Path, n: str, base: str = "origin/main") -> tuple[list[str], str]:
+def resume_worktree(repo: Path, wt: Path, n: str, base: str = "") -> tuple[list[str], str]:
     """Make story/N's worktree for a builder (#877). A fresh story gets a new branch from base. When the branch or worktree already exists
     (an earlier session stopped), the branch is reused: the worktree is attached when missing, commits and uncommitted changes stay, and the
     branch is rebased onto base when that is clean. Returns (problems, note for the builder's brief), the note empty for a fresh story."""
+    base = base or f"origin/{default_branch(repo)}"
     first = add_worktree(repo, wt, n, base)
     if not first or "already" not in first[0]:
         return first, ""
@@ -136,6 +138,10 @@ def resume_worktree(repo: Path, wt: Path, n: str, base: str = "origin/main") -> 
     return problems, note
 
 
+def default_branch(wt: Path) -> str:
+    return agent_loop.default_branch(wt)
+
+
 def _main_checkout(wt: Path) -> Path | None:
     common = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
     return Path(common).parent if common else None
@@ -144,12 +150,12 @@ def _main_checkout(wt: Path) -> Path | None:
 def squash(wt: Path, story: str, log) -> bool:
     """Replace a branch's commits on top of origin/main with one commit holding the same tree, so main gains one commit per story (#898).
     Its message is the first commit's subject with the story number. A branch of one commit keeps its own message. Returns False when the squash failed."""
-    subjects = _git(wt, "log", "--reverse", "--format=%s", "origin/main..HEAD").stdout.splitlines()
+    subjects = _git(wt, "log", "--reverse", "--format=%s", f"origin/{default_branch(wt)}..HEAD").stdout.splitlines()
     if len(subjects) < 2:
         return True
     title = re.sub(r"\s*\(#\d+\)\s*$", "", subjects[0]).strip() or f"Story {story}"
     tree = _git(wt, "rev-parse", "HEAD^{tree}").stdout.strip()
-    made = _git(wt, "commit-tree", tree, "-p", "origin/main", "-m", f"{title} (#{story})")
+    made = _git(wt, "commit-tree", tree, "-p", f"origin/{default_branch(wt)}", "-m", f"{title} (#{story})")
     new = made.stdout.strip()
     if made.returncode or not new or _git(wt, "reset", "--soft", new).returncode:
         log.write(f"--- squash failed: {made.stderr.strip()}\n")
@@ -159,13 +165,13 @@ def squash(wt: Path, story: str, log) -> bool:
 
 
 def refusal(wt: Path) -> tuple[str, str]:
-    """(result word, message) when wt must not land: it holds uncommitted files, which the push would leave behind, or it has no scripts/validate.sh,
+    """(result word, message) when wt must not land: it holds uncommitted files, which the push would leave behind, or it has no validation command,
     which no run can pass (#1011). ("", "") when it may land."""
     dirty = [line[3:] for line in _git(wt, "status", "--porcelain").stdout.splitlines() if line.strip()]
     if dirty:
         return "dirty-worktree", f"Refused: {wt} has uncommitted files, so nothing landed: {', '.join(dirty[:10])}. Commit them by explicit path or remove them."
-    if not (wt / "scripts" / "validate.sh").is_file():
-        return "no-validate", f"Refused: {wt} has no scripts/validate.sh, so nothing can check the commit and it is not read as done."
+    if agent_loop.validation_command(wt) is None:
+        return "no-validate", f"Refused: {wt} has no validation command, so nothing can check the commit and it is not read as done. Fix: {agent_loop.NO_VALIDATION_FIX}"
     return "", ""
 
 
@@ -178,6 +184,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
     main = _main_checkout(wt)
     if main and main != wt and link_venv(main, wt):
         log.write(f"linked {main / '.venv'} into {wt}\n")
+    base = default_branch(wt)
     deadline, attempt = time.monotonic() + BUDGET, 0
     while attempt < TRIES or time.monotonic() < deadline:
         if attempt >= TRIES:
@@ -186,7 +193,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
             time.sleep(PAUSE)
         attempt += 1
         _run(wt, log, "git", "fetch", "-q", "origin")
-        if not _run(wt, log, "git", "rebase", "origin/main"):
+        if not _run(wt, log, "git", "rebase", f"origin/{base}"):
             _run(wt, log, "git", "rebase", "--abort")
             return "rebase-conflict", ""
         if not squash(wt, story, log):
@@ -194,13 +201,13 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         if not _reuses_pass(wt, log) and not _validates(wt, log):
             return "validate-failed", ""
         _run(wt, log, "git", "fetch", "-q", "origin")
-        if not _run(wt, log, "git", "merge-base", "--is-ancestor", "origin/main", "HEAD"):
+        if not _run(wt, log, "git", "merge-base", "--is-ancestor", f"origin/{base}", "HEAD"):
             continue
-        if _run(wt, log, "git", "push", "origin", "HEAD:main"):
+        if _run(wt, log, "git", "push", "origin", f"HEAD:{base}"):
             sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=wt, capture_output=True, text=True).stdout.strip()
             return "pushed", sha
         _run(wt, log, "git", "fetch", "-q", "origin")
-        if _run(wt, log, "git", "merge-base", "--is-ancestor", "origin/main", "HEAD"):
+        if _run(wt, log, "git", "merge-base", "--is-ancestor", f"origin/{base}", "HEAD"):
             return "push-failed", ""  # main did not move, so the push error in the log is the reason (#851)
     return "main-kept-moving", ""
 
@@ -214,8 +221,8 @@ def cleanup(wt: Path) -> list[str]:
     Nothing is removed while the worktree has uncommitted changes or a commit that is not on origin/main, and main is never touched."""
     branch = _git(wt, "branch", "--show-current").stdout.strip()
     common = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
-    if not common or _git(wt, "merge-base", "--is-ancestor", "HEAD", "origin/main").returncode != 0:
-        return [f"Kept {wt}: it has commits that are not on origin/main."]
+    if not common or _git(wt, "merge-base", "--is-ancestor", "HEAD", f"origin/{default_branch(wt)}").returncode != 0:
+        return [f"Kept {wt}: it has commits that are not on origin/{default_branch(wt)}."]
     if _git(wt, "status", "--porcelain").stdout.strip():
         return [f"Kept {wt}: it has uncommitted changes."]
     lines = []
@@ -331,11 +338,12 @@ def command_land(argv: list[str]) -> int:
     if result != "pushed":
         print(f"Handover written to {write_handover(wt, story, result, path, key)}. No branch was pushed.")
         return 1
+    root, branch = _main_checkout(wt) or OC_ROOT, default_branch(wt)  # read before cleanup removes the worktree
     for line in cleanup(wt):
         print(line)
-    behind, state, moved = maintain.fast_forward(OC_ROOT, fetch=True)
+    behind, state, moved = maintain.fast_forward(root, fetch=True, branch=branch)  # the story's own repo, never OliverCode's checkout (#1012)
     if moved:
         print(f"Main checkout fast-forwarded {behind} commit(s).")
     elif behind:
-        print(f"Main checkout left alone: {behind} commit(s) behind origin/main and {state}.")
+        print(f"Main checkout left alone: {behind} commit(s) behind origin/{branch} and {state}.")
     return 0

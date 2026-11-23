@@ -35,18 +35,49 @@ READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the st
                  "and make no tool call and no change.")
 
 
+NO_VALIDATION_FIX = "add scripts/validate.sh, or an npm validate or check script, and name it in the repo's CLAUDE.md."
+NO_VALIDATION = f"The repo has no validation command to run. Fix: {NO_VALIDATION_FIX}"
+
+
 def validation_command(cwd: str | Path) -> list[str] | None:
-    """The repo's own validation command, or None when it has none this loop can run."""
-    if (Path(cwd) / "scripts" / "validate.sh").is_file():
+    """The repo's own validation command, or None when it has none this loop can run (#1012): scripts/validate.sh, then an
+    `npm run NAME` that CLAUDE.md names and package.json defines, then an npm validate or check script."""
+    root = Path(cwd)
+    if (root / "scripts" / "validate.sh").is_file():
         return ["bash", "scripts/validate.sh"]
+    try:
+        scripts = json.loads((root / "package.json").read_text(encoding="utf-8")).get("scripts", {})
+    except (OSError, ValueError, AttributeError):
+        return None
+    try:
+        text = (root / "CLAUDE.md").read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        text = ""
+    for name in re.findall(r"npm run ([\w:.-]+)", text):
+        if name in scripts:
+            return ["npm", "run", name]
+    for name in ("validate", "check"):
+        if name in scripts:
+            return ["npm", "run", name]
     return None
+
+
+def default_branch(cwd: str | Path) -> str:
+    """The repo's default branch as origin names it: origin/HEAD, else the first of main, master and develop that origin holds, else main."""
+    ran = subprocess.run(["git", "-C", str(cwd), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True)
+    if ran.returncode == 0 and ran.stdout.strip():
+        return ran.stdout.strip().removeprefix("origin/")
+    for name in ("main", "master", "develop"):
+        if subprocess.run(["git", "-C", str(cwd), "rev-parse", "--verify", "-q", f"refs/remotes/origin/{name}"], capture_output=True).returncode == 0:
+            return name
+    return "main"
 
 
 def validate(cwd: str | Path) -> tuple[bool, str]:
     """(passed, the end of its output). It waits for a slot in the per-user validation queue."""
     command = validation_command(cwd)
     if command is None:
-        return False, "The repo has no validation command to run."
+        return False, NO_VALIDATION
     argv = [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "queue", "run", "--", *command]
     try:
         ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
@@ -62,11 +93,8 @@ def gate_tail(output: str) -> str:
 
 def branch_diff(cwd: str | Path) -> str:
     """The story's whole diff against origin's default branch, cut at DIFF_LIMIT characters with a marker that names the files it cut (#1015)."""
-    for base in ("origin/main", "origin/master"):
-        ran = subprocess.run(["git", "-C", str(cwd), "diff", f"{base}...HEAD"], capture_output=True, text=True)
-        if ran.returncode == 0:
-            return cut_diff(ran.stdout)
-    return ""
+    ran = subprocess.run(["git", "-C", str(cwd), "diff", f"origin/{default_branch(cwd)}...HEAD"], capture_output=True, text=True)
+    return cut_diff(ran.stdout) if ran.returncode == 0 else ""
 
 
 def cut_diff(full: str) -> str:
@@ -269,7 +297,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say) ->
         if reply["code"] != 0:
             return {"done": False, "reason": exit_reason(reply, n, resumed), "rounds": n, "tokens": tokens, "summary": summary}
         if not checked:
-            return {"done": False, "reason": "The model finished, but the repo has no scripts/validate.sh, so nothing checked the result.",
+            return {"done": False, "reason": f"The model finished, but nothing checked the result. {NO_VALIDATION}", "fatal": True,
                     "rounds": n, "tokens": tokens, "summary": summary}
         if validation_command(cwd) is None and not Path(cwd).exists():  # the builder landed the story and its worktree is gone, so there is nothing left to validate (#877)
             return {"done": True, "reason": "The story landed during the round, so its worktree is gone and validation is skipped.",

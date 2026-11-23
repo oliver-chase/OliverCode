@@ -124,6 +124,26 @@ class CompleteStory(unittest.TestCase):
             self.assertIn("push it first", cs.commit_pushed(local, work))
             self.assertIn("not in this checkout", cs.commit_pushed("0" * 40, work))
 
+    def test_a_commit_on_a_master_default_branch_counts_as_pushed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t" + chr(64) + "t.test",
+                   "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t" + chr(64) + "t.test"}
+            def git(*a, cwd=tmp):
+                return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True, env=env, check=True).stdout.strip()
+            remote = os.path.join(tmp, "remote"); work = os.path.join(tmp, "work")
+            subprocess.run(["git", "init", "-q", "--bare", "-b", "master", remote], check=True)
+            subprocess.run(["git", "clone", "-q", remote, work], check=True, capture_output=True, env=env)
+            git("commit", "-q", "--allow-empty", "-m", "one", cwd=work)
+            git("push", "-q", "origin", "HEAD:master", cwd=work)
+            git("fetch", "-q", "origin", cwd=work)
+            git("remote", "set-head", "origin", "master", cwd=work)
+            self.assertIsNone(cs.commit_pushed(git("rev-parse", "HEAD", cwd=work), work))
+
+    def test_a_board_whose_finished_lane_is_named_done_closes_to_done(self):
+        code, _, calls = self.run_it("builder-only.json", extra={"fields": {"status": {"id": "F1", "options": {"Done": "OPT_FINISHED"}}}})
+        self.assertEqual(code, 0)
+        self.assertIn("-f v=OPT_FINISHED", "\n".join(calls))
+
     def test_complete_writes_only_after_the_builder_check_passes_and_the_item_is_found(self):
         # A failed close names the write that already landed, so a rerun finishes the rest.
         code, _, _ = self.run_it("builder-only.json", fail="state=closed")

@@ -216,7 +216,8 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
             cfg = json.load(h)
         repo = f"{cfg['repoOwner']}/{cfg['repoName']}"
         status = cfg["fields"]["status"]
-        option = status["options"]["Complete"]
+        finished = {k.lower(): v for k, v in status["options"].items()}
+        option = finished.get("complete") or finished["done"]  # a board names its finished lane Complete or Done (#1012)
     except (OSError, ValueError, KeyError) as exc:
         print(f"complete_story: cannot read the config: {exc}", file=err)
         return 2

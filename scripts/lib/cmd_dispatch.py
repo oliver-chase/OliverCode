@@ -111,6 +111,14 @@ def _default_branch(repo) -> str:
     return done.stdout.strip().removeprefix("origin/") if done.returncode == 0 and done.stdout.strip() else "main"
 
 
+def origin_slug(repo, slug: str) -> str:
+    """The repo whose issues are read: a fork inherits upstream's config file, so the origin remote names it (#754, #1012)."""
+    origin = backlog_setup.origin_owner_name(repo)
+    if origin and f"{origin[0]}/{origin[1]}".lower() != slug.lower():
+        return f"{origin[0]}/{origin[1]}"
+    return slug
+
+
 def _parse(argv: list[str]):
     sid, dry, pos, i = "", False, [], 0
     while i < len(argv):
@@ -217,9 +225,7 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
         slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
     except (OSError, ValueError, KeyError) as exc:
         return _refuse(f"{repo} has no readable docs/backlog-config.json ({exc}).")
-    origin = backlog_setup.origin_owner_name(repo)
-    if origin and f"{origin[0]}/{origin[1]}".lower() != slug.lower():
-        slug = f"{origin[0]}/{origin[1]}"  # a fork inherits upstream's config file: the origin remote names the repo whose issues are read (#754)
+    slug = origin_slug(repo, slug)
     story, why = read_story(runner, slug, n)
     if why:
         return _refuse(f"story #{n} was not read: {why}")

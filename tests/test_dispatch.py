@@ -43,6 +43,7 @@ class RunIo:
         self.builds, self.issue = builds, None
         self.repo = Path("/repo")
 
+    def validation(self): return ["bash", "scripts/validate.sh"]
     def worktree(self, n): return Path(f"/wt/{n}")
     def beat(self, building): pass
     def claim(self, n): self.steps.append("claim")
@@ -181,6 +182,10 @@ class TestForkOrigin(DispatchCase):
     def test_a_config_naming_another_repo_reads_the_origin_remotes_repo(self):
         self.with_origin("git@github.com:me/my-fork.git")
         self.assertEqual("me/my-fork", self.slug_read())
+
+    def test_drain_reads_the_same_fork_slug_as_dispatch(self):
+        self.with_origin("git@github.com:me/my-fork.git")
+        self.assertEqual("me/my-fork", cmd_dispatch.origin_slug(self.repo, "o/r"))
 
     def test_a_config_matching_origin_is_used_as_before(self):
         self.with_origin("https://github.com/O/R.git")
