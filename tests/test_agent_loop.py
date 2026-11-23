@@ -266,10 +266,16 @@ class TestLoop(unittest.TestCase):
         self.assertIn("nothing is pushed", out["reason"])
         self.assertEqual(4, len(run.prompts))
 
-    def test_a_finding_with_no_round_left_for_a_fix_holds_at_once(self):
-        run = Scripted(reply("built"), reply("scripts/a.py: no test"))
-        out = self.loop(run, [(True, "")], size="M", rounds=1)
-        self.assertEqual(("scripts/a.py: no test", 2), (out["held"], len(run.prompts)))
+    def test_a_finding_in_the_last_round_still_gets_its_one_fix_session(self):
+        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("PASS"))
+        out = self.loop(run, [(True, ""), (True, "")], size="M", rounds=1)
+        self.assertEqual((True, 4), (out["done"], len(run.prompts)))
+
+    def test_a_finding_after_a_failed_validation_still_gets_one_fix_session(self):
+        run = Scripted(reply("built"), reply("fixed"), reply("scripts/a.py: no test"), reply("fixed again"), reply("PASS"))
+        out = self.loop(run, [(False, "gate"), (True, ""), (True, "")], size="M")
+        self.assertEqual((True, 5), (out["done"], len(run.prompts)))
+        self.assertIn("scripts/a.py: no test", run.prompts[3])
 
     def test_a_small_story_that_touches_no_hook_runs_no_reader(self):
         run = Scripted(reply("built"))

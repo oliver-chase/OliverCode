@@ -187,9 +187,10 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, si
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
-    start, failures, findings = model_name, 0, 0
-    for n in range(1, rounds + 1):
-        model_name = escalate(start, failures)
+    start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
+    while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
+        n += 1
+        fix_owed, model_name = False, escalate(start, failures)
         resumed = False
         while True:
             try:
@@ -230,9 +231,9 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, si
                 verdict = review(task, cwd, session, tail, run=run, say=say)
                 if verdict["verdict"] == "findings":
                     findings += 1
-                    if findings == 1 and n < rounds:  # one fix session, then the reader reads again (#975)
+                    if findings == 1:  # one fix session, then the reader reads again (#975)
                         say(f"Round {n}: the reader found a problem. One fix session, then the reader reads again.")
-                        prompt, claude_session = review_brief(task, cwd, verdict["text"]), ""
+                        prompt, claude_session, fix_owed = review_brief(task, cwd, verdict["text"]), "", True
                         continue
                     return {"done": False, "held": verdict["text"], "reason": f"The fresh reader reports a problem, so nothing is pushed: {verdict['text'][:300]}",
                             "rounds": n, "tokens": tokens, "summary": summary}
