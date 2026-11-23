@@ -22,10 +22,12 @@ class TestOpenIssues(unittest.TestCase):
         self.assertEqual("P1", page.priority(issue(4, body="Priority: P1", labels=["P3"])))
         self.assertEqual("", page.priority(issue(5, body="no line")))
 
-    def test_owner_gate_reads_labels_and_body_phrases(self):
+    def test_owner_gate_reads_labels_only(self):
         self.assertTrue(page.owner_gated(issue(1, labels=["owner-gate"])))
-        self.assertTrue(page.owner_gated(issue(2, body="This is an Owner step.")))
-        self.assertTrue(page.owner_gated(issue(3, body="Needs owner approval first")))
+        self.assertTrue(page.owner_gated(issue(5, labels=["owner-action"])))
+        # #1075: prose never gates a story; a scenario that creates an owner step is still built
+        self.assertFalse(page.owner_gated(issue(2, body="Then one open owner step names the board")))
+        self.assertFalse(page.owner_gated(issue(3, body="Needs owner approval first")))
         self.assertFalse(page.owner_gated(issue(4, body="a normal story", labels=["bug"])))
 
     def test_rank_orders_by_priority_then_number(self):

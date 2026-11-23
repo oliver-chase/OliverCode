@@ -1,7 +1,7 @@
 """Open stories from gh REST with no model call: the priority, owner-gate and rank rules `olivercode drain` shares.
 
-Priority is the "Priority: P0..P3" line of the issue body, else a label such as P1 or "priority: P1". A story is owner-gated when a label contains "owner"
-(owner-gate, owner-step, owner-approval) or the body says "owner step" or "owner approval". A GitHub hold skips the reads.
+Priority is the "Priority: P0..P3" line of the issue body, else a label such as P1 or "priority: P1". A story is owner-gated only when a label contains "owner"
+(owner-action, owner-gate). A GitHub hold skips the reads.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from lib import gh_budget
 
 BODY_PRIORITY = re.compile(r"^\s*(?:\*\*)?Priority:?(?:\*\*)?\s*(P[0-9])\b", re.IGNORECASE | re.MULTILINE)
 LABEL_PRIORITY = re.compile(r"^(?:priority\W*)?(P[0-9])$", re.IGNORECASE)
-BODY_GATE = re.compile(r"owner[ -](?:step|approval)", re.IGNORECASE)
 
 
 def priority(issue: dict) -> str:
@@ -31,7 +30,7 @@ def priority(issue: dict) -> str:
 
 def owner_gated(issue: dict) -> bool:
     names = [str(l.get("name", "") if isinstance(l, dict) else l) for l in issue.get("labels") or []]
-    return any("owner" in n.lower() for n in names) or bool(BODY_GATE.search(issue.get("body") or ""))
+    return any("owner" in n.lower() for n in names)  # a label marks owner work; prose that describes an owner step never gates a story (#1075)
 
 
 def fetch(slug: str) -> list[dict] | None:
