@@ -1,8 +1,0 @@
-[
- {
-  "body": "Agent action\n- Agent: builder-1\n- Role: builder\n- Commit: abc1234\n- Files changed: 2\n- Result: tests pass"
- },
- {
-  "body": "Agent action\n- Agent: qa-1\n- Role: qa\n- Commit: abc1234\n- Files changed: 2\n- Result: PASS; confirmed: Work is finished"
- }
-]
