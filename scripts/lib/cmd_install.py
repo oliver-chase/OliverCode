@@ -155,7 +155,7 @@ def _schedule_gaps() -> None:
     print("  [JOB] " + ("gap-sweep job loaded" if cmd_gapsweep.schedule(True) == 0 else "gap-sweep job failed; run `olivercode gap-sweep --schedule`"))
 
 
-REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions"))
+REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review"))
 REMOVED_PAGES = (".olivercode/city.html",)
 
 

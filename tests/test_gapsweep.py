@@ -8,10 +8,10 @@ from unittest import mock
 from _support import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_gapsweep  # noqa: E402
+from lib import cmd_gapsweep, conform  # noqa: E402
 
 
-def feature(fid="hooks", title="Commit gates"):
+def feature(fid="hooks", title="the hooks conform row"):
     return SimpleNamespace(id=fid, title=title, enable="olivercode sync-hooks", owner_only=False)
 
 
@@ -70,10 +70,12 @@ class TestGapSweep(unittest.TestCase):
         self.assertEqual(got, (1, 0))
         self.assertEqual(len(made), 1)
 
-    def test_a_missing_register_stops_the_sweep_with_a_message(self):
-        with mock.patch.dict(sys.modules, {"lib.features": None}), mock.patch("builtins.print") as out:
-            self.assertEqual(cmd_gapsweep.run(board_list=list), 1)
-        self.assertIn("not installed", out.call_args.args[0])
+    def test_each_failing_conform_row_an_agent_can_repair_is_a_gap_and_owner_rows_are_not(self):
+        rows = [conform.Row("hooks", "fail", fix="olivercode sync-hooks"), conform.Row("ignore", "pass"),
+                conform.Row("sleep-setting", "fail", fix="caffeinate"), conform.Row("exceptions", "fail")]
+        with mock.patch.object(cmd_gapsweep.conform, "check_repo", return_value=rows):
+            gaps = cmd_gapsweep.gaps_of(REPO_ROOT)
+        self.assertEqual([("hooks", "olivercode sync-hooks")], [(g.id, g.enable) for g in gaps])
 
 
 if __name__ == "__main__":

@@ -46,8 +46,6 @@ GROUPS = (
         ("status", "Show how many stories are open and how fast they close"),
         ("status digest", "Write the one-page summary a new thread starts from"),
         ("conform", "Check repos against the shared standard"),
-        ("features", "Show which standards each repo has on or off"),
-        ("machines", "Record or list each machine's version and gates"),
         ("ledger", "Show which repos have a current audit"),
         ("audit-fleet", "Check the skills for structure problems"),
         ("audit-mode", "Choose whether an audit fixes what it finds"),
@@ -95,7 +93,6 @@ GROUPS = (
         ("discover", "Find the git repos on this machine and register them"),
         ("init-fleet", "Create your private repo for fleet settings"),
         ("fleet-sync", "Bring each repo level with its remote"),
-        ("review", "Run the recurring review of the whole fleet"),
         ("policy", "Write the permission policy for a repo"),
     )),
     ("Orientation", (
@@ -103,7 +100,7 @@ GROUPS = (
         ("guide", "Say what everything does, or what one command, gate, guard, job or skill does"),
     )),
 )
-JOBS = {"burndown": "board burndown", "sweep": "board sweep", "fleet-sync": "fleet-sync", "review": "review", "retro": "retro", "maintain": "maintain",
+JOBS = {"burndown": "board burndown", "sweep": "board sweep", "fleet-sync": "fleet-sync", "retro": "retro", "maintain": "maintain",
         "gh-limit": "gh-limit", "version-cut": "version-cut"}  # the scheduled jobs and the command that installs each, as the README names them
 
 

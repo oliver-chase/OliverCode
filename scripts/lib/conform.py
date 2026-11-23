@@ -1,8 +1,8 @@
 """`olivercode conform`: one repo checked against docs/CONTRACT.md.
 
-Each requirement in the contract is one function here. A miss reports the command that fixes it,
-and a repo that must differ records the exception in its own docs/repo-structure-contract.md,
-which this reports as an exception and not as a pass.
+Each requirement in the contract guards a failure that loses work, leaks data or breaks a gate, and is one function here.
+A miss reports the command that fixes it, and a repo that must differ records the exception in its own
+docs/repo-structure-contract.md, which this reports as an exception and not as a pass.
 """
 
 from __future__ import annotations
@@ -17,11 +17,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from lib import backlog_setup, engine_only as engine_gate, features as features_register, live_copy, local_config, machines as machine_records, open_issues, queue_bypass as bypass_gate, repo_gates, repo_name_guard, schedules
+from lib import backlog_setup, claude_settings, engine_only as engine_gate, local_config, open_issues, repo_gates, repo_name_guard
 from lib.gitfiles import tracked_files
 from lib.local_config import OC_ROOT
 
-REQUIRED_FILES = ("README.md", "CLAUDE.md", "docs/repo-structure-contract.md", "docs/backlog-config.json")
 EXCEPTION_HEADING = "Contract exceptions"
 EXCEPTION_LINE = re.compile(r"^- (?P<id>[a-z-]+): (?P<reason>.*?)\.? Expires (?P<expires>\d{4}-\d{2}-\d{2})\s*$")
 
@@ -36,14 +35,6 @@ class Row:
 
 def _fail(requirement: str, detail: str, fix: str) -> Row:
     return Row(requirement, "fail", detail, fix)
-
-
-def layout(repo: Path, **_) -> Row:
-    missing = [rel for rel in REQUIRED_FILES if not (repo / rel).is_file()
-               and not (rel == "docs/backlog-config.json" and backlog_setup.config_path(repo).is_file())]
-    if missing:
-        return _fail("layout", f"missing {', '.join(missing)}", f"olivercode bootstrap {repo}")
-    return Row("layout", "pass")
 
 
 IGNORE_SAMPLES = (".env.local", ".env", "credentials.pem", "private.key", ".secrets/token")
@@ -61,48 +52,6 @@ def ignore(repo: Path, runner=subprocess.run, **_) -> Row:
         return _fail("ignore", f"git does not ignore {', '.join(missing)}",
                      f"add patterns for them to {repo.name}/.gitignore, such as .env.local, .env, *.pem, *.key and .secrets/*")
     return Row("ignore", "pass")
-
-
-README_ORDER = ("Install", "Documentation", "Status", "License")
-
-
-def readme_order_problems(text: str) -> list[str]:
-    """A README opens with a title, and its Install, Documentation, Status and License headings come in that order."""
-    lines = text.splitlines()
-    problems = [] if lines and lines[0].startswith("# ") else ["README.md does not open with a title line"]
-    heads = [h.strip().lower() for h in re.findall(r"^##\s+(.+?)\s*$", text, re.MULTILINE)]
-    positions = [(name, next((i for i, h in enumerate(heads) if h.startswith(name.lower())), None)) for name in README_ORDER]
-    found = [(name, at) for name, at in positions if at is not None]
-    for (a, i), (b, j) in zip(found, found[1:]):
-        if j < i:
-            problems.append(f"README.md puts \"{b}\" before \"{a}\"; the order is {', '.join(README_ORDER)}")
-    return problems
-
-
-def readme(repo: Path, **_) -> Row:
-    """Passes when README.md opens with a title and keeps Install, Documentation, Status and License in that order."""
-    path = repo / "README.md"
-    if not path.is_file():
-        return Row("readme", "skip", "no README.md, which the layout row reports")
-    problems = readme_order_problems(path.read_text(errors="ignore"))
-    if problems:
-        return _fail("readme", "; ".join(problems), f"reorder the sections of {repo.name}/README.md")
-    return Row("readme", "pass")
-
-
-NO_CONTRACT_NEEDED = {"docs", "scripts"}
-
-
-def folders(repo: Path, **_) -> Row:
-    """Passes when every tracked top-level folder besides docs and scripts appears as `name/` in docs/repo-structure-contract.md."""
-    contract = repo / "docs" / "repo-structure-contract.md"
-    text = contract.read_text(errors="ignore") if contract.is_file() else ""
-    tops = {rel.split("/")[0] for rel in tracked_files(repo) if "/" in rel and not rel.startswith(".")}
-    undeclared = sorted(t for t in tops - NO_CONTRACT_NEEDED if f"{t}/" not in text)
-    if undeclared:
-        return _fail("folders", f"the structure contract does not declare {', '.join(t + '/' for t in undeclared)}",
-                     f"list each folder with its purpose under \"Required structure\" in {repo.name}/docs/repo-structure-contract.md")
-    return Row("folders", "pass")
 
 
 def validation(repo: Path, **_) -> Row:
@@ -123,30 +72,11 @@ def validation(repo: Path, **_) -> Row:
     return _fail("validation", "CLAUDE.md names no validation command that exists (scripts/validate.sh, npm run validate or npm run check)", fix)
 
 
-BYPASS_GATE = "scripts/lib/queue_bypass.py"
 ENGINE_GATE = "scripts/lib/engine_only.py"
 
 
-def queue_bypass(repo: Path, **_) -> Row:
-    """The gate-queue bypass check (#757). A repo that ships the gate must still run it from scripts/validate.sh, and
-    conform runs the check itself on every repo, so a repo whose validation drops it cannot pass silently."""
-    script = repo / "scripts" / "validate.sh"
-    if (repo / BYPASS_GATE).is_file():
-        runs = script.is_file() and any(Path(BYPASS_GATE).name in line and not line.lstrip().startswith("#")
-                                        for line in script.read_text(errors="ignore").splitlines())
-        if not runs:
-            return _fail("queue-bypass", f"scripts/validate.sh no longer runs the queue bypass check ({BYPASS_GATE})",
-                         f"restore the `bypass` gate in {repo.name}/scripts/validate.sh, which runs `python3 {BYPASS_GATE}`")
-    findings = bypass_gate.check(repo)
-    if findings:
-        shown = "; ".join(findings[:3]) + (f"; and {len(findings) - 3} more" if len(findings) > 3 else "")
-        return _fail("queue-bypass", f"the queue bypass check finds {len(findings)} bypass(es): {shown}",
-                     "`olivercode sync-hooks` adds a missing queue block; start every other test or validation run through `bash scripts/validate.sh`")
-    return Row("queue-bypass", "pass")
-
-
 def sweep_loaded() -> bool:
-    return features_register._agent(None, "com.olivercode.board-sweep")
+    return (Path.home() / "Library" / "LaunchAgents" / "com.olivercode.board-sweep.plist").is_file()
 
 
 def board(repo: Path, *, offline: bool, api=None, oc_root: Path = OC_ROOT, **_) -> Row:
@@ -212,16 +142,6 @@ def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False,
     return Row("managed-files", "pass")
 
 
-DEAD_SELFTEST = ".githooks/ste-lint-joined.py"
-
-
-def dead_selftest(repo: Path, **_) -> Row:
-    """The STE gates are gone from the fleet, so a copy of their selftest only fails at its line 97 and must not return."""
-    if (repo / DEAD_SELFTEST).exists():
-        return _fail("dead-selftest", f"{repo.name} holds {DEAD_SELFTEST}, a selftest that fails because the vendor linter now joins wrapped lines", f"git rm {DEAD_SELFTEST}")
-    return Row("dead-selftest", "pass")
-
-
 CODE_SUFFIXES = (".py", ".js", ".mjs", ".ts", ".tsx", ".sh", ".swift")
 TEST_NAME = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|\.(test|spec)\.[a-z]+$|_test\.[a-z]+$")
 
@@ -234,106 +154,6 @@ def tests(repo: Path, **_) -> Row:
     if any(TEST_NAME.search(f) for f in tracked):
         return Row("tests", "pass")
     return _fail("tests", "the repo has code and no tracked test file", f"add a test for the code that matters most to {repo.name}")
-
-
-def docs(repo: Path, *, offline: bool, runner=subprocess.run, settings: dict | None = None, **_) -> Row:
-    if offline:
-        return Row("docs", "skip", "offline")
-    slug = repo_slug(repo)
-    known = (settings or {}).get(f"{slug[0]}/{slug[1]}".lower()) if slug else None
-    if known is not None:
-        about = {"description": known.get("description"), "repositoryTopics": (known.get("repositoryTopics") or {}).get("totalCount")}
-    else:
-        try:
-            done = runner(["gh", "repo", "view", "--json", "description,repositoryTopics"],
-                          capture_output=True, text=True, timeout=15, cwd=str(repo))
-            about = json.loads(done.stdout) if done.returncode == 0 else None
-        except (OSError, subprocess.TimeoutExpired, ValueError):
-            about = None
-    if about is None:
-        return Row("docs", "skip", "gh cannot reach the repo")
-    if not (about.get("description") or "").strip() or not about.get("repositoryTopics"):
-        return _fail("docs", "the GitHub About has no description or no topics", "gh repo edit --description ... --add-topic ...")
-    return Row("docs", "pass")
-
-
-LEARNING_HEADING = "Learning loop"
-LEARNING_STEPS = ("Record", "Read", "Compare", "Decide", "Thin data")
-
-
-def learning(repo: Path, **_) -> Row:
-    """Passes when the repo's structure contract answers the five steps of the loop in docs/CONTRACT.md, each with a real value."""
-    fix = f"fill in the \"{LEARNING_HEADING}\" section of {repo.name}/docs/repo-structure-contract.md (steps in docs/CONTRACT.md), or record an exception"
-    path = repo / "docs" / "repo-structure-contract.md"
-    text = path.read_text(errors="ignore") if path.is_file() else ""
-    section = re.search(rf"^#+ {LEARNING_HEADING}\s*\n(.*?)(?=^#+ |\Z)", text, re.S | re.M)
-    if not section:
-        return _fail("learning", f"no \"{LEARNING_HEADING}\" section in docs/repo-structure-contract.md", fix)
-    missing = []
-    for step in LEARNING_STEPS:
-        line = re.search(rf"^[-*] {step}: *(.*)$", section.group(1), re.M)
-        if not line or not line.group(1).strip() or line.group(1).lstrip().startswith("<"):
-            missing.append(step)
-    if missing:
-        return _fail("learning", f"the loop has no answer for: {', '.join(missing)}", fix)
-    return Row("learning", "pass")
-
-
-APPLIED_LINE = re.compile(r"^applied: *(?:none, because .+|\S.*)$", re.I | re.M)
-
-
-def research(repo: Path, **_) -> Row:
-    """Passes when every file under docs/research states where its findings landed, as `applied: <file>` or `applied: none, because <reason>`."""
-    folder = repo / "docs" / "research"
-    files = sorted(folder.glob("*.md")) if folder.is_dir() else []
-    if not files:
-        return Row("research", "skip", "no docs/research")
-    bare = [f.name for f in files if not APPLIED_LINE.search(f.read_text(errors="ignore"))]
-    if bare:
-        shown = ", ".join(bare[:3]) + (f" and {len(bare) - 3} more" if len(bare) > 3 else "")
-        return _fail("research", f"{len(bare)} research file(s) name no place their findings landed: {shown}",
-                     "add an `applied: <file in code, data or a skill>` line to each, or `applied: none, because <reason>`")
-    return Row("research", "pass")
-
-
-def audit(repo: Path, **_) -> Row:
-    ledger = repo / "docs" / "AUDITED.txt"
-    if ledger.is_file() and ledger.read_text(encoding="utf-8").strip():
-        return Row("audit", "pass")
-    return Row("audit", "manual", "no command checks it", "run the audit skill on a multi-commit session")
-
-
-def automation(repo: Path, *, home: Path | None = None, **_) -> Row:
-    """Passes when each script a launchd job or scheduled task runs from this repo is tracked by its git, so a local
-    automation is never the only copy. A repo none of them points into is skipped."""
-    home = home or Path.home()
-    # An empty prefix reads every job, because a job that points into this repo is this repo's whoever owns the label.
-    jobs = schedules.jobs(home / ".claude" / "scheduled-tasks", home / "Library" / "LaunchAgents", home, ("",))
-    root = repo.resolve()
-    tracked, scripts, untracked = None, 0, []
-    for name, _, paths in jobs:
-        for raw in paths:
-            path = Path(raw)
-            if not path.is_file() or path.suffix not in schedules.SCRIPT_SUFFIXES:
-                continue
-            try:
-                rel = path.resolve().relative_to(root).as_posix()
-            except ValueError:
-                continue
-            tracked = set(tracked_files(repo)) if tracked is None else tracked
-            scripts += 1
-            if rel not in tracked:
-                untracked.append(f"{name} runs {rel}")
-    if untracked:
-        return _fail("automation", "not tracked by git: " + "; ".join(untracked),
-                     f"`git -C {repo} add` each script and commit it, so the automation ships inside the repo")
-    return Row("automation", "pass") if scripts else Row("automation", "skip", "no local automation runs a script from this repo")
-
-
-def live_launcher(repo: Path, *, oc_root: Path = OC_ROOT, **_) -> Row:
-    """Passes unless OliverCode runs from a path `liveCopies` lists as live, where an update would write into a running bot."""
-    found = live_copy.problem(oc_root)
-    return _fail("live-launcher", found, "run olivercode from the agent copy named above") if found else Row("live-launcher", "pass")
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -382,14 +202,13 @@ def repo_slug(repo: Path) -> tuple[str, str] | None:
 
 
 def fleet_settings(slugs, runner=subprocess.run) -> dict | None:
-    """Delete-on-merge, About and admin rights for every (owner, name) in ONE GraphQL request (#775), keyed by lower-cased "owner/name".
+    """Delete-on-merge and admin rights for every (owner, name) in ONE GraphQL request (#775), keyed by lower-cased "owner/name".
 
     None when GitHub cannot be reached, so each check falls back to its own per-repo call."""
     slugs = sorted(set(slugs))
     if not slugs:
         return {}
-    parts = "".join(f'r{i}: repository(owner: {json.dumps(o)}, name: {json.dumps(n)}) {{ deleteBranchOnMerge description '
-                    f'repositoryTopics(first: 1) {{ totalCount }} viewerCanAdminister }} ' for i, (o, n) in enumerate(slugs))
+    parts = "".join(f'r{i}: repository(owner: {json.dumps(o)}, name: {json.dumps(n)}) {{ deleteBranchOnMerge viewerCanAdminister }} ' for i, (o, n) in enumerate(slugs))
     try:
         done = runner(["gh", "api", "graphql", "-f", f"query={{ {parts}}}"], capture_output=True, text=True, timeout=60)
         data = (json.loads(done.stdout).get("data") or {}) if done.returncode == 0 else {}
@@ -423,28 +242,6 @@ def delete_on_merge(repo: Path, *, offline: bool, settings: dict | None = None, 
         return Row("delete-on-merge", "pass")
     return _fail("delete-on-merge", f"{owner}/{name} keeps merged pull request branches on GitHub",
                  f"`gh repo edit {owner}/{name} --delete-branch-on-merge`")
-
-
-def features(repo: Path, *, home: Path | None = None, **_) -> Row:
-    """Passes when every feature in docs/STANDARDS.json that is not owner-only is on for the repo. A miss names each enable command."""
-    try:
-        gaps = features_register.off(repo, home)
-    except (OSError, ValueError) as err:
-        return _fail("features", f"the feature register is unreadable: {err}", "restore docs/STANDARDS.json from git")
-    if gaps:
-        return _fail("features", f"{len(gaps)} feature(s) off: " + ", ".join(g.title + (f" ({g.state}: {g.note})" if g.note else "") for g in gaps),
-                     "; ".join(dict.fromkeys(features_register.command_for(g, repo) for g in gaps)))
-    gone = [f for f in features_register.evaluate(repo, home) if f.retired]
-    return Row("features", "pass", "retired: " + "; ".join(f"{f.title} ({f.retired})" for f in gone) if gone else "")
-
-
-def machines(repo: Path, *, oc_root: Path = OC_ROOT, **_) -> Row:
-    """Passes when every machine that recorded itself in the repo runs the newest version with the commit gates and the permission policy (#740)."""
-    lines = machine_records.problems(repo, oc_root)
-    if lines:
-        return _fail("machines", "; ".join(lines), f"on each machine named: olivercode update, olivercode sync-hooks, olivercode policy init {repo}, then olivercode machines record --repo {repo}")
-    count = len(machine_records.records(repo))
-    return Row("machines", "pass", f"{count} machine(s) recorded" if count else "")
 
 
 def engine_only(repo: Path, **_) -> Row:
@@ -493,8 +290,24 @@ def sleep_setting(repo: Path, *, offline: bool = False, runner=None, system: str
     return Row("sleep-setting", "pass")
 
 
-CHECKS = (layout, ignore, readme, folders, validation, queue_bypass, engine_only, fleet_private, sleep_setting, board, issues, hooks, managed_files, dead_selftest, tests, docs, learning, research, audit,
-          automation, live_launcher, branches, delete_on_merge, features, machines)
+def permission_policy(repo: Path, **_) -> Row:
+    """Passes when the repo lists what a session may do without asking, in .olivercode/policy.json."""
+    if (repo / ".olivercode" / "policy.json").is_file():
+        return Row("permission-policy", "pass")
+    return _fail("permission-policy", f"{repo.name} has no .olivercode/policy.json, so a session has no list of what it may do unasked", f"olivercode policy init {repo}")
+
+
+def unfinished_work_snapshot(repo: Path, *, home: Path | None = None, **_) -> Row:
+    """Passes when the installed Claude settings still run wip_save.py, which saves work not yet landed. Runs once, on the engine checkout."""
+    if not (repo / ENGINE_GATE).is_file():
+        return Row("unfinished-work-snapshot", "skip", "not an engine checkout")
+    if "wip_save.py" in claude_settings.missing((home or Path.home()) / ".claude" / "settings.json"):
+        return _fail("unfinished-work-snapshot", "the Claude settings on this machine do not run wip_save.py, so unlanded work is never saved", "olivercode install")
+    return Row("unfinished-work-snapshot", "pass")
+
+
+CHECKS = (ignore, validation, engine_only, fleet_private, sleep_setting, board, issues, hooks, managed_files, tests, branches, delete_on_merge,
+          permission_policy, unfinished_work_snapshot)
 
 
 def _parse_date(text: str) -> date | None:
@@ -573,11 +386,11 @@ def check_fleet(repos, *, oc_root: Path, offline: bool, hooks_only: bool = False
     return rows, settings
 
 
-LOCAL_FIXES = ("hooks", "queue-bypass", "managed-files", "features", "dead-selftest")
+LOCAL_FIXES = ("hooks", "managed-files", "permission-policy")
 
 
 def fix_kind(row: Row) -> str:
     """How `conform --fix` repairs a failing row: "local" edits the repo, "github" changes a setting the owner owns, "owner" is a step for the owner queue (#778)."""
-    if row.requirement in LOCAL_FIXES and not (row.requirement == "queue-bypass" and "sync-hooks" not in row.fix):
+    if row.requirement in LOCAL_FIXES:
         return "local"
     return "github" if row.requirement == "delete-on-merge" else "owner"

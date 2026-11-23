@@ -28,6 +28,15 @@ class TestRemovedJobs(unittest.TestCase):
         self.assertEqual(len(cmd_install.REMOVED_JOBS), len(ran))
         self.assertTrue(all(argv[:2] == ["launchctl", "bootout"] for argv in ran))
 
+    def test_the_review_job_is_unloaded_and_deleted_by_install_and_update(self):
+        self.assertIn("com.olivercode.review", cmd_install.REMOVED_JOBS)
+        plist = self.agents / "com.olivercode.review.plist"
+        plist.write_text("<plist/>")
+        ran = []
+        self.assertEqual(["com.olivercode.review"], cmd_install.retire_removed_jobs(self.home, run=lambda argv, **_: ran.append(argv)))
+        self.assertFalse(plist.exists())
+        self.assertEqual("com.olivercode.review", ran[0][2].split("/")[-1])
+
     def test_a_second_run_finds_nothing_to_remove(self):
         self.assertEqual([], cmd_install.retire_removed_jobs(self.home, run=mock.Mock()))
 

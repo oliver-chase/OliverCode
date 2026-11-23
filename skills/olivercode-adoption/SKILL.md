@@ -26,7 +26,7 @@ bash "$OC/scripts/qa/rehearse-install.sh"
 
 If it fails, stop and report the fork as broken. Everything below assumes a sound checkout.
 
-After install, point the user to "How work runs" in README.md and do not restate it. Then run `olivercode features --explain` and show the user its output, which says in plain sentences what each feature and scheduled job does and which are loaded on this machine.
+After install, point the user to "How work runs" in README.md and do not restate it. Then run `olivercode guide` and show the user its output, which says in plain sentences what each command, gate, job and skill does.
 
 ## The two decisions only a human can make
 

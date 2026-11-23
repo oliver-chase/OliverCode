@@ -56,10 +56,7 @@ from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
 from lib.cmd_batch import command_batch  # noqa: E402
 from lib.cmd_audit_mode import command_audit_mode  # noqa: E402
 from lib.cmd_initfleet import command_init_fleet  # noqa: E402
-from lib.cmd_review import command_review  # noqa: E402
 from lib.cmd_cutlist import command_cutlist, record_command  # noqa: E402
-from lib.features import command_features  # noqa: E402
-from lib.machines import command_machines  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
 from lib.cmd_owner import command_owner  # noqa: E402
 from lib.push_approval import command_push_blocked  # noqa: E402
@@ -171,8 +168,6 @@ def main() -> int:
         return command_limits(argv)
     if cmd == "cutlist":
         return command_cutlist(argv)
-    if cmd == "review":
-        return command_review(argv)
     if cmd == "init-fleet":
         return command_init_fleet(argv)
     if cmd == "owner":
@@ -217,10 +212,6 @@ def main() -> int:
         if len(rest) > 1:
             _reject_extra(cmd, rest[1:])
         return command_conform(OC_ROOT, Path(rest[0]).expanduser().resolve() if rest else None, root, offline, hooks_only, fix, story)
-    if cmd == "features":
-        return command_features(argv)
-    if cmd == "machines":
-        return command_machines(argv)
     if cmd == "update":
         story = None
         if "--story" in argv:

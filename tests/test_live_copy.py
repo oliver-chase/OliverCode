@@ -9,7 +9,7 @@ from unittest import mock
 from _support import REPO_ROOT, load_script, quiet, temp_dir
 
 load_script("scripts/olivercode", "olivercode_launcher_live")
-from lib import cmd_install, conform, live_copy  # noqa: E402
+from lib import cmd_install, live_copy  # noqa: E402
 
 
 class TestLiveCopy(unittest.TestCase):
@@ -37,12 +37,6 @@ class TestLiveCopy(unittest.TestCase):
     def test_no_live_list_passes(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": os.devnull}):
             self.assertEqual("", live_copy.problem(self.live))
-
-    def test_conform_fails_with_the_fix(self):
-        row = conform.live_launcher(self.tmp, oc_root=self.live)
-        self.assertEqual("fail", row.status)
-        self.assertIn(str(self.agent), row.detail)
-        self.assertEqual("pass", conform.live_launcher(self.tmp, oc_root=self.agent).status)
 
     def test_install_refuses_and_writes_nothing(self):
         home = self.tmp / "home"

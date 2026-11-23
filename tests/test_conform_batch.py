@@ -41,8 +41,6 @@ class TestBatchedReads(unittest.TestCase):
         a, b = _repo(self.tmp, "a", ("acme", "a")), _repo(self.tmp, "b", ("acme", "b"))
         self.assertEqual("pass", conform.delete_on_merge(a, offline=False, settings=found).status)
         self.assertEqual("fail", conform.delete_on_merge(b, offline=False, settings=found).status)
-        self.assertEqual("pass", conform.docs(a, offline=False, settings=found).status)
-        self.assertEqual("fail", conform.docs(b, offline=False, settings=found).status)
 
     def test_an_unreachable_github_returns_none_so_checks_fall_back(self):
         self.assertIsNone(conform.fleet_settings([("acme", "a")], lambda *a, **k: SimpleNamespace(returncode=1, stdout="")))
@@ -64,7 +62,7 @@ class TestBatchedReads(unittest.TestCase):
         repos = [(n, _repo(self.tmp, n), False, "") for n in ("b", "a", "c")]
         rows, _ = conform.check_fleet(repos, oc_root=REPO_ROOT, offline=True)
         self.assertEqual(3, len(rows))
-        self.assertTrue(all(r[0].requirement == "layout" for r in rows))
+        self.assertTrue(all(r[0].requirement == "ignore" for r in rows))
 
 
 class TestCommitHelper(unittest.TestCase):
@@ -108,38 +106,34 @@ class TestConformFix(unittest.TestCase):
     def fix(self, repo):
         entry = ("a", repo, False, "")
         rows, settings = conform.check_fleet([entry], oc_root=REPO_ROOT, offline=True)
-        with mock.patch.object(cmd_fleet._repo_state, "archived", return_value=None), \
-                mock.patch.object(cmd_fleet._features, "enable", return_value=[]):
+        with mock.patch.object(cmd_fleet._repo_state, "archived", return_value=None):
             return quiet(cmd_fleet._fix_fleet, REPO_ROOT, [entry], rows, settings, True, False, "acme/widgets#7")
 
-    def test_a_dead_selftest_is_removed_in_one_commit_and_owner_steps_are_queued(self):
+    def test_a_missing_permission_policy_is_made_in_one_commit_and_owner_steps_are_queued(self):
         repo = _repo(self.tmp, "a")
-        (repo / ".githooks").mkdir()
-        (repo / conform.DEAD_SELFTEST).write_text("x\n")
-        git(repo, "add", ".")
-        git(repo, "commit", "-q", "--no-verify", "-m", "Add selftest")
         left, out = self.fix(repo)
         self.assertIn("[FIX] a: committed", out)
-        self.assertFalse((repo / conform.DEAD_SELFTEST).exists())
+        self.assertTrue((repo / ".olivercode" / "policy.json").is_file())
         self.assertIn("[OWNER] a:", out)
-        self.assertNotIn("dead-selftest", out.split("Checking again")[1].replace("[OK] dead-selftest", ""))
+        self.assertNotIn("[FAIL] permission-policy", out.split("Checking again")[1])
         self.assertEqual(left, int(out.rsplit("After --fix: ", 1)[1].split()[0]))
 
     def test_a_repo_with_a_local_edit_in_a_touched_file_is_skipped(self):
         repo = _repo(self.tmp, "a")
         (repo / ".githooks").mkdir()
-        (repo / conform.DEAD_SELFTEST).write_text("x\n")
+        (repo / ".githooks" / "pre-commit").write_text("x\n")
         git(repo, "add", ".")
-        git(repo, "commit", "-q", "--no-verify", "-m", "Add selftest")
-        (repo / conform.DEAD_SELFTEST).write_text("edited\n")
+        git(repo, "commit", "-q", "--no-verify", "-m", "Add hook")
+        (repo / ".githooks" / "pre-commit").write_text("edited\n")
         _, out = self.fix(repo)
         self.assertIn("[SKIP] a: not committed", out)
-        self.assertTrue((repo / conform.DEAD_SELFTEST).exists())
+        self.assertEqual("edited\n", (repo / ".githooks" / "pre-commit").read_text())
 
     def test_fix_kinds(self):
         self.assertEqual("local", conform.fix_kind(conform.Row("hooks", "fail", fix="olivercode sync-hooks")))
         self.assertEqual("github", conform.fix_kind(conform.Row("delete-on-merge", "fail")))
-        self.assertEqual("owner", conform.fix_kind(conform.Row("docs", "fail")))
+        self.assertEqual("owner", conform.fix_kind(conform.Row("tests", "fail")))
+        self.assertEqual("local", conform.fix_kind(conform.Row("permission-policy", "fail")))
 
 
 

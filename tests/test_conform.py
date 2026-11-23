@@ -35,6 +35,8 @@ def _template_repo():
         (repo / ".gitignore").write_text(".env.*\n.env\n*.pem\n*.key\n.secrets/\n")
         (repo / "README.md").write_text("# widgets\n")
         (repo / "CLAUDE.md").write_text("Run `bash scripts/validate.sh` before committing.\n")
+        (repo / ".olivercode").mkdir(exist_ok=True)
+        (repo / ".olivercode" / "policy.json").write_text("{}\n")
         cmd_fleet._install_hook_pair(repo, TEMPLATES, private_repo=False)
         _TEMPLATE.append(repo)
     return _TEMPLATE[0]
@@ -50,10 +52,6 @@ class ConformBase(unittest.TestCase):
         rows = conform.check_repo(self.repo, oc_root=REPO_ROOT, offline=True, today=TODAY, **kwargs)
         return {row.requirement: row for row in rows}
 
-    def fill_loop(self):
-        path = self.repo / "docs" / "repo-structure-contract.md"
-        path.write_text(path.read_text().split("## Learning loop")[0] + "## Learning loop\n" + "".join(f"- {s}: a file\n" for s in conform.LEARNING_STEPS))
-
     def contract(self, text):
         path = self.repo / "docs" / "repo-structure-contract.md"
         path.write_text(path.read_text() + text)
@@ -62,12 +60,42 @@ class ConformBase(unittest.TestCase):
 class TestRequirements(ConformBase):
     def test_a_bootstrapped_repo_passes_every_check_that_can_run_offline(self):
         rows = self.rows()
-        for name in ("layout", "ignore", "validation", "hooks", "managed-files"):
+        for name in ("ignore", "validation", "hooks", "managed-files", "permission-policy"):
             self.assertEqual("pass", rows[name].status, f"{name}: {rows[name].detail}")
         self.assertEqual("skip", rows["board"].status)
-        self.assertEqual("manual", rows["audit"].status)
-        (self.repo / "docs" / "AUDITED.txt").write_text("abc123 README.md\n")
-        self.assertEqual("pass", self.rows()["audit"].status, "a ledger records that an audit ran")
+        self.assertEqual("skip", rows["unfinished-work-snapshot"].status, "only the engine checkout reads the machine's settings")
+
+    def test_the_contract_keeps_the_rows_that_protect_a_repo_and_none_of_the_self_rules(self):
+        names = {check.__name__.replace("_", "-") for check in conform.CHECKS}
+        kept = {"ignore", "hooks", "engine-only", "fleet-private", "issues", "managed-files", "tests", "delete-on-merge", "branches", "sleep-setting", "board",
+                "validation", "permission-policy", "unfinished-work-snapshot"}
+        self.assertEqual(kept, names)
+        contract = (REPO_ROOT / "docs" / "CONTRACT.md").read_text()
+        for gone in ("layout", "readme", "folders", "docs", "learning", "research", "audit", "automation", "live-launcher", "dead-selftest", "queue-bypass", "features", "machines"):
+            self.assertNotIn(f"| `{gone}` |", contract)
+        for row in kept:
+            self.assertIn(f"| `{row}` |", contract)
+
+    def test_the_register_and_its_commands_are_gone(self):
+        self.assertFalse((REPO_ROOT / "docs" / "STANDARDS.json").exists())
+        for module in ("features", "machines"):
+            self.assertFalse((REPO_ROOT / "scripts" / "lib" / f"{module}.py").exists())
+
+    def test_a_repo_with_no_permission_policy_fails_naming_the_init_command(self):
+        (self.repo / ".olivercode" / "policy.json").unlink()
+        row = self.rows()["permission-policy"]
+        self.assertEqual("fail", row.status)
+        self.assertEqual(f"olivercode policy init {self.repo}", row.fix)
+
+    def test_the_snapshot_row_fails_on_the_engine_checkout_when_the_settings_lack_the_hook(self):
+        (self.repo / "scripts" / "lib").mkdir()
+        (self.repo / "scripts" / "lib" / "engine_only.py").write_text("x = 1\n")
+        (self.tmp / ".claude").mkdir()
+        (self.tmp / ".claude" / "settings.json").write_text("{}")
+        row = conform.unfinished_work_snapshot(self.repo, home=self.tmp)
+        self.assertEqual(("fail", "olivercode install"), (row.status, row.fix))
+        with mock.patch.object(conform.claude_settings, "missing", return_value=[]):
+            self.assertEqual("pass", conform.unfinished_work_snapshot(self.repo, home=self.tmp).status)
 
     def test_a_gitignore_missing_a_credential_pattern_fails_naming_it(self):
         self.assertEqual("pass", self.rows()["ignore"].status)
@@ -82,21 +110,6 @@ class TestRequirements(ConformBase):
         (self.repo / ".gitignore").unlink()
         quiet(launcher.command_bootstrap, REPO_ROOT, self.repo, False)
         self.assertEqual("pass", self.rows()["ignore"].status)
-        # The readme and folders rows share this repo: a misordered README and an undeclared folder each fail.
-        self.assertEqual("pass", self.rows()["readme"].status)
-        (self.repo / "README.md").write_text("# widgets\n\n## License\n\n## Status\n")
-        row = self.rows()["readme"]
-        self.assertEqual("fail", row.status)
-        self.assertIn("\"License\" before \"Status\"", row.detail)
-        self.assertEqual("pass", self.rows()["folders"].status)
-        (self.repo / "vendor").mkdir()
-        (self.repo / "vendor" / "a.txt").write_text("x\n")
-        subprocess.run(["git", "-C", str(self.repo), "add", "vendor"], check=True)
-        row = self.rows()["folders"]
-        self.assertEqual("fail", row.status)
-        self.assertIn("vendor/", row.detail)
-        self.contract("\n- `vendor/` holds third-party code\n")
-        self.assertEqual("pass", self.rows()["folders"].status)
 
     def test_a_repo_with_code_needs_a_tracked_test(self):
         self.assertEqual("skip", self.rows()["tests"].status, "the fixture repo holds no code")
@@ -108,83 +121,9 @@ class TestRequirements(ConformBase):
         git(self.repo, "add", "tests")
         self.assertEqual("pass", self.rows()["tests"].status)
 
-    def test_a_launchd_job_that_runs_an_untracked_script_fails_the_automation_row(self):
-        import plistlib
-        home = self.tmp  # the repo sits under this home, as a real repo sits under the owner's
-        agents = home / "Library" / "LaunchAgents"
-        agents.mkdir(parents=True)
-        script = self.repo / "run_job.sh"
-        script.write_text("#!/bin/sh\n")
-        self.assertEqual("skip", self.rows(home=home)["automation"].status)
-        (agents / "com.example.job.plist").write_bytes(plistlib.dumps({"Label": "com.example.job", "ProgramArguments": ["/bin/sh", str(script)]}))
-        row = self.rows(home=home)["automation"]
-        self.assertEqual("fail", row.status)
-        self.assertIn("run_job.sh", row.detail)
-        git(self.repo, "add", "run_job.sh")
-        self.assertEqual("pass", self.rows(home=home)["automation"].status)
-
-    def test_a_research_file_must_say_where_its_findings_landed(self):
-        self.assertEqual("skip", self.rows()["research"].status)
-        folder = self.repo / "docs" / "research"
-        folder.mkdir()
-        (folder / "one.md").write_text("A finding with a number.\n")
-        self.assertEqual("fail", self.rows()["research"].status)
-        (folder / "one.md").write_text("A finding.\n\napplied: scripts/check.py\n")
-        self.assertEqual("pass", self.rows()["research"].status)
-        (folder / "two.md").write_text("applied: none, because it is per-account\n")
-        self.assertEqual("pass", self.rows()["research"].status)
-
-    def test_the_learning_loop_needs_all_five_steps_filled_in(self):
-        self.assertEqual("fail", self.rows()["learning"].status, "the template placeholders are not answers")
-        self.contract("\n## Learning loop\n- Record: data/decisions.csv\n- Read: scripts/review.py\n- Compare: data/market.json\n- Decide: scripts/review.py close\n")
-        row = self.rows()["learning"]
-        self.assertEqual("fail", row.status)
-        self.assertIn("Thin data", row.detail)
-
-    def test_a_filled_in_learning_loop_passes_and_an_exception_excuses_it(self):
-        self.fill_loop()
-        path = self.repo / "docs" / "repo-structure-contract.md"
-        self.assertEqual("pass", self.rows()["learning"].status)
-        path.write_text(path.read_text().split("## Learning loop")[0] + "## Contract exceptions\n- learning: static site with no analytics. Expires 2027-01-01\n")
-        self.assertEqual("exception", self.rows()["learning"].status)
-
-    def test_a_missing_root_doc_fails_layout_with_the_bootstrap_fix(self):
-        (self.repo / "README.md").unlink()
-        row = self.rows()["layout"]
-        self.assertEqual("fail", row.status)
-        self.assertIn("README.md", row.detail)
-        self.assertIn("olivercode bootstrap", row.fix)
-
-    def test_a_backlog_config_at_the_path_claude_md_names_passes_layout(self):
-        (self.repo / "docs" / "backlog-config.json").rename(self.repo / "backlog-config.json")
-        (self.repo / "CLAUDE.md").write_text("Run `bash scripts/validate.sh`. The board config is `backlog-config.json`.\n")
-        self.assertEqual("pass", self.rows()["layout"].status, self.rows()["layout"].detail)
-
     def test_a_claude_md_that_does_not_name_the_validation_command_fails(self):
         (self.repo / "CLAUDE.md").write_text("Rules.\n")
         self.assertEqual("fail", self.rows()["validation"].status)
-
-    def test_a_repo_whose_validation_drops_the_bypass_check_fails_naming_the_check(self):
-        validate = self.repo / "scripts" / "validate.sh"
-        self.assertEqual("pass", self.rows()["queue-bypass"].status)
-        (self.repo / "scripts" / "lib").mkdir()
-        (self.repo / "scripts" / "lib" / "queue_bypass.py").write_text("print('ok')\n")
-        row = self.rows()["queue-bypass"]
-        self.assertEqual("fail", row.status)
-        self.assertIn("no longer runs the queue bypass check", row.detail)
-        self.assertIn("widgets/scripts/validate.sh", row.fix)
-        validate.write_text(validate.read_text() + 'python3 scripts/lib/queue_bypass.py "$PWD"\n')
-        self.assertEqual("pass", self.rows()["queue-bypass"].status)
-
-    def test_a_tracked_bypass_of_the_validation_queue_fails_the_row(self):
-        (self.repo / "scripts" / "validate.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
-        (self.repo / "scripts" / "ci.sh").write_text("#!/usr/bin/env bash\npython3 -m unittest discover tests\n")
-        git(self.repo, "add", "scripts")
-        row = self.rows()["queue-bypass"]
-        self.assertEqual("fail", row.status)
-        self.assertIn("no queue block", row.detail)
-        self.assertIn("scripts/ci.sh:2", row.detail)
-        self.assertIn("sync-hooks", row.fix)
 
     def test_a_missing_validate_script_fails(self):
         (self.repo / "scripts" / "validate.sh").unlink()
@@ -224,15 +163,6 @@ class TestRequirements(ConformBase):
         cmd_fleet._install_hook_pair(self.repo, TEMPLATES, private_repo=True)
         self.assertEqual("pass", self.rows(private=True)["managed-files"].status)
 
-    def test_the_dead_ste_selftest_fails_naming_the_file_and_the_repo(self):
-        self.assertEqual("pass", self.rows()["dead-selftest"].status)
-        (self.repo / ".githooks" / "ste-lint-joined.py").write_text("print('selftest')\n")
-        row = self.rows()["dead-selftest"]
-        self.assertEqual("fail", row.status)
-        self.assertIn(".githooks/ste-lint-joined.py", row.detail)
-        self.assertIn("widgets", row.detail)
-        self.assertEqual("git rm .githooks/ste-lint-joined.py", row.fix)
-
     def test_an_edited_strict_managed_file_fails(self):
         (self.repo / "QUALITY_BASELINE.md").write_text("changed\n")
         row = self.rows()["managed-files"]
@@ -261,19 +191,6 @@ class TestNetworkChecks(ConformBase):
     def test_a_board_that_matches_passes_and_an_unreachable_one_skips(self):
         self.assertEqual("pass", self.board((1, 0, 0)).status)
         self.assertEqual("skip", self.board((0, 0, 1)).status)
-
-    def about(self, stdout, returncode=0):
-        runner = mock.Mock(return_value=subprocess.CompletedProcess([], returncode, stdout=stdout, stderr=""))
-        return conform.docs(self.repo, offline=False, runner=runner)
-
-    def test_an_about_with_a_description_and_topics_passes(self):
-        self.assertEqual("pass", self.about(json.dumps({"description": "x", "repositoryTopics": [{"name": "a"}]})).status)
-
-    def test_an_empty_about_fails_and_an_unreachable_gh_skips(self):
-        self.assertEqual("fail", self.about(json.dumps({"description": " ", "repositoryTopics": []})).status)
-        self.assertEqual("skip", self.about("", returncode=1).status)
-
-
 
 
 class TestFleetPrivate(ConformBase):
@@ -355,11 +272,11 @@ class TestTimeouts(ConformBase):
     def test_a_check_that_times_out_fails_its_row_and_the_rest_still_run(self):
         def slow(repo, **_):
             raise subprocess.TimeoutExpired("git", 60)
-        with mock.patch.object(conform, "CHECKS", (slow, conform.layout)):
+        with mock.patch.object(conform, "CHECKS", (slow, conform.ignore)):
             rows = {row.requirement: row for row in conform.check_repo(self.repo, offline=True)}
         self.assertEqual("fail", rows["slow"].status)
         self.assertIn("timed out after 60 seconds", rows["slow"].detail)
-        self.assertIn("layout", rows)
+        self.assertIn("ignore", rows)
 
 
 class TestExceptions(ConformBase):
@@ -395,40 +312,22 @@ class TestExceptions(ConformBase):
 
 
 class TestCommand(ConformBase):
-    def setUp(self):
-        super().setUp()
-        # The features row reads this machine's launchd jobs; tests/test_features.py covers it.
-        patch = mock.patch.object(conform.features_register, "off", return_value=[])
-        patch.start()
-        self.addCleanup(patch.stop)
-
     def test_the_command_exits_non_zero_on_a_failure_and_zero_when_clean(self):
-        self.fill_loop()
         (code, out) = quiet(launcher.command_conform, REPO_ROOT, self.repo, None, True)
         self.assertEqual(0, code, out)
-        (self.repo / "README.md").unlink()
+        (self.repo / "scripts" / "validate.sh").unlink()
         (code, out) = quiet(launcher.command_conform, REPO_ROOT, self.repo, None, True)
         self.assertEqual(1, code)
-        self.assertIn("[FAIL] layout", out)
-
-    def test_the_command_fails_and_names_the_repo_and_the_bypass_check_it_dropped(self):
-        self.fill_loop()
-        (self.repo / "scripts" / "lib").mkdir()
-        (self.repo / "scripts" / "lib" / "queue_bypass.py").write_text("print('ok')\n")
-        code, out = quiet(launcher.command_conform, REPO_ROOT, self.repo, None, True)
-        self.assertEqual(1, code)
-        self.assertIn("widgets\n", out)
-        self.assertIn("[FAIL] queue-bypass: scripts/validate.sh no longer runs the queue bypass check", out)
+        self.assertIn("[FAIL] validation", out)
 
     def test_hooks_only_checks_the_hooks_and_nothing_else(self):
-        (self.repo / "README.md").unlink()
+        (self.repo / "scripts" / "validate.sh").unlink()
         code, out = quiet(launcher.command_conform, REPO_ROOT, self.repo, None, True, True)
         self.assertEqual(0, code, out)
         self.assertIn("[OK] hooks", out)
-        self.assertNotIn("layout", out)
+        self.assertNotIn("validation", out)
 
     def test_with_no_directory_it_prints_one_block_per_registered_repo(self):
-        self.fill_loop()
         profiles = {"widgets": {}, "absent": {}}
         with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(profiles, None)), \
                 mock.patch.object(cmd_fleet, "registry_gap", return_value=""):
@@ -442,10 +341,9 @@ class TestCommand(ConformBase):
         code, out = quiet(launcher.command_conform, REPO_ROOT, self.tmp / "nope", None, True)
         self.assertEqual(1, code)
         self.assertIn("is not a directory", out)
-        self.assertNotIn("layout", out)
+        self.assertNotIn("validation", out)
 
     def test_a_directory_takes_its_hook_variant_from_the_registry(self):
-        self.fill_loop()
         (self.repo / ".githooks" / "pre-commit").write_text("#!/usr/bin/env bash\nexit 0\n")
         code, _ = quiet(launcher.command_conform, REPO_ROOT, self.repo, self.tmp, True)
         self.assertEqual(1, code)

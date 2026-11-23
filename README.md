@@ -103,16 +103,16 @@ python3 scripts/olivercode conform
 | Job | Commands |
 | --- | --- |
 | Install and update | `olivercode install`, `olivercode uninstall`, `olivercode update`, `olivercode bootstrap`, `olivercode sync-hooks`, `olivercode place`, `olivercode clean`, `olivercode worktree`, `olivercode commit-check` |
-| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode features`, `olivercode machines`, `olivercode ledger`, `olivercode audit-fleet`, `olivercode audit-mode`, `olivercode maintain`, `olivercode eval`, `olivercode report`, `olivercode cutlist`, `olivercode limits`, `olivercode usage` |
+| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode ledger`, `olivercode audit-fleet`, `olivercode audit-mode`, `olivercode maintain`, `olivercode eval`, `olivercode report`, `olivercode cutlist`, `olivercode limits`, `olivercode usage` |
 | Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode land`, `olivercode wip`, `olivercode validated`, `olivercode queue`, `olivercode batch` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode gap-sweep`, `olivercode board sweep`, `olivercode board burndown`, `olivercode story`, `olivercode candidates`, `olivercode gh-limit` |
 | Owner and decisions | `olivercode owner`, `olivercode push-blocked`, `olivercode decisions` |
 | Learning | `olivercode lesson`, `olivercode retro` |
-| Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode review`, `olivercode policy` |
+| Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode policy` |
 | Orientation | `olivercode skills`, `olivercode guide` |
 
-The scheduled jobs (`burndown`, `sweep`, `fleet-sync`, `review`, `retro`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
+The scheduled jobs (`burndown`, `sweep`, `fleet-sync`, `retro`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
 
 ## Skills
 

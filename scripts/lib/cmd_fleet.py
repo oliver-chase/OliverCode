@@ -16,7 +16,6 @@ from lib import validate_snippet as _snippet
 from lib.cli import require_dir, take_flag
 from lib.gitfiles import commit_after, commit_changes
 from lib import cmd_owner as _owner
-from lib import features as _features
 from lib.local_config import OC_ROOT
 from lib import repo_state as _repo_state
 from lib.local_config import private_repos as _private_repos
@@ -72,15 +71,15 @@ def _local_fix(oc_root: Path, repo: Path, kinds: set[str], private: bool, varian
     """(the paths the repo's local fixes touch, None when unknown; the function that applies them)."""
     manifest = json.loads((oc_root / "shared" / "project-bootstrap-manifest.json").read_text()).get("templatedFiles", [])
     touches: list[str] = []
-    if kinds & {"hooks", "queue-bypass"}:
+    if "hooks" in kinds:
         touches += MANAGED_PATHS
     if "managed-files" in kinds:
         touches += [e["target"] for e in manifest if e.get("mode") == "strict"]
-    if "dead-selftest" in kinds:
-        touches.append(_conform.DEAD_SELFTEST)
+    if "permission-policy" in kinds:
+        touches.append(".olivercode/policy.json")
 
     def apply() -> None:
-        if kinds & {"hooks", "queue-bypass"}:
+        if "hooks" in kinds:
             templates = repo_gates.hook_templates(oc_root)
             if variant:
                 _install_pre_push(repo, templates)
@@ -90,11 +89,9 @@ def _local_fix(oc_root: Path, repo: Path, kinds: set[str], private: bool, varian
             _queue_block(oc_root, repo.name, repo)
         if "managed-files" in kinds:
             subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), "bootstrap", str(repo)], capture_output=True, text=True)
-        if "dead-selftest" in kinds:
-            _git(repo, "rm", "-q", "-f", "--", _conform.DEAD_SELFTEST)
-        if "features" in kinds:
-            _features.enable(repo, out=lambda text: print(f"      {text}"))
-    return (None if "features" in kinds else tuple(touches)), apply
+        if "permission-policy" in kinds:
+            subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), "policy", "init", str(repo)], capture_output=True, text=True)
+    return tuple(touches), apply
 
 
 def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None, offline: bool, hooks_only: bool, story: str) -> int:

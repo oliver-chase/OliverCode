@@ -1,7 +1,7 @@
-"""Launcher command `gap-sweep`: file one story for each standard a repo has off, every night, with no model call (#725).
+"""Launcher command `gap-sweep`: file one story for each conform row a repo fails, every night, with no model call (#725).
 
-`olivercode gap-sweep [--schedule | --unschedule]` reads the feature register (`features.off`, #723) for OliverCode and each
-cloned fleet repo that has a board. For each row that is off and that an agent can turn on, it appends one candidate to the local candidates list (#895), at most five per repo per run and the most urgent first,
+`olivercode gap-sweep [--schedule | --unschedule]` runs the offline conform rows for OliverCode and each
+cloned fleet repo that has a board. For each row that fails and that an agent can repair, it appends one candidate to the local candidates list (#895), at most five per repo per run and the most urgent first,
 and files nothing. The owner promotes a candidate with `olivercode candidates promote N`, and groom fills its fields later. A gap with an open story is never added twice: the
 sweep comments on that story once a week instead. A gap whose story is closed is never added again, and nothing is added while the repo holds more than the open story cap.
 """
@@ -14,9 +14,10 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
-from lib import candidates, cmd_owner, failure_log, gh_budget, launchd
+from lib import candidates, conform, cmd_owner, failure_log, gh_budget, launchd
 from lib.cmd_sweep import boards
 from lib.local_config import OC_ROOT
 
@@ -24,8 +25,23 @@ LABEL = "com.olivercode.gap-sweep"
 USAGE = "Usage: olivercode gap-sweep [--schedule | --unschedule]"
 CAP = 5
 REMIND_DAYS = 7
-PRIORITY = {"hooks": "P0", "permission-policy": "P0", "board-baseline": "P1", "story-template": "P1"}
+PRIORITY = {"hooks": "P0", "permission-policy": "P0", "ignore": "P0", "engine-only": "P0", "managed-files": "P1"}
 BATCH = OC_ROOT / "skills" / "backlog" / "scripts" / "batch_project.py"
+OWNER_ROWS = ("sleep-setting", "fleet-private")  # settings only the owner changes, so the sweep leaves them to conform
+
+
+@dataclass
+class Gap:
+    id: str
+    title: str
+    enable: str
+
+
+def gaps_of(root: Path) -> list[Gap]:
+    """One gap for each offline conform row of ROOT that fails and that an agent can repair."""
+    rows = conform.check_repo(root, offline=True)
+    return [Gap(r.requirement, f"the {r.requirement} conform row", r.fix.strip("`") or f"olivercode conform {{repo}}")
+            for r in rows if r.status == "fail" and r.requirement not in OWNER_ROWS and r.requirement != "exceptions"]
 
 
 def marker(gap_id: str) -> str:
@@ -34,14 +50,14 @@ def marker(gap_id: str) -> str:
 
 def body(feature, repo: str, epic: int, priority: str) -> str:
     cmd = feature.enable.replace("{repo}", repo)
-    return (f"**As the owner**, I want {feature.title.lower()} turned on in {repo}, so that I never have to ask for it.\n\n"
+    return (f"**As the owner**, I want {feature.title} to pass in {repo}, so that I never have to ask for it.\n\n"
             "```gherkin\n"
-            f"Feature: {feature.title} is on\n  Scenario: Main case\n"
-            f"    Given {feature.title.lower()} is off in {repo}\n    When `{feature.enable.replace('{repo}', repo)}` runs\n"
-            f"    Then `olivercode features --repo {repo}` shows {feature.title.lower()} on\n```\n\n"
+            f"Feature: {feature.title} passes\n  Scenario: Main case\n"
+            f"    Given {feature.title} fails in {repo}\n    When `{cmd}` runs\n"
+            f"    Then `olivercode conform {repo}` shows {feature.id} as OK\n```\n\n"
             f"Epic: #{epic}\nPriority: {priority}. Size: XS. Work type: Story.\n\n"
-            "Existing coverage checked: the feature register lists this feature as off, and no open story enables it.\n\n"
-            f"Filed by the nightly gap sweep from the feature register. Enable command: `{cmd}`.\n{marker(feature.id)}\n")
+            "Existing coverage checked: conform fails this row, and no open story repairs it.\n\n"
+            f"Filed by the nightly gap sweep from the conform rows. Fix command: `{cmd}`.\n{marker(feature.id)}\n")
 
 
 def gh(args: list[str]):
@@ -106,11 +122,11 @@ def sweep_repo(name: str, config: Path, gaps: list, slug: str, epic: int | None,
     room = open_count <= candidates.limits()["openStoryCap"]
     filed = commented = 0
     for feature in sorted(gaps, key=lambda g: (PRIORITY.get(g.id, "P2"), g.id)):
-        title = f"Turn on {feature.title.lower()} in {name}"
+        title = f"Make {feature.title} pass in {name}"
         if feature.id in existing:
             number, key = existing[feature.id], f"{slug}#{existing[feature.id]}"
             if now - state.get(key, 0) > REMIND_DAYS * 86400:
-                comment(number, f"The nightly gap sweep still finds {feature.title.lower()} off in {name}. Enable command: `{feature.enable.replace('{repo}', name)}`.")
+                comment(number, f"The nightly gap sweep still finds {feature.title} failing in {name}. Fix command: `{feature.enable.replace('{repo}', name)}`.")
                 state[key], commented = now, commented + 1
         elif feature.id not in closed and room and not candidates.has(slug, title) and filed < CAP:
             priority = PRIORITY.get(feature.id, "P2")
@@ -123,11 +139,6 @@ def sweep_repo(name: str, config: Path, gaps: list, slug: str, epic: int | None,
 
 
 def run(board_list=boards, now: float | None = None) -> int:
-    try:
-        from lib import features
-    except ImportError:
-        print("The feature register (`olivercode features`, #723) is not installed here, so the gap sweep did not run.")
-        return 1
     now = time.time() if now is None else now
     path = failure_log.home() / "gap-sweep-state.json"
     try:
@@ -144,7 +155,7 @@ def run(board_list=boards, now: float | None = None) -> int:
         try:
             cfg = json.loads(config.read_text(encoding="utf-8"))
             root = config.resolve().parent.parent
-            gaps = features.off(root)
+            gaps = gaps_of(root)
             filed, commented = sweep_repo(name, config, gaps, f"{cfg['repoOwner']}/{cfg['repoName']}", epic_of(config) if gaps else 0, state, now)
         except (Exception, SystemExit) as exc:
             cmd_owner.note("gap-sweep", f"{name}: the gap sweep failed: {str(exc)[:200]}")
@@ -152,7 +163,7 @@ def run(board_list=boards, now: float | None = None) -> int:
             continue
         print(f"{name}: {len(gaps)} gap(s), {filed} candidate(s) added, {commented} reminder(s)")
         if filed:
-            cmd_owner.note("gap-sweep", f"{name}: added {filed} candidate(s) for standards that were off. Run `olivercode candidates`")
+            cmd_owner.note("gap-sweep", f"{name}: added {filed} candidate(s) for conform rows that failed. Run `olivercode candidates`")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=1), encoding="utf-8")
     return 1 if bad else 0
