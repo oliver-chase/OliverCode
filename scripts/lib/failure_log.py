@@ -58,11 +58,16 @@ def append_private(path: Path, text: str) -> None:
     os.chmod(path, 0o600)
 
 
+def stamp() -> str:
+    """The UTC second a log line carries. Stamps of one format compare as text, so a window of lines is read by comparing them."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def record(gate: str, reason: str, repo: str = "") -> None:
     """Append one finding, the way the hooks do."""
     path = log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    when = stamp()
     clean = " ".join(reason.split())[:200]
     append_private(path, f"{when}\t{repo or Path.cwd().name}\t{gate}\t{clean}\n")
     trim(path)
@@ -90,6 +95,11 @@ def entries() -> list[tuple[str, str, str, str]]:
         return []
     rows = [line.split("\t") for line in path.read_text(encoding="utf-8", errors="ignore").splitlines()]
     return [tuple(r) for r in rows if len(r) == 4]
+
+
+def since(repo: str, start: str) -> list[tuple[str, str, str, str]]:
+    """The lines a repo wrote at or after `start`, a stamp from `stamp`, oldest first (#1058)."""
+    return [row for row in entries() if row[1] == repo and row[0] >= start]
 
 
 REPEAT = 3

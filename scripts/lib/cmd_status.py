@@ -161,7 +161,8 @@ def live_lines(now: datetime, open_now: int, rows: list[dict]) -> list[str]:
     return [tokens_per_story(rows, log)] + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), (landed(rows) or [None])[0])
 
 
-def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=live_lines) -> int:
+def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=live_lines,
+        waiting=lambda: waiting_lines()) -> int:
     if not slug:
         out("Error: this repo has no GitHub origin.")
         return 1
@@ -178,6 +179,11 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
     out(f"{slug}: " + summary(open_now, rows, now))
     for line in live(now, open_now, rows):
         out(line)
+    steps = waiting()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
+    if steps:
+        out("Waits on the owner:")
+        for line in steps:
+            out(line)
     held = run_lock.active(slug, now.timestamp())
     if held:
         out("Run: " + run_lock.describe(held, now.timestamp()))

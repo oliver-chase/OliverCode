@@ -14,10 +14,11 @@ import re
 import subprocess
 import sys
 import time
+from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, gh_budget, intake, local_config, owner_decisions, run_lock
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, owner_decisions, policy, run_lock
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -59,6 +60,7 @@ class Io:
     def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int | None = None):
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
+        self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
         """`gh` through the runner a caller injected, else the shared one that honors the GitHub hold."""
@@ -132,8 +134,22 @@ class Io:
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), owner_decisions.brief_section(n)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
         builder, _reader = intake.models(size, issue.get("labels") or (), f"story-{n}")
+        self.built_at[n] = failure_log.stamp()
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder,
                                    rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0))
+
+    def policy_stop(self, n: int, worktree: Path) -> dict | None:
+        """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
+        return policy_stop_in(worktree.name, self.built_at.get(n, ""))
+
+    def queue_owner(self, n: int, stop: dict) -> None:
+        """One open owner-queue line for a story a policy ask stopped. A story already waiting on the owner gets no second line (#1058)."""
+        key = f"policy-stop:{self.slug}#{n}"
+        if any(i["status"] == "open" and i.get("key") == key for i in cmd_owner.items()):
+            return
+        at = f" at the {stop['gate']} gate" if stop["gate"] else ""
+        cmd_owner.add(self.agent, f"Story #{n} waits on you: {stop['rule']} stopped its builder{at}, so drain did not restart it. The story comment names the next action.",
+                      extra={"key": key, "story": n, "gate": stop["gate"]})
 
     def commits(self, worktree: Path) -> int:
         done = subprocess.run(["git", "-C", str(worktree), "rev-list", "--count", f"origin/{self.branch()}..HEAD"], capture_output=True, text=True)
@@ -295,6 +311,33 @@ def held_comment(worktree: Path, finding: str) -> str:
     return f"Held by the fresh reader, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.\n\nFinding:\n{finding[:2000]}"
 
 
+def policy_stop_in(repo: str, start: str) -> dict | None:
+    """The policy ask that answered a commit of `repo` since `start`, as {'rule', 'gate', 'finding', 'file'}, or None. The hooks log the ask
+    as a policy line, and the commit-gate block that repeated most in the same window is the gate, its newest line the finding (#1058)."""
+    if not start:
+        return None
+    rows = failure_log.since(repo, start)
+    asks = [reason for _, _, gate, reason in rows if gate == "policy" and reason.startswith("ask ")]
+    if not asks:
+        return None
+    blocks = [(gate, reason) for _, _, gate, reason in rows if gate not in policy.NON_COMMIT_GATES]
+    gate, finding = "", ""
+    if blocks:
+        gate = Counter(g for g, _ in blocks).most_common(1)[0][0]
+        finding = next(reason for g, reason in reversed(blocks) if g == gate)
+    named = re.search(r"[\w.-]+(?:/[\w.-]+)*\.\w+", finding)
+    return {"rule": asks[-1][len("ask "):], "gate": gate, "finding": finding, "file": named.group(0) if named else ""}
+
+
+def policy_stop_comment(stop: dict) -> str:
+    """The one comment a policy-stopped story gets: the rule and gate, the last finding, the file it named and the one next action (#1058)."""
+    return (f"Stopped by the policy, so drain starts no restart: {stop['rule']} answered this builder's commit with ask, and a headless session cannot answer it.\n"
+            f"- Gate: {stop['gate'] or 'none'}\n"
+            f"- Last finding: {stop['finding'] or 'none'}\n"
+            f"- File: {stop['file'] or 'none named'}\n"
+            "- Next: run the diagnosing-bugs loop on the gate's finding, then return this story to Ready.")
+
+
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n, tokens, note = issue["number"], 0, ""
     lead = io.landed_lead(issue)
@@ -320,15 +363,20 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
             io.comment(n, held_comment(worktree, out["held"]))
             return False, tokens
-        if not out["done"]:
+        if out["done"]:
+            try:
+                closed, note = land_and_close(io, worktree, n)
+            except CloseRefused:
+                return False, tokens
+            if closed:
+                return True, tokens
+        else:
             note = out["reason"]
-            continue
-        try:
-            closed, note = land_and_close(io, worktree, n)
-        except CloseRefused:
+        stop = io.policy_stop(n, worktree)
+        if stop:  # a policy ask answers a headless builder with no one to answer it, so a restart would hit the same ask (#1058)
+            io.comment(n, policy_stop_comment(stop))
+            io.queue_owner(n, stop)
             return False, tokens
-        if closed:
-            return True, tokens
     io.comment(n, f"Drain blocked after {RESTARTS} restarts of the builder on {worktree}. Last reason: {note}")
     return False, tokens
 

@@ -26,8 +26,15 @@ class TestStatus(unittest.TestCase):
     def status(self, open_now, rows, slug="o/r"):
         out = io.StringIO()
         code = cmd_status.run(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"),
-                              live=lambda now, count, rows: [])
+                              live=lambda now, count, rows: [], waiting=lambda: [])
         return code, out.getvalue()
+
+    def test_status_names_a_story_a_policy_stop_left_waiting_on_the_owner(self):
+        step = "Story #1012 waits on you: triggers.gateFailures stopped its builder at the Owner identifiers gate, so drain did not restart it."
+        out = io.StringIO()
+        cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
+                       live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"])
+        self.assertIn("Waits on the owner:\n- #7 " + step, out.getvalue())
 
     def test_a_falling_count_prints_the_rate_and_a_zero_date(self):
         rows = [issue("2026-11-01", "2026-11-20")] * 14 + [issue("2026-11-20")] * 7

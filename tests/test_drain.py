@@ -23,11 +23,12 @@ def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
 
 
 class FakeIo:
-    def __init__(self, issues, cap=2, builds=None, land_ok=True, tokens=10):
+    def __init__(self, issues, cap=2, builds=None, land_ok=True, tokens=10, stops=None):
         self.agent, self.moved, self.released, self.already, self.kept, self.on_main = "drain", [], [], False, [], set()
         self.ghost_land = False
         self.refuse_close = ""
         self.slug, self.issues, self.cap, self.builds, self.land_ok, self.tokens = "o/r", list(issues), cap, builds or {}, land_ok, tokens
+        self.stops, self.owner = stops or {}, []  # story number -> the policy stop its builder hit; the owner-queue lines written
         self.closed, self.comments, self.started, self.claims, self.lock = [], [], [], set(), threading.Lock()
         self.active, self.peak_overlap = set(), []
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
@@ -74,6 +75,8 @@ class FakeIo:
     def release(self, n): self.released.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
     def landed(self, wt, n): return self.already or (n in self.on_main)
+    def policy_stop(self, n, wt): return self.stops.get(n)
+    def queue_owner(self, n, stop): self.owner.append((n, stop))
 
 
 def state():
@@ -183,6 +186,59 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], [n for n, _ in io.comments])
         self.assertIn("scripts/a.py: no test", io.comments[0][1])
         self.assertIn("nothing was pushed", io.comments[0][1])
+
+    def test_a_policy_stopped_builder_is_not_restarted_and_the_owner_hears_once(self):
+        stop = {"rule": "triggers.gateFailures", "gate": "Owner identifiers", "finding": "scripts/lib/x.py:4 owner identifier", "file": "scripts/lib/x.py"}
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "commit refused"}]}, stops={1: stop})
+        _, out, st = self.run_drain(io)
+        self.assertEqual(io.started, [1])
+        self.assertEqual(st["blocked"], [1])
+        self.assertEqual(io.kept, [1])
+        self.assertEqual([(1, stop)], io.owner)
+        self.assertEqual([1], [n for n, _ in io.comments])
+        body = io.comments[0][1]
+        for part in ("Gate: Owner identifiers", "Last finding: scripts/lib/x.py:4 owner identifier", "File: scripts/lib/x.py", "Next: run the diagnosing-bugs loop"):
+            self.assertIn(part, body)
+
+    def test_the_1012_failure_log_replays_to_one_comment_and_no_restart(self):
+        """#1058: five owner-identifier blocks then six policy asks, all on OliverCode-1012. Before the fix drain restarted three times."""
+        home = temp_dir(self)
+        log = home / "failures.log"
+        rows = [f"2026-11-23T16:{m:02d}:{s:02d}Z\tOliverCode-1012\tOwner identifiers\tscripts/lib/owner.py:9 owner identifier found\n" for m, s in ((12, 0), (13, 0), (14, 0), (15, 0), (16, 0))]
+        rows += [f"2026-11-23T16:{m:02d}:00Z\tOliverCode-1012\tpolicy\task triggers.gateFailures\n" for m in range(19, 27)]
+        log.write_text("".join(rows), encoding="utf-8")
+
+        class Replay(FakeIo):
+            def policy_stop(self, n, wt):
+                return cmd_drain.policy_stop_in("OliverCode-1012", "2026-11-23T16:12:00Z")
+
+        io = Replay([issue(1012)], builds={1012: [{"done": False, "reason": "commit refused"} for _ in range(4)]})
+        with mock.patch.dict(os.environ, {"OLIVERCODE_FAILURE_LOG": str(log)}):
+            _, out, st = self.run_drain(io)
+        self.assertEqual(io.started, [1012])
+        self.assertEqual(1, len(io.comments))
+        self.assertIn("File: scripts/lib/owner.py", io.comments[0][1])
+        self.assertEqual(st["blocked"], [1012])
+
+    def test_a_stop_with_no_policy_ask_in_the_run_is_not_a_stop(self):
+        log_home = temp_dir(self)
+        log = log_home / "failures.log"
+        log.write_text("2026-11-23T16:12:00Z\tOliverCode-1012\tOwner identifiers\tscripts/lib/owner.py:9 found\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"OLIVERCODE_FAILURE_LOG": str(log)}):
+            self.assertIsNone(cmd_drain.policy_stop_in("OliverCode-1012", "2026-11-23T16:00:00Z"))
+
+    def test_the_owner_line_is_written_once_per_story_and_names_the_gate(self):
+        home = temp_dir(self)
+        stop = {"rule": "triggers.gateFailures", "gate": "Owner identifiers", "finding": "", "file": ""}
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            io = cmd_drain.Io(Path("/repo"), "o/r")
+            io.queue_owner(1012, stop)
+            io.queue_owner(1012, stop)
+            from lib import cmd_owner
+            open_steps = [i for i in cmd_owner.items() if i["status"] == "open"]
+        self.assertEqual(1, len(open_steps))
+        self.assertIn("Story #1012 waits on you", open_steps[0]["step"])
+        self.assertIn("at the Owner identifiers gate", open_steps[0]["step"])
 
     def test_failed_landing_counts_as_a_restart(self):
         io = FakeIo([issue(1)], land_ok=False)

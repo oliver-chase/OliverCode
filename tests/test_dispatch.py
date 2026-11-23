@@ -64,6 +64,7 @@ class RunIo:
         return True, ""
     def release(self, n): self.steps.append("release")
     def keep_open(self, n, reason=""): self.steps.append(f"open:{reason}")
+    def policy_stop(self, n, wt): return None  # no policy ask answers this fake's builds (#1058)
     def landed_lead(self, issue): return None
 
 
