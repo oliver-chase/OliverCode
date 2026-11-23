@@ -45,9 +45,8 @@ INSTALL_RECORD = ".olivercode-install.json"
 # The first install's closing text: how work runs, the first steps and the habits that keep it cheap, in 20 lines at most (#972, #991).
 INTRODUCTION = """How OliverCode works
   You work in one thread and say what you want. Each request becomes a story on the repo's board.
-  `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless
-  Claude session, and the runner validates it and lands it for you. Run `olivercode status`
-  to see what is open.
+  `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, and the runner validates it and lands it for you.
+  The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost.
 
 First steps, in order
   1. Register your repos: olivercode discover --root <folder holding your repos> --register
@@ -58,6 +57,15 @@ Using it well
 """ + "\n".join(f"  {habit}" for habit in cmd_guide.USING_IT_WELL) + """
 
 Run `olivercode guide` for the full overview."""
+
+
+def closing_lines(oc_root: Path) -> str:
+    """Install's last lines on every install: the status steps from `olivercode guide status` and a pointer to the adoption skill (#1059)."""
+    steps = "\n".join(f"  {step}" for step in cmd_guide.status_steps(oc_root))
+    return f"""Follow a run from a terminal (`olivercode guide status` prints these steps again)
+{steps}
+
+Walk through the rest of setup: say "set up OliverCode" in Claude Code, and the olivercode-adoption skill takes you through it."""
 
 
 RULE_LINKS = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md", "DESIGN.md": Path("docs") / "DESIGN.md"}
@@ -543,10 +551,10 @@ def command_install(oc_root: Path) -> int:
         board_step(registered_repos())
     else:
         print("Board step skipped here. Run `olivercode install` in your own terminal, or `olivercode backlog-setup DIR --apply` for each repo.")
+    print(closing_lines(oc_root))
     if first_install:
+        print()
         print(INTRODUCTION)
-    else:
-        print("Run `olivercode guide` to see how work runs.")
     return 1 if broken or broken_settings else 0
 
 

@@ -18,6 +18,8 @@ HOW_WORK_RUNS = (
     "`olivercode status` shows what is open.",
 )
 
+THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost."
+
 # The habits that keep OliverCode cheap, printed after the first steps by the guide and the first install's introduction, one line each (#991).
 USING_IT_WELL = (
     "Work in one thread per topic, and start a fresh one when it grows long.",
@@ -147,9 +149,21 @@ def explain(oc_root: Path, name: str) -> list[str]:
     return out
 
 
+def status_steps(oc_root: Path) -> list[str]:
+    """How to follow a run from a terminal, at no token cost (#1059). Install's closing lines, the adoption skill and `olivercode guide status` all print these."""
+    return [
+        "1. Open the Terminal app.",
+        "2. Inside a repo folder, run `olivercode status`.",
+        f"3. From any folder, run `olivercode status --root {oc_root}` for this OliverCode checkout.",
+        "Each check reads GitHub only and costs no model turn, so run it as often as you like.",
+    ]
+
+
 def command_guide(oc_root: Path, name: str | None = None) -> int:
     if name:
         found = explain(oc_root, name)
+        if name.lower().removeprefix("olivercode ").strip() == "status":
+            found.append("Status steps\n" + "\n".join(f"  {step}" for step in status_steps(oc_root)))
         if not found:
             print(f"Error: nothing named '{name}' is a command, gate, guard, job or skill. Run `olivercode guide` for the list.")
             return 1
@@ -158,6 +172,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     print("How work runs")
     for sentence in HOW_WORK_RUNS:
         print(f"  {sentence}")
+    print(f"  {THREAD_LINE}")
     print("\nFirst steps, in order")
     print("  1. olivercode discover --root <folder holding your repos> --register    add your repos to the fleet")
     print("  2. olivercode health                                                   check this machine")

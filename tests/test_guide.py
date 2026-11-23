@@ -117,3 +117,35 @@ class TestUsingItWell(unittest.TestCase):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         for habit in cmd_guide.USING_IT_WELL:
             self.assertIn(habit.rstrip("."), readme)
+
+
+class TestStatusSteps(unittest.TestCase):
+    """#1059: install, the adoption skill and `olivercode guide status` print one set of steps to follow a run from a terminal."""
+
+    def test_guide_status_prints_the_steps_with_this_checkout_path(self):
+        code, text = quiet(cmd_guide.command_guide, REPO_ROOT, "status")
+        self.assertEqual(0, code)
+        self.assertIn("Command: olivercode status", text)
+        for step in cmd_guide.status_steps(REPO_ROOT):
+            self.assertIn(step, text)
+        self.assertIn(f"olivercode status --root {REPO_ROOT}", text)
+        self.assertIn("Terminal", text)
+        self.assertIn("no model turn", text)
+
+    def test_install_closes_with_the_same_steps_and_the_adoption_pointer(self):
+        from lib import cmd_install
+        closing = cmd_install.closing_lines(REPO_ROOT)
+        for step in cmd_guide.status_steps(REPO_ROOT):
+            self.assertIn(step, closing)
+        self.assertIn("olivercode-adoption", closing)
+        self.assertNotIn("Run `olivercode guide` to see how work runs.", closing)
+
+    def test_the_introduction_and_the_guide_say_the_thread_steers_a_run_and_status_is_free(self):
+        from lib import cmd_install
+        line = "The thread that started a run is the one to steer it."
+        free = "`olivercode status` answers status from any thread or terminal at no token cost."
+        self.assertIn(line, cmd_install.INTRODUCTION.replace("\n  ", " "))
+        self.assertIn(free, cmd_install.INTRODUCTION.replace("\n  ", " "))
+        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
+        self.assertIn(line, text)
+        self.assertIn(free, text)

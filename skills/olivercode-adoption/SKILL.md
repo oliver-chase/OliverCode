@@ -69,3 +69,7 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 ## Output
 
 Report what moved (from where, to where, verified at the destination), what stayed and why, what you could not classify with the question they need to answer, the quoted enforcement probe, and where the backups are.
+
+## Closing lines
+
+As the last step, run `olivercode guide status` and show the user its output. It gives the steps to follow a run from a terminal, which cost no model turn, so the user never has to ask a thread for status.
