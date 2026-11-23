@@ -478,7 +478,7 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    fleet_repo_step(fleet_registry_path(), ask=input if owner_terminal() else None)
+    fleet_repo_step(fleet_registry_path().parent, ask=input if owner_terminal() else None)
     if owner_terminal():
         board_step(registered_repos())
     else:
