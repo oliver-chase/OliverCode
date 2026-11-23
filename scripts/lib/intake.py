@@ -183,6 +183,7 @@ def prevention(slug: str, epic: int = 1, repeats=None, fetch=gh_issues, file=can
 
 # Split open stories by files area so non-overlapping stories go to builders in parallel (#794).
 AREA = re.compile(r"^\W*Files area:\W*(.+)$", re.I | re.M)
+CREATES = re.compile(r"^\W*Creates:\W*(.+)$", re.I | re.M)
 WAIT_LINE = re.compile(r"\b(?:wait\w*|until|after|once|data|window)\b", re.I)
 WAIT_DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 WAIT_SPAN = re.compile(r"\b(\d+)[- ]days?\s+(?:of\s+)?(?:data|window|wait)|\bwait\w*\s+(?:for\s+)?(\d+)\s+days?\b", re.I)
@@ -190,10 +191,19 @@ WAIT_DAYS = 14
 SMALL = ("XS", "S")
 
 
+def _listed(line: re.Pattern, body: str) -> list[str]:
+    m = line.search(body or "")
+    return [t.strip("`.,;*()") for t in re.split(r"[,;\s]+", m.group(1)) if t.strip("`.,;*()")] if m else []
+
+
 def files_area(body: str) -> list[str]:
     """The paths on the story's `Files area:` line, or [] when it has none."""
-    m = AREA.search(body or "")
-    return [t.strip("`.,;*()") for t in re.split(r"[,;\s]+", m.group(1)) if t.strip("`.,;*()")] if m else []
+    return _listed(AREA, body)
+
+
+def creates(body: str) -> list[str]:
+    """The paths on the story's `Creates:` line, the new files it adds (#1004), or [] when it has none."""
+    return _listed(CREATES, body)
 
 
 def overlaps(a: list[str], b: list[str]) -> bool:

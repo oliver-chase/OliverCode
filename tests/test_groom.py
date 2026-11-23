@@ -231,3 +231,84 @@ class TestAForkCarryingTheOwnersConfig(unittest.TestCase):
         with mock.patch.object(cmd_sweep, "OC_ROOT", repo), mock.patch.object(cmd_sweep, "load_repo_profiles", return_value=({}, None)), \
                 mock.patch.object(cmd_sweep, "backlog_config", return_value={"projectOwner": "owner", "projectNumber": 15}):
             self.assertEqual([], cmd_sweep.boards())
+
+
+class TestFilingFit(unittest.TestCase):
+    """The filing check (#1004): overlap with open stories and missing paths, with no model call."""
+
+    def main_repo(self, *paths):
+        repo = temp_dir(self)
+        for p in paths:
+            (repo / p).parent.mkdir(parents=True, exist_ok=True)
+            (repo / p).write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "init"], check=True)
+        return repo
+
+    def test_an_open_story_sharing_a_file_is_named_in_a_related_line(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        stories = {5: {"body": "Files area: scripts/lib/cmd_groom.py, docs/a.md"}, 6: {"body": "Files area: docs/b.md"}}
+        body, lines = cmd_groom.fit("Files area: scripts/lib/cmd_groom.py\n", "New", stories, repo)
+        self.assertEqual("Files area: scripts/lib/cmd_groom.py\nRelated: #5 (Files area overlaps)\n", body)
+        self.assertEqual([], lines)
+
+    def test_a_folder_that_holds_an_open_stories_file_overlaps_it(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        body, _ = cmd_groom.fit("Files area: scripts/lib/\n", "New", {7: {"body": "Files area: scripts/lib/cmd_groom.py"}}, repo)
+        self.assertIn("Related: #7 (Files area overlaps)", body)
+
+    def test_a_related_line_is_replaced_and_never_doubled(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        stories = {5: {"body": "Files area: scripts/lib/cmd_groom.py"}}
+        once, _ = cmd_groom.fit("Files area: scripts/lib/cmd_groom.py\n", "New", stories, repo)
+        twice, _ = cmd_groom.fit(once, "New", stories, repo)
+        self.assertEqual(once, twice)
+        self.assertEqual(1, twice.count("Related:"))
+
+    def test_a_path_that_is_not_on_main_is_printed_with_the_story_and_the_story_still_files(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        body, lines = cmd_groom.fit("Files area: scripts/lib/cmd_groom.py, scripts/lib/gone.py\n", "Fix the gap", {}, repo)
+        self.assertEqual(["Fix the gap: Files area names scripts/lib/gone.py, which is not on main and no Creates line names it"], lines)
+        self.assertIn("Files area: scripts/lib/cmd_groom.py, scripts/lib/gone.py", body)
+
+    def test_a_path_the_story_creates_is_not_flagged_and_a_folder_on_main_is_not_either(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        text = "Files area: scripts/lib/new.py, scripts/lib/, new file\nCreates: scripts/lib/new.py\n"
+        self.assertEqual([], cmd_groom.fit(text, "New", {}, repo)[1])
+
+    def test_a_word_in_the_files_area_is_not_read_as_a_path(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        self.assertEqual([], cmd_groom.fit("Files area: scripts/lib/cmd_groom.py, new\n", "New", {}, repo)[1])
+
+    def test_a_repo_git_cannot_read_says_the_check_did_not_run(self):
+        repo = temp_dir(self)
+        _, lines = cmd_groom.fit("Files area: scripts/lib/cmd_groom.py\n", "New", {}, repo)
+        self.assertEqual(["New: the Files area check did not run, because git cannot read main"], lines)
+
+    def test_the_fit_command_writes_the_related_line_and_prints_the_missing_path(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        (repo / "docs").mkdir()
+        config = repo / "docs" / "backlog-config.json"
+        config.write_text(json.dumps({"repoOwner": "o", "repoName": "r"}))
+        body_file = temp_dir(self) / "body.md"
+        body_file.write_text("Files area: scripts/lib/cmd_groom.py, scripts/lib/gone.py\n", encoding="utf-8")
+        argv = ["--fit", str(body_file), "--title", "New story", "--config", str(config)]
+        with mock.patch.object(cmd_groom, "open_stories", return_value={9: {"body": "Files area: scripts/lib/cmd_groom.py"}}) as read, \
+                mock.patch("builtins.print") as out:
+            self.assertEqual(0, cmd_groom.command_groom(argv))
+        read.assert_called_once_with("o/r")
+        self.assertIn("Related: #9 (Files area overlaps)", body_file.read_text(encoding="utf-8"))
+        out.assert_called_once_with("New story: Files area names scripts/lib/gone.py, which is not on main and no Creates line names it")
+
+    def test_a_failed_read_of_the_open_stories_still_lets_the_story_file(self):
+        repo = self.main_repo("scripts/lib/cmd_groom.py")
+        (repo / "docs").mkdir()
+        config = repo / "docs" / "backlog-config.json"
+        config.write_text(json.dumps({"repoOwner": "o", "repoName": "r"}))
+        body_file = temp_dir(self) / "body.md"
+        body_file.write_text("Files area: scripts/lib/cmd_groom.py\n", encoding="utf-8")
+        with mock.patch.object(cmd_groom, "open_stories", side_effect=RuntimeError("no network")), mock.patch("builtins.print") as out:
+            self.assertEqual(0, cmd_groom.command_fit(["--fit", str(body_file), "--title", "New", "--config", str(config)]))
+        self.assertEqual("Files area: scripts/lib/cmd_groom.py\n", body_file.read_text(encoding="utf-8"))
+        out.assert_called_once_with("New: the Related check did not run (no network), so the story files without it")

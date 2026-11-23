@@ -259,7 +259,75 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         _state().write_text(json.dumps(state, indent=1), encoding="utf-8")
 
 
+RELATED = re.compile(r"^Related:.*$", re.M)
+PATH_LIKE = re.compile(r"[/.]")
+
+
+def related_to(body, stories):
+    """Numbers of the open stories whose Files area shares a file or folder with this body's (#1004). No model call."""
+    from lib import intake
+    mine = intake.files_area(body)
+    return sorted(n for n, s in stories.items() if intake.overlaps(mine, intake.files_area(s.get("body") or "")))
+
+
+def tracked(root):
+    """Every file and folder path on main, or None when git cannot read main."""
+    ran = maintain._git(root, "ls-tree", "-r", "--name-only", "main")
+    if ran.returncode:
+        return None
+    paths = set()
+    for line in ran.stdout.splitlines():
+        parts = line.split("/")
+        paths.update("/".join(parts[:i]) for i in range(1, len(parts) + 1))
+    return paths
+
+
+def missing(body, on_main):
+    """The Files area paths that are not on main and that no Creates line names (#1004). A word with no slash or dot is not a path."""
+    from lib import intake
+    made = {p.rstrip("/") for p in intake.creates(body)}
+    return [p for p in intake.files_area(body) if PATH_LIKE.search(p) and p.rstrip("/") not in on_main and p.rstrip("/") not in made]
+
+
+def fit(body, title, stories, root):
+    """(the body, the lines to print) at filing (#1004). Open stories that share a Files area path get one Related line, which replaces an
+    earlier one. Each named path that is not on main and not created prints with the story's title. Filing goes on either way."""
+    numbers = related_to(body, stories)
+    if numbers:
+        line = "Related: " + ", ".join(f"#{n}" for n in numbers) + " (Files area overlaps)"
+        body = RELATED.sub(line, body) if RELATED.search(body) else body.rstrip("\n") + "\n" + line + "\n"
+    on_main = tracked(root)
+    if on_main is None:
+        return body, [f"{title}: the Files area check did not run, because git cannot read main"]
+    return body, [f"{title}: Files area names {p}, which is not on main and no Creates line names it" for p in missing(body, on_main)]
+
+
+def command_fit(argv):
+    """`olivercode board groom --fit BODY_FILE --title TITLE --config FILE` (#1004): rewrites BODY_FILE with its Related line and prints each
+    missing path. It calls no model and returns 0 on a finding too, since the story still files."""
+    opts = dict(zip(argv[::2], argv[1::2]))
+    if len(argv) != 6 or set(opts) != {"--fit", "--title", "--config"}:
+        print("Usage: olivercode board groom --fit BODY_FILE --title TITLE --config FILE")
+        return 1
+    config = Path(opts["--config"])
+    cfg = json.loads(config.read_text(encoding="utf-8"))
+    slug, root = f"{cfg['repoOwner']}/{cfg['repoName']}", config.resolve().parent.parent
+    path = Path(opts["--fit"])
+    try:
+        stories = open_stories(slug)
+    except RuntimeError as exc:
+        print(f"{opts['--title']}: the Related check did not run ({exc}), so the story files without it")
+        return 0
+    body, lines = fit(path.read_text(encoding="utf-8"), opts["--title"], stories, root)
+    path.write_text(body, encoding="utf-8")
+    for line in lines:
+        print(line)
+    return 0
+
+
 def command_groom(argv):
+    if argv[:1] == ["--fit"]:
+        return command_fit(argv)
     force, args = "--force" in argv, [a for a in argv if a != "--force"]
     chosen = boards() if args == ["--all"] else [(Path(args[1]).parent.parent.name, Path(args[1]))] if len(args) == 2 and args[0] == "--config" else []
     if not chosen:
