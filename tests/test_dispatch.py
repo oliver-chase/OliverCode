@@ -220,39 +220,12 @@ def small(number, area="scripts/lib/x.py", size="XS", priority="P2"):
             "body": f"Do {number}.\nPriority: {priority}. Size: {size}. Work type: Story.\nFiles area: {area}"}
 
 
-class TestBatching(DispatchCase):
-    def lead(self, size="XS"):
-        return {**STORY, "body": f"Do the lead.\nPriority: P1. Size: {size}. Work type: Story.\nFiles area: scripts/lib/x.py"}
-
-    def test_three_small_stories_on_one_file_share_a_session_and_the_brief_names_them(self):
-        code, _, io = self.run_dispatch(story=self.lead(), others=(small(78), small(79)))
+class TestOneStoryPerBuilder(DispatchCase):
+    def test_a_small_story_builds_alone_and_takes_no_mates(self):
+        code, _, io = self.run_dispatch(story={**STORY, "body": "Do the lead.\nPriority: P1. Size: XS. Work type: Story.\nFiles area: scripts/lib/x.py"},
+                                        others=(small(78),))
         self.assertEqual(code, 0)
-        self.assertEqual([78, 79], [m["number"] for m in io.issue["mates"]])
-        brief = cmd_dispatch.batch_section(io.issue, io.issue["mates"])
-        for text in ("builds 3 small stories that share files: #77, #78, #79", "commit each as its own commit", "Story #79: Small 79"):
-            self.assertIn(text, brief)
-
-    def test_a_session_takes_at_most_five_and_only_overlapping_xs_and_s_stories(self):
-        others = tuple(small(n) for n in range(80, 88)) + (small(90, size="M"), small(91, area="scripts/lib/other.py"))
-        mates = cmd_dispatch.batch_mates(self.lead(size="S"), [self.lead(), *others])
-        self.assertEqual([i["number"] for i in mates], [80, 81, 82, 83])
-
-    def test_an_m_story_runs_alone(self):
-        self.assertEqual(cmd_dispatch.batch_mates(self.lead(size="M"), [small(78)]), [])
-        _, _, io = self.run_dispatch(story=self.lead(size="M"), others=(small(78),))
-        self.assertEqual([], io.issue["mates"])
-
-    def test_a_batched_story_without_its_own_commit_stays_open_on_ready(self):
-        code, _, io = self.run_dispatch(story=self.lead(), others=(small(78),))
-        self.assertEqual((0, ["claim", "build", "land", "close", "open:no commit for (#78) is on the default branch after the batch session with #77.",
-                              "release", "release"]), (code, io.steps))
-
-    def test_each_batched_story_closes_on_its_own_commit(self):
-        io = RunIo()
-        io.on_main.add(78)
-        code, _, io = self.run_dispatch(io=io, story=self.lead(), others=(small(78),))
-        self.assertEqual((0, ["claim", "build", "land", "close", "close", "release", "release"]), (code, io.steps))
-
+        self.assertNotIn("mates", io.issue)
 
 class TestDispatchRun(DispatchCase):
     def test_a_builder_that_never_finishes_comments_the_blocker_returns_the_story_to_ready_and_releases(self):

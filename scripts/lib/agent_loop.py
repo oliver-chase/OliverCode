@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from lib import failure_log, model, usage_sessions
@@ -147,13 +148,14 @@ def start_size(session_id: str, projects: Path | None = None) -> int | None:
 
 
 def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None) -> None:
-    """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost and stop reason, and on a session's first round the tokens it started with (#878).
+    """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost, stop reason and write time, and on a session's first round the tokens it started with (#878, #987).
     A log that cannot be written never stops a loop."""
     usage = reply.get("usage") or {}
     row = {"story": story, "round": n, "model": model_name, "input": usage.get("input", 0), "output": usage.get("output", 0),
            "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0), "cost_usd": reply.get("cost_usd"),
            "stop": reply.get("stop", ""), "stderr_tail": reply.get("stderr", ""), "resumed": bool(reply.get("resumed")),
-           "settings": reply.get("settings", "")}  # which setup ran, so the two start sizes can be compared (#911)
+           "settings": reply.get("settings", ""),  # which setup ran, so the two start sizes can be compared (#911)
+           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     try:

@@ -90,11 +90,10 @@ class Io:
         return path
 
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
-        """One headless builder session on the story: the brief holds the code the story names, the stories batched with it and the owner's decisions, and the
+        """One headless builder session on the story: the brief holds the code the story names and the owner's decisions, and the
         model follows the story size, with a small story getting a third round on the next model up (#890)."""
-        n, size, mates = issue["number"], cmd_groom.size_of(issue), issue.get("mates") or []
-        extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), cmd_dispatch.batch_section(issue, mates),
-                                                  owner_decisions.brief_section(n)) if part)
+        n, size = issue["number"], cmd_groom.size_of(issue)
+        extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), owner_decisions.brief_section(n)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=agent_loop.model_for(size, issue.get("labels")), size=size,
                                    rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0))
@@ -202,39 +201,16 @@ def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
     return True, why
 
 
-def close_mate(io, lead: int, n: int) -> bool:
-    """Close a story batched with the lead on its own commit, or leave it open on Ready with the reason on it (#913)."""
-    try:
-        worktree = io.worktree(lead)
-    except RuntimeError as exc:
-        io.keep_open(n, f"the worktree of story/{lead} was not available: {exc}")
-        return False
-    if not io.landed(worktree, n):
-        io.keep_open(n, f"no commit for (#{n}) is on the default branch after the batch session with #{lead}.")
-        return False
-    closed, reason = io.close_by_script(worktree, n, f"landed with #{lead} on branch story/{lead}")
-    if not closed:
-        io.comment(n, f"Close refused by complete_story.py: {reason}")
-        io.keep_open(n)
-    return closed
-
-
 def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
-    """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit.
-    Stories batched with it (issue["mates"], #889) ride the same branch: each closes only when a commit that names it is on origin's default branch, and
-    otherwise goes back to Ready (#913)."""
-    n, mates = issue["number"], issue.get("mates") or []
+    """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit. Each builder takes one story, so no commit carries two stories' work (#988)."""
+    n = issue["number"]
     try:
         closed, used = _work_story(io, issue, state)
-        for mate in mates:
-            close_mate(io, n, mate["number"])
         if not closed:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
         return closed, used
     finally:
         io.release(n)
-        for mate in mates:
-            io.release(mate["number"])
 
 
 def held_comment(worktree: Path, finding: str) -> str:

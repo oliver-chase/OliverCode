@@ -162,23 +162,6 @@ class DrainCase(unittest.TestCase):
         self.run_drain(io)
         self.assertEqual((io.closed, io.moved, io.kept), ([], [], [1]))
 
-    def test_a_batched_story_without_its_own_commit_stays_open_and_returns_to_ready(self):
-        io = FakeIo([])
-        closed, _ = cmd_drain.work_story(io, {**issue(1), "mates": [issue(2)]}, state())
-        self.assertEqual((closed, io.closed, io.kept, sorted(io.released)), (True, [1], [2], [1, 2]))
-
-    def test_each_batched_story_closes_on_its_own_commit(self):
-        io = FakeIo([])
-        io.on_main.add(2)
-        closed, _ = cmd_drain.work_story(io, {**issue(1), "mates": [issue(2)]}, state())
-        self.assertEqual((closed, sorted(io.closed), io.kept), (True, [1, 2], []))
-
-    def test_a_batch_that_landed_nothing_closes_no_story(self):
-        io = FakeIo([])
-        io.ghost_land = True
-        cmd_drain.work_story(io, {**issue(1), "mates": [issue(2)]}, state())
-        self.assertEqual((io.closed, sorted(io.kept)), ([], [1, 2]))
-
     def test_a_blocked_story_stays_open_and_returns_to_ready(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1 in round 1."} for _ in range(4)]})
         self.run_drain(io)
@@ -262,14 +245,14 @@ class TestRealIo(unittest.TestCase):
                 self.io.build(issue(7, f"Do it.\nSize: {size}", labels=labels), Path("/wt/7"), "")
             self.assertEqual((model_name, rounds), (run_loop.call_args.kwargs["model_name"], run_loop.call_args.kwargs["rounds"]), size)
 
-    def test_the_brief_carries_the_batched_stories_and_the_resume_note(self):
-        lead = {**issue(7, "Do it.\nSize: XS"), "mates": [{"number": 8, "title": "Mate", "body": "Do eight."}]}
+    def test_the_brief_carries_the_resume_note_and_names_no_other_story(self):
+        lead = issue(7, "Do it.\nSize: XS")
         self.io.resumed[7] = "Earlier partial work is present on branch story/7."
         with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
             self.io.build(lead, Path("/wt/7"), "")
         brief = run_loop.call_args.args[0]
-        self.assertIn("builds 2 small stories that share files: #7, #8", brief)
         self.assertIn("Earlier partial work is present on branch story/7.", brief)
+        self.assertNotIn("share files", brief)
 
     def test_the_claim_posts_through_the_runner_as_the_agent_and_a_held_budget_queues_the_card(self):
         posted, queued = [], []

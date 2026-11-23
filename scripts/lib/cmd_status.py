@@ -21,8 +21,11 @@ from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 import issue_count  # noqa: E402
+import log_action  # noqa: E402
 
 DAYS = 7
+STALL_MINUTES = 30  # a building story with no claim or run-log row newer than this is reported as stalled (#987)
+CLEAN_STOPS = ("", "end_turn", "completed")  # the stop reasons that end a round without trouble
 DIGEST_TOKENS = 1500
 DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four, and ids, paths and code run shorter, so three keeps the digest under the limit
 OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
@@ -63,7 +66,90 @@ def summary(open_now: int, rows: list[dict], now: datetime, days: int = DAYS) ->
     return head + f" The count falls {net:.1f} per day, so it reaches zero on {zero:%Y-%m-%d}."
 
 
-def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print) -> int:
+def claims_path() -> Path:
+    return gh_budget.home() / "dispatch-claims.json"
+
+
+def live_claims(now: float) -> dict:
+    """The dispatch claims younger than the claim window, by story key 'owner/repo#N', each with its agent and its time."""
+    try:
+        held = json.loads(claims_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    limit = log_action.CLAIM_HOURS * 3600
+    return {key: mine for key, mine in held.items() if isinstance(mine, dict) and now - float(mine.get("at", 0)) < limit}
+
+
+def runner_alive() -> bool:
+    """True when a drain or dispatch process runs on this machine, read from the process table. No model call (#987)."""
+    try:
+        return subprocess.run(["pgrep", "-f", "olivercode (drain|dispatch)"], capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+def _epoch(value) -> float:
+    """A run-log row's time in epoch seconds, or 0 for a row that has none (rows written before #987 carry no time)."""
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def next_ready(path: Path) -> str:
+    """The first open story in the status digest, which is the next Ready story in priority order, or '' when no digest is written."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    parts = text.split("\n## Open,", 1)
+    if len(parts) < 2:
+        return ""
+    for line in parts[1].splitlines()[1:]:
+        if line.startswith("## "):
+            break
+        if line.startswith("- "):
+            return line[2:]
+    return ""
+
+
+def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, landed_row: dict | None) -> list[str]:
+    """The live status lines: one line for each story building (its minutes, its round), or the idle or running line, then the last landing and the next
+    Ready story, then a warning for a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). It reads only what it is given."""
+    lines, warnings = [], []
+    for key, mine in sorted(claims.items()):
+        n = key.rsplit("#", 1)[-1]
+        rows = [r for r in log if r.get("story") == f"story-{n}"]
+        progress = max([float(mine.get("at", 0))] + [_epoch(r.get("at")) for r in rows])
+        if not alive:
+            warnings.append(f"Warning: #{n} holds a claim by {mine.get('agent')} but no drain or dispatch process is running. The claim expires by itself "
+                            f"after {log_action.CLAIM_HOURS} hours, or delete its entry in {claims_path()} to release it now.")
+        elif (now - progress) / 60 > STALL_MINUTES:
+            warnings.append(f"Warning: the runner has stalled on #{n}. Nothing has moved for {int((now - progress) // 60)} minutes. "
+                            f"Resume it with `olivercode dispatch {n}`.")
+        else:
+            lines.append(f"Building #{n} for {int((now - float(mine.get('at', 0))) // 60)} minutes on round {rows[-1].get('round', 0) if rows else 0}.")
+    if not lines:
+        lines.append("The runner is running and no story is building." if alive else
+                     f"Runner idle: no story is building and {open_now} stories are open. Start it with `olivercode drain REPO`.")
+    if landed_row:
+        last = f"Last landed: #{landed_row.get('number')} {_text(landed_row.get('title'), 90)}."
+    else:
+        last = f"Last landed: none in the last {DAYS} days."
+    lines.append(last + (f" Next Ready: {ready}." if ready else ""))
+    if log and log[-1].get("stop", "") not in CLEAN_STOPS:
+        story = str(log[-1].get("story", ""))
+        warnings.append(f"Warning: the last run on {story} stopped with {log[-1].get('stop')}. Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`.")
+    return lines + warnings
+
+
+def live_lines(now: datetime, open_now: int, rows: list[dict]) -> list[str]:
+    """The status lines for this machine right now, read from the claims, the run log, the process table and the digest."""
+    stamp = now.timestamp()
+    return activity(stamp, live_claims(stamp), run_log(), runner_alive(), open_now, next_ready(digest_path()), (landed(rows) or [None])[0])
+
+
+def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=live_lines) -> int:
     if not slug:
         out("Error: this repo has no GitHub origin.")
         return 1
@@ -78,6 +164,8 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
         out(f"Error: the issues of {slug} were not read.")
         return 1
     out(f"{slug}: " + summary(open_now, rows, now))
+    for line in live(now, open_now, rows):
+        out(line)
     return 0
 
 
