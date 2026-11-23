@@ -5,6 +5,7 @@ appears in this file.
 """
 
 import json
+import shutil
 
 from _support import git
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
@@ -28,12 +29,36 @@ class IdentifierSetup:
 
 class IdentifierGate(IdentifierSetup):
     """Every rule of the gate, run against OliverCode's own hook. The two templates are built from the same gate
-    source (build-hooks --check fails on drift), so they get one wiring test."""
+    source by build-hooks.py, so they get one wiring test."""
 
     def test_a_derived_author_name_in_a_skill_blocks_and_names_file_and_line(self):
         self.stage("skills/demo/SKILL.md", f"intro\nowned by {FAKE.capitalize()} today\n")
         out = self.assertBlocked("owner identifier").stdout
         self.assertIn("skills/demo/SKILL.md:2", out)
+        self.assertNotIn(FAKE, out.lower())
+
+    def test_a_name_with_a_hyphen_or_apostrophe_blocks_as_written(self):
+        git(self.tmp, "config", "user.name", "Zorbquill Kesh-Vantrel")
+        git(self.tmp, "config", "user.email", "anon@example.invalid")
+        self.stage("two.txt", "two\n")
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "second")
+        for prose in ("by Zorbquill Kesh-Vantrel.", "by Zorbquill Kesh Vantrel", "by zorbquill kesh\u2019vantrel"):
+            with self.subTest(prose):
+                self.stage("docs/who.md", prose + "\n")
+                self.assertIn("docs/who.md:1", self.assertBlocked("owner identifier").stdout)
+
+    def test_an_author_name_with_accented_letters_blocks(self):
+        git(self.tmp, "config", "user.name", "Jos\u00e9 Garc\u00eda-Vantrel")
+        git(self.tmp, "config", "user.email", "anon@example.invalid")
+        self.stage("two.txt", "two\n")
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "second")
+        self.stage("docs/who.md", "written by Jos\u00e9 Garc\u00eda Vantrel\n")
+        self.assertIn("docs/who.md:1", self.assertBlocked("owner identifier").stdout)
+
+    def test_a_missing_python_blocks_because_the_scan_could_not_run(self):
+        self.stage("a.txt", "plain\n")
+        result = self.assertBlocked("owner identifier", PATH=self.path_without("python"))
+        self.assertIn("python3 is needed", result.stdout)
 
     def test_markdown_and_tests_are_scanned(self):
         self.stage("docs/guide.md", f"{FAKE}\n")
@@ -65,6 +90,15 @@ class IdentifierGate(IdentifierSetup):
         self.stage("package.json", '{"name": "@acme-widgets/widget-core"}\n')
         self.stage("README.md", "npm i github:acme-widgets/widget-lib and import @acme-widgets/widget-core\n")
         self.assertIn("passed", self.assertAllowed().stdout)
+
+    def test_the_spaced_repo_name_is_the_project_and_the_owner_still_blocks(self):
+        git(self.tmp, "remote", "add", "origin", "https://github.com/acme-widgets/widget-library.git")
+        git(self.tmp, "commit", "-q", "--no-verify", "--allow-empty", "-m", "other author",
+            "--author", "Widget Library <wl@example.invalid>")
+        self.stage("README.md", "The widget library docs live here.\n")
+        self.assertIn("passed", self.assertAllowed().stdout)
+        self.stage("NOTES.md", "Ask acme-widgets about the widget library.\n")
+        self.assertIn("NOTES.md:1", self.assertBlocked("owner identifier").stdout)
 
     def test_the_owner_name_beside_the_project_name_still_blocks(self):
         git(self.tmp, "remote", "add", "origin", "https://github.com/acme-widgets/widget-lib.git")
@@ -109,6 +143,43 @@ class IdentifierGate(IdentifierSetup):
         self.assertIn("src/app.py:1", out)
         self.assertNotIn("fixtures/data.json:", out)
 
+    def test_every_account_key_on_one_config_line_counts(self):
+        self.stage(CONFIG, gate_config(configGlobs=["shop/*.json"]))
+        self.stage("shop/config.json", '{"accountName": "alphawidgets", "shopName": "betastore"}\n')
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "shop")
+        self.stage("README.txt", "welcome to alphawidgets\n")
+        self.assertBlocked("owner identifier")
+
+    def test_an_author_name_made_of_hex_letters_and_a_digit_still_blocks(self):
+        git(self.tmp, "config", "user.name", "Ace2024 Vantrel")
+        git(self.tmp, "config", "user.email", "anon@example.invalid")
+        self.stage("two.txt", "two\n")
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "second")
+        self.stage(CONFIG, gate_config(configGlobs=["shop/*.json"]))
+        self.stage("shop/config.json", '{"shopName": "ace2024"}\n')
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "shop")
+        self.stage("README.txt", "by ace2024\n")
+        self.assertBlocked("owner identifier")
+
+    def test_a_repo_named_like_its_owner_still_blocks_the_authors_name(self):
+        git(self.tmp, "remote", "add", "origin", f"https://github.com/{FAKE}/{FAKE}.git")
+        self.stage("docs/who.md", f"by {FAKE.capitalize()} Vantrel\n")
+        self.assertIn("docs/who.md:1", self.assertBlocked("owner identifier").stdout)
+
+    def test_a_config_value_with_a_regex_character_does_not_switch_the_gate_off(self):
+        self.stage(CONFIG, gate_config(configGlobs=["shop/*.json"]))
+        self.stage("shop/config.json", '{"shopName": "Studio (Etsy"}\n')
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "shop")
+        self.stage("README.txt", f"by {FAKE.capitalize()} Vantrel\n")
+        self.assertBlocked("owner identifier")
+
+    def test_numeric_hex_and_role_values_are_not_identifiers(self):
+        self.stage(CONFIG, gate_config(configGlobs=["shop/*.json"]))
+        self.stage("shop/config.json", '{"brandColor": "#00ff88", "shopId": "1234567", "ownerMail": "support"}\n')
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "shop")
+        self.stage("README.txt", "colors #00ff88 id 1234567 write to support\n")
+        self.assertAllowed()
+
     def test_config_values_for_account_keys_count(self):
         self.stage(CONFIG, gate_config(configGlobs=["shop/*.json"]))
         self.stage("shop/config.json", '{"shopName": "Acme Prints", "other": "plainvalue"}\n')
@@ -145,7 +216,6 @@ class IdentifierGate(IdentifierSetup):
         self.assertAllowed()
 
     def test_nothing_derivable_skips_with_a_note(self):
-        import shutil
         shutil.rmtree(self.tmp / ".git" / "refs" / "heads", ignore_errors=True)
         (self.tmp / ".git" / "refs" / "heads").mkdir()
         (self.tmp / ".git" / "packed-refs").unlink(missing_ok=True)
