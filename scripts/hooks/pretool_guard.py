@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Claude Code PreToolUse hook (Bash, Edit, Write, MultiEdit): the commit, placement, policy and GitHub guards in one process.
+"""Claude Code PreToolUse hook (Bash, Edit, Write, MultiEdit): the commit, archived, placement, policy and GitHub guards in one process.
 
 One hook parses the input once per tool call and asks each guard in turn: commit_guard (a commit that would skip the repo's gates),
-placement_guard (a clone or worktree outside its home), policy_guard (the repo's policy.json) and gh_guard
-(the shared GitHub budget). A deny from any guard wins over an ask. Each guard fails open on its own bug, so
+archived_guard (a commit or push in a repo GitHub archived or deleted), placement_guard (a clone or worktree outside its home), main_checkout (an edit or commit in a fleet repo's main checkout), policy_guard (the repo's policy.json) and gh_guard
+(the shared GitHub budget), reset_guard (a `git reset --hard` in a main checkout or a tree with uncommitted changes), and model_guard (a subagent on a model other than Sonnet that the owner never named). When none objects, queue_guard routes a validation command through `olivercode queue run`. A deny from any guard wins over an ask. Each guard fails open on its own bug, so
 one broken guard never disables the others and never blocks a command. The guards stay runnable on their own.
 """
 
@@ -16,11 +16,17 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
+import archived_guard  # noqa: E402
 import commit_guard  # noqa: E402
 import gh_guard  # noqa: E402
+import memory_guard  # noqa: E402
+import model_guard  # noqa: E402
 import placement_guard  # noqa: E402
 import policy_guard  # noqa: E402
-from lib import policy  # noqa: E402
+import queue_guard  # noqa: E402
+import reset_guard  # noqa: E402
+from lib import failure_log, main_checkout, policy  # noqa: E402
+import hook_fires  # noqa: E402
 
 
 def _safely(check, *args):
@@ -28,6 +34,12 @@ def _safely(check, *args):
         return check(*args)
     except Exception:  # noqa: BLE001 -- fail open, one guard's bug never blocks a command or hides another guard
         return None
+
+
+def _found(found: list, gate: str, kind: str, why: str, cwd: Path) -> None:
+    """Keep a guard's verdict and log it as that guard's trigger, so `olivercode cutlist` can tell what still fires."""
+    found.append((kind, why))
+    _safely(failure_log.record, gate, why, cwd.name)
 
 
 def verdicts(data: dict) -> list[tuple[str, str]]:
@@ -39,10 +51,24 @@ def verdicts(data: dict) -> list[tuple[str, str]]:
         if "commit" in command:
             why = _safely(commit_guard.reason, command, cwd)
             if why:
-                found.append(("deny", why))
+                _found(found, "commit_guard", "deny", why, cwd)
+        if "git" in command:
+            why = _safely(archived_guard.reason, command, cwd)
+            if why:
+                _found(found, "archived_guard", "deny", why, cwd)
         why = _safely(placement_guard.reason, command, cwd)
         if why:
-            found.append(("deny", why))
+            _found(found, "placement_guard", "deny", why, cwd)
+        if "reset" in command:
+            why = _safely(reset_guard.reason, command, cwd)
+            if why:
+                _found(found, "reset_guard", "deny", why, cwd)
+    why = _safely(main_checkout.reason, data)
+    if why:
+        _found(found, "main_checkout_guard", "deny", why, cwd)
+    why = _safely(model_guard.reason, data)
+    if why:
+        _found(found, "model_guard", "deny", why, cwd)
     decided = _safely(policy_guard.decide, data)
     if decided and decided[0]:
         decision, repo = decided
@@ -50,10 +76,22 @@ def verdicts(data: dict) -> list[tuple[str, str]]:
         found.append((decision.kind, decision.reason))
     # A GitHub write is counted against the budget, so it is only asked once nothing else has refused the call.
     if command and not any(kind == "deny" for kind, _ in found):
-        why = _safely(gh_guard.refusal, command)
+        why = _safely(gh_guard.check, data)
         if why:
-            found.append(("deny", why))
+            _found(found, "gh_guard", "deny", why, cwd)
+    # A memory write that states a rule is refused; it comes last so another guard's reason is not hidden by it.
+    why = _safely(memory_guard.reason, data)
+    if why:
+        _found(found, "memory_guard", "deny", why, cwd)
     return found
+
+
+def updated_input(data: dict) -> dict | None:
+    """The tool input with a validation command routed through the per-user queue, or None to leave it alone."""
+    tool_input = data.get("tool_input") or {}
+    command = tool_input.get("command") or ""
+    wrapped = _safely(queue_guard.rewrite, command) if command else None
+    return {**tool_input, "command": wrapped} if wrapped else None
 
 
 def main() -> int:
@@ -64,16 +102,28 @@ def main() -> int:
     except json.JSONDecodeError:
         return 0
     found = verdicts(data)
+    rewritten = _safely(updated_input, data) if found and all(k == "allow" for k, _ in found) else None
+    if rewritten:  # a warning never drops the queue rewrite; the output carries both reasons
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
+                                                 "permissionDecisionReason": " ".join([r for _, r in found] + ["Validation waits in the per-user queue."]),
+                                                 "updatedInput": rewritten}}))
+        return 0
     if found:
         kind, reason = next((v for v in found if v[0] == "deny"), found[0])
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                                  "permissionDecision": kind,
                                                  "permissionDecisionReason": reason}}))
+        return 0
+    rewritten = _safely(updated_input, data)
+    if rewritten:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
+                                                 "permissionDecisionReason": "Validation waits in the per-user queue.",
+                                                 "updatedInput": rewritten}}))
     return 0
 
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main())
+        raise SystemExit(hook_fires.run("pretool_guard", main))
     except Exception:  # noqa: BLE001 -- fail open
         raise SystemExit(0)

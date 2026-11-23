@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from pathlib import Path
 
 from lib.gitfiles import tracked_files
@@ -53,6 +52,13 @@ DOWNSTREAM_RELATIVE = frozenset(
     }
 )
 
+# Hooks that scripts/build-hooks.py builds and git ignores (HOOK-OUTPUTS-1), and OliverCode's own
+# .githooks links to them. A fresh clone holds none of them until a command builds them.
+BUILT_HOOKS = frozenset(
+    [f"core/templates/project/{name}" for name in ("pre-commit", "pre-commit-private", "pre-push", "commit-msg")]
+    + [f".githooks/{name}" for name in ("pre-commit", "pre-push", "commit-msg")]
+)
+
 # Everything under here describes the repo a template is stamped INTO.
 TEMPLATE_PREFIX = "core/templates/"
 
@@ -74,6 +80,8 @@ OPTIONAL_PREFIXES = (
     "runtime/manifests",
     ".claude-optimization/memory/",
     ".claude-optimization/state/",
+    "docs/backlog-config.local.json",
+    "shared/repo-profiles.local.json",
 )
 
 
@@ -88,13 +96,7 @@ def _tracked_files(repo_root: Path) -> list[str]:
 
 
 def _is_exempt(token: str) -> bool:
-    if any(c in token for c in PLACEHOLDER_CHARS):
-        return True
-    if token in DOWNSTREAM_RELATIVE:
-        return True
-    if token.startswith(OPTIONAL_PREFIXES):
-        return True
-    return False
+    return any(c in token for c in PLACEHOLDER_CHARS) or token in DOWNSTREAM_RELATIVE or token in BUILT_HOOKS or token.startswith(OPTIONAL_PREFIXES)
 
 
 def _candidates(text: str) -> list[str]:

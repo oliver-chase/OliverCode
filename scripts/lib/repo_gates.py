@@ -14,7 +14,19 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+
+def hook_templates(oc_root: Path) -> Path:
+    """core/templates/project with its hooks freshly built. The built hooks are untracked
+    (HOOK-OUTPUTS-1), so every reader builds them first. A checkout with no builder is used as it is."""
+    builder = oc_root / "scripts" / "build-hooks.py"
+    if builder.is_file():
+        built = subprocess.run([sys.executable, str(builder)], capture_output=True, text=True)
+        if built.returncode:
+            print(f"hook build failed ({(built.stderr or built.stdout).strip().splitlines()[-1:] or ['no output']}); using the templates as they are", file=sys.stderr)
+    return oc_root / "core" / "templates" / "project"
 
 
 def repo_root(path: Path) -> Path | None:
@@ -37,7 +49,16 @@ def hooks_path(root: Path) -> str:
 
 def has_gates(root: Path) -> bool:
     """The repo ships its own commit gates."""
-    return (root / ".githooks" / "pre-commit").is_file()
+    # lexists: a dangling link is a gate that is broken, which gate_problem names, and no gate at all would hide it.
+    hook = root / ".githooks" / "pre-commit"
+    return hook.is_file() or os.path.lexists(hook)
+
+
+def fix_command(root: Path) -> str:
+    """The command that makes git run this checkout's gates. A linked worktree needs its own setting, which plain `git config` does not give it (#786)."""
+    if (root / ".git").is_file():
+        return f'olivercode worktree fix "{root}"'
+    return f'git -C "{root}" config core.hooksPath .githooks'
 
 
 def gate_problem(root: Path) -> str:
@@ -46,18 +67,15 @@ def gate_problem(root: Path) -> str:
     if not configured:
         return "core.hooksPath is unset, so git runs none of this repo's commit gates"
     hooks_dir = Path(configured).expanduser()
+    if hooks_dir.is_absolute() and has_gates(root):
+        # Absolute works in the main checkout but sends every worktree to this checkout's hooks, where commit_guard refuses its commits.
+        return f"core.hooksPath is the absolute path {configured}; set it to the relative .githooks so every worktree runs its own gates"
     if not hooks_dir.is_absolute():
         hooks_dir = root / hooks_dir
     if hooks_dir.resolve() != (root / ".githooks").resolve():
         # Any other folder with an executable pre-commit, such as .git/hooks or a global
         # hooks path, passes git's check while the repo's own gates never run.
         return f"core.hooksPath points at {configured}, so this repo's .githooks gates never run"
-    return hooks_dir_problem(hooks_dir)
-
-
-def hooks_dir_problem(hooks_dir: Path) -> str:
-    """Why git would run no hook from this directory, or "" when its pre-commit runs.
-    gate_problem is its one caller."""
     if not hooks_dir.is_dir():
         return f"core.hooksPath points at {hooks_dir}, which does not exist, so git runs no hooks"
     live = hooks_dir / "pre-commit"
@@ -66,6 +84,22 @@ def hooks_dir_problem(hooks_dir: Path) -> str:
     if not os.access(live, os.X_OK):
         return f"{live} is not executable, so git skips it"
     return ""
+
+
+def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True)
+
+
+def _tracked(repo_root: Path, filename: str) -> bool:
+    return _git(repo_root, "ls-files", "--error-unmatch", f".githooks/{filename}").returncode == 0
+
+
+def _committed_bytes(repo_root: Path, installed: Path, filename: str) -> bytes:
+    """The hook as HEAD holds it, which is what every clone gets; an untracked hook is read from disk."""
+    if _tracked(repo_root, filename):
+        shown = _git(repo_root, "show", f"HEAD:.githooks/{filename}")
+        return shown.stdout if shown.returncode == 0 else b""
+    return installed.read_bytes()
 
 
 def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> list[str]:
@@ -93,36 +127,9 @@ def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> l
             problems.append(f"no {filename} in {hooks_dir}")
         elif not os.access(installed, os.X_OK):
             problems.append(f"{installed} is not executable, so git skips it")
-        elif installed.read_bytes() != canonical.read_bytes():
+        elif _tracked(repo_root, filename) and _git(repo_root, "status", "--porcelain", "--", f".githooks/{filename}").stdout.strip():
+            problems.append(f"{filename} is tracked but differs from HEAD, so it is hand-edited or uncommitted")
+        elif _committed_bytes(repo_root, installed, filename) != canonical.read_bytes():
             problems.append(f"{filename} diverges from the {template} template")
 
     return problems
-
-
-class SizeError(Exception):
-    """Why a repo's line total or baseline could not be read: `kind` is missing, invalid or count, and `detail` names what failed."""
-
-    def __init__(self, kind: str, detail: str = ""):
-        super().__init__(f"{kind}: {detail}")
-        self.kind, self.detail = kind, detail
-
-
-def size_allowance(baseline: dict) -> int:
-    """The lines a repo may grow past its recorded baseline: allowancePercent (default 5) of "lines". The shell gate in
-    core/hooks/gates/size-ratchet.sh applies the same rule."""
-    return (baseline.get("lines") or 0) * baseline.get("allowancePercent", 5) // 100
-
-
-def size_report(repo: Path, oc_root: Path) -> tuple[int, dict]:
-    """(the repo's line total, its docs/SIZE-BASELINE.json) from the counter the size-ratchet gate uses; raises SizeError when either cannot be read."""
-    path = repo / "docs" / "SIZE-BASELINE.json"
-    if not path.is_file():
-        raise SizeError("missing", str(path))
-    try:
-        baseline = json.loads(path.read_text())
-    except ValueError as exc:
-        raise SizeError("invalid", str(exc)) from exc
-    done = subprocess.run(["bash", str(oc_root / "skills" / "audit" / "scripts" / "size.sh"), "--total", str(repo)], capture_output=True, text=True)
-    if done.returncode != 0 or not done.stdout.strip().isdigit():
-        raise SizeError("count", done.stderr.strip() or done.stdout.strip())
-    return int(done.stdout), baseline

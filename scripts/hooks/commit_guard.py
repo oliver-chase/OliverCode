@@ -18,7 +18,6 @@ its own bug costs more than the rare case it misses.
 from __future__ import annotations
 
 import json
-import re
 import shlex
 import sys
 from pathlib import Path
@@ -31,29 +30,8 @@ from lib import policy  # noqa: E402
 # The whole command is tokenized once, so a separator inside a quoted message stays part of
 # that message; splitting on the raw text first dropped any commit whose message held a
 # `;`, `|` or `&&`, which is most of them.
-OPERATOR_CHARS = ";&|()`\n"
-ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # git's global options whose value is the next word; read as a subcommand, the value hid the commit.
 GLOBAL_VALUE_OPTIONS = {"--git-dir", "--work-tree", "--namespace", "--super-prefix"}
-SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
-
-
-def _segments(command: str):
-    """The simple commands in `command`, each as its list of words."""
-    lex = shlex.shlex(command, posix=True, punctuation_chars=OPERATOR_CHARS)
-    lex.whitespace = " \t\r"
-    lex.whitespace_split = True
-    lex.commenters = ""
-    words: list[str] = []
-    for token in lex:
-        if token and set(token) <= set(OPERATOR_CHARS):
-            if words:
-                yield words
-            words = []
-        else:
-            words.append(token)
-    if words:
-        yield words
 
 
 def _located(where: Path, option: str, value: str) -> Path:
@@ -65,15 +43,15 @@ def _located(where: Path, option: str, value: str) -> Path:
 
 
 def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int = 0,
-             seen: frozenset = frozenset()) -> list[tuple[Path, list[str], list[str], list[str]]]:
-    """Each `git ... commit ...` in the command: (directory it runs in, config keys it sets,
+             seen: frozenset = frozenset(), verbs: tuple = ("commit",)) -> list[tuple[Path, list[str], list[str], list[str]]]:
+    """Each `git ... commit ...` (or any verb in `verbs`) in the command: (directory it runs in, config keys it sets,
     environment assignments before it, commit args). Anything unparseable yields nothing."""
     found = []
     here = cwd
     exported: list[str] = []  # `export NAME=value` reaches every later command in the line
     hooks_path_changed = False  # an earlier `git config core.hooksPath ...` reaches every later commit
     try:
-        segments = list(_segments(command))
+        segments = list(policy.lex(command))
     except ValueError:
         return found
     if depth > 200:
@@ -84,19 +62,19 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
             words = words[1:]
         env, words = policy.unwrap(words)  # past `env`, `sudo`, `nice -n 5`, `timeout 9` and the like
         if words and words[0] == "export":
-            exported += [w for w in words[1:] if ASSIGNMENT.match(w)]
+            exported += [w for w in words[1:] if policy.ASSIGNMENT.match(w)]
             continue
         if len(words) >= 2 and words[0] == "cd":
             here = (here / Path(words[1]).expanduser()).resolve()
             continue
-        if words and Path(words[0]).name in SHELLS:
+        if words and Path(words[0]).name in policy.SHELLS:
             # `bash -c "git commit ..."` hides the commit inside a string; read that string as a command line.
             flags = [k for k, w in enumerate(words[1:], 1) if w.startswith("-") and not w.startswith("--") and "c" in w]
             if flags and flags[0] + 1 < len(words):
-                found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here, aliases_in, depth + 1, seen)]
+                found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(words[flags[0] + 1], here, aliases_in, depth + 1, seen, verbs)]
             continue
         if words and Path(words[0]).name == "eval":
-            found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here, aliases_in, depth + 1, seen)]
+            found += [(w, k, exported + env + e, a) for w, k, e, a in _commits(" ".join(words[1:]), here, aliases_in, depth + 1, seen, verbs)]
             continue
         if not words or Path(words[0]).name != "git":
             continue
@@ -159,9 +137,9 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
                 head = " ".join(shlex.quote(w) for w in words[:i] + expansion)
                 line = f"{head} {rest}"
             found += [(w, k + keys, exported + env + e, a)
-                      for w, k, e, a in _commits(line, where, aliases, depth + 1, seen | {(name, tuple(expansion))})]
+                      for w, k, e, a in _commits(line, where, aliases, depth + 1, seen | {(name, tuple(expansion))}, verbs)]
             continue
-        if i < len(words) and words[i] == "commit":
+        if i < len(words) and words[i] in verbs:
             if hooks_path_changed:
                 keys = keys + ["core.hookspath"]
             for assignment in exported + env:
@@ -242,13 +220,12 @@ def reason(command: str, cwd: Path) -> str:
         if not (root and repo_gates.has_gates(root)):
             continue
         if _skips_hooks(args):
-            return "This commit passes --no-verify, which skips the repo's commit gates. Commit without it and fix what the gates report."
+            return "This commit passes --no-verify, which skips the repo's commit gates. Commit without it and fix what the gates report. See docs/GATES.md, Commit guard limits."
         if _overrides_hooks_path(keys, env):
-            return "This commit overrides core.hooksPath, which disables the repo's commit gates. Commit without the override."
+            return "This commit overrides core.hooksPath, which disables the repo's commit gates. Commit without the override. See docs/GATES.md, Commit guard limits."
         problem = repo_gates.gate_problem(root)
         if problem:
-            return (f"Refused: {problem}. Run `git -C \"{root}\" config core.hooksPath .githooks`, "
-                    "then commit again so the gates run.")
+            return f"Refused: {problem}. Fix it, then commit again. See docs/GATES.md, Repo-local hook."
     return ""
 
 

@@ -2,7 +2,7 @@
 """Claude Code PreToolUse hook (Bash, Edit, Write): enforces the repo's .olivercode/policy.json.
 
 A command or path outside the policy is denied with the rule that applies, and a trigger (a push,
-a mass delete, a third failed attempt at one gate) asks the owner. Each decision is written to the
+a mass delete, a third failed attempt at one gate) asks first. Each decision is written to the
 failure log. A repo with no policy is not restricted. Fails open on anything it cannot parse, because
 a guard that blocks a legitimate action on its own bug costs more than the case it misses.
 """

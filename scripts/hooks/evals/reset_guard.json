@@ -1,0 +1,7 @@
+{"guard": "reset_guard", "scenarios": [
+    {"name": "A hard reset in a main checkout is denied", "payload": {"tool_name": "Bash", "tool_input": {"command": "git reset --hard origin/main"}, "cwd": "{repo}"}, "expect": "deny", "reason": "main checkout"},
+    {"name": "A hard reset in a worktree with uncommitted changes is denied", "payload": {"tool_name": "Bash", "tool_input": {"command": "git reset --hard"}, "cwd": "{wt}"}, "expect": "deny", "worktree": "dirty", "reason": "uncommitted changes"},
+    {"name": "A hard reset reached through git -C into a dirty worktree is denied", "payload": {"tool_name": "Bash", "tool_input": {"command": "git -C {wt} reset --hard HEAD"}, "cwd": "{wt}"}, "expect": "deny", "worktree": "dirty", "reason": "uncommitted changes"},
+    {"name": "A hard reset in a clean story worktree is allowed", "payload": {"tool_name": "Bash", "tool_input": {"command": "git reset --hard origin/main"}, "cwd": "{wt}"}, "expect": "allow", "worktree": "clean"},
+    {"name": "A soft reset in a main checkout is allowed", "payload": {"tool_name": "Bash", "tool_input": {"command": "git reset --soft HEAD~1"}, "cwd": "{repo}"}, "expect": "allow"}
+]}

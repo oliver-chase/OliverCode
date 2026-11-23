@@ -16,16 +16,17 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
-import commit_guard  # noqa: E402
-from lib import placement  # noqa: E402
+from lib import placement, policy  # noqa: E402
 
 
 def reason(command: str, cwd: Path) -> str:
-    if "git" not in command or not ("clone" in command or "worktree" in command):
+    clone = "git" in command and ("clone" in command or "worktree" in command)
+    create = "gh" in command and "create" in command
+    if not (clone or create):
         return ""
     try:
-        for words in commit_guard._segments(command):
-            why = placement.violation(words, cwd)
+        for words in policy.lex(command):
+            why = (placement.violation(words, cwd) if clone else "") or (placement.repo_create_violation(words, cwd) if create else "")
             if why:
                 return why
     except ValueError:

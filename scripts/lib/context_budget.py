@@ -1,13 +1,17 @@
-"""What a session loads at start, in words, against the contextWords budget in docs/BUDGET.json.
+"""What a session loads at start, in words, against the total the last passing run recorded.
 
-The always-loaded files are ~/.claude/CLAUDE.md and VOICE.md (resolved through their links) and the
-CLAUDE.md of the repo the session opens in. The harness fails over budget so it cannot grow the
-context an agent starts with.
+The always-loaded files are ~/.claude/CLAUDE.md and VOICE.md (resolved through their links), the
+CLAUDE.md of the repo the session opens in, and the description line of every installed skill in
+~/.claude/skills/*/SKILL.md, because the skill list reaches every session. The budget is a ratchet: the first run records
+the total in ~/.olivercode/context-words.json (OLIVERCODE_HOME overrides the folder), a lower total lowers the record, and a
+higher one fails. Growth stops and a trim never has to be forced. The owner raises the record by editing that file.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 
 from lib.local_config import OC_ROOT, claude_dir
@@ -25,25 +29,69 @@ def loaded_files(repo: Path | None = None) -> list[Path]:
     return out
 
 
+FRONTMATTER = re.compile(r"\A---\n(.*?)\n---", re.S)
+DESCRIPTION = re.compile(r"^description:[ \t]*(.*(?:\n[ \t]+.*)*)", re.M)
+
+
+def skill_description(path: Path) -> str:
+    """The frontmatter description of a SKILL.md, or "" when it has none. Quotes and block markers are dropped."""
+    head = FRONTMATTER.match(path.read_text(encoding="utf-8", errors="ignore"))
+    found = DESCRIPTION.search(head.group(1)) if head else None
+    if not found:
+        return ""
+    text = " ".join(found.group(1).split())
+    return text[1:] if text[:1] in {">", "|"} and text[1:2] in {"", " "} else text
+
+
+def skill_files() -> list[Path]:
+    seen, out = set(), []
+    for f in sorted((claude_dir() / "skills").glob("*/SKILL.md")):
+        if f.is_file() and f.resolve() not in seen:
+            seen.add(f.resolve())
+            out.append(f)
+    return out
+
+
+def record_path() -> Path:
+    return Path(os.environ.get("OLIVERCODE_HOME") or Path.home() / ".olivercode") / "context-words.json"
+
+
 def budget() -> int | None:
+    """The recorded total, or None before the first run."""
     try:
-        return int(json.loads((OC_ROOT / "docs" / "BUDGET.json").read_text(encoding="utf-8"))["contextWords"])
-    except (OSError, ValueError, KeyError):
+        value = json.loads(record_path().read_text(encoding="utf-8")).get("words")
+    except (OSError, ValueError, AttributeError):
         return None
+    return value if isinstance(value, int) and value > 0 else None
+
+
+def _record(total: int) -> None:
+    path = record_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"words": total}) + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def measure(repo: Path | None = None) -> tuple[int, list[tuple[int, Path]]]:
-    sizes = sorted(((len(f.read_text(encoding="utf-8", errors="ignore").split()), f) for f in loaded_files(repo)), reverse=True)
+    sizes = [(len(f.read_text(encoding="utf-8", errors="ignore").split()), f) for f in loaded_files(repo)]
+    sizes += [(len(skill_description(f).split()), f) for f in skill_files()]
+    sizes.sort(key=lambda row: row[0], reverse=True)
     return sum(n for n, _ in sizes), sizes
 
 
 def report(repo: Path | None = None) -> tuple[bool, str]:
-    """(within budget, the report text)."""
+    """(within budget, the report text). A first or lower total becomes the new record."""
     total, sizes = measure(repo)
     limit = budget()
-    lines = [f"{n:>6} words  {f}" for n, f in sizes]
-    if limit is None:
-        return True, f"A session loads {total} words (no contextWords budget set in docs/BUDGET.json).\n" + "\n".join(lines)
-    if total > limit:
-        return False, f"Over budget: a session loads {total} words against a budget of {limit}. Largest files:\n" + "\n".join(lines)
-    return True, f"A session loads {total} words, within the budget of {limit}.\n" + "\n".join(lines)
+    lines = [f"{n:>6} words  {f}" for n, f in sizes[:8]]
+    if limit is not None and total > limit:
+        return False, (f"Over budget: a session loads {total} words, {total - limit} past the recorded {limit}. Largest files:\n"
+                       + "\n".join(lines) + f"\nTrim the growth, or raise the record in {record_path()} with the reason on the story.")
+    if limit is None or total < limit:
+        _record(total)
+    return True, f"A session loads {total} words, within the recorded {total if limit is None or total < limit else limit}.\n" + "\n".join(lines)
+
+
+landed = budget  # the recorded total
