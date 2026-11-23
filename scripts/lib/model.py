@@ -18,7 +18,7 @@ from lib import claude_settings
 TIMEOUT = 900
 ALLOWED_TOOLS = "Read,Edit,Write,Bash,Grep,Glob"
 EMPTY_MCP = '{"mcpServers":{}}'  # with --strict-mcp-config, no connector loads into a headless run (#878)
-PROJECT_ENV = "OLIVERCODE_PROJECT_SETTINGS"  # "1" runs each headless call with the project's settings and OliverCode's hooks only (#911)
+PROJECT_ENV = "OLIVERCODE_PROJECT_SETTINGS"  # unset or "1" runs each headless call with the project's settings and OliverCode's hooks only (#911, #1016); "0" loads the owner's current setup
 HEADLESS_ENV = "OLIVERCODE_HEADLESS"  # "1" in every headless call's environment; session_check reads it and skips the placement scan (#911)
 
 
@@ -63,12 +63,12 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
     """Run `claude -p` once in a directory: {'code', 'text', 'tokens', 'session_id', 'usage', 'cost_usd', 'stop', 'stderr', 'settings'}. `resume` continues an earlier Claude Code session.
     `stop` is the CLI's own stop reason: its `terminal_reason` ('max_turns' when the turn cap ended the session), else its result subtype, and '' when it gave none (#877).
     `stderr` is the last STDERR_TAIL characters of what the CLI wrote to stderr.
-    `project_only` runs the session with the project's settings and OliverCode's own hooks, with the owner's ~/.claude settings left out (#911). None reads PROJECT_ENV, and
+    `project_only` runs the session with the project's settings and OliverCode's own hooks, with the owner's ~/.claude settings left out (#911). None reads PROJECT_ENV, which is project-only unless it is "0" (#1016), and
     `settings` names which setup ran: 'project' or 'current'. The installed OliverCode hooks run on every tool the call uses, because Claude Code loads them from ~/.claude."""
     if not available():
         raise ModelError("The claude command is not on PATH. Install Claude Code and sign in with `claude`.")
     if project_only is None:
-        project_only = os.environ.get(PROJECT_ENV) == "1"
+        project_only = os.environ.get(PROJECT_ENV) != "0"
     argv = ["claude", "-p", prompt, "--output-format", "json", "--max-turns", str(max_turns)]
     argv += ["--strict-mcp-config", "--mcp-config", EMPTY_MCP]
     if project_only:

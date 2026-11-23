@@ -182,7 +182,7 @@ A story that is M or larger, or that changes a hook, gets one fresh reader after
 
 Claude Code has no flag that loads only the skills a story names. `--disable-slash-commands` drops every skill and saved only about 1,000 tokens of a 42,000-token start in a measured run, so the headless runner loads skills as an interactive session does. The start size is mostly the global rules files and tool definitions.
 
-Set `OLIVERCODE_PROJECT_SETTINGS=1` to start each headless session with the project's settings only: `claude -p` then gets `--setting-sources project,local`, and the owner's `~/.claude/settings.json` contributes only OliverCode's own hook entries, so the commit gates and the pretool guards still run. The run refuses to start when those entries are missing. The default stays the current flags until one measured story shows the smaller start. To measure, run the same story once each way and compare `start_tokens` by the `settings` field of its run-log lines. Each headless session also skips the repo placement scan at start.
+Each headless session starts with the project's settings only by default: `claude -p` gets `--setting-sources project,local`, and the owner's `~/.claude/settings.json` contributes only OliverCode's own hook entries, so the commit gates and the pretool guards still run. The run refuses to start when those entries are missing. Set `OLIVERCODE_PROJECT_SETTINGS=0` to load the owner's current setup instead. To compare the two, run the same story once each way and compare `start_tokens` by the `settings` field of its run-log lines, which read `project` or `current`. Each headless session also skips the repo placement scan at start.
 
 ## Restoring on a new machine
 

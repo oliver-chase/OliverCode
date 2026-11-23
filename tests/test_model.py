@@ -18,7 +18,7 @@ REPLY = json.dumps({"result": "ok", "session_id": "abc", "total_cost_usd": 0.012
 class TestRunCli(unittest.TestCase):
     def setUp(self):
         self.home = temp_dir(self)
-        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_PROJECT_SETTINGS": "0"})
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -109,16 +109,18 @@ class TestRunCli(unittest.TestCase):
                 model.run_cli("task", str(self.home), project_only=True)
         run.assert_not_called()
 
-    def test_the_env_switch_picks_the_project_setup_and_every_call_names_its_setup_and_marks_itself_headless(self):
+    def test_the_project_setup_is_the_default_and_the_env_switch_set_to_0_opts_back_in_and_every_call_marks_itself_headless(self):
         path = self.home / "settings.json"
         path.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": 'python3 "/oc/scripts/hooks/wip_save.py"'}]}]}}))
-        with mock.patch.dict(os.environ, {"OLIVERCODE_PROJECT_SETTINGS": "1"}), mock.patch.object(model, "user_settings", return_value=path):
+        with mock.patch.object(model, "user_settings", return_value=path), mock.patch.dict(os.environ):
+            os.environ.pop("OLIVERCODE_PROJECT_SETTINGS", None)
             run, out = self.call()
-        self.assertIn("--setting-sources", run.call_args_list[0][0][0])
-        self.assertEqual(("project", "1"), (out["settings"], run.call_args_list[0][1]["env"]["OLIVERCODE_HEADLESS"]))
-        run, out = self.call()
-        self.assertEqual(("current", "1"), (out["settings"], run.call_args_list[0][1]["env"]["OLIVERCODE_HEADLESS"]))
-        self.assertNotIn("--setting-sources", run.call_args_list[0][0][0])
+            self.assertIn("--setting-sources", run.call_args_list[0][0][0])
+            self.assertEqual(("project", "1"), (out["settings"], run.call_args_list[0][1]["env"]["OLIVERCODE_HEADLESS"]))
+            with mock.patch.dict(os.environ, {"OLIVERCODE_PROJECT_SETTINGS": "0"}):
+                run, out = self.call()
+            self.assertEqual(("current", "1"), (out["settings"], run.call_args_list[0][1]["env"]["OLIVERCODE_HEADLESS"]))
+            self.assertNotIn("--setting-sources", run.call_args_list[0][0][0])
 
     def test_a_missing_claude_command_says_how_to_get_it(self):
         with mock.patch("shutil.which", return_value=None):
