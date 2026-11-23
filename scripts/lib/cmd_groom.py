@@ -2,7 +2,7 @@
 `olivercode board groom [--config FILE | --all | --force]` calls no model; a repo unchanged since the last run costs no GraphQL call.
 
 Beyond drift it sets a blank Priority and Size from the story body, moves an unblocked Backlog story that has both to
-Ready, and queues one owner line for each pair of open stories that look like duplicates. `maintain --fix` runs it, the
+Ready, and queues one owner line for each pair of open stories that look like duplicates. It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). `maintain --fix` runs it, the
 SessionStart hook starts it in the background when the last success is over 24 hours old, and `health` fails after 48.
 
 A story imported from a file (a `Source:` line naming one) carries a copied Priority, so groom labels it
@@ -258,4 +258,18 @@ def command_groom(argv):
     if not chosen:
         print("Usage: olivercode board groom [--config FILE | --all | --force]")
         return 1
-    return 0 if all([groom_board(n, c, force) for n, c in chosen]) else 1
+    code = 0 if all([groom_board(n, c, force) for n, c in chosen]) else 1
+    return max(code, check_intake(chosen)) if args == ["--all"] else code
+
+
+def check_intake(chosen, out=print) -> int:
+    """The board sweep's second half (#982): the repeated-blocker check on the first board's repo and the intake check on every board. Returns 1 on a finding."""
+    from lib import cmd_sweep, intake
+    held = gh_budget.refusal() or gh_budget.points_refusal()
+    if held:
+        out("Intake check skipped: " + held.split(". ")[0])
+        return 0
+    fleet = cmd_sweep.repos(lambda: chosen)
+    for line in intake.prevention(*fleet[0][1:]) if fleet else []:
+        out(line)
+    return intake.run(fleet)

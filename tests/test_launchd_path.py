@@ -9,7 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from lib import cmd_burndown, cmd_ghreplay, launchd, maintain  # noqa: E402
+from lib import cmd_boardsweep, cmd_ghreplay, launchd, maintain  # noqa: E402
 
 
 class TestJobPath(unittest.TestCase):
@@ -25,7 +25,7 @@ class TestJobPath(unittest.TestCase):
         return plistlib.loads(plist.read_bytes())
 
     def test_a_job_built_by_launchd_job_runs_with_the_folder_holding_gh(self):
-        self.assertEqual("/opt/homebrew/bin", self.installed(cmd_burndown)["EnvironmentVariables"]["PATH"].split(":")[0])
+        self.assertEqual("/opt/homebrew/bin", self.installed(cmd_boardsweep)["EnvironmentVariables"]["PATH"].split(":")[0])
 
     def test_a_job_with_its_own_plist_builder_runs_with_the_folder_holding_gh(self):
         for module in (cmd_ghreplay, maintain):

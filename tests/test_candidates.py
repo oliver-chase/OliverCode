@@ -201,11 +201,6 @@ class TestScheduledEntryPoints(unittest.TestCase):
         self.assertTrue(0 < self.candidate_count() <= candidates.limits()["retroFilesPerRun"])
         self.assertFalse((self.oc / "story-outbox.jsonl").exists())
 
-    def test_the_gap_sweep_creates_no_issue(self):
-        self.launcher("gap-sweep")
-        self.assertEqual([], creations(self.record))
-        self.assertFalse((self.oc / "story-outbox.jsonl").exists())
-
     def test_the_hooks_create_no_issue(self):
         hooks = REPO_ROOT / "scripts" / "hooks"
         for n in range(50):

@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, temp_dir
@@ -152,6 +153,26 @@ class TestGroomImportedPriorities(unittest.TestCase):
         _, calls, filed = self.run_groom(stories, mine)
         self.assertEqual((calls, filed), ([], []))
         self.assertEqual(mine["rerank"]["numbers"], list(range(1, 11)))
+
+
+class TestGroomRunsTheSweepsChecks(unittest.TestCase):
+    def test_all_runs_the_intake_and_repeated_blocker_checks_after_the_boards(self):
+        config = Path("/x/r/docs/backlog-config.json")
+        with mock.patch.object(cmd_groom, "groom_board", return_value=True), mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), \
+                mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), \
+                mock.patch("lib.cmd_sweep.boards", return_value=[("R", config)]), mock.patch("lib.cmd_sweep.repos", return_value=[("R", "o/r", 3)]), \
+                mock.patch("lib.intake.prevention", return_value=[]) as prevention, mock.patch("lib.intake.run", return_value=1) as intake_run:
+            self.assertEqual(1, cmd_groom.command_groom(["--all"]))
+        prevention.assert_called_once_with("o/r", 3)
+        intake_run.assert_called_once_with([("R", "o/r", 3)])
+
+    def test_a_held_budget_skips_the_intake_check_and_a_single_config_never_runs_it(self):
+        with mock.patch.object(cmd_groom.gh_budget, "refusal", return_value="held. later"), mock.patch("lib.intake.run") as intake_run:
+            self.assertEqual(0, cmd_groom.check_intake([("R", Path("a.json"))], out=lambda t: None))
+        intake_run.assert_not_called()
+        with mock.patch.object(cmd_groom, "groom_board", return_value=True), mock.patch.object(cmd_groom, "check_intake") as check:
+            self.assertEqual(0, cmd_groom.command_groom(["--config", "/x/r/docs/backlog-config.json"]))
+        check.assert_not_called()
 
 
 class TestGroomScheduling(unittest.TestCase):

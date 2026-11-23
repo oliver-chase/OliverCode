@@ -91,7 +91,7 @@ The secret patterns live once in `core/hooks/secret-patterns.sh`, and `scripts/b
 
 ## Repeated blockers
 
-The nightly `olivercode board sweep` reads the failure log with no model call. A gate and reason that appear 3 or more times file one story, "Prevent the repeated block: ...", naming the blocker and its occurrences. An open story for the same blocker gets each new occurrence as a comment, and a blocker seen twice files nothing.
+The daily `olivercode board groom --all`, which `maintain --fix` runs, reads the failure log with no model call. A gate and reason that appear 3 or more times file one story, "Prevent the repeated block: ...", naming the blocker and its occurrences. An open story for the same blocker gets each new occurrence as a comment, and a blocker seen twice files nothing.
 
 ## Hook trigger log
 

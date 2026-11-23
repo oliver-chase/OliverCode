@@ -20,11 +20,11 @@ class TestRemovedJobs(unittest.TestCase):
     def test_an_installed_job_of_a_removed_command_is_unloaded_and_deleted(self):
         for label in cmd_install.REMOVED_JOBS:
             (self.agents / f"{label}.plist").write_text("<plist/>")
-        (self.agents / "com.olivercode.burndown.plist").write_text("<plist/>")
+        (self.agents / "com.olivercode.board-sweep.plist").write_text("<plist/>")
         ran = []
         gone = cmd_install.retire_removed_jobs(self.home, run=lambda argv, **_: ran.append(argv))
         self.assertEqual(list(cmd_install.REMOVED_JOBS), gone)
-        self.assertEqual(["com.olivercode.burndown.plist"], sorted(p.name for p in self.agents.iterdir()))
+        self.assertEqual(["com.olivercode.board-sweep.plist"], sorted(p.name for p in self.agents.iterdir()))
         self.assertEqual(len(cmd_install.REMOVED_JOBS), len(ran))
         self.assertTrue(all(argv[:2] == ["launchctl", "bootout"] for argv in ran))
 
@@ -36,6 +36,21 @@ class TestRemovedJobs(unittest.TestCase):
         self.assertEqual(["com.olivercode.review"], cmd_install.retire_removed_jobs(self.home, run=lambda argv, **_: ran.append(argv)))
         self.assertFalse(plist.exists())
         self.assertEqual("com.olivercode.review", ran[0][2].split("/")[-1])
+
+    def test_the_gap_sweep_burndown_and_sweep_jobs_are_unloaded_and_deleted_and_their_commands_are_gone(self):
+        labels = ("com.olivercode.gap-sweep", "com.olivercode.burndown", "com.olivercode.sweep")
+        for label in labels:
+            self.assertIn(label, cmd_install.REMOVED_JOBS)
+            (self.agents / f"{label}.plist").write_text("<plist/>")
+        ran = []
+        self.assertEqual(sorted(labels), sorted(cmd_install.retire_removed_jobs(self.home, run=lambda argv, **_: ran.append(argv))))
+        self.assertEqual([], list(self.agents.iterdir()))
+        self.assertEqual(sorted(labels), sorted(argv[2].split("/")[-1] for argv in ran))
+        for command in ("gap-sweep", "board burndown", "board sweep"):
+            done = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), *command.split()], capture_output=True, text=True)
+            self.assertNotEqual(0, done.returncode, command)
+        self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_gapsweep.py").exists())
+        self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_burndown.py").exists())
 
     def test_a_second_run_finds_nothing_to_remove(self):
         self.assertEqual([], cmd_install.retire_removed_jobs(self.home, run=mock.Mock()))

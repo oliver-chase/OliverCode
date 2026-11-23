@@ -146,16 +146,7 @@ def _schedule_replay() -> None:
     print("  [JOB] " + ("GitHub replay job loaded" if cmd_ghreplay.schedule(True) == 0 else "GitHub replay job failed; run `olivercode gh-limit --schedule`"))
 
 
-def _schedule_gaps() -> None:
-    """Load the nightly gap-sweep job (`olivercode gap-sweep --schedule`, #725), under the same real-home rule as the replay job."""
-    real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
-    if real is None or Path.home().resolve() != real.resolve():
-        return
-    from lib import cmd_gapsweep
-    print("  [JOB] " + ("gap-sweep job loaded" if cmd_gapsweep.schedule(True) == 0 else "gap-sweep job failed; run `olivercode gap-sweep --schedule`"))
-
-
-REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review"))
+REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep"))
 REMOVED_PAGES = (".olivercode/city.html",)
 
 
@@ -464,7 +455,6 @@ def command_install(oc_root: Path) -> int:
             print(f"  [WARN] {problem}; to fix it run `{fix}`")
 
     _schedule_replay()
-    _schedule_gaps()
     _retire_removed_jobs()
 
     broken = _broken_links(skills_dir)

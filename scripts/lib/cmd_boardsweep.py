@@ -27,6 +27,7 @@ OPENING = "Backlog"
 
 def plan(items: list[dict], issues: list[dict], config: dict) -> tuple[list[int], list[int]]:
     """(numbers of closed issues whose card is not finished, numbers of open issues with no card) for the config's own repo."""
+    sys.path.insert(0, str(SCRIPTS))
     import check_board_hygiene  # noqa: PLC0415
     options = config.get("fields", {}).get("status", {}).get("options", {})
     finished = next((k for k in options if k.lower() in FINISHED), None)

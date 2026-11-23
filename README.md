@@ -56,7 +56,7 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 | The health code posted on the wall | Commit gates | No secrets, no personal data, and every change tied to a ticket |
 | The manager who stops a cook from doing something dangerous | Tool guards | Refuse unsafe commands, unsafe pushes and overspending GitHub |
 | The suggestion box | The candidates list | Automatic checks drop ideas in, and nothing becomes a ticket until you pick it |
-| The nightly close-down checklist | Scheduled jobs | Health, maintenance and board sweeps, with no model |
+| The nightly close-down checklist | Scheduled jobs | Health, maintenance and board grooming, with no model |
 | The recipe binder every cook follows | Rules, voice and design files | Loaded into every session |
 | The training manuals | Skills | How to audit, file a story, plan and diagnose a bug |
 | The franchise inspection | Fleet checks | Checks every one of your repos against the same standard |
@@ -106,13 +106,13 @@ python3 scripts/olivercode conform
 | Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode ledger`, `olivercode audit-fleet`, `olivercode audit-mode`, `olivercode maintain`, `olivercode eval`, `olivercode report`, `olivercode cutlist`, `olivercode limits`, `olivercode usage` |
 | Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode land`, `olivercode wip`, `olivercode validated`, `olivercode queue`, `olivercode batch` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
-| Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode gap-sweep`, `olivercode board sweep`, `olivercode board burndown`, `olivercode story`, `olivercode candidates`, `olivercode gh-limit` |
+| Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode story`, `olivercode candidates`, `olivercode gh-limit` |
 | Owner and decisions | `olivercode owner`, `olivercode push-blocked`, `olivercode decisions` |
 | Learning | `olivercode lesson`, `olivercode retro` |
 | Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode policy` |
 | Orientation | `olivercode skills`, `olivercode guide` |
 
-The scheduled jobs (`burndown`, `sweep`, `fleet-sync`, `retro`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
+The scheduled jobs (`board sync`, `fleet-sync`, `retro`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
 
 ## Skills
 

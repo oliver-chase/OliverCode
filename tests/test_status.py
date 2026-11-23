@@ -52,6 +52,23 @@ class TestStatus(unittest.TestCase):
         _, text = self.status(5, [issue("2026-10-01", "2026-10-02")])
         self.assertIn("0 closed and 0 opened", text)
 
+    def test_the_tokens_per_closed_story_average_the_run_log_of_the_stories_that_closed(self):
+        rows = [dict(issue("2026-11-01", "2026-11-20"), number=4), dict(issue("2026-11-01", "2026-11-21"), number=5), dict(issue("2026-11-01"), number=6)]
+        log = [{"story": "story-4", "input": 600, "output": 400}, {"story": "story-4", "input": 1000, "output": 0},
+               {"story": "story-5", "input": 1000, "output": 0}, {"story": "story-6", "input": 9000, "output": 0}]
+        self.assertEqual("Tokens per closed story: 1,500 across 2 stories closed in the last 7 days.", cmd_status.tokens_per_story(rows, log))
+        self.assertIn("not recorded", cmd_status.tokens_per_story(rows, []))
+
+    def test_status_prints_the_open_count_the_rate_the_tokens_and_the_zero_date(self):
+        rows = [dict(issue("2026-11-01", "2026-11-20"), number=n) for n in range(1, 15)] + [issue("2026-11-20")] * 7
+        out = io.StringIO()
+        with mock.patch.object(cmd_status, "run_log", return_value=[{"story": "story-1", "input": 100, "output": 50}]), \
+                mock.patch.object(cmd_status, "live_claims", return_value={}), mock.patch.object(cmd_status, "runner_alive", return_value=False):
+            cmd_status.run("o/r", count=lambda s, state: 14, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"))
+        text = out.getvalue()
+        for want in ("14 open", "2.0 stories landed per day", "Tokens per closed story: 150", "reaches zero on 2026-12-06"):
+            self.assertIn(want, text)
+
     def test_a_failed_read_exits_one(self):
         code, text = self.status(None, [])
         self.assertEqual(1, code)

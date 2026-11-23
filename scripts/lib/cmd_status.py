@@ -1,4 +1,4 @@
-"""Launcher command `status`: the open story count, the landing rate and the projected zero date for this repo, from gh REST only, with no model call.
+"""Launcher command `status`: the open story count, the landing rate, the tokens per closed story and the projected zero date for this repo, from gh REST only, with no model call.
 
 `olivercode status [--root DIR]` reads the repo's open count and the stories opened and closed in the last seven days. A falling count prints the stories
 landed per day and the date the count reaches zero at that pace. A flat or rising count prints the same figures and says the date is not reachable.
@@ -143,10 +143,22 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
     return lines + warnings
 
 
+def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
+    """The tokens the runner spent per story closed in ROWS, from the run log's input and output counts for each of those stories (#982)."""
+    spent = {}
+    for entry in log:
+        spent[str(entry.get("story"))] = spent.get(str(entry.get("story")), 0) + int(entry.get("input") or 0) + int(entry.get("output") or 0)
+    counted = [spent[f"story-{r.get('number')}"] for r in landed(rows) if spent.get(f"story-{r.get('number')}")]
+    if not counted:
+        return f"Tokens per closed story: not recorded for the last {DAYS} days."
+    return f"Tokens per closed story: {sum(counted) // len(counted):,} across {len(counted)} stories closed in the last {DAYS} days."
+
+
 def live_lines(now: datetime, open_now: int, rows: list[dict]) -> list[str]:
     """The status lines for this machine right now, read from the claims, the run log, the process table and the digest."""
     stamp = now.timestamp()
-    return activity(stamp, live_claims(stamp), run_log(), runner_alive(), open_now, next_ready(digest_path()), (landed(rows) or [None])[0])
+    log = run_log()
+    return [tokens_per_story(rows, log)] + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), (landed(rows) or [None])[0])
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=live_lines) -> int:

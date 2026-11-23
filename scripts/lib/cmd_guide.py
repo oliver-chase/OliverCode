@@ -73,9 +73,7 @@ GROUPS = (
     ("Backlog and boards", (
         ("backlog-setup", "Set up or repair a repo's board"),
         ("board groom", "Fix drifted cards and fill in missing fields"),
-        ("gap-sweep", "File a story for each standard a repo is missing"),
-        ("board sweep", "Report cards that drifted from their issues"),
-        ("board burndown", "Count open issues per repo"),
+        ("board sync", "Move closed stories to Complete and add open stories with no card"),
         ("story", "Hold a story request until GitHub has room to file it"),
         ("candidates", "Keep ideas for stories until the owner picks them"),
         ("gh-limit", "Show or lift the shared GitHub rate-limit hold"),
@@ -100,7 +98,7 @@ GROUPS = (
         ("guide", "Say what everything does, or what one command, gate, guard, job or skill does"),
     )),
 )
-JOBS = {"burndown": "board burndown", "sweep": "board sweep", "fleet-sync": "fleet-sync", "retro": "retro", "maintain": "maintain",
+JOBS = {"board-sweep": "board sync", "fleet-sync": "fleet-sync", "retro": "retro", "maintain": "maintain",
         "gh-limit": "gh-limit", "version-cut": "version-cut"}  # the scheduled jobs and the command that installs each, as the README names them
 
 

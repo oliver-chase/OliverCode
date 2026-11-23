@@ -42,7 +42,6 @@ from lib.cmd_fleet import (  # noqa: E402
 from lib.cmd_dispatch import command_dispatch  # noqa: E402
 from lib.cmd_drain import command_drain  # noqa: E402
 from lib.cmd_board import command_board  # noqa: E402
-from lib.cmd_gapsweep import command_gapsweep  # noqa: E402
 from lib.cmd_version import command_docs_check, command_version_cut  # noqa: E402
 from lib.cmd_land import command_land  # noqa: E402
 from lib.cmd_run import command_run  # noqa: E402
@@ -148,8 +147,6 @@ def main() -> int:
     if cmd == "docs-check":
         _reject_extra(cmd, argv)
         return command_docs_check()
-    if cmd == "gap-sweep":
-        return command_gapsweep(argv)
     if cmd == "run":
         return command_run(argv)
     if cmd == "dispatch":
