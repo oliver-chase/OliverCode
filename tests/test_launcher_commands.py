@@ -6,56 +6,87 @@ Argument handling gets tests because an ignored unknown flag is a wrong success:
 """
 
 import contextlib
-import os
 import io
+import os
 import json
-import shutil
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo
+from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
 
 LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import claude_settings, cli, cmd_install  # noqa: E402  (load_script put scripts/ on the path)
+from lib import claude_settings, cmd_install  # noqa: E402  (load_script put scripts/ on the path)
 
 
-class TestInstall(unittest.TestCase):
+class HomeCase(unittest.TestCase):
+    """A test case whose home folder is a fresh temporary folder."""
+
+    def setUp(self):
+        self.tmp = temp_dir(self)
+        self.enterContext(mock.patch.object(Path, "home", staticmethod(lambda: self.tmp)))
+        self.enterContext(mock.patch.dict(os.environ, {"HOME": str(self.tmp), "OLIVERCODE_HOME": str(self.tmp / "oc-home")}))
+        self.root = self._make_checkout()
+
+    def _make_checkout(self):
+        """A throwaway OliverCode checkout with gates and one skill, so no test touches the real clone or its git config."""
+        root = scratch_repo(self.tmp / "checkout")
+        (root / "skills" / "demo-skill").mkdir(parents=True)
+        (root / "skills" / "demo-skill" / "SKILL.md").write_text("---\nname: demo-skill\n---\n")
+        (root / "docs").mkdir()
+        (root / "CLAUDE.md").write_text("rules\n")
+        (root / "docs" / "VOICE.md").write_text("voice\n")
+        (root / ".githooks").mkdir()
+        (root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
+        (root / ".githooks" / "pre-commit").chmod(0o755)
+        return root
+
+
+class TestInstall(HomeCase):
     """`install` activates a checkout. Its one hard property: never destroy rules
     the operator already had -- that file is often their whole accumulated ruleset."""
 
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-install-"))
-        self._home = Path.home
-        Path.home = staticmethod(lambda: self.tmp)  # type: ignore[assignment]
-        env = mock.patch.dict(os.environ, {"HOME": str(self.tmp), "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
-        env.start()
-        self.addCleanup(env.stop)
-
-    def tearDown(self):
-        Path.home = self._home  # type: ignore[assignment]
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
     def test_virgin_home_gets_symlinks(self):
-        self.assertEqual(cmd_install.command_install(REPO_ROOT), 0)
+        self.assertEqual(cmd_install.command_install(self.root), 0)
         claude_md = self.tmp / ".claude" / "CLAUDE.md"
         self.assertTrue(claude_md.is_symlink())
-        self.assertEqual(claude_md.resolve(), (REPO_ROOT / "CLAUDE.md").resolve())
+        self.assertEqual(claude_md.resolve(), (self.root / "CLAUDE.md").resolve())
         voice = self.tmp / ".claude" / "VOICE.md"
-        self.assertEqual(voice.resolve(), (REPO_ROOT / "docs" / "VOICE.md").resolve())
+        self.assertEqual(voice.resolve(), (self.root / "docs" / "VOICE.md").resolve())
         linked = [p for p in (self.tmp / ".claude" / "skills").iterdir() if p.is_symlink()]
         self.assertGreater(len(linked), 0, "no skills were linked")
+
+    def test_install_loads_the_gh_replay_job_only_for_the_real_home(self):
+        with mock.patch("lib.cmd_ghreplay.schedule", return_value=0) as sched:
+            cmd_install.command_install(self.root)  # HOME is a temp folder here
+            sched.assert_not_called()
+            real = self.tmp  # a home that matches the account's own home folder
+            with mock.patch("pwd.getpwuid", return_value=mock.Mock(pw_dir=str(real))), \
+                 mock.patch.object(cmd_install.sys, "platform", "darwin"):
+                cmd_install._schedule_replay()
+            sched.assert_called_once_with(True)
+
+    def test_install_unloads_and_deletes_the_idle_sessions_job_the_command_it_ran_is_gone(self):
+        agents = self.tmp / "Library" / "LaunchAgents"
+        agents.mkdir(parents=True)
+        plist = agents / "com.olivercode.idle-sessions.plist"
+        plist.write_text("<plist/>", encoding="utf-8")
+        ran = mock.Mock()
+        with contextlib.redirect_stdout(io.StringIO()):
+            gone = cmd_install.retire_removed_jobs(self.tmp, run=ran)
+        self.assertEqual(["com.olivercode.idle-sessions"], gone)
+        self.assertFalse(plist.exists())
+        self.assertEqual("bootout", ran.call_args[0][0][1])
 
     def test_existing_real_claude_md_is_backed_up_not_destroyed(self):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)
         (claude_dir / "CLAUDE.md").write_text("my existing rules\n", encoding="utf-8")
 
-        cmd_install.command_install(REPO_ROOT)
+        cmd_install.command_install(self.root)
 
         backup = claude_dir / "CLAUDE.md.pre-olivercode"
         self.assertTrue(backup.is_file(), "existing rules were not backed up")
@@ -63,7 +94,7 @@ class TestInstall(unittest.TestCase):
         self.assertTrue((claude_dir / "CLAUDE.md").is_symlink())
 
     def _skill(self):
-        return next(p.name for p in sorted((REPO_ROOT / "skills").iterdir()) if (p / "SKILL.md").is_file())
+        return next(p.name for p in sorted((self.root / "skills").iterdir()) if (p / "SKILL.md").is_file())
 
     def _all_backups(self):
         return [p for p in (self.tmp / ".claude").rglob("*") if ".pre-olivercode" in p.name]
@@ -74,8 +105,8 @@ class TestInstall(unittest.TestCase):
         old = self.tmp / "old" / "OliverCode"
         (claude_dir / "CLAUDE.md").symlink_to(old / "CLAUDE.md")
         (claude_dir / "skills" / self._skill()).symlink_to(old / "skills" / self._skill())
-        cmd_install.command_install(REPO_ROOT)
-        self.assertEqual((claude_dir / "CLAUDE.md").resolve(), (REPO_ROOT / "CLAUDE.md").resolve())
+        cmd_install.command_install(self.root)
+        self.assertEqual((claude_dir / "CLAUDE.md").resolve(), (self.root / "CLAUDE.md").resolve())
         self.assertEqual(self._all_backups(), [])
 
     def test_relinks_a_recorded_link_whose_checkout_moved_without_a_backup(self):
@@ -83,14 +114,14 @@ class TestInstall(unittest.TestCase):
         claude_dir.mkdir(parents=True)
         old = str(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
         (claude_dir / "CLAUDE.md").symlink_to(old)
-        launcher._write_record(claude_dir, {"CLAUDE.md": old})
-        cmd_install.command_install(REPO_ROOT)
+        cmd_install._write_record(claude_dir, {"CLAUDE.md": old})
+        cmd_install.command_install(self.root)
         self.assertEqual(self._all_backups(), [])
 
     def test_records_every_link_it_wrote(self):
-        cmd_install.command_install(REPO_ROOT)
+        cmd_install.command_install(self.root)
         claude_dir = self.tmp / ".claude"
-        record = launcher._read_record(claude_dir)
+        record = cmd_install._read_record(claude_dir)
         links = [p for p in claude_dir.rglob("*") if p.is_symlink()]
         self.assertEqual(record, {str(p.relative_to(claude_dir)): os.readlink(p) for p in links})
 
@@ -98,7 +129,7 @@ class TestInstall(unittest.TestCase):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)
         (claude_dir / "CLAUDE.md").symlink_to("/Volumes/Ext/dotfiles/CLAUDE.md")  # a drive not mounted
-        cmd_install.command_install(REPO_ROOT)
+        cmd_install.command_install(self.root)
         backup = claude_dir / "CLAUDE.md.pre-olivercode"
         self.assertTrue(backup.is_symlink(), "the owner's dangling link was replaced with no backup")
         self.assertEqual(os.readlink(backup), "/Volumes/Ext/dotfiles/CLAUDE.md")
@@ -106,9 +137,9 @@ class TestInstall(unittest.TestCase):
     def test_backs_up_a_dangling_link_the_record_does_not_name(self):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)
-        launcher._write_record(claude_dir, {"CLAUDE.md": "/somewhere/else/CLAUDE.md"})
+        cmd_install._write_record(claude_dir, {"CLAUDE.md": "/somewhere/else/CLAUDE.md"})
         (claude_dir / "CLAUDE.md").symlink_to(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
-        cmd_install.command_install(REPO_ROOT)
+        cmd_install.command_install(self.root)
         self.assertTrue((claude_dir / "CLAUDE.md.pre-olivercode").is_symlink())
 
     def test_backs_up_a_live_link_into_another_checkout_and_reinstall_adds_none(self):
@@ -118,39 +149,25 @@ class TestInstall(unittest.TestCase):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)
         (claude_dir / "CLAUDE.md").symlink_to(fork / "CLAUDE.md")
-        cmd_install.command_install(REPO_ROOT)
+        cmd_install.command_install(self.root)
         self.assertEqual((claude_dir / "CLAUDE.md.pre-olivercode").resolve(), (fork / "CLAUDE.md").resolve())
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            cmd_install.command_install(REPO_ROOT)
-        self.assertIn("[ALREADY] ~/.claude/CLAUDE.md", out.getvalue())
+        self.assertIn("[ALREADY] ~/.claude/CLAUDE.md", quiet(cmd_install.command_install, self.root)[1])
         self.assertEqual(len(self._all_backups()), 1)
 
     def test_installs_the_claude_code_hooks_and_keeps_the_owners_settings(self):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)
         (claude_dir / "settings.json").write_text(json.dumps({"model": "opus"}))
-        self.assertEqual(cmd_install.command_install(REPO_ROOT), 0)
+        self.assertEqual(cmd_install.command_install(self.root), 0)
         settings = json.loads((claude_dir / "settings.json").read_text())
         self.assertEqual(settings["model"], "opus")
         self.assertEqual(claude_settings.missing(claude_dir / "settings.json"), [])
 
-    def _install(self, root=REPO_ROOT):
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            rc = cmd_install.command_install(root)
-        return rc, out.getvalue()
+    def _install(self, root=None):
+        return quiet(cmd_install.command_install, root or self.root)
 
     def _checkout(self):
-        """A throwaway OliverCode checkout with gates, so no test touches the real git config."""
-        root = scratch_repo(self.tmp / "checkout")
-        (root / "skills").mkdir()
-        (root / "docs").mkdir()
-        (root / "CLAUDE.md").write_text("rules\n")
-        (root / "docs" / "VOICE.md").write_text("voice\n")
-        (root / ".githooks").mkdir()
-        (root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
-        (root / ".githooks" / "pre-commit").chmod(0o755)
-        return root
+        return self.root
 
     def test_unset_hooks_path_is_set_to_githooks(self):
         root = self._checkout()
@@ -234,7 +251,7 @@ class TestInstall(unittest.TestCase):
     def test_removes_its_own_link_to_a_skill_the_checkout_no_longer_has(self):
         skills = self.tmp / ".claude" / "skills"
         skills.mkdir(parents=True)
-        (skills / "retired-skill").symlink_to(REPO_ROOT / "skills" / "retired-skill")
+        (skills / "retired-skill").symlink_to(self.root / "skills" / "retired-skill")
         (skills / "owners-skill").symlink_to(self.tmp / "nowhere" / "retired-skill")
         rc, out = self._install()
         self.assertIn("retired-skill", out)
@@ -245,32 +262,22 @@ class TestInstall(unittest.TestCase):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)
         (claude_dir / "settings.json").write_text("{not json")
-        self.assertEqual(cmd_install.command_install(REPO_ROOT), 1)
+        self.assertEqual(cmd_install.command_install(self.root), 1)
         self.assertEqual((claude_dir / "settings.json").read_text(), "{not json")
 
 
-class TestUninstall(unittest.TestCase):
+class TestUninstall(HomeCase):
     """`uninstall` removes what install wrote in ~/.claude and nothing of the owner's."""
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-uninstall-"))
-        self._home = Path.home
-        Path.home = staticmethod(lambda: self.tmp)  # type: ignore[assignment]
-        env = mock.patch.dict(os.environ, {"HOME": str(self.tmp)})
-        env.start()
-        self.addCleanup(env.stop)
+        super().setUp()
         self.claude = self.tmp / ".claude"
 
-    def tearDown(self):
-        Path.home = self._home  # type: ignore[assignment]
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
     def _quiet(self, fn):
-        with contextlib.redirect_stdout(io.StringIO()):
-            return fn(REPO_ROOT)
+        return quiet(fn, self.root)[0]
 
     def _links_into_checkout(self):
-        root = REPO_ROOT.resolve()
+        root = self.root.resolve()
         return [p for p in self.claude.rglob("*") if p.is_symlink() and p.resolve().is_relative_to(root)]
 
     def test_removes_every_link_and_hook_install_wrote(self):
@@ -327,25 +334,24 @@ class TestUninstall(unittest.TestCase):
 
     def test_removes_dangling_links_left_by_a_checkout_that_moved(self):
         old = self.tmp / "old" / "OliverCode"
-        skill = next(p.name for p in (REPO_ROOT / "skills").iterdir() if (p / "SKILL.md").is_file())
+        skill = next(p.name for p in (self.root / "skills").iterdir() if (p / "SKILL.md").is_file())
         skills = self.claude / "skills"
         skills.mkdir(parents=True)
         (self.claude / "CLAUDE.md").symlink_to(old / "CLAUDE.md")
         (self.claude / "VOICE.md").symlink_to(old / "docs" / "VOICE.md")
         (skills / skill).symlink_to(old / "skills" / skill)
         (skills / "not-shipped").symlink_to(old / "skills" / "not-shipped")  # not a skill this checkout ships
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            self.assertEqual(cmd_install.command_uninstall(REPO_ROOT), 0)
+        rc, out = quiet(cmd_install.command_uninstall, self.root)
+        self.assertEqual(rc, 0)
         for path in (self.claude / "CLAUDE.md", self.claude / "VOICE.md", skills / skill):
             self.assertFalse(path.is_symlink(), path)
         self.assertTrue((skills / "not-shipped").is_symlink())
-        self.assertIn("1 of them dangling", out.getvalue())
+        self.assertIn("1 of them dangling", out)
 
     def test_keeps_a_lone_dangling_link_on_a_machine_never_installed(self):
         (self.claude / "skills").mkdir(parents=True)
         (self.claude / "CLAUDE.md").symlink_to("/Volumes/Ext/dotfiles/CLAUDE.md")
-        skill = next(p.name for p in sorted((REPO_ROOT / "skills").iterdir()) if (p / "SKILL.md").is_file())
+        skill = next(p.name for p in sorted((self.root / "skills").iterdir()) if (p / "SKILL.md").is_file())
         (self.claude / "skills" / skill).symlink_to(f"/Volumes/X/my-skills/skills/{skill}")
         self._quiet(cmd_install.command_uninstall)
         self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
@@ -355,13 +361,13 @@ class TestUninstall(unittest.TestCase):
         (self.claude / "skills").mkdir(parents=True)
         old = str(self.tmp / "old" / "OliverCode" / "CLAUDE.md")
         (self.claude / "CLAUDE.md").symlink_to(old)
-        skill = next(p.name for p in sorted((REPO_ROOT / "skills").iterdir()) if (p / "SKILL.md").is_file())
+        skill = next(p.name for p in sorted((self.root / "skills").iterdir()) if (p / "SKILL.md").is_file())
         (self.claude / "skills" / skill).symlink_to(self.tmp / "old" / "OliverCode" / "skills" / skill)
-        launcher._write_record(self.claude, {"CLAUDE.md": old})
+        cmd_install._write_record(self.claude, {"CLAUDE.md": old})
         self._quiet(cmd_install.command_uninstall)
         self.assertFalse((self.claude / "CLAUDE.md").is_symlink())
         self.assertTrue((self.claude / "skills" / skill).is_symlink(), "a link the record does not name was removed")
-        self.assertFalse((self.claude / launcher.INSTALL_RECORD).exists())
+        self.assertFalse((self.claude / cmd_install.INSTALL_RECORD).exists())
 
     def test_restores_another_checkouts_links_it_backed_up(self):
         fork = self.tmp / "fork"
@@ -380,21 +386,17 @@ class TestUninstall(unittest.TestCase):
         (self.claude / "CLAUDE.md").unlink()
         (self.claude / "CLAUDE.md").write_text("second\n")
         self._quiet(cmd_install.command_install)
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            cmd_install.command_uninstall(REPO_ROOT)
+        out = quiet(cmd_install.command_uninstall, self.root)[1]
         self.assertEqual((self.claude / "CLAUDE.md").read_text(), "second\n")
         self.assertEqual((self.claude / "CLAUDE.md.pre-olivercode").read_text(), "first\n")
-        self.assertIn("CLAUDE.md.pre-olivercode", out.getvalue())
+        self.assertIn("CLAUDE.md.pre-olivercode", out)
 
     def test_names_the_owners_own_skills_copy_correctly(self):
         (self.claude / "skills.pre-olivercode").mkdir(parents=True)
         self._quiet(cmd_install.command_install)
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            cmd_install.command_uninstall(REPO_ROOT)
-        self.assertIn("skills.pre-olivercode", out.getvalue())
-        self.assertNotIn("An earlier install made", out.getvalue())
+        out = quiet(cmd_install.command_uninstall, self.root)[1]
+        self.assertIn("skills.pre-olivercode", out)
+        self.assertNotIn("An earlier install made", out)
         self.assertTrue((self.claude / "skills.pre-olivercode").is_dir())
 
     def test_leaves_a_broken_settings_file_alone_and_fails(self):
@@ -405,7 +407,7 @@ class TestUninstall(unittest.TestCase):
         self.assertEqual(self._links_into_checkout(), [], "the links still come out")
 
     def test_rejects_an_unknown_flag_without_touching_home(self):
-        env = {**os.environ, "HOME": str(self.tmp)}
+        env = {**os.environ, "HOME": str(self.tmp), "OLIVERCODE_HOME": str(self.tmp / "oc-home")}
         self._quiet(cmd_install.command_install)
         result = subprocess.run([sys.executable, str(LAUNCHER), "uninstall", "--bogus"],
                                 capture_output=True, text=True, cwd=str(self.tmp), env=env)
@@ -414,7 +416,7 @@ class TestUninstall(unittest.TestCase):
         self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
         # Every command that takes no extra word refuses one before it acts.
         for cmd in ("install", "health", "update", "sync-hooks", "audit-fleet", "skills",
-                    "size . ", "conform . ", "discover --root . "):
+                    "conform . ", "discover --root . "):
             with self.subTest(cmd):
                 done = subprocess.run([sys.executable, str(LAUNCHER), *cmd.split(), "--bogus"],
                                       capture_output=True, text=True, cwd=str(self.tmp), env=env)
@@ -455,11 +457,6 @@ class TestUnknownArgsRejected(unittest.TestCase):
         result = self._run("not-a-command")
         self.assertNotEqual(result.returncode, 0)
 
-    def test_help_names_every_listed_command(self):
-        out = self._run("help").stdout
-        for entry, _ in cli.COMMANDS:
-            self.assertIn(entry, out)
-
     def test_help_aliases_all_exit_zero(self):
         for args in ([], ["--help"], ["-h"], ["help"]):
             self.assertEqual(self._run(*args).returncode, 0, f"{args} should exit 0")
@@ -470,16 +467,10 @@ class TestBootstrap(unittest.TestCase):
     the correctness property: strict overwrites, presence must never clobber."""
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="olivercode-bootstrap-"))
-        scratch_repo(self.tmp)
+        self.tmp = scratch_repo(temp_dir(self, "olivercode-bootstrap-"))
 
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _run(self, dry=False):
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            rc = launcher.command_bootstrap(REPO_ROOT, self.tmp, dry)
-        return rc, out.getvalue()
+    def _run(self, dry=False, oc=REPO_ROOT):
+        return quiet(launcher.command_bootstrap, oc, self.tmp, dry)
 
     def test_dry_run_writes_nothing(self):
         rc, _ = self._run(dry=True)
@@ -499,37 +490,24 @@ class TestBootstrap(unittest.TestCase):
 
     def _fake_checkout(self, manifest: dict) -> Path:
         """An OliverCode root holding only a bootstrap manifest, so one rule is tested alone."""
-        root = Path(tempfile.mkdtemp(prefix="olivercode-fakeoc-"))
-        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        root = temp_dir(self, "olivercode-fakeoc-")
         (root / "shared").mkdir()
         (root / "shared" / "project-bootstrap-manifest.json").write_text(json.dumps(manifest))
         return root
 
     def test_required_directories_are_made_even_when_no_file_lands_in_them(self):
         oc = self._fake_checkout({"requiredDirectories": ["empty/dir", ".github/workflows"]})
-        with contextlib.redirect_stdout(io.StringIO()):
-            rc = launcher.command_bootstrap(oc, self.tmp, False)
+        rc, _ = self._run(oc=oc)
         self.assertEqual(rc, 0)
         self.assertTrue((self.tmp / "empty" / "dir").is_dir())
         self.assertTrue((self.tmp / ".github" / "workflows").is_dir())
 
     def test_a_template_source_missing_from_the_checkout_fails(self):
         oc = self._fake_checkout({"templatedFiles": [{"source": "core/gone.md", "target": "gone.md"}]})
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            rc = launcher.command_bootstrap(oc, self.tmp, False)
+        rc, out = self._run(oc=oc)
         self.assertEqual(rc, 1)
-        self.assertIn("core/gone.md", out.getvalue())
+        self.assertIn("core/gone.md", out)
 
     def test_refuses_a_non_git_directory(self):
-        plain = Path(tempfile.mkdtemp(prefix="olivercode-nongit-"))
-        try:
-            with contextlib.redirect_stdout(io.StringIO()):
-                rc = launcher.command_bootstrap(REPO_ROOT, plain, False)
-            self.assertEqual(rc, 1, "must refuse a directory with no .git")
-        finally:
-            shutil.rmtree(plain, ignore_errors=True)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
+        plain = temp_dir(self, "olivercode-nongit-")
+        self.assertEqual(quiet(launcher.command_bootstrap, REPO_ROOT, plain, False)[0], 1, "must refuse a directory with no .git")

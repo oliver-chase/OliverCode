@@ -7,20 +7,18 @@ copy, or every fleet command would silently see an empty fleet.
 
 import json
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+from _support import temp_dir  # noqa: E402
 from lib import local_config, repo_profiles  # noqa: E402
 
 
 class RegistryLocation(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.private = Path(self.tmp.name) / "private"
+        self.private = temp_dir(self) / "private"
         (self.private / "olivercode").mkdir(parents=True)
         (self.private / "olivercode" / "repo-profiles.json").write_text(json.dumps({"profiles": {"real": {}}}))
         p = mock.patch.object(repo_profiles, "private_repos", lambda: {"notes": self.private})
@@ -32,7 +30,7 @@ class RegistryLocation(unittest.TestCase):
         self.assertEqual((list(profiles), path), (["real"], self.private / "olivercode" / "repo-profiles.json"))
 
     def test_another_root_reads_its_own_shared_copy(self):
-        other = Path(self.tmp.name) / "fork"
+        other = self.private.parent / "fork"
         (other / "shared").mkdir(parents=True)
         (other / "shared" / "repo-profiles.json").write_text(json.dumps({"profiles": {}}))
         self.assertEqual(repo_profiles.registry_file(other), other / "shared" / "repo-profiles.json")
@@ -55,6 +53,49 @@ class RegistryLocation(unittest.TestCase):
         tracked = json.loads((local_config.OC_ROOT / "shared" / "repo-profiles.json").read_text())
         self.assertEqual(tracked["profiles"], {})
 
+class SymlinkedExample(unittest.TestCase):
+    """A configured registry that is a symlink to the tracked example counts as unset (#845)."""
 
-if __name__ == "__main__":
-    unittest.main()
+    def setUp(self):
+        home = temp_dir(self)
+        self.link = home / "repo-profiles.json"
+        self.link.symlink_to(local_config.OC_ROOT / "shared" / "repo-profiles.json")
+        self.private = home / "private"
+        (self.private / "olivercode").mkdir(parents=True)
+        self.real = self.private / "olivercode" / "repo-profiles.json"
+        self.real.write_text(json.dumps({"profiles": {"real": {}}}))
+        for patcher in (mock.patch.dict("os.environ", {"OLIVERCODE_FLEET_REGISTRY": str(self.link)}),
+                        mock.patch.object(repo_profiles, "private_repos", lambda: {"notes": self.private})):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_the_private_fallback_runs(self):
+        self.assertEqual(repo_profiles.registry_file(local_config.OC_ROOT), self.real)
+
+    def test_a_missing_private_registry_is_reported_as_a_gap(self):
+        self.real.unlink()
+        self.assertIn("privateRepos", repo_profiles.registry_gap(local_config.OC_ROOT))
+
+    def test_a_write_never_lands_in_the_tracked_example(self):
+        self.real.unlink()
+        self.assertEqual(repo_profiles.registry_write_file(local_config.OC_ROOT),
+                         local_config.OC_ROOT / "shared" / "repo-profiles.local.json")
+
+
+class ConfiguredRegistryPath(unittest.TestCase):
+    def test_the_default_sits_under_the_olivercode_home(self):
+        self.assertEqual(local_config.fleet_registry_path(), Path.home() / ".olivercode" / "fleet" / "repo-profiles.json")
+
+    def test_the_config_key_names_the_path_and_the_registry_is_read_from_it(self):
+        home = temp_dir(self)
+        registry = home / "mine.json"
+        registry.write_text(json.dumps({"profiles": {"x": {}}}))
+        cfg = home / "local.json"
+        cfg.write_text(json.dumps({"fleetRegistry": str(registry)}))
+        with mock.patch.dict("os.environ", {"OLIVERCODE_LOCAL_CONFIG": str(cfg)}):
+            self.assertEqual(local_config.fleet_registry_path(), registry)
+            self.assertEqual(repo_profiles.load_repo_profiles(local_config.OC_ROOT), ({"x": {}}, registry))
+
+    def test_no_fleet_names_init_fleet(self):
+        self.assertIn("olivercode init-fleet", repo_profiles.NO_FLEET)
+

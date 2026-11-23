@@ -10,6 +10,9 @@
       "git\\s+config\\s+(\\S+\\s+)*core\\.hooksPath\\s+(?!(\\./)?\\.githooks\\b)[^\\s;&|]"
     ]
   },
+  "installs": {
+    "deny": []
+  },
   "paths": {
     "allow": [
       "**"

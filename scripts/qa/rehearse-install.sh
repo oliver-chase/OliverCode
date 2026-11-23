@@ -7,7 +7,7 @@
 #
 # Cases: a fresh clone's commands, the adoption skill, a virgin machine, an existing
 # ~/.claude, a scattered fleet, --root layouts, discover, bootstrap, hookVariant, the full
-# backout, idempotency, update, the no-commit probe and zero-config basics. Every claim is a
+# backout, idempotency, update, the no-commit probe, zero-config basics and a fork's first commit. Every claim is a
 # sentence in README.md or docs/SETUP.md, so a failure means the code or that sentence is wrong.
 #
 # Usage:
@@ -127,7 +127,7 @@ register "$WS/OliverCode" app-a app-b
 oc sync-hooks 2>&1 | grep -q "app-a: hooks synced" && ok "sync-hooks reaches fleet" s1 || bad "sync-hooks reaches fleet" s1
 probe_blocked "$WS/app-a" && ok "secret blocked in app-a (Gate 1 line seen)" s1 || bad "secret blocked in app-a" s1
 probe_blocked "$WS/app-b" && ok "secret blocked in app-b (Gate 1 line seen)" s1 || bad "secret blocked in app-b" s1
-oc conform --offline 2>&1 | grep -A8 "^app-a" | grep -q "\[OK\] hooks" && ok "conform confirms the adopted fleet's hooks" s1 || bad "conform confirms the adopted fleet's hooks" s1
+oc conform --offline 2>&1 | grep -A24 "^app-a" | grep -q "\[OK\] hooks" && ok "conform confirms the adopted fleet's hooks" s1 || bad "conform confirms the adopted fleet's hooks" s1
 
 # ------------------------------------------------- S2 existing ~/.claude preserved
 say "--- S2: existing ~/.claude (real rules + vendor skill + foreign symlink) ---"
@@ -214,8 +214,8 @@ register "$WS/OliverCode" "special|custom governance path"
 oc sync-hooks 2>&1 | grep -q "special: declared hook variant" && ok "variant skipped by sync-hooks" s7 || bad "variant skipped by sync-hooks" s7
 grep -q "custom-gate" "$WS/special/.githooks/pre-commit" && ok "variant hook not overwritten" s7 || bad "variant hook not overwritten" s7
 h7="$(oc conform --offline 2>&1)"
-echo "$h7" | grep -A8 "^special" | grep -q "declared hook variant" && ok "conform reports the variant with a note" s7 || bad "conform reports the variant with a note" s7
-echo "$h7" | grep -A8 "^special" | grep -q "\[FAIL\] hooks" && bad "variant does not fail the hooks check" s7 || ok "variant does not fail the hooks check" s7
+echo "$h7" | grep -A24 "^special" | grep -q "declared hook variant" && ok "conform reports the variant with a note" s7 || bad "conform reports the variant with a note" s7
+echo "$h7" | grep -A24 "^special" | grep -q "\[FAIL\] hooks" && bad "variant does not fail the hooks check" s7 || ok "variant does not fail the hooks check" s7
 
 # --------------------------------------------------------------- S8 backout
 say "--- S8: the documented backout removes everything ---"
@@ -319,6 +319,20 @@ for cmd in "--help" "health" "skills"; do
 done
 (cd "$WS/OliverCode" && HOME="$H" bash scripts/validate.sh) >/dev/null 2>&1 \
   && ok "validate.sh on a clean copy" s12 || bad "validate.sh on a clean copy" s12
+
+# ----------------------------------------------------------- S13 a fork's first commit
+say "--- S13: a fork carrying the owner's backlog config makes its first commit ---"
+new_case s13
+mk_oc "$WS/OliverCode"
+git -C "$WS/OliverCode" remote remove origin >/dev/null 2>&1
+git -C "$WS/OliverCode" remote add origin https://github.com/someone-else/their-fork.git
+HOOKS="$(cd "$WS/OliverCode" && python3 -c 'import sys; sys.path.insert(0, "scripts"); from pathlib import Path; from lib import repo_gates; print(repo_gates.hook_templates(Path(".")))')"
+printf 'Fix the first thing (#1)\n' > "$WS/msg.txt"
+FORK_OUT="$(cd "$WS/OliverCode" && HOME="$H" bash "$HOOKS/commit-msg" "$WS/msg.txt" 2>&1)"; FORK_CODE=$?
+[ "$FORK_CODE" -eq 0 ] && ! printf '%s' "$FORK_OUT" | grep -q "no such story" \
+  && ok "the commit-msg gate does not block a fork on the owner's story numbers" s13 || bad "the commit-msg gate does not block a fork on the owner's story numbers" s13
+printf '%s' "$FORK_OUT" | grep -q "backlog-setup --apply" \
+  && ok "the gate's note names backlog-setup" s13 || bad "the gate's note names backlog-setup" s13
 
 say ""
 say "================ REHEARSAL: $PASS passed, $FAIL failed ================"

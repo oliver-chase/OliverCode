@@ -1,0 +1,1 @@
+{"repo": "{{OWNER}}/{{REPO}}", "schedule": {"cadence": "weekly", "hour": 9}, "conform": true, "boardSweep": true, "updateCheck": true, "alwaysUpToDate": false}

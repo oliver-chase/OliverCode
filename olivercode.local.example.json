@@ -2,10 +2,21 @@
   "_comment": "The example of this machine's local config: where repos live, the private repos and per-repo paths. Copy it to olivercode.local.json.",
   "repoRoot": "~/Developer/Repos",
   "allowOutside": [],
+  "autoCoverLessons": false,
+  "retroEpic": 0,
+  "auditMode": "gated",
+  "fleetRegistry": "~/.olivercode/fleet/repo-profiles.json",
   "privateRepos": {
     "notes": "~/path/to/a-private-repo"
   },
+  "otherDeviceRepos": ["a-repo-that-lives-on-another-device"],
+  "otherDeviceOwners": ["another-devices-github-org"],
+  "allowedAuthors": ["your-github-login", "your-bot-login"],
+  "personalRepos": ["a-personal-repo"],
   "skillsRoot": "~/path/to/skills",
+  "liveCopies": {
+    "~/path/a-running-bot-reads": "~/path/to/its-agent-copy"
+  },
   "repoPaths": {
     "repo-name": "~/path/to/repo-outside-the-fleet-folder"
   }

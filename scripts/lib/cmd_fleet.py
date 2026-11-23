@@ -1,24 +1,32 @@
-"""Launcher commands that act on the fleet: conform, backlog-setup, sync-hooks, audit-fleet and update."""
+"""Launcher commands that act on the fleet: conform, backlog-setup, sync-hooks, audit-fleet, ledger and update."""
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from lib import backlog_setup as _backlog_setup
 from lib import conform as _conform
+from lib import repo_gates
+from lib import update_state
+from lib import validate_snippet as _snippet
 from lib.cli import require_dir, take_flag
+from lib.gitfiles import commit_after, commit_changes
+from lib import cmd_owner as _owner
+from lib import features as _features
 from lib.local_config import OC_ROOT
+from lib import repo_state as _repo_state
 from lib.local_config import private_repos as _private_repos
 from lib.local_config import skills_root as _skills_root
 from lib.repo_profiles import iter_fleet as _iter_fleet
-from lib.repo_profiles import load_repo_profiles, registry_file, registry_gap
+from lib.repo_profiles import NO_FLEET, load_repo_profiles, registry_file, registry_gap
 
 
-def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None, offline: bool, hooks_only: bool = False) -> int:
-    """`olivercode conform [DIR]`: one repo, or the registered fleet, against docs/CONTRACT.md."""
+def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None, offline: bool, hooks_only: bool = False, fix: bool = False, story: str = "") -> int:
+    """`olivercode conform [DIR] [--fix --story REF]`: one repo, or the registered fleet, against docs/CONTRACT.md. `--fix` repairs what it can in one commit per repo."""
     print("OliverCode conformance")
     print("=" * 40)
     if target:
@@ -26,7 +34,9 @@ def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None,
             print(f"  [FAIL] {target} is not a directory.")
             return 1
         profiles, _ = load_repo_profiles(oc_root)
-        profile = next((p for n, p, path in _iter_fleet(profiles, fleet_root or oc_root.parent) if path.resolve() == target.resolve()), {})
+        if _repo_state.skipped(target.name, target):
+            return 0
+        profile = next((p for n, p, path in _iter_fleet(profiles, fleet_root or oc_root.parent, skip_archived=False) if path.resolve() == target.resolve()), {})
         private = target.resolve() in {p.resolve() for p in _private_repos().values()}
         repos = [(target.name, target, bool(profile.get("private")) or private, profile.get("hookVariant", ""))]
     else:
@@ -43,22 +53,106 @@ def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None,
             print(f"  [FAIL] {gap}")
             return 1
         if not repos:
-            print(f"  [SKIP] no fleet registered in {registry_file(oc_root)}")
+            fleet_message = NO_FLEET[0].upper() + NO_FLEET[1:]
+            if private:
+                print(f"  [FAIL] the fleet registry is empty in {registry_file(oc_root)}, so no repo was checked. {fleet_message}")
+                return 1
+            print(f"  [SKIP] no fleet registered in {registry_file(oc_root)}. {fleet_message}")
+    results, settings = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)
     failed = 0
-    for name, path, private_repo, variant in repos:
-        failed += _conform.render(name, _conform.check_repo(path, oc_root=oc_root, offline=offline, private=private_repo, variant=variant, hooks_only=hooks_only))
+    for (name, _, _, _), rows in zip(repos, results):
+        failed += _conform.render(name, rows)
     print(f"\nChecked {len(repos)} repo(s): {failed} requirement(s) failed")
+    if fix and failed:
+        failed = _fix_fleet(oc_root, repos, results, settings, offline, hooks_only, story)
     return 1 if failed else 0
 
 
+def _local_fix(oc_root: Path, repo: Path, kinds: set[str], private: bool, variant: str) -> tuple[tuple[str, ...] | None, object]:
+    """(the paths the repo's local fixes touch, None when unknown; the function that applies them)."""
+    manifest = json.loads((oc_root / "shared" / "project-bootstrap-manifest.json").read_text()).get("templatedFiles", [])
+    touches: list[str] = []
+    if kinds & {"hooks", "queue-bypass"}:
+        touches += MANAGED_PATHS
+    if "managed-files" in kinds:
+        touches += [e["target"] for e in manifest if e.get("mode") == "strict"]
+    if "dead-selftest" in kinds:
+        touches.append(_conform.DEAD_SELFTEST)
+
+    def apply() -> None:
+        if kinds & {"hooks", "queue-bypass"}:
+            templates = repo_gates.hook_templates(oc_root)
+            if variant:
+                _install_pre_push(repo, templates)
+                _set_hooks_path(repo)
+            else:
+                _install_hook_pair(repo, templates, private_repo=private)
+            _queue_block(oc_root, repo.name, repo)
+        if "managed-files" in kinds:
+            subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), "bootstrap", str(repo)], capture_output=True, text=True)
+        if "dead-selftest" in kinds:
+            _git(repo, "rm", "-q", "-f", "--", _conform.DEAD_SELFTEST)
+        if "features" in kinds:
+            _features.enable(repo, out=lambda text: print(f"      {text}"))
+    return (None if "features" in kinds else tuple(touches)), apply
+
+
+def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None, offline: bool, hooks_only: bool, story: str) -> int:
+    """`conform --fix` (#778): per repo, run each local fix, commit them together, set GitHub settings the owner owns, queue the owner steps, then check again."""
+    print("\nFixing")
+    print("=" * 40)
+    for (name, path, private, variant), rows in zip(repos, results):
+        failing = [r for r in rows if r.status == "fail"]
+        local = {r.requirement for r in failing if _conform.fix_kind(r) == "local"}
+        if _repo_state.archived(path):
+            print(f"  [SKIP] {name}: archived on GitHub, nothing to fix")
+            continue
+        if local:
+            touches, apply = _local_fix(oc_root, path, local, private, variant)
+            result = commit_after(path, apply, f"Bring the repo in line with the OliverCode contract ({story})",
+                                  "Fixes: " + ", ".join(sorted(local)) + " (olivercode conform --fix).", touches)
+            print(f"  [{'SKIP' if result.startswith('not committed') else 'FIX'}] {name}: {result}")
+        slug = _conform.repo_slug(path)
+        owned = bool(((settings or {}).get(f"{slug[0]}/{slug[1]}".lower()) or {}).get("viewerCanAdminister")) if slug else False
+        for row in (r for r in failing if _conform.fix_kind(r) != "local"):
+            if _conform.fix_kind(row) == "github" and owned and not offline:
+                done = subprocess.run(["gh", "repo", "edit", f"{slug[0]}/{slug[1]}", "--delete-branch-on-merge"], capture_output=True, text=True)
+                print(f"  [{'FIX' if done.returncode == 0 else 'FAIL'}] {name}: {row.requirement} set on GitHub")
+                if done.returncode == 0:
+                    continue
+            item = _owner.add("conform", f"{name}: {row.requirement} needs the owner", command=row.fix.strip("`"), error=row.detail or row.requirement)
+            print(f"  [OWNER] {name}: {row.requirement} is owner queue item {item['id']}: {row.fix}")
+    print("\nChecking again")
+    print("=" * 40)
+    again, _ = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)
+    left = sum(_conform.render(name, rows) for (name, _, _, _), rows in zip(repos, again))
+    print(f"\nAfter --fix: {left} requirement(s) still fail")
+    return left
+
+
 def command_backlog_setup(argv: list[str]) -> int:
-    """`olivercode backlog-setup [DIR] [--apply]`: see lib/backlog_setup.py and docs/SETUP.md."""
+    """`olivercode backlog-setup [DIR] [--apply [--commit --story REF]]`: see lib/backlog_setup.py and docs/SETUP.md."""
     apply, rest = take_flag(argv, "--apply")
-    if len(rest) > 1 or (rest and rest[0].startswith("-")):
-        print("Usage: olivercode backlog-setup [DIR] [--apply]")
+    commit, rest = take_flag(rest, "--commit")
+    story = None
+    if "--story" in rest and rest.index("--story") + 1 < len(rest):
+        at = rest.index("--story")
+        story, rest = rest[at + 1], rest[:at] + rest[at + 2:]
+    if len(rest) > 1 or (rest and rest[0].startswith("-")) or (commit and not (apply and story)):
+        print("Usage: olivercode backlog-setup [DIR] [--apply [--commit --story REF]]")
         return 1
     target = Path(rest[0] if rest else ".").expanduser()
-    return _backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT) if require_dir(target) else 1
+    if target.is_dir() and _repo_state.skipped(target.resolve().name, target):
+        return 0
+    if not require_dir(target):
+        return 1
+    if not commit:
+        return _backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT)
+    code: list[int] = []
+    result = commit_after(target.resolve(), lambda: code.append(_backlog_setup.run_setup(target, apply, _backlog_setup.Api(), OC_ROOT)),
+                          f"Set up the board config and hooks with backlog-setup ({story})", "The repo's backlog config and commit-msg hook now match the board.")
+    print(f"  [COMMIT] {target.resolve().name}: {result}")
+    return code[0] if code else 1
 
 
 def _install_pre_push(repo_path: Path, templates_dir: Path) -> None:
@@ -105,14 +199,99 @@ def _set_hooks_path(repo_path: Path) -> None:
     subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
 
 
-def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
+HOOK_FILES = ("pre-commit", "pre-commit-private", "pre-push", "commit-msg")  # every file a sync can write or delete
+
+
+VALIDATE_PATH = "scripts/validate.sh"  # sync also inserts the validation-queue block here
+MANAGED_PATHS = tuple(f".githooks/{n}" for n in HOOK_FILES) + (VALIDATE_PATH,)
+
+
+def _git(repo_path: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(repo_path), *args], capture_output=True, text=True)
+
+
+def _hook_snapshot(repo_path: Path) -> dict:
+    """Each hook file's bytes and executable bit before sync runs, and whether git already saw it changed.
+
+    A path whose git status is not empty (modified, staged, deleted or untracked) differs for a reason that
+    is not sync's, so the commit step leaves that repo alone."""
+    snap = {}
+    status = _git(repo_path, "status", "--porcelain", "--untracked-files=all", "--", *MANAGED_PATHS).stdout.splitlines()
+    changed = {line[3:].split(" -> ")[-1].strip('"') for line in status}
+    for rel in MANAGED_PATHS:
+        path = repo_path / rel
+        snap[rel] = {"data": path.read_bytes() if path.is_file() else None,
+                     "exec": path.is_file() and os.access(path, os.X_OK), "dirty": rel in changed}
+    return snap
+
+
+def _commit_synced(name: str, repo_path: Path, before: dict, story: str, archived: str | None = None) -> None:
+    """Commit the hook files sync changed in one repo, by explicit path, and print one line about it.
+
+    Never pushes and never skips the repo's own hooks: a refusal is reported and the paths are unstaged."""
+    def say(text: str) -> None:
+        print(f"  [COMMIT] {name}: {text}")
+
+    state = archived or _repo_state.archived(repo_path)
+    if state:
+        return say(f"not committed, {state} on GitHub")
+    if _git(repo_path, "rev-parse", "-q", "--verify", "HEAD").returncode != 0:
+        return say("not committed, the repo has no commits")
+    dirty = [rel for rel, was in before.items() if was["dirty"]]
+    if dirty:
+        return say(f"not committed, {', '.join(dirty)} already had uncommitted changes")
+    changed = []
+    for rel, was in before.items():
+        path = repo_path / rel
+        now = (path.read_bytes() if path.is_file() else None, path.is_file() and os.access(path, os.X_OK))
+        if now != (was["data"], was["exec"]):
+            changed.append(rel)
+    if not changed:
+        return say("nothing to commit")
+    queue_line = ("scripts/validate.sh now takes a slot in the per-user validation queue, so a script that calls it "
+                  "directly waits its turn.\n\n" if VALIDATE_PATH in changed else "")
+    message = (f"Sync the managed hook files from OliverCode ({story})\n\n"
+               "The hook files in this repo now match the current OliverCode templates.\n\n" + queue_line +
+               "No test: managed hook files copied from OliverCode\nSize: XS\n")
+    say(commit_changes(repo_path, changed, message))
+
+
+def _queue_block(oc_root: Path, name: str, repo_path: Path) -> None:
+    """Insert the validation-queue block into the repo's own scripts/validate.sh when it lacks it."""
+    line = _snippet.report(name, *_snippet.ensure_queue_snippet(oc_root, repo_path))
+    if line:
+        print(line)
+
+
+def _sync_one(name: str, repo_path: Path, failed: list[str], install, ok_line: str, commit: bool, story: str | None) -> bool:
+    """Run one repo's install, print `ok_line` and commit the change when asked; a repo whose git config fails is reported and the rest still sync."""
+    before = _hook_snapshot(repo_path) if commit else {}
+    try:
+        install()
+        print(ok_line)
+        if commit:
+            _commit_synced(name, repo_path, before, story)
+        return True
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"  [FAIL] {name}: {exc}")
+        failed.append(name)
+        return False
+
+
+def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None, commit: bool = False, story: str | None = None) -> int:
     """Converge hooks + core.hooksPath across every fleet repo and every private repo.
 
     fleet_root defaults to OliverCode's parent (the sibling-repos layout). A fork whose
     repos live elsewhere passes --root; without that, every repo would silently SKIP as
     "not present on this machine" and the command would still report success.
+
+    With commit=True each repo's changed hook files are then committed by path under `story`
+    (see _commit_synced). The default writes files and commits nothing.
     """
-    templates_dir = oc_root / "core" / "templates" / "project"
+    if commit and not story:
+        print("sync-hooks --commit needs --story REF, the story from your backlog that the commit cites.")
+        return 1
+    templates_dir = repo_gates.hook_templates(oc_root)
     fleet_root = fleet_root or oc_root.parent
     updated = 0
     skipped = 0
@@ -129,42 +308,28 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None) -> int:
             # Declared variant: overwriting its pre-commit would destroy a considered customization.
             # `health` reports it as a WARN. Remove the profile field
             # to bring the repo back under the template.
-            try:
-                _install_pre_push(repo_path, templates_dir)
-                _set_hooks_path(repo_path)
-            except (OSError, subprocess.CalledProcessError) as exc:
-                print(f"  [FAIL] {name}: {exc}")
-                failed_repos.append(name)
-                continue
-            print(f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced, hooksPath set")
-            skipped += 1
+            if _sync_one(name, repo_path, failed_repos, lambda: (_install_pre_push(repo_path, templates_dir), _set_hooks_path(repo_path), _queue_block(oc_root, name, repo_path)),
+                         f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced, hooksPath set", commit, story):
+                skipped += 1
             continue
         # A private repo gets the private variant, which drops the PII gate (it holds
-        # personal data by design) and adds the archived-content gate. Declared per
+        # personal data by design). Declared per
         # profile, so every private repo gets its hook from sync-hooks and none is
         # installed by hand and left to go stale on the next template change.
         is_private = bool(profile.get("private"))
-        # One repo whose git config fails is reported, and the rest still sync.
-        try:
-            _install_hook_pair(repo_path, templates_dir, private_repo=is_private)
-        except (OSError, subprocess.CalledProcessError) as exc:
-            print(f"  [FAIL] {name}: {exc}")
-            failed_repos.append(name)
-            continue
         variant_note = "private-variant " if is_private else ""
-        print(f"  [OK] {name}: {variant_note}hooks synced, hooksPath set")
-        updated += 1
+        if _sync_one(name, repo_path, failed_repos, lambda: (_install_hook_pair(repo_path, templates_dir, private_repo=is_private), _queue_block(oc_root, name, repo_path)),
+                     f"  [OK] {name}: {variant_note}hooks synced, hooksPath set", commit, story):
+            updated += 1
 
     for name, root in _private_repos().items():
         if (root / ".git").exists():
-            try:
-                _install_hook_pair(root, templates_dir, private_repo=True)
-            except (OSError, subprocess.CalledProcessError) as exc:
-                print(f"  [FAIL] {name}: {exc}")
-                failed_repos.append(name)
+            if _repo_state.skipped(name, root):
+                skipped += 1
                 continue
-            print(f"  [OK] {name}: private-variant hook synced, hooksPath set")
-            updated += 1
+            if _sync_one(name, root, failed_repos, lambda: (_install_hook_pair(root, templates_dir, private_repo=True), _queue_block(oc_root, name, root)),
+                         f"  [OK] {name}: private-variant hook synced, hooksPath set", commit, story):
+                updated += 1
         else:
             print(f"  [SKIP] {name}: no .git at {root}")
             skipped += 1
@@ -198,7 +363,7 @@ def command_audit_fleet(oc_root: Path) -> int:
         print("  [INFO] no skills folder set for this machine (skillsRoot) — only OliverCode's skills are checked")
     else:
         targets = {"skills": skills, **targets}
-    checks = ["check_skill_structure.py"]
+    check = "check_skill_structure.py"
 
     broken = False
     for target_name, target_path in targets.items():
@@ -206,18 +371,18 @@ def command_audit_fleet(oc_root: Path) -> int:
             print(f"  [SKIP] {target_name}: {target_path} not found")
             continue
         print(f"-- {target_name} ({target_path}) --")
-        for check in checks:
-            result = subprocess.run(
-                ["python3", str(scripts_dir / check), str(target_path)],
-                capture_output=True, text=True,
-            )
-            out_lines = result.stdout.strip().splitlines()
-            summary = out_lines[-1] if out_lines else "(no output)"
-            # A check exits 1 when it has findings. Any other nonzero exit, or a traceback, means it did not run.
-            crashed = result.returncode > 1 or "Traceback" in result.stderr
-            broken = broken or crashed
-            status = "ERROR" if crashed else "FAIL" if result.returncode != 0 else "ok"
-            print(f"  [{status}] {check}: {summary}")
+        result = subprocess.run(
+            [sys.executable, str(scripts_dir / check),
+             *([f"--with={skills}"] if skills and target_name == "olivercode-skills" else []), str(target_path)],
+            capture_output=True, text=True,
+        )
+        out_lines = result.stdout.strip().splitlines()
+        summary = out_lines[-1] if out_lines else "(no output)"
+        # A check exits 1 when it has findings. Any other nonzero exit, or a traceback, means it did not run.
+        crashed = result.returncode > 1 or "Traceback" in result.stderr
+        broken = broken or crashed
+        status = "ERROR" if crashed else "FAIL" if result.returncode != 0 else "ok"
+        print(f"  [{status}] {check}: {summary}")
 
     print("\nFindings are heuristic. Read the flagged locations before treating any as a real "
           "defect -- this command never fixes anything on its own.")
@@ -225,8 +390,10 @@ def command_audit_fleet(oc_root: Path) -> int:
     return 1 if broken else 0
 
 
-def command_update() -> int:
-    """Pull this checkout's tracking branch, re-run install, then converge fleet hooks.
+def command_update(oc_root: Path | None = None, story: str | None = None) -> int:
+    """Pull this checkout's tracking branch, re-run install, converge fleet hooks, then run conform on the fleet.
+
+    A dirty, mid-rebase or diverged checkout is refused before anything changes (update_state.py).
 
     Install runs on every update because a pull can add a skill or a Claude Code hook,
     and only install links those into ~/.claude; without it a second device kept the
@@ -238,13 +405,32 @@ def command_update() -> int:
     Pulling those is a deliberate act with real merge consequences -- a fork carries local
     edits to CLAUDE.md, contracts, and templates, which is the whole point of forking -- so
     it is documented in docs/SETUP.md ("Staying current") and not automated here.
+
+    With `story` the hook sync commits each repo's changed hooks under that story (sync-hooks --commit).
     """
-    pull_code = subprocess.run(["git", "-C", str(OC_ROOT), "pull"]).returncode
+    root = oc_root or OC_ROOT
+    stuck = update_state.problem(root)
+    if stuck:
+        what, fix = stuck
+        print(f"olivercode update changed nothing: {what}.")
+        print(f"Fix: {fix}")
+        return 1
+    pull_code = subprocess.run(["git", "-C", str(root), "pull", "--ff-only"]).returncode
     if pull_code != 0:
         return pull_code
-    launcher = [sys.executable, str(OC_ROOT / "scripts" / "olivercode")]
-    print()
+    launcher = [sys.executable, str(root / "scripts" / "olivercode")]
     install_code = subprocess.run([*launcher, "install"]).returncode
-    print()
-    sync_code = subprocess.run([*launcher, "sync-hooks"]).returncode
-    return install_code or sync_code
+    sync_code = subprocess.run([*launcher, "sync-hooks", *(["--commit", "--story", story] if story else [])]).returncode
+    conform_code = subprocess.run([*launcher, "conform"]).returncode
+    if conform_code:
+        print("Conform found failures in the fleet. Each Fix line above names the repair; `olivercode conform --fix --story N` applies the ones it can.")
+    return install_code or sync_code or conform_code
+
+
+def command_ledger(oc_root: Path, root: Path | None) -> int:
+    """`olivercode ledger [--root DIR]`: the audit skill's fleet ledger report, over every repo under the root."""
+    script = oc_root / "skills" / "audit" / "scripts" / "ledger_report.py"
+    if not script.is_file():
+        print(f"Error: {script} not found -- this checkout is missing skills/audit.")
+        return 1
+    return subprocess.run([sys.executable, str(script), str(root or oc_root.parent)]).returncode

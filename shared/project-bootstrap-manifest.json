@@ -20,6 +20,16 @@
       "mode": "strict"
     },
     {
+      "source": "core/templates/project/scripts/version_cut.py",
+      "target": "scripts/version_cut.py",
+      "mode": "strict"
+    },
+    {
+      "source": "core/templates/project/scripts/docs_check.py",
+      "target": "scripts/docs_check.py",
+      "mode": "strict"
+    },
+    {
       "source": "core/templates/project/CLAUDE.md",
       "target": "CLAUDE.md",
       "mode": "presence"
@@ -60,24 +70,14 @@
       "mode": "presence"
     },
     {
-      "source": "core/templates/project/docs/SIZE-BASELINE.json",
-      "target": "docs/SIZE-BASELINE.json",
-      "mode": "presence"
-    },
-    {
       "source": "core/templates/project/docs/IDENTIFIER-GATE.json",
       "target": "docs/IDENTIFIER-GATE.json",
       "mode": "presence"
     },
     {
-      "source": "skills/audit/scripts/size.sh",
-      "target": "scripts/size.sh",
-      "mode": "strict"
-    },
-    {
-      "source": "scripts/lib/duplication_check.py",
-      "target": "scripts/duplication_check.py",
-      "mode": "strict"
+      "source": "core/templates/project/.gitignore",
+      "target": ".gitignore",
+      "mode": "presence"
     }
   ]
 }

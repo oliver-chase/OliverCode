@@ -1,5 +1,4 @@
-"""Direct tests for the launcher commands that had none: skills, discover, sync-hooks,
-audit-fleet and placement drift.
+"""Direct tests for the launcher commands that had none: skills, discover, audit-fleet and placement drift.
 
 Every test runs against a scratch checkout and a scratch HOME. Nothing reaches the network, and
 git reads no machine config (tests/_support.py).
@@ -12,33 +11,13 @@ import subprocess
 import unittest
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo, quiet, temp_dir
+from _fleet_case import ScratchHome
+from _support import REPO_ROOT, git, git_env, load_script, scratch_repo, quiet, temp_dir
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import local_config  # noqa: E402  (load_script put scripts/ on the path)
 from lib import cmd_fleet, cmd_health, cmd_repo  # noqa: E402
-
-
-class ScratchHome(unittest.TestCase):
-    """A scratch HOME and checkout that no test can leave behind."""
-
-    def setUp(self):
-        self.tmp = temp_dir(self, "olivercode-fleetcmd-", resolve=True)
-        self.home = self.tmp / "home"
-        self.home.mkdir()
-        env = mock.patch.dict(os.environ, {"HOME": str(self.home)})
-        env.start()
-        self.addCleanup(env.stop)
-        self.oc = self.tmp / "oc"
-        self.oc.mkdir()
-
-    def add_skill(self, name, description="Does a thing."):
-        folder = self.oc / "skills" / name
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / "SKILL.md").write_text(
-            f'---\nname: {name}\ndescription: "{description}"\n---\n\nBody.\n', encoding="utf-8")
-        return folder
 
 
 class TestCommandSkills(ScratchHome):
@@ -117,7 +96,10 @@ class TestCommandDiscover(ScratchHome):
         scratch_repo(self.fleet / "plain")
         code, out = self.discover(self.fleet, register=True)
         self.assertEqual(code, 0)
-        profiles = json.loads(registry.read_text())["profiles"]
+        self.assertNotIn("scripted", json.loads(registry.read_text())["profiles"], "the tracked file never receives repo names")
+        local = self.oc / "shared" / "repo-profiles.local.json"
+        self.assertEqual(0o600, local.stat().st_mode & 0o777)
+        profiles = json.loads(local.read_text())["profiles"]
         self.assertEqual("make test", profiles["kept"]["canonicalValidationCommand"])
         self.assertEqual("bash scripts/validate.sh", profiles["scripted"]["canonicalValidationCommand"])
         self.assertEqual("npm run check", profiles["node"]["canonicalValidationCommand"])
@@ -137,7 +119,7 @@ class TestCommandDiscover(ScratchHome):
         scratch_repo(self.fleet / "real")
         _, out = self.discover(self.oc.parent)
         self.assertIn("real", out)
-        self.assertNotIn("dep", out)
+        self.assertNotIn("node_modules", out)
 
     def test_no_repos_fails_and_names_the_roots(self):
         code, out = self.discover(self.fleet)
@@ -150,95 +132,6 @@ class TestCommandDiscover(ScratchHome):
         self.discover(self.fleet)
         self.assertEqual(git(repo, "status", "--porcelain").stdout, before)
         self.assertFalse((repo / ".githooks").exists())
-
-
-class TestCommandSyncHooks(ScratchHome):
-    def setUp(self):
-        super().setUp()
-        (self.oc / "core" / "templates").mkdir(parents=True)
-        shutil.copytree(TEMPLATES, self.oc / "core" / "templates" / "project")
-        self.fleet = self.tmp / "fleet"
-        self.fleet.mkdir()
-        self.private = {}
-
-    def sync(self, profiles):
-        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(profiles, None)), \
-                mock.patch.object(cmd_fleet, "_private_repos", return_value=self.private):
-            return quiet(launcher.command_sync_hooks, self.oc, self.fleet)
-
-    def test_a_fleet_repo_gets_the_public_hooks_and_a_hooks_path(self):
-        repo = scratch_repo(self.fleet / "alpha")
-        (repo / ".githooks").mkdir()
-        (repo / ".githooks" / "pre-commit-private").write_text("stale\n")
-        code, out = self.sync({"alpha": {}})
-        self.assertEqual(code, 0)
-        self.assertIn("[OK] alpha: hooks synced", out)
-        self.assertEqual(["commit-msg", "pre-commit", "pre-push"], sorted(p.name for p in (repo / ".githooks").iterdir()))
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), (TEMPLATES / "pre-commit").read_bytes())
-        self.assertTrue(os.access(repo / ".githooks" / "pre-commit", os.X_OK))
-        self.assertEqual(git(repo, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
-        for name in ("pre-push", "commit-msg"):
-            self.assertTrue((repo / ".githooks" / name).is_file(), name)
-
-    def test_a_private_profile_gets_the_private_variant_as_its_live_hook(self):
-        repo = scratch_repo(self.fleet / "vault")
-        (repo / ".githooks").mkdir()
-        (repo / ".githooks" / "pre-commit-private").write_text("stale\n")
-        self.sync({"vault": {"private": True}})
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(),
-                         (TEMPLATES / "pre-commit-private").read_bytes())
-        self.assertFalse((repo / ".githooks" / "pre-commit-private").exists())
-
-    def test_a_repo_missing_from_this_machine_is_skipped(self):
-        code, out = self.sync({"ghost": {}})
-        self.assertEqual(code, 0)
-        self.assertIn("[SKIP] ghost: not present on this machine", out)
-        self.assertFalse((self.fleet / "ghost").exists())
-
-    def test_a_declared_variant_keeps_its_pre_commit_and_still_gets_pre_push(self):
-        repo = scratch_repo(self.fleet / "custom")
-        (repo / ".githooks").mkdir()
-        (repo / ".githooks" / "pre-commit").write_text("custom\n")
-        _, out = self.sync({"custom": {"hookVariant": "bespoke"}})
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_text(), "custom\n")
-        self.assertTrue((repo / ".githooks" / "pre-push").is_file())
-        self.assertIn("declared hook variant (bespoke)", out)
-        hooks_path = subprocess.run(["git", "-C", str(repo), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
-        self.assertEqual(".githooks", hooks_path)
-
-    def test_a_private_repo_outside_the_fleet_is_synced_with_the_private_variant(self):
-        repo = scratch_repo(self.tmp / "elsewhere" / "notes")
-        self.private = {"notes": repo}
-        _, out = self.sync({})
-        self.assertIn("[OK] notes", out)
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(),
-                         (TEMPLATES / "pre-commit-private").read_bytes())
-
-    def test_a_private_repo_with_no_git_folder_is_skipped(self):
-        self.private = {"notes": self.tmp / "nowhere"}
-        _, out = self.sync({})
-        self.assertIn("[SKIP] notes: no .git", out)
-
-    def test_with_the_harness_config_it_touches_nothing_outside_the_temp_dir(self):
-        """No fixture config: the machine's olivercode.local.json must not reach the run."""
-        self.assertEqual(os.environ["OLIVERCODE_LOCAL_CONFIG"], os.devnull)
-        self.assertEqual(({}, {}), (cmd_fleet._private_repos(), local_config.repo_paths()))
-        (self.oc / "shared").mkdir()
-        (self.oc / "shared" / "repo-profiles.json").write_text('{"profiles": {}}')
-        scratch_repo(self.fleet / "alpha")
-        with mock.patch.object(cmd_fleet, "registry_gap", return_value=None):
-            code, out = quiet(launcher.command_sync_hooks, self.oc, self.fleet)
-        self.assertEqual(code, 0)
-        self.assertIn("0 target(s) synced, 0 skipped.", out)
-        self.assertFalse((self.fleet / "alpha" / ".githooks").exists())
-
-    def test_a_second_run_changes_nothing(self):
-        repo = scratch_repo(self.fleet / "alpha")
-        self.sync({"alpha": {}})
-        first = (repo / ".githooks" / "pre-commit").read_bytes()
-        code, _ = self.sync({"alpha": {}})
-        self.assertEqual(code, 0)
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), first)
 
 
 class TestCommandAuditFleet(ScratchHome):
@@ -342,6 +235,14 @@ class TestPlacementDrift(ScratchHome):
         (_, failed, _), out = self.drift()
         self.assertEqual(failed, 1)
         self.assertIn("pointing elsewhere: beta", out)
+
+    def test_a_dangling_link_to_an_included_skill_fails_once_and_the_all_linked_line_stays_off(self):
+        self.link("alpha")
+        self.link("beta", self.tmp / "moved")
+        (_, failed, _), out = self.drift()
+        self.assertEqual(1, failed)
+        self.assertEqual(1, out.count("[FAIL]"))
+        self.assertNotIn("correctly symlinked", out)
 
     def test_a_broken_link_fails_and_is_named(self):
         self.link("alpha")

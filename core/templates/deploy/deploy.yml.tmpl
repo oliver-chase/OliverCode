@@ -1,0 +1,69 @@
+# OliverCode deploy template. It is a template only: it lives outside .github/workflows, so nothing runs
+# until the owner copies it into one repo as .github/workflows/deploy.yml and approves it there.
+# Replace every __TOKEN__ below, then delete this header.
+#
+#   __VALIDATE_COMMAND__   the repo's own validation, for example: bash scripts/validate.sh --tree
+#   __DEPLOY_COMMAND__     deploys the checked-out commit to production and reads its credential from secrets
+#   __ROLLBACK_COMMAND__   puts the previous release back live
+#   __LIVE_URL__           the production address the check requests, for example https://example.com/
+#   __EXPECTED_TEXT__      text the live page must contain
+#   __DEPLOY_SECRET__      the repository secret name holding the deploy key
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One deploy at a time, and a newer merge waits for the running one.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Validate
+        run: __VALIDATE_COMMAND__
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    # The owner approves this pipeline once, by adding the repo's deploy key as an environment secret.
+    environment: production
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Deploy
+        env:
+          DEPLOY_KEY: ${{ secrets.__DEPLOY_SECRET__ }}
+        run: __DEPLOY_COMMAND__
+      - name: Check the live site
+        id: live
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error --location "__LIVE_URL__" | grep -q -F "__EXPECTED_TEXT__"; then
+              exit 0
+            fi
+            sleep 20
+          done
+          exit 1
+      - name: Roll back
+        if: failure() && steps.live.outcome == 'failure'
+        env:
+          DEPLOY_KEY: ${{ secrets.__DEPLOY_SECRET__ }}
+        run: __ROLLBACK_COMMAND__
+      - name: File a P0
+        if: failure() && steps.live.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "P0: production check failed after ${GITHUB_SHA::7}, rolled back" \
+            --body "The live check on __LIVE_URL__ failed after the deploy of ${GITHUB_SHA}. The workflow ran the rollback. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

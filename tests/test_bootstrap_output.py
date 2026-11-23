@@ -5,6 +5,7 @@ Each test bootstraps into a scratch repo with HOME and git config isolated, and 
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -85,7 +86,7 @@ class BootstrapOutput(unittest.TestCase):
         self.assertNotEqual(0, done.returncode, done.stdout)
 
     def test_files_in_presence_mode_survive_a_second_bootstrap(self):
-        mine = {"CLAUDE.md": "MY REPO RULES\n", "docs/backlog-config.json": '{"mine": true}\n', "docs/SIZE-BASELINE.json": '{"lines": 777}\n'}
+        mine = {"CLAUDE.md": "MY REPO RULES\n", "docs/backlog-config.json": '{"mine": true}\n'}
         for rel, text in mine.items():
             (self.repo / rel).write_text(text)
         subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)], env=self.env, check=True, capture_output=True)
@@ -123,11 +124,47 @@ class TestOfferedFiles(unittest.TestCase):
         self.bootstrap()
         self.assertFalse((self.repo / ".github").exists())
 
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
     def test_the_structure_contract_script_passes_in_a_repo_without_github(self):
         self.bootstrap()
         shutil.rmtree(self.repo / ".github")
         ran = subprocess.run(["node", "scripts/check-structure-contract.mjs"], cwd=self.repo, capture_output=True, text=True)
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
 
-if __name__ == "__main__":
-    unittest.main()
+
+class BootstrapVariant(unittest.TestCase):
+    """The pre-commit variant follows the repo's visibility. A fake gh answers, so no network is reached."""
+
+    def bootstrap(self, answer):
+        tmp = temp_dir(self, "olivercode-bootvar-")
+        home = tmp / "home"
+        home.mkdir()
+        bin_dir = tmp / "bin"
+        bin_dir.mkdir()
+        gh = bin_dir / "gh"
+        gh.write_text("#!/bin/sh\n" + ("echo " + answer + "\n" if answer else "exit 1\n"))
+        gh.chmod(0o755)
+        repo = scratch_repo(tmp / "repo")
+        subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/jane-doe/shop.git"], check=True)
+        env = git_env(HOME=str(home), PATH=f"{bin_dir}:{os.environ['PATH']}")
+        done = subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(repo)], env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return (repo / ".githooks" / "pre-commit").read_bytes(), done.stdout
+
+    def template(self, name):
+        return (REPO_ROOT / "core" / "templates" / "project" / name).read_bytes()
+
+    def test_private_repo_gets_the_private_variant(self):
+        hook, _ = self.bootstrap("private")
+        self.assertEqual(hook, self.template("pre-commit-private"))
+        self.assertNotEqual(hook, self.template("pre-commit"))
+
+    def test_public_repo_gets_the_public_variant(self):
+        hook, out = self.bootstrap("public")
+        self.assertEqual(hook, self.template("pre-commit"))
+        self.assertNotIn("private variant written", out)
+
+    def test_unreadable_visibility_gets_the_private_variant_and_says_why(self):
+        hook, out = self.bootstrap("")
+        self.assertEqual(hook, self.template("pre-commit-private"))
+        self.assertIn("could not read the repo's visibility", out)

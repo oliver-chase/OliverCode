@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import pwd
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
+from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import voice_file
+from lib.local_config import design_file, voice_file
 
 from lib import claude_settings as _claude_settings
+from lib import queue_shim as _queue_shim
 from lib import repo_gates as _repo_gates
 from lib.repo_profiles import registry_file
 from lib.skills_catalog import skill_dirs
@@ -38,12 +42,38 @@ def _backups(path: Path) -> list[Path]:
 INSTALL_RECORD = ".olivercode-install.json"
 
 
+RULE_LINKS = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md", "DESIGN.md": Path("docs") / "DESIGN.md"}
+
+
 def _managed_links(oc_root: Path) -> dict[str, Path]:
     """Each link install makes, as its path under ~/.claude -> its source relative to the checkout."""
-    links = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md"}
+    links = dict(RULE_LINKS)
     for skill in skill_dirs(oc_root / "skills"):
         links[f"skills/{skill.name}"] = Path("skills") / skill.name
     return links
+
+
+def override_dir() -> Path:
+    """This device's skill overrides, `~/.olivercode/skills`, outside every checkout."""
+    from lib import failure_log  # the home folder is shared with the other local state
+    return failure_log.home() / "skills"
+
+
+def wanted_skills(oc_root: Path) -> dict[str, Path]:
+    """Each skill name -> the folder ~/.claude/skills links to: an override wins over the shipped skill."""
+    wanted = {skill.name: skill for skill in skill_dirs(oc_root / "skills")}
+    over = override_dir()
+    if over.is_dir():
+        for folder in sorted(over.iterdir()):
+            if folder.is_dir() and not folder.name.startswith("."):
+                wanted[folder.name] = folder
+    return wanted
+
+
+def _is_managed(link: Path, oc_root: Path) -> bool:
+    """True for a link into this checkout's skills or into the override folder: install wrote it, so install may move it."""
+    target = link.resolve()
+    return any(target.is_relative_to(base.resolve()) for base in (oc_root / "skills", override_dir()))
 
 
 def _read_record(claude_dir: Path) -> dict | None:
@@ -89,6 +119,98 @@ def _dangling_from_install(claude_dir: Path, oc_root: Path) -> set[str]:
     return {k for k, b in bases.items() if counts[b] >= 2}
 
 
+def _schedule_replay() -> None:
+    """Load the launchd job that replays queued gh writes at each GraphQL reset (`olivercode gh-limit --schedule`, #704).
+    Only on a Mac and only for the real home folder, so a test or a relocated HOME never loads a job."""
+    real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
+    if real is None or Path.home().resolve() != real.resolve():
+        return
+    from lib import cmd_ghreplay
+    print("  [JOB] " + ("GitHub replay job loaded" if cmd_ghreplay.schedule(True) == 0 else "GitHub replay job failed; run `olivercode gh-limit --schedule`"))
+
+
+def _schedule_gaps() -> None:
+    """Load the nightly gap-sweep job (`olivercode gap-sweep --schedule`, #725), under the same real-home rule as the replay job."""
+    real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
+    if real is None or Path.home().resolve() != real.resolve():
+        return
+    from lib import cmd_gapsweep
+    print("  [JOB] " + ("gap-sweep job loaded" if cmd_gapsweep.schedule(True) == 0 else "gap-sweep job failed; run `olivercode gap-sweep --schedule`"))
+
+
+REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions"))
+REMOVED_PAGES = (".olivercode/city.html",)
+
+
+def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[str]:
+    """Unload and delete the launchd jobs of commands the engine no longer has. Returns the labels it removed."""
+    folder = (home or Path.home()) / "Library" / "LaunchAgents"
+    gone = []
+    for label in REMOVED_JOBS:
+        plist = folder / f"{label}.plist"
+        if not plist.is_file():
+            continue
+        run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
+        plist.unlink(missing_ok=True)
+        print(f"  [JOB] removed the job {label}, which has no command any more")
+        gone.append(label)
+    return gone
+
+
+def retire_removed_pages(home: Path | None = None) -> list[str]:
+    """Delete the pages that removed commands wrote under the home folder. Returns the paths it removed, relative to home."""
+    folder = home or Path.home()
+    gone = []
+    for rel in REMOVED_PAGES:
+        page = folder / rel
+        if not page.is_file():
+            continue
+        page.unlink()
+        print(f"  [PAGE] removed {rel}, which a removed command wrote")
+        gone.append(rel)
+    return gone
+
+
+def _retire_removed_jobs() -> None:
+    """Remove the jobs and pages of removed commands, under the same real-home rule as the replay job."""
+    real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
+    if real is None or Path.home().resolve() != real.resolve():
+        return
+    retire_removed_jobs()
+    retire_removed_pages()
+
+
+def owner_terminal() -> bool:
+    """True when the owner runs install in their own terminal: a terminal on both ends and no Claude Code session
+    around it. A session, a pipe or a scheduled job is not the owner."""
+    agent = any(os.environ.get(v) for v in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"))
+    return sys.stdin.isatty() and sys.stdout.isatty() and not agent
+
+
+def _install_automode(settings_path: Path) -> bool:
+    """Write the handoff autoMode rules for the owner, or print them for the owner to add. Returns True on a failure."""
+    block = _claude_settings.automode_block()
+    if not owner_terminal():
+        try:
+            current = json.loads(settings_path.read_text()) if settings_path.is_file() and settings_path.read_text().strip() else {}
+        except (OSError, ValueError):
+            current = {}
+        if _claude_settings.automode_missing(current):
+            print("  [OWNER] autoMode rules for session handoffs not written, since only you running install in a terminal writes them.")
+            print("          Run `olivercode install` yourself, or add this at the top level of ~/.claude/settings.json:")
+            print("\n".join("          " + line for line in block.splitlines()))
+        else:
+            print("  [ALREADY] autoMode rules in ~/.claude/settings.json")
+        return False
+    try:
+        result, backup = _claude_settings.install_automode(settings_path)
+    except ValueError as exc:
+        print(f"  [FAIL] autoMode rules not written to ~/.claude/settings.json ({exc})")
+        return True
+    print(f"  [{result.upper()}] autoMode rules in ~/.claude/settings.json" + (f" (previous settings kept at {backup})" if backup else ""))
+    return False
+
+
 def command_install(oc_root: Path) -> int:
     """Activate this checkout: symlink CLAUDE.md, the voice and every skill into ~/.claude.
 
@@ -106,6 +228,10 @@ def command_install(oc_root: Path) -> int:
     checkout moved, is replaced in place. `uninstall` restores the backup. Install records
     the links it wrote in ~/.claude/.olivercode-install.json so uninstall need not guess.
     """
+    live = _live_copy.problem(oc_root)
+    if live:
+        print(f"  [FAIL] {live}")
+        return 1
     claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"
     print("OliverCode install — activating this checkout in ~/.claude")
@@ -120,15 +246,21 @@ def command_install(oc_root: Path) -> int:
             print("         Move or remove it, then re-run `olivercode install`.")
             return 1
     skills_dir.mkdir(parents=True, exist_ok=True)
+    # The hooks are built here, since a fresh clone holds only their sources (HOOK-OUTPUTS-1)
+    # and this checkout's .githooks links point at the built files.
+    _repo_gates.hook_templates(oc_root)
     backups: list[str] = []
     moved_links = _dangling_from_install(claude_dir, oc_root)
 
-    def _link(target: Path, source: Path) -> str:
-        """Point target at source. Returns a one-word status."""
+    def _link(target: Path, source: Path, keep_own: bool = False) -> str:
+        """Point target at source. Returns a one-word status. With keep_own, a file or link the user put there stays as it is (#719)."""
+        if keep_own and (target.exists() or target.is_symlink()) and not (target.is_symlink() and (_is_managed_rule(target) or target.resolve() == source.resolve())):
+            return "kept"
         if target.is_symlink():
             if target.resolve() == source.resolve():
                 return "already"
-            if str(target.relative_to(claude_dir)) in moved_links:
+            # A link into this checkout or the override folder is install's own, so it moves in place.
+            if str(target.relative_to(claude_dir)) in moved_links or _is_managed(target, oc_root):
                 target.unlink()
                 target.symlink_to(source)
                 return "relinked"
@@ -151,39 +283,71 @@ def command_install(oc_root: Path) -> int:
     print(f"  [{status.upper()}] ~/.claude/CLAUDE.md")
     # CLAUDE.md imports the voice by this fixed path. A relative import from a symlinked
     # CLAUDE.md has no documented base directory, so it could silently load nothing.
-    status = _link(claude_dir / "VOICE.md", voice_file(oc_root))
+    def _is_managed_rule(link: Path) -> bool:
+        """True for a rules link install wrote: it points into this checkout or at the configured voice or design file."""
+        target = link.resolve()
+        return any(target == base or target.is_relative_to(base) for base in (oc_root.resolve(), voice_file(oc_root).resolve(), design_file(oc_root).resolve()))
+
+    status = _link(claude_dir / "VOICE.md", voice_file(oc_root), keep_own=True)
     print(f"  [{status.upper()}] ~/.claude/VOICE.md")
+    # DESIGN.md is read on visual work only, so CLAUDE.md does not import it.
+    status = _link(claude_dir / "DESIGN.md", design_file(oc_root), keep_own=True)
+    print(f"  [{status.upper()}] ~/.claude/DESIGN.md")
 
     linked = already = 0
-    for skill in skill_dirs(oc_root / "skills"):
-        result = _link(skills_dir / skill.name, skill)
+    wanted = wanted_skills(oc_root)
+    for name, source in wanted.items():
+        result = _link(skills_dir / name, source)
         if result == "already":
             already += 1
         else:
             linked += 1
     print(f"  [OK] skills: {linked} linked, {already} already correct")
-    # A skill this checkout removed leaves its link dangling into the checkout's own skills folder.
-    # Install wrote that link, so install removes it.
+    # A skill this checkout or the override folder removed leaves a dangling link that install wrote.
     retired = sorted(p.name for p in skills_dir.iterdir() if p.is_symlink() and not p.exists()
-                     and Path(os.readlink(p)) == oc_root / "skills" / p.name)
+                     and (Path(os.readlink(p)) == oc_root / "skills" / p.name
+                          or Path(os.readlink(p)).parent == override_dir()))
     for name in retired:
         (skills_dir / name).unlink()
     if retired:
         print(f"  [REMOVED] links to skills this checkout no longer has: {', '.join(retired)}")
     from lib import failure_log  # the hooks log blocked commits only where this folder exists
     failure_log.home().mkdir(parents=True, exist_ok=True)
-    _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, rel in _managed_links(oc_root).items()
-                               if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == (oc_root / rel).resolve()})
+    # A release that moves a state file moves the user's copy once, with a backup (#762).
+    from lib import state_migrations
+    for line in state_migrations.run(oc_root):
+        print(f"  [MIGRATED] {line}")
+    expected = {k: oc_root / rel for k, rel in RULE_LINKS.items()}
+    expected.update({f"skills/{name}": source for name, source in wanted.items()})
+    _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, src in expected.items()
+                               if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == src.resolve()})
+
+    broken_settings = False
+    # Every repo's validate.sh takes a queue slot through this helper, so no repo script names this checkout (#572).
+    try:
+        status = _queue_shim.install(oc_root, backups)
+        print(f"  [{status.upper()}] ~/.local/bin/validate-queue")
+    except OSError as exc:
+        print(f"  [FAIL] ~/.local/bin/validate-queue could not be written ({exc}); validate.sh runs unqueued until `olivercode install` succeeds")
+        broken_settings = True
+
+    try:
+        for line in _queue_shim.install_launcher(oc_root, backups):
+            print(line)
+    except OSError as exc:
+        print(f"  [FAIL] `olivercode` could not be put on the PATH ({exc}); run `olivercode install` again once it is fixed")
+        broken_settings = True
 
     # The Claude Code hooks are what hold the rules in every session, so install owns
     # them like the links above; claude_settings leaves the operator's own keys alone.
-    broken_settings = False
     try:
         result = _claude_settings.install(claude_dir / "settings.json")
         print(f"  [{result.upper()}] Claude Code hooks in ~/.claude/settings.json")
     except ValueError as exc:  # invalid JSON, or a shape the merge would have to guess at
         print(f"  [FAIL] ~/.claude/settings.json could not be merged ({exc}); left as it is, hooks not installed")
         broken_settings = True
+    else:
+        broken_settings = _install_automode(claude_dir / "settings.json") or broken_settings
 
     # A fresh clone has core.hooksPath unset, so git runs none of this checkout's own gates.
     # Set it only when unset and only in this checkout's own repo; a value the owner chose stays.
@@ -203,6 +367,10 @@ def command_install(oc_root: Path) -> int:
         else:
             print(f"  [WARN] {problem}; to fix it run `{fix}`")
 
+    _schedule_replay()
+    _schedule_gaps()
+    _retire_removed_jobs()
+
     broken = _broken_links(skills_dir)
     if broken:
         print(f"  [FAIL] broken symlinks in ~/.claude/skills/: {', '.join(broken)}")
@@ -210,7 +378,7 @@ def command_install(oc_root: Path) -> int:
     untouched = sorted(
         p.name for p in skills_dir.iterdir()
         if p.name and not p.name.startswith(".")
-        and not (p.is_symlink() and p.exists() and p.resolve().is_relative_to(oc_root))
+        and not (p.is_symlink() and p.exists() and (p.resolve().is_relative_to(oc_root) or _is_managed(p, oc_root)))
     )
     if untouched:
         print(f"  [KEPT] {len(untouched)} entr(y/ies) not managed by this checkout, left as-is: "
@@ -262,7 +430,7 @@ def command_uninstall(oc_root: Path) -> int:
             return True
         return False
 
-    for name, rel in (("CLAUDE.md", Path("CLAUDE.md")), ("VOICE.md", Path("docs") / "VOICE.md")):
+    for name, rel in RULE_LINKS.items():
         path, note = claude_dir / name, ""
         if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or _points_into(path, voice_file(root).resolve()) or name in moved_links):
             if not path.exists():
@@ -282,7 +450,7 @@ def command_uninstall(oc_root: Path) -> int:
         for entry in sorted(skills_dir.iterdir()):
             if not entry.is_symlink():
                 continue
-            ours = _points_into(entry, root / "skills")
+            ours = _points_into(entry, root / "skills") or _points_into(entry, override_dir().resolve())
             moved = not ours and f"skills/{entry.name}" in moved_links
             if ours or moved:
                 entry.unlink()
@@ -301,7 +469,13 @@ def command_uninstall(oc_root: Path) -> int:
         print(f"  [FAIL] ~/.claude/settings.json could not be read ({exc}); left as it is, hooks not removed")
         broken_settings = True
 
-    leftovers = [b for name in ("CLAUDE.md", "VOICE.md") for b in _backups(claude_dir / name)]
+    shim = _queue_shim.uninstall(oc_root)
+    print(f"  [{shim.upper()}] ~/.local/bin/validate-queue")
+    for line in _queue_shim.uninstall_launcher(oc_root):
+        print(line)
+
+    leftovers = [b for name in RULE_LINKS for b in _backups(claude_dir / name)]
+    leftovers += _backups(_queue_shim.shim_path()) + _backups(_queue_shim.launcher_path())
     if skills_dir.is_dir():
         leftovers += sorted(b for b in skills_dir.iterdir() if BACKUP_SUFFIX in b.name)
     (claude_dir / INSTALL_RECORD).unlink(missing_ok=True)

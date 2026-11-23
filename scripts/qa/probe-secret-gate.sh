@@ -2,11 +2,10 @@
 # ─── Secret-Gate Probe ─────────────────────────────────────────────────────
 # Proves Gate 1 (secrets) blocks a commit. A sync-hooks "done" only confirms
 # the hook files were written, and this probe confirms git runs them. The
-# README, docs/SETUP.md and skills/olivercode-adoption/SKILL.md walkthroughs
-# all invoke this one script.
+# docs/SETUP.md and skills/olivercode-adoption/SKILL.md walkthroughs use this one script.
 #
-# Writes the probe file straight into the current repo, unstaged by
-# /tmp: the gate scans what is staged, so a copy step would prove nothing.
+# Writes the probe file straight into the current repo, never staged
+# through /tmp: the gate scans what is staged, so a copy step would prove nothing.
 #
 # Usage: bash scripts/qa/probe-secret-gate.sh   (run from inside the repo to probe)
 
