@@ -1,5 +1,6 @@
 """`olivercode land` pushes a worktree to main and keeps the main checkout level with it (#608)."""
 
+import json
 import os
 import shutil
 import tempfile
@@ -12,6 +13,8 @@ from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 session_check = load_script("scripts/hooks/session_check.py", "session_check_land")
 from lib import cmd_land, maintain, validated  # noqa: E402
+
+REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
 
 
 class Base(unittest.TestCase):
@@ -45,6 +48,9 @@ class Base(unittest.TestCase):
         git(self.main, "remote", "set-url", "origin", str(self.root / "origin.git"))
         git(self.main, "worktree", "repair", str(self.wt))
         p = mock.patch.object(cmd_land, "OC_ROOT", self.main); p.start(); self.addCleanup(p.stop)
+        self.body = ""  # the story's body, read over REST: no Files area, so the scope check stays out of these landing tests (#1073)
+        p = mock.patch.object(cmd_land, "story_body", side_effect=lambda wt, story: self.body); p.start(); self.addCleanup(p.stop)
+        p = mock.patch.object(cmd_land, "_story_comment"); self.comment = p.start(); self.addCleanup(p.stop)
 
     def land(self):
         return quiet(cmd_land.command_land, [str(self.wt), "9"])
@@ -473,6 +479,135 @@ class TestSessionStart(Base):
             notes = session_check.checkout_notes()
         self.assertIn("trails origin/main by 1", notes[0])  # a merged fix that cannot reach the checkout is named (#823)
         self.assertEqual("edit", (self.main / "a.txt").read_text())
+
+
+# Built from pieces so this file never holds the literal the check looks for: the check reads this file's own added lines (#1073).
+SKIP_LINE = "@" + "unittest.skip" + "('later')"
+OR_TRUE_LINE = "make " + "|" + "| true"
+
+
+class TestLandStaysInStory(Base):
+    """A landing refuses a commit that changes a file outside its story's Files area, or that weakens a test (#1073)."""
+
+    def test_a_commit_outside_the_files_area_is_refused_and_named_on_the_story(self):
+        self.body = "Files area: a.txt"
+        before = git(self.root / "origin.git", "rev-parse", "main").stdout
+        code, out = self.land()
+        self.assertEqual(1, code)
+        self.assertIn("RESULT outside-area", out)
+        self.assertIn("b.txt", (self.root / "logs" / "land-main-9.log").read_text())
+        self.comment.assert_called_once()
+        text = self.comment.call_args.args[2]
+        self.assertIn("b.txt", text)
+        self.assertIn("Widen the Files area", text)
+        self.assertEqual(before, git(self.root / "origin.git", "rev-parse", "main").stdout, "nothing reached main")
+
+    def test_a_commit_inside_its_files_area_lands_and_gets_no_comment(self):
+        self.body = "Files area: b.txt, scripts/"
+        code, out = self.land()
+        self.assertEqual(0, code)
+        self.assertIn("RESULT pushed", out)
+        self.comment.assert_not_called()
+
+    def test_a_commit_that_adds_a_skip_to_a_test_is_refused_and_names_the_line(self):
+        self.body = "Files area: b.txt, tests/"
+        (self.wt / "tests").mkdir()
+        (self.wt / "tests" / "test_b.py").write_text("import unittest\n" + SKIP_LINE + "\n")
+        git(self.wt, "add", "."); git(self.wt, "commit", "-q", "-m", "Skip b (#9)")
+        code, out = self.land()
+        self.assertEqual(1, code)
+        self.assertIn("RESULT weakened-test", out)
+        self.assertIn("tests/test_b.py:2 adds a skip", (self.root / "logs" / "land-main-9.log").read_text())
+
+    def test_a_story_that_cannot_be_read_is_refused_rather_than_checked_against_nothing(self):
+        self.body = None
+        code, out = self.land()
+        self.assertEqual(1, code)
+        self.assertIn("RESULT scope-unchecked", out)
+
+
+class TestStoryReads(Base):
+    """The REST read, the comment post and the repo slug run for real here; the landing tests above replace them (#1073)."""
+
+    def test_the_slug_comes_from_the_origin_remote(self):
+        git(self.main, "remote", "set-url", "origin", "https://github.com/acme/widgets.git")
+        self.assertEqual("acme/widgets", REAL_STORY_SLUG(self.wt))
+
+    def test_the_slug_falls_back_to_the_backlog_config_when_origin_names_no_repo(self):
+        git(self.main, "remote", "remove", "origin")
+        (self.main / "docs").mkdir(exist_ok=True)
+        (self.main / "docs" / "backlog-config.json").write_text(json.dumps({"repoOwner": "acme", "repoName": "gadgets"}))
+        self.assertEqual("acme/gadgets", REAL_STORY_SLUG(self.wt))
+
+    def test_the_body_is_read_over_rest_with_a_null_body_read_as_empty(self):
+        with mock.patch.object(cmd_land, "_story_slug", return_value="acme/widgets"), \
+                mock.patch.object(cmd_land.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="Files area: a.txt\n")) as run:
+            self.assertEqual("Files area: a.txt\n", REAL_STORY_BODY(self.wt, "9"))
+        args = run.call_args.args[0]
+        self.assertEqual(["gh", "api", "repos/acme/widgets/issues/9", "--jq", '.body // ""'], args)
+
+    def test_a_failed_rest_read_returns_none_so_the_landing_refuses(self):
+        with mock.patch.object(cmd_land, "_story_slug", return_value="acme/widgets"), \
+                mock.patch.object(cmd_land.subprocess, "run", return_value=mock.Mock(returncode=1, stdout="")):
+            self.assertIsNone(REAL_STORY_BODY(self.wt, "9"))
+
+    def test_no_slug_means_no_body_to_read(self):
+        with mock.patch.object(cmd_land, "_story_slug", return_value=""):
+            self.assertIsNone(REAL_STORY_BODY(self.wt, "9"))
+
+    def test_the_comment_posts_to_the_story_over_rest(self):
+        with mock.patch.object(cmd_land, "_story_slug", return_value="acme/widgets"), \
+                mock.patch.object(cmd_land.subprocess, "run") as run:
+            REAL_STORY_COMMENT(self.wt, "9", "Landing refused.")
+        self.assertEqual(["gh", "api", "repos/acme/widgets/issues/9/comments", "-f", "body=Landing refused."], run.call_args.args[0])
+
+
+class TestWeakenedTests(unittest.TestCase):
+    """The weakening check reads a zero-context diff: a skip, a trailing true and removed assertions (#1073)."""
+
+    def diff(self, path, hunk, *lines):
+        return f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n{hunk}\n" + "".join(f"{line}\n" for line in lines)
+
+    def test_assertions_removed_from_a_test_with_no_code_removed_are_refused_at_the_first_one(self):
+        rows = cmd_land._changed_lines(self.diff("tests/test_a.py", "@@ -5,2 +5,1 @@",
+                                                 "-        self.assertEqual(1, f())", "-        self.assertTrue(g())", "+        pass"))
+        self.assertEqual(["tests/test_a.py:5 removes 2 assertion(s) without removing the code they cover"], cmd_land.weakened(rows))
+
+    def test_assertions_may_go_when_the_commit_also_removes_the_code_they_cover(self):
+        diff = self.diff("tests/test_a.py", "@@ -5,2 +5,1 @@", "-        self.assertEqual(1, f())", "+        pass")
+        diff += self.diff("scripts/lib/a.py", "@@ -9,1 +9,0 @@", "-def f(): return 1")
+        self.assertEqual([], cmd_land.weakened(cmd_land._changed_lines(diff)))
+
+    def test_a_one_line_code_edit_does_not_excuse_assertions_removed_from_a_test(self):
+        diff = self.diff("tests/test_a.py", "@@ -5,2 +5,1 @@", "-        self.assertEqual(1, f())", "+        pass")
+        diff += self.diff("scripts/lib/a.py", "@@ -9,1 +9,1 @@", "-def f(): return 1", "+def f(): return 2")
+        self.assertEqual(["tests/test_a.py:5 removes 1 assertion(s) without removing the code they cover"],
+                         cmd_land.weakened(cmd_land._changed_lines(diff)))
+
+    def test_blank_lines_removed_from_product_code_do_not_excuse_assertions(self):
+        diff = self.diff("tests/test_a.py", "@@ -5,1 +5,0 @@", "-        self.assertTrue(g())")
+        diff += self.diff("scripts/lib/a.py", "@@ -9,2 +9,0 @@", "-", "-   ")
+        self.assertEqual(["tests/test_a.py:5 removes 1 assertion(s) without removing the code they cover"],
+                         cmd_land.weakened(cmd_land._changed_lines(diff)))
+
+    def test_an_assertion_moved_to_another_line_is_not_a_loss(self):
+        rows = cmd_land._changed_lines(self.diff("tests/test_a.py", "@@ -5,1 +5,1 @@", "-        self.assertEqual(1, f())", "+        self.assertEqual(1, g())"))
+        self.assertEqual([], cmd_land.weakened(rows))
+
+    def test_a_skip_added_to_a_test_names_its_line(self):
+        rows = cmd_land._changed_lines(self.diff("tests/test_a.py", "@@ -0,0 +7,1 @@", "+    " + SKIP_LINE))
+        self.assertEqual(["tests/test_a.py:7 adds a skip"], cmd_land.weakened(rows))
+
+    def test_or_true_added_to_a_validation_script_is_refused_but_not_added_to_product_code(self):
+        flagged = cmd_land._changed_lines(self.diff("scripts/validate.sh", "@@ -1,0 +2,1 @@", "+" + OR_TRUE_LINE))
+        self.assertEqual(["scripts/validate.sh:2 adds " + "|" + "| true to a test command"], cmd_land.weakened(flagged))
+        product = cmd_land._changed_lines(self.diff("scripts/lib/a.py", "@@ -1,0 +2,1 @@", "+" + OR_TRUE_LINE))
+        self.assertEqual([], cmd_land.weakened(product))
+
+    def test_a_deleted_test_file_counts_its_assertions_under_its_own_path(self):
+        diff = ("diff --git a/tests/test_gone.py b/tests/test_gone.py\n--- a/tests/test_gone.py\n+++ /dev/null\n@@ -1,1 +0,0 @@\n"
+                "-        self.assertEqual(1, f())\n")
+        self.assertEqual(["tests/test_gone.py:1 removes 1 assertion(s) without removing the code they cover"], cmd_land.weakened(cmd_land._changed_lines(diff)))
 
 
 if __name__ == "__main__":

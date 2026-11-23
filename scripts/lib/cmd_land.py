@@ -3,6 +3,7 @@
 It rebases the worktree on origin/main, squashes a branch of several commits into one whose message is the first commit's title and the story number (#898), runs the repo's validation up to twice unless a passing run already recorded the same tree (#910), pushes HEAD:main and retries up to four times when main moves. After a push it fast-forwards the main
 checkout when that is clean and prints how far behind an edited or diverged one is. The log is ~/.olivercode/land/land-REPO-N.log (under OLIVERCODE_HOME when set) and ends
 with `RESULT pushed SHA`, `RESULT rebase-conflict`, `RESULT validate-failed`, `RESULT push-failed` (the push failed while main stood still) or `RESULT main-kept-moving` (a land keeps retrying with a short pause for ten minutes while main moves and each rebase is clean). A second land for a story that is already running refuses. Land never edits docs/LIMITS.json: the size ceiling only warns (#879).
+A commit that changes a file outside its story's Files area ends with `RESULT outside-area` and gets a comment on the story; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
 
 A landed story is cleaned up here (#712): the worktree, the local branch and the remote branch are deleted, so no session needs a removal permission. Work that did not land
 stays in its worktree, gets a handover file ~/.olivercode/land/handover-REPO-N.md, and no branch is pushed for it.
@@ -17,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import agent_loop, failure_log, maintain, validated
+from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, validated
 from lib.validate_gates import PROGRESS  # the lines that also print on the terminal while a land validates (#776)
 from lib.local_config import OC_ROOT
 
@@ -27,6 +28,11 @@ BUDGET = 600  # seconds a land keeps retrying after TRIES clean rebases while ma
 PAUSE = 5
 USAGE = "Usage: olivercode land WORKTREE STORY"
 CUT_LOCK = "version-cut.lock"
+TEST_FILE = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|[._](test|spec)\.\w+$")
+VALIDATION_FILE = re.compile(r"validat|\.githooks/|\.github/workflows/")
+SKIP = re.compile(r"@(?:unittest\.|pytest\.mark\.)?skip|\bskip(?:Test|If|Unless)?\(|\.skip\(|\bx(?:it|describe|test)\(|mark\.xfail")
+OR_TRUE = re.compile(r"\|\|\s*true\b")
+ASSERT = re.compile(r"\bassert\w*\(|\bassert\s|\bexpect\(")
 
 
 def _run(wt: Path, log, *cmd: str, env: dict | None = None) -> bool:
@@ -175,6 +181,105 @@ def refusal(wt: Path) -> tuple[str, str]:
     return "", ""
 
 
+def _story_slug(wt: Path) -> str:
+    """owner/name of the repo the story lives in: the origin remote names it, so a fork's inherited config does not (#754, #1012). "" when none is found."""
+    main = _main_checkout(wt) or wt
+    try:
+        origin = backlog_setup.origin_owner_name(main)
+        if origin:
+            return f"{origin[0]}/{origin[1]}"
+        cfg = local_config.backlog_config(main)
+        return f"{cfg['repoOwner']}/{cfg['repoName']}"
+    except (OSError, ValueError, KeyError, TypeError):
+        return ""
+
+
+def story_body(wt: Path, story: str) -> str | None:
+    """The story's body read over REST, which spends no GraphQL points (#1073). None when it cannot be read."""
+    slug = _story_slug(wt)
+    if not slug:
+        return None
+    try:
+        done = subprocess.run(["gh", "api", f"repos/{slug}/issues/{story}", "--jq", '.body // ""'], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def _story_comment(wt: Path, story: str, text: str) -> None:
+    """Post text on the story. A failed post changes nothing about the refusal, which the log and the result already name (#1073)."""
+    slug = _story_slug(wt)
+    if not slug:
+        return
+    try:
+        subprocess.run(["gh", "api", f"repos/{slug}/issues/{story}/comments", "-f", f"body={text}"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _changed_lines(diff: str) -> list[tuple[str, int, str, str]]:
+    """(path, line, sign, text) for each changed line of a zero-context diff. The line is its number in the file after the commit, so a
+    removed line names the spot it left (#1073)."""
+    rows, old, path, new, header = [], "", "", 0, False
+    for raw in diff.splitlines():
+        if raw.startswith("diff --git "):
+            header = True
+        elif header and raw.startswith("--- "):
+            old = raw[6:] if raw.startswith("--- a/") else ""
+        elif header and raw.startswith("+++ "):
+            path = raw[6:] if raw.startswith("+++ b/") else old
+        elif raw.startswith("@@"):
+            header, new = False, max(1, int(re.search(r"\+(\d+)", raw).group(1)))  # git writes +0 for a removal before line 1
+        elif raw.startswith("+"):
+            rows.append((path, new, "+", raw[1:]))
+            new += 1
+        elif raw.startswith("-"):
+            rows.append((path, new, "-", raw[1:]))
+    return rows
+
+
+def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
+    """What in a commit weakens a test, each as `file:line reason` (#1073): a skip added to a test file, `|| true` added to a test or validation
+    file, or assertions removed from a test file net of the ones added to it. Assertions may go when the commit deletes more non-blank code
+    outside the tests than it adds there, since that is the code they covered. A one-line edit nets to zero, so it covers nothing."""
+    found, lost = [], {}
+    code = [sign for path, _, sign, text in rows if not TEST_FILE.search(path) and text.strip()]
+    net_code = code.count("-") - code.count("+")
+    for path, line, sign, text in rows:
+        test = TEST_FILE.search(path)
+        if sign == "+" and test and SKIP.search(text):
+            found.append(f"{path}:{line} adds a skip")
+        if sign == "+" and (test or VALIDATION_FILE.search(path)) and OR_TRUE.search(text):
+            found.append(f"{path}:{line} adds || true to a test command")
+        if test and ASSERT.search(text):
+            first, net = lost.get(path, (None, 0))
+            if sign == "-" and first is None:
+                first = line
+            lost[path] = (first, net + (1 if sign == "-" else -1))
+    if net_code <= 0:
+        found +=[f"{path}:{first} removes {net} assertion(s) without removing the code they cover" for path, (first, net) in lost.items() if net > 0]
+    return found
+
+
+def _scope_refusal(wt: Path, base: str, area: list[str], story: str, log) -> str:
+    """The result word when the commit must not land: it changes a file outside the story's Files area, or it weakens a test. "" when it may (#1073).
+    A story with no Files area has no area to hold the commit to, so only the test check applies to it."""
+    outside = [p for p in _git(wt, "diff", "--name-only", "--no-renames", f"origin/{base}", "HEAD").stdout.splitlines()
+               if area and not intake.overlaps([p], area)]
+    if outside:
+        names = ", ".join(outside)
+        log.write(f"Refused: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}), so nothing landed.\n")
+        _story_comment(wt, story, f"Landing refused: this commit changes {names}, which is outside the Files area ({', '.join(area)}). "
+                                  "Widen the Files area to include it, or drop the change.")
+        return "outside-area"
+    diff = _git(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout
+    found = weakened(_changed_lines(diff))
+    if found:
+        log.write(f"Refused: this commit weakens a test, so nothing landed: {'; '.join(found)}.\n")
+        return "weakened-test"
+    return ""
+
+
 def land(wt: Path, story: str, log) -> tuple[str, str]:
     """Run the landing recipe in wt, writing to log. Returns (result word, short sha)."""
     word, why = refusal(wt)
@@ -185,6 +290,11 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
     if main and main != wt and link_venv(main, wt):
         log.write(f"linked {main / '.venv'} into {wt}\n")
     base = default_branch(wt)
+    body = story_body(wt, story)
+    if body is None:
+        log.write(f"Refused: story #{story} could not be read over REST, so its Files area is unknown and nothing landed.\n")
+        return "scope-unchecked", ""
+    area = intake.files_area(body)
     deadline, attempt = time.monotonic() + BUDGET, 0
     while attempt < TRIES or time.monotonic() < deadline:
         if attempt >= TRIES:
@@ -198,6 +308,9 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
             return "rebase-conflict", ""
         if not squash(wt, story, log):
             return "push-failed", ""
+        refused = _scope_refusal(wt, base, area, story, log)
+        if refused:
+            return refused, ""
         if not _reuses_pass(wt, log) and not _validates(wt, log):
             return "validate-failed", ""
         _run(wt, log, "git", "fetch", "-q", "origin")
