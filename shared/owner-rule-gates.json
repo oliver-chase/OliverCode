@@ -1,0 +1,52 @@
+[
+  {
+    "match": "Every change starts as a ticket",
+    "check": ".githooks/commit-msg"
+  },
+  {
+    "match": "Commit and push straight to main",
+    "check": "core/hooks/pre-push.sh"
+  },
+  {
+    "match": "Every git repository lives in",
+    "check": "scripts/hooks/placement_guard.py"
+  },
+  {
+    "match": "Never overload the owner",
+    "check": "scripts/hooks/queue_guard.py"
+  },
+  {
+    "match": "No contrast framing",
+    "check": "skills/audit/scripts/fleet_check.py"
+  },
+  {
+    "match": "Run `board-hygiene` on every backlog",
+    "check": "judgment: backlog",
+    "stated": "check_board_hygiene.py"
+  },
+  {
+    "match": "When asked if something \"works\"",
+    "check": "judgment: audit",
+    "stated": "Read and unknown"
+  },
+  {
+    "match": "Fast execution. Propose ranked changes",
+    "check": "judgment: plan",
+    "stated": "User approves"
+  },
+  {
+    "match": "Documentation only says what a thing does",
+    "check": "core/templates/project/scripts/docs_check.py"
+  },
+  {"match": "Approved plan runs to the end", "check": "judgment: plan", "stated": "every phase without stopping to report"},
+  {"match": "Post an issue's \"landed in", "check": "judgment: backlog", "stated": "git log -1"},
+  {"match": "Before a structural change to skills", "check": "judgment: plan", "stated": "states the target in five lines"},
+  {"match": "No process or history narration", "check": "judgment: skill-creation", "stated": "No decision ID, date, issue number"},
+  {"match": "One line per paragraph in markdown prose", "check": "judgment: skill-creation", "stated": "no hard-wrapping"},
+  {"match": "An example or source file (pptx template", "check": "judgment: audit", "stated": "may break a content rule on purpose"},
+  {"match": "Name files, folders, and trigger phrases", "check": "judgment: skill-creation", "stated": "Names a person says"},
+  {"match": "Skills ship portable", "check": "judgment: skill-creation", "stated": "Generic at creation"},
+  {"match": "A layout or design fix is judged", "check": "judgment: audit", "stated": "realistic longer content"},
+  {"match": "Avoid parallel optimization structures", "check": "judgment: skill-creation", "stated": "Extend an existing skill"},
+  {"match": "Never run a command that can post to verify", "check": "repo: digioperator", "id": "no-mistyped-dry-run-flag"}
+]
