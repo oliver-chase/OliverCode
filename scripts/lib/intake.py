@@ -230,11 +230,15 @@ def long_wait(body: str, today: datetime.date | None = None) -> str:
     return ""
 
 
-def models(size: str, labels=(), session: str = "") -> tuple[str, str]:
-    """(builder model, reader model) a story starts on (#1015): the builder is the one agent_loop starts with, after a restart escalation, and the
-    reader is never weaker than Sonnet. The brief names both, so it says what the runner does."""
-    builder = agent_loop.restart_model(session, agent_loop.model_for(size, labels))
-    return builder, agent_loop.reader_for(builder)
+def models(story: dict, session: str = "") -> tuple[str, str, str]:
+    """(builder model, reader model, the rule that chose the builder) a story starts on (#1015, #1026): the builder is the one agent_loop starts with,
+    after a restart escalation, and the reader is never weaker than Sonnet. The brief and the status line name all three, so they say what the runner does."""
+    from lib import cmd_groom  # cmd_groom imports intake, so the import waits until a story is routed
+    base, why = agent_loop.route(cmd_groom.size_of(story), story.get("labels") or (), files_area(story.get("body") or ""), cmd_groom.priority_of(story))
+    builder = agent_loop.restart_model(session, base)
+    if builder != base:
+        why += "; a restart escalated it one level"
+    return builder, agent_loop.reader_for(builder), why
 
 
 def plan(issues: list[dict], today: datetime.date | None = None) -> dict:
@@ -256,11 +260,11 @@ def plan(issues: list[dict], today: datetime.date | None = None) -> dict:
             waits[i["number"]] = (f"waits on {when}: rewrite it to " + ("do it now" if rank[i["number"]][0] in ("P0", "P1") else "close it")
                                   + " (do it now or close it)")
     return {"groups": sorted(groups, key=lambda g: rank[g[0]]), "rewrite": sorted(n for n in areas if not areas[n]), "waits": waits,
-            "models": {i["number"]: models(cmd_groom.size_of(i), i.get("labels") or (), f"story-{i['number']}") for i in todo if areas[i["number"]]}}
+            "models": {i["number"]: models(i, f"story-{i['number']}") for i in todo if areas[i["number"]]}}
 
 
 def render(found: dict) -> str:
-    lines = [f"Parallel group {k}: " + " then ".join(f"#{n} ({found['models'][n][0]} builder, {found['models'][n][1]} QA)" for n in g)
+    lines = [f"Parallel group {k}: " + " then ".join(f"#{n} ({found['models'][n][0]} builder, {found['models'][n][1]} QA, chosen for {found['models'][n][2]})" for n in g)
              for k, g in enumerate(found["groups"], 1)]
     lines += [f"#{n} names no files area: rewrite it, it is not dispatched" for n in found["rewrite"]]
     lines += [f"#{n} {why}" for n, why in sorted(found["waits"].items())]

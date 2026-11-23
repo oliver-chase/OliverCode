@@ -238,6 +238,28 @@ class TestLoop(unittest.TestCase):
         self.assertEqual(["haiku", "haiku", "sonnet", "sonnet", "opus"],
                          [agent_loop.model_for(s) for s in ("XS", "S", "M", "L")] + [agent_loop.model_for("M", [{"name": "design"}])])
 
+    def test_a_small_story_touching_landing_claims_gates_or_hooks_or_a_p0_starts_on_the_middle_model(self):
+        for files, priority in ((["scripts/lib/cmd_land.py"], "P2"), (["scripts/lib/cmd_drain.py"], "P2"), (["scripts/lib/agent_loop.py", "docs/RULES.md"], "P2"),
+                                (["scripts/lib/log_action.py"], "P2"), (["skills/backlog/scripts/complete_story.py"], "P2"), (["core/hooks/guard.py"], "P2"),
+                                (["scripts/hooks/gh_guard.py"], "P2"), ([], "P0")):
+            with self.subTest(files=files, priority=priority):
+                self.assertEqual("sonnet", agent_loop.model_for("S", files=files, priority=priority))
+
+    def test_a_small_story_touching_only_docs_tests_or_one_command_starts_on_the_smallest_model(self):
+        self.assertEqual("haiku", agent_loop.model_for("XS", files=["docs/RULES.md", "tests/test_cmd_status.py", "scripts/lib/cmd_status.py"], priority="P2"))
+
+    def test_the_route_names_the_rule_that_chose_the_model(self):
+        self.assertEqual(("sonnet", "its Files area touches scripts/lib/agent_loop.py"), agent_loop.route("XS", files=["scripts/lib/agent_loop.py"]))
+        self.assertEqual(("sonnet", "priority P0"), agent_loop.route("S", priority="P0"))
+        self.assertEqual(("opus", "labeled design"), agent_loop.route("M", [{"name": "design"}]))
+        self.assertEqual(("haiku", "size S with no risky path or P0 priority"), agent_loop.route("S"))
+
+    def test_the_run_log_records_the_rule_that_chose_the_builder(self):
+        run = Scripted(reply("built"), reply("PASS"))
+        self.loop(run, [(True, "")], model_name="sonnet", why="priority P0")
+        rows = [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
+        self.assertEqual(["priority P0"], [r["route"] for r in rows if r.get("story") == "s1" and "route" in r])
+
     def test_a_small_story_moves_up_one_level_after_a_second_failed_validation(self):
         run = Scripted(reply(), reply(), reply(), reply("PASS"))
         out = self.loop(run, [(False, "a"), (False, "b"), (True, "")], model_name="haiku", rounds=3)
@@ -363,8 +385,9 @@ class TestLoop(unittest.TestCase):
 
     def test_the_brief_names_the_builder_and_reader_the_runner_starts(self):
         from lib import cmd_dispatch
-        for size, labels, expect in (("S", [], "Run on Haiku, and a fresh Sonnet reader"), ("M", [], "Run on Sonnet, and a fresh Sonnet reader"),
-                                     ("M", [{"name": "design"}], "Run on Opus, and a fresh Opus reader")):
+        for size, labels, expect in (("S", [], "Run on Haiku (size S with no risky path or P0 priority), and a fresh Sonnet reader"),
+                                     ("M", [], "Run on Sonnet (size M), and a fresh Sonnet reader"),
+                                     ("M", [{"name": "design"}], "Run on Opus (labeled design), and a fresh Opus reader")):
             with self.subTest(size=size, labels=labels):
                 brief = cmd_dispatch.headless_brief(9, {"title": "t", "body": f"Size: {size}", "labels": labels}, "dispatch")
                 self.assertIn(expect, brief)

@@ -29,8 +29,10 @@ class TestSplit(unittest.TestCase):
         self.assertEqual(sorted(map(tuple, found["groups"])), [(1, 3), (2, 4)])
 
     def test_small_stories_build_on_haiku_and_every_story_is_read_by_sonnet_or_larger(self):
-        found = intake.plan([story(1, "a.py", "XS"), story(2, "b.py", "M")], TODAY)
-        self.assertEqual(found["models"], {1: ("haiku", "sonnet"), 2: ("sonnet", "sonnet")})
+        found = intake.plan([story(1, "a.py", "XS"), story(2, "b.py", "M"), story(3, "scripts/lib/cmd_land.py", "XS")], TODAY)
+        self.assertEqual(found["models"], {1: ("haiku", "sonnet", "size XS with no risky path or P0 priority"), 2: ("sonnet", "sonnet", "size M"),
+                                           3: ("sonnet", "sonnet", "its Files area touches scripts/lib/cmd_land.py")})
+        self.assertIn("#3 (sonnet builder, sonnet QA, chosen for its Files area touches scripts/lib/cmd_land.py)", intake.render(found))
 
     def test_a_story_with_no_area_is_flagged_and_dispatch_refuses_it(self):
         self.assertEqual(intake.plan([story(5)], TODAY)["rewrite"], [5])

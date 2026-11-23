@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import backlog_setup, cmd_groom, intake, gh_budget, local_config, open_issues, run_lock
+from lib import backlog_setup, intake, gh_budget, local_config, open_issues, run_lock
 from lib.local_config import OC_ROOT
 from lib.placement import config as placement_config
 
@@ -39,8 +39,8 @@ HEADLESS_RULES = """Builder rules:
 def headless_brief(n: int, story: dict, agent: str, worktree=None, extras: str = "", note: str = "") -> str:
     """The one brief a headless builder gets, for `dispatch` and `drain` alike (#877): the story, what it names, and rules that end at the commit.
     `extras` is text between the story and the rules (code excerpts, owner decisions) and `note` says why an earlier builder stopped."""
-    builder, reader = intake.models(cmd_groom.size_of(story), story.get("labels") or (), f"story-{n}")  # the same names the runner starts (#1015)
-    model = f"Run on {builder.capitalize()}, and a fresh {reader.capitalize()} reader reads the commit before it lands"
+    builder, reader, why = intake.models(story, f"story-{n}")  # the same names the runner starts (#1015), and the rule that chose the builder (#1026)
+    model = f"Run on {builder.capitalize()} ({why}), and a fresh {reader.capitalize()} reader reads the commit before it lands"
     body = (story.get("body") or "").strip()
     extras = extras.replace(" and validate before the last commit. `olivercode land` then lands the branch and each story is closed.", ". The runner validates and lands the branch and closes each story.")
     text = f"Story #{n}: {story['title']}\n\n{body}\n\n{extras + chr(10) if extras else ''}{HEADLESS_RULES.format(n=n, model=model, agent=agent)}\n"

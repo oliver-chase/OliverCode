@@ -137,9 +137,9 @@ class Io:
         n, size = issue["number"], cmd_groom.size_of(issue)
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), owner_decisions.brief_section(n)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
-        builder, _reader = intake.models(size, issue.get("labels") or (), f"story-{n}")
+        builder, _reader, why = intake.models(issue, f"story-{n}")
         self.built_at[n] = failure_log.stamp()
-        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder,
+        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
                                    rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0))
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:

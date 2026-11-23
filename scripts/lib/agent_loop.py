@@ -29,6 +29,8 @@ DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment 
 LADDER = ("haiku", "sonnet", "opus")
 RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round starts its next build one level up (#1015)
 READER = "sonnet"  # the least capable model that reads a commit: no story is read by anything weaker (#1015)
+RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py")  # landing, claims, gates and the loop itself (#1026)
+RISKY_DIRS = ("core/hooks", "scripts/hooks")
 SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
@@ -114,12 +116,34 @@ def fix_brief(task: str, cwd: str | Path, tail: str) -> str:
             f"The story:\n{task}\n\nThe diff so far:\n{branch_diff(cwd)}\n\nThe last {TAIL_LINES} lines of the failing gate:\n{tail}")
 
 
-def model_for(size: str, labels=()) -> str:
-    """The model a story starts on (#890): XS and S the smallest, M and L the middle, and only a story labeled design the largest."""
+def risky_paths(files) -> list[str]:
+    """The Files area paths that touch landing, claims, gates or hooks (#1026): a file named in RISKY_FILES, or anything under RISKY_DIRS."""
+    hits = []
+    for path in files:
+        name = path.rstrip("/")
+        if name.rsplit("/", 1)[-1] in RISKY_FILES or any(name == d or name.startswith(d + "/") for d in RISKY_DIRS):
+            hits.append(path)
+    return hits
+
+
+def route(size: str, labels=(), files=(), priority: str = "") -> tuple[str, str]:
+    """(model, reason) a story starts on (#890, #1026). Only a story labeled design takes the largest. M and L take the middle. XS and S take the
+    smallest unless their Files area touches landing, claims, gates or hooks, or their priority is P0, which take the middle. The reason names the rule."""
     names = {(l.get("name") if isinstance(l, dict) else l or "").lower() for l in labels or []}
     if "design" in names:
-        return LADDER[-1]
-    return LADDER[0] if size in ("XS", "S") else LADDER[1]
+        return LADDER[-1], "labeled design"
+    if size not in ("XS", "S"):
+        return LADDER[1], f"size {size}"
+    if risky := risky_paths(files):
+        return LADDER[1], f"its Files area touches {', '.join(risky)}"
+    if priority == "P0":
+        return LADDER[1], "priority P0"
+    return LADDER[0], f"size {size} with no risky path or P0 priority"
+
+
+def model_for(size: str, labels=(), files=(), priority: str = "") -> str:
+    """The model a story starts on (#890, #1026). route() also says which rule chose it."""
+    return route(size, labels, files, priority)[0]
 
 
 def escalate(model_name: str, failures: int) -> str:
@@ -222,7 +246,7 @@ def start_size(session_id: str, projects: Path | None = None) -> int | None:
     return None
 
 
-def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None) -> None:
+def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "") -> None:
     """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost, stop reason and write time, and on a session's first round the tokens it started with (#878, #987).
     A log that cannot be written never stops a loop."""
     usage = reply.get("usage") or {}
@@ -233,6 +257,8 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
+    if why:
+        row["route"] = why  # the rule that chose the model the build started on (#1026)
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
@@ -253,14 +279,14 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print) -> dict:
+             run=None, check=None, say=print, why: str = "") -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
     finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
-    `run` and `check` default to model.run_cli and validate."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say)
+    `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026)."""
+    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say) -> dict:
+def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="") -> dict:
     run, check = run or model.run_cli, check or validate
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
@@ -274,7 +300,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say) ->
             try:
                 reply = run(prompt, cwd, max_turns=max_turns, session=session, system=SYSTEM, model=model_name, resume=claude_session)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
-                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed})
+                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed}, why=why)
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
@@ -286,7 +312,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say) ->
             reply = {**reply, "resumed": resumed}
             tokens += reply["tokens"]
             claude_session = reply["session_id"] or claude_session
-            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None)
+            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why)
             summary = reply["text"]
             say(f"Round {n}: {summary.strip()[:300]}")
             if reply["code"] != 0 and reply.get("stop") in RESUMABLE and not resumed and claude_session:
