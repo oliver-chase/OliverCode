@@ -51,7 +51,7 @@ INTRODUCTION = """How OliverCode works
 First steps, in order
   1. Register your repos: olivercode discover --root <folder holding your repos> --register
   2. Check this machine: olivercode health
-  3. File your first story: say what you want in Claude Code, and it becomes a story on the board.
+  3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`. A chat never builds a board story by hand.
 
 Using it well
 """ + "\n".join(f"  {habit}" for habit in cmd_guide.USING_IT_WELL) + """
@@ -263,10 +263,21 @@ def registered_repos() -> list[tuple[str, Path]]:
     return [("OliverCode", OC_ROOT), *[(name, path) for name, _, path in iter_fleet(profiles, OC_ROOT.parent) if (path / ".git").exists()]]
 
 
+def board_config(path: Path) -> dict | None:
+    """The repo's own board config, or None. A config that is absent, still the example's, or names another owner's repo counts as
+    absent, so backlog-setup writes this repo's own (#1013). A repo with no origin remote has nothing to compare, so its config stands."""
+    from lib import backlog_setup
+    config = backlog_setup.load_config(backlog_setup.config_path(path))
+    slug = backlog_setup.origin_owner_name(path)
+    if config is None or (slug is not None and f"{config['repoOwner']}/{config['repoName']}".lower() != f"{slug[0]}/{slug[1]}".lower()):
+        return None
+    return config
+
+
 def board_step(repos: list[tuple[str, Path]]) -> str:
     """Install's board step (#994). With gh signed in and holding the project scope, it runs `backlog-setup --apply` for each repo whose
-    backlog config is absent or still the example's, names that config in the repo's CLAUDE.md and prints the board URL. A repo with a
-    valid config is left alone. Returns the line that stopped the step before any board, or "" when it ran."""
+    backlog config is absent, still the example's or another owner's (#1013), names that config in the repo's CLAUDE.md and prints the board
+    URL. A repo with its own valid config is left alone. Returns the line that stopped the step before any board, or "" when it ran."""
     from lib import backlog_setup
     from lib.cmd_fleet import command_backlog_setup
     from lib.health_checks import gh_ready
@@ -276,12 +287,12 @@ def board_step(repos: list[tuple[str, Path]]) -> str:
         return problem
     for name, path in repos:
         try:
-            if backlog_setup.load_config(backlog_setup.config_path(path)) is not None:
+            if board_config(path) is not None:
                 continue
             if command_backlog_setup([str(path), "--apply"]) != 0:
                 print(f"{name}: backlog-setup did not finish. Fix the cause, then run `olivercode backlog-setup {path} --apply`")
                 continue
-            config = backlog_setup.load_config(backlog_setup.config_path(path))
+            config = board_config(path)
         except backlog_setup.SetupError as error:
             print(f"{name}: {error}")
             continue

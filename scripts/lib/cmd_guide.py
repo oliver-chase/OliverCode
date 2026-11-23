@@ -14,6 +14,7 @@ from lib.cli import COMMANDS
 HOW_WORK_RUNS = (
     "You work in one thread, and you say what you want. Each request becomes a story on the repo's board.",
     "`olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main, logs the story and closes it.",
+    "A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`.",
     "`olivercode status` shows what is open.",
 )
 
@@ -159,7 +160,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     print("\nFirst steps, in order")
     print("  1. olivercode discover --root <folder holding your repos> --register    add your repos to the fleet")
     print("  2. olivercode health                                                   check this machine")
-    print("  3. File your first story: say what you want in Claude Code, and it becomes a story on the board")
+    print("  3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO")
     print("\nUsing it well")
     for habit in USING_IT_WELL:
         print(f"  {habit}")

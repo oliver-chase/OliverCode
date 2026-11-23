@@ -1,5 +1,6 @@
 """Install makes the fleet folder a local git repo with one commit, offers a private GitHub copy once, and health repairs a loose folder (#993)."""
 
+import json
 import os
 import subprocess
 import sys
@@ -67,6 +68,26 @@ class FleetRepo(unittest.TestCase):
         self.assertIn('"me/fleet"', (dest / "review-config.json").read_text())
         self.assertFalse(cmd_initfleet.fill_placeholders(dest, "me", "fleet"))
 
+    def test_init_fleet_on_the_local_repo_adds_a_remote_and_nests_no_repo(self):
+        dest = temp_dir(self) / "fleet"
+        quiet(cmd_install.fleet_repo_step, dest, None, None)
+        calls = []
+
+        def runner(args):
+            calls.append(args)
+            if args[:3] == ["gh", "api", "repos/me/olivercode-fleet"] and args[-1] == ".private":
+                return 0, "true"
+            if args[:3] == ["gh", "api", "repos/me/olivercode-fleet/collaborators?affiliation=direct"]:
+                return 0, "[]"
+            return 0, ""
+
+        code = quiet(cmd_initfleet.command_init_fleet, ["--owner", "me", "--dir", str(dest)], runner)[0]
+        self.assertEqual(0, code)
+        git = [args[3:] for args in calls if args[:2] == ["git", "-C"]]
+        self.assertIn(["remote", "add", "origin", "https://github.com/me/olivercode-fleet.git"], git)
+        self.assertNotIn("init", [step[0] for step in git])
+        self.assertEqual([dest / ".git"], list(dest.rglob(".git")))
+
 
 class BoardStep(unittest.TestCase):
     """Install gives each registered repo its board once gh is ready, and stops before any board when it is not (#994)."""
@@ -100,6 +121,48 @@ class BoardStep(unittest.TestCase):
         setup.assert_called_once_with([str(widget), "--apply"])
         self.assertIn("backlog-config.json", (widget / "CLAUDE.md").read_text())
         self.assertIn("projects/3", out)
+
+    def test_a_config_naming_another_owners_repo_is_treated_as_absent_and_set_up(self):
+        repo = temp_dir(self) / "widget"
+        (repo / "docs").mkdir(parents=True)
+        (repo / "CLAUDE.md").write_text("# widget\n")
+        theirs = {"repoOwner": "someone", "repoName": "widget", "projectOwner": "someone", "projectNumber": 3, "projectId": "PVT_x"}
+        (repo / "docs" / "backlog-config.json").write_text(json.dumps(theirs))
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/me/widget.git"], check=True)
+        with self.gh(0), mock.patch("lib.cmd_fleet.command_backlog_setup", return_value=0) as setup:
+            problem, _ = quiet(cmd_install.board_step, [("widget", repo)])
+        self.assertEqual("", problem)
+        setup.assert_called_once_with([str(repo), "--apply"])
+
+    def test_a_config_naming_this_repo_is_left_alone(self):
+        repo = temp_dir(self) / "widget"
+        (repo / "docs").mkdir(parents=True)
+        mine = {"repoOwner": "me", "repoName": "widget", "projectOwner": "me", "projectNumber": 3, "projectId": "PVT_x"}
+        (repo / "docs" / "backlog-config.json").write_text(json.dumps(mine))
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", "git@github.com:me/widget.git"], check=True)
+        with self.gh(0), mock.patch("lib.cmd_fleet.command_backlog_setup") as setup:
+            quiet(cmd_install.board_step, [("widget", repo)])
+        setup.assert_not_called()
+
+
+class WhoBuilds(unittest.TestCase):
+    """The install text, the guide, the README, RULES.md and CLAUDE.md state one rule for who builds a board story (#1013)."""
+
+    RULE = "A chat never builds a board story by hand"
+
+    def test_each_doc_and_the_guide_state_the_one_rule(self):
+        from lib import cmd_guide
+        for path in ("CLAUDE.md", "docs/RULES.md", "README.md"):
+            self.assertIn(self.RULE, (REPO_ROOT / path).read_text(encoding="utf-8"), path)
+        self.assertIn(self.RULE, " ".join(cmd_guide.HOW_WORK_RUNS))
+
+    def test_the_first_steps_end_on_building_a_story_in_install_and_the_guide(self):
+        from lib import cmd_guide
+        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`", cmd_install.INTRODUCTION)
+        _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
+        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO", out)
 
 
 
