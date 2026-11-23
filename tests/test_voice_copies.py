@@ -32,10 +32,16 @@ class TestVoiceCopies(unittest.TestCase):
     def test_matching_copy_passes(self):
         (self.suite / "docs" / "VOICE.md").write_text("voice\n")
         self.assertEqual(self.check(), (1, 0, 0))
+        (self.suite / "docs" / "VOICE.md").write_text("voice\n\n## The dashboard\n")
+        self.assertEqual(self.check(), (1, 0, 0))
 
     def test_drifted_copy_fails(self):
         (self.suite / "docs" / "VOICE.md").write_text("old voice\n")
         self.assertEqual(self.check(), (0, 1, 0))
+        # the design copy is checked beside the voice copy
+        (self.oc / "docs" / "DESIGN.md").write_text("design\n")
+        (self.suite / "docs" / "DESIGN.md").write_text("design\n\n## Brand\n")
+        self.assertEqual(self.check(), (1, 1, 0))
 
     def test_suite_without_copy_is_not_checked(self):
         self.assertEqual(self.check(), (0, 0, 0))
@@ -68,7 +74,3 @@ class TestVoiceCopies(unittest.TestCase):
         (home / "docs").mkdir()
         (home / "docs" / "VOICE.md").write_text("old voice\n")
         self.assertEqual(self.check(home / "skills"), (0, 0, 0))
-
-
-if __name__ == "__main__":
-    unittest.main()

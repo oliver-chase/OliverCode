@@ -41,7 +41,3 @@ class TestSkillLinks(unittest.TestCase):
         (self.links / "y").symlink_to(self.tmp / "gone")
         (self.links / "fine").symlink_to(self.skills / "a")
         self.assertEqual(["y", "z"], broken_links(self.links))
-
-
-if __name__ == "__main__":
-    unittest.main()

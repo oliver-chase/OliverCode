@@ -25,7 +25,3 @@ class TestTrackedFiles(unittest.TestCase):
         plain = Path(tempfile.mkdtemp(prefix="gitfiles-plain-"))
         self.addCleanup(shutil.rmtree, plain, ignore_errors=True)
         self.assertEqual(gitfiles.tracked_files(plain), [])
-
-
-if __name__ == "__main__":
-    unittest.main()

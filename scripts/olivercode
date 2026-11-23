@@ -11,26 +11,75 @@ scripts/lib/cmd_*.py, and the shared argument helpers in scripts/lib/cli.py.
 """
 from __future__ import annotations
 
+import os
 import subprocess  # noqa: F401  (tests patch launcher.subprocess)
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.cli import print_usage, reject_extra as _reject_extra, require_dir as _require_dir, take_flag as _take_flag, take_root_flag as _take_root_flag  # noqa: E402
+from lib.cli import MIN_PYTHON, newer_python, print_usage, reject_extra as _reject_extra, require_dir as _require_dir, take_flag as _take_flag, take_root_flag as _take_root_flag  # noqa: E402
+
+
+def _use_newer_python() -> None:
+    """Re-run under a current interpreter when python3 is older than the minimum and a newer one is installed.
+
+    With no newer interpreter the launcher keeps going, so `olivercode health` can still report the old version.
+    """
+    if sys.version_info[:2] >= MIN_PYTHON or os.environ.get("OLIVERCODE_REEXEC"):
+        return
+    exe = newer_python()
+    if exe:
+        os.environ["OLIVERCODE_REEXEC"] = "1"
+        os.execv(exe, [exe, str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    _use_newer_python()  # before the imports below, which may not parse on an old Python
+
 from lib.cmd_fleet import (  # noqa: E402
-    command_audit_fleet, command_backlog_setup, command_conform, command_sync_hooks, command_update,
+    command_audit_fleet, command_backlog_setup, command_conform, command_ledger, command_sync_hooks, command_update,
 )
+from lib.cmd_dispatch import command_dispatch  # noqa: E402
+from lib.cmd_drain import command_drain  # noqa: E402
+from lib.cmd_board import command_board  # noqa: E402
+from lib.cmd_gapsweep import command_gapsweep  # noqa: E402
+from lib.cmd_version import command_docs_check, command_version_cut  # noqa: E402
+from lib.cmd_land import command_land  # noqa: E402
+from lib.cmd_run import command_run  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
+from lib.cmd_lesson import command_lesson  # noqa: E402
+from lib.retro import command_retro  # noqa: E402
+from lib.schedules import command_usage  # noqa: E402
+from lib.story_outbox import command_story  # noqa: E402
+from lib.candidates import command_candidates  # noqa: E402
+from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
+from lib.cmd_batch import command_batch  # noqa: E402
+from lib.cmd_audit_mode import command_audit_mode  # noqa: E402
+from lib.cmd_initfleet import command_init_fleet  # noqa: E402
+from lib.cmd_review import command_review  # noqa: E402
+from lib.cmd_cutlist import command_cutlist, record_command  # noqa: E402
+from lib.features import command_features  # noqa: E402
+from lib.machines import command_machines  # noqa: E402
+from lib.cmd_limits import command_limits  # noqa: E402
+from lib.cmd_owner import command_owner  # noqa: E402
+from lib.push_approval import command_push_blocked  # noqa: E402
+from lib.cmd_rule import command_rule  # noqa: E402
+from lib.decisions import command_decisions  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
 from lib.failure_log import command_report  # noqa: E402
+from lib.validated import command as command_validated  # noqa: E402
+from lib.evals import command_eval  # noqa: E402
 from lib.cmd_health import command_health  # noqa: E402
-from lib.cmd_install import command_install, command_uninstall, _read_record, _write_record, INSTALL_RECORD  # noqa: E402,F401
+from lib.cmd_status import command_status  # noqa: E402
+from lib.cmd_commit_check import command_commit_check  # noqa: E402
+from lib.wip import command_wip  # noqa: E402
+from lib.cmd_install import command_install, command_uninstall  # noqa: E402
 from lib.cmd_repo import (
-    command_bootstrap, command_clean, command_discover, command_gh_limit, command_place,
-    command_policy,
-    command_size, command_skills,
+    command_bootstrap, command_clean, command_discover, command_gh_limit, command_place, command_queue,
+    command_policy, command_worktree,
+    command_skills,
 )  # noqa: E402
-from lib.local_config import OC_ROOT  # noqa: E402,F401
+from lib.local_config import OC_ROOT  # noqa: E402
 
 
 
@@ -41,6 +90,7 @@ def main() -> int:
 
     cmd = sys.argv[1]
     argv = sys.argv[2:]
+    record_command(cmd)
 
     if cmd == "discover":
         roots: list[Path] = []
@@ -60,16 +110,17 @@ def main() -> int:
             return 1
         target = Path(rest[0]).expanduser()
         return command_bootstrap(OC_ROOT, target, dry) if _require_dir(target) else 1
-    if cmd == "size":
-        lower, rest = _take_flag(argv, "--lower")
-        if len(rest) > 1:
-            _reject_extra(cmd, rest[1:])
-        target = Path(rest[0]).expanduser() if rest else Path.cwd()
-        return command_size(OC_ROOT, target, lower) if _require_dir(target) else 1
     if cmd == "backlog-setup":
         return command_backlog_setup(argv)
     if cmd == "install":
-        _reject_extra(cmd, argv)
+        show, rest = _take_flag(argv, "--show-allow")
+        _reject_extra(cmd, rest)
+        if show:
+            from lib import claude_settings
+            from lib.local_config import claude_dir as _claude_dir
+            print("Install adds these rules to permissions.allow in ~/.claude/settings.json and keeps every rule you have:")
+            print("\n".join(claude_settings.allow_lines(_claude_dir() / "settings.json")))
+            return 0
         return command_install(OC_ROOT)
     if cmd == "uninstall":
         _reject_extra(cmd, argv)
@@ -79,13 +130,74 @@ def main() -> int:
         root, rest = _take_root_flag(argv)
         _reject_extra(cmd, rest)
         return command_health(root)
+    if cmd == "status":
+        return command_status(argv)
+    if cmd == "validated":
+        return command_validated(argv)
+    if cmd == "queue":
+        return command_queue(argv)
     if cmd == "gh-limit":
         return command_gh_limit(argv)
+    if cmd == "usage":
+        return command_usage(argv)
+    if cmd == "land":
+        return command_land(argv)
+    if cmd == "board":
+        return command_board(argv)
+    if cmd == "version-cut":
+        return command_version_cut(argv)
+    if cmd == "version" and argv[:1] == ["cut"]:
+        return command_version_cut(["--commit", *argv[1:]])
+    if cmd == "docs-check":
+        _reject_extra(cmd, argv)
+        return command_docs_check()
+    if cmd == "gap-sweep":
+        return command_gapsweep(argv)
+    if cmd == "run":
+        return command_run(argv)
+    if cmd == "dispatch":
+        return command_dispatch(argv)
+    if cmd == "drain":
+        return command_drain(argv)
+    if cmd == "decisions":
+        return command_decisions(argv)
+    if cmd == "fleet-sync":
+        return command_fleet_sync(argv)
+    if cmd == "batch":
+        return command_batch(argv)
+    if cmd == "audit-mode":
+        return command_audit_mode(argv)
+    if cmd == "limits":
+        return command_limits(argv)
+    if cmd == "cutlist":
+        return command_cutlist(argv)
+    if cmd == "review":
+        return command_review(argv)
+    if cmd == "init-fleet":
+        return command_init_fleet(argv)
+    if cmd == "owner":
+        return command_owner(argv)
+    if cmd == "push-blocked":
+        return command_push_blocked(argv)
+    if cmd == "rule":
+        return command_rule(argv)
+    if cmd == "lesson":
+        return command_lesson(argv)
+    if cmd == "retro":
+        return command_retro(argv)
+    if cmd == "story":
+        return command_story(argv)
+    if cmd == "candidates":
+        return command_candidates(argv)
     if cmd == "policy":
         return command_policy(argv)
     if cmd == "place":
         _reject_extra(cmd, argv)
         return command_place()
+    if cmd == "commit-check":
+        return command_commit_check(argv)
+    if cmd == "worktree":
+        return command_worktree(argv)
     if cmd == "clean":
         apply, rest = _take_flag(argv, "--apply")
         _reject_extra(cmd, rest)
@@ -93,26 +205,61 @@ def main() -> int:
     if cmd == "conform":
         offline, rest = _take_flag(argv, "--offline")
         hooks_only, rest = _take_flag(rest, "--hooks-only")
+        fix, rest = _take_flag(rest, "--fix")
+        story = None
+        if "--story" in rest and rest.index("--story") + 1 < len(rest):
+            at = rest.index("--story")
+            story, rest = rest[at + 1], rest[:at] + rest[at + 2:]
+        if fix and not story:
+            print("Usage: olivercode conform --fix --story REF [DIR] [--offline] [--root DIR]  (the story the fix commits cite)")
+            return 1
         root, rest = _take_root_flag(rest)
         if len(rest) > 1:
             _reject_extra(cmd, rest[1:])
-        return command_conform(OC_ROOT, Path(rest[0]).expanduser().resolve() if rest else None, root, offline, hooks_only)
+        return command_conform(OC_ROOT, Path(rest[0]).expanduser().resolve() if rest else None, root, offline, hooks_only, fix, story)
+    if cmd == "features":
+        return command_features(argv)
+    if cmd == "machines":
+        return command_machines(argv)
     if cmd == "update":
+        story = None
+        if "--story" in argv:
+            at = argv.index("--story")
+            if at + 1 >= len(argv):
+                print("Usage: olivercode update [--story REF]")
+                return 1
+            story, argv = argv[at + 1], argv[:at] + argv[at + 2:]
         _reject_extra(cmd, argv)
-        return command_update()
+        return command_update(story=story)
     if cmd == "sync-hooks":
-        root, rest = _take_root_flag(argv)
+        commit, rest = _take_flag(argv, "--commit")
+        story = None
+        if "--story" in rest:
+            at = rest.index("--story")
+            if at + 1 >= len(rest) or not commit:
+                print("Usage: olivercode sync-hooks [--root DIR] [--commit [--story REF]]")
+                return 1
+            story, rest = rest[at + 1], rest[:at] + rest[at + 2:]
+        root, rest = _take_root_flag(rest)
         _reject_extra(cmd, rest)
-        return command_sync_hooks(OC_ROOT, root)
+        return command_sync_hooks(OC_ROOT, root, commit, story)
     if cmd == "audit-fleet":
         _reject_extra(cmd, argv)
         return command_audit_fleet(OC_ROOT)
+    if cmd == "ledger":
+        root, rest = _take_root_flag(argv)
+        _reject_extra(cmd, rest)
+        return command_ledger(OC_ROOT, root)
     if cmd == "skills":
         return command_skills(argv)
     if cmd == "maintain":
         return command_maintain(argv)
+    if cmd == "eval":
+        return command_eval(argv)
     if cmd == "report":
         return command_report(argv)
+    if cmd == "wip":
+        return command_wip(argv)
     if cmd == "guide":
         _reject_extra(cmd, argv)
         return command_guide(OC_ROOT)

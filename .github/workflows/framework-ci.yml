@@ -12,12 +12,12 @@ jobs:
   framework-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Health check
         run: python3 scripts/olivercode health
 
-      # validate.sh covers the pre-commit gates, doc/code consistency, reference
+      # validate.sh covers the pre-commit gates, gate incident records, reference
       # integrity, bloat, code quality and the smoke tests.
       - name: Validate gates over the whole tree
         run: bash scripts/validate.sh --tree

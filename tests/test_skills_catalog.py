@@ -27,32 +27,21 @@ class SkillsCatalogBase(unittest.TestCase):
 
 
 class ParseFrontmatter(SkillsCatalogBase):
-    def test_quoted_values_lose_their_quotes(self):
-        path = self.skill("a", "---\nname: \"alpha\"\ndescription: 'Does A: and more.'\n---\n")
-        self.assertEqual(("alpha", "Does A: and more."), catalog._parse_skill_frontmatter(path))
-
-    def test_no_frontmatter_at_all_keeps_the_folder_name(self):
-        path = self.skill("some-skill", "# Some Skill\n\nNo frontmatter here.\n")
-        self.assertEqual(("some-skill", ""), catalog._parse_skill_frontmatter(path))
-
-    def test_a_folded_block_joins_its_lines(self):
-        path = self.skill("folded", "---\nname: folded\ndescription: >\n  Line one.\n  Line two.\n---\n")
-        self.assertEqual(("folded", "Line one. Line two."), catalog._parse_skill_frontmatter(path))
-
-    def test_an_empty_name_keeps_the_folder_name(self):
-        path = self.skill("folder-name", "---\nname:\ndescription: x\n---\n")
-        self.assertEqual("folder-name", catalog._parse_skill_frontmatter(path)[0])
-
-    def test_frontmatter_that_never_closes_is_ignored(self):
-        path = self.skill("open", "---\nname: wrong\ndescription: never closed\n")
-        self.assertEqual(("open", ""), catalog._parse_skill_frontmatter(path))
-
-    def test_a_literal_block_joins_its_lines_and_stops_at_the_next_key(self):
-        path = self.skill(
-            "lit",
-            "---\ndescription: |-\n  First line.\n\n  Second line.\nname: lit-skill\n---\n",
+    def test_each_frontmatter_shape_parses(self):
+        # Quotes come off, a missing or empty name or unclosed frontmatter keeps the folder name, and a
+        # folded or literal block joins its lines and stops at the next key.
+        cases = (
+            ("a", "---\nname: \"alpha\"\ndescription: 'Does A: and more.'\n---\n", ("alpha", "Does A: and more.")),
+            ("some-skill", "# Some Skill\n\nNo frontmatter here.\n", ("some-skill", "")),
+            ("folded", "---\nname: folded\ndescription: >\n  Line one.\n  Line two.\n---\n", ("folded", "Line one. Line two.")),
+            ("folder-name", "---\nname:\ndescription: x\n---\n", ("folder-name", "x")),
+            ("open", "---\nname: wrong\ndescription: never closed\n", ("open", "")),
+            ("lit", "---\ndescription: |-\n  First line.\n\n  Second line.\nname: lit-skill\n---\n",
+             ("lit-skill", "First line. Second line.")),
         )
-        self.assertEqual(("lit-skill", "First line. Second line."), catalog._parse_skill_frontmatter(path))
+        for folder, text, expected in cases:
+            with self.subTest(folder=folder):
+                self.assertEqual(expected, catalog._parse_skill_frontmatter(self.skill(folder, text)))
 
     def test_an_unreadable_skill_file_falls_back_to_the_folder_name(self):
         path = self.root / "skills" / "broken" / "SKILL.md"
@@ -73,6 +62,3 @@ class LoadSkills(SkillsCatalogBase):
             [("apple", "first"), ("zebra", "last")],
             catalog._load_skills(self.root),
         )
-
-if __name__ == "__main__":
-    unittest.main()

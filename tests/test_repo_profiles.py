@@ -54,26 +54,15 @@ class LoadRepoProfiles(RepoProfilesBase):
 
 
 class ResolveRepoPath(RepoProfilesBase):
-    def test_default_is_the_sibling_folder(self):
-        self.assertEqual(Path("/fleet/alpha"), repo_profiles.resolve_repo_path("alpha", {}, Path("/fleet")))
-
-    def test_a_relative_path_resolves_under_the_fleet_root(self):
-        self.assertEqual(
-            Path("/fleet/clients/alpha"),
-            repo_profiles.resolve_repo_path("alpha", {"path": "clients/alpha"}, Path("/fleet")),
-        )
-
-    def test_an_absolute_path_is_used_as_written(self):
-        self.assertEqual(
-            Path("/elsewhere/alpha"),
-            repo_profiles.resolve_repo_path("alpha", {"path": "/elsewhere/alpha"}, Path("/fleet")),
-        )
-
-    def test_a_home_relative_path_expands(self):
-        self.assertEqual(
-            Path.home() / "code" / "alpha",
-            repo_profiles.resolve_repo_path("alpha", {"path": "~/code/alpha"}, Path("/fleet")),
-        )
+    def test_a_profile_path_resolves_by_its_form(self):
+        # No path is the sibling folder; a relative path sits under the fleet root, an absolute one is
+        # used as written and a home-relative one expands.
+        for profile, expected in (({}, Path("/fleet/alpha")),
+                                  ({"path": "clients/alpha"}, Path("/fleet/clients/alpha")),
+                                  ({"path": "/elsewhere/alpha"}, Path("/elsewhere/alpha")),
+                                  ({"path": "~/code/alpha"}, Path.home() / "code" / "alpha")):
+            with self.subTest(profile=profile):
+                self.assertEqual(expected, repo_profiles.resolve_repo_path("alpha", profile, Path("/fleet")))
 
     def test_this_machines_path_wins_over_the_profile(self):
         self.local_paths = {"alpha": Path("/this/machine/alpha")}
@@ -93,7 +82,3 @@ class IterFleet(RepoProfilesBase):
 
     def test_an_empty_registry_yields_nothing(self):
         self.assertEqual([], list(repo_profiles.iter_fleet({}, Path("/fleet"))))
-
-
-if __name__ == "__main__":
-    unittest.main()

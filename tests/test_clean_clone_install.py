@@ -30,7 +30,7 @@ class TestCleanCloneInstall(unittest.TestCase):
         __import__("shutil").rmtree(cls.tmp, ignore_errors=True)
 
     def launcher(self, *args):
-        env = git_env(HOME=str(self.home), OLIVERCODE_LOCAL_CONFIG=os.devnull)
+        env = git_env(HOME=str(self.home), OLIVERCODE_HOME=str(self.home / ".olivercode"), OLIVERCODE_LOCAL_CONFIG=os.devnull, OLIVERCODE_LAUNCHER=str(self.home / "no-launcher"))
         return subprocess.run(["python3", str(self.clone / "scripts" / "olivercode"), *args], capture_output=True, text=True, env=env)
 
     def test_install_then_health_exit_zero_with_no_local_config(self):
@@ -51,7 +51,3 @@ class TestCleanCloneInstall(unittest.TestCase):
         (repo / "notes.md").write_text("see /Users/example/private")
         git(repo, "add", ".")
         self.assertEqual(owner_leaks(repo, ["/Users/example"]), ["notes.md"])
-
-
-if __name__ == "__main__":
-    unittest.main()

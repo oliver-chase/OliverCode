@@ -130,6 +130,3 @@ class TestMarkdownLinks(RepoCase):
         self.assertEqual(reference_check.report(self.repo, quiet=True), 0)
         self.links("[gone](docs/GONE.md)\n")
         self.assertEqual(reference_check.report(self.repo, quiet=True), 1)
-
-if __name__ == "__main__":
-    unittest.main()

@@ -1,20 +1,15 @@
 """Tests for _check_activation_links: a dangling ~/.claude link fails health and names the fix."""
 
-import contextlib
-import io
 import unittest
 
-from _support import load_script, temp_dir
+from _support import load_script, quiet, temp_dir
 
 health_checks = load_script("scripts/lib/health_checks.py")
 
 
 class TestActivationLinks(unittest.TestCase):
     def run_check(self, claude):
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            result = health_checks._check_activation_links(claude)
-        return result, out.getvalue()
+        return quiet(health_checks._check_activation_links, claude)
 
     def test_broken_rules_link_fails_and_prints_the_fix(self):
         claude = temp_dir(self)
@@ -44,7 +39,3 @@ class TestActivationLinks(unittest.TestCase):
 
     def test_no_install_is_a_skip_and_not_a_failure(self):
         self.assertEqual(self.run_check(temp_dir(self))[0], (0, 0, 1))
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -23,6 +23,11 @@ ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 os.environ["OLIVERCODE_LOCAL_CONFIG"] = os.devnull
 
 os.environ.update(ISOLATION)
+# repo_state asks GitHub whether a repo is archived; no test reaches the network, so a test that wants an answer injects one.
+os.environ["OLIVERCODE_ARCHIVED"] = "off"
+# The session hook starts a background groom when the last one is old; no test starts one.
+os.environ["OLIVERCODE_NO_BACKGROUND"] = "1"
+os.environ["OLIVERCODE_NO_STARTUP_CHECK"] = "1"  # manager check skips the start-up checklist (#726); its own tests unset this
 
 # The suite runs with a throwaway HOME, so no test can back up, relink or rewrite the owner's
 # real ~/.claude. A test that needs a home of its own still sets one.
@@ -30,6 +35,10 @@ REAL_HOME = os.environ.get("HOME")
 TEST_HOME = tempfile.mkdtemp(prefix="olivercode-test-home-")
 atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
 os.environ["HOME"] = TEST_HOME
+
+# The built hooks are untracked (HOOK-OUTPUTS-1), and many tests copy or run them, so a fresh clone
+# builds them before any test reads one. The build rewrites only a hook that changed.
+subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "build-hooks.py")], check=True)
 
 
 def temp_dir(case, prefix="olivercode-test-", resolve=False):
@@ -83,6 +92,9 @@ def scratch_repo(path, *, bare=False, branch=None, identity=True):
     if branch:
         args += ["-b", branch]
     git(path, *args)
+    # Automatic maintenance runs in the background after a commit or push and holds locks that a copy of the repo can meet half-gone.
+    git(path, "config", "maintenance.auto", "false")
+    git(path, "config", "gc.auto", "0")
     if identity and not bare:
         git(path, "config", "user.email", "test@example.invalid")
         git(path, "config", "user.name", "Test")
@@ -104,3 +116,10 @@ def load_script(relative, name=None):
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)
     return module
+
+
+def run_hook(script, payload, env=None, raw=False):
+    """Run a hook script with `payload` (a dict, or text when raw) on stdin and return the CompletedProcess."""
+    import json
+    return subprocess.run([sys.executable, str(script)], input=payload if raw else json.dumps(payload),
+                          capture_output=True, text=True, env=env if env is not None else os.environ.copy())
