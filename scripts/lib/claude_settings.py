@@ -34,6 +34,7 @@ MANAGED = (
     ("Stop", None, "wip_save.py"),
     ("UserPromptSubmit", None, "lesson_capture.py"),
     ("UserPromptSubmit", None, "error_paste.py"),
+    ("UserPromptSubmit", None, "status_hint.py"),
     ("PostToolUse", "Bash", "denial_watch.py"),
 )
 # Scripts cut from the repo. Install and update remove an entry that runs one, from any checkout, so a machine that

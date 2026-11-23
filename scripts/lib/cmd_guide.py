@@ -17,6 +17,16 @@ HOW_WORK_RUNS = (
     "`olivercode status` shows what is open.",
 )
 
+# The habits that keep OliverCode cheap, printed after the first steps by the guide and the first install's introduction, one line each (#991).
+USING_IT_WELL = (
+    "Work in one thread per topic, and start a fresh one when it grows long.",
+    "Never ask a thread for status, open the status page or run `olivercode status`.",
+    "Say what you want once and let the runner build it.",
+    "Keep a story small and name its files.",
+    "Never start a builder in a chat: `olivercode dispatch N` builds a board story without one.",
+    "A long thread costs more on every message, because all of it is re-read.",
+)
+
 
 # The README "Commands" table: each job and the commands under it, each with one plain line. tests/test_guide.py holds the README to the same rows.
 GROUPS = (
@@ -166,6 +176,9 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     print("  1. olivercode discover --root <folder holding your repos> --register    add your repos to the fleet")
     print("  2. olivercode health                                                   check this machine")
     print("  3. File your first story: say what you want in Claude Code, and it becomes a story on the board")
+    print("\nUsing it well")
+    for habit in USING_IT_WELL:
+        print(f"  {habit}")
     print("\nCommands, by the job they do (olivercode guide NAME says more about one)")
     for job, cmds in GROUPS:
         print(f"\n{job}")

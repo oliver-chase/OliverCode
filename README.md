@@ -64,6 +64,15 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 
 Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
 
+## Using it well
+
+- Work in one thread per topic, and start a fresh one when it grows long
+- Never ask a thread for status, open the status page or run `olivercode status`
+- Say what you want once and let the runner build it
+- Keep a story small and name its files
+- Never start a builder in a chat: `olivercode dispatch N` builds a board story without one
+- A long thread costs more on every message, because all of it is re-read
+
 ## Dispatch planning
 
 `olivercode dispatch --plan` reads each story's Files area, holds back stories that overlap and runs the rest in parallel, and sets the model by story size. A story with no Files area is refused until it gets one.

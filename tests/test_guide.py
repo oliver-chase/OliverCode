@@ -104,3 +104,16 @@ class TestReadmeListsEveryCommand(unittest.TestCase):
         self.assertTrue(bullets)
         for name in bullets:
             self.assertIn(name, _names(), f"docs/SETUP.md describes {name}, which olivercode --help does not list")
+
+
+class TestUsingItWell(unittest.TestCase):
+    def test_the_guide_lists_each_habit_in_a_section_between_the_first_steps_and_the_commands(self):
+        """#991: the guide and the README hold the same six habits, one line each, after the first steps and before the commands."""
+        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
+        order = [text.index(t) for t in ("First steps, in order", "Using it well", cmd_guide.USING_IT_WELL[0], "Commands, by the job")]
+        self.assertEqual(order, sorted(order))
+        for habit in cmd_guide.USING_IT_WELL:
+            self.assertIn(habit, text)
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        for habit in cmd_guide.USING_IT_WELL:
+            self.assertIn(habit.rstrip("."), readme)

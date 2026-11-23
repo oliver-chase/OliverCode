@@ -401,3 +401,65 @@ class TestSettingsRemove(unittest.TestCase):
             with self.assertRaises(ValueError):
                 claude_settings.remove(self.path)
             self.assertEqual(json.loads(self.path.read_text()), bad)
+
+
+hint = load_script("scripts/hooks/status_hint.py")
+DIGEST = """# Status digest
+Written 2026-11-23 13:00 UTC.
+Board: owner/repo: 3 open stories.
+
+## Open, 2 in priority order
+- #991 P1 The guide teaches efficient use
+- #979 P1 Stories build one at a time
+
+## Landed, the last five
+- #985 A new thread starts from the digest
+
+## Waits on the owner
+Nothing.
+"""
+
+
+class StatusHint(unittest.TestCase):
+    """#991: a status question is answered from the digest with no tool call, and any other message gets nothing."""
+
+    def setUp(self):
+        self.tmp = temp_dir(self)
+        self.digest = self.tmp / "status-digest.md"
+        self.digest.write_text(DIGEST, encoding="utf-8")
+
+    def test_a_status_question_gets_the_board_and_open_lines_with_the_path_and_no_landed_section(self):
+        for prompt in ("what's building right now?", "what is left on the board", "when will it finish?", "any status on the queue",
+                       "what's the status?", "status of the queue", "status?"):
+            text = hint.context(prompt, self.digest)
+            self.assertIn("Board: owner/repo: 3 open stories.", text, prompt)
+            self.assertIn("#991 P1", text, prompt)
+            self.assertIn(str(self.digest), text, prompt)
+            self.assertIn("no tool call", text, prompt)
+            self.assertNotIn("## Landed", text, prompt)
+
+    def test_any_other_message_gets_nothing(self):
+        for prompt in ("fix the parser bug in cmd_land", "what does the status code in cmd_land do", "", "Add a status field to the story schema",
+                       "fix the status handling in cmd_land", "the PR status is red", "when the hook is ready to commit, fix the parser"):
+            self.assertEqual("", hint.context(prompt, self.digest), prompt)
+
+    def test_a_message_from_another_session_gets_nothing(self):
+        prompt = "Another Claude session sent a message: what is building?"
+        self.assertEqual("", hint.context(prompt, self.digest))
+
+    def test_a_missing_digest_is_said_and_no_tool_call_is_implied(self):
+        text = hint.context("what's left?", self.tmp / "absent.md")
+        self.assertIn("No status digest is written yet", text)
+        self.assertIn("olivercode status digest", text)
+
+    def test_the_hook_adds_context_only_for_a_status_question_and_fails_open_on_bad_input(self):
+        script = str(REPO_ROOT / "scripts" / "hooks" / "status_hint.py")
+        env = dict(os.environ, OLIVERCODE_HOME=str(self.tmp))
+        (self.tmp / "status-digest.md").write_text(DIGEST, encoding="utf-8")
+        status = subprocess.run([sys.executable, script], input='{"prompt": "what is building?"}', capture_output=True, text=True, env=env)
+        self.assertEqual(0, status.returncode)
+        self.assertIn("additionalContext", status.stdout)
+        other = subprocess.run([sys.executable, script], input='{"prompt": "fix the parser bug"}', capture_output=True, text=True, env=env)
+        self.assertEqual((0, ""), (other.returncode, other.stdout))
+        bad = subprocess.run([sys.executable, script], input="not json", capture_output=True, text=True, env=env)
+        self.assertEqual(0, bad.returncode)

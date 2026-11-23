@@ -51,7 +51,7 @@ scripts/olivercode health
 
 `health` checks that every symlink resolves into this checkout. Keep the backups until everything is verified.
 
-The first `install` on a machine ends with a short introduction to how work runs and the three first steps: register your repos, run `health`, file your first story. A repeat install prints one line that points to `olivercode guide`, which opens with the same explanation as the README's "How work runs" section.
+The first `install` on a machine ends with a short introduction to how work runs, the three first steps and the "Using it well" habits: register your repos, run `health`, file your first story. A repeat install prints one line that points to `olivercode guide`, which opens with the same explanation as the README's "How work runs" section. A status question in a session is answered from the status digest by `status_hint.py`, so it costs no tool call; `install` adds that hook, and `health` fails until it is in place.
 
 Before the install step writes `permissions.allow`, run `scripts/olivercode install --show-allow` and show the user its output. Each line names one rule, whether it is already present, and what it permits. One yes from the user lets `install` write the missing ones beside their own rules, and `olivercode health` fails when any is missing later.
 

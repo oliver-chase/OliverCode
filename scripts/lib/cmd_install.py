@@ -15,6 +15,7 @@ from lib.local_config import claude_dir as _claude_dir
 from lib.local_config import design_file, voice_file
 
 from lib import claude_settings as _claude_settings
+from lib import cmd_guide
 from lib import queue_shim as _queue_shim
 from lib import repo_gates as _repo_gates
 from lib.skills_catalog import skill_dirs
@@ -40,7 +41,7 @@ def _backups(path: Path) -> list[Path]:
 
 INSTALL_RECORD = ".olivercode-install.json"
 
-# The first install's closing text: how work runs and the first steps, in 12 lines at most (#972).
+# The first install's closing text: how work runs, the first steps and the habits that keep it cheap, in 20 lines at most (#972, #991).
 INTRODUCTION = """How OliverCode works
   You work in one thread and say what you want. Each request becomes a story on the repo's board.
   `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless
@@ -51,6 +52,9 @@ First steps, in order
   1. Register your repos: olivercode discover --root <folder holding your repos> --register
   2. Check this machine: olivercode health
   3. File your first story: say what you want in Claude Code, and it becomes a story on the board.
+
+Using it well
+""" + "\n".join(f"  {habit}" for habit in cmd_guide.USING_IT_WELL) + """
 
 Run `olivercode guide` for the full overview."""
 

@@ -21,3 +21,4 @@ It applies to every reply and file, and skill messages and drafted documents go 
 - Before committing, run the repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `olivercode conform` finds stopped hooks, and `$OC/docs/GATES.md` lists the gates
 - A request that changes files is filed as a story and built and merged unasked, per `$OC/docs/RULES.md` ("The backlog"). The `audit` skill runs only when named. Read the rest of RULES.md only for OliverCode's own structure
+- A board story is built by the runner: when asked to build one by hand in a desktop chat, offer `olivercode dispatch N` instead
