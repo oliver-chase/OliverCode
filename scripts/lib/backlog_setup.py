@@ -4,7 +4,7 @@
 `boards_health`. The baseline itself lives once in `shared/kanban-baseline.json`, and the
 comparison lives once in `skills/backlog/scripts/check_kanban_baseline.py`, which this module imports.
 
-Every GitHub call goes through an injectable `Api`, so the unit tests run with a fake runner and no network.
+Every GitHub call goes through the injectable `Api` in `lib/board_api.py`, so the unit tests run with a fake runner and no network.
 
 Why the repair is safe: GitHub's `updateProjectV2Field` keeps an option's id and every item value on it when the
 option is sent with its `id`, and clears those values when it is sent without one. The command sends every
@@ -23,282 +23,58 @@ from pathlib import Path
 from lib.local_config import OC_ROOT  # noqa: E402
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 import check_kanban_baseline as kanban  # noqa: E402
-from lib import repo_gates  # noqa: E402
+from lib import board_api, repo_gates  # noqa: E402
+# The board's GraphQL side lives in board_api.py.
+from lib.board_api import (  # noqa: E402
+    FIELD_KEYS, Api, SetupError, count_problems, create_field, describe_plans, field_key,
+    gh_field_list, plan_board, read_board, read_fields, restore_values, snapshot_board,
+    update_field)
 
-COLORS = ["GRAY", "BLUE", "GREEN", "YELLOW", "ORANGE", "RED", "PINK", "PURPLE"]
-LANE_COLORS = {"backlog": "GRAY", "ready": "BLUE", "in progress": "YELLOW", "qa": "ORANGE", "complete": "GREEN"}
-# GitHub's default Status field ships Todo, In Progress and Done. These carry their items to the baseline lanes.
-DEFAULT_STATUS_MAP = {"todo": "Backlog", "done": "Complete"}
-FIELD_KEYS = {"status": "status", "priority": "priority", "size": "size", "work type": "workType", "area": "area"}
-BACKUP_DIR = Path("scratch") / "backlog-backups"
-BATCH = 25
 FIX = "olivercode backlog-setup {path} --apply"
+WORKFLOWS = (("Item closed", "set Status to Complete"), ("Auto-add to project", "set the filter to is:issue is:open"))
+WORKFLOW_URL = "https://github.com/users/{owner}/projects/{number}/workflows"
 
 
-class SetupError(Exception):
-    """A step that cannot continue. The message says what happened and what to do."""
+def workflow_steps(owner: str, number: int) -> list[str]:
+    """The two workflow toggles GitHub offers no API for, with the board's page and the clicks."""
+    return [f"Two board workflows need you, because GitHub has no API for them. Open {WORKFLOW_URL.format(owner=owner, number=number)}, "
+            "pick each workflow in the left list, set the value, save, then reload to check it is on:",
+            "  - Item closed: turn it on and " + WORKFLOWS[0][1],
+            "  - Auto-add to project: choose this repo, " + WORKFLOWS[1][1] + ", then turn it on"]
 
 
-def field_key(name: str) -> str:
-    key = FIELD_KEYS.get(name.lower())
-    if key:
-        return key
-    words = re.split(r"\W+", name.strip())
-    return words[0].lower() + "".join(w.title() for w in words[1:])
-
-
-def default_runner(args, stdin=None):
-    p = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True)
-    return p.returncode, p.stdout, p.stderr
-
-
-class Api:
-    """GraphQL through `gh api graphql`. `runner(args, stdin) -> (returncode, stdout, stderr)`."""
-
-    def __init__(self, runner=None):
-        self.runner = runner or default_runner
-
-    def graphql(self, query: str, **variables):
-        args = ["api", "graphql", "-f", f"query={query}"]
-        for name, value in variables.items():
-            if value is None:
-                continue
-            args += ["-F" if isinstance(value, int) and not isinstance(value, bool) else "-f", f"{name}={value}"]
-        code, out, err = self.runner(args, None)
-        try:
-            data = json.loads(out) if out.strip() else {}
-        except json.JSONDecodeError:
-            data = {}
-        if isinstance(data, dict) and data.get("errors"):
-            messages = "; ".join(e.get("message", str(e)) for e in data["errors"])
-            raise SetupError(f"GitHub rejected a request: {messages}")
-        if code != 0 or not isinstance(data, dict) or "data" not in data:
-            raise SetupError(f"gh api graphql failed: {(err or out).strip() or 'no output'}")
-        return data["data"]
-
-
-FIELDS_QUERY = """query($p:ID!){node(id:$p){... on ProjectV2{id title number
- owner{... on User{login} ... on Organization{login}}
- fields(first:100){nodes{__typename ... on ProjectV2FieldCommon{id name dataType}
- ... on ProjectV2SingleSelectField{options{id name color description}}}}}}}"""
-
-ITEMS_QUERY = """query($p:ID!,$c:String){node(id:$p){... on ProjectV2{items(first:100,after:$c){
- pageInfo{hasNextPage endCursor}
- nodes{id content{__typename ... on Issue{number title} ... on PullRequest{number title} ... on DraftIssue{title}}
- fieldValues(first:30){nodes{... on ProjectV2ItemFieldSingleSelectValue{optionId name field{... on ProjectV2FieldCommon{id name}}}}}}}}}}"""
-
-
-def read_fields(api: Api, project_id: str) -> dict:
-    node = api.graphql(FIELDS_QUERY, p=project_id).get("node")
-    if not node or not node.get("id"):
-        raise SetupError(f"Project {project_id} cannot be read. The backlog config names a Project that does not exist "
-                         "or that this account cannot open.")
-    fields = []
-    for f in node["fields"]["nodes"]:
-        if not f or "id" not in f:
-            continue
-        fields.append({"id": f["id"], "name": f["name"], "type": f["__typename"], "options": f.get("options") or []})
-    return {"id": node["id"], "title": node["title"], "number": node["number"],
-            "owner": (node.get("owner") or {}).get("login", ""), "fields": fields}
-
-
-def read_items(api: Api, project_id: str) -> list[dict]:
-    items, cursor = [], None
-    while True:
-        page = api.graphql(ITEMS_QUERY, p=project_id, c=cursor)["node"]["items"]
-        for n in page["nodes"]:
-            content = n.get("content") or {}
-            values = {}
-            for v in (n.get("fieldValues") or {}).get("nodes", []):
-                if v and v.get("field"):
-                    values[v["field"]["id"]] = {"optionId": v["optionId"], "name": v["name"]}
-            items.append({"id": n["id"], "number": content.get("number"), "title": content.get("title", ""),
-                          "values": values})
-        if not page["pageInfo"]["hasNextPage"]:
-            return items
-        cursor = page["pageInfo"]["endCursor"]
-
-
-def read_board(api: Api, project_id: str) -> dict:
-    board = read_fields(api, project_id)
-    board["items"] = read_items(api, project_id)
-    return board
-
-
-def gh_field_list(board: dict) -> dict:
-    """The board's fields in the shape `gh project field-list --format json` returns, for the baseline checker."""
-    return {"fields": [{"name": f["name"], "type": f["type"], "options": [{"name": o["name"]} for o in f["options"]]}
-                       for f in board["fields"]]}
-
-
-def find_field(board: dict, name: str) -> dict | None:
-    return next((f for f in board["fields"] if f["name"].lower() == name.lower()), None)
-
-
-def plan_options(existing: list[dict], desired: list[str], mapping: dict[str, str]) -> dict:
-    """Decide the final option list of one single-select field.
-
-    Returns {final, added, renamed, dropped, remap}. `final` keeps the id of every option it
-    carries over, which is what keeps item values attached. An existing option the baseline does not name is
-    renamed or merged only for Status, through GitHub's Todo and Done defaults, and otherwise stays and is
-    reported by the baseline check."""
-    names = {d.lower(): d for d in desired}
-    claimed = {o["name"].lower(): o for o in existing if o["name"].lower() in names}
-    renamed, dropped, remap, extras = [], [], {}, []
-    for o in existing:
-        if o["name"].lower() in names:
-            continue
-        tl = (mapping.get(o["name"].lower()) or "").lower()
-        if tl not in names:
-            extras.append(o)
-            continue
-        remap[o["name"]] = names[tl]
-        if tl in claimed:
-            dropped.append(o["name"])
-        else:
-            claimed[tl] = o
-            renamed.append((o["name"], names[tl]))
-    final, added = [], []
-    for i, d in enumerate(desired):
-        o = claimed.get(d.lower())
-        if o:
-            final.append({"id": o["id"], "name": d, "color": o.get("color") or "GRAY", "description": o.get("description") or ""})
-        else:
-            added.append(d)
-            final.append({"name": d, "color": LANE_COLORS.get(d.lower(), COLORS[i % len(COLORS)]), "description": ""})
-    final += [{"id": o["id"], "name": o["name"], "color": o.get("color") or "GRAY", "description": o.get("description") or ""}
-              for o in extras]
-    return {"final": final, "added": added, "renamed": renamed, "dropped": dropped, "remap": remap}
-
-
-def plan_board(board: dict | None, baseline: dict, config: dict | None) -> list[dict]:
-    """One entry per baseline field: {name, key, action: create|update|ok, plan, field}."""
-    specs = [("Status", baseline["lanes"])]
-    for name, wanted in baseline["fields"].items():
-        specs.append((name, list(((config or {}).get("fields", {}).get("area") or {}).get("options") or ["General"]) if wanted == "config" else wanted))
-    plans = []
-    for name, desired in specs:
-        field = find_field(board, name) if board else None
-        key = field_key(name)
-        if field is None or field["type"] != kanban.SINGLE_SELECT:
-            plans.append({"name": name, "key": key, "action": "create", "field": None,
-                          "plan": plan_options([], desired, {})})
-            continue
-        field_map = DEFAULT_STATUS_MAP if key == "status" else {}
-        plan = plan_options(field["options"], desired, field_map)
-        changed = plan["added"] or plan["renamed"] or plan["dropped"]
-        plans.append({"name": field["name"], "key": key, "action": "update" if changed else "ok",
-                      "field": field, "plan": plan})
-    return plans
-
-
-def describe_plans(plans: list[dict]) -> list[str]:
-    lines = []
-    for p in plans:
-        pl = p["plan"]
-        if p["action"] == "create":
-            lines.append(f"create field {p['name']} with options {', '.join(o['name'] for o in pl['final'])}")
-        elif p["action"] == "update":
-            bits = ["add " + o for o in pl["added"]] + [f"rename {a} to {b}" for a, b in pl["renamed"]]
-            bits += [f"merge {d} into {pl['remap'][d]}" for d in pl["dropped"]]
-            lines.append(f"update field {p['name']}: " + "; ".join(bits))
-    return lines
-
-
-def snapshot_board(board: dict, project: dict, taken: str) -> dict:
-    keys = {f["id"]: field_key(f["name"]) for f in board["fields"]
-            if f["type"] == kanban.SINGLE_SELECT and field_key(f["name"]) in set(FIELD_KEYS.values())}
-    items = [{"id": it["id"], "number": it["number"], "title": it["title"],
-              "values": {keys[fid]: v for fid, v in it["values"].items() if fid in keys}} for it in board["items"]]
-    counts: dict[str, dict[str, int]] = {}
-    for it in items:
-        for key, v in it["values"].items():
-            by_name = counts.setdefault(key, {})
-            by_name[v["name"]] = by_name.get(v["name"], 0) + 1
-    return {"taken": taken, "project": project, "itemCount": len(items), "counts": counts, "items": items}
+def workflow_problems(target: Path, api: Api) -> list[str]:
+    """Names each readable workflow that is off on the repo's board. An unreadable board or workflow list reports nothing."""
+    slug = origin_owner_name(target)
+    try:
+        config = load_config(config_path(target))
+    except SetupError:
+        return []
+    if slug is None or config is None:
+        return []
+    state = board_api.read_workflows(api, config["projectId"])
+    if not state:
+        return []
+    by_lower = {k.lower(): v for k, v in state.items()}
+    off = [name for name, _ in WORKFLOWS if by_lower.get(name.lower()) is False]
+    if not off:
+        return []
+    try:
+        number = read_fields(api, config["projectId"])["number"]
+    except SetupError:
+        return []
+    return [f"the board {slug[0]}/{slug[1]} has the workflow '{name}' off. Turn it on at "
+            f"{WORKFLOW_URL.format(owner=slug[0], number=number)}" for name in off]
 
 
 def write_snapshot(snapshot: dict, target: Path, stamp: str) -> Path:
-    path = target / BACKUP_DIR / f"backlog-snapshot-{stamp}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
+    # The git dir is never tracked, so a snapshot of item titles cannot be committed by accident.
+    found = subprocess.run(["git", "-C", str(target), "rev-parse", "--absolute-git-dir"], capture_output=True, text=True)
+    if found.returncode != 0 or not found.stdout.strip():
+        raise SetupError(f"{target} has no git dir to keep the board snapshot in. Run git init there first.")
+    path = Path(found.stdout.strip()) / "backlog-backups" / f"backlog-snapshot-{stamp}.json"
+    write_config(path, snapshot)
     return path
-
-
-def current_values(board: dict) -> dict[str, dict[str, str]]:
-    keys = {f["id"]: field_key(f["name"]) for f in board["fields"] if f["type"] == kanban.SINGLE_SELECT}
-    return {it["id"]: {keys[fid]: v["name"] for fid, v in it["values"].items() if fid in keys} for it in board["items"]}
-
-
-def restore_values(api: Api, board: dict, snapshot: dict, remap: dict[str, dict[str, str]]) -> int:
-    """Set back every tracked value that differs from the snapshot (after the remap). Returns how many were set."""
-    now = current_values(board)
-    fields = {field_key(f["name"]): f for f in board["fields"] if f["type"] == kanban.SINGLE_SELECT}
-    todo = []
-    for it in snapshot["items"]:
-        if it["id"] not in now:
-            continue
-        for key, v in it["values"].items():
-            want = remap.get(key, {}).get(v["name"], v["name"])
-            if (now[it["id"]].get(key) or "").lower() == want.lower() or key not in fields:
-                continue
-            option = next((o for o in fields[key]["options"] if o["name"].lower() == want.lower()), None)
-            if option is None:
-                raise SetupError(f"Cannot restore {key} {want} on {it['title'] or it['id']}: the option no longer exists. "
-                                 "The snapshot file holds every original value.")
-            todo.append((it["id"], fields[key]["id"], option["id"]))
-    for start in range(0, len(todo), BATCH):
-        chunk = todo[start:start + BATCH]
-        body = " ".join(
-            f'm{i}: updateProjectV2ItemFieldValue(input:{{projectId:{json.dumps(board["id"])},itemId:{json.dumps(item)},'
-            f'fieldId:{json.dumps(field)},value:{{singleSelectOptionId:{json.dumps(opt)}}}}}){{projectV2Item{{id}}}}'
-            for i, (item, field, opt) in enumerate(chunk))
-        api.graphql("mutation{" + body + "}")
-    return len(todo)
-
-
-def count_problems(board: dict, snapshot: dict, remap: dict[str, dict[str, str]]) -> list[str]:
-    """Per-option counts after the change against the snapshot's counts, carried through the remap."""
-    expected: dict[str, dict[str, int]] = {}
-    for key, counts in snapshot["counts"].items():
-        for name, n in counts.items():
-            target = remap.get(key, {}).get(name, name).lower()
-            expected.setdefault(key, {})
-            expected[key][target] = expected[key].get(target, 0) + n
-    ids = {it["id"] for it in snapshot["items"]}
-    now = current_values(board)
-    actual: dict[str, dict[str, int]] = {}
-    for item_id, values in now.items():
-        if item_id not in ids:
-            continue
-        for key, name in values.items():
-            if key in expected:
-                actual.setdefault(key, {})
-                actual[key][name.lower()] = actual[key].get(name.lower(), 0) + 1
-    problems = []
-    for key, counts in expected.items():
-        for name in sorted(set(counts) | set(actual.get(key, {}))):
-            if counts.get(name, 0) != actual.get(key, {}).get(name, 0):
-                problems.append(f"{key} {name}: snapshot {counts.get(name, 0)}, board {actual.get(key, {}).get(name, 0)}")
-    return problems
-
-
-def _option_literal(o: dict) -> str:
-    color = o.get("color") if o.get("color") in COLORS else "GRAY"
-    parts = ([f"id:{json.dumps(o['id'])}"] if o.get("id") else [])
-    parts += [f"name:{json.dumps(o['name'])}", f"color:{color}", f"description:{json.dumps(o.get('description') or '')}"]
-    return "{" + ",".join(parts) + "}"
-
-
-def update_field(api: Api, field_id: str, options: list[dict]) -> None:
-    api.graphql("mutation{updateProjectV2Field(input:{fieldId:%s,singleSelectOptions:[%s]}){projectV2Field{"
-                "... on ProjectV2SingleSelectField{id}}}}" % (json.dumps(field_id), ",".join(_option_literal(o) for o in options)))
-
-
-def create_field(api: Api, project_id: str, name: str, options: list[dict]) -> None:
-    api.graphql("mutation{createProjectV2Field(input:{projectId:%s,dataType:SINGLE_SELECT,name:%s,singleSelectOptions:[%s]}){"
-                "projectV2Field{... on ProjectV2SingleSelectField{id}}}}"
-                % (json.dumps(project_id), json.dumps(name), ",".join(_option_literal({**o, "id": None}) for o in options)))
 
 
 def origin_owner_name(target: Path) -> tuple[str, str] | None:
@@ -320,7 +96,7 @@ def config_path(target: Path) -> Path:
             if (target / name).is_file():
                 return target / name
         if names:
-            return target / next((n for n in names if "/" in n), names[0])
+            return target / next((n for n in names if "/" in n), "docs/backlog-config.json")
     return target / "docs" / "backlog-config.json"
 
 
@@ -328,7 +104,12 @@ def load_config(path: Path) -> dict | None:
     """The repo's config, or None when it is absent or still the example's placeholders."""
     if not path.is_file():
         return None
-    config = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        raise SetupError(f"{path.name} cannot be read as JSON. Fix the file or delete it, then run backlog-setup again.")
+    if not isinstance(config, dict) or not (config.get("repoOwner") and config.get("repoName")):
+        raise SetupError(f"{path.name} names no repoOwner and repoName. Copy shared/backlog-config.example.json over it.")
     text = json.dumps(config)
     if "your-github-org-or-user" in text or '"PVT_..."' in text or '"..."' in text or not config.get("projectId"):
         return None
@@ -380,7 +161,7 @@ def hooks_dir_for(target: Path) -> tuple[Path, bool]:
 
 def commit_msg_problem(target: Path, oc_root: Path) -> str:
     """Why the repo's commit-msg hook would not run or differs from the template, or "" when it is right."""
-    template = oc_root / "core" / "templates" / "project" / "commit-msg"
+    template = repo_gates.hook_templates(oc_root) / "commit-msg"
     hooks, _ = hooks_dir_for(target)
     hook = hooks / "commit-msg"
     if not hook.is_file():
@@ -397,16 +178,16 @@ def deploy_hook(hooks_dir: Path, templates_dir: Path, name: str) -> None:
     dst.chmod(0o755)
 
 
-def run_setup(target: Path, apply: bool, api: Api, oc_root: Path = OC_ROOT, out=print, now: datetime.datetime | None = None) -> int:
+def run_setup(target: Path, apply: bool, api: Api, oc_root: Path = OC_ROOT, out=print) -> int:
     """Plan, and with `apply` carry out, one repo's board setup. Returns the exit status."""
     try:
-        return _run_setup(target, apply, api, oc_root, out, now)
+        return _run_setup(target, apply, api, oc_root, out)
     except SetupError as exc:
         out(f"backlog-setup stopped: {exc}")
         return 1
 
 
-def _run_setup(target, apply, api, oc_root, out, now) -> int:
+def _run_setup(target, apply, api, oc_root, out) -> int:
     target = Path(target).resolve()
     if not (target / ".git").exists():
         raise SetupError(f"{target} is not a git repository. Run git init and add an origin remote first.")
@@ -419,13 +200,17 @@ def _run_setup(target, apply, api, oc_root, out, now) -> int:
     cfg_path = config_path(target)
     rel_cfg = str(cfg_path.relative_to(target)) if cfg_path.is_relative_to(target) else str(cfg_path)
     config = load_config(cfg_path)
+    inherited = ""
     if config and f"{config['repoOwner']}/{config['repoName']}".lower() != f"{owner}/{repo}".lower():
-        raise SetupError(f"{rel_cfg} names {config['repoOwner']}/{config['repoName']}'s Project but this checkout's origin is "
-                         f"{owner}/{repo}. That is another repo's config, so nothing was read or written. Delete it or "
-                         "copy shared/backlog-config.example.json over it.")
-    stamp = (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+        inherited = f"{config['repoOwner']}/{config['repoName']}"
+        config = None
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     changes: list[str] = []
     out(f"backlog-setup {'--apply' if apply else '(dry run)'} for {owner}/{repo}")
+    if inherited:
+        out(f"{rel_cfg} is {inherited}'s config, inherited from the repo this checkout came from. It is never read, "
+            f"and {'it is replaced with' if apply else '--apply replaces it with'} {owner}/{repo}'s own.")
+        changes.append(f"replace {inherited}'s inherited {rel_cfg} with {owner}/{repo}'s own")
 
     # 1. The Project
     board = None
@@ -486,16 +271,28 @@ def _run_setup(target, apply, api, oc_root, out, now) -> int:
     elif not board:
         changes.append(f"write {rel_cfg} with the new Project's field and option IDs")
 
+    # 3b. Labels
+    try:
+        absent = board_api.missing_labels(api, f"{owner}/{repo}")
+    except SetupError:
+        absent = []
+    if absent:
+        changes.append("create the label" + ("s " if len(absent) > 1 else " ") + " and ".join(n for n, _, _ in absent))
+        if apply:
+            board_api.create_labels(api, f"{owner}/{repo}", absent)
+
     # 4. Hook
     hooks, unset = hooks_dir_for(target)
     if commit_msg_problem(target, oc_root):
         changes.append(f"install the story-reference commit-msg hook in {hooks}")
         if apply:
-            deploy_hook(hooks, oc_root / "core" / "templates" / "project", "commit-msg")
+            deploy_hook(hooks, repo_gates.hook_templates(oc_root), "commit-msg")
     if unset:
         changes.append("set core.hooksPath to .githooks")
         if apply:
-            subprocess.run(["git", "-C", str(target), "config", "core.hooksPath", ".githooks"], check=True)
+            done = subprocess.run(["git", "-C", str(target), "config", "core.hooksPath", ".githooks"], capture_output=True, text=True)
+            if done.returncode != 0:
+                raise SetupError(f"git could not set core.hooksPath: {done.stderr.strip()}. Run git -C {target} config core.hooksPath .githooks yourself.")
     # 5. Report
     verdict = 0
     if apply and board:
@@ -514,6 +311,9 @@ def _run_setup(target, apply, api, oc_root, out, now) -> int:
     else:
         out("Nothing to change. The repo is already set up.")
     out(kanban.NOT_VISIBLE)
+    if apply and board:
+        for line in workflow_steps(owner, board["number"]):
+            out(line)
     if not apply and changes:
         out(f"Next: run `olivercode backlog-setup {target} --apply` to make these changes.")
     return verdict
@@ -552,7 +352,10 @@ def board_status(target: Path, api: Api, oc_root: Path = OC_ROOT) -> tuple[str, 
     if slug is None:
         return "warn", ["board check skipped: the checkout has no origin remote, so there is no board to verify"]
     cfg_path = config_path(target)
-    config = load_config(cfg_path)
+    try:
+        config = load_config(cfg_path)
+    except SetupError as exc:
+        return "fail", [str(exc)]
     if config is None:
         return "fail", [f"no usable backlog config at {cfg_path.relative_to(target) if cfg_path.is_relative_to(target) else cfg_path}"]
     if f"{config['repoOwner']}/{config['repoName']}".lower() != f"{slug[0]}/{slug[1]}".lower():
@@ -578,7 +381,7 @@ def boards_health(repos: list[tuple[str, Path]], api: Api, oc_root: Path = OC_RO
         fix = FIX.format(path=path)
         status, problems = board_status(path, api, oc_root)
         hook = commit_msg_problem(path, oc_root) if check_hook else ""
-        optout = (path / ".githooks" / "commit-msg.optout").exists()
+        optout = (hooks_dir_for(path)[0] / "commit-msg.optout").exists()
         if status == "ok" and (not hook or optout):
             out(f"  [OK] {name}: board matches the baseline" + (", commit-msg hook present" if check_hook else ""))
             passed += 1
