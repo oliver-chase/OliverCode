@@ -17,7 +17,10 @@ from lib import cmd_cutlist, hook_fires  # noqa: E402
 class TestCutlist(unittest.TestCase):
     def setUp(self):
         self.home = temp_dir(self)
-        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_FAILURE_LOG": str(self.home / "failures.log")})
+        self.fleet = self.home / "fleet"
+        self.fleet.mkdir()
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_FAILURE_LOG": str(self.home / "failures.log"),
+                                               "OLIVERCODE_FLEET_REGISTRY": str(self.fleet / "repo-profiles.json")})
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -32,7 +35,7 @@ class TestCutlist(unittest.TestCase):
         (root / "scripts/hooks/wip_save.py").write_text("x\ny\n")
         (root / "docs").mkdir()
         (root / "docs/RULES.md").write_text("# Rules\n")
-        (root / "shared/owner-rule-gates.json").write_text(json.dumps([{"match": "push straight to main", "check": "core/hooks/pre-push.sh"}]))
+        (self.fleet / "owner-rule-gates.json").write_text(json.dumps([{"match": "push straight to main", "check": "core/hooks/pre-push.sh"}]))
         git(root, "add", "-A")
         git(root, "commit", "-qm", "Add the gates (#38)")
         return root
@@ -175,6 +178,11 @@ class TestJudgmentAndRepoCarriers(unittest.TestCase):
 
     def setUp(self):
         self.root = temp_dir(self) / "oc"
+        self.fleet = temp_dir(self) / "fleet"
+        self.fleet.mkdir()
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_FLEET_REGISTRY": str(self.fleet / "repo-profiles.json")})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         (self.root / "shared").mkdir(parents=True)
         (self.root / "skills" / "plan").mkdir(parents=True)
         (self.root / "skills" / "plan" / "SKILL.md").write_text("# Plan\nThe user approves, then every step runs.\n")
@@ -182,7 +190,7 @@ class TestJudgmentAndRepoCarriers(unittest.TestCase):
         self.memory.write_text("## Standing Rules\n\n- Approved plans run to the end\n")
 
     def gates(self, *entries):
-        (self.root / "shared" / "owner-rule-gates.json").write_text(json.dumps(list(entries)))
+        (self.fleet / "owner-rule-gates.json").write_text(json.dumps(list(entries)))
         return cmd_cutlist.owner_rules(self.memory, self.root)
 
     def test_a_judgment_entry_counts_when_the_skill_exists_and_states_the_rule(self):
@@ -202,7 +210,8 @@ class TestJudgmentAndRepoCarriers(unittest.TestCase):
         (self.root.parent / "fleet-app" / "owner-rules.json").write_text(json.dumps([{"id": "plans-run"}]))
         self.assertEqual("repo: fleet-app", self.gates(entry)[0][1])
 
-    def test_the_shipped_gates_name_only_judgment_skills_that_state_their_rule(self):
-        gates = json.loads((REPO_ROOT / "shared" / "owner-rule-gates.json").read_text(encoding="utf-8"))
-        for g in (g for g in gates if g["check"].startswith("judgment:")):
-            self.assertTrue(cmd_cutlist.carrier(g, REPO_ROOT), g["match"])
+    def test_the_engine_ships_no_owner_rule_gates(self):
+        self.assertFalse((REPO_ROOT / "shared" / "owner-rule-gates.json").exists())
+
+    def test_a_fleet_with_no_gates_file_lists_no_rules(self):
+        self.assertEqual([], cmd_cutlist.owner_rules(self.memory, self.root))

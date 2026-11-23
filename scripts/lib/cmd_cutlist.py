@@ -19,11 +19,16 @@ from pathlib import Path
 from lib import failure_log, hook_fires, limits
 from lib.claude_settings import MANAGED
 from lib.cli import COMMANDS
-from lib.local_config import OC_ROOT
+from lib.local_config import OC_ROOT, fleet_registry_path
 
 USAGE = "Usage: olivercode cutlist [--days N] [--memory USER.md] | --dupes"
 COMMAND_LOG = "commands.log"
-RULE_GATES = "shared/owner-rule-gates.json"
+RULE_GATES = "owner-rule-gates.json"  # the owner's rules live in the private fleet folder, never in this repo
+
+
+def rule_gates_file() -> Path:
+    """The owner-rule-gates.json beside the fleet registry."""
+    return fleet_registry_path().parent / RULE_GATES
 
 # Each guard file and the gate name it writes to the failure log. A guard missing here logs nothing.
 GUARD_LABELS = {
@@ -218,7 +223,7 @@ def owner_rules(memory: Path, root: Path) -> list[tuple[str, str]]:
     """(rule, the check that covers it or '') for each bullet under the memory file's rule and preference headings."""
     try:
         text = memory.read_text(encoding="utf-8")
-        gates = json.loads((root / RULE_GATES).read_text(encoding="utf-8"))
+        gates = json.loads(rule_gates_file().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     rules, section = [], ""

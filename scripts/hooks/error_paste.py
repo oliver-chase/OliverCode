@@ -21,20 +21,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import candidates, cmd_owner, failure_log, local_config, repo_state  # noqa: E402
 from lib import hook_fires  # noqa: E402
 
-EPIC_NUMBER = 722
 
 
-def _own_repo() -> str:
-    """The repo that holds this hook, named by its own backlog config so no owner identifier sits in the source."""
+def _own_config() -> dict:
+    """The backlog config of the repo that holds this hook, so no owner identifier or epic number sits in the source."""
     try:
-        cfg = local_config.backlog_config(Path(__file__).resolve().parent.parent.parent)
-        return f"{cfg['repoOwner']}/{cfg['repoName']}"
-    except (OSError, ValueError, KeyError):
-        return ""
+        return local_config.backlog_config(Path(__file__).resolve().parent.parent.parent)
+    except (OSError, ValueError):
+        return {}
 
 
-FALLBACK_REPO = _own_repo()
-EPIC = f"{FALLBACK_REPO}#{EPIC_NUMBER}" if FALLBACK_REPO else f"#{EPIC_NUMBER}"
+_CONFIG = _own_config()
+FALLBACK_REPO = f"{_CONFIG['repoOwner']}/{_CONFIG['repoName']}" if "repoOwner" in _CONFIG and "repoName" in _CONFIG else ""
+EPIC_NUMBER = _CONFIG.get("errorEpic")
+EPIC = (f"{FALLBACK_REPO}#{EPIC_NUMBER}" if FALLBACK_REPO else f"#{EPIC_NUMBER}") if EPIC_NUMBER else ""
 TRACEBACK_RE = re.compile(r"Traceback \(most recent call last\):\n(?:[ \t]+.*\n|\w.*\n)*?(?P<last>[A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt)\b[^\n]*)")
 UNREAD_RE = re.compile(r"^[^\n]*could not be read[^\n]*$", re.IGNORECASE | re.MULTILINE)
 SECRET_RE = re.compile(r"(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|(?:password|passwd|secret|token|api[_-]?key)\s*[=:]\s*\S{6,}|-----BEGIN [A-Z ]*PRIVATE KEY)", re.IGNORECASE)
@@ -61,7 +61,7 @@ def body(repo: str, sym: str, paste: str) -> str:
             "```gherkin\nFeature: A pasted error is fixed\n  Scenario: The error no longer occurs\n"
             "    Given the error pasted below\n    When the cause is diagnosed with the diagnosing-bugs loop and fixed\n"
             "    Then the failing step runs without that error\n    And a test covers the cause\n```\n\n"
-            f"Epic: {EPIC}\nPriority: P1. Size: S. Work type: Story.\n\n"
+            + (f"Epic: {EPIC}\n" if EPIC else "") + "Priority: P1. Size: S. Work type: Story.\n\n"
             "Existing coverage checked: the owner pasted the error, so the first step of the fix is a search of the repo and open issues for its symbol.\n\n"
             "Detail: run the `diagnosing-bugs` loop before changing code. Added by the error-paste hook from the owner's prompt, "
             "so the owner does not have to ask for it.\n\nPasted error:\n\n```\n" + paste + "\n```\n")

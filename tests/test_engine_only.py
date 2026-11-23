@@ -41,7 +41,7 @@ class StagedGate(unittest.TestCase):
         done = gate(repo)
         self.assertEqual(done.returncode, 1)
         self.assertIn("docs/stories/one.md", done.stdout)
-        self.assertIn(f"docs/note.md is names the fleet repo {FLEET_NAME}", done.stdout)
+        self.assertIn(f"docs/note.md is names a fleet repo", done.stdout)
         self.assertIn("olivercode-fleet", done.stdout)
 
     def test_a_staged_config_and_a_filled_registry_are_refused(self):

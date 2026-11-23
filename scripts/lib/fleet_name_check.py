@@ -51,7 +51,7 @@ def check_all(repo_root: Path) -> list[str]:
             match = pattern.search(line)
             if match:
                 failures.append(
-                    f"{rel}:{number} names another fleet repo ({match.group(1).lower()}); "
+                    f"{rel}:{number} names another fleet repo; "
                     "use a generic name or move the file out of the tracked tree"
                 )
     return failures

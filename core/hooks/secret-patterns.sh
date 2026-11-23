@@ -27,7 +27,7 @@ SECRET_PATTERNS=(
 # Exempt: a line marked "secret-scan: allow", and a hit
 # whose every matched value is a placeholder (EXAMPLE, placeholder, your_key, a run of x).
 SECRET_PLACEHOLDER='EXAMPLE|[Ee]xample|[Pp]laceholder|PLACEHOLDER|[Yy]our[_-]?([Aa]pi[_-]?)?([Kk]ey|[Tt]oken|[Ss]ecret)|YOUR_|(^|[^A-Za-z0-9])[xX]{8,}([^A-Za-z0-9]|$)'
-# A generic `key`-style hit whose value is a lowercase hyphenated slug (wedding-invite-wildflower-5x7) is a name, not a
+# A generic `key`-style hit whose value is a lowercase hyphenated slug (my-asset-name-5x7) is a name, not a
 # credential: real secrets carry mixed case or no hyphens, and every vendor shape above is matched by its own pattern.
 secret_not_slug() {
   local m v

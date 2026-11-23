@@ -131,9 +131,8 @@ class TestRenderGuard(unittest.TestCase):
 
     def test_a_render_command_is_rewritten_with_render(self):
         for command in ["ffmpeg -i in.mp4 out.mp4", "/opt/homebrew/bin/ffmpeg -y -i a.mp4 b.mp4",
-                        "python3 scripts/explainer_render.py --topic x", "python3 scripts/clip_tools.py rerender",
-                        "python3 scripts/clip_tools.py cut abc name:1-9", "python3 scripts/render_phrase.py batch",
-                        "python3 scripts/render_new.py --limit 3", "python3 scripts/map_render.py", "./scripts/dashboard_render.py"]:
+                        "python3 scripts/render_video.py batch", "python3 scripts/render_new.py --limit 3",
+                        "python3 scripts/page_render.py", "./scripts/dashboard_render.py"]:
             self.assertEqual(f"{RENDER} {command}", queue_guard.rewrite(command), command)
         self.assertEqual(f"cd /r && {RENDER} ffmpeg -i a b", queue_guard.rewrite("cd /r && ffmpeg -i a b"))
 
@@ -141,8 +140,7 @@ class TestRenderGuard(unittest.TestCase):
         self.assertEqual(f"{RENDER} ffmpeg -i a b", pretool.updated_input(bash("ffmpeg -i a b"))["command"])
 
     def test_a_non_render_or_already_queued_command_is_left_alone(self):
-        for command in ["ffprobe -i a.mp4", "echo ffmpeg", "ls && ffmpeg -i a b", "python3 scripts/clip_tools.py prep abc",
-                        "python3 scripts/clip_tools.py ledger", "python3 scripts/flow.py post", "cat render_phrase.py",
+        for command in ["ffprobe -i a.mp4", "echo ffmpeg", "ls && ffmpeg -i a b", "python3 scripts/flow.py post", "cat render_video.py",
                         "ffmpeg2 -x", "grep render scripts/x.py", f"{RENDER} ffmpeg -i a b",
                         "olivercode queue run --render -- ffmpeg -i a b"]:
             self.assertIsNone(queue_guard.rewrite(command), command)

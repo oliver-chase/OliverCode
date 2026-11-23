@@ -24,9 +24,9 @@ class TestOutsiders(Base):
         return [i["step"] for i in cmd_owner.items()]
 
     def test_another_author_is_queued_with_number_author_title_and_link(self):
-        self.run_check([item(720, "Mikeknab", "Add a thing", state="closed")])
+        self.run_check([item(720, "Outsider-a", "Add a thing", state="closed")])
         (step,) = self.steps()
-        for part in ("o/r#720", "Mikeknab", "Add a thing", "https://github.com/o/r/issues/720"):
+        for part in ("o/r#720", "Outsider-a", "Add a thing", "https://github.com/o/r/issues/720"):
             self.assertIn(part, step)
 
     def test_a_pull_request_by_another_author_is_queued(self):
@@ -38,11 +38,11 @@ class TestOutsiders(Base):
         self.assertEqual([], self.steps())
 
     def test_a_second_run_adds_nothing_even_after_the_owner_closed_the_line(self):
-        self.run_check([item(720, "mikeknab")])
-        self.run_check([item(720, "mikeknab")])
+        self.run_check([item(720, "outsider-a")])
+        self.run_check([item(720, "outsider-a")])
         self.assertEqual(1, len(self.steps()))
         cmd_owner.close(cmd_owner.items()[0]["id"])
-        self.run_check([item(720, "mikeknab")])
+        self.run_check([item(720, "outsider-a")])
         self.assertEqual(1, len(self.steps()))
 
     def test_no_allowed_authors_means_the_check_is_off(self):

@@ -62,10 +62,10 @@ class TestGate1Secrets(GateHarness):
         self.assertAllowed()
 
     def test_a_lowercase_slug_value_passes_and_a_real_looking_secret_beside_it_still_blocks(self):
-        self.stage("catalog.json", '{"key": "wedding-invite-wildflower-5x7", "name": "Wildflower"}\n')
+        self.stage("catalog.json", '{"key": "my-asset-name-5x7", "name": "Wildflower"}\n')
         self.assertAllowed()
         secret = "Ab3dE9fGh1" + "Jk5mNp7QrS2tUv4"  # mixed case, no hyphen: not a slug
-        self.stage("catalog2.json", '{"key": "wedding-invite-wildflower-5x7", "api_' + 'key": "' + secret + '"}\n')
+        self.stage("catalog2.json", '{"key": "my-asset-name-5x7", "api_' + 'key": "' + secret + '"}\n')
         out = self.assertBlocked("gate 1").stdout
         self.assertIn("BLOCKED: catalog2.json matches secret pattern", out)
 

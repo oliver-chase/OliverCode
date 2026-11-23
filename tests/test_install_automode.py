@@ -67,7 +67,6 @@ class TestAutoModeNamesTheCheckout(unittest.TestCase):
         rules = cs.automode_rules(Path("/work/OC"))
         text = " ".join(r for group in rules.values() for r in group)
         self.assertIn("/work/OC", text)
-        self.assertNotIn("~/Developer/Repos/OliverCode", text)
         self.assertNotIn("The owner runs OliverCode", text)
 
 

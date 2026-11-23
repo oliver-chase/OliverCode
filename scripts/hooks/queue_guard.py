@@ -34,14 +34,12 @@ QUEUED_COMMANDS = (
 )
 
 # Render commands wait in the one-slot render queue and run under nice (#524): ffmpeg (ffprobe is cheap and stays out), any
-# script named render*.py or *_render.py, explainer_render, and clip_tools cut, rerender or a render subcommand.
+# script named render*.py or *_render.py.
 _PATH = r"(?:[^\s;&|<>()$`'\"]*/)?"
 _PYTHON = rf"(?:{_PATH}python3?\s+)?"
 RENDER_HEAD = (
     rf"(?:{_PATH}ffmpeg"
-    rf"|{_PYTHON}{_PATH}[\w.-]*render[\w.-]*\.py"
-    rf"|{_PATH}explainer_render"
-    rf"|{_PYTHON}{_PATH}clip_tools(?:\.py)?\s+(?:cut|rerender|render\w*))"
+    rf"|{_PYTHON}{_PATH}[\w.-]*render[\w.-]*\.py)"
 )
 
 _CD = r"(?P<cd>cd\s+(?:\"[^\"]+\"|'[^']+'|[^\s;&|<>()$`]+)\s*&&\s*)?"

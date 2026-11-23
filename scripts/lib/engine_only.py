@@ -57,7 +57,7 @@ def personal_findings(root: Path, paths: list[str], staged: bool = False) -> lis
         elif rel == "shared/repo-profiles.json" and _filled_registry(_read(root, rel, staged)):
             why = "a filled-in fleet registry"
         elif pattern and rel not in SYNCED_GATES and (hit := pattern.search(rel) or pattern.search(_read(root, rel, staged))):
-            why = f"names the fleet repo {hit.group(1).lower()}"
+            why = "names a fleet repo"
         else:
             continue
         found.append(f"{rel} is {why}: {FIX}")

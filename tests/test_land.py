@@ -285,7 +285,6 @@ class TestLand(Base):
             code, out = self.land()
         self.assertEqual(0, code)
         self.assertIn("RESULT pushed", (home / "land" / "land-main-9.log").read_text())
-        self.assertNotIn("claude-501", out)
 
     def test_an_edited_main_checkout_is_left_alone_and_its_lag_is_printed(self):
         (self.main / "a.txt").write_text("local edit")

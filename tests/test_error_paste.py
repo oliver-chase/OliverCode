@@ -36,7 +36,7 @@ class TestErrorPaste(unittest.TestCase):
 
     def test_could_not_be_read_files_a_story_and_plain_prompts_or_secrets_do_not(self):
         home = temp_dir(self)
-        self.assertIn("candidate added", self.run_hook("the shop tab 'Etsy' could not be read", home))
+        self.assertIn("candidate added", self.run_hook("the tab 'Shop' could not be read", home))
         self.assertEqual("", self.run_hook("please add a button", temp_dir(self)))
         self.assertEqual("", self.run_hook(TRACE + "token=abcdef123456\n", temp_dir(self)))
 
