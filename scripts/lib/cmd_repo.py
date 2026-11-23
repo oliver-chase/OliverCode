@@ -379,7 +379,8 @@ def command_gh_limit(argv: list[str]) -> int:
         print(f"Queued. {gh_budget.enqueue(argv[2:])} gh command(s) wait for the GraphQL reset.")
         return 0
     if argv == ["replay"]:
-        print(gh_budget.replay())
+        from lib import cmd_ghreplay
+        print(cmd_ghreplay.run())
         return 0
     if argv in (["--schedule"], ["--unschedule"]):
         from lib import cmd_ghreplay

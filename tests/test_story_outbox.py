@@ -9,7 +9,7 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import gh_budget, story_outbox  # noqa: E402
+from lib import cmd_ghreplay, gh_budget, story_outbox  # noqa: E402
 
 
 class Runner:
@@ -112,6 +112,44 @@ class TestOutbox(unittest.TestCase):
         code, out = quiet(story_outbox.command_story, ["outbox", "add", "--repo", "acme/widget", "--title", "One", "--body", "x"], Runner())
         self.assertEqual(0, code)
         self.assertEqual(2, story_outbox.count())
+
+    def test_the_replay_job_sends_the_outbox_in_order_and_names_each_issue(self):
+        story_outbox.add("acme/widget", "One", "a")
+        story_outbox.add("acme/widget", "Two", "b")
+        runner = Runner()
+        report = cmd_ghreplay.run(runner)
+        self.assertEqual(["One", "Two"], [c[c.index("--title") + 1] for c in runner.calls])
+        self.assertEqual(0, story_outbox.count())
+        self.assertIn("Filed #701 in acme/widget: One", report)
+        self.assertIn("Filed #702 in acme/widget: Two", report)
+
+    def test_the_replay_job_sends_nothing_over_the_hourly_write_cap(self):
+        story_outbox.add("acme/widget", "One", "a")
+        with mock.patch.object(gh_budget, "WRITES_PER_HOUR", 1):
+            gh_budget.reserve_write()
+            runner = Runner()
+            report = cmd_ghreplay.run(runner)
+        self.assertEqual([], runner.calls)
+        self.assertEqual(1, story_outbox.count())
+        self.assertIn("1 story request(s) wait", report)
+
+    def test_the_replay_job_reports_a_missing_gh_and_keeps_the_queue(self):
+        story_outbox.add("acme/widget", "One", "a")
+
+        def missing(args):
+            raise FileNotFoundError("gh")
+        report = cmd_ghreplay.run(missing)
+        self.assertIn("Story outbox failed: gh", report)
+        self.assertEqual(1, story_outbox.count())
+
+    def test_the_replay_job_sends_nothing_during_a_graphql_hold(self):
+        story_outbox.add("acme/widget", "One", "a")
+        gh_budget.note_limit(who="test", resources=("graphql",))
+        runner = Runner()
+        report = cmd_ghreplay.run(runner)
+        self.assertEqual([], runner.calls)
+        self.assertEqual(1, story_outbox.count())
+        self.assertIn("1 story request(s) wait", report)
 
     def test_health_warns_while_requests_are_unfiled_and_passes_once_flushed(self):
         from lib.cmd_health import command_health

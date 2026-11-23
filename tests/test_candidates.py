@@ -134,7 +134,7 @@ class TestNoDirectFiling(unittest.TestCase):
 
     def test_a_creator_is_named_only_by_the_outbox_the_candidates_list_and_the_owner_commands(self):
         """Any mention of the issue creators, called or passed as a value, sits in a file the owner's commands reach."""
-        allowed = {"scripts/lib/story_outbox.py", "scripts/lib/candidates.py", "scripts/hooks/gh_guard.py", "scripts/olivercode", "scripts/lib/cli.py"}
+        allowed = {"scripts/lib/story_outbox.py", "scripts/lib/candidates.py", "scripts/lib/cmd_ghreplay.py", "scripts/hooks/gh_guard.py", "scripts/olivercode", "scripts/lib/cli.py"}
         mention = re.compile(r"story_outbox\.(add|flush|_run_gh|command_story)\b|story_outbox import|issue create|\"issue\",\s*\"create\"|createIssue")
         found = set()
         for path in (REPO_ROOT / "scripts").rglob("*.py"):
