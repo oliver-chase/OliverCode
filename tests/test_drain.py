@@ -107,19 +107,26 @@ class DrainCase(unittest.TestCase):
         self.assertIn("Drain done: 3 stories closed", out)
         self.assertEqual(code, 0)
 
-    def test_never_two_builders_on_the_same_files(self):
-        io = FakeIo([issue(1, "Files area: scripts/lib/cmd_drain.py"), issue(2, "Files area: scripts/lib/cmd_drain.py"), issue(3, "Files area: scripts/lib/cmd_land.py")], cap=3)
-        self.run_drain(io)
-        self.assertEqual(sorted(io.closed), [1, 2, 3])
-        for active in io.peak_overlap:
-            self.assertFalse({1, 2} <= active)
-
-    def test_a_folder_and_a_file_inside_it_overlap_through_the_one_rule(self):
-        io = FakeIo([issue(1, "Files area: scripts/lib"), issue(2, "Files area: scripts/lib/cmd_drain.py")], cap=2)
+    def test_two_stories_on_one_file_build_at_the_same_time(self):
+        """#1080: a shared file no longer holds a story back; the landing's rebase is the guard. The barrier only opens with both builders live."""
+        gate = threading.Barrier(2, timeout=5)
+        io = FakeIo([issue(1, "Files area: scripts/lib/cmd_install.py"), issue(2, "Files area: scripts/lib/cmd_install.py")], cap=4)
+        build = io.build
+        io.build = lambda i, wt, note: (gate.wait(), build(i, wt, note))[1]
         self.run_drain(io)
         self.assertEqual(sorted(io.closed), [1, 2])
-        for active in io.peak_overlap:
-            self.assertFalse({1, 2} <= active)
+
+    def test_a_rebase_conflict_restarts_the_builder_with_the_fix_named(self):
+        """#1080: the builder is told to rebase onto the default branch and keep both changes."""
+        io = FakeIo([issue(1)], cap=1)
+        notes, results = [], ["RESULT rebase-conflict", "RESULT pushed abc1234"]
+        build = io.build
+        io.build = lambda i, wt, note: (notes.append(note), build(i, wt, note))[1]
+        io.land = lambda wt, n: (io.on_main.add(n) or True, results.pop(0)) if results[0].endswith("abc1234") else (False, results.pop(0))
+        self.run_drain(io)
+        self.assertEqual([1], io.closed)
+        self.assertIn("rebase onto origin", notes[1])
+        self.assertIn("keep both", notes[1])
 
     def test_only_ready_sized_stories_with_a_files_area_are_built_and_each_skip_is_named_once(self):
         io = FakeIo([issue(1, status="Backlog"), issue(2, size=""), {**issue(3), "body": "Priority: P0"}, issue(4)], cap=4)

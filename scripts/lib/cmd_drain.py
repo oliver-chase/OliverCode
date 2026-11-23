@@ -313,6 +313,9 @@ def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
     Returns (landed, why or the blocker). A refused close comments the gate's message on the story and raises CloseRefused (#912)."""
     if io.commits(worktree) > 0:
         ok, why = io.land(worktree, n)
+        if not ok and "rebase-conflict" in why:  # another story landed on the same lines first, which sharing files allows (#1080)
+            return False, ("Landing hit a rebase conflict with work that landed meanwhile. In the worktree, run git fetch and git rebase onto origin's "
+                           "default branch, keep both changes where they conflict, run the story's tests, commit and stop.")
         if not ok:
             return False, f"Landing failed: {why}"
         if not io.landed(worktree, n):  # the story closes only on a commit that origin's default branch holds (#877)
@@ -466,17 +469,14 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
                     continue
                 todo.append(issue)
-            busy = [intake.files_area(i.get("body") or "") for i in running.values()]  # one overlap rule, shared with the planner (#1014)
             started = False
-            for issue in todo:
+            for issue in todo:  # stories that share a file build together; the landing's rebase onto the default branch is the guard (#1080)
                 if len(running) >= io.capacity():
                     break
-                areas = intake.files_area(issue.get("body") or "")
-                if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
+                if io.claimed(issue):
                     continue
                 io.claim(issue["number"])
                 running[pool.submit(work_story, io, issue, state)] = issue
-                busy.append(areas)
                 started = True
             io.beat([i["number"] for i in running.values()])
             if not running:
