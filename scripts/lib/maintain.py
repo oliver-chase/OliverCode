@@ -2,7 +2,7 @@
 
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
 a dangling activation link, prunes a worktree whose folder is gone, deletes merged local branches, downloads git files that iCloud evicted
-from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). A problem that is not safe to change on its own (hooks
+from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live (#997): a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
 that drifted, a repo inside a synced folder, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
 With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scripts/run-tests.sh and records the commit, exit code and test count for `olivercode health` (#977).
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
@@ -11,6 +11,7 @@ With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scri
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import getpass
 import io
 import json
@@ -20,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -486,11 +488,83 @@ def check_failure_candidates(fix: bool) -> list[Problem]:
     return []
 
 
+STATE_STEP = "state"
+OUTPUT_SUFFIXES = (".out", ".log", ".txt")
+RETIRED_OUTPUTS = ("burndown.json", "gap-sweep-state.json", "sweep-state.json", "work-map-state.json")  # written by removed jobs under names that differ from theirs
+PREFIX = "com.olivercode."
+LOG_QUIET_SECONDS = 3600  # a log written more recently than this may have a live writer, so it waits for a quieter run
+
+
+def _removed_outputs() -> set[str]:
+    """The file names a removed job wrote: its name with each output suffix, plus the RETIRED_OUTPUTS (#997)."""
+    from lib.cmd_install import REMOVED_JOBS
+    return {label[len(PREFIX):] + suffix for label in REMOVED_JOBS for suffix in OUTPUT_SUFFIXES} | set(RETIRED_OUTPUTS)
+
+
+def _free_lock(path: Path, remove: bool) -> bool:
+    """True when no process holds the flock on this lock file, so the process that made it is gone. With remove, the free file is
+    deleted while its lock is still held. A file another process holds, or one that cannot be read, is left alone."""
+    try:
+        with path.open("rb") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if remove:
+                path.unlink(missing_ok=True)
+            return True
+    except OSError:
+        return False
+
+
+def _cut_log(path: Path, cap: int) -> None:
+    """Keep the newest whole lines of a log within `cap` bytes. The file is rewritten in place, so a process that holds it open keeps its handle (#997)."""
+    with path.open("rb") as handle:
+        handle.seek(-(cap + 1), os.SEEK_END)  # one byte before the window says whether it starts on a line
+        window = handle.read()
+    kept = window[1:]
+    if window[:1] != b"\n":
+        kept = kept.split(b"\n", 1)[1] if b"\n" in kept else b""
+    path.write_bytes(kept)
+
+
+def _names(paths: list[Path]) -> str:
+    return ", ".join(p.name for p in paths[:4]) + (" and more" if len(paths) > 4 else "")
+
+
+def check_state(fix: bool, home: Path | None = None, limits: dict | None = None) -> list[Problem]:
+    """The OliverCode home keeps only what is live (#997). It reports each lock file no process holds, each output file of a removed job and
+    each log over `stateLogBytes` in docs/LIMITS.json, with its count. With --fix it removes the locks and outputs and cuts the logs. A lock a live
+    process holds is never touched."""
+    from lib.health_checks import state_limits
+    home = home or failure_log.home()
+    cap = (state_limits() if limits is None else limits)["stateLogBytes"]
+    found = []
+    locks = [p for p in sorted(home.glob("*.lock")) if _free_lock(p, remove=fix)]
+    if locks:
+        found.append(Problem(STATE_STEP, f"{len(locks)} lock file(s) that no process holds: {_names(locks)}", fixable=True,
+                             fixed=fix and not any(p.exists() for p in locks)))
+    dead = [home / name for name in sorted(_removed_outputs()) if (home / name).is_file()]
+    if dead:
+        if fix:
+            for path in dead:
+                path.unlink(missing_ok=True)
+        found.append(Problem(STATE_STEP, f"{len(dead)} output file(s) of removed jobs: {_names(dead)}", fixable=True,
+                             fixed=fix and not any(p.exists() for p in dead)))
+    logs = sorted(p for p in home.iterdir() if p.suffix in (".log", ".out") and p.is_file()) if home.is_dir() else []
+    quiet = [p for p in logs if time.time() - p.stat().st_mtime >= LOG_QUIET_SECONDS]  # a log still being written is cut by a later run
+    big = [p for p in quiet if cap and p.stat().st_size > cap and p not in dead]
+    if big:
+        if fix:
+            for path in big:
+                _cut_log(path, cap)
+        found.append(Problem(STATE_STEP, f"{len(big)} log(s) over {cap} bytes: {_names(big)}", fixable=True,
+                             fixed=fix and not any(p.stat().st_size > cap for p in big)))
+    return found
+
+
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
     fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's registry
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
-                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_candidates(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
+                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_candidates(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
     return problems

@@ -76,9 +76,9 @@ class TestWarning(Repo):
         commit(self.root, "Evidence (#2)")
         self.assertIn("120 tracked lines", self.run_cmd("check")[1])
 
-    def test_the_file_holds_one_number_and_no_raise_history(self):
+    def test_the_file_holds_the_ceilings_and_no_raise_history(self):
         data = json.loads((REPO_ROOT / limits.LIMITS_FILE).read_text(encoding="utf-8"))
-        self.assertEqual({"_comment", "limit"}, set(data))
+        self.assertEqual({"_comment", "limit", "stateEntries", "stateBytes", "stateLogBytes"}, set(data))
 
     def test_inbound_lists_each_line_that_names_a_document(self):
         with open(self.root / "README.md", "a", encoding="utf-8") as fh:

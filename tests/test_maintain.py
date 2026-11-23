@@ -1,6 +1,7 @@
 """olivercode maintain repairs what is safe, reports what is not, and writes both to the logs."""
 
 import contextlib
+import fcntl
 import io
 import json
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from _maintain_case import Base
-from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import failure_log, health_checks, hygiene, maintain, placement  # noqa: E402
@@ -339,6 +340,91 @@ class TestFailureCandidates(unittest.TestCase):
         item = candidates.items()[0]
         self.assertEqual(1, candidates.count())
         self.assertNotIn("acme-widget", item["title"] + item["body"])
+
+
+class TestStateFolder(Base):
+    LIMITS = {"stateEntries": 80, "stateBytes": 52428800, "stateLogBytes": 100}
+
+    def lock_held_by_a_live_process(self, name):
+        """Hold a lock with flock on an open handle, as a live process does, and return the handle to close."""
+        path = self.home / name
+        path.touch()
+        handle = path.open("rb")
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        self.addCleanup(handle.close)
+        return path
+
+    def test_a_lock_no_process_holds_is_removed_and_a_held_one_stays(self):
+        stale = self.home / "board-my-shop-1.lock"
+        stale.touch()
+        held = self.lock_held_by_a_live_process("board-my-shop-2.lock")
+        found = maintain.check_state(False, self.home, self.LIMITS)
+        self.assertEqual(["state"], [p.step for p in found])
+        self.assertIn("1 lock file(s)", found[0].text)
+        self.assertTrue(stale.exists())
+        found = maintain.check_state(True, self.home, self.LIMITS)
+        self.assertTrue(found[0].fixed)
+        self.assertFalse(stale.exists())
+        self.assertTrue(held.exists())
+
+    def test_output_of_a_removed_job_is_removed_and_a_live_output_stays(self):
+        dead = [self.home / "idle-sessions.out", self.home / "burndown.json", self.home / "work-map-state.json"]
+        for path in dead:
+            path.write_text("x")
+        live = self.home / "maintain.out"
+        live.write_text("x")
+        self.assertFalse(maintain.check_state(False, self.home, self.LIMITS)[0].fixed)
+        self.assertTrue(all(p.exists() for p in dead))
+        found = maintain.check_state(True, self.home, self.LIMITS)
+        self.assertIn("3 output file(s) of removed jobs", found[0].text)
+        self.assertTrue(found[0].fixed)
+        self.assertFalse(any(p.exists() for p in dead))
+        self.assertTrue(live.exists())
+
+    def test_a_log_over_its_limit_is_cut_to_its_newest_whole_lines(self):
+        log = self.home / "commands.log"
+        lines = [f"line {n:03d}\n" for n in range(40)]  # 9 bytes each, so 11 whole lines fit in 100 bytes
+        log.write_text("".join(lines))
+        os.utime(log, (1, 1))  # quiet for a long time, so a run may cut it
+        found = maintain.check_state(False, self.home, self.LIMITS)
+        self.assertIn("1 log(s) over 100 bytes", found[0].text)
+        found = maintain.check_state(True, self.home, self.LIMITS)
+        self.assertTrue(found[0].fixed)
+        self.assertEqual(lines[-11:], log.read_text().splitlines(keepends=True))
+
+    def test_a_log_written_within_the_last_hour_is_left_for_a_quieter_run(self):
+        log = self.home / "commands.log"
+        log.write_text("".join(f"line {n:03d}\n" for n in range(40)))
+        self.assertEqual([], maintain.check_state(True, self.home, self.LIMITS))
+        self.assertEqual(360, log.stat().st_size)
+
+    def test_a_clean_home_reports_nothing(self):
+        (self.home / "commands.log").write_text("short\n")
+        self.assertEqual([], maintain.check_state(True, self.home, self.LIMITS))
+
+    def test_health_fails_over_the_entry_limit_and_passes_under_it(self):
+        for n in range(3):
+            (self.home / f"entry-{n}").write_text("x")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            over = health_checks._check_state_folder(self.home, {**self.LIMITS, "stateEntries": 2})
+            under = health_checks._check_state_folder(self.home, self.LIMITS)
+        self.assertEqual((0, 1, 0), over)
+        self.assertEqual((1, 0, 0), under)
+        self.assertIn("[FAIL]", out.getvalue())
+        self.assertIn("maintain --fix", out.getvalue())
+
+    def test_the_health_command_runs_the_state_folder_check(self):
+        from lib import cmd_health
+        with mock.patch.object(cmd_health, "_check_state_folder", return_value=(0, 1, 0)) as check:
+            with mock.patch.object(cmd_health, "_claude_dir", lambda: self.home / ".claude"):
+                quiet(cmd_health.command_health)
+        check.assert_called_once_with()
+
+    def test_health_reads_its_limits_from_the_limits_file(self):
+        limits = health_checks.state_limits(REPO_ROOT)
+        self.assertEqual({"stateEntries", "stateBytes", "stateLogBytes"}, set(limits))
+        self.assertTrue(all(isinstance(v, int) for v in limits.values()))
 
 
 if __name__ == "__main__":

@@ -18,7 +18,8 @@ from lib import claude_settings as _claude_settings
 from lib import failure_log
 from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, gh_problem, python_version
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import design_file, fleet_registry_path
+from lib.limits import LIMITS_FILE
+from lib.local_config import OC_ROOT, design_file, fleet_registry_path
 
 from lib.skill_links import broken_links, link_states
 from lib.skills_catalog import skill_dirs
@@ -381,6 +382,52 @@ def _check_clean_clone_suite(record: Path | None = None, now: float | None = Non
         print(f"  [FAIL] the clean-clone suite last ran {age:.1f} days ago on commit {commit}; run `olivercode maintain --fix` or check the daily job")
         return 0, 1, 0
     print(f"  [OK] the clean-clone suite passed on commit {commit}: {data.get('tests', 0)} tests, {age:.1f} days ago")
+    return 1, 0, 0
+
+
+STATE_KEYS = ("stateEntries", "stateBytes", "stateLogBytes")
+MIB = 1024 * 1024
+
+
+def state_limits(root: Path | None = None) -> dict:
+    """The state folder's ceilings in docs/LIMITS.json (#997). A key the file lacks reads as None, which switches its check off."""
+    try:
+        data = json.loads(((root or OC_ROOT) / LIMITS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data = data if isinstance(data, dict) else {}
+    return {key: data.get(key) for key in STATE_KEYS}
+
+
+def folder_bytes(home: Path) -> int:
+    """The bytes under a folder, with links left out so a link to a large file elsewhere is not counted here."""
+    total = 0
+    for dirpath, _dirs, files in os.walk(home):
+        for name in files:
+            full = os.path.join(dirpath, name)
+            if not os.path.islink(full):
+                total += os.path.getsize(full)
+    return total
+
+
+def _check_state_folder(home: Path | None = None, limits: dict | None = None) -> tuple[int, int, int]:
+    """The OliverCode home holds no more entries or bytes than docs/LIMITS.json allows (#997). Over a limit it fails and names the
+    nightly job, `maintain --fix`, which clears the locks, dead output and oversized logs that grow the folder."""
+    print("\nState folder:")
+    home = home or failure_log.home()
+    limits = state_limits() if limits is None else limits
+    entries = len(list(home.iterdir())) if home.is_dir() else 0
+    size = folder_bytes(home)
+    text = f"{home} holds {entries} entries and {size / MIB:.1f} MB"
+    over = []
+    if limits["stateEntries"] is not None and entries > limits["stateEntries"]:
+        over.append(f"{entries} entries against a limit of {limits['stateEntries']}")
+    if limits["stateBytes"] is not None and size > limits["stateBytes"]:
+        over.append(f"{size / MIB:.1f} MB against a limit of {limits['stateBytes'] / MIB:.1f} MB")
+    if over:
+        print(f"  [FAIL] {text}, over the limit in docs/LIMITS.json: {'; '.join(over)}. Run `olivercode maintain --fix` to clear what is not live")
+        return 0, 1, 0
+    print(f"  [OK] {text}, within the limit in docs/LIMITS.json")
     return 1, 0, 0
 
 
