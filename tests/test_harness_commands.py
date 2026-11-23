@@ -1,23 +1,16 @@
 """The gate-block report, memory and version health, and the voice override."""
 
-import contextlib
-import io
 import json
 import os
+import subprocess
 import unittest
 from unittest import mock
 
 from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
+from _support import quiet as run
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import failure_log, health_checks, local_config  # noqa: E402
-
-
-def run(fn, *args):
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out):
-        code = fn(*args)
-    return code, out.getvalue()
 
 
 class Base(unittest.TestCase):
@@ -54,22 +47,20 @@ class TestReport(Base):
 
 
 class TestMemoryAndVersion(Base):
-    def make(self, text, budget=None):
+    def make(self, text):
         root = temp_dir(self)
         (root / ".claude-optimization" / "memory").mkdir(parents=True)
         (root / ".claude-optimization" / "memory" / "MEMORY.md").write_text(text)
-        (root / "docs").mkdir()
-        (root / "docs" / "BUDGET.json").write_text(json.dumps({"memoryWords": budget}))
         return root
 
     def test_memory_over_budget_fails_and_names_the_largest_file(self):
-        root = self.make("word " * 50, budget=10)
-        out = run(health_checks._check_memory, root)
+        root = self.make("word " * 50)
+        out = run(health_checks._check_memory, root, 10)
         self.assertEqual(out[0][1], 1)
         self.assertIn("MEMORY.md (50)", out[1])
 
     def test_a_stale_path_is_listed_and_nothing_is_deleted(self):
-        root = self.make("See `" + "scripts/" + "gone.py` for details.", budget=100)
+        root = self.make("See `" + "scripts/" + "gone.py` for details.")
         (root / "scripts").mkdir()
         (root / "scripts" / "here.py").write_text("")
         result, text = run(health_checks._check_memory, root)
@@ -77,26 +68,28 @@ class TestMemoryAndVersion(Base):
         self.assertEqual(result[2], 1)
         self.assertTrue((root / ".claude-optimization" / "memory" / "MEMORY.md").exists())
 
-    def test_a_fork_behind_upstream_sees_the_gap_and_missing_entries(self):
+    def test_a_checkout_behind_upstream_prints_the_count_and_the_log(self):
         up = temp_dir(self)
         scratch_repo(up, branch="main")
-        (up / "VERSION").write_text("0.2.0\n")
-        (up / "CHANGELOG.md").write_text("# Changelog\n\n## 0.2.0\n\nClosed #99.\n")
-        git(up, "add", "."); git(up, "commit", "-q", "-m", "x")
+        (up / "a.txt").write_text("a")
+        git(up, "add", "."); git(up, "commit", "-q", "-m", "first")
         fork = temp_dir(self)
-        scratch_repo(fork)
-        git(fork, "remote", "add", "upstream", str(up)); git(fork, "fetch", "-q", "upstream")
-        (fork / "VERSION").write_text("0.1.0\n")
-        (fork / "CHANGELOG.md").write_text("# Changelog\n")
-        result, text = run(health_checks._check_version, fork)
-        self.assertIn("0.1.0 differs from upstream 0.2.0", text)
-        self.assertIn("Closed #99.", text)
+        subprocess.run(["git", "clone", "-q", str(up), str(fork)], check=True)
+        git(fork, "remote", "rename", "origin", "upstream")
+        (up / "x.txt").write_text("x")
+        git(up, "add", "."); git(up, "commit", "-q", "-m", "Closed #99")
+        git(fork, "fetch", "-q", "upstream")
+        result, text = run(health_checks._check_commits_behind, fork)
+        self.assertIn("1 commit(s) behind upstream/main", text)
+        self.assertIn("Closed #99", text)
+        self.assertEqual(result, (0, 0, 1))
 
-    def test_a_fork_with_no_upstream_checks_nothing(self):
+    def test_a_level_checkout_is_ok_and_one_with_no_remote_checks_nothing(self):
         fork = temp_dir(self)
         scratch_repo(fork)
-        (fork / "VERSION").write_text("0.1.0\n")
-        self.assertEqual(run(health_checks._check_version, fork)[0], (0, 0, 0))
+        result, text = run(health_checks._check_commits_behind, fork)
+        self.assertEqual(result, (0, 0, 0))
+        self.assertIn("not counted", text)
 
 
 class TestVoiceOverride(Base):
@@ -111,7 +104,3 @@ class TestVoiceOverride(Base):
     def test_a_missing_owner_file_falls_back_to_the_shipped_voice(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_VOICE_FILE": str(self.home / "none.md")}):
             self.assertEqual(local_config.voice_file(), REPO_ROOT / "docs" / "VOICE.md")
-
-
-if __name__ == "__main__":
-    unittest.main()

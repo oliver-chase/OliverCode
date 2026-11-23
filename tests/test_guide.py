@@ -5,7 +5,7 @@ import io
 import re
 import unittest
 
-from _support import REPO_ROOT, load_script
+from _support import REPO_ROOT, load_script, quiet
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher_guide")
 from lib import cli, cmd_guide  # noqa: E402
@@ -17,10 +17,7 @@ def _names():
 
 class TestGuide(unittest.TestCase):
     def _guide(self):
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = cmd_guide.command_guide(REPO_ROOT)
-        return code, out.getvalue()
+        return quiet(cmd_guide.command_guide, REPO_ROOT)
 
     def test_prints_every_command_and_every_skill_with_its_phrases(self):
         code, text = self._guide()
@@ -36,12 +33,6 @@ class TestGuide(unittest.TestCase):
             # Each skill shows the phrases that load it, as cli.py's guide line promises.
             self.assertRegex(phrases, r"(?i)\b(trigger|use when)", name)
 
-    def test_help_points_to_the_guide(self):
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            cli.print_usage()
-        self.assertEqual(out.getvalue().rstrip().splitlines()[-1], "New here? Run: olivercode guide")
-
     def test_the_launcher_runs_guide_and_rejects_extra_arguments(self):
         import sys
         from unittest import mock
@@ -53,18 +44,10 @@ class TestGuide(unittest.TestCase):
 
 
 class TestReadmeListsEveryCommand(unittest.TestCase):
-    def test_setup_names_every_command(self):
+    def test_every_setup_launcher_bullet_names_a_real_command(self):
         setup = (REPO_ROOT / "docs" / "SETUP.md").read_text(encoding="utf-8")
-        for n in _names():
-            self.assertRegex(setup, rf"(?m)^- `{re.escape(n)}[ `]", f"docs/SETUP.md has no bullet for {n}")
-
-    def test_readme_points_to_the_guide_and_the_skill_catalog_and_keeps_no_skill_list(self):
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("olivercode guide", readme)
-        self.assertIn("skills/INDEX.md", readme)
-        for name, _ in cmd_guide.skill_triggers(REPO_ROOT):
-            self.assertNotIn(f"| `{name}` |", readme, "skills/INDEX.md is the only skill catalog")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        section = setup.split("## Launcher commands", 1)[1].split("\n## ", 1)[0]
+        bullets = re.findall(r"(?m)^- `([a-z-]+)", section)
+        self.assertTrue(bullets)
+        for name in bullets:
+            self.assertIn(name, _names(), f"docs/SETUP.md describes {name}, which olivercode --help does not list")

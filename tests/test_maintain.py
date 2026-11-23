@@ -1,7 +1,5 @@
 """olivercode maintain repairs what is safe, reports what is not, and writes both to the logs."""
 
-import contextlib
-import io
 import os
 import plistlib
 import subprocess
@@ -9,28 +7,48 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import git, git_env, load_script, scratch_repo, temp_dir
+from _maintain_case import Base
+from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import failure_log, hygiene, maintain, placement  # noqa: E402
 
 
-def quiet(fn, *a, **k):
-    with contextlib.redirect_stdout(io.StringIO()):
-        return fn(*a, **k)
+class TestRetiredJobs(Base):
+    def test_a_job_for_a_removed_command_is_reported_and_removed_by_fix(self):
+        agents = temp_dir(self)
+        plist = agents / f"com.olivercode.{maintain.RETIRED_JOBS[0]}.plist"
+        plist.write_text("x")
+        with mock.patch.object(maintain.subprocess, "run"):
+            self.assertEqual(["retiredjob"], [p.step for p in maintain.check_retired_jobs(False, agents)])
+            self.assertTrue(plist.exists())
+            self.assertTrue(maintain.check_retired_jobs(True, agents)[0].fixed)
+        self.assertFalse(plist.exists())
+        self.assertEqual([], maintain.check_retired_jobs(True, agents))
 
 
-class Base(unittest.TestCase):
-    def setUp(self):
-        self.home = temp_dir(self)
-        self.root = temp_dir(self)
-        self.claude = temp_dir(self)
-        for target, value in (
-            (os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_FAILURE_LOG": str(self.home / "failures.log")}),
-        ):
-            p = mock.patch.dict(target, value); p.start(); self.addCleanup(p.stop)
-        p = mock.patch.object(maintain, "claude_dir", return_value=self.claude); p.start(); self.addCleanup(p.stop)
-        self.cfg = placement.Config(root=self.root, worktrees=self.root / "_worktrees", archive=self.root / "_archive", watch=[], allow=[])
+class TestHooksPath(Base):
+    def repo(self):
+        repo = scratch_repo(self.root / "app")
+        (repo / ".githooks").mkdir()
+        (repo / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
+        (repo / ".githooks" / "pre-commit").chmod(0o755)
+        return repo
+
+    def test_an_absolute_hooks_path_is_reported_and_reset_by_fix(self):
+        repo = self.repo()
+        git(repo, "config", "core.hooksPath", str(repo / ".githooks"))
+        found = maintain.check_hooks_path(self.cfg, fix=False)
+        self.assertEqual(["hookspath"], [p.step for p in found])
+        self.assertFalse(found[0].fixed)
+        maintain.check_hooks_path(self.cfg, fix=True)
+        self.assertEqual(".githooks", git(repo, "config", "--get", "core.hooksPath").stdout.strip())
+
+    def test_the_relative_value_and_an_unset_path_report_nothing(self):
+        repo = self.repo()
+        self.assertEqual([], maintain.check_hooks_path(self.cfg, fix=True))
+        git(repo, "config", "core.hooksPath", ".githooks")
+        self.assertEqual([], maintain.check_hooks_path(self.cfg, fix=True))
 
 
 class TestLinks(Base):
@@ -80,6 +98,49 @@ class TestWorktrees(Base):
         self.make()
         self.assertFalse(maintain.check_worktrees(self.cfg, False)[0].fixed)
         self.assertEqual(len(maintain.check_worktrees(self.cfg, False)), 1)
+
+
+class TestBranches(Base):
+    def make(self):
+        repo = self.root / "app"
+        scratch_repo(repo)
+        (repo / "a.txt").write_text("a")
+        git(repo, "add", "."); git(repo, "commit", "-q", "-m", "x")
+        git(repo, "branch", "-M", "main")
+        git(repo, "branch", "done")  # at main's tip, so merged
+        git(repo, "checkout", "-q", "-b", "old")
+        (repo / "b.txt").write_text("b")
+        git(repo, "add", "."); git(repo, "commit", "-q", "-m", "y")
+        git(repo, "checkout", "-q", "main")
+        return repo
+
+    def test_a_merged_branch_is_listed_and_deleted_with_fix_and_an_unmerged_young_one_is_left(self):
+        repo = self.make()
+        found = maintain.check_branches(self.cfg, False)
+        self.assertEqual(["branches"], [p.step for p in found])
+        self.assertIn("done", found[0].text)
+        self.assertTrue(found[0].fixable)
+        fixed = maintain.check_branches(self.cfg, True)
+        self.assertTrue(fixed[0].fixed)
+        branches = git(repo, "branch", "--format=%(refname:short)").stdout.split()
+        self.assertEqual(["main", "old"], sorted(branches))
+
+    def test_an_unmerged_branch_older_than_a_day_with_no_worktree_is_reported_and_never_deleted(self):
+        repo = self.make()
+        git(repo, "branch", "-d", "done")
+        import time
+        found = maintain.check_branches(self.cfg, True, now=time.time() + 25 * 3600)
+        self.assertEqual(1, len(found))
+        self.assertIn("old", found[0].text)
+        self.assertFalse(found[0].fixable)
+        self.assertIn("old", git(repo, "branch", "--format=%(refname:short)").stdout.split())
+
+    def test_a_branch_a_worktree_has_checked_out_is_left_alone(self):
+        repo = self.make()
+        git(repo, "worktree", "add", "-q", str(temp_dir(self) / "wt"), "done")
+        import time
+        self.assertEqual([p for p in maintain.check_branches(self.cfg, True, now=time.time() + 25 * 3600) if "done" in p.text], [])
+        self.assertIn("done", git(repo, "branch", "--format=%(refname:short)").stdout.split())
 
 
 class TestIcloud(Base):
@@ -166,182 +227,6 @@ class TestCopies(Base):
         repo = self.make()
         (repo / "Chapter 2.txt").write_text("x")
         self.assertEqual(maintain.check_copies(self.cfg, False), [])
-
-
-class TestSlowRepo(Base):
-    def test_a_git_call_that_times_out_skips_the_repo_and_does_not_stop_the_run(self):
-        scratch_repo(self.root / "app")
-        slow = subprocess.TimeoutExpired(["git"], 60)
-        with mock.patch.object(hygiene.subprocess, "run", side_effect=slow):
-            self.assertEqual([], hygiene.stray_copies(self.root / "app"))
-            self.assertEqual([], maintain.check_copies(self.cfg, True))
-
-
-class TestSyncedRoot(Base):
-    def synced(self):
-        root = self.root / "Dropbox" / "Repos"
-        root.mkdir(parents=True)
-        repo = root / "app"
-        scratch_repo(repo)
-        (repo / "a.txt").write_text("a")
-        git(repo, "add", "."); git(repo, "commit", "-q", "-m", "x")
-        cfg = placement.Config(root=root, worktrees=root / "_worktrees", archive=root / "_archive", watch=[], allow=[])
-        return repo, cfg
-
-    def test_git_moves_out_of_the_sync_and_still_works(self):
-        repo, cfg = self.synced()
-        self.assertTrue(maintain.check_git_sync(cfg, False)[0].fixable)
-        self.assertFalse((repo / ".git").is_symlink())
-        self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
-        self.assertTrue((repo / ".git").is_symlink())
-        self.assertTrue((repo / ".git.nosync" / "HEAD").exists())
-        self.assertEqual(git(repo, "log", "--oneline").stdout.count("\n"), 1)
-        self.assertEqual(maintain.check_git_sync(cfg, True), [])
-
-    def test_the_git_folder_is_ignored_and_the_main_checkout_is_not_a_stray_worktree(self):
-        repo, cfg = self.synced()
-        maintain.check_git_sync(cfg, True)
-        self.assertNotIn(".git.nosync", git(repo, "status", "--short").stdout)
-        self.assertEqual(placement.linked_worktrees(cfg), [])
-
-    def test_a_repo_protected_before_the_ignore_rule_existed_is_repaired(self):
-        repo, cfg = self.synced()
-        maintain.check_git_sync(cfg, True)
-        (repo / ".git.nosync" / "info" / "exclude").write_text("")
-        self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
-        self.assertNotIn(".git.nosync", git(repo, "status", "--short").stdout)
-
-    def test_a_link_the_sync_renamed_is_restored(self):
-        repo, cfg = self.synced()
-        maintain.check_git_sync(cfg, True)
-        (repo / ".git").rename(repo / ".git 2")
-        self.assertTrue(maintain.check_git_sync(cfg, False)[0].fixable)
-        self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
-        self.assertTrue((repo / ".git").is_symlink())
-        self.assertFalse((repo / ".git 2").exists() or (repo / ".git 2").is_symlink())
-        self.assertEqual(git(repo, "log", "--oneline").stdout.count("\n"), 1)
-
-    def test_stray_git_folders_are_removed_or_archived_and_an_object_store_is_kept(self):
-        repo, cfg = self.synced()
-        maintain.check_git_sync(cfg, True)
-        (repo / ".git 2").mkdir()
-        (repo / ".git 3").mkdir()
-        (repo / ".git 3" / "index 7").write_text("old index")
-        (repo / ".git 4" / "objects").mkdir(parents=True)
-        self.assertTrue(maintain.check_git_sync(cfg, False)[0].fixable)
-        maintain.check_git_sync(cfg, True)
-        self.assertFalse((repo / ".git 2").exists())
-        self.assertFalse((repo / ".git 3").exists())
-        self.assertEqual("old index", (cfg.archive / "stray-copies" / "app" / ".git 3" / "index 7").read_text())
-        self.assertTrue((repo / ".git 4" / "objects").is_dir())
-        self.assertEqual(1, git(repo, "log", "--oneline").stdout.count("\n"))
-
-    def test_a_running_git_operation_leaves_the_repo_alone(self):
-        repo, cfg = self.synced()
-        (repo / ".git" / "index.lock").write_text("")
-        problem = maintain.check_git_sync(cfg, True)[0]
-        self.assertFalse(problem.fixed)
-        self.assertIn("running", problem.text)
-        self.assertTrue((repo / ".git").is_dir() and not (repo / ".git").is_symlink())
-
-    def test_a_plain_root_reports_nothing(self):
-        scratch_repo(self.root / "app")
-        self.assertEqual(maintain.check_git_sync(self.cfg, True), [])
-        self.assertFalse((self.root / "app" / ".git").is_symlink())
-
-    def test_documents_is_synced_when_icloud_mirrors_it(self):
-        home = temp_dir(self, resolve=True)
-        root = home / "Documents" / "Repos"; root.mkdir(parents=True)
-        self.assertEqual(hygiene.synced_marker(root, home), "")
-        (home / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / "Documents").mkdir(parents=True)
-        self.assertEqual(hygiene.synced_marker(root, home), "iCloud Desktop & Documents")
-
-
-class TestSynced(Base):
-    """On 2026-11-12 iCloud evicted every repo in ~/Documents/Repos and the posting jobs failed with "Resource deadlock avoided"."""
-
-    def setUp(self):
-        super().setUp()
-        self.home = temp_dir(self, resolve=True)
-        p = mock.patch.object(placement, "has_file_provider_xattr", return_value=False); p.start(); self.addCleanup(p.stop)
-
-    def cfg_at(self, root):
-        root.mkdir(parents=True, exist_ok=True)
-        return placement.Config(root=root, worktrees=root / "_worktrees", archive=root / "_archive", watch=[], allow=[])
-
-    def test_every_synced_place_flags_repo_root_with_the_move(self):
-        for place in placement.SYNCED_PLACES:
-            with self.subTest(place=place):
-                problems = maintain.check_synced(self.cfg_at(self.home / place / "Repos"), fleet=[], home=self.home)
-                self.assertEqual([p.step for p in problems], ["synced"])
-                self.assertIn(f"~/{place}", problems[0].text)
-                self.assertIn("~/Developer/Repos", problems[0].text)
-                self.assertFalse(problems[0].fixable)
-
-    def test_a_fleet_repo_in_documents_is_flagged_and_a_safe_one_is_not(self):
-        cfg = self.cfg_at(self.home / "Developer" / "Repos")
-        stray = self.home / "Documents" / "notes"; stray.mkdir(parents=True)
-        safe = cfg.root / "app"; safe.mkdir()
-        problems = maintain.check_synced(cfg, fleet=[stray, safe], home=self.home)
-        self.assertEqual(len(problems), 1)
-        self.assertIn("notes", problems[0].text)
-        self.assertIn("~/Developer/Repos/notes", problems[0].text)
-
-    def test_a_file_provider_folder_is_synced_wherever_it_sits(self):
-        root = self.home / "Elsewhere" / "Repos"
-        placement.has_file_provider_xattr.side_effect = lambda path: path == root.parent
-        self.assertEqual(placement.synced_place(root, self.home), str(root.parent))
-
-    def test_a_safe_root_reports_nothing_and_maintain_exits_one_on_a_synced_root(self):
-        self.assertEqual(maintain.check_synced(self.cfg_at(self.home / "Developer" / "Repos"), fleet=[], home=self.home), [])
-        cfg = self.cfg_at(self.home / "Documents" / "Repos")
-        with mock.patch("pathlib.Path.home", return_value=self.home):
-            problems = maintain.run(False, cfg, health=False)
-        self.assertIn("synced", [p.step for p in problems])
-        self.assertEqual(quiet(maintain.report, problems, False), 1)
-
-
-class TestStaleDocs(Base):
-    def commit(self, repo, when, *paths):
-        git(repo, "add", *paths)
-        subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "x"], env=git_env(GIT_COMMITTER_DATE=when), check=True, capture_output=True)
-
-    def test_a_doc_that_trails_the_file_it_names_is_flagged_and_a_fresh_one_is_not(self):
-        repo = self.root / "app"
-        scratch_repo(repo)
-        (repo / "docs").mkdir()
-        (repo / "docs" / "A.md").write_text("See `run.sh`.")
-        (repo / "docs" / "B.md").write_text("See `run.sh`.")
-        (repo / "run.sh").write_text("1")
-        self.commit(repo, "2026-01-01T00:00:00", "docs/A.md", "run.sh")
-        (repo / "run.sh").write_text("2")
-        self.commit(repo, "2026-06-01T00:00:00", "run.sh", "docs/B.md")
-        found = hygiene.stale_docs(repo)
-        self.assertEqual(len(found), 1)
-        self.assertIn("docs/A.md names run.sh", found[0])
-
-
-class TestReport(Base):
-    def test_an_unfixable_problem_is_logged_and_the_exit_code_is_one(self):
-        problems = [maintain.Problem("placement", "repo out of place: /x. move it")]
-        self.assertEqual(quiet(maintain.report, problems, True), 1)
-        self.assertEqual(failure_log.entries()[0][2], "maintain")
-        self.assertIn("NEEDS A DECISION", (self.home / "maintenance.log").read_text())
-
-    def test_everything_fixed_exits_zero_and_logs_no_failure(self):
-        self.assertEqual(quiet(maintain.report, [maintain.Problem("links", "x", True, True)], True), 0)
-        self.assertEqual(failure_log.entries(), [])
-
-    def test_usage_error_exits_one(self):
-        self.assertEqual(quiet(maintain.command_maintain, ["--bogus"]), 1)
-
-
-class TestSchedule(Base):
-    def test_the_job_runs_maintain_fix_daily(self):
-        job = maintain.plist()
-        self.assertEqual(job["ProgramArguments"][-2:], ["maintain", "--fix"])
-        self.assertIn("StartCalendarInterval", job)
-        plistlib.loads(plistlib.dumps(job))
 
 
 if __name__ == "__main__":

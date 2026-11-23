@@ -34,7 +34,3 @@ class HarnessIsolation(unittest.TestCase):
                     mock.patch.object(local_config, "REAL_LOCAL_FILE", real):
                 with self.assertRaises(RuntimeError):
                     local_config.load_local()
-
-
-if __name__ == "__main__":
-    unittest.main()

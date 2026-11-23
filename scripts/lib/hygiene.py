@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 COPY_NAME = re.compile(r"^(?P<stem>.+?) (?P<n>\d+)(?P<ext>\.[^./ ]+)?$")
-SYNC_MARKERS = ("Mobile Documents", "CloudStorage", "Dropbox", "OneDrive", "Google Drive", "GoogleDrive", "iCloud")
 STALE_DAYS = 60
 MAX_STALE_PER_REPO = 5
 BACKTICK = re.compile(r"`([^`\s]+)`")
@@ -115,23 +114,6 @@ def clear_copies(repo: Path, archive: Path, copies: list[Copy]) -> int:
         cleared += 1
     return cleared
 
-
-def synced_marker(root: Path, home: Path | None = None) -> str:
-    """Name of the sync service that mirrors `root`, or ''. macOS mirrors Desktop and Documents into iCloud Drive."""
-    home = home or Path.home()
-    resolved = str(root.resolve())
-    for marker in SYNC_MARKERS:
-        if marker in resolved:
-            return marker
-    cloud = home / "Library" / "Mobile Documents" / "com~apple~CloudDocs"
-    for folder in ("Desktop", "Documents"):
-        if (cloud / folder).is_dir():
-            try:
-                root.resolve().relative_to((home / folder).resolve())
-                return "iCloud Desktop & Documents"
-            except ValueError:
-                continue
-    return ""
 
 
 NOSYNC = ".git.nosync"

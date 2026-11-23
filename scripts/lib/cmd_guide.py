@@ -32,5 +32,5 @@ def command_guide(oc_root: Path) -> int:
     print("\nSkills: say the phrase to Claude Code and the skill loads")
     for name, phrases in skill_triggers(oc_root):
         print(f"  {name}\n      {phrases}")
-    print("\nMore: README.md, docs/SETUP.md (setup and commands), docs/CATALOG.md (every part)")
+    print("\nMore: README.md, docs/SETUP.md (setup and commands)")
     return 0

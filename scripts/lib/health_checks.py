@@ -1,38 +1,31 @@
-"""Health checks: vault skill links, voice copies, fleet locations, remotes and oversized files.
+"""Health checks: vault skill links, voice and design copies, placement drift, memory, version, Python and launcher.
 
-`cmd_health.py` imports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
+`health_topology.py` holds the fleet-location, remote and oversized-file checks, and this file re-exports them. `cmd_health.py` imports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
+from lib import claude_settings as _claude_settings
+from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, python_version
 from lib.local_config import claude_dir as _claude_dir
 
-from lib.repo_profiles import configured_location, iter_fleet
 from lib.skill_links import broken_links, link_states
 from lib.skills_catalog import skill_dirs
-
-# ── Topology checks ──────────────────────────────────────────────────────────
-# The gates cover CONTENT: no secret, no emoji, no archived copy in a commit.
-# The checks below cover TOPOLOGY -- where things live, whether they are still wired
-# together, whether they could be recovered. Each failure class is silent without a check:
-#   - two folder repos pointed at a GitHub repo that had been deleted, so
-#     neither was backed up anywhere and pushing was impossible
-#   - a 423MB blob sat in one of those histories, over GitHub's 100MB per-file
-#     hard limit, so that repo could never have pushed even with a live remote
-#   - a hand-made symlink that nothing would recreate on another machine (see
-#     `_check_vault_skill_links` for the skill layer)
-# All of them read outside the framework repo, so all of them degrade to WARN
-# when that context is absent, and a standalone clone stays HEALTHY.
-
-GITHUB_FILE_LIMIT = 100 * 1024 * 1024
+from lib.health_topology import _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve  # noqa: E401,F401
 
 
-def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
+def _check_vault_skill_links(skills_root: Path | None, oc_skills: Path | None = None) -> tuple[int, int, int]:
     """Every skill in this machine's skills folder must be symlinked into ~/.claude/skills/.
+
+    A skill under `oc_skills` (OliverCode's own folder) is left to the placement drift check,
+    so one bad link prints one FAIL.
 
     A skill with no matching symlink is invisible to the Skill tool and nothing says
     why. Walks nested skill folders, so a skill under any family subfolder is
@@ -59,6 +52,8 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
         if "SKILL.md" in filenames:
             declared.append(Path(dirpath))
             dirnames[:] = []
+    if oc_skills is not None:
+        declared = [d for d in declared if not d.resolve().is_relative_to(oc_skills.resolve())]
     declared.sort()
 
     if not declared:
@@ -88,7 +83,10 @@ def _check_vault_skill_links(skills_root: Path | None) -> tuple[int, int, int]:
 
 
 def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]:
-    """A self-contained suite's docs/VOICE.md must match this repo's docs/VOICE.md.
+    """A self-contained suite's docs/VOICE.md must start with this repo's docs/VOICE.md.
+
+    A suite may add its own sections after the shared text, and any edit to the shared
+    text fails.
 
     A suite ships its own copy so it runs without OliverCode, and nothing else notices
     when one copy is edited and the others are not. A suite is found from its skills
@@ -104,137 +102,38 @@ def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]
         print("  [INFO] ~/.claude/skills/ not present — not checked")
         return 0, 0, 0
     suites = set()
+    all_roots = set()
     for link in skills_dir.iterdir():
         if not (link.is_symlink() and link.exists()):
             continue
         skill = link.resolve()
         root = skill.parent.parent
-        if skill.parent.name == "skills" and root != oc_root.resolve() and (root / "docs" / "VOICE.md").is_file():
-            suites.add(root)
+        if skill.parent.name == "skills" and root != oc_root.resolve():
+            all_roots.add(root)
+            if (root / "docs" / "VOICE.md").is_file():
+                suites.add(root)
     if not suites:
         print("  [INFO] no installed suite ships docs/VOICE.md — not checked")
         return 0, 0, 0
     passed = failed = 0
     text = canonical.read_bytes()
     for root in sorted(suites):
-        if (root / "docs" / "VOICE.md").read_bytes() == text:
-            print(f"  [OK] {root.name}/docs/VOICE.md matches")
+        if (root / "docs" / "VOICE.md").read_bytes().startswith(text):
+            print(f"  [OK] {root.name}/docs/VOICE.md keeps the shared text")
             passed += 1
         else:
-            print(f"  [FAIL] {root.name}/docs/VOICE.md differs — copy it from {canonical}")
+            print(f"  [FAIL] {root.name}/docs/VOICE.md changes the shared text — copy it from {canonical} and keep its own sections after it")
             failed += 1
+    design = oc_root / "docs" / "DESIGN.md"
+    if design.is_file():
+        for root in sorted(r for r in all_roots if (r / "docs" / "DESIGN.md").is_file()):
+            if (root / "docs" / "DESIGN.md").read_bytes().startswith(design.read_bytes()):
+                print(f"  [OK] {root.name}/docs/DESIGN.md keeps the shared text")
+                passed += 1
+            else:
+                print(f"  [FAIL] {root.name}/docs/DESIGN.md changes the shared text — copy it from {design} and keep its own sections after it")
+                failed += 1
     return passed, failed, 0
-
-
-def _check_fleet_locations(profiles: dict, fleet_root: Path) -> tuple[int, int, int]:
-    """A registered repo that has a configured location but no repo there has moved, and that is a FAIL.
-
-    Without this a moved repo dropped out of every later check and the report still read healthy.
-    A repo with no configured location was never cloned on this machine, which is only a note.
-    """
-    print("\nFleet repo locations:")
-    passed = failed = 0
-    for name, profile, path in iter_fleet(profiles, fleet_root):
-        if (path / ".git").exists():
-            passed += 1
-            continue
-        where = configured_location(name, profile)
-        if where is None:
-            print(f"  [INFO] {name} is not cloned on this machine")
-            continue
-        print(f"  [FAIL] {name}: no repo at {path}. Update {where}")
-        failed += 1
-    return passed, failed, 0
-
-
-def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int]:
-    """Every repo's origin must actually exist on the remote host.
-
-    A deleted or renamed remote is the failure mode with no local symptom at all:
-    committing keeps working, `git status` stays clean, and the work is simply not
-    backed up anywhere.
-
-    Only a host that answers and DENIES the repo counts as a FAIL. Two cases that
-    look similar are deliberately warnings instead:
-      - a network error means unverifiable, so it only warns
-      - no origin at all is a local-only repo, which is a legitimate state; a fresh
-        `git init` scratch repo has no remote and is not a governance failure
-    """
-    print("\nRemote reachability:")
-    passed = failed = skipped = 0
-    for name, path in repos:
-        if not (path / ".git").exists():
-            continue
-        url = subprocess.run(["git", "-C", str(path), "remote", "get-url", "origin"],
-                             capture_output=True, text=True).stdout.strip()
-        if not url:
-            print(f"  [WARN] {name}: no origin remote — local only, nothing to verify")
-            skipped += 1
-            continue
-        try:
-            r = subprocess.run(["git", "-C", str(path), "ls-remote", "--exit-code", "-h", url],
-                               capture_output=True, text=True, timeout=25)
-        except subprocess.TimeoutExpired:
-            print(f"  [WARN] {name}: remote check timed out — unverified")
-            skipped += 1
-            continue
-        err = (r.stderr or "").lower()
-        if r.returncode == 0:
-            passed += 1
-        elif "not found" in err or "does not exist" in err or "repository not found" in err:
-            print(f"  [FAIL] {name}: origin does not exist ({url}) — this repo is not backed up")
-            failed += 1
-        elif "could not resolve host" in err or "network" in err or "timed out" in err:
-            print(f"  [WARN] {name}: host unreachable — unverified, so only a warning")
-            skipped += 1
-        else:
-            print(f"  [WARN] {name}: origin unverified ({err.strip().splitlines()[0][:70] if err.strip() else 'no detail'})")
-            skipped += 1
-    if passed and not failed:
-        print(f"  [OK] {passed} remote(s) reachable")
-    elif not (passed or failed or skipped):
-        print("  [WARN] no repo with a remote to check — skipping")
-        skipped = 1
-    return passed, failed, skipped
-
-
-def _check_oversized_tracked(repos: list[tuple[str, Path]]) -> tuple[int, int, int]:
-    """No tracked file may exceed GitHub's 100MB per-file hard limit.
-
-    Over that, the push is rejected outright -- and if the file is already in
-    history, no amount of deleting it from the tree fixes the push. Catching it at
-    the tracked-file stage is the only cheap moment.
-    """
-    print("\nTracked file sizes:")
-    passed = failed = skipped = 0
-    for name, path in repos:
-        if not (path / ".git").exists():
-            continue
-        r = subprocess.run(["git", "-C", str(path), "ls-files", "-z"],
-                           capture_output=True, text=True)
-        if r.returncode != 0:
-            skipped += 1
-            continue
-        over = []
-        for rel in filter(None, r.stdout.split("\0")):
-            f = path / rel
-            try:
-                if f.is_file() and f.stat().st_size > GITHUB_FILE_LIMIT:
-                    over.append((rel, f.stat().st_size))
-            except OSError:
-                continue
-        if over:
-            for rel, size in over[:5]:
-                print(f"  [FAIL] {name}: {rel} is {size // (1024*1024)}MB — GitHub rejects over 100MB")
-            failed += 1
-        else:
-            passed += 1
-    if passed and not failed:
-        print(f"  [OK] {passed} repo(s) under the limit")
-    elif not (passed or failed or skipped):
-        print("  [WARN] no git repo to check — skipping")
-        skipped = 1
-    return passed, failed, skipped
 
 
 def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
@@ -264,7 +163,7 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
             # OliverCode (fresh clone, fork, or scratch copy). That's a valid state, not
             # drift, because a stranger's fresh clone must report HEALTHY.
             print(f"  [WARN] this checkout is not the machine's installed OliverCode "
-                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/RULES.md")
+                  f"(no ~/.claude/skills/ symlinks point here) — to install, see docs/SETUP.md")
             skipped += 1
         elif missing:
             print(f"  [FAIL] not symlinked at ~/.claude/skills/: {', '.join(missing)}")
@@ -272,7 +171,7 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
         elif wrong_target:
             print(f"  [FAIL] symlinked but pointing elsewhere: {', '.join(wrong_target)}")
             failed += 1
-        else:
+        elif "broken" not in states.values():
             print(f"  [OK] all {len(oc_skill_names)} OliverCode skills correctly symlinked at ~/.claude/skills/")
             passed += 1
 
@@ -294,7 +193,7 @@ def _check_activation_links(claude_dir: Path) -> tuple[int, int, int]:
     A machine where install never ran has no links, which is a skip.
     """
     passed = failed = 0
-    links = [claude_dir / "CLAUDE.md", claude_dir / "VOICE.md"]
+    links = [claude_dir / "CLAUDE.md", claude_dir / "VOICE.md", claude_dir / "DESIGN.md"]
     skills = claude_dir / "skills"
     if skills.is_dir():
         links += sorted(p for p in skills.iterdir() if p.is_symlink())
@@ -315,12 +214,77 @@ def _check_activation_links(claude_dir: Path) -> tuple[int, int, int]:
     return passed, failed, 0
 
 
-def _check_memory(oc_root: Path) -> tuple[int, int, int]:
-    """The memory files stay within memoryWords in docs/BUDGET.json, and an entry that names a gone path is stale.
+MANAGED_SETTINGS = Path("/Library/Application Support/ClaudeCode/managed-settings.json")
+
+
+def _check_managed_hooks_only(managed_path: Path = MANAGED_SETTINGS) -> tuple[int, int, int]:
+    """Warn when managed settings set `allowManagedHooksOnly` and carry no OliverCode hooks.
+
+    Claude Code then ignores every hook in ~/.claude/settings.json, so the gates stop with no error.
+    A user cannot lift the lock, so this is a WARN that names the fix. No managed file, an unreadable
+    one or a lock that is off says nothing.
+    """
+    try:
+        managed = json.loads(managed_path.read_text())
+    except (OSError, ValueError):
+        return 0, 0, 0
+    if not isinstance(managed, dict) or managed.get("allowManagedHooksOnly") is not True:
+        return 0, 0, 0
+    lacking = _claude_settings.missing(managed_path)
+    print("\nManaged hooks lock:")
+    if not lacking:
+        print("  [OK] managed settings lock hooks and carry all OliverCode hooks")
+        return 1, 0, 0
+    print(f"  [WARN] {managed_path} sets allowManagedHooksOnly, so Claude Code ignores the OliverCode hooks in "
+          f"~/.claude/settings.json ({', '.join(lacking)} missing there). Add those hooks to the managed settings, "
+          "since a user cannot lift the lock")
+    return 0, 0, 1
+
+
+# The sources a worktree's commit hooks are built from. A worktree builds them from its own branch, so they are older than
+# origin/main once main changes any of these after the worktree branched (#902).
+GATE_SOURCES = (".githooks", "core/hooks", "scripts/build-hooks.py", "core/templates/project/pre-commit*",
+                "core/templates/project/pre-push", "core/templates/project/commit-msg")
+
+
+def stale_hook(path: Path, base: str = "origin/main") -> str:
+    """Why a worktree's commit hooks predate `base`, or "" when they are current or the worktree has no gates (#902)."""
+    from lib import repo_gates
+    if not repo_gates.has_gates(path):
+        return ""
+    fork = subprocess.run(["git", "-C", str(path), "merge-base", "HEAD", base], capture_output=True, text=True)
+    if fork.returncode or not fork.stdout.strip():
+        return ""
+    changed = subprocess.run(["git", "-C", str(path), "diff", "--name-only", fork.stdout.strip(), base, "--", *GATE_SOURCES],
+                             capture_output=True, text=True)
+    if changed.returncode or not changed.stdout.strip():
+        return ""
+    return f"{changed.stdout.split()[0]} changed on {base} after this worktree branched"
+
+
+def _check_worktree_hooks() -> tuple[int, int, int]:
+    """Fail each linked worktree whose commit hooks predate origin/main, and name it with its fix (#902). A worktree with no gates says nothing."""
+    from lib import placement
+    stale = [(wt.path, why) for wt in placement.worktrees() if (why := stale_hook(wt.path))]
+    print("\nWorktree hooks:")
+    if not stale:
+        print("  [OK] every worktree's commit hooks are current with origin/main")
+        return 1, 0, 0
+    for path, why in stale:
+        print(f"  [FAIL] {path} runs commit hooks older than origin/main ({why}). Rebase it with "
+              f"`git -C \"{path}\" rebase origin/main`, then run `olivercode worktree fix \"{path}\"`. "
+              "Once it is merged, `olivercode clean --apply` removes it")
+    return 0, len(stale), 0
+
+
+MEMORY_WORDS = 5000
+
+
+def _check_memory(oc_root: Path, budget: int = MEMORY_WORDS) -> tuple[int, int, int]:
+    """The memory files stay within 5,000 words, and an entry that names a gone path is stale.
 
     Stale entries are listed and never deleted: the owner decides what to drop.
     """
-    import json
     import re
 
     folder = oc_root / ".claude-optimization" / "memory"
@@ -330,8 +294,6 @@ def _check_memory(oc_root: Path) -> tuple[int, int, int]:
         return 0, 0, 0
     passed = failed = skipped = 0
     words = {f.name: len(f.read_text(encoding="utf-8").split()) for f in files}
-    budget_file = oc_root / "docs" / "BUDGET.json"
-    budget = json.loads(budget_file.read_text(encoding="utf-8")).get("memoryWords") if budget_file.is_file() else None
     total = sum(words.values())
     if budget and total > budget:
         failed += 1
@@ -339,7 +301,7 @@ def _check_memory(oc_root: Path) -> tuple[int, int, int]:
         print(f"  [FAIL] memory holds {total} words, over the {budget} budget by {total - budget}. Largest: {largest}")
     else:
         passed += 1
-        print(f"  [OK] memory holds {total} words" + (f" of {budget}" if budget else ""))
+        print(f"  [OK] memory holds {total} words" + f" of {budget}")
     stale = []
     for f in files:
         for ref in sorted(set(re.findall(r"`([~\w./-]+/[\w./-]+|[\w-]+\.(?:md|py|sh|json))`", f.read_text(encoding="utf-8")))):
@@ -358,31 +320,145 @@ def _check_memory(oc_root: Path) -> tuple[int, int, int]:
     return passed, failed, skipped
 
 
-def _check_version(oc_root: Path) -> tuple[int, int, int]:
-    """Compare VERSION with the `upstream` remote's, and print the changelog entries a fork is missing.
+def _check_commits_behind(oc_root: Path) -> tuple[int, int, int]:
+    """Print how many commits this checkout is behind upstream/main (origin/main on a clone) and their one-line log.
 
-    Reads only refs already fetched, so health stays offline. A checkout with no upstream remote has nothing to compare.
+    Reads only refs already fetched, so health stays offline. A checkout with neither remote ref has nothing to compare.
     """
-    version_file = oc_root / "VERSION"
-    if not version_file.is_file():
+    for ref in ("upstream/main", "origin/main"):
+        done = subprocess.run(["git", "-C", str(oc_root), "log", "--oneline", f"HEAD..{ref}"], capture_output=True, text=True)
+        if done.returncode == 0:
+            break
+    else:
+        print("  [INFO] no upstream/main or origin/main fetched, so the commits behind were not counted")
         return 0, 0, 0
-    local = version_file.read_text().strip()
-
-    def show(path: str) -> str | None:
-        out = subprocess.run(["git", "-C", str(oc_root), "show", f"upstream/main:{path}"], capture_output=True, text=True)
-        return out.stdout if out.returncode == 0 else None
-
-    upstream = show("VERSION")
-    if upstream is None:
-        print(f"  [INFO] version {local}; no upstream remote fetched, so no version gap was checked")
-        return 0, 0, 0
-    upstream = upstream.strip()
-    if upstream == local:
-        print(f"  [OK] version {local} matches upstream")
+    lines = done.stdout.splitlines()
+    if not lines:
+        print(f"  [OK] level with {ref}")
         return 1, 0, 0
-    have = set((oc_root / "CHANGELOG.md").read_text().splitlines()) if (oc_root / "CHANGELOG.md").is_file() else set()
-    missing = [l for l in (show("CHANGELOG.md") or "").splitlines() if l.strip() and l not in have]
-    print(f"  [WARN] version {local} differs from upstream {upstream}. Changelog entries you are missing:")
-    for line in missing[:15]:
+    print(f"  [WARN] {len(lines)} commit(s) behind {ref}. Run `olivercode update`. Newest first:")
+    for line in lines[:15]:
         print(f"         {line}")
     return 0, 0, 1
+
+
+def _check_python() -> tuple[int, int, int]:
+    """The `python3` a shell finds must meet MIN_PYTHON (lib/cli.py).
+
+    The hooks and gates run under that python3. An older one parses some of them and
+    fails on others, so a half-working harness looks like a healthy one.
+    """
+    print("\nPython:")
+    exe = shutil.which("python3")
+    found = python_version(exe) if exe else None
+    if found is None:
+        print(f"  [FAIL] python3 not found or not runnable. Need Python {MIN_PYTHON_TEXT} or newer: {PYTHON_FIX}")
+        return 0, 1, 0
+    if found < MIN_PYTHON:
+        print(f"  [FAIL] python3 is {found[0]}.{found[1]} ({exe}), and OliverCode needs {MIN_PYTHON_TEXT} or newer: {PYTHON_FIX}")
+        return 0, 1, 0
+    print(f"  [OK] python3 is {found[0]}.{found[1]}, at or above the minimum {MIN_PYTHON_TEXT}")
+    return 1, 0, 0
+
+
+def _gh_auth_status() -> subprocess.CompletedProcess:
+    return subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=30)
+
+
+def _check_gh_auth(runner=None) -> tuple[int, int, int]:
+    """`gh` must be signed in, because the backlog skill and the board checks all run through it.
+
+    Health must exit 0 on a clone with no local context (docs/SETUP.md), so a missing gh and a signed-out gh
+    are both warnings. The signed-out row names the fix. `runner` stands in for
+    `gh auth status` in tests, so no check here makes a live call.
+    """
+    print("\nGitHub CLI:")
+    try:
+        result = (runner or _gh_auth_status)()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        print("  [WARN] gh is not installed or did not answer, so its sign-in was not checked. Install it from https://cli.github.com")
+        return 0, 0, 1
+    if result.returncode == 0:
+        print("  [OK] gh is signed in")
+        return 1, 0, 0
+    print("  [WARN] gh is signed out, so the backlog and board checks cannot reach GitHub. Run: gh auth login")
+    return 0, 0, 1
+
+
+SLEEP_FIX = ("In System Settings, open Battery or Energy and turn off sleep on power adapter and display sleep (Never), "
+             "or run `caffeinate -dimsu` in a terminal before leaving")
+
+
+def sleep_warning(pmset_text: str) -> str | None:
+    """The one plain line naming the fix when `pmset -g` shows a sleep that would stop a session, else None.
+
+    Display sleep and system sleep both count when their timer is above 0 minutes. A system sleep that
+    powerd reports as prevented by caffeinate holds the machine awake, so it does not count.
+    """
+    stops = []
+    for line in pmset_text.splitlines():
+        parts = line.split()
+        if len(parts) < 2 or parts[0] not in ("sleep", "displaysleep") or not parts[1].isdigit() or int(parts[1]) == 0:
+            continue
+        if parts[0] == "sleep" and "caffeinate" in line:
+            continue
+        stops.append("display sleep" if parts[0] == "displaysleep" else "system sleep")
+    if not stops:
+        return None
+    return f"This Mac would stop work on {' and '.join(stops)}. {SLEEP_FIX}"
+
+
+def _pmset_text() -> str:
+    return subprocess.run(["pmset", "-g"], capture_output=True, text=True, timeout=15).stdout
+
+
+def _check_sleep(runner=None, system: str | None = None) -> tuple[int, int, int]:
+    """Warn, never fail, when a sleep setting would stop a session. Skips on a host that is not macOS.
+
+    `runner` stands in for `pmset -g` in tests, so no check here reads the live machine.
+    """
+    print("\nSleep settings:")
+    if (system or sys.platform) != "darwin":
+        print("  [INFO] not macOS, so sleep settings were not checked")
+        return 0, 0, 0
+    try:
+        text = (runner or _pmset_text)()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        print("  [WARN] pmset did not answer, so sleep settings were not checked")
+        return 0, 0, 1
+    warning = sleep_warning(text)
+    if warning:
+        print(f"  [WARN] {warning}")
+        return 0, 0, 1
+    print("  [OK] no sleep setting would stop work")
+    return 1, 0, 0
+
+
+def _check_launcher(oc_root: Path, launcher: Path | None = None) -> tuple[int, int, int]:
+    """A launcher at /usr/local/bin/olivercode (or the path in OLIVERCODE_LAUNCHER) must reach a launcher that exists.
+
+    After the checkout moves, the link or wrapper keeps pointing at the old folder and every
+    `olivercode` call dies with a bare "No such file". No launcher there is a skip.
+    """
+    launcher = launcher or Path(os.environ.get("OLIVERCODE_LAUNCHER") or "/usr/local/bin/olivercode")
+    print("\nLauncher:")
+    repair = f"ln -sf {oc_root / 'scripts' / 'olivercode'} {launcher}"
+    if not launcher.is_symlink() and not launcher.exists():
+        print(f"  [INFO] no launcher at {launcher} — not checked")
+        return 0, 0, 0
+    if launcher.is_symlink():
+        target = os.readlink(launcher)
+        if launcher.exists():
+            print(f"  [OK] {launcher} reaches {launcher.resolve()}")
+            return 1, 0, 0
+        print(f"  [FAIL] {launcher} points at {target}, which does not exist. Repair it with: {repair}")
+        return 0, 1, 0
+    import re
+    text = launcher.read_text(errors="ignore")
+    dead = [p for p in re.findall(r"\"(/[^\"$]+)\"|'(/[^'$]+)'|(?:=|exec \S+ )(/[^\s\"'$]+)", text)
+            for p in p if p and not Path(p).exists()]
+    if dead:
+        print(f"  [FAIL] {launcher} names {dead[0]}, which does not exist. Repair it with: {repair}")
+        return 0, 1, 0
+    print(f"  [OK] {launcher} reaches an existing launcher")
+    return 1, 0, 0

@@ -1,0 +1,145 @@
+"""`olivercode status`: open count, landing rate and projected zero date from gh REST, with no model call."""
+
+import io
+import os
+import sys
+import tempfile
+import unittest
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest import mock
+
+from _support import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from lib import cmd_status  # noqa: E402
+
+NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
+
+
+def issue(created: str, closed: str | None = None) -> dict:
+    return {"created_at": created + "T00:00:00Z", "closed_at": closed + "T00:00:00Z" if closed else None}
+
+
+class TestStatus(unittest.TestCase):
+    def status(self, open_now, rows, slug="o/r"):
+        out = io.StringIO()
+        code = cmd_status.run(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"))
+        return code, out.getvalue()
+
+    def test_a_falling_count_prints_the_rate_and_a_zero_date(self):
+        rows = [issue("2026-11-01", "2026-11-20")] * 14 + [issue("2026-11-20")] * 7
+        code, text = self.status(14, rows)
+        self.assertEqual(0, code)
+        self.assertIn("14 open", text)
+        self.assertIn("2.0 stories landed per day", text)
+        self.assertIn("reaches zero on 2026-12-06", text)
+
+    def test_a_flat_count_says_the_date_is_not_reachable(self):
+        rows = [issue("2026-11-20", "2026-11-21")] * 7
+        code, text = self.status(5, rows)
+        self.assertEqual(0, code)
+        self.assertIn("1.0 stories landed per day", text)
+        self.assertIn("not reachable at this rate", text)
+
+    def test_a_rising_count_says_the_date_is_not_reachable(self):
+        _, text = self.status(5, [issue("2026-11-20")] * 3)
+        self.assertIn("not reachable at this rate", text)
+
+    def test_issues_outside_the_window_are_not_counted(self):
+        _, text = self.status(5, [issue("2026-10-01", "2026-10-02")])
+        self.assertIn("0 closed and 0 opened", text)
+
+    def test_a_failed_read_exits_one(self):
+        code, text = self.status(None, [])
+        self.assertEqual(1, code)
+        self.assertIn("were not read", text)
+
+    def test_no_origin_exits_one(self):
+        self.assertEqual(1, self.status(1, [], slug=None)[0])
+
+    def test_recent_leaves_out_pull_requests(self):
+        class Done:
+            returncode = 0
+            stdout = '[[{"created_at": "a"}, {"created_at": "b", "pull_request": {}}]]'
+        self.assertEqual([{"created_at": "a"}], cmd_status.recent("o/r", NOW, runner=lambda args: Done()))
+
+
+def decision(n: int, words: str = "Option A") -> dict:
+    return {"created": "2026-11-22T10:00:00+00:00", "decision": f"D{n}", "thread": "T1", "words": words, "options": ["A", "B"], "choice": "A", "by": "SID"}
+
+
+def round_row(n: int) -> dict:
+    return {"story": f"#{n}", "round": 1, "model": "claude-haiku-5-5", "input": 1200, "output": 300, "cache_read": 0, "cache_write": 0, "cost_usd": 0.012}
+
+
+class TestDigest(unittest.TestCase):
+    def write(self, decisions, runs, rows=None, open_now=14, slug="o/r"):
+        out = io.StringIO()
+        target = Path(self.tmp.name) / "status-digest.md"
+        code = cmd_status.digest(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows or [issue("2026-11-20")] * 3, now=NOW,
+                                 out=lambda t: out.write(t + "\n"), decisions=lambda: decisions, runs=lambda: runs, target=target)
+        return code, out.getvalue(), target
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_digest_is_written_within_the_token_limit(self):
+        decisions = [decision(n, words="Option A " * 60) for n in range(1000)]
+        runs = [round_row(n) for n in range(1000)]
+        code, text, target = self.write(decisions, runs)
+        self.assertEqual(0, code)
+        body = target.read_text(encoding="utf-8")
+        self.assertLessEqual(cmd_status.tokens(body), cmd_status.DIGEST_TOKENS)
+        self.assertIn(f"tokens, limit {cmd_status.DIGEST_TOKENS}", text)
+
+    def test_the_newest_decisions_are_kept_when_the_digest_trims(self):
+        decisions = [decision(n, words="Option A " * 60) for n in range(1000)]
+        _, _, target = self.write(decisions, [])
+        body = target.read_text(encoding="utf-8")
+        self.assertIn("## Decisions, 5 of 1000", body)
+        self.assertIn("D999", body)
+        self.assertNotIn("D0:", body)
+
+    def test_the_board_line_and_both_logs_appear(self):
+        _, _, target = self.write([decision(1)], [round_row(7)])
+        body = target.read_text(encoding="utf-8")
+        self.assertIn("o/r: 14 open.", body)
+        self.assertIn("- D1: chose A on 2026-11-22 in thread T1. Words: Option A", body)
+        self.assertIn("- #7 round 1 on claude-haiku-5-5: 1200 in and 300 out tokens, cost $0.01", body)
+
+    def test_a_review_row_names_its_findings(self):
+        _, _, target = self.write([], [{"story": "#7", "review": "findings", "findings": "The gate fails on line 3."}])
+        self.assertIn("- #7 review findings. Findings: The gate fails on line 3.", target.read_text(encoding="utf-8"))
+
+    def test_no_origin_writes_nothing_and_exits_one(self):
+        code, text, target = self.write([], [], slug=None)
+        self.assertEqual(1, code)
+        self.assertIn("no GitHub origin", text)
+        self.assertFalse(target.exists())
+
+    def test_a_failed_read_writes_nothing_and_exits_one(self):
+        out = io.StringIO()
+        target = Path(self.tmp.name) / "status-digest.md"
+        code = cmd_status.digest("o/r", count=lambda s, state: None, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
+                                 decisions=lambda: [], runs=lambda: [], target=target)
+        self.assertEqual(1, code)
+        self.assertIn("were not read", out.getvalue())
+        self.assertFalse(target.exists())
+
+    def test_the_run_log_skips_lines_that_are_not_objects(self):
+        log = Path(self.tmp.name) / "run-log.jsonl"
+        log.write_text('{"story": "#1", "round": 1}\n\nnot json\n[1, 2]\n', encoding="utf-8")
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": self.tmp.name}):
+            self.assertEqual([{"story": "#1", "round": 1}], cmd_status.run_log())
+
+    def test_a_missing_run_log_reads_as_empty(self):
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": self.tmp.name}):
+            self.assertEqual([], cmd_status.run_log())
+
+
+if __name__ == "__main__":
+    unittest.main()
