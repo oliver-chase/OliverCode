@@ -55,6 +55,9 @@ class EarlyStopGuard(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         return json.loads(out.stdout or "{}").get("decision") == "block"
 
+    def test_a_finished_turn_that_says_open_the_dashboard_is_not_blocked(self):
+        self.assertFalse(self.blocks(user("x"), text("Done. Open the dashboard in your browser to see it.")))
+
     def test_the_turn_that_asked_in_its_next_step_box_about_a_payment_is_not_blocked(self):
         self.assertFalse(self.blocks(user("start phase 2"),
                                      tool(WRAP_UP, {"recap": "Done.", "ask": "Pay the $40 invoice?"}), result(),

@@ -38,8 +38,7 @@ QUOTED_RE = re.compile(r"```.*?```|`[^`\n]*`|\"[^\"\n]*\"|\u201c[^\u201d\n]*\u20
 # tried first: a command, an error text or a tool name in the same message (#550).
 OWNER_STEP_RE = re.compile(
     r"\b(you(?:'ll| will)? (?:need|have|must|should) to|please (?:run|open|click|install|add|set|paste|enter|log|sign|go|copy|restart|check|create)|"
-    r"(?:run|paste|copy) (?:this|the following|these)|you (?:can|could) (?:run|open|click|install|paste)|"
-    r"(?:open|click) (?:the|this|your) )",
+    r"(?:run|paste|copy) (?:this|the following|these)|you (?:can|could) (?:run|open|click|install|paste))",
     re.IGNORECASE,
 )
 ATTEMPT_RE = re.compile(

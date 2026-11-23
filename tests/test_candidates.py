@@ -127,7 +127,7 @@ class TestNoDirectFiling(unittest.TestCase):
     def test_a_pasted_error_adds_a_candidate_and_creates_no_issue(self):
         sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
         import error_paste
-        text = error_paste.file_story("Traceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad\n", "s", "")
+        text = error_paste.file_story("```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad\n```\n", "s", str(REPO_ROOT))
         self.assertIn("candidate", text)
         self.assertEqual(["Fix: ValueError: bad"], [i["title"] for i in candidates.items()])
         self.assertEqual(0, story_outbox.count())
@@ -195,8 +195,8 @@ class TestScheduledEntryPoints(unittest.TestCase):
     def test_the_hooks_create_no_issue(self):
         hooks = REPO_ROOT / "scripts" / "hooks"
         for n in range(50):
-            prompt = f"Traceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad {n}\n"
-            subprocess.run([sys.executable, str(hooks / "error_paste.py")], input=json.dumps({"prompt": prompt, "session_id": "s", "cwd": "/nonexistent"}),
+            prompt = f"```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad {n}\n```\n"
+            subprocess.run([sys.executable, str(hooks / "error_paste.py")], input=json.dumps({"prompt": prompt, "session_id": "s", "cwd": str(REPO_ROOT)}),
                            capture_output=True, text=True, env=self.env, check=True)
             subprocess.run([sys.executable, str(hooks / "lesson_capture.py")], input=json.dumps({"prompt": "no, that is wrong, stop doing that", "session_id": "s"}),
                            capture_output=True, text=True, env=self.env, check=True)

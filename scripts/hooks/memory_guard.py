@@ -16,7 +16,8 @@ from pathlib import Path
 
 MEMORY_PATH = re.compile(r"(?:\.claude-optimization/memory/|\.claude/projects/[^/\s'\"]+/memory/)")
 AUTO_MEMORY = re.compile(r"\.claude/projects/[^/\s'\"]+/memory/")
-RULE = re.compile(r"\b(?:always|never|must|should|shall|rule|whenever|do not|don'?t|before (?:you|each|every|any)|from now on)\b", re.IGNORECASE)
+# A rule is a line that starts with an imperative (or a sentence or a quoted string does); a fact that holds should or always mid-sentence is allowed.
+RULE = re.compile(r"(?:^|[.!?]\s+|['\"])[\s>#*\-\d.)]*(?:always|never|must|should|shall|whenever|do not|don'?t|before (?:you|each|every|any)|from now on)\b", re.IGNORECASE | re.MULTILINE)
 POINTER_LINE = re.compile(r"^\s*(?:[-*]\s*)?\[[^\]]+\]\([^)]+\)(?:\s*[-:—].*)?$")
 
 REFUSAL = ("Refused: this write puts a rule into memory, and auto-memory under ~/.claude/projects is never written. Rules belong "

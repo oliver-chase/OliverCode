@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Claude Code UserPromptSubmit hook: a pasted error becomes a candidate (#716, #971).
 
-When the owner's prompt holds a Python traceback or a "could not be read" error, the hook adds one bug candidate for the
-session's repo (the exception line as the title, the paste as the body, `diagnosing-bugs` named), queues one line in the
+When the owner's prompt holds a Python traceback in a fence or an indented block, the hook adds one bug candidate for the
+session's repo (the exception line as the title, the paste cut at the fence as the body, `diagnosing-bugs` named), queues one line in the
 owner queue. The candidate waits in the candidates list (candidates.py) until the owner promotes it, so the hook creates no issue. The same error pasted again files nothing. A paste that
 looks like it holds a secret files nothing. Deterministic, with no model call and no network call, and it fails open on
 its own error.
@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -35,24 +36,25 @@ FALLBACK_REPO = f"{_CONFIG['repoOwner']}/{_CONFIG['repoName']}" if "repoOwner" i
 EPIC_NUMBER = _CONFIG.get("errorEpic")
 EPIC = (f"{FALLBACK_REPO}#{EPIC_NUMBER}" if FALLBACK_REPO else f"#{EPIC_NUMBER}") if EPIC_NUMBER else ""
 TRACEBACK_RE = re.compile(r"Traceback \(most recent call last\):\n(?:[ \t]+.*\n|\w.*\n)*?(?P<last>[A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt)\b[^\n]*)")
-UNREAD_RE = re.compile(r"^[^\n]*could not be read[^\n]*$", re.IGNORECASE | re.MULTILINE)
 SECRET_RE = re.compile(r"(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|(?:password|passwd|secret|token|api[_-]?key)\s*[=:]\s*\S{6,}|-----BEGIN [A-Z ]*PRIVATE KEY)", re.IGNORECASE)
 MAX_PASTE = 4000
 
 
-def symptom(prompt: str) -> str:
-    """The one-line symptom of the first error in the prompt, or "" when it holds none."""
-    found = TRACEBACK_RE.search(prompt)
-    if found:
-        return found.group("last").strip()
-    found = UNREAD_RE.search(prompt)
-    return found.group(0).strip() if found else ""
+FENCE_RE = re.compile(r"^[ \t]*```[^\n]*\n(?P<inner>.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+INDENTED_RE = re.compile(r"(?:^(?: {4}|\t)[^\n]*(?:\n|$))+", re.MULTILINE)
 
 
-def paste_of(prompt: str) -> str:
-    """The error text: from the traceback header or the unread line to the end of the prompt, capped."""
-    starts = [m.start() for m in (re.search(r"Traceback \(most recent call last\)", prompt), UNREAD_RE.search(prompt)) if m]
-    return prompt[min(starts):][:MAX_PASTE].rstrip() if starts else ""
+def _traces(prompt: str):
+    """Each traceback the prompt holds in a fence or an indented block, cut at the fence or the block end."""
+    for block in [m.group("inner") for m in FENCE_RE.finditer(prompt)] + [textwrap.dedent(m.group(0)) for m in INDENTED_RE.finditer(prompt)]:
+        found = TRACEBACK_RE.search(block if block.endswith("\n") else block + "\n")
+        if found:
+            yield found.group("last").strip(), block[found.start():].strip()[:MAX_PASTE].rstrip()
+
+
+def trace_of(prompt: str) -> tuple[str, str]:
+    """The (symptom, paste) of the first fenced or indented traceback, or ("", "") when the prompt holds none."""
+    return next(_traces(prompt), ("", ""))
 
 
 def body(repo: str, sym: str, paste: str) -> str:
@@ -60,7 +62,7 @@ def body(repo: str, sym: str, paste: str) -> str:
             "```gherkin\nFeature: A pasted error is fixed\n  Scenario: The error no longer occurs\n"
             "    Given the error pasted below\n    When the cause is diagnosed with the diagnosing-bugs loop and fixed\n"
             "    Then the failing step runs without that error\n    And a test covers the cause\n```\n\n"
-            + (f"Epic: {EPIC}\n" if EPIC else "") + "Priority: P1. Size: S. Work type: Story.\n\n"
+            + (f"Epic: {EPIC}\n" if EPIC and repo == FALLBACK_REPO else "") + "Priority: P1. Size: S. Work type: Story.\n\n"
             "Existing coverage checked: the owner pasted the error, so the first step of the fix is a search of the repo and open issues for its symbol.\n\n"
             "Detail: run the `diagnosing-bugs` loop before changing code. Added by the error-paste hook from the owner's prompt, "
             "so the owner does not have to ask for it.\n\nPasted error:\n\n```\n" + paste + "\n```\n")
@@ -68,10 +70,12 @@ def body(repo: str, sym: str, paste: str) -> str:
 
 def file_story(prompt: str, session: str, cwd: str, home_seen: Path | None = None) -> str:
     """File the story for the first error in `prompt`. Returns the note for the session, or "" when nothing was filed."""
-    sym, paste = symptom(prompt), paste_of(prompt)
+    sym, paste = trace_of(prompt)
     if not sym or SECRET_RE.search(paste):
         return ""
-    repo = repo_state.origin(cwd) or FALLBACK_REPO if cwd else FALLBACK_REPO
+    repo = repo_state.origin(cwd) if cwd else None
+    if not repo:
+        return ""
     key = hashlib.sha256(f"{repo}\n{sym}".encode("utf-8")).hexdigest()[:16]
     seen_file = home_seen or failure_log.home() / "error-paste-seen.json"
     try:
