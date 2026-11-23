@@ -37,13 +37,9 @@ class TestHook(Isolated):
         self.assertEqual((run.returncode, run.stdout), (0, ""))
         self.assertFalse((self.home / "lesson-flags").exists())
 
-    def test_a_message_that_names_a_story_is_kept_for_the_ledger_and_prints_nothing(self):
+    def test_a_message_that_names_a_story_is_not_written_here_and_prints_nothing(self):
         run = self.hook("for #983 you did it wrong again")
         self.assertEqual((run.returncode, run.stdout), (0, ""))
-        self.assertIn("983", "".join(p.read_text() for p in self.home.rglob("*") if p.is_file()))
-
-    def test_a_cross_session_message_names_no_story_for_the_ledger(self):
-        self.hook("<cross-session-message from=a>for #983 wrong again")
         self.assertEqual([p for p in self.home.rglob("*") if p.is_file()], [])
 
     def test_the_hook_never_blocks_when_the_home_folder_is_unusable(self):

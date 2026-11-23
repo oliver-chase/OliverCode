@@ -1,28 +1,16 @@
 #!/usr/bin/env python3
-"""Claude Code UserPromptSubmit hook: each owner message that names a story (#N) is appended to the decisions file for that story's builder (#884).
+"""Claude Code UserPromptSubmit hook that no longer records anything (#1046).
 
-It prints nothing to the session and never blocks the prompt, and it fails open on its own error.
+The owner's messages that name a story are kept by owner_decision_capture.py, the decision ledger's only writer. This hook is left in place until #983 removes it. It prints nothing to the session and never blocks the prompt, and it fails open on its own error.
 """
 
 from __future__ import annotations
 
-import json
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import lesson_flags, owner_decisions  # noqa: E402
 
 
 def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-    except json.JSONDecodeError:
-        data = {}
-    prompt = str(data.get("prompt") or "")
-    if lesson_flags.from_owner(prompt):
-        owner_decisions.record(prompt, str(data.get("session_id") or ""))
+    sys.stdin.read()
     return 0
 
 

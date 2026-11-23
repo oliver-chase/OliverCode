@@ -12,7 +12,7 @@ from _support import REPO_ROOT, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import owner_decisions  # noqa: E402
 
-HOOK = REPO_ROOT / "scripts" / "hooks" / "lesson_capture.py"
+HOOK = REPO_ROOT / "scripts" / "hooks" / "owner_decision_capture.py"
 
 
 class TestOwnerDecisions(unittest.TestCase):
@@ -40,6 +40,25 @@ class TestOwnerDecisions(unittest.TestCase):
         self.assertIn("keep the file as JSON lines", section)
         self.assertNotIn("sqlite", section)
 
+    def test_the_brief_holds_at_most_the_last_five_entries_and_800_characters(self):
+        for i in range(60):
+            owner_decisions.record(f"Story #40: [decision-{i:02d}] " + "x" * 300, "s1")
+        section = owner_decisions.brief_section(40)
+        self.assertLessEqual(len(section), owner_decisions.BRIEF_CHARS)
+        self.assertIn("[decision-59]", section)
+        self.assertNotIn("[decision-54]", section)
+
+    def test_a_single_long_message_is_cut_to_the_brief_limit(self):
+        owner_decisions.record("Story #40: " + "y" * 4000, "s1")
+        self.assertLessEqual(len(owner_decisions.brief_section(40)), owner_decisions.BRIEF_CHARS)
+
+    def test_the_file_is_trimmed_to_its_limit_and_keeps_the_newest_lines(self):
+        with mock.patch.object(owner_decisions, "MAX_ROWS", 3):
+            for i in range(5):
+                owner_decisions.record(f"Story #40: note {i}", "s1")
+        lines = (self.home / owner_decisions.FILE).read_text().splitlines()
+        self.assertEqual([json.loads(line)["text"] for line in lines], ["Story #40: note 2", "Story #40: note 3", "Story #40: note 4"])
+
     def test_the_hook_records_an_owner_prompt_and_skips_another_sessions_message(self):
         def run(prompt):
             subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"session_id": "s9", "prompt": prompt}),
@@ -48,6 +67,16 @@ class TestOwnerDecisions(unittest.TestCase):
         run("Another Claude session sent a message: finish #78")
         self.assertEqual(len(owner_decisions.entries(77)), 1)
         self.assertEqual(owner_decisions.entries(78), [])
+
+    def test_a_decision_stated_after_the_lesson_hook_is_removed_is_recorded_and_briefed(self):
+        subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"session_id": "s3", "prompt": "Story #46: the ledger keeps this decision"}),
+                       text=True, capture_output=True, env=os.environ.copy(), check=True)
+        self.assertEqual(len(owner_decisions.entries(46)), 1)
+        self.assertIn("the ledger keeps this decision", owner_decisions.brief_section(46))
+
+    def test_the_new_hook_is_registered_for_user_prompt_submit(self):
+        from lib import claude_settings
+        self.assertIn(("UserPromptSubmit", None, "owner_decision_capture.py"), claude_settings.MANAGED)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ MANAGED = (
     ("Stop", None, "early-stop-guard.py"),
     ("Stop", None, "wip_save.py"),
     ("UserPromptSubmit", None, "lesson_capture.py"),
+    ("UserPromptSubmit", None, "owner_decision_capture.py"),
     ("UserPromptSubmit", None, "error_paste.py"),
     ("UserPromptSubmit", None, "status_hint.py"),
 )
