@@ -11,14 +11,21 @@ refuses a new clone or worktree outside the root, and `clean` removes what is re
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
-from lib import repo_gates
+from lib import gh_budget, repo_gates
 from lib.local_config import OC_ROOT, load_local, other_device
+
+# A builder's worktree and its dispatch claim are held this long. CLAIM_HOURS matches skills/backlog/scripts/log_action.py.
+CLAIM_HOURS = 2
+FRESH_HOURS = 2
 
 SKIP_DIRS = {"node_modules", ".git", "Library", ".Trash", ".venv", "venv", "__pycache__", ".next", "dist", "build"}
 BACKUP_NAME = re.compile(r"(backup|\.bak$|-old$|-copy$)", re.IGNORECASE)
@@ -248,9 +255,47 @@ def _story_of(wt: Worktree) -> str:
     return f"story #{found.group(1)}" if found else "its story"
 
 
+def held_reason(wt: Worktree) -> str:
+    """Why a merged and clean worktree stays anyway: a live dispatch claim holds its story, or a builder used it in the last
+    FRESH_HOURS. Empty when nothing holds it."""
+    story = re.fullmatch(r"story/(\d+)", wt.branch or "")
+    if story and _claimed(story.group(1)):
+        return f"a dispatch claim holds story #{story.group(1)}"
+    touched = _last_touched(wt)
+    if not touched:
+        return "its folder cannot be read"
+    if time.time() - touched < FRESH_HOURS * 3600:
+        return f"used in the last {FRESH_HOURS} hours, so a builder may still be working in it"
+    return ""
+
+
+def _last_touched(wt: Worktree) -> float:
+    """The newest change time of the folder, its .git file and the index git keeps for it. Any git command a builder runs
+    rewrites that index, so an idle worktree shows its age and an active one shows it. 0 when none of them can be read."""
+    gitdir = _git(wt.path, "rev-parse", "--git-dir").stdout.strip()
+    stamps = []
+    for path in (wt.path, wt.path / ".git", wt.path / gitdir / "index"):
+        try:
+            stamps.append(path.stat().st_mtime)
+        except OSError:
+            pass
+    return max(stamps, default=0.0)
+
+
+def _claimed(number: str) -> bool:
+    """True while a dispatch claim on this story number is younger than CLAIM_HOURS, in any repo. The claims are written by cmd_dispatch."""
+    try:
+        claims = json.loads((gh_budget.home() / "dispatch-claims.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    now = time.time()
+    return any(key.endswith(f"#{number}") and isinstance(v, dict) and now - float(v.get("at", 0)) < CLAIM_HOURS * 3600
+               for key, v in claims.items())
+
+
 def clean(cfg: Config | None = None, apply: bool = False) -> list[str]:
-    """Lines saying what happens to each worktree: merged and clean ones are removed, the rest kept and why.
-    Remote branches merged into their repo's default branch follow, see remote_branches."""
+    """Lines saying what happens to each worktree: merged and clean ones are removed unless held_reason keeps them, and the rest are
+    kept and why. Remote branches merged into their repo's default branch follow, see remote_branches."""
     cfg = cfg or config()
     lines = []
     for wt in worktrees(cfg):
@@ -258,6 +303,8 @@ def clean(cfg: Config | None = None, apply: bool = False) -> list[str]:
             lines.append(f"KEEP   {wt.path} (uncommitted changes)")
         elif not wt.merged:
             lines.append(f"KEEP   {wt.path} (finish or discard {_story_of(wt)}: branch {wt.branch or 'detached'} has commits not on origin/main)")
+        elif held := held_reason(wt):
+            lines.append(f"KEEP   {wt.path} ({held})")
         elif apply:
             done = _git(wt.common, "worktree", "remove", str(wt.path))
             lines.append(f"REMOVE {wt.path}" if done.returncode == 0 else f"FAILED {wt.path}: {done.stderr.strip()[:80]}")
@@ -276,9 +323,32 @@ def _default_ref(repo: Path) -> str:
     return head.stdout.strip() if head.returncode == 0 and head.stdout.strip() else "origin/main"
 
 
+def _open_pr(repo: Path, name: str) -> bool:
+    """True when an open pull request has this branch as its head, or when GitHub cannot say, so the branch stays. The REST call
+    spends no GraphQL points, and a hit per-minute call cap counts as cannot say."""
+    slug = _origin_slug(repo)
+    refused = gh_budget.reserve_call()  # '' when the call may go ahead, else the text naming the wait
+    if not slug or refused:
+        return True
+    head = quote(f"{slug.split('/')[0]}:{name}")
+    try:
+        done = subprocess.run(["gh", "api", f"repos/{slug}/pulls?state=open&head={head}", "--jq", "length"],
+                              capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return True
+    count = done.stdout.strip()
+    return done.returncode != 0 or not count.isdigit() or int(count) > 0
+
+
+def prunable_remote(repo: Path, name: str) -> bool:
+    """True when clean --apply may delete this merged origin branch: a story/* branch with no open pull request. conform names the same ones."""
+    return name.startswith("story/") and not _open_pr(repo, name)
+
+
 def remote_branches(cfg: Config | None = None, apply: bool = False) -> list[str]:
-    """One line per origin branch merged into its repo's default branch. With apply it is deleted on origin.
-    A branch a worktree has checked out, and the protected names, are never touched."""
+    """One line per origin story/* branch merged into its repo's default branch, unless it has an open pull request. With apply it is
+    deleted on origin. Any other branch is someone's own and is never listed. A branch a worktree has checked out, and the protected
+    names, are never touched."""
     cfg = cfg or config()
     if not cfg.root.is_dir():
         return []
@@ -296,6 +366,8 @@ def remote_branches(cfg: Config | None = None, apply: bool = False) -> list[str]
         for ref in sorted(merged):
             name = ref[len("origin/"):] if ref.startswith("origin/") else ""
             if not name or name == "HEAD" or ref == default or name in busy or name in PROTECTED_REMOTE_BRANCHES:
+                continue
+            if not prunable_remote(repo, name):
                 continue
             if not apply:
                 lines.append(f"REMOVE {repo.name}: {ref} (merged into {default}; run with --apply)")

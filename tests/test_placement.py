@@ -5,8 +5,10 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 
@@ -185,10 +187,46 @@ class TestClean(unittest.TestCase):
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.cfg.worktrees.mkdir()
 
-    def add(self, name):
+    def add(self, name, branch=None, age_hours=3):
+        """A worktree from origin/main with no commit. Its folder, its .git file and its index are dated age_hours back, so no
+        builder has used it lately (#1045)."""
         path = self.cfg.worktrees / name
-        git(self.repo, "worktree", "add", "-q", str(path), "-b", name)
+        git(self.repo, "worktree", "add", "-q", str(path), "-b", branch or name)
+        old = time.time() - age_hours * 3600
+        for stamped in (path, path / ".git", self.repo / ".git" / "worktrees" / name / "index"):
+            os.utime(stamped, (old, old))
         return path
+
+    def claims(self, claims):
+        home = temp_dir(self)
+        (home / "dispatch-claims.json").write_text(json.dumps(claims))
+        return mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)})
+
+    def test_a_fresh_worktree_with_no_commit_is_kept_by_apply(self):
+        path = self.add("fresh", age_hours=0)
+        lines = placement.clean(self.cfg, apply=True)
+        self.assertTrue(path.exists())
+        self.assertTrue(any(line.startswith(f"KEEP   {path}") and "used in the last" in line for line in lines))
+
+    def test_a_worktree_whose_builder_ran_git_lately_is_kept_though_its_folder_is_old(self):
+        path = self.add("active")
+        os.utime(self.repo / ".git" / "worktrees" / "active" / "index")  # a git command just rewrote the index
+        lines = placement.clean(self.cfg, apply=True)
+        self.assertTrue(path.exists())
+        self.assertTrue(any(line.startswith(f"KEEP   {path}") and "used in the last" in line for line in lines))
+
+    def test_a_worktree_whose_story_has_a_live_dispatch_claim_is_kept(self):
+        path = self.add("story-77", branch="story/77")
+        with self.claims({"OliverCode#77": {"agent": "builder", "at": time.time()}}):
+            lines = placement.clean(self.cfg, apply=True)
+        self.assertTrue(path.exists())
+        self.assertTrue(any("dispatch claim holds story #77" in line for line in lines))
+
+    def test_an_expired_dispatch_claim_does_not_keep_its_worktree(self):
+        path = self.add("story-78", branch="story/78")
+        with self.claims({"OliverCode#78": {"agent": "builder", "at": time.time() - 3 * 3600}}):
+            placement.clean(self.cfg, apply=True)
+        self.assertFalse(path.exists())
 
     def test_a_merged_clean_worktree_is_listed_and_kept_without_apply(self):
         path = self.add("done")
@@ -220,6 +258,50 @@ class TestClean(unittest.TestCase):
         lines = placement.clean(self.cfg, apply=True)
         self.assertTrue(path.exists())
         self.assertTrue(any(line.startswith("KEEP") and "not on origin/main" in line and "finish or discard story #656" in line for line in lines))
+
+
+class TestRemoteBranches(unittest.TestCase):
+    """#1045: only a merged story/* branch is pruned, and never one with an open pull request."""
+
+    def setUp(self):
+        base = temp_dir(self, resolve=True)
+        self.cfg = make_config(base / "Repos", [])
+        self.repo = scratch_repo(self.cfg.root / "app", branch="main")
+        git(self.repo, "commit", "--allow-empty", "-q", "-m", "x")
+        for ref in ("refs/remotes/origin/main", "refs/remotes/origin/story/7", "refs/remotes/origin/feature-x"):
+            git(self.repo, "update-ref", ref, "HEAD")
+
+    def test_only_a_merged_story_branch_is_listed(self):
+        with mock.patch.object(placement, "_open_pr", return_value=False):
+            self.assertEqual(["REMOVE app: origin/story/7 (merged into origin/main; run with --apply)"], placement.remote_branches(self.cfg))
+
+    def ask_github(self, stdout="0\n", returncode=0, refused=""):
+        """The real _open_pr with GitHub's answer faked. Returns its verdict and the mock that stood in for gh."""
+        with mock.patch.object(placement, "_origin_slug", return_value="acme/app"), \
+                mock.patch.object(placement.gh_budget, "reserve_call", return_value=refused), \
+                mock.patch.object(placement.subprocess, "run",
+                                  return_value=subprocess.CompletedProcess([], returncode, stdout, "")) as run:
+            verdict = placement._open_pr(self.repo, "story/7")
+        return verdict, run
+
+    def test_no_open_pull_request_lets_the_story_branch_go(self):
+        verdict, run = self.ask_github("0\n")
+        self.assertFalse(verdict)
+        self.assertIn("head=acme%3Astory/7", " ".join(run.call_args[0][0]))
+
+    def test_an_open_pull_request_keeps_the_branch(self):
+        verdict, _ = self.ask_github("1\n")
+        self.assertTrue(verdict)
+
+    def test_a_refused_or_failed_check_keeps_the_branch(self):
+        verdict, run = self.ask_github(refused="Try again in 30 seconds.")
+        self.assertTrue(verdict)
+        run.assert_not_called()
+        self.assertTrue(self.ask_github("", returncode=1)[0])
+
+    def test_a_story_branch_with_an_open_pull_request_is_kept(self):
+        with mock.patch.object(placement, "_open_pr", return_value=True):
+            self.assertEqual([], placement.remote_branches(self.cfg))
 
 
 class TestViolation(unittest.TestCase):

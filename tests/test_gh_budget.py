@@ -1,5 +1,6 @@
 """Tests for the shared GitHub rate-limit budget: scripts/lib/gh_budget.py and the gh_guard and gh_watch hooks."""
 
+import fcntl
 import json
 import os
 import subprocess
@@ -405,6 +406,82 @@ class TestIsWrite(unittest.TestCase):
         import gh_guard
         self.assertFalse(gh_guard.is_write('gh api graphql -f query="{ repository(owner: \\"o\\") { id } }"'))
         self.assertTrue(gh_guard.is_write('gh api graphql -f query="mutation{ x }"'))
+
+
+class TestReplay(Isolated):
+    """#1045: the replay sends each queued write once, keeps a failed one and counts its failures, and moves a write that keeps
+    failing to the owner queue. A write queued during a replay is never lost."""
+
+    def queue(self, *numbers):
+        for n in numbers:
+            gh_budget.enqueue(["gh", "issue", "close", str(n)], cwd=str(self.home))
+
+    def rows(self):
+        path = self.home / gh_budget.QUEUE
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def test_a_sent_write_is_never_sent_again_and_a_failed_one_is_retried(self):
+        self.queue(1, 2, 3)
+        calls = []
+
+        def run(argv, cwd):
+            calls.append(argv[-1])
+            return subprocess.CompletedProcess([], 1 if argv[-1] == "3" else 0, "", "boom")
+
+        gh_budget.replay(run=run)
+        gh_budget.replay(run=run)
+        self.assertEqual(["1", "2", "3", "3"], calls)
+        (row,) = self.rows()
+        self.assertEqual("3", row["argv"][-1])
+        self.assertEqual(2, row["attempts"])
+
+    def test_a_write_that_fails_three_times_moves_to_the_owner_queue(self):
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        self.queue(5)
+        bad = subprocess.CompletedProcess([], 1, "", "could not close")
+        for _ in range(3):
+            gh_budget.replay(run=lambda a, c: bad)
+        self.assertEqual([], self.rows())
+        self.assertIn("gh issue close 5", (self.home / "owner-queue.jsonl").read_text())
+
+    def test_a_write_queued_during_a_replay_stays_queued(self):
+        self.queue(1)
+
+        def run(argv, cwd):
+            if argv[-1] == "1":
+                self.queue(2)
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        gh_budget.replay(run=run)
+        self.assertEqual(["2"], [row["argv"][-1] for row in self.rows()])
+
+    def test_a_replay_that_starts_while_another_runs_sends_nothing(self):
+        self.queue(1)
+        calls = []
+        with open(self.home / gh_budget.REPLAY_LOCK, "a+") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            report = gh_budget.replay(run=lambda a, c: calls.append(a) or subprocess.CompletedProcess([], 0, "", ""))
+        self.assertIn("Another replay", report)
+        self.assertEqual([], calls)
+        self.assertEqual(1, len(self.rows()))
+
+    def test_a_command_that_raises_stays_queued_and_counts_a_failure(self):
+        self.queue(4)
+
+        def run(argv, cwd):
+            raise subprocess.TimeoutExpired(argv, 120)
+
+        self.assertIn("kept: gh issue close 4", gh_budget.replay(run=run))
+        self.assertEqual(1, self.rows()[0]["attempts"])
+
+    def test_a_rate_limit_stops_the_run_and_counts_no_failure(self):
+        self.queue(1, 2)
+        calls = []
+        limited = subprocess.CompletedProcess([], 1, "", "API rate limit exceeded")
+        with mock.patch.dict(os.environ, {"OLIVERCODE_GH_PROBE": "0"}):
+            gh_budget.replay(run=lambda a, c: calls.append(a[-1]) or limited)
+        self.assertEqual(["1"], calls)
+        self.assertEqual([("1", None), ("2", None)], [(row["argv"][-1], row.get("attempts")) for row in self.rows()])
 
 
 class TestResourceHold(Isolated):

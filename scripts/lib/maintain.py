@@ -310,7 +310,7 @@ def check_tidy(cfg: placement.Config, fix: bool, ps_text: str | None = None, tas
     for wt in trees:
         if str(wt.path) in gone:
             continue
-        why = "uncommitted changes" if wt.dirty else "" if wt.merged else f"commits not on the default branch ({wt.branch or 'detached'})"
+        why = "uncommitted changes" if wt.dirty else placement.held_reason(wt) if wt.merged else f"commits not on the default branch ({wt.branch or 'detached'})"
         if why:
             age = _git(wt.path, "log", "-1", "--format=%cr").stdout.strip() or "no commits"
             kept.append(f"{wt.path} ({why}; last commit {age})")

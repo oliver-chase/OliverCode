@@ -47,25 +47,41 @@ def config(root):
 class ConformBranches(unittest.TestCase):
     def setUp(self):
         self.root, self.work, self.origin = make_pair(self)
+        patch = mock.patch.object(placement, "_open_pr", return_value=False)  # no open pull request, so a merged story/* branch may go (#1045)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def test_origin_with_only_its_default_branch_passes(self):
         self.assertEqual(conform.branches(self.work, offline=False).status, "pass")
 
     def test_a_merged_remote_branch_fails_and_is_named_safe_to_delete(self):
-        push_branch(self.work, "story-done", merged=True)
+        push_branch(self.work, "story/done", merged=True)
         row = conform.branches(self.work, offline=False)
         self.assertEqual(row.status, "fail")
-        self.assertIn("story-done (merged into main, safe to delete)", row.detail)
+        self.assertIn("story/done (merged into main, safe to delete)", row.detail)
         self.assertIn("olivercode clean --apply", row.fix)
 
+    def test_a_merged_branch_clean_keeps_is_not_called_safe_to_delete(self):
+        push_branch(self.work, "feature-x", merged=True)
+        row = conform.branches(self.work, offline=False)
+        self.assertIn("feature-x (merged into main, not a story branch, so clean leaves it)", row.detail)
+        self.assertNotIn("safe to delete", row.detail)
+
+    def test_a_merged_story_branch_with_an_open_pull_request_is_not_called_safe_to_delete(self):
+        push_branch(self.work, "story/held", merged=True)
+        with mock.patch.object(placement, "_open_pr", return_value=True):
+            row = conform.branches(self.work, offline=False)
+        self.assertIn("story/held (merged into main, kept by clean", row.detail)
+        self.assertNotIn("safe to delete", row.detail)
+
     def test_an_unmerged_remote_branch_fails_and_is_named_with_its_commits(self):
-        push_branch(self.work, "story-open", merged=False)
+        push_branch(self.work, "story/open", merged=False)
         row = conform.branches(self.work, offline=False)
         self.assertEqual(row.status, "fail")
-        self.assertIn("story-open (has commits not on main)", row.detail)
+        self.assertIn("story/open (has commits not on main)", row.detail)
 
     def test_offline_skips_and_a_repo_with_no_origin_skips(self):
-        push_branch(self.work, "story-open", merged=False)
+        push_branch(self.work, "story/open", merged=False)
         self.assertEqual(conform.branches(self.work, offline=True).status, "skip")
         local = scratch_repo(self.root / "local", branch="main")
         self.assertEqual(conform.branches(local, offline=False).status, "skip")
@@ -102,27 +118,30 @@ class CleanRemoteBranches(unittest.TestCase):
     def setUp(self):
         self.root, self.work, self.origin = make_pair(self)
         self.cfg = config(self.root)
+        patch = mock.patch.object(placement, "_open_pr", return_value=False)  # no open pull request, so a merged story/* branch may go (#1045)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def test_without_apply_a_merged_branch_is_listed_and_kept(self):
-        push_branch(self.work, "story-done", merged=True)
+        push_branch(self.work, "story/done", merged=True)
         lines = placement.remote_branches(self.cfg, apply=False)
-        self.assertTrue(any("origin/story-done" in line and "run with --apply" in line for line in lines))
-        self.assertIn("story-done", origin_branches(self.origin))
+        self.assertTrue(any("origin/story/done" in line and "run with --apply" in line for line in lines))
+        self.assertIn("story/done", origin_branches(self.origin))
 
     def test_apply_deletes_the_merged_branch_and_keeps_unmerged_and_default(self):
-        push_branch(self.work, "story-done", merged=True)
-        push_branch(self.work, "story-open", merged=False)
+        push_branch(self.work, "story/done", merged=True)
+        push_branch(self.work, "story/open", merged=False)
         lines = placement.remote_branches(self.cfg, apply=True)
-        self.assertTrue(any(line.startswith("REMOVE") and "origin/story-done" in line for line in lines))
+        self.assertTrue(any(line.startswith("REMOVE") and "origin/story/done" in line for line in lines))
         remaining = origin_branches(self.origin)
-        self.assertNotIn("story-done", remaining)
-        self.assertTrue({"story-open", "main"} <= remaining)
+        self.assertNotIn("story/done", remaining)
+        self.assertTrue({"story/open", "main"} <= remaining)
 
     def test_a_branch_a_worktree_has_checked_out_is_never_deleted(self):
-        push_branch(self.work, "story-live", merged=True)
-        git(self.work, "worktree", "add", "-q", "-b", "story-live", str(self.root.parent / "wt"), "origin/story-live")
+        push_branch(self.work, "story/live", merged=True)
+        git(self.work, "worktree", "add", "-q", "-b", "story/live", str(self.root.parent / "wt"), "origin/story/live")
         placement.remote_branches(self.cfg, apply=True)
-        self.assertIn("story-live", origin_branches(self.origin))
+        self.assertIn("story/live", origin_branches(self.origin))
 
 
 class CleanRemoteBranchesQAFixes(unittest.TestCase):
@@ -131,6 +150,9 @@ class CleanRemoteBranchesQAFixes(unittest.TestCase):
     def setUp(self):
         self.root, self.work, self.origin = make_pair(self)
         self.cfg = config(self.root)
+        patch = mock.patch.object(placement, "_open_pr", return_value=False)  # no open pull request, so a merged story/* branch may go (#1045)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def make_trunk_default(self):
         git(self.work, "push", "-q", "origin", "main:refs/heads/trunk")
@@ -139,21 +161,21 @@ class CleanRemoteBranchesQAFixes(unittest.TestCase):
 
     def test_a_trunk_default_is_never_listed_for_removal(self):
         self.make_trunk_default()
-        push_branch(self.work, "story-done", merged=True)
+        push_branch(self.work, "story/done", merged=True)
         lines = placement.remote_branches(self.cfg, apply=False)
-        self.assertTrue(any("origin/story-done" in line for line in lines))
+        self.assertTrue(any("origin/story/done" in line for line in lines))
         self.assertFalse(any(line.startswith("REMOVE work: origin/trunk") for line in lines))
 
     def test_apply_deletes_merged_branches_on_a_trunk_default_and_keeps_trunk(self):
         self.make_trunk_default()
-        push_branch(self.work, "story-done", merged=True)
+        push_branch(self.work, "story/done", merged=True)
         placement.remote_branches(self.cfg, apply=True)
         remaining = origin_branches(self.origin)
-        self.assertNotIn("story-done", remaining)
+        self.assertNotIn("story/done", remaining)
         self.assertIn("trunk", remaining)
 
     def test_a_branch_that_moved_on_origin_after_the_merge_check_is_kept(self):
-        push_branch(self.work, "story-moved", merged=True)
+        push_branch(self.work, "story/moved", merged=True)
         real_git = placement._git
         raced = []
 
@@ -164,7 +186,7 @@ class CleanRemoteBranchesQAFixes(unittest.TestCase):
                 raced.append(True)
                 git(self.work, "checkout", "-q", "-B", "tmp", "main")
                 git(self.work, "commit", "--allow-empty", "-q", "-m", "moved on origin")
-                git(self.work, "push", "-q", "origin", "tmp:refs/heads/story-moved")
+                git(self.work, "push", "-q", "origin", "tmp:refs/heads/story/moved")
                 git(self.work, "checkout", "-q", "main")
                 git(self.work, "branch", "-q", "-D", "tmp")
             return out
@@ -172,11 +194,11 @@ class CleanRemoteBranchesQAFixes(unittest.TestCase):
         with mock.patch.object(placement, "_git", side_effect=race):
             lines = placement.remote_branches(self.cfg, apply=True)
         self.assertTrue(raced)
-        self.assertTrue(any(line.startswith("FAILED") and "story-moved" in line for line in lines))
-        self.assertIn("story-moved", origin_branches(self.origin))
+        self.assertTrue(any(line.startswith("FAILED") and "story/moved" in line for line in lines))
+        self.assertIn("story/moved", origin_branches(self.origin))
 
     def test_a_branch_already_deleted_on_origin_is_not_reported_as_removed(self):
-        push_branch(self.work, "story-gone", merged=True)
-        git(self.origin, "update-ref", "-d", "refs/heads/story-gone")
+        push_branch(self.work, "story/gone", merged=True)
+        git(self.origin, "update-ref", "-d", "refs/heads/story/gone")
         lines = placement.remote_branches(self.cfg, apply=True)
-        self.assertFalse(any("story-gone" in line for line in lines))
+        self.assertFalse(any("story/gone" in line for line in lines))

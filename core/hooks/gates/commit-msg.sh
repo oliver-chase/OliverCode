@@ -201,35 +201,9 @@ EOF_REFS
   fi
 fi
 
-# CLOSES-CARD-1. A commit that says "closes #N" or "resolves #N" ("Fix #N" stays a plain reference) queues Status Complete for that card through
-# batch_project.py, so closing an issue never leaves a stale card (the 12 issues closed by hand with a card still open).
-# A message with a bare "(#N)" queues nothing. When the queue cannot take the request the commit is refused with the fix.
-CLOSES="$(printf '%s\n' "$MESSAGE" | grep -Eio '(^|[^[:alnum:]_])(close[sd]?|resolve[sd]?):?[[:space:]]+#0*[1-9][0-9]*([^[:alnum:]_]|$)' \
-  | grep -Eo '#0*[1-9][0-9]*' | sed 's/^#0*//' | sort -un || true)"
-if [ -n "$CLOSES" ]; then
-  CARD_LAUNCHER="${OLIVERCODE_LAUNCHER:-$(command -v olivercode 2>/dev/null || cat "${OLIVERCODE_HOME:-$HOME/.olivercode}/launcher" 2>/dev/null || true)}"
-  CARD_BATCH=""
-  if [ -n "$CARD_LAUNCHER" ]; then
-    CARD_BATCH="$(cd "$(dirname "$(readlink -f "$CARD_LAUNCHER" 2>/dev/null || echo "$CARD_LAUNCHER")")/.." 2>/dev/null && pwd)/skills/backlog/scripts/batch_project.py"
-  fi
-  CARD_CONFIG="$(git rev-parse --show-toplevel 2>/dev/null || true)/docs/backlog-config.json"
-  if [ ! -r "$CARD_CONFIG" ] || [ ! -f "$CARD_BATCH" ]; then
-    echo "[commit-msg] BLOCKED: the message closes #$(printf '%s' "$CLOSES" | tr '\n' ' ' | sed 's/ *$//;s/ / #/g'), and the card cannot be queued: ${CARD_CONFIG} or the backlog scripts are missing."
-    echo "  Run \`olivercode backlog-setup --apply\` to write the config, or drop the closing keyword and write \"(#N)\"."
-    block
-  elif [ -n "${OLIVERCODE_COMMIT_CHECK:-}" ]; then
-    echo "[commit-check] The message closes #$(printf '%s' "$CLOSES" | tr '\n' ' ' | sed 's/ *$//;s/ / #/g'); a real commit queues Status Complete for each card, and this check queues nothing."
-  else
-    CARD_JSON="$(printf '%s\n' "$CLOSES" | awk 'BEGIN{printf "{\"issues\":["} {printf "%s{\"number\":%s,\"fields\":{\"status\":\"Complete\"}}", (NR>1?",":""), $1} END{print "]}"}')"
-    CARD_OK=1
-    CARD_OUT="$(printf '%s\n' "$CARD_JSON" | python3 "$CARD_BATCH" --config "$CARD_CONFIG" --input - 2>&1)" || CARD_OK=0
-    if [ "$CARD_OK" -eq 0 ] && ! printf '%s' "$CARD_OUT" | grep -q 'stays queued'; then
-      echo "[commit-msg] BLOCKED: the Status Complete request for the closed card could not be queued: $(printf '%s' "$CARD_OUT" | tail -1)"
-      echo "  Run \`olivercode backlog-setup --apply\` to repair the config, then commit again."
-      block
-    fi
-  fi
-fi
+# A card reads Complete only after its work lands. A commit that says "closes #N" moves no card here, and STORY-EXISTS-1 above still
+# checks that N names a story. GitHub closes the issue once the commit reaches the default branch, which is after the push, and
+# `olivercode board sync` (scripts/lib/cmd_boardsweep.py) then moves the card of a closed issue to Status Complete (#1045).
 if [ "$BLOCK_COUNT" -gt 0 ]; then
   echo "[commit-msg] $BLOCK_COUNT blocking finding$([ "$BLOCK_COUNT" -eq 1 ] || echo s). Fix all of them, then commit again."
   exit 1

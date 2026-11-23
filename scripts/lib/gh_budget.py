@@ -13,12 +13,14 @@ limit any agent hits, so one agent's failure protects all the others. Standard l
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import math
 import os
 import re
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 try:
@@ -131,6 +133,9 @@ def refusal(resource: str = "") -> str:
 
 QUEUE = "gh-queue.jsonl"
 QUEUE_REPORT = "gh-queue-report.txt"
+REPLAY_LOCK = "gh-replay.lock"
+# A queued write that fails this many times leaves the queue for the owner queue (`olivercode owner`).
+OWNER_AFTER = 3
 
 
 def enqueue(argv: list[str], cwd: str = "") -> int:
@@ -140,39 +145,123 @@ def enqueue(argv: list[str], cwd: str = "") -> int:
     home().mkdir(parents=True, exist_ok=True)
     with open(home() / QUEUE, "a+", encoding="utf-8") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
-        fh.write(json.dumps({"argv": argv, "cwd": cwd or os.getcwd(), "queued": time.time()}) + "\n")
+        fh.write(json.dumps({"id": uuid.uuid4().hex, "argv": argv, "cwd": cwd or os.getcwd(), "queued": time.time()}) + "\n")
         fh.seek(0)
         return len(fh.read().splitlines())
 
 
-def replay(run=None) -> str:
-    """Run the queued gh commands once GraphQL is free, keep the ones that fail, and report what each wrote. Returns the
-    report, also saved in ~/.olivercode/gh-queue-report.txt. While GraphQL is held nothing runs."""
-    path = home() / QUEUE
+def _parse(text: str) -> list[dict]:
+    """The queued rows in file order. A row written before ids existed takes the hash of its line as its id."""
+    rows = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            rows.append({**row, "id": row.get("id") or hashlib.sha1(line.encode("utf-8")).hexdigest()})
+    return rows
+
+
+def _read() -> list[dict]:
     try:
-        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    except (OSError, ValueError):
-        rows = []
+        return _parse((home() / QUEUE).read_text(encoding="utf-8"))
+    except OSError:
+        return []
+
+
+def _settle(row_id: str, attempts: int | None = None) -> None:
+    """Under the queue's lock, drop the row with this id, or record its failed attempts when `attempts` is given. The file is read
+    again here, so a command queued while the replay runs is kept."""
+    home().mkdir(parents=True, exist_ok=True)
+    with open(home() / QUEUE, "a+", encoding="utf-8") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            fh.seek(0)
+            rows = _parse(fh.read())
+            if attempts is None:
+                rows = [r for r in rows if r["id"] != row_id]
+            else:
+                rows = [{**r, "attempts": attempts} if r["id"] == row_id else r for r in rows]
+            fh.seek(0)
+            fh.truncate()
+            fh.write("".join(json.dumps(r) + "\n" for r in rows))
+            fh.flush()
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def _to_owner(argv: list[str], err: str) -> bool:
+    """Put a write that keeps failing in the owner queue with the command and its error. False when the owner queue refuses the
+    text, which leaves the write queued."""
+    try:
+        from lib import cmd_owner
+        cmd_owner.add("gh-replay", f"a queued GitHub write failed {OWNER_AFTER} times and was not sent: run it by hand or drop it",
+                      command=" ".join(argv)[:200], error=err[:200] or "no output")
+    except (ImportError, ValueError):  # ImportError: loaded bare, where the owner queue is not on the path
+        return False
+    return True
+
+
+def _run_gh(argv: list[str], cwd: str) -> subprocess.CompletedProcess:
+    return subprocess.run(argv, cwd=cwd if os.path.isdir(cwd) else None, capture_output=True, text=True, timeout=120)
+
+
+def replay(run=None) -> str:
+    """Run the queued gh commands once GraphQL is free. A command that succeeds leaves the queue at once, so it is never sent
+    twice. One that fails stays queued with the failure counted, and after OWNER_AFTER failures it moves to the owner queue. A rate
+    limit stops the run and counts as no failure. A replay that starts while another runs is refused. Returns the report, also saved
+    in ~/.olivercode/gh-queue-report.txt. While GraphQL is held nothing runs."""
+    home().mkdir(parents=True, exist_ok=True)
+    with open(home() / REPLAY_LOCK, "a+", encoding="utf-8") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return "Another replay is already running, and it sends each queued command once."
+        try:
+            return _replay(run)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _replay(run) -> str:
+    rows = _read()
     if not rows:
         return "The GitHub queue is empty."
     if blocked_until("graphql"):
         when = time.strftime("%H:%M", time.localtime(blocked_until("graphql")))
         return f"{len(rows)} queued gh command(s) wait for the GraphQL reset at about {when}."
-    run = run or (lambda argv, cwd: subprocess.run(argv, cwd=cwd if os.path.isdir(cwd) else None, capture_output=True, text=True, timeout=120))
-    lines, kept = [], []
+    run = run or _run_gh
+    lines, sent, owned = [], 0, 0
     for row in rows:
-        done = run(row["argv"], row["cwd"])
-        cmd = " ".join(row["argv"])[:80]
-        if done.returncode == 0:
+        argv = row.get("argv", [])
+        cmd = " ".join(argv)[:80]
+        try:
+            done = run(argv, row.get("cwd", ""))
+            failed, err = done.returncode != 0, (done.stderr or done.stdout or "").strip()
+        except Exception as exc:  # noqa: BLE001 -- a timeout or a missing gh is a failed write, so it stays queued
+            failed, err = True, str(exc)
+        if not failed:
+            _settle(row["id"])
+            sent += 1
             lines.append(f"wrote: {cmd}")
+            continue
+        if is_limit(err):
+            note_limit(who="replay", resources=limit_resources(cmd, err))
+            lines.append(f"held: {cmd} (GitHub's limit stopped the run, so nothing more was sent and this failure is not counted)")
+            break
+        attempts = row.get("attempts", 0) + 1
+        if attempts >= OWNER_AFTER and _to_owner(argv, err):
+            _settle(row["id"])
+            owned += 1
+            lines.append(f"owner: {cmd} (failed {attempts} times, so it is in the owner queue)")
         else:
-            err = (done.stderr or done.stdout or "").strip().splitlines()
-            if is_limit("\n".join(err)):
-                note_limit(who="replay", resources=limit_resources(cmd, "\n".join(err)))
-            kept.append(row)
-            lines.append(f"kept: {cmd} ({err[-1][:100] if err else 'failed'})")
-    path.write_text("".join(json.dumps(r) + "\n" for r in kept), encoding="utf-8")
-    report = f"{len(rows) - len(kept)} of {len(rows)} queued gh command(s) written.\n" + "\n".join(lines)
+            _settle(row["id"], attempts)
+            lines.append(f"kept: {cmd} ({err.splitlines()[-1][:100] if err else 'failed'})")
+    moved = f", {owned} moved to the owner queue" if owned else ""
+    report = f"{sent} of {len(rows)} queued gh command(s) written{moved}.\n" + "\n".join(lines)
     (home() / QUEUE_REPORT).write_text(report + "\n", encoding="utf-8")
     return report
 

@@ -333,6 +333,13 @@ class TestStoryExists(CommitMsgCase):
         self.assertEqual(0, offline.returncode)
         self.assertIn("WARNING", offline.stdout + offline.stderr)
 
+    def test_a_closing_keyword_is_checked_like_any_story(self):
+        """#1045: "closes #N" names a story, so a number GitHub does not have blocks the commit like any other reference."""
+        blocked = self.commit("Ship it, closes #99")
+        self.assertEqual(1, blocked.returncode)
+        self.assertIn("acme/app#99", blocked.stdout + blocked.stderr)
+        self.assertEqual(0, self.commit("Ship it, closes #12").returncode)
+
     def test_a_placeholder_config_passes_and_says_how_to_fill_it(self):
         (self.repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "your-github-owner", "repoName": "your-repo"}\n')
         done = self.commit("Add a feature (#99)")

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from lib import backlog_setup, claude_settings, engine_only as engine_gate, local_config, open_issues, repo_gates, repo_name_guard
+from lib import backlog_setup, claude_settings, engine_only as engine_gate, local_config, open_issues, placement, repo_gates, repo_name_guard
 from lib.gitfiles import tracked_files
 from lib.local_config import OC_ROOT
 
@@ -161,7 +161,8 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def branches(repo: Path, *, offline: bool, **_) -> Row:
-    """Passes when origin holds only its default branch. Lists each other branch as merged (clean --apply deletes it) or not."""
+    """Passes when origin holds only its default branch. Lists each other branch as one clean --apply deletes (merged story/* with no open
+    pull request, the rule placement.prunable_remote applies), one it keeps, or one that has commits not on the default branch."""
     if offline:
         return Row("branches", "skip", "offline")
     if _git(repo, "remote", "get-url", "origin").returncode != 0:
@@ -181,14 +182,18 @@ def branches(repo: Path, *, offline: bool, **_) -> Row:
             continue
         if _git(repo, "cat-file", "-e", f"{sha}^{{commit}}").returncode != 0:
             state = "not fetched here, so its merge state is unknown"
-        elif _git(repo, "merge-base", "--is-ancestor", sha, f"origin/{default}").returncode == 0:
-            state = f"merged into {default}, safe to delete"
-        else:
+        elif _git(repo, "merge-base", "--is-ancestor", sha, f"origin/{default}").returncode != 0:
             state = f"has commits not on {default}"
+        elif placement.prunable_remote(repo, name):
+            state = f"merged into {default}, safe to delete"
+        elif name.startswith("story/"):
+            state = f"merged into {default}, kept by clean while its pull request is open or GitHub cannot say"
+        else:
+            state = f"merged into {default}, not a story branch, so clean leaves it"
         others.append(f"{name} ({state})")
     if others:
         return _fail("branches", f"origin has branches besides {default}: " + "; ".join(others),
-                     "`olivercode clean --apply` deletes the merged ones; land or delete the rest with `git push origin --delete <branch>`")
+                     "`olivercode clean --apply` deletes the merged story/* branches with no open pull request; delete the rest with `git push origin --delete <branch>`")
     return Row("branches", "pass")
 
 

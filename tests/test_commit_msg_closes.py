@@ -1,11 +1,8 @@
-"""A commit message with a closing keyword queues Status Complete for that card, or the commit is refused."""
+"""A commit message with a closing keyword moves no card. The card reads Complete only after the work lands (#1045)."""
 
 import json
-import os
 import subprocess
-import time
 import unittest
-from pathlib import Path
 
 from _support import REPO_ROOT, git_env, temp_dir
 from test_commit_msg import CommitMsgCase
@@ -16,8 +13,6 @@ class TestClosesCard(CommitMsgCase):
         super().setUp()
         self.first_commit()
         self.oc_home = temp_dir(self, "olivercode-home-")
-        # A held rate limit keeps the queue from calling GitHub, so the request stays in the queue file.
-        (self.oc_home / "gh-limit.json").write_text(json.dumps({"until": time.time() + 3600}))
         cfg = json.loads((REPO_ROOT / "docs" / "backlog-config.json").read_text())
         cfg["repoOwner"] = ""
         self.config = self.repo / "docs" / "backlog-config.json"
@@ -36,12 +31,12 @@ class TestClosesCard(CommitMsgCase):
             return []
         return [(i["number"], i["fields"]) for job in json.loads(path.read_text()) for i in job["issues"]]
 
-    def test_a_closing_keyword_queues_status_complete(self):
+    def test_a_closing_keyword_queues_nothing_and_the_commit_passes(self):
         for n, word in enumerate(("closes", "Closed", "resolved:")):
             with self.subTest(word):
                 done = self.commit_with(f"Ship it, {word} #{640 + n}")
                 self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual([(640 + n, {"status": "Complete"}) for n in range(3)], self.queued())
+        self.assertEqual([], self.queued())
 
     def test_a_bare_reference_queues_nothing(self):
         done = self.commit_with("Ship it (#642)")
@@ -53,17 +48,10 @@ class TestClosesCard(CommitMsgCase):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual([], self.queued())
 
-    def test_a_missing_config_refuses_with_the_fix(self):
+    def test_a_missing_config_does_not_block_a_closing_commit(self):
         self.config.unlink()
         done = self.commit_with("Ship it, closes #642")
-        self.assertEqual(1, done.returncode)
-        self.assertIn("olivercode backlog-setup --apply", done.stdout + done.stderr)
-
-    def test_a_queue_that_cannot_take_the_request_refuses_with_the_fix(self):
-        self.config.write_text("{}")
-        done = self.commit_with("Ship it, closes #642")
-        self.assertEqual(1, done.returncode)
-        self.assertIn("olivercode backlog-setup --apply", done.stdout + done.stderr)
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual([], self.queued())
 
 
