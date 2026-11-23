@@ -15,8 +15,9 @@ def gh_list(args):
     return subprocess.run(["gh", "api"] + args, capture_output=True, text=True, timeout=60)
 
 
-def count_issues(repo, state="open", runner=gh_list):
-    """Issues (not pull requests) in `repo` with `state`, or None when the read fails."""
+def issue_rows(repo, state="open", runner=gh_list):
+    """The issues (not pull requests) of `repo` with `state`, as the list API returns them, or None when the read fails. The count and the
+    board sweep's fingerprint both come from this one read (#1020)."""
     done = runner(["-X", "GET", f"repos/{repo}/issues", "-f", f"state={state}", "-f", "per_page=100", "--paginate", "--slurp"])
     if done.returncode != 0:
         return None
@@ -25,7 +26,13 @@ def count_issues(repo, state="open", runner=gh_list):
     except ValueError:
         return None
     rows = [row for page in pages for row in (page if isinstance(page, list) else [page])]
-    return sum(1 for row in rows if isinstance(row, dict) and "pull_request" not in row)
+    return [row for row in rows if isinstance(row, dict) and "pull_request" not in row]
+
+
+def count_issues(repo, state="open", runner=gh_list):
+    """Issues (not pull requests) in `repo` with `state`, or None when the read fails."""
+    rows = issue_rows(repo, state, runner)
+    return None if rows is None else len(rows)
 
 
 def main(argv=None):

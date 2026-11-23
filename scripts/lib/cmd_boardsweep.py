@@ -10,12 +10,14 @@ a card whose issue is closed moves to Status Complete, and an open issue with no
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
-from lib import cmd_sweep, gh_budget, launchd
+from lib import board_mirror, cmd_sweep, gh_budget, launchd
 from lib.local_config import OC_ROOT
 
 LABEL = "com.olivercode.board-sweep"
@@ -23,6 +25,7 @@ USAGE = "Usage: olivercode board sync [--dry-run] | [--schedule | --unschedule]"
 SCRIPTS = OC_ROOT / "skills" / "backlog" / "scripts"
 FINISHED = ("complete", "done")
 OPENING = "Backlog"
+KEPT = "board-sweep-issues.json"  # each board's repo issues from its last full read, with the fingerprint of the open issues they came from (#1020)
 
 
 def plan(items: list[dict], issues: list[dict], config: dict) -> tuple[list[int], list[int]]:
@@ -43,17 +46,56 @@ def request(config: dict, close: list[int], add: list[int]) -> dict:
             + [{"number": n, "fields": {"status": OPENING}} for n in add]}
 
 
+def fingerprint(opened: list[dict]) -> str:
+    """A fingerprint of the open issues: each number with its last update. A new, closed or edited issue changes it."""
+    return hashlib.sha256(json.dumps(sorted((i.get("number"), i.get("updated_at", "")) for i in opened)).encode()).hexdigest()
+
+
+def open_read(repo: str, run) -> list[dict] | None:
+    """The open issues of REPO, pull requests left out, through REST, which a GraphQL hold does not block. None when the read fails. The read is
+    issue_count's, so the sweep and the status count share one definition of an open issue (#1020)."""
+    import issue_count  # noqa: PLC0415
+
+    def rest(args: list[str]) -> SimpleNamespace:  # the sweep's runner returns stdout or None; the issue read wants a process result
+        out = run(["api", *args])
+        return SimpleNamespace(returncode=0 if out is not None else 1, stdout=out or "")
+
+    return issue_count.issue_rows(repo, runner=rest)
+
+
+def _kept_all() -> dict:
+    try:
+        return json.loads((gh_budget.home() / KEPT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def read(config_path: Path) -> tuple[dict, list[dict], list[dict]]:
-    """(config, board items, repo issues) through REST and the shared local board copy. Exits when the board cannot be read."""
+    """(config, board items, repo issues). The open issues are read on every sweep, and their fingerprint decides whether the repo's full issue list and
+    the board are read again: they are read only when it changed, so an unchanged repo costs one open read (#1020). Raises when the board or the issues
+    cannot be read."""
     sys.path.insert(0, str(SCRIPTS))
     import board_rest  # noqa: PLC0415
     import check_board_hygiene as hygiene  # noqa: PLC0415
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    items = hygiene.load_items(config, use_cache=False)
-    issues = board_rest.repo_issues(f"{config['repoOwner']}/{config['repoName']}", hygiene.run_gh_soft)
+    repo = f"{config['repoOwner']}/{config['repoName']}"
+    opened = open_read(repo, hygiene.run_gh_soft)
+    if opened is None:
+        raise RuntimeError("the repo's open issues could not be read through REST")
+    stamp = fingerprint(opened)
+    kept = _kept_all().get(str(config_path)) or {}
+    if kept.get("stamp") == stamp:
+        return config, hygiene.load_items(config), kept.get("issues") or []
+    issues = board_rest.repo_issues(repo, hygiene.run_gh_soft)
     if issues is None:
         raise RuntimeError("the repo's issues could not be read through REST")
-    return config, items, issues
+    everything = _kept_all()
+    everything[str(config_path)] = {"stamp": stamp, "issues": issues}
+    try:
+        (gh_budget.home() / KEPT).write_text(json.dumps(everything), encoding="utf-8")
+    except OSError:
+        pass  # without the copy the next sweep rereads the issues, which is the cost this avoids and no failure
+    return config, hygiene.load_items(config, use_cache=False), issues
 
 
 def apply(config_path: Path, payload: dict) -> int:
@@ -66,6 +108,7 @@ def apply(config_path: Path, payload: dict) -> int:
         return batch_project.main(["--config", str(config_path), "--input", fh.name])
     finally:
         Path(fh.name).unlink(missing_ok=True)
+        board_mirror.invalidate()  # the sweep queued or applied a change, so the next sweep reads the board live rather than from the copy (#1020)
 
 
 def run(board_list=cmd_sweep.boards, reader=read, applier=apply, dry_run: bool = False, out=print) -> int:

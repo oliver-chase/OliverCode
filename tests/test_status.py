@@ -8,11 +8,13 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
-from _support import REPO_ROOT
+from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from lib import cmd_boardsweep as sweep  # noqa: E402
 from lib import cmd_status  # noqa: E402
 
 NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
@@ -152,6 +154,22 @@ class TestDigest(unittest.TestCase):
         self.assertEqual(["- #7 Done 7 (2026-11-17)", "- #6 Done 6 (2026-11-16)", "- #5 Done 5 (2026-11-15)", "- #4 Done 4 (2026-11-14)", "- #3 Done 3 (2026-11-13)"], landed)
         self.assertIn("## Waits on the owner\n- #4 Approve the push", body)
 
+    def test_next_ready_passes_over_a_claimed_story_and_an_owner_gated_one(self):
+        """#1020: Next Ready names the first open story that is neither claimed nor waiting on the owner."""
+        opened = [{"number": 1, "title": "Gated", "body": "Priority: P0.", "labels": [{"name": "owner-action"}]},
+                  {"number": 2, "title": "Claimed", "body": "Priority: P1.", "labels": []},
+                  {"number": 3, "title": "Ready", "body": "Priority: P2.", "labels": []}]
+        _, _, target = self.write([], [], opened=opened)
+        self.assertEqual("P2 #3 Ready", cmd_status.next_ready(target, {2}))
+        self.assertEqual("P1 #2 Claimed", cmd_status.next_ready(target))
+
+    def test_held_numbers_takes_the_live_claims_and_the_open_owner_steps(self):
+        """#1020: a live claim and an open owner-queue step each hold their story back from Ready; a closed step does not."""
+        steps = [{"status": "open", "step": "Story #3 needs the owner's approval"}, {"status": "done", "step": "Story #4 was approved"}]
+        with mock.patch.object(cmd_status, "live_claims", return_value={"o/r#2": {"agent": "drain"}}), \
+                mock.patch.object(cmd_status.cmd_owner, "items", return_value=steps):
+            self.assertEqual({2, 3}, cmd_status.held_numbers(NOW.timestamp()))
+
     def test_the_session_lines_are_three_and_name_the_open_count_the_last_landing_and_the_digest(self):
         rows = [{"number": 5, "title": "Newest", "closed_at": "2026-11-20T00:00:00Z"}, {"number": 4, "title": "Older", "closed_at": "2026-11-19T00:00:00Z"}]
         lines = cmd_status.session_lines("o/r", 14, rows, Path("/x/status-digest.md"))
@@ -205,6 +223,21 @@ class TestDigest(unittest.TestCase):
         lines = cmd_status.activity(NOW.timestamp(), {}, log, True, 2, "", None, {"pid": 4242, "who": "drain r"})
         self.assertEqual("Warning: the last run on story-5 stopped with max_turns.", lines[-1])
 
+    def test_a_long_round_whose_runner_beat_a_minute_ago_is_not_stalled(self):
+        """#1020: a claim 40 minutes old is building, not stalled, when the live holder is building it and its heartbeat is a minute old."""
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 2400}}
+        holder = {"pid": 4242, "who": "drain r", "building": [7], "beat": NOW.timestamp() - 60}
+        lines = cmd_status.activity(NOW.timestamp(), claims, [], True, 1, "", None, holder)
+        self.assertTrue(lines[0].startswith("Building #7 for 40 minutes"))
+        self.assertFalse(any("stalled" in line for line in lines))
+
+    def test_a_long_round_whose_holder_is_not_building_it_is_stalled(self):
+        """#1020: a live holder that is building another story does not keep a stalled claim from warning."""
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 2400}}
+        holder = {"pid": 4242, "who": "drain r", "building": [8], "beat": NOW.timestamp() - 60}
+        lines = cmd_status.activity(NOW.timestamp(), claims, [], True, 1, "", None, holder)
+        self.assertTrue(any(line.startswith("Warning: #7 holds a claim") for line in lines))
+
     def test_a_claim_without_a_live_runner_names_the_stale_claim_and_its_release(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
         lines = cmd_status.activity(NOW.timestamp(), claims, [], False, 1, "", None)
@@ -232,6 +265,55 @@ class TestDigest(unittest.TestCase):
     def test_a_missing_run_log_reads_as_empty(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": self.tmp.name}):
             self.assertEqual([], cmd_status.run_log())
+
+
+BOARD = {"repoOwner": "o", "repoName": "r", "fields": {"status": {"options": {"Backlog": "1", "Complete": "2"}}}}
+
+
+def board_card(number: int, status: str) -> dict:
+    return {"content": {"number": number, "repository": "o/r"}, "status": status}
+
+
+class TestBoardRead(unittest.TestCase):
+    """#1020: the repo's full issue list and the board are read again only when the open issues changed (cmd_boardsweep.read)."""
+
+    def setUp(self):
+        home = temp_dir(self)
+        self.env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.config = home / "board.json"
+        self.config.write_text(json.dumps(BOARD), encoding="utf-8")
+        self.open_rows = [{"number": 1, "updated_at": "t1"}]
+        self.rest = SimpleNamespace(repo_issues=mock.Mock(return_value=[{"number": 1, "state": "OPEN", "title": "t"}]))
+        self.hygiene = SimpleNamespace(run_gh_soft=lambda args: json.dumps([self.open_rows]),
+                                       load_items=mock.Mock(return_value=[board_card(1, "Backlog")]))
+        patcher = mock.patch.dict(sys.modules, {"board_rest": self.rest, "check_board_hygiene": self.hygiene})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_an_unchanged_repo_rereads_no_issues_and_no_board(self):
+        sweep.read(self.config)
+        self.rest.repo_issues.reset_mock()
+        self.hygiene.load_items.reset_mock()
+        _, items, issues = sweep.read(self.config)
+        self.rest.repo_issues.assert_not_called()
+        self.assertEqual([{"number": 1, "state": "OPEN", "title": "t"}], issues)
+        self.assertEqual([board_card(1, "Backlog")], items)
+
+    def test_a_changed_open_issue_rereads_the_issues_and_the_board(self):
+        sweep.read(self.config)
+        self.open_rows.append({"number": 2, "updated_at": "t2"})
+        self.rest.repo_issues.reset_mock()
+        sweep.read(self.config)
+        self.rest.repo_issues.assert_called_once()
+        self.hygiene.load_items.assert_called_with(BOARD, use_cache=False)
+
+    def test_an_unreadable_open_list_raises_without_rereading(self):
+        self.hygiene.run_gh_soft = lambda args: None
+        with self.assertRaises(RuntimeError):
+            sweep.read(self.config)
+        self.rest.repo_issues.assert_not_called()
 
 
 if __name__ == "__main__":

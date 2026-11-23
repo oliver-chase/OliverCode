@@ -11,6 +11,7 @@ alone (#892), and the session-start hook refreshes it and prints `session_lines`
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -24,12 +25,13 @@ import issue_count  # noqa: E402
 import log_action  # noqa: E402
 
 DAYS = 7
-STALL_MINUTES = run_lock.STALL_MINUTES  # a building story with no claim or run-log row newer than this is reported as stalled (#987)
+STALL_MINUTES = run_lock.STALL_MINUTES  # a building story whose progress has not moved for this long is reported as stalled (#987, #1020)
 CLEAN_STOPS = ("", "end_turn", "completed")  # the stop reasons that end a round without trouble
 DIGEST_TOKENS = 1500
 DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four, and ids, paths and code run shorter, so three keeps the digest under the limit
 OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
 DIGEST_ITEMS = 5  # the latest decisions and the latest run-log rows the digest keeps before it trims to the limit
+OWNER_GATED = " (owner gated)"  # the digest's mark on a story that waits on the owner, so Next Ready skips it (#1020)
 USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR]"
 
 
@@ -88,16 +90,26 @@ def runner_alive() -> bool:
         return False
 
 
-def _epoch(value) -> float:
-    """A run-log row's time in epoch seconds, or 0 for a row that has none (rows written before #987 carry no time)."""
+def held_numbers(now: float) -> set[int]:
+    """The story numbers that a live claim or an open owner-queue step holds back from Ready. A claim names its story in its key, and a policy stop names
+    its story in its step (#1058)."""
+    held = {int(key.rsplit("#", 1)[-1]) for key in live_claims(now) if key.rsplit("#", 1)[-1].isdigit()}
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return 0.0
+        steps = [i for i in cmd_owner.items() if i["status"] == "open"]
+    except (OSError, ValueError, KeyError):
+        steps = []
+    return held | {int(n) for i in steps for n in re.findall(r"Story #(\d+)", str(i.get("step", "")))}
 
 
-def next_ready(path: Path) -> str:
-    """The first open story in the status digest, which is the next Ready story in priority order, or '' when no digest is written."""
+def _number(line: str) -> int | None:
+    """The issue number a digest story line names, or None when the line names none."""
+    found = re.search(r"#(\d+)", line)
+    return int(found.group(1)) if found else None
+
+
+def next_ready(path: Path, held: set[int] = frozenset()) -> str:
+    """The first open story in the status digest that is neither in HELD nor owner-gated, which is the next Ready story in priority order, or '' when
+    none is or no digest is written (#1020). The digest lists only its first OPEN_SHOWN open stories."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -108,7 +120,7 @@ def next_ready(path: Path) -> str:
     for line in parts[1].splitlines()[1:]:
         if line.startswith("## "):
             break
-        if line.startswith("- "):
+        if line.startswith("- ") and not line.endswith(OWNER_GATED) and _number(line) not in held:
             return line[2:]
     return ""
 
@@ -125,13 +137,16 @@ def stall_line(n: str, mine: dict, minutes: int, holder: dict | None) -> str:
 
 def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, landed_row: dict | None, holder: dict | None = None) -> list[str]:
     """The live status lines: one line for each story building (its minutes, its round), or the idle or running line, then the last landing and the next
-    Ready story, then a warning for a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). `holder` is the live run
-    that holds the repo, if any (#1076). It reads only what it is given."""
+    Ready story, then a warning for a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). A builder's progress is the newer of
+    its claim's time and the live holder's heartbeat, when the holder is building it (#1020). `holder` is the live run that holds the repo, if any (#1076).
+    It reads only what it is given."""
     lines, warnings = [], []
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
         rows = [r for r in log if r.get("story") == f"story-{n}"]
-        progress = max([float(mine.get("at", 0))] + [_epoch(r.get("at")) for r in rows])
+        progress = float(mine.get("at", 0))
+        if holder and n.isdigit() and int(n) in (holder.get("building") or []):
+            progress = max(progress, float(holder.get("beat", 0)))  # the live runner beats while it builds the story (#1020)
         if not alive:
             warnings.append(f"Warning: #{n} holds a claim by {mine.get('agent')} but no drain or dispatch process is running. The claim expires by itself "
                             f"after {log_action.CLAIM_HOURS} hours, or delete its entry in {claims_path()} to release it now.")
@@ -171,7 +186,8 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     log = run_log()
     from lib import gated
     holder = run_lock.active(slug, stamp) if slug else {}
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()),
+    ready = next_ready(digest_path(), held_numbers(stamp))
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, ready,
                                                                            (landed(rows) or [None])[0], holder)
 
 
@@ -262,8 +278,8 @@ def _story_line(row: dict, closed: bool = False) -> str:
 
 
 def open_lines(opened: list[dict]) -> list[str]:
-    """The open stories in priority order, at most OPEN_SHOWN."""
-    return [_story_line(r) for r in sorted(opened, key=open_issues.rank)[:OPEN_SHOWN]]
+    """The open stories in priority order, at most OPEN_SHOWN. An owner-gated story carries OWNER_GATED, so Next Ready passes over it."""
+    return [_story_line(r) + (OWNER_GATED if open_issues.owner_gated(r) else "") for r in sorted(opened, key=open_issues.rank)[:OPEN_SHOWN]]
 
 
 def waiting_lines() -> list[str]:
