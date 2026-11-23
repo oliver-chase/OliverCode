@@ -50,11 +50,8 @@ GROUPS = (
         ("audit-fleet", "Check the skills for structure problems"),
         ("audit-mode", "Choose whether an audit fixes what it finds"),
         ("maintain", "Repair what is safe to repair on this machine"),
-        ("eval", "Replay known cases through the guards and report any that changed"),
         ("report", "Count how often each gate blocked a commit"),
-        ("cutlist", "List what earns its place and what has gone unused"),
         ("limits", "Check the size of the repo against its ceiling"),
-        ("usage", "List scheduled jobs and what they cost"),
     )),
     ("Run and land work", (
         ("run", "Run one task in a fresh headless Claude session and validate it"),
@@ -85,7 +82,6 @@ GROUPS = (
     )),
     ("Learning", (
         ("lesson", "Record a mistake and the rule that prevents it"),
-        ("retro", "Turn lessons that have no check into story requests"),
     )),
     ("Fleet and policy", (
         ("discover", "Find the git repos on this machine and register them"),
@@ -98,7 +94,7 @@ GROUPS = (
         ("guide", "Say what everything does, or what one command, gate, guard, job or skill does"),
     )),
 )
-JOBS = {"board-sweep": "board sync", "fleet-sync": "fleet-sync", "retro": "retro", "maintain": "maintain",
+JOBS = {"board-sweep": "board sync", "fleet-sync": "fleet-sync", "maintain": "maintain",
         "gh-limit": "gh-limit", "version-cut": "version-cut"}  # the scheduled jobs and the command that installs each, as the README names them
 
 

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import denials, hook_fires  # noqa: E402
+from lib import denials  # noqa: E402
 
 
 def main() -> int:
@@ -33,6 +33,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("denial_watch", main))
+        raise SystemExit(main())
     except Exception:  # noqa: BLE001 -- a broken check must never stop a command
         raise SystemExit(0)

@@ -1,7 +1,7 @@
 """A step the permission classifier denied reaches the owner queue once, with its exact command (#781, #787).
 
 `scripts/hooks/denial_watch.py` passes each Bash command and its output to `record`. A denial of a persistent job
-(a launchd load, `olivercode retro --schedule`) queues one line with the job label and the command to paste. `resolved`
+(a launchd load, `olivercode maintain --schedule`) queues one line with the job label and the command to paste. `resolved`
 is the check that closes a line once the owner ran the command. Standard library only.
 """
 

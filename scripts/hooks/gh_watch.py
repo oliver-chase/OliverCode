@@ -15,7 +15,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import gh_budget  # noqa: E402
 from gh_guard import uses_gh  # noqa: E402
-import hook_fires  # noqa: E402
 
 
 # gh starts an error line with "gh: ", so a file that only quotes one mid-line is not an error.
@@ -48,6 +47,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("gh_watch", main))
+        raise SystemExit(main())
     except Exception:  # noqa: BLE001 -- fail open
         raise SystemExit(0)

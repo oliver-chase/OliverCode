@@ -168,7 +168,6 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 - `repoPaths`: a repo outside the fleet folder
 - `liveCopies`: each path a running bot reads, mapped to its agent copy. `install` and `conform` fail when OliverCode runs from a live path and name the agent copy to use
 - `auditMode`: `full` or `gated`. Unset, the audit stops at its report and filed issues, and `olivercode audit-mode full|gated` stores the opt-in to fix them too
-- `retroEpic`: the epic that `olivercode retro --file` names in each story it files, as a number, `#N` or `owner/repo#N`. Leave it unset or 0 and those stories carry no Epic line
 - `voiceFile`: the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of `docs/VOICE.md`
 - `designFile`: your own design file, which `install` links as `~/.claude/DESIGN.md` in place of `docs/DESIGN.md`. `install` keeps a `~/.claude/VOICE.md` or `DESIGN.md` you already have and prints `[KEPT]`
 
@@ -202,7 +201,7 @@ In a repo with commit gates, a new interactive session refreshes `status-digest.
 - `land WORKTREE STORY` rebases the worktree on origin/main, runs `scripts/validate.sh` up to twice unless the runner already recorded a pass for the same tree (the log names the record it used, #910), pushes `HEAD:main` (retrying while main moves, see "A land resumes and retries"), fast-forwards a clean main checkout and deletes the worktree and its branches. Work that does not land stays in its worktree with a handover file at `~/.olivercode/land/handover-REPO-N.md`
 - `limits check` prints the tracked line count against the one ceiling number in `docs/LIMITS.json` (tests are not counted) and exits 0 always. A count over the ceiling prints a warning and blocks nothing, and `validate.sh` and `land` never edit the file. Edit the number by hand to accept growth
 - `board` (`groom` and `sync`), `fleet-sync`, `maintain` and `gh-limit` run without a model call, and each takes `--schedule` where `--help` shows it. `gh-limit clear` lifts the shared GitHub rate-limit hold
-- `owner`, `decisions`, `lesson`, `retro`, `batch` and `story outbox` keep the owner's decisions, corrections and queued story requests in `~/.olivercode/`
+- `owner`, `decisions`, `lesson`, `batch` and `story outbox` keep the owner's decisions, corrections and queued story requests in `~/.olivercode/`
 - `push-blocked --session SID` answers a blocked OliverCode push. It reads the decision record `standing-push-olivercode` that the owner made with `decisions record ... --by owner`, names the one rule to allow and exits 0, and nobody asks the owner again. With no record it exits 1, leaves the push blocked and queues one owner line that asks once. It edits no settings file: the rule itself reaches `~/.claude/settings.json` through the installer's autoMode story
 - `install` links `docs/VOICE.md` and `docs/DESIGN.md` into `~/.claude`, links each skill, merges the hook entries listed in `docs/RULES.md` ("Execution") into `~/.claude/settings.json` and sets `core.hooksPath` to `.githooks` here when unset. Any other file at a target path moves to `<name>.pre-olivercode` and is printed. `uninstall` reverses exactly that
 - `validated record|check SHA` keeps the passing full validations that the pre-push hook requires before a push to main
@@ -224,10 +223,6 @@ Every board has two workflows that GitHub offers no API for, so an agent cannot 
 
 `core/templates/deploy/deploy.yml.tmpl` is the one reusable workflow for production deploys from CI. It sits outside `.github/workflows` and `bootstrap` does not stamp it, so it runs nowhere until the owner copies it into a repo as deploy.yml in its workflows folder, replaces the `__TOKEN__` placeholders (validation, deploy and rollback commands, live address, expected text, deploy secret name) and adds the deploy key as a secret of the repo's `production` environment. On each push to main it runs the repo's validation, deploys, checks the live address, and on a failed check runs the rollback and files a P0 issue. The owner approves each repo's workflow and key once, and a deploy by hand still needs the owner's message.
 
-### Recurring jobs audit
-
-`olivercode usage jobs --days N` (7 by default) lists every scheduled task and launchd job of this machine with its schedule, whether it starts a model, whether its text names a gate, its token spend over the period and whether it is a candidate to convert (it starts a model and names no gate). The list is ranked by spend, highest first. A scheduled task's spend is the usage in its run transcripts. A launchd job has no per-job transcript, so its spend shows as not measured. Run it before a conversion and again 7 days after, and the change is a number. The command reads files only and starts no model.
-
 ## How a headless builder finishes a story
 
 `drain` and `dispatch N` share one finish, the same `work_story` code. The builder works in a worktree that `olivercode worktree add` prepares, so hooks and the virtualenv exist before its first commit. When the loop's validation passes, the story is landed with `olivercode land`, commented, closed and its card queued to Complete. Both commands send the builder the same brief: it commits by explicit path and stops, and it never validates, lands, logs or closes. A story counts as landed when a commit that names it is on origin's default branch, which the runner checks in the main checkout, so a story whose worktree is already gone is reported landed with exit 0. A story is closed only on that evidence. On any other outcome the story stays open, a comment names the reason, its card returns to Ready and the claim is released. A validation that runs past its hour fails the round and goes back to the model.
@@ -237,10 +232,6 @@ A story whose earlier session stopped keeps its branch story/N. A second `dispat
 A session that stops on the turn cap (30 turns) or the 900-second round limit is resumed once on the same Claude Code session before the round counts as failed. Any other non-zero exit is reported with the CLI's own stop reason and the tail of its stderr, in the run log and in the story comment.
 
 ## Troubleshooting
-
-### A denied job reaches the owner queue
-
-When the permission classifier denies a command that loads a persistent job (a `launchctl bootstrap` or `olivercode retro --schedule`), the denial-watch hook writes one owner-queue line with the job label and the exact command to paste. The same denial again writes no second line. Run `olivercode owner list` to see the line and `olivercode owner done ID` once the job is loaded.
 
 ### Commits are passing gates that should have blocked them
 

@@ -18,7 +18,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import failure_log  # noqa: E402
 import wip  # noqa: E402
-import hook_fires  # noqa: E402
 
 INTERVAL_S = 600
 BUDGET_S = 2.0
@@ -59,7 +58,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("wip_save", main))
+        raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001 -- a broken save must never stop a turn
         print(f"wip_save failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(0)

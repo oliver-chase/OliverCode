@@ -52,6 +52,21 @@ class TestRemovedJobs(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_gapsweep.py").exists())
         self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_burndown.py").exists())
 
+    def test_the_hourly_lesson_job_is_unloaded_and_deleted_and_its_command_is_gone(self):
+        label = "com.olivercode.lessons"
+        self.assertIn(label, cmd_install.REMOVED_JOBS)
+        (self.agents / f"{label}.plist").write_text("<plist/>")
+        ran = []
+        self.assertEqual([label], cmd_install.retire_removed_jobs(self.home, run=lambda argv, **_: ran.append(argv)))
+        self.assertEqual([], list(self.agents.iterdir()))
+        self.assertEqual(label, ran[0][2].split("/")[-1])
+        for command in ("retro", "cutlist", "usage", "eval"):
+            done = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), command], capture_output=True, text=True)
+            self.assertNotEqual(0, done.returncode, command)
+        listing = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True).stdout
+        for command in ("olivercode retro", "olivercode cutlist", "olivercode usage", "olivercode eval"):
+            self.assertNotIn(command, listing)
+
     def test_a_second_run_finds_nothing_to_remove(self):
         self.assertEqual([], cmd_install.retire_removed_jobs(self.home, run=mock.Mock()))
 

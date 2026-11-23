@@ -145,22 +145,5 @@ class Schedules(unittest.TestCase):
         self.assertIsNone(schedules.task_runs(self.tmp / "none"))
 
 
-    def test_audit_ranks_jobs_by_spend_and_flags_ungated_models(self):
-        """#783 (docs/SETUP.md, Recurring jobs audit): the audit lists each recurring job with its schedule, model start, gate and spend, highest spend first."""
-        for name, text in (("busy", "Sweep the inbox with the model."), ("gated", "Run the gate first, then work.")):
-            (self.tasks / name).mkdir()
-            (self.tasks / name / "SKILL.md").write_text(text)
-        (self.agents / "poll.plist").write_bytes(plistlib.dumps({"Label": "com.olivercode.poll", "ProgramArguments": [str(self.repo / "run.py")], "StartInterval": 600}))
-        rows = schedules.audit_rows(7, self.tasks, self.agents, self.tmp, crons={"busy": ("0 * * * *", True)}, spend={"busy": 500, "gated": 10})
-        self.assertEqual(["busy", "gated", "com.olivercode.poll"], [r["name"] for r in rows])
-        self.assertEqual((True, True), (rows[0]["model"], rows[0]["convert"]))
-        self.assertFalse(rows[1]["convert"])
-        self.assertEqual(("launchd", "every 600 s", False), (rows[2]["kind"], rows[2]["schedule"], rows[2]["model"]))
-        report = schedules.audit_report(7, tasks_dir=self.tasks, agents_dir=self.agents, home=self.tmp, crons={}, spend={"busy": 500})
-        self.assertIn("### Recurring jobs audit", (REPO_ROOT / "docs" / "SETUP.md").read_text(encoding="utf-8"))
-        self.assertIn("olivercode usage jobs --days 7", report)
-        self.assertIn("1 of 3 jobs start a model and name no gate", report)
-
-
 if __name__ == "__main__":
     unittest.main()

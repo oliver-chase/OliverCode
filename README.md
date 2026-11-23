@@ -14,7 +14,7 @@ What the harness covers today:
 - A GitHub budget and a validation queue that every session shares
 - A decision ledger that keeps the owner's exact words for each decision
 
-Also in place: regression evals that replay fixed scenarios through the real hooks, a check that policy cannot turn off silently, and a lessons log with a retro step. Fresh-clone portability, second-device sync, honest token counts and a check for each lesson are tracked on the backlog.
+Also in place: a check that policy cannot turn off silently, and a lessons log that `olivercode lesson add` appends to. Fresh-clone portability, second-device sync, honest token counts and a check for each lesson are tracked on the backlog.
 
 ## Install
 
@@ -103,16 +103,16 @@ python3 scripts/olivercode conform
 | Job | Commands |
 | --- | --- |
 | Install and update | `olivercode install`, `olivercode uninstall`, `olivercode update`, `olivercode bootstrap`, `olivercode sync-hooks`, `olivercode place`, `olivercode clean`, `olivercode worktree`, `olivercode commit-check` |
-| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode ledger`, `olivercode audit-fleet`, `olivercode audit-mode`, `olivercode maintain`, `olivercode eval`, `olivercode report`, `olivercode cutlist`, `olivercode limits`, `olivercode usage` |
+| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode ledger`, `olivercode audit-fleet`, `olivercode audit-mode`, `olivercode maintain`, `olivercode report`, `olivercode limits` |
 | Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode land`, `olivercode wip`, `olivercode validated`, `olivercode queue`, `olivercode batch` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode story`, `olivercode candidates`, `olivercode gh-limit` |
 | Owner and decisions | `olivercode owner`, `olivercode push-blocked`, `olivercode decisions` |
-| Learning | `olivercode lesson`, `olivercode retro` |
+| Learning | `olivercode lesson` |
 | Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode policy` |
 | Orientation | `olivercode skills`, `olivercode guide` |
 
-The scheduled jobs (`board sync`, `fleet-sync`, `retro`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
+The scheduled jobs (`board sync`, `fleet-sync`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
 
 ## Skills
 

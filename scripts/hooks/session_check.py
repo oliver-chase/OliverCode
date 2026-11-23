@@ -26,7 +26,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import repo_gates  # noqa: E402
-import hook_fires  # noqa: E402
 
 RULE_LINKS = ("CLAUDE.md", "VOICE.md", "DESIGN.md")
 
@@ -128,7 +127,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("session_check", main))
+        raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001 -- a broken check must never stop a session from starting
         print(f"session_check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(0)

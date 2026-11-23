@@ -93,10 +93,6 @@ The secret patterns live once in `core/hooks/secret-patterns.sh`, and `scripts/b
 
 The daily `olivercode board groom --all`, which `maintain --fix` runs, reads the failure log with no model call. A gate and reason that appear 3 or more times file one story, "Prevent the repeated block: ...", naming the blocker and its occurrences. An open story for the same blocker gets each new occurrence as a comment, and a blocker seen twice files nothing.
 
-## Hook trigger log
-
-Each registered Claude Code hook runs its main through `scripts/lib/hook_fires.py`, with no model call. The log is one small file per hook under `~/.olivercode/hook-fires` that holds the first run, the last run and the last time the hook acted by blocking, denying, warning or adding context. A busy hook writes once a day, and a logging failure never changes what the hook does. `olivercode cutlist` reads the files and flags a hook with no action once its log covers the 60-day window. The hooks that never acted are removed by the story "Remove hooks that never fire, after 2027-01-20".
-
 ## Engine-only check
 
 The engine-only check, `scripts/lib/engine_only.py`, keeps an OliverCode clone free of personal files. The commit gate runs it through `docs/SUITE-CHECKS.json` and refuses a staged config, filled-in registry, memory file, story, queue item or file that names a fleet repo, with a message that points at the private olivercode-fleet repo. `olivercode conform` runs the same check on the whole checkout and fails with the file and the fix

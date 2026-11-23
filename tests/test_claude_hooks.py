@@ -315,6 +315,14 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertIn("~/mine.sh", commands)
         self.assertFalse({n for _, _, n in claude_settings.MANAGED} & set(claude_settings.RETIRED))
 
+    def test_install_drops_the_denial_watch_entry_and_leaves_its_script(self):
+        entry = {"type": "command", "command": 'python3 "/old/checkout/scripts/hooks/denial_watch.py"'}
+        merged = claude_settings.merge({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [entry]}]}}, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        self.assertFalse(any("denial_watch" in c for c in commands))
+        self.assertNotIn("denial_watch.py", [n for _, _, n in claude_settings.MANAGED])
+        self.assertTrue((claude_settings.HOOKS_DIR / "denial_watch.py").is_file())
+
     def test_dead_names_a_managed_entry_whose_script_does_not_exist(self):
         root = temp_dir(self, "olivercode-dead-", resolve=True)
         (root / "scripts" / "hooks").mkdir(parents=True)

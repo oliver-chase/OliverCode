@@ -146,7 +146,7 @@ def _schedule_replay() -> None:
     print("  [JOB] " + ("GitHub replay job loaded" if cmd_ghreplay.schedule(True) == 0 else "GitHub replay job failed; run `olivercode gh-limit --schedule`"))
 
 
-REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep"))
+REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep", "lessons"))
 REMOVED_PAGES = (".olivercode/city.html",)
 
 

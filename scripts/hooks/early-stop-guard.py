@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-import hook_fires  # noqa: E402
 
 PROMISE_RE = re.compile(
     r"\b(I'?ll|I will|let me|next,? I|now I'?ll)\b[^.]{0,60}"
@@ -297,7 +296,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("early-stop-guard", main))
+        raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001 -- fail open, never block on the hook's own bug
         print(json.dumps({"systemMessage": f"early-stop-guard failed open: {exc}"}))
         raise SystemExit(0)

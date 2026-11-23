@@ -2,8 +2,6 @@
   "_comment": "The example of this machine's local config: where repos live, the private repos and per-repo paths. Copy it to olivercode.local.json.",
   "repoRoot": "~/Developer/Repos",
   "allowOutside": [],
-  "autoCoverLessons": false,
-  "retroEpic": 0,
   "auditMode": "gated",
   "fleetRegistry": "~/.olivercode/fleet/repo-profiles.json",
   "privateRepos": {

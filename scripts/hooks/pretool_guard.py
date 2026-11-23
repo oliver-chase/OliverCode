@@ -26,7 +26,6 @@ import policy_guard  # noqa: E402
 import queue_guard  # noqa: E402
 import reset_guard  # noqa: E402
 from lib import failure_log, main_checkout, policy  # noqa: E402
-import hook_fires  # noqa: E402
 
 
 def _safely(check, *args):
@@ -37,7 +36,7 @@ def _safely(check, *args):
 
 
 def _found(found: list, gate: str, kind: str, why: str, cwd: Path) -> None:
-    """Keep a guard's verdict and log it as that guard's trigger, so `olivercode cutlist` can tell what still fires."""
+    """Keep a guard's verdict and log it as that guard's trigger."""
     found.append((kind, why))
     _safely(failure_log.record, gate, why, cwd.name)
 
@@ -124,6 +123,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("pretool_guard", main))
+        raise SystemExit(main())
     except Exception:  # noqa: BLE001 -- fail open
         raise SystemExit(0)

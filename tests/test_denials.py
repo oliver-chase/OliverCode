@@ -14,7 +14,7 @@ from lib import cmd_owner, denials  # noqa: E402
 
 HOOK = REPO_ROOT / "scripts" / "hooks" / "denial_watch.py"
 DENIED = "Permission for this action has been denied by the auto mode classifier."
-LOAD = "launchctl bootstrap gui/501 /Users/me/Library/LaunchAgents/com.olivercode.retro.plist"
+LOAD = "launchctl bootstrap gui/501 /Users/me/Library/LaunchAgents/com.olivercode.maintain.plist"
 
 
 class TestDeniedJob(unittest.TestCase):
@@ -32,7 +32,7 @@ class TestDeniedJob(unittest.TestCase):
         self.assertIsNone(denials.record(LOAD, DENIED, "s1"))
         (line,) = self.open_lines()
         self.assertEqual(LOAD, line["command"])
-        self.assertIn("com.olivercode.retro", line["step"])
+        self.assertIn("com.olivercode.maintain", line["step"])
 
     def test_a_command_that_ran_or_is_not_covered_queues_nothing(self):
         self.assertIsNone(denials.record(LOAD, "loaded", "s1"))

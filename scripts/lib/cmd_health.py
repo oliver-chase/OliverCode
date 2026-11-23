@@ -126,20 +126,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     otel = bool(os.environ.get("CLAUDE_CODE_ENABLE_TELEMETRY")) and any(k.startswith("OTEL_") for k in os.environ)
     print("  [INFO] Claude Code telemetry export is " + ("configured in this environment" if otel else "not configured in this environment"))
 
-    # Lessons with no check. Any gap warns, and so does a retro that is overdue or has never run.
-    print("\nLessons:")
-    from lib import retro
-    gap = retro.uncovered_count(fleet_root)
-    if gap:
-        t.warn(f"{gap} lesson(s) have no check or story. Run `olivercode retro --file`")
-    else:
-        t.ok("0 lessons without a check")
-    from lib import lesson_flags
-    old = lesson_flags.stale_count()
-    if old:
-        t.fail(f"{old} owner correction(s) are over a day old with no lesson added. Run `olivercode lesson add`")
-    else:
-        t.ok("every owner correction has a lesson")
+    print("\nCheckouts and queues:")
     from lib import maintain
     behind, state = maintain.main_checkout_lag(OC_ROOT)
     if behind:
@@ -154,11 +141,6 @@ def command_health(fleet_root: Path | None = None) -> int:
         t.warn(f"{unfiled} story request(s) are unfiled in {story_outbox.outbox_file()}. Run `olivercode story outbox flush`")
     else:
         t.ok("no unfiled story requests")
-    late = retro.staleness()
-    if late:
-        t.warn(late)
-    else:
-        t.ok("a retro ran in the last 8 days")
 
     # 2. The optional local control plane (runtime/control-plane/, gitignored). A machine
     # without one has nothing to check here, so its absence is not counted as a skip.

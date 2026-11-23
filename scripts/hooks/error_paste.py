@@ -19,7 +19,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import candidates, cmd_owner, failure_log, local_config, repo_state  # noqa: E402
-from lib import hook_fires  # noqa: E402
 
 
 
@@ -106,7 +105,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("error_paste", main))
+        raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001 -- a broken check must never stop the owner's prompt
         print(f"error_paste failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(0)

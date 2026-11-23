@@ -1,6 +1,6 @@
 """The candidates list (#895): gaps the automatic filers find wait here until the owner promotes them to the board.
 
-Gap sweep, retro, audit and maintain call `add`, which appends one JSON line to ~/.olivercode/candidates.jsonl
+Gap sweep, audit and maintain call `add`, which appends one JSON line to ~/.olivercode/candidates.jsonl
 (OLIVERCODE_HOME overrides the folder) and files nothing. `olivercode candidates` prints the list. `olivercode candidates promote N...`
 queues each chosen story in the story outbox and flushes it, so a promoted candidate is filed once. Standard library only.
 """
@@ -18,7 +18,7 @@ from lib import failure_log, repo_name_guard, story_outbox
 USAGE = "Usage: olivercode candidates [add --source NAME --repo OWNER/NAME --title TITLE (--body TEXT | --body-file FILE) | promote N... | promote --all | drop N...]"
 
 
-# The open stories a repo may hold before the automatic filers add none, and how many stories one `retro --auto` run may
+# The open stories a repo may hold before the automatic filers add none, and how many stories one groom run may
 # file (#875). limits.json in the OliverCode home folder overrides either number.
 DEFAULT_LIMITS = {"openStoryCap": 20, "retroFilesPerRun": 3}
 

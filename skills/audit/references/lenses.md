@@ -33,7 +33,6 @@ Every claim is checked against the code, and the code wins.
 ## 4. One home per concept
 
 - The same rule, list, schema, command chain or explanation in two or more files. Name the one home and where each copy points
-- Run `olivercode cutlist --dupes` for the count of helpers with the same body in two or more files, and merge each pair into one module that both callers import
 - Near-duplicates a byte check misses: a reworded rule, two functions doing one job, two tests covering one behavior
 - Competing standards: a second writing, style, layout or process rule beside the one that owns it
 - A copy that a self-contained part needs is kept when a recorded reason and a check that keeps the copies identical both exist

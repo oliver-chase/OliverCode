@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from lib import lesson_cover, lesson_flags, lessons, retro
+from lib import lesson_cover, lesson_flags, lessons
 from lib.cli import flags as _flags
 from lib.local_config import OC_ROOT
 
 USAGE = """Usage:
-  olivercode lesson add [--structure | --repo DIR] --what TEXT --why TEXT --rule TEXT [--covered-by REF] [--flag NAME]
+  olivercode lesson add [--structure | --repo DIR] --what TEXT --why TEXT --rule TEXT [--covered-by REF]
   olivercode lesson list [--structure | --repo DIR] [--uncovered]
   olivercode lesson cover ID REF [--structure | --repo DIR]
-  olivercode lesson dismiss FLAG --reason TEXT
   olivercode lesson seed"""
 
 
@@ -33,9 +32,9 @@ def _line(r: dict) -> str:
 
 def command_lesson(argv: list[str]) -> int:
     sub, rest = (argv[0], argv[1:]) if argv else ("", [])
-    valued = {"--repo", "--what", "--why", "--rule", "--covered-by", "--flag", "--reason"}
+    valued = {"--repo", "--what", "--why", "--rule", "--covered-by"}
     parsed = _flags(rest, valued, {"--structure", "--uncovered"})
-    if parsed is None or sub not in ("add", "list", "cover", "seed", "dismiss"):
+    if parsed is None or sub not in ("add", "list", "cover", "seed"):
         print(USAGE)
         return 1
     vals, _, pos, seen = parsed
@@ -48,11 +47,6 @@ def command_lesson(argv: list[str]) -> int:
             rec = lessons.add(vals.get("--what", ""), vals.get("--why", ""), vals.get("--rule", ""),
                               vals.get("--covered-by"), repo)
             print(f"Recorded lesson {rec['id']} in {lessons.path(repo)}")
-            if not vals.get("--covered-by"):
-                retro.auto_cover()
-            cleared = lesson_flags.clear(vals.get("--flag"))
-            if cleared:
-                print(f"Cleared correction flag {cleared}; {len(lesson_flags.open_flags())} remain open")
             return 0
         if sub == "list" and not pos:
             found = lessons.uncovered(repo) if "--uncovered" in seen else lessons.read(repo)
@@ -65,10 +59,6 @@ def command_lesson(argv: list[str]) -> int:
                 return 1
             rec = lessons.cover(pos[0], pos[1], repo)
             print(f"Lesson {rec['id']} is covered by {rec['covered_by']}")
-            return 0
-        if sub == "dismiss" and len(pos) == 1:
-            gone = lesson_flags.dismiss(pos[0], vals.get("--reason", ""))
-            print(f"Dismissed correction flag {gone}; {len(lesson_flags.open_flags())} remain open")
             return 0
         if sub == "seed" and not pos and not vals and not seen:
             print(f"Added {lessons.seed()} seed lessons to {lessons.path()}")

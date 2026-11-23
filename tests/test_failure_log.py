@@ -34,9 +34,9 @@ class TestHookWrites(unittest.TestCase):
             failure_log.record("gate", "reason", "repo")
         self.assertEqual(log.stat().st_mode & 0o777, 0o600)
 
-    def test_two_hooks_writing_at_once_leave_the_fires_file_intact(self):
-        from lib import hook_fires
-        path = self.dir / hook_fires.FOLDER / "guard.json"
+    def test_two_writers_at_once_leave_the_file_intact(self):
+        from lib import failure_log
+        path = self.dir / "fires" / "guard.json"
         stop, bad = threading.Event(), []
 
         def read():
@@ -51,7 +51,7 @@ class TestHookWrites(unittest.TestCase):
         def write(n):
             for i in range(150):
                 path.parent.mkdir(parents=True, exist_ok=True)
-                hook_fires.write_atomic(path, json.dumps({"ran": f"{n}-{i}" * 200}) + "\n")
+                failure_log.write_atomic(path, json.dumps({"ran": f"{n}-{i}" * 200}) + "\n")
 
         reader = threading.Thread(target=read)
         reader.start()

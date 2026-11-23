@@ -16,7 +16,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import cmd_status, lesson_flags  # noqa: E402
-import hook_fires  # noqa: E402
 
 CHARS = 1200  # the board line and the open list, about three hundred tokens, is what a status answer needs
 # A question about the board only: "status" alone, or "status" in a question or a status-of phrase. "the PR status is red" and "add a status field" are not questions.
@@ -64,7 +63,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(hook_fires.run("status_hint", main))
+        raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001 -- a broken check must never stop the owner's prompt
         print(f"status_hint failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(0)

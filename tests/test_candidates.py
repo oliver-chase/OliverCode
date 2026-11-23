@@ -11,7 +11,7 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import candidates, failure_log, gh_budget, intake, lesson_cover, retro, story_outbox  # noqa: E402
+from lib import candidates, failure_log, gh_budget, intake, lesson_cover, story_outbox  # noqa: E402
 
 
 def origin_as_github() -> dict:
@@ -96,26 +96,23 @@ class TestNoDirectFiling(unittest.TestCase):
     def setUp(self):
         home = temp_dir(self)
         cfg = home / "local.json"
-        cfg.write_text(json.dumps({"autoCoverLessons": True}))
+        cfg.write_text("{}")
         env = {"OLIVERCODE_HOME": str(home), "OLIVERCODE_LOCAL_CONFIG": str(cfg), "OLIVERCODE_FAILURE_LOG": str(home / "failures.log")}
         for p in (mock.patch.dict(os.environ, env), mock.patch.object(gh_budget, "refusal", return_value=""),
-                  mock.patch.object(retro, "sources", return_value=[("structure", None)]),
-                  mock.patch.object(retro, "slug", return_value="o/r"),
                   mock.patch.object(lesson_cover, "own_backlog", return_value=True)):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_the_lesson_job_meets_fifty_repeated_refusals_and_adds_at_most_the_cap(self):
+    def test_the_prevention_check_meets_fifty_repeated_refusals_and_adds_at_most_the_cap(self):
         for n in range(50):
             for _ in range(3):
                 failure_log.record("Commit message", f"refusal {n}", "r")
-        lines = []
-        retro.auto_cover(out=lines.append, fetch=lambda slug: [])
+        intake.prevention("o/r", 1, fetch=lambda slug: [])
         cap = int(candidates.limits()["retroFilesPerRun"])
         self.assertEqual(cap, candidates.count())
         self.assertEqual(0, story_outbox.count())
         self.assertTrue(all(i["title"].startswith(intake.PREVENT) for i in candidates.items()))
-        retro.auto_cover(out=lines.append, fetch=lambda slug: [])
+        intake.prevention("o/r", 1, fetch=lambda slug: [])
         self.assertEqual(2 * cap, candidates.count(), "a second run adds the next ones and never the same ones twice")
 
     def test_a_refusal_from_a_removed_guard_adds_no_candidate(self):
@@ -177,7 +174,7 @@ class TestScheduledEntryPoints(unittest.TestCase):
         gh.write_text(FAKE_GH)
         gh.chmod(0o755)
         self.record = self.root / "gh-calls.txt"
-        (self.root / "local.json").write_text(json.dumps({"autoCoverLessons": True}))
+        (self.root / "local.json").write_text("{}")
         (self.oc / "failures.log").write_text("".join(
             f"2026-11-0{1 + n % 9}T10:00:{m:02d}Z\tOliverCode\tCommit message\trefusal number {n}\n" for n in range(50) for m in range(3)))
         self.env = {**os.environ, "HOME": str(self.home), "OLIVERCODE_HOME": str(self.oc), "OLIVERCODE_FAILURE_LOG": str(self.oc / "failures.log"),
@@ -194,12 +191,6 @@ class TestScheduledEntryPoints(unittest.TestCase):
     def launcher(self, *argv, stdin=None):
         done = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), *argv], capture_output=True, text=True, env=self.env, input=stdin, timeout=120)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-
-    def test_the_lesson_job_adds_at_most_the_cap_and_creates_no_issue(self):
-        self.launcher("retro", "--auto")
-        self.assertEqual([], creations(self.record))
-        self.assertTrue(0 < self.candidate_count() <= candidates.limits()["retroFilesPerRun"])
-        self.assertFalse((self.oc / "story-outbox.jsonl").exists())
 
     def test_the_hooks_create_no_issue(self):
         hooks = REPO_ROOT / "scripts" / "hooks"

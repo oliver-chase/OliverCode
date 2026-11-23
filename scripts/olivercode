@@ -47,15 +47,12 @@ from lib.cmd_land import command_land  # noqa: E402
 from lib.cmd_run import command_run  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.cmd_lesson import command_lesson  # noqa: E402
-from lib.retro import command_retro  # noqa: E402
-from lib.schedules import command_usage  # noqa: E402
 from lib.story_outbox import command_story  # noqa: E402
 from lib.candidates import command_candidates  # noqa: E402
 from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
 from lib.cmd_batch import command_batch  # noqa: E402
 from lib.cmd_audit_mode import command_audit_mode  # noqa: E402
 from lib.cmd_initfleet import command_init_fleet  # noqa: E402
-from lib.cmd_cutlist import command_cutlist, record_command  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
 from lib.cmd_owner import command_owner  # noqa: E402
 from lib.push_approval import command_push_blocked  # noqa: E402
@@ -64,7 +61,6 @@ from lib.decisions import command_decisions  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
 from lib.failure_log import command_report  # noqa: E402
 from lib.validated import command as command_validated  # noqa: E402
-from lib.evals import command_eval  # noqa: E402
 from lib.cmd_health import command_health  # noqa: E402
 from lib.cmd_status import command_status  # noqa: E402
 from lib.cmd_commit_check import command_commit_check  # noqa: E402
@@ -86,7 +82,6 @@ def main() -> int:
 
     cmd = sys.argv[1]
     argv = sys.argv[2:]
-    record_command(cmd)
 
     if cmd == "discover":
         roots: list[Path] = []
@@ -134,8 +129,6 @@ def main() -> int:
         return command_queue(argv)
     if cmd == "gh-limit":
         return command_gh_limit(argv)
-    if cmd == "usage":
-        return command_usage(argv)
     if cmd == "land":
         return command_land(argv)
     if cmd == "board":
@@ -163,8 +156,6 @@ def main() -> int:
         return command_audit_mode(argv)
     if cmd == "limits":
         return command_limits(argv)
-    if cmd == "cutlist":
-        return command_cutlist(argv)
     if cmd == "init-fleet":
         return command_init_fleet(argv)
     if cmd == "owner":
@@ -175,8 +166,6 @@ def main() -> int:
         return command_rule(argv)
     if cmd == "lesson":
         return command_lesson(argv)
-    if cmd == "retro":
-        return command_retro(argv)
     if cmd == "story":
         return command_story(argv)
     if cmd == "candidates":
@@ -242,8 +231,6 @@ def main() -> int:
         return command_skills(argv)
     if cmd == "maintain":
         return command_maintain(argv)
-    if cmd == "eval":
-        return command_eval(argv)
     if cmd == "report":
         return command_report(argv)
     if cmd == "wip":

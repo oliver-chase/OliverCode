@@ -26,7 +26,7 @@ LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 
 # A setting a release adds gets its default here. The saved value wins, so a default only fills a key the user never set.
-DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "autoCoverLessons": False, "retroEpic": 0, "personalRepos": []}
+DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": []}
 BACKLOG_CONFIG = "docs/backlog-config.json"
 LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
 

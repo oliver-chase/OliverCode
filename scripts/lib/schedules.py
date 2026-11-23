@@ -337,84 +337,8 @@ def summary(tasks_dir: Path | None = None, agents_dir: Path | None = None, home:
     return len(jobs(tasks_dir or home / ".claude" / "scheduled-tasks", agents_dir or home / "Library" / "LaunchAgents", home, label_prefixes()))
 
 
-def _launchd_timing(text: str) -> str:
-    """A launchd job's schedule in words, read from its plist text."""
-    try:
-        data = plistlib.loads(text.encode("utf-8"))
-    except (ValueError, plistlib.InvalidFileException):
-        return "unknown"
-    if data.get("StartInterval"):
-        return f"every {int(data['StartInterval'])} s"
-    cal = data.get("StartCalendarInterval")
-    if cal:
-        return "calendar " + json.dumps(cal, sort_keys=True)
-    return "at load" if data.get("RunAtLoad") else "unknown"
-
-
-def audit_rows(days: int = 7, tasks_dir: Path | None = None, agents_dir: Path | None = None, home: Path | None = None,
-               crons=None, spend=None) -> list[dict]:
-    """One dict per recurring job (#783): name, kind, schedule, whether it starts a model, whether it names a gate, spend over `days`
-    days in tokens (None when launchd gives no per-job transcript), and whether a script can find its work first. Ranked by spend."""
-    home = home or Path.home()
-    tasks_dir = tasks_dir or home / ".claude" / "scheduled-tasks"
-    agents_dir = agents_dir or home / "Library" / "LaunchAgents"
-    crons = crons if crons is not None else task_crons() or {}
-    if spend is None:
-        spend = task_spend(days)
-    out = []
-    for name, text, _ in jobs(tasks_dir, agents_dir, home, label_prefixes()):
-        is_task = (tasks_dir / name / "SKILL.md").is_file()
-        model = is_task or bool(re.search(r"(^|[/<>\s])claude(\s|<|$)", text))
-        gated = bool(GATE_WORDS.search(text))
-        cron = crons.get(name)
-        out.append({"name": name, "kind": "task" if is_task else "launchd", "schedule": (cron[0] if cron else "unknown") if is_task else _launchd_timing(text),
-                    "model": model, "gate": gated, "spend": spend.get(name) if is_task else None,
-                    "convert": model and not gated})
-    out.sort(key=lambda r: (-(r["spend"] or 0), r["name"]))
-    return out
-
-
-def task_spend(days: int = 7, directory: Path | None = None, projects: Path | None = None, now: float | None = None) -> dict[str, int]:
-    """Tokens (input, output and cache) per scheduled task id over the last `days` days, from each run's transcript."""
-    import time
-    from lib import usage_sessions
-    from lib.local_config import claude_dir
-    since = (time.time() if now is None else now) - days * 86400
-    totals: dict[str, int] = {}
-    for record in usage_sessions.app_records(directory).values():
-        task = record.get("scheduledTaskId")
-        path = usage_sessions.transcript(str(record.get("cliSessionId") or ""), projects or claude_dir() / "projects") if task else None
-        used = usage_sessions.period_usage(path, since) if path else None
-        if used:
-            totals[str(task)] = totals.get(str(task), 0) + sum(used)
-    return totals
-
-
-def audit_report(days: int = 7, **kwargs) -> str:
-    rows = audit_rows(days, **kwargs)
-    if not rows:
-        return "No recurring job found."
-    head = ("Job", "Kind", "Schedule", "Starts a model", "Gate", f"Tokens, {days} days", "Convert")
-    table = [(r["name"], r["kind"], r["schedule"], "yes" if r["model"] else "no", "yes" if r["gate"] else "no",
-              f"{r['spend']:,}" if r["spend"] is not None else "not measured", "yes" if r["convert"] else "no") for r in rows]
-    widths = [max(len(x[i]) for x in [head, *table]) for i in range(len(head))]
-    lines = ["  ".join(c.ljust(w) for c, w in zip(x, widths)).rstrip() for x in [head, *table]]
-    ungated_model = sum(r["convert"] for r in rows)
-    return "\n".join(lines + ["", f"{ungated_model} of {len(rows)} jobs start a model and name no gate. Rebuild this list with: olivercode usage jobs --days {days}",
-                              "A launchd job has no per-job transcript, so its spend shows as not measured."])
-
-
 if __name__ == "__main__":
     for f in check():
         print(f"[{f.level}] {f.task}: {f.text}")
     for job, spends in refreshes():
         print(f"[REFRESH] {job}: {'starts a Claude session' if spends else 'no model call'}")
-
-
-def command_usage(argv: list[str]) -> int:
-    """`olivercode usage jobs [--days N]`: the recurring jobs audit."""
-    if argv[:1] == ["jobs"] and (len(argv) == 1 or (len(argv) == 3 and argv[1] == "--days" and argv[2].isdigit())):
-        print(audit_report(int(argv[2]) if len(argv) == 3 else 7))
-        return 0
-    print("Usage: olivercode usage jobs [--days N]")
-    return 1
