@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Claude Code UserPromptSubmit hook: a status question is answered from the status digest, with no tool call (#991).
+"""Claude Code UserPromptSubmit hook: a status question is answered from the status digest, with no model turn (#991, #1000).
 
-When the owner's prompt asks what is building, what is left or when something finishes, the hook adds the board line and the open stories from
-status-digest.md (cmd_status.digest_path) to the session, with the file's path and one line saying no tool call is needed. Every other prompt, and
-every message from another session or a notification, gets nothing. The prompt is never blocked, and the hook fails open on its own error.
+When the owner's prompt asks what is building, what is left or when something finishes, the hook reads the board line and the open stories from
+status-digest.md (cmd_status.digest_path). A message that is only a status question is blocked, and those lines are the block reason, so no model
+turn runs and the message never enters the thread. A mixed message goes through with the lines added as context. Every other prompt, a prompt that
+starts with "ask:", and every message from another session or a notification, gets nothing. The hook fails open on its own error.
 """
 
 from __future__ import annotations
@@ -23,10 +24,22 @@ STATUS_RE = re.compile(r"\bwhat(?:'s| is| are)\s+(?:the\s+)?status\b|\bstatus\s+
                        r"|\bwhat(?:'s| is| are)\s+(?:still\s+)?(?:building|left|running|in progress|open)\b|\bhow far\b"
                        r"|\bwhen\s+(?:will|is|does)\s+(?:it|this|that|everything|the\s+\w+)\s+(?:finish|land|complete|be\s+done|be\s+ready|done|ready)\b",
                        re.IGNORECASE | re.MULTILINE)
+ASK_RE = re.compile(r"\s*ask:", re.IGNORECASE)  # the owner's way to force a model turn on a status question
+# Words that may remain once the status phrase is cut out: a message that leaves any other word, such as "and fix the parser", also asks for work.
+FILLER = {"a", "about", "along", "and", "any", "are", "board", "done", "far", "finish", "how", "i", "is", "it", "left", "now", "of", "on", "please",
+          "queue", "ready", "right", "so", "still", "status", "that", "the", "this", "thanks", "what", "when", "whats", "will", "you", "everything"}
+WORD_RE = re.compile(r"[a-z']+")
 
 
 def is_status_question(prompt: str) -> bool:
-    return lesson_flags.from_owner(prompt) and bool(STATUS_RE.search(prompt))
+    return lesson_flags.from_owner(prompt) and not ASK_RE.match(prompt) and bool(STATUS_RE.search(prompt))
+
+
+def is_status_only(prompt: str) -> bool:
+    """True when the prompt is a status question and nothing else: every word left after the status phrase is filler."""
+    if not is_status_question(prompt):
+        return False
+    return all(word in FILLER for word in WORD_RE.findall(STATUS_RE.sub(" ", prompt).lower()))
 
 
 def open_part(text: str) -> str:
@@ -48,6 +61,15 @@ def context(prompt: str, path: Path | None = None) -> str:
             f"Answer from these lines with no tool call. The full status file is {path}, and the owner can read it there.")
 
 
+def block_reason(path: Path) -> str:
+    """The reason shown to the owner when a status-only prompt is blocked: the digest's lines, or a note that none is written yet."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return f"No status digest is written yet at {path}. Write it with `olivercode status digest`."
+    return f"Status from the status file {path}:\n{open_part(text)}"
+
+
 def main() -> int:
     try:
         data = json.load(sys.stdin)
@@ -55,7 +77,13 @@ def main() -> int:
         return 0
     if not isinstance(data, dict):
         return 0
-    text = context(str(data.get("prompt") or ""))
+    prompt = str(data.get("prompt") or "")
+    if is_status_only(prompt):
+        # The block ends the turn, so the context beside it is never read; it keeps the #991 output shape for a status-only prompt.
+        print(json.dumps({"decision": "block", "reason": block_reason(cmd_status.digest_path()),
+                          "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context(prompt)}}))
+        return 0
+    text = context(prompt)
     if text:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}))
     return 0
