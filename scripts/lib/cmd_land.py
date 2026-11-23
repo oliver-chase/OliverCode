@@ -265,7 +265,7 @@ def _scope_refusal(wt: Path, base: str, area: list[str], story: str, log) -> str
     """The result word when the commit must not land: it changes a file outside the story's Files area, or it weakens a test. "" when it may (#1073).
     A story with no Files area has no area to hold the commit to, so only the test check applies to it."""
     outside = [p for p in _git(wt, "diff", "--name-only", "--no-renames", f"origin/{base}", "HEAD").stdout.splitlines()
-               if area and not intake.overlaps([p], area)]
+               if area and not intake.in_area(p, area)]
     if outside:
         names = ", ".join(outside)
         log.write(f"Refused: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}), so nothing landed.\n")

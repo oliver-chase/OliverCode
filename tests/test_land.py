@@ -489,6 +489,15 @@ OR_TRUE_LINE = "make " + "|" + "| true"
 class TestLandStaysInStory(Base):
     """A landing refuses a commit that changes a file outside its story's Files area, or that weakens a test (#1073)."""
 
+    def test_the_test_of_a_listed_file_is_inside_the_area_and_another_files_test_is_not(self):
+        """#1078: the test the rules require is never refused; a test of an unlisted file still is."""
+        from lib import intake
+        area = ["scripts/lib/maintain.py", "skills/audit/scripts/check_report.py", "scripts/hooks/early-stop-guard.py"]
+        for path in ("tests/test_maintain.py", "skills/audit/scripts/test_check_report.py", "tests/test_early_stop_guard.py", "scripts/lib/maintain.py"):
+            self.assertTrue(intake.in_area(path, area), path)
+        for path in ("tests/test_limits.py", "scripts/lib/cmd_health.py", "tests/maintain.py"):
+            self.assertFalse(intake.in_area(path, area), path)
+
     def test_a_commit_outside_the_files_area_is_refused_and_named_on_the_story(self):
         self.body = "Files area: a.txt"
         before = git(self.root / "origin.git", "rev-parse", "main").stdout

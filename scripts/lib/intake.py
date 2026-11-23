@@ -217,6 +217,18 @@ def overlaps(a: list[str], b: list[str]) -> bool:
     return any(x == y or x.rstrip("/") + "/" == y[:len(x.rstrip("/")) + 1] or y.rstrip("/") + "/" == x[:len(y.rstrip("/")) + 1] for x in a for y in b)
 
 
+def in_area(path: str, area: list[str]) -> bool:
+    """True when the path is inside the area, or is the test of a file the area lists: test_NAME.py for NAME.py or NAME.sh, a hyphen read as an
+    underscore. The rules ask for a test with every change, so the test of a listed file never counts as scope creep (#1078)."""
+    if overlaps([path], area):
+        return True
+    name = Path(path).name
+    if not name.startswith("test_"):
+        return False
+    stem = Path(name[len("test_"):]).stem
+    return any(Path(a).stem.replace("-", "_") == stem for a in area if not a.endswith("/"))
+
+
 def long_wait(body: str, today: datetime.date | None = None) -> str:
     """The wait a story parks its work on beyond WAIT_DAYS days, or ''."""
     today = today or datetime.date.today()
