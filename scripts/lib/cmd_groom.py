@@ -12,7 +12,9 @@ covered becomes priority-reviewed.
 
 import hashlib
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -36,8 +38,17 @@ def load_state():
         return {}
 
 
+GH_FALLBACK = "/opt/homebrew/bin/gh"  # launchd's default PATH has no gh, so the job falls back to the Homebrew folder (#1010)
+
+
+def put_gh_on_path():
+    """Adds the Homebrew folder to PATH when gh is not on it, so every subprocess this run starts (the skill scripts and the rate-limit reads too) finds gh (#1010)."""
+    if shutil.which("gh") is None and Path(GH_FALLBACK).is_file():
+        os.environ["PATH"] = os.pathsep.join([str(Path(GH_FALLBACK).parent), os.environ.get("PATH", "")])
+
+
 def gh(args):
-    done = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=120)
+    done = subprocess.run([shutil.which("gh") or GH_FALLBACK, *args], capture_output=True, text=True, timeout=120)
     return done.stdout if done.returncode == 0 else None
 
 
@@ -195,11 +206,35 @@ def stale(hours, now=None, state=None, slugs=None):
     return seen is None or (time.time() if now is None else now) - seen > hours * 3600
 
 
+def queue_failure(name, slug, config, error):
+    """One open owner line for a board whose groom failed, naming the error and the command that retries it (#1010). A line that already
+    names the same error stays; a line with an older error closes and is replaced."""
+    key, retry = f"groom:{slug}", f"olivercode board groom --config {config}"
+    open_lines = [i for i in cmd_owner.items() if i["status"] == "open" and i.get("key") == key]
+    if any(i.get("error") == error for i in open_lines):
+        return
+    for i in open_lines:
+        cmd_owner.close(i["id"])
+    step = f"{name} ({slug}) did not groom: fix the cause in the error, then run `{retry}`"
+    try:
+        cmd_owner.add("groom", step, command=retry, error=error, extra={"key": key})
+    except ValueError:  # the error text held a value the owner queue refuses, so the line names the state file instead
+        cmd_owner.add("groom", step, command=retry, error="the error text is not stored here; see groom-state.json", extra={"key": key})
+
+
+def close_failure(slug):
+    """Closes the owner line for a board that grooms again."""
+    for i in cmd_owner.items():
+        if i["status"] == "open" and i.get("key") == f"groom:{slug}":
+            cmd_owner.close(i["id"])
+
+
 def groom_board(name: str, config: Path, force=False, now=None, run=gh):
     import batch_project
     import board_rest
     import check_board_hygiene
     now = time.time() if now is None else now
+    put_gh_on_path()
     cfg = json.loads(config.read_text(encoding="utf-8"))
     slug, root = f"{cfg['repoOwner']}/{cfg['repoName']}", config.resolve().parent.parent
     state = load_state()
@@ -212,7 +247,8 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         fp = fingerprint(slug, root, run)
         if fp and fp == mine.get("fp") and not force:
             print(f"{name}: unchanged since the last groom, skipped")
-            mine["ok"] = now
+            mine.update(ok=now, failed="")
+            close_failure(slug)
             return True
         issues = board_rest.repo_issues(slug, run)
         if issues is None:
@@ -250,10 +286,11 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
                 batch_project.main(["--config", str(config), "--input", f.name])
             cmd_owner.note("groom", f"{name}: groom fixed {len(fixes)} card(s) that had drifted, were missing or lacked Priority, Size or Ready")
         mine.update(ok=now, fp=fingerprint(slug, root, run), failed="")
+        close_failure(slug)
         return True
     except (Exception, SystemExit) as exc:
-        mine["failed"] = str(exc)[:200]
-        cmd_owner.note("groom", f"{name}: grooming failed: {mine['failed']}")
+        mine["failed"] = str(exc)[:200] or type(exc).__name__
+        queue_failure(name, slug, config, mine["failed"])
         return False
     finally:
         with failure_log.locked(_state()):  # merge this board's record into the file as it is now, so another groom's record is kept

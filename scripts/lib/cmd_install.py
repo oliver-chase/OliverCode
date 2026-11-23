@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import pwd
 import shlex
 import subprocess
@@ -189,13 +190,39 @@ def retire_removed_pages(home: Path | None = None) -> list[str]:
     return gone
 
 
+def repair_job_plists(home: Path | None = None, run=subprocess.run) -> list[str]:
+    """Rewrite each OliverCode job plist that has no PATH with the PATH that finds gh, then reload it, since launchd's default PATH has
+    no gh and the job fails every run (#1010). Returns the labels it repaired."""
+    from lib import launchd
+    folder = (home or Path.home()) / "Library" / "LaunchAgents"
+    fixed = []
+    for plist in sorted(folder.glob("com.olivercode.*.plist")) if folder.is_dir() else []:
+        try:
+            data = plistlib.loads(plist.read_bytes())
+        except (OSError, ValueError):
+            continue
+        env = data.get("EnvironmentVariables") or {}
+        if "PATH" in env:
+            continue
+        data["EnvironmentVariables"] = {**env, "PATH": launchd.job_path()}
+        plist.write_bytes(plistlib.dumps(data))
+        label = data.get("Label") or plist.stem
+        run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
+        loaded = run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)], capture_output=True, text=True)
+        note = "" if loaded.returncode == 0 else f"; launchctl refused it: {loaded.stderr.strip()}"
+        print(f"  [JOB] {label} ran with no PATH, so it could not find gh; rewrote it with PATH and reloaded it{note}")
+        fixed.append(label)
+    return fixed
+
+
 def _retire_removed_jobs() -> None:
-    """Remove the jobs and pages of removed commands, under the same real-home rule as the replay job."""
+    """Remove the jobs and pages of removed commands, and give each job plist a PATH that finds gh, under the same real-home rule as the replay job."""
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
     retire_removed_jobs()
     retire_removed_pages()
+    repair_job_plists()
 
 
 def owner_terminal() -> bool:

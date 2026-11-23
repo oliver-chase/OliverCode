@@ -2,6 +2,7 @@
 
 import json
 import os
+import plistlib
 import subprocess
 import sys
 import unittest
@@ -13,7 +14,7 @@ from _support import REPO_ROOT, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "backlog" / "scripts"))
 import check_board_hygiene  # noqa: E402
-from lib import cmd_groom  # noqa: E402
+from lib import cmd_groom, cmd_install, launchd  # noqa: E402
 
 
 def drift(items, states):
@@ -219,11 +220,11 @@ class TestAForkCarryingTheOwnersConfig(unittest.TestCase):
     def test_groom_refuses_the_inherited_config_and_reads_no_board(self):
         home, repo = temp_dir(self), self.fork()
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), \
-                mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), mock.patch("check_board_hygiene.load_items") as load, \
-                mock.patch.object(cmd_groom.cmd_owner, "note") as note:
+                mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), mock.patch("check_board_hygiene.load_items") as load:
             self.assertFalse(cmd_groom.groom_board("Fork", repo / "docs" / "backlog-config.json"))
+            (line,) = [i for i in cmd_groom.cmd_owner.items() if i["status"] == "open"]
         load.assert_not_called()
-        self.assertIn("names owner/OliverCode's Project, but this checkout's origin is me/my-fork", note.call_args.args[1])
+        self.assertIn("names owner/OliverCode's Project, but this checkout's origin is me/my-fork", line["error"])
 
     def test_the_sweep_skips_the_inherited_config(self):
         from lib import cmd_sweep
@@ -231,6 +232,62 @@ class TestAForkCarryingTheOwnersConfig(unittest.TestCase):
         with mock.patch.object(cmd_sweep, "OC_ROOT", repo), mock.patch.object(cmd_sweep, "load_repo_profiles", return_value=({}, None)), \
                 mock.patch.object(cmd_sweep, "backlog_config", return_value={"projectOwner": "owner", "projectNumber": 15}):
             self.assertEqual([], cmd_sweep.boards())
+
+
+class TestGhFindsItself(unittest.TestCase):
+    """#1010: the nightly job's PATH lacks gh, so groom runs gh from PATH and else from the Homebrew folder."""
+
+    def test_gh_runs_the_one_on_path_and_else_the_homebrew_copy(self):
+        with mock.patch.object(cmd_groom.shutil, "which", return_value=None), mock.patch.object(cmd_groom.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, "out", "")
+            self.assertEqual("out", cmd_groom.gh(["api", "user"]))
+        self.assertEqual("/opt/homebrew/bin/gh", run.call_args.args[0][0])
+        with mock.patch.object(cmd_groom.shutil, "which", return_value="/usr/local/bin/gh"), mock.patch.object(cmd_groom.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, "", "")
+            cmd_groom.gh(["api", "user"])
+        self.assertEqual("/usr/local/bin/gh", run.call_args.args[0][0])
+
+    def test_a_run_without_gh_on_path_adds_the_homebrew_folder_for_its_subprocesses(self):
+        with mock.patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}), mock.patch.object(cmd_groom.shutil, "which", return_value=None), \
+                mock.patch.object(cmd_groom.Path, "is_file", return_value=True):
+            cmd_groom.put_gh_on_path()
+            self.assertEqual("/opt/homebrew/bin:/usr/bin:/bin", os.environ["PATH"])
+
+
+class TestGroomFailureReachesTheOwner(unittest.TestCase):
+    """#1010: a board that fails to groom leaves one open owner line naming the board, the error and the retry, and a good run closes it."""
+
+    def setUp(self):
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
+        patch.start()
+        self.addCleanup(patch.stop)
+        repo = temp_dir(self)
+        (repo / "docs").mkdir()
+        self.config = repo / "docs" / "backlog-config.json"
+        self.config.write_text(json.dumps({"repoOwner": "o", "repoName": "r"}))
+
+    def groom(self, fingerprint, now):
+        with mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), \
+                mock.patch.object(cmd_groom, "fingerprint", **fingerprint), mock.patch("check_board_hygiene.load_items", return_value=[]), \
+                mock.patch("board_rest.repo_issues", return_value=[]), mock.patch.object(cmd_groom, "open_stories", return_value={}), mock.patch("batch_project.main"):
+            return cmd_groom.groom_board("R", self.config, True, now)
+
+    def open_lines(self):
+        return [i for i in cmd_groom.cmd_owner.items() if i["status"] == "open"]
+
+    def test_a_failed_groom_leaves_one_open_line_and_a_good_run_closes_it(self):
+        error = "[Errno 2] No such file or directory: 'gh'"
+        self.assertFalse(self.groom({"side_effect": FileNotFoundError(error)}, 1.0))
+        self.assertFalse(self.groom({"side_effect": FileNotFoundError(error)}, 2.0))
+        (line,) = self.open_lines()
+        self.assertIn("R (o/r) did not groom", line["step"])
+        self.assertEqual(error, line["error"])
+        self.assertEqual(f"olivercode board groom --config {self.config}", line["command"])
+        from lib import cmd_status
+        self.assertIn("R (o/r) did not groom", "\n".join(cmd_status.waiting_lines()))  # the digest shows it the same day
+        self.assertTrue(self.groom({"return_value": "fp"}, 3.0))
+        self.assertEqual([], self.open_lines())
+        self.assertEqual([], cmd_status.waiting_lines())
 
 
 class TestFilingFit(unittest.TestCase):
@@ -312,3 +369,28 @@ class TestFilingFit(unittest.TestCase):
             self.assertEqual(0, cmd_groom.command_fit(["--fit", str(body_file), "--title", "New", "--config", str(config)]))
         self.assertEqual("Files area: scripts/lib/cmd_groom.py\n", body_file.read_text(encoding="utf-8"))
         out.assert_called_once_with("New: the Related check did not run (no network), so the story files without it")
+
+
+class TestRepairOldPlists(unittest.TestCase):
+    """#1010: a job plist installed before the PATH fix has none, so install rewrites it with one and reloads it."""
+
+    def setUp(self):
+        self.home = temp_dir(self)
+        self.folder = self.home / "Library" / "LaunchAgents"
+        self.folder.mkdir(parents=True)
+
+    def test_an_old_job_plist_with_no_path_is_rewritten_with_one_and_reloaded(self):
+        old = self.folder / "com.olivercode.maintain.plist"
+        old.write_bytes(plistlib.dumps({"Label": "com.olivercode.maintain", "ProgramArguments": ["python3"]}))
+        run = mock.Mock(return_value=subprocess.CompletedProcess([], 0, "", ""))
+        with mock.patch.object(launchd.shutil, "which", return_value="/opt/homebrew/bin/gh"), mock.patch("builtins.print"):
+            self.assertEqual(["com.olivercode.maintain"], cmd_install.repair_job_plists(self.home, run))
+        self.assertEqual("/opt/homebrew/bin", plistlib.loads(old.read_bytes())["EnvironmentVariables"]["PATH"].split(":")[0])
+        self.assertIn("bootstrap", run.call_args_list[-1].args[0])
+
+    def test_a_plist_that_already_names_a_path_is_left_alone(self):
+        ok = self.folder / "com.olivercode.fleet-sync.plist"
+        ok.write_bytes(plistlib.dumps({"Label": "com.olivercode.fleet-sync", "EnvironmentVariables": {"PATH": "/x"}}))
+        run = mock.Mock()
+        self.assertEqual([], cmd_install.repair_job_plists(self.home, run))
+        run.assert_not_called()
