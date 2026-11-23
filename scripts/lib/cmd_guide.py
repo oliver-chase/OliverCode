@@ -70,6 +70,7 @@ GROUPS = (
         ("story", "Hold a story request until GitHub has room to file it"),
         ("candidates", "Keep ideas for stories until the owner picks them"),
         ("gh-limit", "Show or lift the shared GitHub rate-limit hold"),
+        ("gated", "Run a scheduled job's command only when a check finds work"),
     )),
     ("Owner and decisions", (
         ("owner", "Keep the steps only the owner can take"),

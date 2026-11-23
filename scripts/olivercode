@@ -47,6 +47,7 @@ from lib.cmd_land import command_land  # noqa: E402
 from lib.cmd_run import command_run  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.cmd_lesson import command_lesson  # noqa: E402
+from lib.gated import command_gated  # noqa: E402
 from lib.story_outbox import command_story  # noqa: E402
 from lib.candidates import command_candidates  # noqa: E402
 from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
@@ -124,6 +125,8 @@ def main() -> int:
         return command_queue(argv)
     if cmd == "gh-limit":
         return command_gh_limit(argv)
+    if cmd == "gated":
+        return command_gated(argv)
     if cmd == "land":
         return command_land(argv)
     if cmd == "board":

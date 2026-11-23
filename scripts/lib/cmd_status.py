@@ -158,7 +158,8 @@ def live_lines(now: datetime, open_now: int, rows: list[dict]) -> list[str]:
     """The status lines for this machine right now, read from the claims, the run log, the process table and the digest."""
     stamp = now.timestamp()
     log = run_log()
-    return [tokens_per_story(rows, log)] + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), (landed(rows) or [None])[0])
+    from lib import gated
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), (landed(rows) or [None])[0])
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=live_lines,

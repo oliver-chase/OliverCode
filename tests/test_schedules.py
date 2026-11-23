@@ -67,7 +67,7 @@ class Schedules(unittest.TestCase):
         crons = {"polls": ("0 */2 * * *", True), "gated": ("0 */2 * * *", True), "paused": ("0 * * * *", False)}
         found = [f for f in self.check(crons=crons) if "gate" in f.text]
         self.assertEqual([(f.level, f.task) for f in found], [("FAIL", "polls")])
-        self.assertIn("baseline rule 17", found[0].text)
+        self.assertIn("olivercode gated --job polls CHECK -- ", found[0].text)
         self.assertIn("12 times a day", found[0].text)
         self.assertEqual(schedules.runs_per_day("0 6 * * 3,5"), 2 / 7)
         self.assertEqual(schedules.runs_per_day("*/15 * * * *"), 96)
@@ -147,3 +147,53 @@ class Schedules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Gated(unittest.TestCase):
+    def setUp(self):
+        self.tmp = temp_dir(self, "olivercode-wrap-", resolve=True)
+        self.log = self.tmp / "gated-runs.jsonl"
+        patch = mock.patch("lib.gated.log_path", return_value=self.log)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def run_gated(self, check_code):
+        from lib import gated
+        calls = []
+
+        def runner(cmd, **kw):
+            calls.append(cmd)
+            return mock.Mock(returncode=check_code if kw.get("shell") else 0)
+        return gated.run_gated("job", "check.sh", ["claude", "-p", "go"], runner), calls
+
+    def test_exit_0_starts_the_command_and_exit_1_skips_it_with_a_log_line(self):
+        code, calls = self.run_gated(0)
+        self.assertEqual((code, len(calls)), (0, 2))
+        code, calls = self.run_gated(1)
+        self.assertEqual((code, calls), (0, ["check.sh"]))
+        self.assertEqual([json.loads(l)["result"] for l in self.log.read_text().splitlines()], ["ran", "skipped"])
+
+    def test_a_broken_check_does_not_start_the_command(self):
+        code, calls = self.run_gated(2)
+        self.assertEqual((code, calls), (2, ["check.sh"]))
+
+    def test_status_counts_skipped_runs_and_the_model_sessions_they_avoided(self):
+        from lib import gated
+        self.run_gated(1)
+        self.run_gated(1)
+        self.run_gated(0)
+        self.assertEqual(gated.skipped_week(self.log), {"job": (3, 2, 2)})
+        self.assertIn("2 of 3 runs skipped", gated.savings_lines(self.log)[0])
+
+    def test_health_names_the_job_its_rate_and_the_wrapper_line_and_install_refuses_it(self):
+        agents = self.tmp / "agents"
+        agents.mkdir()
+        plist = {"Label": "co.x.open", "ProgramArguments": ["/bin/sh", "-c", f"{self.tmp}/x.sh && claude -p run"], "StartInterval": 3600}
+        (agents / "a.plist").write_bytes(plistlib.dumps(plist))
+        found = schedules.check(self.tmp / "t", agents, runs={}, crons={}, prefixes=("co.x",), repo_root=self.tmp, home=self.tmp, archived=lambda p: None)
+        text = [f.text for f in found if f.task == "co.x.open" and "no gate" in f.text][0]
+        self.assertIn("24 times a day", text)
+        self.assertIn("olivercode gated --job co.x.open CHECK -- ", text)
+        self.assertIn("Not loaded: co.x.open", schedules.refusal("co.x.open", plist))
+        plist["ProgramArguments"][2] = "olivercode gated ./x.sh -- claude -p run"
+        self.assertIsNone(schedules.refusal("co.x.open", plist))

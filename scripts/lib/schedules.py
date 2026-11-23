@@ -213,8 +213,9 @@ def runs_per_day(cron: str) -> float | None:
     return per_day
 
 
-# A gate is a script that finds out whether there is work before a model starts. A prompt names one when it says "gate".
-GATE_WORDS = re.compile(r"\bgate\b", re.IGNORECASE)
+# A gate is a script that finds out whether there is work before a model starts. A job names one when it says "gate" or runs `olivercode gated` (#998).
+GATE_WORDS = re.compile(r"\bgated?\b", re.IGNORECASE)
+MODEL_START = re.compile(r"(^|[/<>\s])claude(\s|<|$)")
 
 
 def ungated(tasks_dir: Path, crons: dict[str, tuple[str, bool]] | None) -> list[tuple[str, float | None]]:
@@ -247,6 +248,33 @@ TOKEN_FREE_HINT = ("Run the build from a launchd job that starts no Claude sessi
 
 GATE_HINT = ("Put a gate script first that exits when there is no work, and start the model only when it finds some "
              "(baseline rule 17 in skills/skill-creation/SKILL.md).")
+
+
+def _launchd_rate(text: str) -> str:
+    """A launchd job's runs per day in words, from its StartInterval or StartCalendarInterval."""
+    try:
+        data = plistlib.loads(text.encode("utf-8"))
+    except (ValueError, plistlib.InvalidFileException):
+        return "an unknown number of times"
+    cal = data.get("StartCalendarInterval")
+    per_day = 86400 / data["StartInterval"] if data.get("StartInterval") else (len(cal) if isinstance(cal, list) else 1) if cal else None
+    if per_day is None:
+        return "an unknown number of times" if not data.get("RunAtLoad") else "once"
+    return f"{round(per_day, 2):g} time{'s' if per_day != 1 else ''}"
+
+
+def gate_fix(text: str, is_task: bool, name: str) -> str:
+    """The fix for an ungated job: the exact `olivercode gated` line to put in its place, where CHECK exits 0 with work and 1 with none."""
+    from lib import gated
+    return f"Put this in its place, with CHECK a script that exits 0 when there is work and 1 when there is none: `{gated.wrapper_line(text, is_task, name)}`."
+
+
+def refusal(label: str, plist: dict) -> str | None:
+    """Why a launchd job is not loaded: it starts a model and names no gate. None when it may load (#998)."""
+    text = plistlib.dumps(plist).decode("utf-8", errors="replace")
+    if not MODEL_START.search(text) or GATE_WORDS.search(text):
+        return None
+    return f"Not loaded: {label} starts a model and names no gate. {gate_fix(text, False, label)}"
 
 
 def refreshes(tasks_dir: Path | None = None, agents_dir: Path | None = None, home: Path | None = None,
@@ -318,11 +346,12 @@ def check(tasks_dir: Path | None = None, agents_dir: Path | None = None, runs=No
             out.append(Finding("WARN", name, f"refreshes a page but starts a Claude session on every run. {TOKEN_FREE_HINT}"))
     for name, per_day in ungated(tasks_dir, crons if crons is not None else task_crons()):
         rate = "an unknown number of times" if per_day is None else f"{round(per_day, 2):g} time{'s' if per_day != 1 else ''}"
-        out.append(Finding("FAIL", name, f"runs a model {rate} a day and names no gate command. {GATE_HINT}"))
+        out.append(Finding("FAIL", name, f"runs a model {rate} a day and names no gate command. {gate_fix('', True, name)}"))
     for name, text, _ in listed:
         if (tasks_dir / name / "SKILL.md").is_file() or not re.search(r"(^|[/<>\s])claude(\s|<|$)", text) or GATE_WORDS.search(text):
             continue
-        out.append(Finding("FAIL", name, f"is a launchd job that starts a Claude session and names no gate command. {GATE_HINT}"))
+        rate = _launchd_rate(text)
+        out.append(Finding("FAIL", name, f"is a launchd job that starts a Claude session {rate} a day and names no gate command. {gate_fix(text, False, name)}"))
     history = runs() if callable(runs) else runs if runs is not None else task_runs()
     for task, lst in sorted((history or {}).items()):
         last = lst[-LAST_RUNS:]
