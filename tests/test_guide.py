@@ -43,6 +43,22 @@ class TestGuide(unittest.TestCase):
                 launcher.main()
 
 
+class TestHowWorkRunsMatches(unittest.TestCase):
+    def test_the_guide_opens_with_how_work_runs_before_the_command_list(self):
+        code, text = quiet(cmd_guide.command_guide, REPO_ROOT)
+        self.assertEqual(code, 0)
+        self.assertTrue(text.startswith("How work runs\n"))
+        self.assertLess(text.index(cmd_guide.HOW_WORK_RUNS[-1]), text.index(cli.COMMANDS[0][0]))
+        for sentence in cmd_guide.HOW_WORK_RUNS:
+            self.assertIn(sentence, text)
+
+    def test_the_readme_section_says_the_same_things_in_the_same_order(self):
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        section = readme.split("## How work runs", 1)[1].split("\n## ", 1)[0]
+        positions = [section.index(sentence) for sentence in cmd_guide.HOW_WORK_RUNS]
+        self.assertEqual(positions, sorted(positions))
+
+
 class TestReadmeListsEveryCommand(unittest.TestCase):
     def test_every_setup_launcher_bullet_names_a_real_command(self):
         setup = (REPO_ROOT / "docs" / "SETUP.md").read_text(encoding="utf-8")

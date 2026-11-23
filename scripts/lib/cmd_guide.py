@@ -7,6 +7,14 @@ from pathlib import Path
 
 from lib.cli import COMMANDS
 
+# How work runs, in the order the guide and the README "How work runs" section both print it (#972).
+HOW_WORK_RUNS = (
+    "You work in one thread, and you say what you want. Each request becomes a story on the repo's board.",
+    "`olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main, logs the story and closes it.",
+    "`olivercode status` shows what is open.",
+)
+
+
 def skill_triggers(oc_root: Path) -> list[tuple[str, str]]:
     """Each (skill, what it does and the phrases that load it) pair from the skills' own descriptions, sorted by name."""
     rows = []
@@ -21,11 +29,13 @@ def skill_triggers(oc_root: Path) -> list[tuple[str, str]]:
 
 
 def command_guide(oc_root: Path) -> int:
-    print("OliverCode gives Claude Code projects one set of rules, skills and Git checks.\n")
-    print("First steps")
-    print("  1. python3 scripts/olivercode install     link the rules, skills and hooks into ~/.claude")
-    print("  2. python3 scripts/olivercode health      check this machine")
-    print("  3. python3 scripts/olivercode bootstrap . add the managed files to a project, then run sync-hooks\n")
+    print("How work runs")
+    for sentence in HOW_WORK_RUNS:
+        print(f"  {sentence}")
+    print("\nFirst steps, in order")
+    print("  1. olivercode discover --root <folder holding your repos> --register    add your repos to the fleet")
+    print("  2. olivercode health                                                   check this machine")
+    print("  3. File your first story: say what you want in Claude Code, and it becomes a story on the board\n")
     print("Commands (olivercode --help prints the same list)")
     for cmd, desc in COMMANDS:
         print(f"  {cmd}\n      {desc}")

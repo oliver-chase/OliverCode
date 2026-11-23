@@ -17,7 +17,6 @@ from lib.local_config import design_file, voice_file
 from lib import claude_settings as _claude_settings
 from lib import queue_shim as _queue_shim
 from lib import repo_gates as _repo_gates
-from lib.repo_profiles import registry_file
 from lib.skills_catalog import skill_dirs
 from lib.skill_links import broken_links as _broken_links
 
@@ -40,6 +39,20 @@ def _backups(path: Path) -> list[Path]:
 
 
 INSTALL_RECORD = ".olivercode-install.json"
+
+# The first install's closing text: how work runs and the first steps, in 12 lines at most (#972).
+INTRODUCTION = """How OliverCode works
+  You work in one thread and say what you want. Each request becomes a story on the repo's board.
+  `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless
+  Claude session, and the runner validates it and lands it for you. Run `olivercode status`
+  to see what is open.
+
+First steps, in order
+  1. Register your repos: olivercode discover --root <folder holding your repos> --register
+  2. Check this machine: olivercode health
+  3. File your first story: say what you want in Claude Code, and it becomes a story on the board.
+
+Run `olivercode guide` for the full overview."""
 
 
 RULE_LINKS = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md", "DESIGN.md": Path("docs") / "DESIGN.md"}
@@ -234,6 +247,7 @@ def command_install(oc_root: Path) -> int:
         return 1
     claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"
+    first_install = _read_record(claude_dir) is None
     print("OliverCode install — activating this checkout in ~/.claude")
     print("=" * 40)
 
@@ -392,7 +406,10 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    print(f"Next: `olivercode discover --root <folder holding your repos> --register` adds them to {registry_file(oc_root)}, then `olivercode conform` checks them.")
+    if first_install:
+        print(INTRODUCTION)
+    else:
+        print("Run `olivercode guide` to see how work runs.")
     return 1 if broken or broken_settings else 0
 
 

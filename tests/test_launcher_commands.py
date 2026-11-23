@@ -169,6 +169,28 @@ class TestInstall(HomeCase):
     def _checkout(self):
         return self.root
 
+    def test_a_first_install_ends_with_the_introduction_and_three_first_steps(self):
+        rc, out = self._install()
+        self.assertEqual(rc, 0)
+        intro = out[out.index("How OliverCode works"):].strip()
+        self.assertLessEqual(len(intro.splitlines()), 12)
+        for phrase in ("one thread", "each request becomes a story", "olivercode dispatch N",
+                       "olivercode drain REPO", "validates", "olivercode status"):
+            self.assertIn(phrase.lower(), intro.lower())
+        steps = [line.strip() for line in intro.splitlines() if line.strip()[:2] in ("1.", "2.", "3.")]
+        self.assertEqual(len(steps), 3)
+        self.assertIn("discover", steps[0])
+        self.assertIn("health", steps[1])
+        self.assertIn("story", steps[2])
+
+    def test_a_repeat_install_prints_one_line_that_points_to_the_guide(self):
+        self._install()
+        rc, out = self._install()
+        self.assertEqual(rc, 0)
+        self.assertNotIn("How OliverCode works", out)
+        guide_lines = [line for line in out.splitlines() if "olivercode guide" in line]
+        self.assertEqual(len(guide_lines), 1)
+
     def test_unset_hooks_path_is_set_to_githooks(self):
         root = self._checkout()
         rc, out = self._install(root)

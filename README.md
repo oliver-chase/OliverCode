@@ -37,7 +37,7 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 ## How work runs
 
-You work in one thread. Say what you want, and the session files each request as a story. `olivercode dispatch N` or `olivercode drain REPO` then builds each story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main with `olivercode land`, logs the story and closes it. You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
+You work in one thread, and you say what you want. Each request becomes a story on the repo's board. `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main, logs the story and closes it. `olivercode status` shows what is open. You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
 
 ## Dispatch planning
 
