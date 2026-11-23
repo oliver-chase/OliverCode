@@ -31,6 +31,7 @@ Load the file of the route the request names. A request that fits two routes run
 | The docs, a README, or "are these accurate" | Docs | `references/docs.md` |
 | This session's work, a commit range, "QA this" | Changes | `references/changes.md` |
 | A plan file, or a plan about to run | Plan | `references/plan.md` |
+| "Security audit" | Security: proven boundary crossings only | `references/security.md` |
 
 Every route loads `references/lenses.md`. A target with a user interface also loads `references/frontend-ux.md`.
 
