@@ -164,7 +164,7 @@ class BootstrapVariant(unittest.TestCase):
         self.assertEqual(hook, self.template("pre-commit"))
         self.assertNotIn("private variant written", out)
 
-    def test_unreadable_visibility_gets_the_private_variant_and_says_why(self):
+    def test_unreadable_visibility_gets_the_public_variant_and_says_why(self):
         hook, out = self.bootstrap("")
-        self.assertEqual(hook, self.template("pre-commit-private"))
+        self.assertEqual(hook, self.template("pre-commit"))
         self.assertIn("could not read the repo's visibility", out)

@@ -30,6 +30,8 @@ class TestGate1Secrets(GateHarness):
             "sendgrid": "S" + "G." + "j" * 22 + "." + "k" * 43,
             "webhook-secret": "wh" + "sec_" + "m" * 32,
             "google-oauth": "ya" + "29." + "n" * 40,
+            "openai-project": "sk-" + "proj-" + "Ab1_" * 12,
+            "password-in-url": "postgres://app:" + "hunter2hunter2" + "@db.internal:5432/app",
         }
         cases = {f"cred-{name}.txt": value + "\n" for name, value in modern.items()}
         cases["deploy.sh"] = "TOKEN=ghp_" + "b" * 36 + "\n"

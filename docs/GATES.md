@@ -44,6 +44,8 @@ Each row gives the gate's number in OliverCode's hook, in an adopted repo's hook
 
 The private variant drops the PII gate because a private repo holds personal data by design. `build-hooks.py` generates OliverCode's own hook and the two templates and never a variant repo's hook.
 
+A gate reads its config (`docs/PII-GATE.json`, `docs/IDENTIFIER-GATE.json`) from HEAD, so a commit that edits the config does not exempt itself. Bootstrap writes the public variant, which runs the PII gate, when it cannot read a repo's visibility.
+
 ### Owner identifiers
 
 The gate builds its identifiers from `git log` authors (the full author name as one phrase, plus each email local part), from the owner segment of the `origin` remote, and from the string values of account, shop, store, handle, username, owner, brand and seller keys in the files that `configGlobs` lists. Noreply addresses, bots, Claude, GitHub and Anthropic are ignored. Matching is lowercase on whole words, for identifiers of 5 characters or more.

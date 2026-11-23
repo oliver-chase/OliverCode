@@ -53,11 +53,13 @@ ALLOW = (
     "mcp__ccd_sidebar__set_pinned",
     "mcp__ccd_sidebar__move_sessions",
     "SendMessage",
-    "Bash(git worktree remove *)",
-    "Bash(git -C * worktree remove *)",
+    "Bash(olivercode clean*)",
     "Bash(git worktree prune*)",
-    "Bash(bash scripts/validate.sh*)",
 )
+
+# Entries an older install wrote that a later one no longer pre-approves: `worktree remove *` matches --force, and
+# `validate.sh*` runs whatever script the repo in front of the session ships. Install takes them back out.
+RETIRED_ALLOW = ("Bash(git worktree remove *)", "Bash(git -C * worktree remove *)", "Bash(bash scripts/validate.sh*)")
 
 # One line per ALLOW entry on what it permits, shown by `olivercode install --show-allow` before install writes them.
 ALLOW_WHY = {
@@ -71,10 +73,8 @@ ALLOW_WHY = {
     "mcp__ccd_sidebar__set_pinned": "pin or unpin a session in the sidebar",
     "mcp__ccd_sidebar__move_sessions": "move sessions between sidebar groups",
     "SendMessage": "continue a subagent that already ran",
-    "Bash(git worktree remove *)": "remove a finished story's worktree",
-    "Bash(git -C * worktree remove *)": "remove a finished story's worktree from another folder",
+    "Bash(olivercode clean*)": "remove the merged, clean worktrees, and keep any that hold unlanded work",
     "Bash(git worktree prune*)": "clear the records of worktrees already deleted",
-    "Bash(bash scripts/validate.sh*)": "run the repo's own validation before a commit",
 }
 
 
@@ -203,6 +203,7 @@ def merge(settings: dict, hooks_dir: Path = HOOKS_DIR) -> dict:
     if not isinstance(perms, dict) or not isinstance(perms.get("allow", []), list):
         raise ValueError('"permissions.allow" is not a list')
     allow = perms.setdefault("allow", [])
+    allow[:] = [a for a in allow if a not in RETIRED_ALLOW]
     allow.extend(a for a in ALLOW if a not in allow)
     return out
 

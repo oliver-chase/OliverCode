@@ -1,4 +1,4 @@
-"""Outsider activity (#826): an issue or pull request by an author outside `allowedAuthors` (olivercode.local.json) reaches the owner queue once.
+"""Outsider activity (#826): an issue or pull request by an author outside `allowedAuthors` (olivercode.local.json) reaches the owner queue once, as its reference, author and link without the title.
 An empty list switches the check off. A line is never re-queued, open or done, so a closed line stays closed."""
 
 import json
@@ -29,8 +29,5 @@ def check(boards: list[tuple[str, str]]) -> None:
             who, ref = (it.get("user") or {}).get("login") or "unknown", f"{slug}#{it['number']}"
             if who.lower() in ok or any(f"outsider {ref} " in i["step"] for i in cmd_owner.items()):
                 continue
-            text = f"outsider {ref} ({'pull request' if 'pull_request' in it else 'issue'}, {it.get('state')}) by {who}: %s{it.get('html_url')}"
-            try:
-                cmd_owner.add("maintain", text % f"{it.get('title')} ")
-            except ValueError:  # a title that reads like a secret is queued without it
-                cmd_owner.add("maintain", text % "")
+            # An outsider writes the title, so the queue, which sessions read, holds only the reference, the author and the link.
+            cmd_owner.add("maintain", f"outsider {ref} ({'pull request' if 'pull_request' in it else 'issue'}, {it.get('state')}) by {who}: {it.get('html_url')}")

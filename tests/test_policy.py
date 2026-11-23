@@ -52,6 +52,17 @@ class TestEvaluate(unittest.TestCase):
             self.assertIsNone(policy.evaluate_bash(rules, command), command)
         self.assertIn("no voice tools", policy.evaluate_bash(rules, "pip install kokoro").reason)
 
+    def test_a_push_that_destroys_or_sweeps_branches_is_denied(self):
+        repo = self.on_branch("story/1")
+        for command, rule in (("git push origin --delete main", "git push --delete"), ("git push origin :main", "git push --delete"),
+                              ("git push -d origin master", "git push --delete"), ("git push --mirror", "git push --mirror"),
+                              ("git push --all origin", "git push --mirror"), ("git push origin --prune", "git push --mirror"),
+                              ("git push origin HEAD", "git push branch")):
+            d = policy.evaluate_bash(policy.DEFAULT, command, repo=repo)
+            self.assertEqual(("deny", rule), (d.kind, d.rule), command)
+        self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "git push origin --delete story/old", repo=repo))
+        self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "git push origin HEAD", repo=self.on_branch("main")))
+
     def test_a_wrapped_command_is_read(self):
         self.assertEqual("deny", policy.evaluate_bash(ALLOW_GIT, "bash -c 'zzz now'").kind)
 

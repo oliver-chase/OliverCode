@@ -244,8 +244,12 @@ class TestSettingsMerge(unittest.TestCase):
         self.assertEqual(claude_settings.missing_allow(path), list(claude_settings.ALLOW[1:]))
         claude_settings.install(path)
         self.assertEqual(claude_settings.missing_allow(path), [])
-        for rule in ("mcp__ccd_sidebar__set_pinned", "mcp__ccd_session__start_session", "Bash(git worktree remove *)", "Bash(bash scripts/validate.sh*)"):
+        for rule in ("mcp__ccd_sidebar__set_pinned", "mcp__ccd_session__start_session", "Bash(olivercode clean*)"):
             self.assertIn(rule, claude_settings.ALLOW)
+        for rule in ("Bash(git worktree remove *)", "Bash(git -C * worktree remove *)", "Bash(bash scripts/validate.sh*)"):
+            self.assertNotIn(rule, claude_settings.ALLOW)
+        old = {"permissions": {"allow": ["Bash(ls)", "Bash(git worktree remove *)", "Bash(bash scripts/validate.sh*)"]}}
+        self.assertEqual(claude_settings.merge(old)["permissions"]["allow"], ["Bash(ls)", *claude_settings.ALLOW])
 
     def test_show_allow_names_each_rule_with_what_it_permits(self):
         path = temp_dir(self, "olivercode-settings-") / "settings.json"

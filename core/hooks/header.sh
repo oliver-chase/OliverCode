@@ -47,9 +47,10 @@ if [ -n "$STAGED_FILES" ]; then
   TEXT_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off grep --cached -I --name-only -e '' 2>/dev/null \
     | grep -Fxf - <(printf '%s\n' "$STAGED_FILES") || true)
 fi
-# gate_list FILE KEY prints each string in the JSON array KEY of the staged FILE.
+# gate_list FILE KEY prints each string in the JSON array KEY of FILE as HEAD holds it.
 gate_list() {
-  git show ":$1" 2>/dev/null | tr '\n' ' ' \
+  # It reads the config from HEAD, because a commit that edits the config would otherwise exempt itself.
+  git show "HEAD:$1" 2>/dev/null | tr '\n' ' ' \
     | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' \
     | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true
 }

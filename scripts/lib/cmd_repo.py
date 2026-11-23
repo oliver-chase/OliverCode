@@ -177,9 +177,9 @@ def _validation_command(repo: Path) -> str:
 
 
 def repo_visibility(slug: tuple[str, str] | None) -> tuple[str, str]:
-    """The repo's GitHub visibility as ("public" | "private", reason). Anything unreadable is private, the stricter variant."""
+    """The repo's GitHub visibility as ("public" | "private", reason). Anything unreadable is public, the stricter variant, which runs the PII gate."""
     if not slug:
-        return "private", "the repo has no origin remote"
+        return "public", "the repo has no origin remote"
     try:
         done = subprocess.run(["gh", "api", f"repos/{slug[0]}/{slug[1]}", "--jq", ".visibility"],
                               capture_output=True, text=True, timeout=30)
@@ -187,7 +187,7 @@ def repo_visibility(slug: tuple[str, str] | None) -> tuple[str, str]:
             return ("public" if done.stdout.strip() == "public" else "private"), ""
     except (OSError, subprocess.SubprocessError):
         pass
-    return "private", "gh could not read the repo's visibility"
+    return "public", "gh could not read the repo's visibility"
 
 
 def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
@@ -235,7 +235,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
         fills["<your-github-owner>"] = target_origin[0]
     fills["<Repo>"] = target.name
     visibility, why = repo_visibility(target_origin)
-    if why: print(f"  pre-commit: private variant written, because {why}.")
+    if why: print(f"  pre-commit: public variant written, because {why}.")
 
     new = overwritten = kept = 0
     first_run = not (target / "QUALITY_BASELINE.md").exists()

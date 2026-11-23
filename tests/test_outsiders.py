@@ -23,11 +23,12 @@ class TestOutsiders(Base):
     def steps(self):
         return [i["step"] for i in cmd_owner.items()]
 
-    def test_another_author_is_queued_with_number_author_title_and_link(self):
+    def test_another_author_is_queued_with_number_author_and_link_and_never_the_title(self):
         self.run_check([item(720, "Outsider-a", "Add a thing", state="closed")])
         (step,) = self.steps()
-        for part in ("o/r#720", "Outsider-a", "Add a thing", "https://github.com/o/r/issues/720"):
+        for part in ("o/r#720", "Outsider-a", "https://github.com/o/r/issues/720"):
             self.assertIn(part, step)
+        self.assertNotIn("Add a thing", step)
 
     def test_a_pull_request_by_another_author_is_queued(self):
         self.run_check([item(9, "stranger", pr=True)])

@@ -123,6 +123,7 @@ class IdentifierGate(IdentifierSetup):
 
     def test_local_data_globs_pass_with_an_identifier(self):
         self.stage(CONFIG, gate_config(localData=["fixtures/*"]))
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "gate config")
         self.stage("fixtures/data.json", f'{{"who": "{FAKE}"}}\n')
         self.assertAllowed()
 
@@ -137,6 +138,7 @@ class IdentifierGate(IdentifierSetup):
 
     def test_a_file_outside_local_data_still_blocks_beside_one_inside(self):
         self.stage(CONFIG, gate_config(localData=["fixtures/*"]))
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "gate config")
         self.stage("fixtures/data.json", f"{FAKE}\n")
         self.stage("src/app.py", f"# {FAKE}\n")
         out = self.assertBlocked("owner identifier").stdout

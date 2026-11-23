@@ -361,6 +361,20 @@ def _current_branch(repo: str, rest: list[str]) -> str:
     return done.stdout.strip()
 
 
+def _pushes_every_branch(rest: list[str]) -> bool:
+    """--mirror, --all, --branches or --prune among the push flags: each acts on every branch of the remote."""
+    return any(w in ("--mirror", "--all", "--branches", "--prune") for w in rest[rest.index("push") + 1:] if w.startswith("--"))
+
+
+def _deleted_branches(rest: list[str]) -> list[str]:
+    """The branch names a `git push` deletes on the remote: each name after `--delete` or `-d`, and each `:name` refspec."""
+    rest = rest[rest.index("push") + 1:] if "push" in rest else rest
+    positional = [w.lstrip("+") for w in rest if not w.startswith("-")][1:]
+    if any(w in ("--delete", "-d") for w in rest):
+        return [w.removeprefix("refs/heads/") for w in positional]
+    return [w[1:].removeprefix("refs/heads/") for w in positional if w.startswith(":")]
+
+
 def _pushed_branches(rest: list[str], repo: str = "") -> list[str]:
     """The branch names a `git push` creates or updates on the remote: the destination of each refspec, so
     `local:refs/heads/x` names x. A push with no refspec, such as a bare `git push`, updates the checked-out branch.
@@ -375,6 +389,9 @@ def _pushed_branches(rest: list[str], repo: str = "") -> list[str]:
     names = []
     for spec in positional[1:]:
         dest = spec.lstrip("+").rpartition(":")[2] if ":" in spec else spec.lstrip("+")
+        if dest == "HEAD":  # HEAD pushes the checked-out branch
+            current = _current_branch(repo, whole)
+            dest = current or dest
         if spec.lstrip("+").startswith(":") or dest.startswith("refs/tags/") or dest == "HEAD":
             continue
         names.append(dest.removeprefix("refs/heads/"))
@@ -467,6 +484,13 @@ def evaluate_bash(policy: dict, command: str, repo: str = "", root: Path | None 
             return Decision("deny", "git push --force", "A force push rewrites shared history, so the policy denies it. Use --force-with-lease and ask the owner. See docs/RULES.md, Execution.")
         if name == "git" and sub == "push" and _skips_hooks(rest):
             return Decision("deny", "git push --no-verify", "`git push --no-verify` skips every pre-push gate, so the policy refuses it. Run the push without the flag and fix what the gates report. See docs/GATES.md, Pre-push gates.")
+        if name == "git" and sub == "push" and _pushes_every_branch(rest):
+            return Decision("deny", "git push --mirror", "`git push --mirror`, `--all` and `--prune` update or delete every branch on the remote at once, so the policy denies them. Push the one branch by name. See docs/RULES.md, Execution.")
+        if name == "git" and sub == "push":
+            default = _default_branch(repo)
+            gone = [b for b in _deleted_branches(rest) if b in (default, "main", "master")]
+            if gone:
+                return Decision("deny", "git push --delete", f"A push that deletes {gone[0]} destroys the default branch on the remote, so the policy denies it. See docs/RULES.md, Execution.")
         if name == "git" and sub == "push" and not _branch_override(env):
             default = _default_branch(repo)
             stray = [b for b in _pushed_branches(rest, repo) if b not in (default, "main", "master")]

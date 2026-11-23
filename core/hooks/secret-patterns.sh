@@ -4,6 +4,8 @@ SECRET_PATTERNS=(
   'sk-[A-Za-z0-9]{20,}'                        # OpenAI/Anthropic-style keys
   'gh[pousr]_[A-Za-z0-9]{36}'                  # GitHub classic, OAuth, user, server and refresh tokens
   'github_pat_[A-Za-z0-9_]{22,}'               # GitHub fine-grained tokens
+  'sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}'   # OpenAI project, service-account and admin keys (hyphens and underscores, which the sk- rule above misses)
+  '[a-z][a-z0-9+.-]*://[^/[:space:]:@]+:[^/[:space:]@]{3,}@[^[:space:]]+'  # A password inside a connection URL, after the user name and before the host
   'sk-ant-[a-z0-9]+-[A-Za-z0-9_-]{20,}'        # Anthropic keys (hyphens, so the sk- rule above misses them)
   'glpat-[A-Za-z0-9_-]{20,}'                   # GitLab tokens
   'hf_[A-Za-z0-9]{30,}'                        # Hugging Face tokens
