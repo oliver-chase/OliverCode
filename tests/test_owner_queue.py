@@ -96,6 +96,21 @@ class TestPreparedOwnerSteps(unittest.TestCase):
                 self.assertIn("Refused", out)
             self.assertEqual([], cmd_owner.items())
 
+    def test_a_step_naming_a_repo_that_ends_in_code_is_queued(self):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            item = cmd_owner.add("maintain", "branches: OliverCode: 1 unmerged branch(es) older than 24 hours with no worktree: story/594")
+            self.assertEqual("open", item["status"])
+            self.assertEqual(1, len(cmd_owner.items()))
+
+    def test_a_keyword_secret_is_refused_whatever_its_case_or_prefix(self):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            for step in ("verification code: 123456", "OTP code: 4411", "passcode: 99182", "api_key=abc123", "my_password: hunter2"):
+                with self.assertRaisesRegex(ValueError, "a step never holds a password, card number, key or code"):
+                    cmd_owner.add("s1", step)
+            self.assertEqual([], cmd_owner.items())
+
     def test_a_command_step_still_resumes_with_no_tab_line(self):
         home = temp_dir(self)
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):

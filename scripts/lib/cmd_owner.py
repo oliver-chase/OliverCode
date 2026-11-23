@@ -68,8 +68,9 @@ def items() -> list[dict]:
     return [latest[i] for i in sorted(latest)]
 
 
-# A card number, or a password, key, token or code written into a field, which no agent ever types or stores (#635).
-_SECRET = re.compile(r"\b(?:\d[ -]?){13,19}\b|(?:password|passwd|pwd|secret|token|api[_-]?key|otp|code|cvv)\s*[=:]\s*\S", re.IGNORECASE)
+# A card number, or a password, key, token or code written into a field, which no agent ever types or stores (#635). The keyword
+# needs a non-letter before it, so a repo name such as OliverCode: is not read as a code (#973).
+_SECRET = re.compile(r"\b(?:\d[ -]?){13,19}\b|(?<![A-Za-z])(?:password|passwd|passcode|pwd|secret|token|api[_-]?key|otp|code|cvv)\s*[=:]\s*\S", re.IGNORECASE)
 
 
 def add(session: str, step: str, command: str = "", error: str = "", tab: str = "", after: str = "", check: str = "",
