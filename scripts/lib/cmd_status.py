@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state
+from lib import cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -24,7 +24,7 @@ import issue_count  # noqa: E402
 import log_action  # noqa: E402
 
 DAYS = 7
-STALL_MINUTES = 30  # a building story with no claim or run-log row newer than this is reported as stalled (#987)
+STALL_MINUTES = run_lock.STALL_MINUTES  # a building story with no claim or run-log row newer than this is reported as stalled (#987)
 CLEAN_STOPS = ("", "end_turn", "completed")  # the stop reasons that end a round without trouble
 DIGEST_TOKENS = 1500
 DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four, and ids, paths and code run shorter, so three keeps the digest under the limit
@@ -178,6 +178,9 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
     out(f"{slug}: " + summary(open_now, rows, now))
     for line in live(now, open_now, rows):
         out(line)
+    held = run_lock.active(slug, now.timestamp())
+    if held:
+        out("Run: " + run_lock.describe(held, now.timestamp()))
     return 0
 
 

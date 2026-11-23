@@ -44,6 +44,7 @@ class RunIo:
         self.repo = Path("/repo")
 
     def worktree(self, n): return Path(f"/wt/{n}")
+    def beat(self, building): pass
     def claim(self, n): self.steps.append("claim")
     def build(self, issue, wt, note):
         self.steps.append("build")
@@ -101,6 +102,29 @@ class TestDispatch(DispatchCase):
             code, _, _ = self.run_dispatch()
         self.assertEqual(0, code)
         self.assertEqual(77, work.call_args.args[1]["number"])
+
+    def test_a_dispatch_while_another_run_holds_the_repo_joins_its_queue_and_builds_nothing(self):
+        """#992: no second builder starts; the story is appended, and the holder is named."""
+        from lib import run_lock
+        run_lock.acquire("o/r", "drain r", time.time(), page="/h/status.md", pid=os.getpid() + 1, alive=lambda p: True)
+        with mock.patch.object(run_lock, "pid_alive", return_value=True):
+            code, out, io = self.run_dispatch()
+        self.assertEqual((0, []), (code, io.steps))
+        self.assertIn("Story #77 joins its queue", out)
+        self.assertIn("drain r", out)
+        self.assertEqual([77], run_lock.take_queue("o/r", os.getpid() + 1))
+
+    def test_a_dispatch_works_the_stories_another_thread_queued_before_it_leaves(self):
+        from lib import run_lock
+
+        def work(io, story, state):
+            if story["number"] == 77:
+                run_lock.acquire("o/r", "dispatch 78", time.time(), want=[78], pid=os.getpid() + 1, alive=lambda p: True)
+            return True, 1
+        with mock.patch.object(cmd_drain, "work_story", side_effect=work) as w, mock.patch.object(cmd_dispatch, "read_story", side_effect=lambda r, s, n: (dict(STORY, number=n), "")):
+            code, _, _ = self.run_dispatch()
+        self.assertEqual((0, [77, 78]), (code, [c.args[1]["number"] for c in w.call_args_list]))
+        self.assertEqual({}, run_lock.active("o/r"))
 
     def test_dry_run_claims_and_builds_nothing(self):
         code, out, io = self.run_dispatch(argv=("77", "--dry-run"))

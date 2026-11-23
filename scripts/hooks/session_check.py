@@ -73,6 +73,28 @@ def digest_notes(cwd: Path) -> list[str]:
     return done[2] if done else []
 
 
+def run_notes(cwd: Path) -> list[str]:
+    """One line while a run is active in this repo: the story in flight, and that requests are filed as stories and join the queue (#992)."""
+    if headless():
+        return []
+    try:
+        root = repo_gates.repo_root(cwd)
+        if not root:
+            return []
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from lib import repo_state, run_lock
+        slug = repo_state.origin(root)
+        rec = run_lock.active(slug) if slug else {}
+    except Exception as exc:  # noqa: BLE001 -- never blocks a session
+        print(f"session_check: run lock check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
+    if not rec:
+        return []
+    building = ", ".join(f"#{n}" for n in rec.get("building") or [])
+    return [f"A run is active in {root.name}, {'building ' + building if building else 'building nothing yet'}. "
+            "Start no builder here. A request that changes files is filed as a story and joins the queue."]
+
+
 def placement_notes() -> list[str]:
     """One note naming the repos, worktrees and backups outside repoRoot, or nothing."""
     try:
@@ -119,7 +141,7 @@ def main() -> int:
         data = {}
     cwd = Path(data.get("cwd") or ".")
     found = notes(cwd, Path.home() / ".claude", str(data.get("session_id") or ""))
-    parts = (["OliverCode session check: " + " ".join(found)] if found else []) + digest_notes(cwd)
+    parts = (["OliverCode session check: " + " ".join(found)] if found else []) + run_notes(cwd) + digest_notes(cwd)
     if parts:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}))
     return 0

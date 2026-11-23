@@ -38,6 +38,7 @@ class FakeIo:
     def capacity(self): return self.cap
     def load_ok(self): return True
     def claim(self, n): pass
+    def beat(self, building): self.beats = getattr(self, "beats", []) + [list(building)]
     def worktree(self, n): return Path(f"/wt/{n}")
     repo = Path("/repo")
     def pending(self, n): return False

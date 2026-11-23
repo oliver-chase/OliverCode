@@ -9,6 +9,7 @@ builds one story through the same `work_story`. Every outside effect goes throug
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -16,7 +17,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, gh_budget, intake, owner_decisions
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, gh_budget, intake, owner_decisions, run_lock
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -83,6 +84,10 @@ class Io:
 
     def capacity(self) -> int:
         return self.parallel
+
+    def beat(self, building: list[int]) -> None:
+        """Tell the repo's run lock which stories are building now (#992)."""
+        run_lock.beat(self.slug, os.getpid(), time.time(), building)
 
     def load_ok(self) -> bool:
         return cmd_dispatch.machine_load()[0] > 0
@@ -330,6 +335,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 running[pool.submit(work_story, io, issue, state)] = issue
                 busy |= files
                 started = True
+            io.beat([i["number"] for i in running.values()])
             if not running:
                 if todo and not started and waits < LOAD_WAITS and not io.load_ok():
                     waits += 1
@@ -352,6 +358,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                             pass
                 state["tokens"] += used
                 (state["closed"] if closed else state["blocked"]).append(issue["number"])
+            io.beat([i["number"] for i in running.values()])
     finally:
         pool.shutdown(wait=True)
     say(f"Drain done: {len(state['closed'])} stories closed, {len(state['blocked'])} blocked, {state['sessions']} sessions, {state['tokens']:,} tokens.")
@@ -366,8 +373,33 @@ def resolve_repo(name: str) -> Path | None:
     return None
 
 
+def status_page() -> str:
+    """The page the run lock names for watching a run: the status digest until the status page lands (#990)."""
+    try:
+        from lib import cmd_status
+        return str(cmd_status.digest_path())
+    except Exception:  # noqa: BLE001 -- a missing page never stops a run
+        return ""
+
+
+def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) -> bool:
+    """Take the repo's run lock, or join the run that holds it (#992). True when this process now holds the run. When another run is live, `want` is
+    appended to its queue, the holder is named and nothing starts. A dead holder's lock is taken over, its claims are released and the queue resumes from the board."""
+    now = time.time()
+    held, taken, why = run_lock.acquire(slug, who, now, page=status_page(), want=want)
+    if held:
+        join = (f"Story #{want[0]} joins its queue." if want else "It reads the board each pass, so every open story joins its queue in priority order.")
+        say(f"No second run starts for {slug}: {run_lock.describe(held, now)} {join}")
+        return False
+    if taken:
+        say(f"Took over the run lock for {slug} from {taken.get('who')}, because {why}. The queue resumes from the board.")
+        for n in taken.get("building") or []:
+            io.release(n)
+    return True
+
+
 def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
-    """`drain REPO`, one story at a time, or `drain REPO --parallel N` for up to N builders at once (#979)."""
+    """`drain REPO`, one story at a time, or `drain REPO --parallel N` for up to N builders at once (#979). One run holds a repo at a time (#992)."""
     args, parallel, rest = list(argv), PARALLEL, []
     while args:
         arg = args.pop(0)
@@ -387,4 +419,15 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
         return 1
     cfg = backlog_config(repo)
     slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
-    return drain(io_factory(repo, slug, parallel=parallel), new_state(), sleep=sleep)
+    io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
+    if not take_run(io, slug, f"drain {repo.name}"):
+        return 0
+    state = new_state()
+    try:
+        with run_lock.Heartbeat(slug, pid):
+            code = drain(io, state, sleep=sleep)
+            while code == 0 and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
+                code = drain(io, state, sleep=sleep)
+        return code
+    finally:
+        run_lock.release(slug, pid)

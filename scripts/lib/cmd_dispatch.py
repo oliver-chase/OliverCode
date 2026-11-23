@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import backlog_setup, cmd_groom, intake, gh_budget, local_config, validate_queue
+from lib import backlog_setup, cmd_groom, intake, gh_budget, local_config, open_issues, run_lock, validate_queue
 from lib.local_config import OC_ROOT
 from lib.placement import config as placement_config
 
@@ -236,6 +236,40 @@ def command_dispatch(argv: list[str], runner=gh, load_check=machine_load, clock=
         return _refuse(f"story #{n} is closed.")
     if not intake.files_area(story.get("body") or ""):
         return _refuse(f"story #{n} names no files area, so it is not dispatched. Rewrite it with a `Files area:` line.")
+    agent = sid or "dispatch"
+    worktree = placement_config().worktrees / f"{repo.name}-{n}"
+    if dry:
+        refused = _start_checks(runner, slug, n, story, clock, load_check, heavy)
+        if refused:
+            return refused
+        print(f"Dry run: story #{n} would build headless in {worktree}, claimed as {agent}. No claim posted.")
+        return 0
+    from lib import cmd_drain  # drain imports this module, so the import waits until a builder runs
+    io = io or cmd_drain.Io(Path(repo), slug, agent, runner)
+    pid = os.getpid()
+    if not cmd_drain.take_run(io, slug, f"dispatch {n}" + (f" from {sid}" if sid else ""), [n]):  # one run per repo: a second thread's story joins the running queue (#992)
+        return 0
+    try:
+        with run_lock.Heartbeat(slug, pid):
+            refused = _start_checks(runner, slug, n, story, clock, load_check, heavy)
+            if refused:
+                return refused
+            code = _build(io, cmd_drain, story, n, worktree)
+            while True:
+                queued = run_lock.release(slug, pid)  # stories other threads queued meanwhile run next, in priority order
+                if not queued:
+                    break
+                stories = [st for st, why in (read_story(runner, slug, q) for q in queued) if not why and st.get("state", "").upper() == "OPEN"]
+                for nxt in sorted(stories, key=open_issues.rank):
+                    if not live_claim(runner, slug, nxt["number"], nxt, clock()):
+                        _build(io, cmd_drain, nxt, nxt["number"], placement_config().worktrees / f"{repo.name}-{nxt['number']}")
+            return code
+    finally:
+        run_lock.release(slug, pid)
+
+
+def _start_checks(runner, slug: str, n: int, story: dict, clock, load_check, heavy) -> int:
+    """The refusals before a builder starts: a live claim, a busy machine, full validation slots. 0 when none applies."""
     claim = live_claim(runner, slug, n, story, clock())
     if claim:
         return _refuse(f"story #{n} is {claim}. Take the next open story.")
@@ -245,14 +279,12 @@ def command_dispatch(argv: list[str], runner=gh, load_check=machine_load, clock=
     held = (heavy or validate_queue.heavy_runs)()
     if held >= validate_queue.HEAVY_CAP:
         return _refuse(f"{held} validation, test or render runs hold slots, which is the cap of {validate_queue.HEAVY_CAP}. Ask again when one finishes.")
-    agent = sid or "dispatch"
-    worktree = placement_config().worktrees / f"{repo.name}-{n}"
-    if dry:
-        print(f"Dry run: story #{n} would build headless in {worktree}, claimed as {agent}. No claim posted.")
-        return 0
-    from lib import cmd_drain  # drain imports this module, so the import waits until a builder runs
-    io = io or cmd_drain.Io(Path(repo), slug, agent, runner)
+    return 0
+
+
+def _build(io, cmd_drain, story: dict, n: int, worktree) -> int:
     io.claim(n)
+    io.beat([n])
     closed, _used = cmd_drain.work_story(io, story, cmd_drain.new_state())
     print(f"Story #{n} {'landed and closed' if closed else 'stayed open and is back on Ready; the reason is in its comment'}. Branch story/{n} in {worktree}.")
     return 0 if closed else 1
