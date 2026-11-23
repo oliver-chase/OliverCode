@@ -9,8 +9,22 @@ This is the one standard for anything visual made for a person: a page, dashboar
 - Each brand looks like itself. Two brands never share a palette, a type pairing and a layout
 - Before a design is built, look at the market leaders in its category and follow their proven structure. The design note names the leaders examined and what the design takes from each
 - Before a visual counts as done, check it frame by frame. Look at each frame or slide of a video, animation, GIF or slide sequence one at a time, never from one overview
+- A real brand's colors come from its own site, its logo files or the owner, and never from memory. The design note names the source. When none is at hand, ask the owner before choosing a color
 
-## Never use these tells of generated design
+## Tells of generated design
+
+Every tell sits in one of two tiers. A Floor tell is never allowed, and no waiver lifts it. A Reflex tell is a judgment call: it ships only with a waiver, a line in the page's design note that names the tell, names the page and gives the reason this page needs it. A Reflex tell with no waiver is a finding.
+
+### Floor
+
+- Invented metrics, such as user counts, ratings or savings with no source
+- A form that sends nothing, or looks sent when it is not
+- An empty picture box standing in for a photo or a product shot
+- Placeholder copy, such as lorem ipsum or "Your text here"
+- Invented testimonials or customer logos
+- Pulsing live dots on a page that is not live
+
+### Reflex
 
 - Tags and pills
 - Italics for emphasis beyond a rare word
@@ -31,6 +45,10 @@ This is the one standard for anything visual made for a person: a page, dashboar
 - Monospace type outside code
 - All-caps subtitles
 - Gradient backgrounds and dark gradient heroes
+- Gradient text
+- Side accent bars on cards, callouts or lists
+- Glow shadows
+- A hover lift on every card
 - Periods at the end of titles
 - Emoji as decoration
 - Cream backgrounds
@@ -38,7 +56,6 @@ This is the one standard for anything visual made for a person: a page, dashboar
 - Disco logos
 - Infinite canvases
 - Pixel loaders
-- Pulsing live dots
 - Sparkle icons
 - Liquid glass
 - Rows of three icon cards
@@ -75,6 +92,12 @@ This is the one standard for anything visual made for a person: a page, dashboar
 - Dark mode shows depth with lighter surfaces, because shadows barely show
 - Full-height sections use 100dvh, and a product shot on white uses mix-blend-mode multiply
 
+**Browser surfaces**
+- Text selection and the caret take the brand's accent, never the browser's default blue
+- Scrollbars are thin and match the field, and in dark mode they sit on the dark field
+- The focus ring is a 2-pixel outline in the accent color, drawn with `:focus-visible` and never removed
+- Figures in tables, prices and stat rows use tabular numerals, so their columns line up
+
 **Content**
 - State the point once, in the fewest words that keep it
 - Every image, icon and chart earns its place by carrying information the text does not
@@ -104,5 +127,5 @@ This is the one standard for anything visual made for a person: a page, dashboar
 ## How it is applied
 
 - Read this file and the repo's own `docs/DESIGN.md` before any visual work, and read the finished result against the tells list before it ships
-- The `audit` skill checks visual output against it (lens 7b), and a mechanical hit on the tells list is a finding
+- The `audit` skill checks visual output against it (lens 7b). A Floor hit is a hard failure, and a Reflex hit is a finding unless its waiver is written in the design note
 - A suite that ships visuals carries a byte-identical copy of this file in its own `docs/DESIGN.md` and may add its own sections after it
