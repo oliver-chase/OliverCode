@@ -3,6 +3,7 @@ Run: python3 -m unittest discover -p "test_*.py"   (from this folder)
 """
 import io
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -27,7 +28,7 @@ class Recorder:
 
 def run(argv, runner, names=None):
     out, err = io.StringIO(), io.StringIO()
-    code = la.main(argv, runner=runner, out=out, err=err, pushed=lambda commit: None, names=names)
+    code = la.main(argv, runner=runner, out=out, err=err, pushed=lambda commit: None, names=names, names_story=lambda commit, story: None)
     return code, out.getvalue(), err.getvalue()
 
 
@@ -38,6 +39,25 @@ def run_unpushed(argv, runner):
 
 
 class LogAction(unittest.TestCase):
+    def test_a_close_names_its_own_commit(self):
+        """#1011: a commit whose message lacks #N for the story is refused, and one that names it posts."""
+        with tempfile.TemporaryDirectory() as tmp:
+            who = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_COMMITTER_NAME": "t", "GIT_AUTHOR_EMAIL": "t-at-test", "GIT_COMMITTER_EMAIL": "t-at-test"}
+            git = lambda *a: subprocess.run(["git", "-C", tmp, *a], capture_output=True, text=True, check=True, env=who)
+            git("init", "-q")
+            git("commit", "--allow-empty", "-qm", "Fix the other thing (#6)")
+            other = git("rev-parse", "HEAD").stdout.strip()
+            git("commit", "--allow-empty", "-qm", "Fix this thing (#5)")
+            mine = git("rev-parse", "HEAD").stdout.strip()
+            self.assertIn("does not name #5", la.commit_names_story(other, 5, tmp))
+            self.assertIn("does not name #5", la.commit_names_story(mine, 55, tmp))
+            self.assertIsNone(la.commit_names_story(mine, 5, tmp))
+        argv = ["--repo", "o/r", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234", "--files", "1", "--result", "ok"]
+        out, err = io.StringIO(), io.StringIO()
+        code = la.main(argv, runner=Recorder(), out=out, err=err, pushed=lambda c: None, names_story=lambda c, s: "commit abc1234 does not name #5 in its message")
+        self.assertEqual(2, code)
+        self.assertIn("does not name #5", err.getvalue())
+
     def test_a_builder_entry_for_an_unpushed_commit_is_refused_and_a_pushed_one_posts(self):
         argv = ["--repo", "o/r", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234", "--files", "1", "--result", "ok"]
         posted = []

@@ -39,6 +39,8 @@ class FakeIo:
     def load_ok(self): return True
     def claim(self, n): pass
     def worktree(self, n): return Path(f"/wt/{n}")
+    repo = Path("/repo")
+    def pending(self, n): return False
 
     def build(self, i, wt, note):
         n = i["number"]
@@ -162,12 +164,46 @@ class DrainCase(unittest.TestCase):
         self.assertNotIn("andoff", out)
         self.assertFalse(any(hasattr(cmd_drain, name) for name in ("HANDOFF_TOKENS", "write_handoff", "read_handoff", "handoff_path")))
 
-    def test_a_builder_that_already_landed_closes_the_story_without_landing_again(self):
+    def test_a_landed_story_closes_through_the_script_with_no_builder_session(self):
         io = FakeIo([issue(1)])
         io.already = True
         io.land = lambda wt, n: self.fail("land ran for a story that was already on the default branch")
         self.run_drain(io)
-        self.assertEqual((io.closed, io.moved), ([1], [1]))
+        self.assertEqual(([], [1], [1]), (io.started, io.closed, io.moved))
+
+    def test_a_refused_close_of_a_landed_story_leaves_the_card_where_it_is(self):
+        io = FakeIo([issue(1)])
+        io.already, io.refuse_close = True, "complete_story: #1 not completed"
+        _, _, st = self.run_drain(io)
+        self.assertEqual(([], [], [1]), (io.started, io.closed, st["blocked"]))
+        self.assertEqual([], io.kept)
+        self.assertIn("Close refused by complete_story.py", io.comments[0][1])
+
+    def test_new_commits_land_before_the_landed_shortcut_and_no_commit_takes_it_only_when_main_holds_the_story(self):
+        io = FakeIo([issue(1)])
+        io.already = True
+        landed = []
+        io.land = lambda wt, n: landed.append(n) or (True, "RESULT pushed")
+        self.assertEqual((True, "RESULT pushed"), cmd_drain.land_and_close(io, Path("/wt/1"), 1))
+        self.assertEqual([1], landed)
+        io.commits = lambda wt: 0
+        self.assertEqual((True, "already on the default branch"), cmd_drain.land_and_close(io, Path("/wt/1"), 1))
+        self.assertEqual([1], landed)
+        io.already = False
+        self.assertFalse(cmd_drain.land_and_close(io, Path("/wt/1"), 1)[0])
+
+    def test_one_crashed_worker_blocks_its_story_and_the_others_continue(self):
+        io = FakeIo([issue(1, "Priority: P0"), issue(2)], cap=1)
+        real = io.build
+        def build(i, wt, note):
+            if i["number"] == 1:
+                raise ValueError("boom")
+            return real(i, wt, note)
+        io.build = build
+        code, _, st = self.run_drain(io)
+        self.assertEqual((0, [1], [2]), (code, st["blocked"], st["closed"]))
+        self.assertIn(1, io.released)
+        self.assertTrue(any(n == 1 and "boom" in body for n, body in io.comments))
 
     def test_a_landing_that_puts_nothing_on_the_default_branch_closes_nothing(self):
         io = FakeIo([issue(1)])
@@ -291,6 +327,45 @@ class TestRealIo(unittest.TestCase):
                 mock.patch.object(cmd_drain.cmd_land, "add_worktree", lambda *a: ["hooks failed"]):
             with self.assertRaises(RuntimeError):
                 self.io.worktree(8)
+
+    def test_a_new_worktree_commit_lands_even_when_an_older_commit_on_main_names_the_story(self):
+        """#1011: the old (#7) commit makes landed() true, yet the worktree's own commit is what lands."""
+        self.commit_file("old.txt", "Earlier work (#7)")
+        wt = temp_dir(self) / "wt"
+        git(self.repo, "worktree", "add", "-q", "-b", "story/7", str(wt), "origin/main")
+        (wt / "new.txt").write_text("new\n")
+        git(wt, "add", "new.txt")
+        git(wt, "commit", "-qm", "More work (#7)")
+        self.assertTrue(self.io.landed(wt, 7))
+        self.assertEqual(1, self.io.commits(wt))
+        pushed = []
+        def land(worktree, n):
+            pushed.append(git(worktree, "rev-parse", "HEAD").stdout.strip())
+            git(self.repo, "update-ref", "refs/remotes/origin/main", pushed[0])
+            return True, "RESULT pushed"
+        self.io.land, self.io.close_by_script = land, lambda *a: (True, "")
+        self.assertEqual((True, "RESULT pushed"), cmd_drain.land_and_close(self.io, wt, 7))
+        self.assertEqual(1, len(pushed))
+        self.assertEqual(pushed[0], git(self.repo, "rev-parse", "origin/main").stdout.strip())
+
+    def test_the_landed_shortcut_runs_on_the_real_io_and_yields_to_unlanded_worktree_commits(self):
+        """#1011: a landed story closes from the repo with no builder, but a worktree holding new commits is built and landed instead."""
+        self.commit_file("old.txt", "Earlier work (#7)")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        closes = []
+        self.io.close_by_script = lambda wt, n, why: closes.append(wt) or (True, "")
+        self.io.landed_lead = lambda issue: None
+        self.io.landed = lambda wt, n: True
+        self.assertFalse(self.io.pending(7))
+        self.assertEqual((True, 0), cmd_drain._work_story(self.io, issue(7), state()))
+        self.assertEqual([self.repo], closes)
+        wt = cmd_drain.placement_config().worktrees / f"{self.repo.name}-7"
+        git(self.repo, "worktree", "add", "-q", "-b", "story/7", str(wt), "origin/main")
+        self.addCleanup(lambda: git(self.repo, "worktree", "remove", "--force", str(wt)))
+        (wt / "new.txt").write_text("new\n")
+        git(wt, "add", "new.txt")
+        git(wt, "commit", "-qm", "More work (#7)")
+        self.assertTrue(self.io.pending(7))
 
     def commit_file(self, path: str, subject: str) -> None:
         (self.repo / path).parent.mkdir(parents=True, exist_ok=True)

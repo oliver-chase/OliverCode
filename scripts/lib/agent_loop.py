@@ -223,7 +223,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, si
         if not checked:
             return {"done": False, "reason": "The model finished, but the repo has no scripts/validate.sh, so nothing checked the result.",
                     "rounds": n, "tokens": tokens, "summary": summary}
-        if validation_command(cwd) is None:  # the builder landed the story and its worktree is gone, so there is nothing left to validate (#877)
+        if validation_command(cwd) is None and not Path(cwd).exists():  # the builder landed the story and its worktree is gone, so there is nothing left to validate (#877)
             return {"done": True, "reason": "The story landed during the round, so its worktree is gone and validation is skipped.",
                     "rounds": n, "tokens": tokens, "summary": summary}
         passed, tail = check(cwd)

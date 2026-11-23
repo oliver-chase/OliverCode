@@ -373,13 +373,24 @@ class TestCleanup(Base):
         self.assertFalse(self.wt.exists())
         self.assertNotIn("remote branch", out)
 
-    def test_a_worktree_with_uncommitted_changes_stays(self):
+    def test_a_worktree_with_uncommitted_files_is_refused_before_anything_lands_and_names_them(self):
         with mock.patch.object(cmd_land, "_validates", return_value=True):
             (self.wt / "c.txt").write_text("c")
             code, out = self.land()
-        self.assertEqual(0, code)
+        self.assertEqual(1, code)
         self.assertTrue(self.wt.exists())
-        self.assertIn("uncommitted changes", out)
+        self.assertIn("RESULT dirty-worktree", out)
+        self.assertIn("c.txt", out)
+        origin = self.root / "origin.git"
+        self.assertNotEqual(git(origin, "rev-parse", "main").stdout, git(self.wt, "rev-parse", "HEAD").stdout)
+
+    def test_a_worktree_with_no_validate_script_is_refused_not_read_as_done(self):
+        git(self.wt, "rm", "-q", "scripts/validate.sh")
+        git(self.wt, "commit", "-qm", "Drop validate (#9)")
+        code, out = self.land()
+        self.assertEqual(1, code)
+        self.assertIn("RESULT no-validate", out)
+        self.assertIn("scripts/validate.sh", out)
 
 
 class TestUnfinishedWork(Base):

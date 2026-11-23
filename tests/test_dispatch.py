@@ -41,6 +41,7 @@ class RunIo:
     def __init__(self, land_ok=True, builds=None):
         self.agent, self.land_ok, self.steps, self.on_main, self.ghost_land = "dispatch", land_ok, [], set(), False
         self.builds, self.issue = builds, None
+        self.repo = Path("/repo")
 
     def worktree(self, n): return Path(f"/wt/{n}")
     def claim(self, n): self.steps.append("claim")
@@ -49,6 +50,7 @@ class RunIo:
         self.issue = issue
         return self.builds.pop(0) if self.builds else {"done": True, "reason": "ok", "rounds": 1, "tokens": 5, "summary": ""}
     def landed(self, wt, n): return n in self.on_main
+    def pending(self, n): return False
     def commits(self, wt): return 1
     def land(self, wt, n):
         self.steps.append("land")
@@ -241,12 +243,12 @@ class TestDispatchRun(DispatchCase):
         self.assertNotIn("close", io.steps)
         self.assertEqual(["comment", "open:", "release"], io.steps[-3:])
 
-    def test_a_builder_that_landed_and_lost_its_worktree_is_reported_landed(self):
+    def test_a_story_already_on_the_default_branch_closes_with_no_builder_session(self):
         io = RunIo()
-        io.on_main.add(77)  # the commit is on origin's default branch and the worktree is gone
+        io.on_main.add(77)  # the commit is on origin's default branch, so no builder starts (#1011)
         io.commits = lambda wt: 0
         code, out, _ = self.run_dispatch(io=io)
-        self.assertEqual((0, ["claim", "build", "close", "release"]), (code, io.steps))
+        self.assertEqual((0, ["claim", "close", "release"]), (code, io.steps))
         self.assertIn("landed and closed", out)
 
     def test_a_story_is_never_closed_unless_its_commit_is_on_the_default_branch(self):

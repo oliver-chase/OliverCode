@@ -175,8 +175,23 @@ def squash(wt: Path, story: str, log) -> bool:
     return True
 
 
+def refusal(wt: Path) -> tuple[str, str]:
+    """(result word, message) when wt must not land: it holds uncommitted files, which the push would leave behind, or it has no scripts/validate.sh,
+    which no run can pass (#1011). ("", "") when it may land."""
+    dirty = [line[3:] for line in _git(wt, "status", "--porcelain").stdout.splitlines() if line.strip()]
+    if dirty:
+        return "dirty-worktree", f"Refused: {wt} has uncommitted files, so nothing landed: {', '.join(dirty[:10])}. Commit them by explicit path or remove them."
+    if not (wt / "scripts" / "validate.sh").is_file():
+        return "no-validate", f"Refused: {wt} has no scripts/validate.sh, so nothing can check the commit and it is not read as done."
+    return "", ""
+
+
 def land(wt: Path, story: str, log) -> tuple[str, str]:
     """Run the landing recipe in wt, writing to log. Returns (result word, short sha)."""
+    word, why = refusal(wt)
+    if word:
+        log.write(why + "\n")
+        return word, ""
     main = _main_checkout(wt)
     if main and main != wt and link_venv(main, wt):
         log.write(f"linked {main / '.venv'} into {wt}\n")
@@ -328,6 +343,8 @@ def command_land(argv: list[str]) -> int:
     finally:
         lock.unlink(missing_ok=True)
     print(f"{line} (log: {path})")
+    if result in ("dirty-worktree", "no-validate"):
+        print(refusal(wt)[1])
     if result != "pushed":
         print(f"Handover written to {write_handover(wt, story, result, path, key)}. No branch was pushed.")
         return 1

@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import sys
 import unittest
 from unittest import mock
@@ -290,12 +291,21 @@ class TestLoop(unittest.TestCase):
 
     def test_a_builder_that_landed_and_removed_its_worktree_ends_the_loop_without_validation(self):
         def lands(prompt, cwd, **kw):
-            (self.repo / "scripts" / "validate.sh").unlink()  # the landed story's worktree is gone
+            shutil.rmtree(self.repo)  # the landed story's worktree is gone
             return reply("Landed.")
 
         out = agent_loop.run_loop("do it", self.repo, "s1", run=lands, say=lambda *_: None)  # the default check, which needs a command
         self.assertEqual((True, 1, "Landed."), (out["done"], out["rounds"], out["summary"]))
         self.assertEqual((False, "The repo has no validation command to run."), agent_loop.validate(self.repo))
+
+    def test_a_worktree_that_lost_its_validate_script_is_not_read_as_done(self):
+        """#1011: the directory is still there, so a missing script means nothing checked the result."""
+        def deletes(prompt, cwd, **kw):
+            (self.repo / "scripts" / "validate.sh").unlink()
+            return reply("Done.")
+
+        out = agent_loop.run_loop("do it", self.repo, "s1", run=deletes, say=lambda *_: None, rounds=1)
+        self.assertFalse(out["done"])
 
     def test_a_passing_validation_ends_the_loop_in_one_round(self):
         out = self.loop(Scripted(reply("All done.")), [(True, "")])

@@ -47,6 +47,17 @@ def commit_pushed(commit, root=None):
     return None
 
 
+def commit_names_story(commit, story, root=None):
+    """None when the message of `commit` contains #STORY, else the reason it does not, so a close names its own commit (#1011)."""
+    git = ["git"] + (["-C", str(root)] if root else [])
+    done = subprocess.run(git + ["log", "-1", "--format=%B", commit], capture_output=True, text=True)
+    if done.returncode != 0:
+        return f"commit {commit} is not in this checkout, so its message cannot be read"
+    if not re.search(rf"#{story}(?!\d)", done.stdout):
+        return f"commit {commit} does not name #{story} in its message, so it is not this story's commit"
+    return None
+
+
 def build_comment(agent, role, commit, files, result):
     """The comment text. One fact per line, so the story reads as a log."""
     return "\n".join([
@@ -136,7 +147,7 @@ def parse_args(argv):
     return args
 
 
-def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_author, pushed=commit_pushed, names=None):
+def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_author, pushed=commit_pushed, names=None, names_story=commit_names_story):
     args = parse_args(argv)
     problems = []
     plain = args.check_claim or args.role == "claim"
@@ -146,6 +157,10 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_autho
         reason = pushed(args.commit)
         if reason:
             problems.append(reason)
+        elif args.story is not None:
+            reason = names_story(args.commit, args.story)
+            if reason:
+                problems.append(reason)
     if not plain and args.files < 0:
         problems.append("--files cannot be negative")
     agent = args.agent

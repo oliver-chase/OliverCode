@@ -90,6 +90,7 @@ class Io:
     def worktree(self, n: int) -> Path:
         """Create story/N's worktree from origin's default branch, or reuse the one a restart finds."""
         path = placement_config().worktrees / f"{self.repo.name}-{n}"
+        subprocess.run(["git", "-C", str(self.repo), "fetch", "-q", "origin", self.branch()], capture_output=True, text=True)  # a base older than origin repeats landed work (#1011)
         problems, self.resumed[n] = cmd_land.resume_worktree(self.repo, path, str(n), f"origin/{self.branch()}")
         if problems:
             raise RuntimeError("; ".join(problems))
@@ -107,6 +108,11 @@ class Io:
     def commits(self, worktree: Path) -> int:
         done = subprocess.run(["git", "-C", str(worktree), "rev-list", "--count", f"origin/{self.branch()}..HEAD"], capture_output=True, text=True)
         return int(done.stdout.strip() or 0) if done.returncode == 0 else 0
+
+    def pending(self, n: int) -> bool:
+        """True when story/N's worktree already holds commits that origin's default branch lacks, so an older commit naming the story is not its finish (#1011)."""
+        path = placement_config().worktrees / f"{self.repo.name}-{n}"
+        return path.is_dir() and self.commits(path) > 0
 
     def landed(self, worktree: Path, n: int) -> bool:
         """True when a commit that names the story is on origin's default branch (#877). It reads the main checkout, so a builder that landed and
@@ -220,18 +226,19 @@ class CloseRefused(RuntimeError):
 
 
 def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
-    """The sequence after a passing builder: land (or accept an earlier landing), then close through complete_story.py with no model call.
+    """The sequence after a passing builder: land the worktree's new commits, or accept an earlier landing when the worktree has none, then close
+    through complete_story.py with no model call. New commits land first, so an older commit on main that names the story never stands in for them (#1011).
     Returns (landed, why or the blocker). A refused close comments the gate's message on the story and raises CloseRefused (#912)."""
-    if io.landed(worktree, n):
-        why = "already on the default branch"
-    elif io.commits(worktree) == 0:
-        return False, "The builder finished with no commit on the branch."
-    else:
+    if io.commits(worktree) > 0:
         ok, why = io.land(worktree, n)
         if not ok:
             return False, f"Landing failed: {why}"
         if not io.landed(worktree, n):  # the story closes only on a commit that origin's default branch holds (#877)
             return False, f"Landing reported success but no commit for (#{n}) is on the default branch: {why}"
+    elif io.landed(worktree, n):
+        why = "already on the default branch"
+    else:
+        return False, "The builder finished with no commit on the branch."
     closed, reason = io.close_by_script(worktree, n, why)
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
@@ -247,6 +254,8 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if not closed:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
         return closed, used
+    except CloseRefused:  # a landed story whose close the gate refused stays where it is, with the gate's message on it (#1011)
+        return False, 0
     finally:
         io.release(n)
 
@@ -262,6 +271,12 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     if lead:  # the work landed under another story, so a fresh build would repeat it on main; the owner decides (#988)
         io.comment(n, f"Not built: commit {lead[0][:12]} ({lead[1]}) on the default branch changed this story's files, so its work most likely landed under that story. The owner decides whether this story closes.")
         return False, 0
+    if not io.pending(n) and io.landed(io.repo, n):  # its commit is on the default branch and no unlanded work waits in its worktree, so it closes through the script and no builder starts (#1011)
+        closed, reason = io.close_by_script(io.repo, n, "already on the default branch")
+        if not closed:
+            io.comment(n, f"Close refused by complete_story.py: {reason}")
+            raise CloseRefused(reason)
+        return True, 0
     try:
         worktree = io.worktree(n)
     except RuntimeError as exc:
@@ -324,7 +339,17 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             finished, _ = wait(running, return_when=FIRST_COMPLETED)
             for fut in finished:
                 issue = running.pop(fut)
-                closed, used = fut.result()
+                try:
+                    closed, used = fut.result()
+                except Exception as exc:  # one crashed worker blocks its own story and the run goes on (#1011)
+                    closed, used = False, 0
+                    n = issue["number"]
+                    say(f"Story #{n} crashed: {exc!r}")
+                    for effect in (lambda: io.comment(n, f"Drain blocked: the worker crashed with {exc!r}."), lambda: io.keep_open(n), lambda: io.release(n)):
+                        try:
+                            effect()
+                        except Exception:
+                            pass
                 state["tokens"] += used
                 (state["closed"] if closed else state["blocked"]).append(issue["number"])
     finally:
