@@ -8,7 +8,9 @@ missing part with its fix and exits 1 when any part is missing, 0 when the body 
 """
 import argparse
 import re
+import subprocess
 import sys
+from pathlib import Path
 
 STORY_SENTENCE = re.compile(r"\bAs (?:the|an?)\s+[^,\n]+?,?\s+I want\s+.+?,\s*so that\s+\S", re.I | re.S)
 EPIC_LINE = re.compile(r"^\s*Epic:\s*(?:[\w.-]+/[\w.-]+)?#\d+\s*$", re.M)
@@ -18,6 +20,7 @@ WORK_TYPE = re.compile(r"\bWork type:\s*(\w+)", re.I)
 PLACEHOLDER = re.compile(r"<[A-Za-z][A-Za-z /|-]*>")
 COVERAGE_LINE = re.compile(r"^\s*(?:[-*]\s*)?Existing coverage checked:\s*\S", re.I | re.M)
 STEP = re.compile(r"^\s*(Given|When|Then|And|But)\b", re.I)
+AREA = re.compile(r"^\W*Files area:\W*(.+)$", re.I | re.M)
 
 PRIORITIES = ("P0", "P1", "P2")
 SIZES = ("XS", "S", "M", "L", "XL")
@@ -56,10 +59,11 @@ def gherkin_problems(body):
     return problems
 
 
-def check_body(body, kind=None, coverage=True):
+def check_body(body, kind=None, coverage=True, root=None):
     """Return a list of (missing part, fix) for the body. An empty list means it is complete.
 
     `coverage=False` skips the Existing coverage checked line, for a scan of stories filed before it was required.
+    `root` is the repo the story changes, so a Files area entry that is a folder there is named.
     """
     problems = []
     wt = WORK_TYPE.search(body)
@@ -93,6 +97,11 @@ def check_body(body, kind=None, coverage=True):
     elif work_type != kind:
         problems.append((f"Work type is {work_type} but this body is checked as a {kind.lower()}",
                          f"set `Work type: {kind}`"))
+    area = AREA.search(body)
+    for entry in [t.strip("`.,;*()") for t in re.split(r"[,;\s]+", area.group(1))] if area else []:
+        if entry and (entry.endswith("/") or (root is not None and (Path(root) / entry).is_dir())):
+            problems.append((f"Files area names the folder {entry}",
+                             "name the files the story changes, because a folder holds back every story that touches a file inside it"))
     ph = PLACEHOLDER.search(re.sub(r"`[^`]*`", "", body))
     if ph:
         problems.append((f"Unfilled placeholder {ph.group(0)}", "replace every <...> with the real text"))
@@ -112,7 +121,8 @@ def main(argv=None):
     if not body.strip():
         print("The body is empty. Write it from " + TEMPLATE + ".", file=sys.stderr)
         return 1
-    problems = check_body(body, args.kind)
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    problems = check_body(body, args.kind, root=(top.stdout.strip() or None) if top.returncode == 0 else None)
     for part, fix in problems:
         print(f"MISSING {part}. Fix: {fix}")
     if problems:

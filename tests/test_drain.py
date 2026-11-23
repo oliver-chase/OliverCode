@@ -182,6 +182,19 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([None, 2], seen)
         self.assertEqual(2, code)
 
+    def test_a_story_whose_files_area_names_a_folder_is_skipped_and_the_rest_run(self):
+        """#1077: a folder-wide area overlapped every story and held a 4-builder drain to 1."""
+        repo = temp_dir(self)
+        (repo / "scripts" / "lib").mkdir(parents=True)
+        wide = issue(1, body="Files area: scripts/lib, tests")
+        self.assertIn("names the folder scripts/lib", cmd_drain.skip_reason(wide, repo))
+        self.assertEqual("", cmd_drain.skip_reason(issue(2), repo))
+        io = FakeIo([wide, issue(2), issue(3)], cap=4)
+        io.repo = repo
+        _, out, _ = self.run_drain(io)
+        self.assertEqual({2, 3}, set(io.started))
+        self.assertIn("Skipped #1", out)
+
     def test_a_full_machine_waits_for_a_free_builder_and_never_reads_the_load(self):
         """#1055: no free builder means wait, then start; the load average plays no part."""
         io = FakeIo([issue(1)], cap=[0, 0, 1])

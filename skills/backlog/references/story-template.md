@@ -4,7 +4,7 @@ Every story and epic body uses this format, and `skills/backlog/scripts/check_st
 
 ## The format
 
-A story body has six parts, in this order:
+A story body has these parts, in this order:
 
 1. The user story sentence: `**As the <role>**, I want <the ask>, so that <the outcome>.`
 2. Gherkin acceptance criteria in a `gherkin` fence: one `Feature:`, and one or more `Scenario:` blocks that each hold Given, When and Then lines (And and But continue a step)
@@ -12,6 +12,7 @@ A story body has six parts, in this order:
 4. The fields on one line: `Priority: P0|P1|P2. Size: XS|S|M|L|XL. Work type: Story.`
 5. For a story, the line `Existing coverage checked:` naming the code, doc or issue you searched and what you found, so no story rebuilds something that exists
 6. Optional detail after the fields, such as the fit check from `SKILL.md` and a re-runnable audit command for an L or XL item
+7. For a story the runner builds, a last line `Files area:` naming the files it changes. It names files and never a folder, because the runner never builds two stories whose areas overlap and a folder overlaps every story that touches a file inside it
 
 Name the role for the person who gets the outcome. The owner is `the owner`. Write each scenario so a second agent can QA the story from the criteria alone.
 

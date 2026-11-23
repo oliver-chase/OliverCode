@@ -22,6 +22,21 @@ def parts(name, kind=None):
 
 
 class StoryFormat(unittest.TestCase):
+    def test_a_files_area_that_names_a_folder_is_rejected_and_a_file_is_not(self):
+        """#1077: a folder in the Files area holds every other story back, so filing names it; a file with no extension passes."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "scripts" / "lib").mkdir(parents=True)
+            (root / "scripts" / "olivercode").write_text("#!/bin/sh\n")
+            base = re.findall(r"````markdown\n(.*?)````", TEMPLATE.read_text(encoding="utf-8"), re.S)[0]
+            folder = base + "\nFiles area: scripts/lib, scripts/olivercode\n"
+            slash = base + "\nFiles area: docs/\n"
+            files = base + "\nFiles area: scripts/olivercode, scripts/lib/intake.py\n"
+            self.assertIn("Files area names the folder scripts/lib", [p for p, _ in sf.check_body(folder, root=root)])
+            self.assertIn("Files area names the folder docs/", [p for p, _ in sf.check_body(slash, root=root)])
+            self.assertEqual([], sf.check_body(files, root=root))
+
     def test_the_template_examples_pass(self):
         examples = re.findall(r"````markdown\n(.*?)````", TEMPLATE.read_text(encoding="utf-8"), re.S)
         self.assertTrue(examples)

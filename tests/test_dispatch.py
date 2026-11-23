@@ -146,6 +146,13 @@ class TestDispatch(DispatchCase):
         self.assertEqual((code, io.steps), (1, []))
         self.assertIn("limit of 4", out)
 
+    def test_it_refuses_a_story_whose_files_area_names_a_folder(self):
+        """#1077: dispatch names the folder to replace with files."""
+        (self.repo / "scripts" / "lib").mkdir(parents=True)
+        code, out, io = self.run_dispatch(story={**STORY, "body": "Do it.\nFiles area: scripts/lib, tests/test_x.py"})
+        self.assertEqual((code, io.steps), (1, []))
+        self.assertIn("names the folder scripts/lib", out)
+
     def test_it_refuses_a_closed_story_and_a_claimed_story(self):
         code, out, io = self.run_dispatch(story={**STORY, "state": "CLOSED"})
         self.assertEqual((code, io.steps), (1, []))

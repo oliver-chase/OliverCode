@@ -32,7 +32,7 @@ FULL_WAITS = 12  # five-minute waits for another repo's run to free a builder be
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
 
 
-def skip_reason(issue: dict) -> str:
+def skip_reason(issue: dict, repo: Path | None = None) -> str:
     """Why drain does not start an open story now, or '' when it may. Only a Ready story with a board Size and a Files area is built (#1014)."""
     if owner_gated(issue):
         return "it is owner-gated"
@@ -40,8 +40,11 @@ def skip_reason(issue: dict) -> str:
         return f"its board Status is {issue.get('status') or 'empty'}, not Ready"
     if not issue.get("size"):
         return "it has no Size on the board"
-    if not intake.files_area(issue.get("body") or ""):
+    area = intake.files_area(issue.get("body") or "")
+    if not area:
         return "it names no Files area"
+    if wide := intake.folders(area, repo):
+        return f"its Files area names the folder {wide[0]}, which would hold every other story back; name the files instead"
     return ""
 
 
@@ -420,7 +423,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()}
             todo = []
             for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
-                if why := skip_reason(issue):  # each skipped story is named once per drain, with the reason (#1014)
+                if why := skip_reason(issue, io.repo):  # each skipped story is named once per drain, with the reason (#1014)
                     if issue["number"] not in reported:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")

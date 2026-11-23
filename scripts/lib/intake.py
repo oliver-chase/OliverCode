@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 from lib import agent_loop, candidates, cmd_owner
 from lib.local_config import OC_ROOT
@@ -199,6 +200,11 @@ def _listed(line: re.Pattern, body: str) -> list[str]:
 def files_area(body: str) -> list[str]:
     """The paths on the story's `Files area:` line, or [] when it has none."""
     return _listed(AREA, body)
+
+
+def folders(area: list[str], root) -> list[str]:
+    """The Files area entries that name a folder: a path ending in "/" or a folder under root. One overlaps every story inside it (#1077)."""
+    return [p for p in area if p.endswith("/") or (root is not None and (Path(root) / p).is_dir())]
 
 
 def creates(body: str) -> list[str]:

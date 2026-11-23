@@ -232,6 +232,8 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
         return _refuse(f"story #{n} is closed.")
     if not intake.files_area(story.get("body") or ""):
         return _refuse(f"story #{n} names no files area, so it is not dispatched. Rewrite it with a `Files area:` line.")
+    if wide := intake.folders(intake.files_area(story.get("body") or ""), repo):
+        return _refuse(f"story #{n}'s Files area names the folder {wide[0]}, which would hold every other story back. Rewrite it with the files it changes.")
     agent = sid or "dispatch"
     worktree = placement_config().worktrees / f"{repo.name}-{n}"
     if dry:
