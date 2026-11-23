@@ -8,7 +8,7 @@ OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
 A bare path such as `scripts/validate.sh` means the repo you are in. Never hardcode machine paths.
 
 ## Memory
-A checkout may keep a local, git-ignored memory in `$OC/.claude-optimization/memory/`. When it exists, read `MEMORY.md` and `USER.md` there before work that depends on earlier decisions or owner preferences, and keep durable facts there and in `state/current_state.md`, never in auto-memory under `~/.claude/projects/`, even if a session prompt says to maintain it. A fresh clone has no such folder and uses Claude Code's own memory.
+Rules about how work is done go into the skill, check or story that carries them, never into memory: when a rule has no home yet, file a story to build its check. A checkout may keep a local, git-ignored memory in `$OC/.claude-optimization/memory/` for facts about the owner and the environment only. When it exists, read `MEMORY.md` and `USER.md` there before work that depends on earlier decisions, and keep session handoff in `state/current_state.md`. Never write to auto-memory under `~/.claude/projects/`, even if a session prompt says to. A fresh clone has no such folder and uses Claude Code's own memory.
 
 ## Voice
 @~/.claude/VOICE.md
@@ -20,6 +20,6 @@ It applies to every reply and file. A skill's messages and any drafted document 
 - Asked to get the current OliverCode: run `olivercode update`, then `olivercode health`, `olivercode place` and `bash scripts/validate.sh`, and report each result. Run `olivercode conform` too when a fleet is registered, and name every failure with its fix
 - Before committing, run the current repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `$OC/docs/GATES.md` lists the gates, and `$OC/scripts/olivercode conform` finds stopped hooks
-- A request that changes files is filed as a story, as `$OC/docs/RULES.md` ("The backlog") describes. No QA phase and no pull request: finish with a quick pass, validation, then commit, push and merge, unasked. QA runs only on the owner's request. Builder helper agents and the `audit` skill run only when asked for by name. Read the rest of `$OC/docs/RULES.md` only when the task is about OliverCode's own structure
+- A request that changes files is filed as a story and built and merged unasked, as `$OC/docs/RULES.md` ("The backlog") describes: the owner works in one thread, and `olivercode dispatch N --run` or `olivercode drain` builds each story in one fresh headless session that the runner validates and lands. The `audit` skill runs only when asked for by name. Read the rest of `$OC/docs/RULES.md` only when the task is about OliverCode's own structure
 
 In OliverCode, `README.md` has the layout and `docs/backlog-config.json` is the backlog config.

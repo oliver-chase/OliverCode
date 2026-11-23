@@ -1,5 +1,5 @@
 {
-  "_comment": "Placeholder for the `backlog` skill's per-repo config, shipped to forks. Copy this file to your own repo (docs/backlog-config.json), fill in your real repo, Project and field IDs from `gh project field-list <number> --owner <owner> --format json`, and name its path in that repo's own CLAUDE.md. Every run refuses a config that still holds these placeholders. `qaRequiredFromIssue` is optional: an issue number at or above which a Complete item needs an independent QA sign-off, or null to switch the check off. `areaPolicy` is optional: list Area options that match no skill folder as parked (a family with no folder here) or catchAll (cross-family work). skills/backlog/references/project-fields.md has the full shape.",
+  "_comment": "Placeholder for the `backlog` skill's per-repo config, shipped to forks. Copy this file to your own repo (docs/backlog-config.json), fill in your real repo, Project and field IDs from `gh project field-list <number> --owner <owner> --format json`, and name its path in that repo's own CLAUDE.md. Every run refuses a config that still holds these placeholders. This file is the full shape.",
   "repoOwner": "your-github-org-or-user",
   "repoName": "your-repo-name",
   "projectOwner": "your-github-org-or-user",
@@ -41,10 +41,5 @@
         "Story": "..."
       }
     }
-  },
-  "qaRequiredFromIssue": null,
-  "areaPolicy": {
-    "parked": [],
-    "catchAll": []
   }
 }

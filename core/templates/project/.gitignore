@@ -1,0 +1,22 @@
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+*.secret
+*.pem
+*.key
+.secrets/*
+!.secrets/README.md
+
+# Agent runtime state
+.claude-optimization/memory/
+.claude-optimization/state/
+.claude-optimization/audits/
+.claude-optimization/scratch/
+olivercode.local.json
+scratch/
+
+# OS files
+.DS_Store
+Thumbs.db

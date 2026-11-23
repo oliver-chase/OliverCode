@@ -1,8 +1,8 @@
 # Python
 __pycache__/
 *.py[cod]
-venv/
-.venv/
+venv
+.venv
 
 # Environment
 .env
@@ -58,4 +58,24 @@ runtime/manifests/
 
 # This machine's paths (scripts/lib/local_config.py). The example is tracked.
 olivercode.local.json
+shared/repo-profiles.local.json
+docs/backlog-config.local.json
+# The checkout-local lesson log a migration moves to ~/.olivercode/lessons (#706, #762)
+docs/LESSONS.jsonl
 scratch/
+
+# Hooks that scripts/build-hooks.py builds from core/hooks/ (HOOK-OUTPUTS-1)
+/core/templates/project/pre-commit
+/core/templates/project/pre-commit-private
+/core/templates/project/pre-push
+/core/templates/project/commit-msg
+
+# Subagent worktrees that Claude Code creates and removes
+.claude/worktrees/
+
+# Local-only audit reports that name fleet repos (story 646)
+.claude-optimization/audits/
+.claude-optimization/scratch/
+
+# Generated audit reports stay out of the tracked tree
+docs/audits/
