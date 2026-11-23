@@ -331,6 +331,15 @@ class TestFailureCandidates(unittest.TestCase):
         self.assertEqual(["acme/widget"], [g[0] for g in gaps if g[1].startswith("Rebase")])
         self.assertEqual([maintain.engine_slug()], [g[0] for g in gaps if g[1].startswith("Gate command")])
 
+    def test_a_gap_filed_on_the_public_engine_names_no_other_repo(self):
+        from lib import candidates
+        gaps = [(maintain.engine_slug(), "Gate command for scheduled task acme-widget-nightly", "Fix: give acme-widget-nightly a gate")]
+        with mock.patch("lib.repo_name_guard.fleet_names", return_value=["acme-widget"]):
+            maintain.file_failure_candidates(gaps)
+        item = candidates.items()[0]
+        self.assertEqual(1, candidates.count())
+        self.assertNotIn("acme-widget", item["title"] + item["body"])
+
 
 if __name__ == "__main__":
     unittest.main()

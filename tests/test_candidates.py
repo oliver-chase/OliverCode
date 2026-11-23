@@ -70,6 +70,14 @@ class TestCandidates(unittest.TestCase):
         code, _ = quiet(candidates.command_candidates, ["promote", "1"], runner)
         self.assertEqual((1, [], 1, 0), (code, runner.calls, story_outbox.count(), candidates.count()))
 
+    def test_a_candidate_for_a_private_repo_is_promoted_to_that_repo_and_never_the_engine(self):
+        candidates.add("maintain", "acme/private-widget", "Rebase widget", "Fix: rebase")
+        runner = Runner()
+        quiet(candidates.command_candidates, ["promote", "1"], runner)
+        self.assertEqual(1, len(runner.calls))
+        self.assertEqual("acme/private-widget", runner.calls[0][runner.calls[0].index("--repo") + 1])
+        self.assertNotIn("OliverCode", " ".join(runner.calls[0]))
+
     def test_drop_removes_and_a_bad_number_is_refused(self):
         candidates.add("retro", "acme/widget", "One", "B")
         self.assertEqual(2, quiet(candidates.command_candidates, ["promote", "5"], Runner())[0])

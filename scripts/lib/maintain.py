@@ -464,9 +464,12 @@ def failure_gaps() -> list[tuple[str, str, str]]:
 
 
 def file_failure_candidates(gaps: list[tuple[str, str, str]]) -> int:
-    """Adds each gap as a candidate. The candidates list holds a repeat once, so a second run adds nothing (#978). Nothing reaches a board until the owner promotes it."""
-    from lib import candidates
+    """Adds each gap as a candidate. The candidates list holds a repeat once, so a second run adds nothing (#978). Nothing reaches a board until the owner promotes it.
+    A gap bound for OliverCode's public board has any other fleet repo's name redacted first, so a scheduled task's name never reaches it."""
+    from lib import candidates, repo_name_guard
     for repo, title, body in gaps:
+        if repo_name_guard.is_olivercode(repo):
+            title, body = repo_name_guard.redact(title), repo_name_guard.redact(body)
         candidates.add("maintain", repo, title, body)
     return len(gaps)
 
