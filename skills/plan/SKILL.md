@@ -12,6 +12,11 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 3. For each step: what, why, expected outcome, risk level
 4. Write it to a markdown file and stop there
 
+## Questions
+
+- Each open decision is asked as one question that states a recommended answer, so "yes" accepts it.
+- Before asking, read the answer from the repo's code or docs. Ask the owner only what they alone can decide.
+
 ## Claims discipline
 
 A claim across N named items is checked against all N, or the plan says how many were checked. The rule is in `audit/references/plan.md`.
