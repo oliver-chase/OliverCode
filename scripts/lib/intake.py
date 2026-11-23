@@ -170,7 +170,7 @@ def prevention(slug: str, epic: int = 1, repeats=None, fetch=gh_issues, file=can
         if key in seen or filed >= cap:
             continue
         body = PREVENT_BODY.format(what=what, nth=len(times) + 1, n=len(times), gate=gate, first=times[0], last=times[-1],
-                                   times=", ".join(times[:10]), epic=epic)
+                                   times=", ".join(times[:10]), epic=epic_of(issues, epic))
         file(slug, title, body)
         seen[key] = len(times)
         filed += 1

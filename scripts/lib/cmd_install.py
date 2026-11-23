@@ -627,7 +627,7 @@ def command_uninstall(oc_root: Path) -> int:
 
     for name, rel in RULE_LINKS.items():
         path, note = claude_dir / name, ""
-        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or _points_into(path, voice_file(root).resolve()) or name in moved_links):
+        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or _points_into(path, voice_file(root).resolve()) or _points_into(path, design_file(root).resolve()) or name in moved_links):
             if not path.exists():
                 note = f" (it pointed at {os.readlink(path)}, which is gone)"
             path.unlink()

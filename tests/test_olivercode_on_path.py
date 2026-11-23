@@ -61,6 +61,13 @@ class TestInstall(PathCase):
         for f in queue_shim.profile_files():
             self.assertEqual(1, f.read_text().count(queue_shim.BLOCK_START), f)
 
+    def test_no_startup_file_for_a_shell_the_machine_lacks(self):
+        with mock.patch.object(queue_shim.shutil, "which", lambda name: None if name == "zsh" else "/bin/" + name):
+            self.install()
+            self.assertFalse((self.home / ".zshenv").exists())
+            self.assertTrue((self.home / ".bashrc").exists())
+            self.assertIsNone(queue_shim.launcher_problem(REPO_ROOT))
+
     def test_a_moved_checkout_replaces_the_stale_link(self):
         self.link.parent.mkdir(parents=True)
         self.link.symlink_to("/old/place/OliverCode/scripts/olivercode")

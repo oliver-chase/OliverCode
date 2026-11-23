@@ -344,6 +344,19 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertEqual(claude_settings.dead(path), cmds[:1])
         self.assertEqual(claude_settings.dead(root / "absent.json"), [])
 
+    def test_missing_names_a_hook_whose_matcher_is_out_of_date(self):
+        root = temp_dir(self, "olivercode-matcher-", resolve=True)
+        path = root / "settings.json"
+        path.write_text(json.dumps(claude_settings.merge({})))
+        self.assertEqual(claude_settings.missing(path), [])
+        old = json.loads(path.read_text())
+        for g in old["hooks"]["PreToolUse"]:
+            g["matcher"] = g["matcher"].replace("NotebookEdit|", "")
+        path.write_text(json.dumps(old))
+        self.assertEqual(claude_settings.missing(path), ["pretool_guard.py"])
+        path.write_text(json.dumps(claude_settings.merge(old)))
+        self.assertEqual(claude_settings.missing(path), [])
+
     def test_a_reinstall_removes_a_cut_hook(self):
         cut = {"type": "command", "command": 'python3 "/oc/scripts/hooks/trace_watch.py"'}
         settings = {"hooks": {"PostToolUse": [{"hooks": [cut]}]}}

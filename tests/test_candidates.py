@@ -99,6 +99,11 @@ class TestNoDirectFiling(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
+    def test_a_lesson_with_no_id_matches_no_failure_by_id(self):
+        rows = [("2026-01-02T00:00:00", "r", "gate", "some reason")]
+        self.assertFalse(lesson_cover.repeats({"rule": ""}, "2026-01-01", rows))
+        self.assertTrue(lesson_cover.repeats({"id": "L1", "rule": ""}, "2026-01-01", [("2026-01-02T00:00:00", "r", "gate", "see L1")]))
+
     def test_the_prevention_check_meets_fifty_repeated_refusals_and_adds_at_most_the_cap(self):
         for n in range(50):
             for _ in range(3):

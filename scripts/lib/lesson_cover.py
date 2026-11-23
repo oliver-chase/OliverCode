@@ -48,8 +48,9 @@ def repeats(lesson: dict, since: str, rows=None) -> bool:
     """True when a failure log line after `since` names the lesson by id or by its rule text."""
     rows = failure_log.entries() if rows is None else rows
     rule = rule_key(lesson.get("rule", ""))
+    ident = lesson.get("id") or ""
     for when, _repo, gate, reason in rows:
-        if when[:10] > since and (lesson.get("id", "?") in reason or lesson.get("id", "?") in gate
+        if when[:10] > since and ((ident and (ident in reason or ident in gate))
                                   or (rule and rule in reason.lower())):
             return True
     return False

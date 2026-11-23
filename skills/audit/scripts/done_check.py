@@ -78,7 +78,7 @@ def checks(repo, epics=(), validate=None, run=sh):
     rc, text = run(cmd, repo)
     out.append(("validation", rc == 0, "" if rc == 0 else text.strip().splitlines()[-1][:120] if text.strip() else "failed"))
     rc, text = run([sys.executable, str(HERE / "fleet_check.py"), str(repo)], repo)
-    bad = crashed(text, rc) + [l for l in text.splitlines() if (l.startswith("voice:") and "no violations" not in l) or "difference(s)" in l
+    bad = crashed(text, rc) + [l for l in text.splitlines() if (l.startswith("voice:") and "no violations" not in l and "skipped, no voice file" not in l) or "difference(s)" in l
            or l.startswith("board: not checked (")]
     out.append(("voice and board", not bad, "; ".join(bad)[:200]))
     rc, text = run([sys.executable, str(HERE / "sweep.py"), str(repo)], repo)

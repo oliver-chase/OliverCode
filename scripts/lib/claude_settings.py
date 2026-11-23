@@ -28,7 +28,7 @@ HOOKS_DIR = Path(__file__).resolve().parent.parent / "hooks"
 # (event, matcher or None, script). Stop and UserPromptSubmit take no matcher.
 MANAGED = (
     ("SessionStart", "startup", "session_check.py"),
-    ("PreToolUse", "Bash|Edit|Write|MultiEdit|Agent|Task", "pretool_guard.py"),
+    ("PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit|Agent|Task", "pretool_guard.py"),
     ("PostToolUse", "Bash", "gh_watch.py"),
     ("Stop", None, "early-stop-guard.py"),
     ("Stop", None, "wip_save.py"),
@@ -242,9 +242,9 @@ def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
         _check_shape(current)
     except (OSError, ValueError):
         current = {}
-    present = {h.get("command") for groups in (current.get("hooks") or {}).values()
+    present = {(g.get("matcher"), h.get("command")) for groups in (current.get("hooks") or {}).values()
                for g in groups for h in g.get("hooks", []) if isinstance(h, dict)}
-    return [script for _, _, script in MANAGED if _command(script, hooks_dir) not in present]
+    return [script for _, matcher, script in MANAGED if (matcher, _command(script, hooks_dir)) not in present]
 
 
 def install(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> str:

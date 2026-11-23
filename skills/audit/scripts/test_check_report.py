@@ -70,6 +70,9 @@ class ReportCheckTest(unittest.TestCase):
         for heading in headings:
             self.assertTrue(any(re.search(rx, heading, re.I) for rx in check_report.LENSES.values()), heading)
 
+    def test_the_design_lens_is_optional(self):
+        self.assertNotIn("design", " ".join(problems(GOOD)))
+
     def test_each_gap_in_a_report_fails_with_its_reason(self):
         # A missing section or coverage, a finding with no issue, an unstated lens, silence about what
         # was not checked, and coverage that is not the last section.

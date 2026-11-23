@@ -342,6 +342,10 @@ class TestFilingFit(unittest.TestCase):
         text = "Files area: scripts/lib/new.py, scripts/lib/, new file\nCreates: scripts/lib/new.py\n"
         self.assertEqual([], cmd_groom.fit(text, "New", {}, repo)[1])
 
+    def test_the_word_leak_is_not_a_security_story_but_a_leaked_key_is(self):
+        self.assertEqual("P2", cmd_groom.priority_of({"title": "Fix a memory leak in the cache", "body": ""}))
+        self.assertEqual("P0", cmd_groom.priority_of({"title": "A leaked token in the log", "body": ""}))
+
     def test_a_word_in_the_files_area_is_not_read_as_a_path(self):
         repo = self.main_repo("scripts/lib/cmd_groom.py")
         self.assertEqual([], cmd_groom.fit("Files area: scripts/lib/cmd_groom.py, new\n", "New", {}, repo)[1])
