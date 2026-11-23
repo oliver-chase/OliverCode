@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from lib import backlog_setup, claude_settings, launchd, engine_only as engine_gate, local_config, open_issues, placement, repo_gates, repo_name_guard
+from lib import backlog_setup, claude_settings, launchd, engine_only as engine_gate, local_config, open_issues, placement, repo_gates, repo_name_guard, repo_profiles
 from lib.gitfiles import tracked_files
 from lib.local_config import OC_ROOT
 
@@ -55,21 +55,15 @@ def ignore(repo: Path, runner=subprocess.run, **_) -> Row:
 
 
 def validation(repo: Path, **_) -> Row:
-    """Passes when CLAUDE.md names scripts/validate.sh, `npm run validate` or `npm run check` and that command exists."""
+    """Passes when CLAUDE.md names a validation command the repo has: its scripts/validate.sh, an npm script, pytest, go test, cargo test or make test."""
     fix = f"add scripts/validate.sh to {repo.name} and name `bash scripts/validate.sh` in its CLAUDE.md"
     claude = repo / "CLAUDE.md"
     text = claude.read_text(errors="ignore") if claude.is_file() else ""
-    try:
-        npm = json.loads((repo / "package.json").read_text()).get("scripts", {}) if (repo / "package.json").is_file() else {}
-    except (OSError, ValueError):
-        npm = {}
-    if "scripts/validate.sh" in text and (repo / "scripts" / "validate.sh").is_file():
-        return Row("validation", "pass")
-    if any(f"npm run {name}" in text and name in npm for name in ("validate", "check")):
+    if any(command in text or command.removeprefix("bash ") in text for command in repo_profiles.validation_commands(repo)):
         return Row("validation", "pass")
     if not text:
         return _fail("validation", "CLAUDE.md is missing", fix)
-    return _fail("validation", "CLAUDE.md names no validation command that exists (scripts/validate.sh, npm run validate or npm run check)", fix)
+    return _fail("validation", "CLAUDE.md names no validation command that exists (scripts/validate.sh, an npm script, pytest, go test, cargo test or make test)", fix)
 
 
 ENGINE_GATE = "scripts/lib/engine_only.py"
@@ -118,6 +112,9 @@ def issues(repo: Path, *, offline: bool, names: list[str] | None = None, fetch=o
 
 
 def hooks(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant: str = "", **_) -> Row:
+    own = repo_profiles.own_hooks_path(repo)
+    if own:
+        return Row("hooks", "pass", f"the repo runs its own hooks from {own}, so sync-hooks leaves core.hooksPath alone")
     problems = repo_gates.hook_problems(repo, repo_gates.hook_templates(oc_root), private)
     if problems and variant:
         # A declared variant replaces only pre-commit; pre-push and commit-msg stay managed.
@@ -146,8 +143,8 @@ def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False,
     return Row("managed-files", "pass")
 
 
-CODE_SUFFIXES = (".py", ".js", ".mjs", ".ts", ".tsx", ".sh", ".swift")
-TEST_NAME = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|\.(test|spec)\.[a-z]+$|_test\.[a-z]+$")
+CODE_SUFFIXES = (".py", ".js", ".mjs", ".ts", ".tsx", ".sh", ".swift", ".go", ".rs", ".rb", ".java", ".kt")
+TEST_NAME = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|\.(test|spec)\.[a-z]+$|_(test|spec)\.[a-z]+$|Tests?\.(java|kt)$")
 
 
 def tests(repo: Path, **_) -> Row:

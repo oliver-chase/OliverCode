@@ -10,7 +10,7 @@ from pathlib import Path
 
 from lib import backlog_setup as _backlog_setup
 from lib import conform as _conform
-from lib import repo_gates
+from lib import repo_gates, repo_profiles
 from lib import update_state
 from lib import validate_snippet as _snippet
 from lib.cli import require_dir, take_flag
@@ -191,7 +191,9 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
 
 
 def _set_hooks_path(repo_path: Path) -> None:
-    """Point git at the repo's .githooks, so every hook sync-hooks installs runs."""
+    """Point git at the repo's .githooks, so every hook sync-hooks installs runs. A repo that already runs its own hooks folder keeps it."""
+    if repo_profiles.own_hooks_path(repo_path):
+        return
     subprocess.run(["git", "-C", str(repo_path), "config", "core.hooksPath", ".githooks"], check=True)
 
 

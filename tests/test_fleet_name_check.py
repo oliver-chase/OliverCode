@@ -33,10 +33,16 @@ def make_repo(case, profiles, files):
 class FleetNameCheckTests(unittest.TestCase):
     def test_a_tracked_line_naming_a_fleet_repo_fails_with_file_and_line(self):
         repo = make_repo(self, {"alpha-repo": {}, "olivercode": {}},
-                         {"docs/note.md": "one\nsee alpha-repo for the rest\n"})
+                         {"docs/note.md": "one\nsee acme/alpha-repo for the rest\n"})
         failures = fleet_name_check.check_all(repo)
         self.assertEqual(len(failures), 1)
         self.assertTrue(failures[0].startswith("docs/note.md:2 "), failures[0])
+
+    def test_a_bare_common_word_name_does_not_match_but_owner_name_does(self):
+        repo = make_repo(self, {"docs": {}, "site": {}}, {"a.md": "docs/site/index.md and the docs\n", "b.md": "see acme/docs\n"})
+        failures = fleet_name_check.check_all(repo)
+        self.assertEqual(len(failures), 1)
+        self.assertTrue(failures[0].startswith("b.md:1 "), failures[0])
 
     def test_a_clean_tree_passes(self):
         repo = make_repo(self, {"alpha-repo": {}}, {"docs/note.md": "nothing private here\n"})

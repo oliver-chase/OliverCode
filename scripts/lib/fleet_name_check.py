@@ -16,8 +16,7 @@ from lib.repo_profiles import load_repo_profiles
 
 # The framework's own name is in every path and every doc, so it is never a fleet name to find.
 OWN_NAMES = frozenset({"olivercode"})
-# A short name matches inside ordinary words, so only names this long or longer are checked.
-MIN_LENGTH = 4
+# A bare word such as "docs" or "site" is ordinary text, so a name counts only in its owner/name form.
 # Gate sources every fleet repo tracks a built copy of, so an edit here forces a commit in each repo.
 # Their example names are cleared at the next fleet-wide hook sync (#665), and this list empties then.
 SYNCED_GATES = frozenset({"core/hooks/gates/owner-identifiers.sh", ".githooks/pre-commit"})
@@ -30,7 +29,7 @@ def fleet_names(repo_root: Path) -> list[str]:
     except (OSError, ValueError):
         # A fork with no registry, or a damaged one, has no names to find, and the check must not crash validation.
         return []
-    names = {name.lower() for name in profiles if len(name) >= MIN_LENGTH}
+    names = {name.lower() for name in profiles}
     return sorted(names - OWN_NAMES, key=lambda n: (-len(n), n))
 
 
@@ -38,7 +37,12 @@ def check_all(repo_root: Path) -> list[str]:
     names = fleet_names(repo_root)
     if not names:
         return []
-    pattern = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(n) for n in names) + r")(?![A-Za-z0-9])", re.IGNORECASE)
+    alternatives = "|".join(re.escape(n) for n in names)
+    # owner/name standing alone, or after a host (github.com/owner/name/issues/3), where a deeper path still names the repo.
+    # A bare path such as docs/site/index.md or lib/site.py has no host, so it never matches; only a .git suffix may follow the name.
+    pattern = re.compile(r"(?<![A-Za-z0-9._-])[A-Za-z0-9][A-Za-z0-9._-]*/(?:" + alternatives + r")(?:\.git(?![A-Za-z0-9]))?(?![A-Za-z0-9_/-]|\.[A-Za-z0-9])"
+                         r"|[A-Za-z0-9-]\.[A-Za-z]{2,}[/:][A-Za-z0-9][A-Za-z0-9._-]*/(?:" + alternatives + r")(?![A-Za-z0-9_-])",
+                         re.IGNORECASE)
     failures = []
     for rel in tracked_files(repo_root):
         if str(rel) in SYNCED_GATES:

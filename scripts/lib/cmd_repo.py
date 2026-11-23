@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 from lib.cli import reject_extra as _reject_extra
-from lib import repo_gates, repo_state
+from lib import repo_gates, repo_profiles, repo_state
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 from lib.repo_profiles import REGISTRY_NAME, registry_file, registry_write_file
 
@@ -163,17 +163,8 @@ def command_discover(oc_root: Path, roots: list[Path], register: bool = False) -
 
 
 def _validation_command(repo: Path) -> str:
-    """The validation command a repo names itself: scripts/validate.sh, then an npm validate or check script."""
-    if (repo / "scripts" / "validate.sh").is_file():
-        return "bash scripts/validate.sh"
-    try:
-        scripts = json.loads((repo / "package.json").read_text()).get("scripts", {})
-    except (OSError, ValueError):
-        scripts = {}
-    for name in ("validate", "check"):
-        if name in scripts:
-            return f"npm run {name}"
-    return "<command>"
+    """The validation command a repo names itself, found by the detector conform and fleet-sync share (lib/repo_profiles.py)."""
+    return repo_profiles.validation_command(repo) or "<command>"
 
 
 def repo_visibility(slug: tuple[str, str] | None) -> tuple[str, str]:

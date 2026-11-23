@@ -1,7 +1,7 @@
 """Launcher command `fleet-sync`: keep every fleet repo level with origin with no model call (#626).
 
 `olivercode fleet-sync` walks the fleet repos cloned on this machine. A repo on its default branch with a clean tree is
-fetched, pulled with rebase, validated by its own `scripts/validate.sh` (or `npm run validate`) when it holds unpushed
+fetched, pulled with rebase, validated by its own validation command (lib/repo_profiles.py) when it holds unpushed
 commits, and pushed. It never resolves a conflict (a failed rebase is aborted), never touches uncommitted files, never
 forces a push and never switches branch. Each repo it cannot bring level goes into the owner queue (`olivercode owner`)
 with the command it ran and the error, once per repo, and prints on the last lines. Template drift stays with
@@ -10,10 +10,12 @@ with the command it ran and the error, once per repo, and prints on the last lin
 
 from __future__ import annotations
 
+import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
-from lib import cmd_owner, launchd
+from lib import cmd_owner, launchd, repo_profiles
 from lib.local_config import OC_ROOT
 from lib.repo_profiles import iter_fleet, load_repo_profiles
 
@@ -31,12 +33,11 @@ def _run(path: Path, *cmd: str) -> tuple[int, str]:
 
 
 def validate(path: Path) -> tuple[int, str]:
-    """The repo's own validation: scripts/validate.sh, else an npm validate script. Neither means nothing to run."""
-    if (path / "scripts" / "validate.sh").is_file():
-        return _run(path, "bash", "scripts/validate.sh")
-    if (path / "package.json").is_file() and '"validate"' in (path / "package.json").read_text(encoding="utf-8", errors="ignore"):
-        return _run(path, "npm", "run", "validate")
-    return 0, ""
+    """The repo's own validation, found by the shared detector. No command found means nothing to run."""
+    command = repo_profiles.validation_command(path)
+    argv = shlex.split(command) if command else []
+    # A tool this machine lacks cannot run, which is nothing to run here and not a failed validation, as the template validate.sh treats it.
+    return _run(path, *argv) if argv and shutil.which(argv[0]) else (0, "")
 
 
 def sync_repo(path: Path, check=validate) -> tuple[str, str, str]:
@@ -45,7 +46,7 @@ def sync_repo(path: Path, check=validate) -> tuple[str, str, str]:
     code2, upstream = _run(path, "git", "rev-parse", "--abbrev-ref", "@{upstream}")
     if code or code2:
         return "no upstream on a branch", "git rev-parse --abbrev-ref @{upstream}", upstream or "HEAD is detached or has no upstream"
-    if upstream.split("/")[-1] != branch or branch not in ("main", "master"):
+    if upstream.split("/")[-1] != branch or branch != repo_profiles.default_branch(path):
         return f"on {branch}, left alone", "git symbolic-ref --short HEAD", f"on branch {branch}, not the default branch"
     _, dirty = _run(path, "git", "status", "--porcelain", "--untracked-files=no")
     if dirty:

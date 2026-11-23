@@ -18,8 +18,20 @@ case "$ID_ORIGIN" in
   *:*) ID_ORIGIN="${ID_ORIGIN#*:}" ;;
   *) ID_ORIGIN="" ;;
 esac
+# An org-owned repo shares its org name on purpose, so the org is allowed and only the committer's own identity is checked.
+ID_ORG=0
+if [ -n "$ID_ORIGIN" ] && command -v gh >/dev/null 2>&1; then
+  [ "$(gh api "users/${ID_ORIGIN%%/*}" --jq .type 2>/dev/null || true)" = "Organization" ] && ID_ORG=1
+fi
+id_authors() {
+  if [ "$ID_ORG" = 1 ]; then
+    printf '%s\t%s\n' "$(git config user.name 2>/dev/null || true)" "$(git config user.email 2>/dev/null || true)"
+  else
+    git log --format='%an%x09%ae' 2>/dev/null
+  fi
+}
 {
-  git log --format='%an%x09%ae' 2>/dev/null | sort -u | while IFS="$(printf '\t')" read -r id_name id_mail; do
+  id_authors | sort -u | while IFS="$(printf '\t')" read -r id_name id_mail; do
     id_name_lc="$(printf '%s' "$id_name" | tr 'A-Z' 'a-z')"
     id_mail_lc="$(printf '%s' "$id_mail" | tr 'A-Z' 'a-z')"
     case "$id_name_lc$id_mail_lc" in *"[bot]"*|*"-bot@"*) continue ;; esac
@@ -34,7 +46,7 @@ esac
       *@*) printf '%s\n' "${id_mail_lc%@*}" | sed 's/+.*//' ;;
     esac
   done
-  printf '%s\n' "${ID_ORIGIN%%/*}" | tr 'A-Z' 'a-z'
+  [ "$ID_ORG" = 1 ] || printf '%s\n' "${ID_ORIGIN%%/*}" | tr 'A-Z' 'a-z'
   gate_list docs/IDENTIFIER-GATE.json configGlobs | while IFS= read -r id_glob; do
     git ls-files | while IFS= read -r id_cfg; do
       case "$id_cfg" in $id_glob) git show ":$id_cfg" 2>/dev/null ;; esac
