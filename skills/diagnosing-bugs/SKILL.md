@@ -17,9 +17,11 @@ Ways to build one, roughly in this order:
 2. A curl or HTTP script against a running dev server
 3. A CLI call with a fixture input, diffing stdout against a known-good snapshot
 4. A headless browser script, a replayed trace, a throwaway harness, a fuzz loop, a `git bisect run` harness or an old-versus-new diff
-5. Last resort, a structured script that drives a human through the clicks
+5. Last resort, a structured script that drives a human through the clicks: `skills/diagnosing-bugs/scripts/hitl_loop.sh STEPS_FILE`
 
 Then tighten it: faster (cache setup, narrow the scope), sharper (assert the specific wrong value, so a run that merely finishes cannot pass) and deterministic (pin time, seed RNG, isolate the filesystem, freeze the network). For a non-deterministic bug, raise the reproduction rate by looping the trigger 100 times, adding stress, narrowing timing windows and injecting sleeps. A 50% flake is debuggable and a 1% flake is not.
+
+**Redact secrets.** A repro that needs an API key or token reads it from an environment variable. Any command or captured log you show has the value replaced with `<REDACTED>`, including in the diagnosis and the commit message. `skills/diagnosing-bugs/scripts/hitl_loop.sh` does this for every variable named in `HITL_REDACT`.
 
 When no loop can be built, stop and say so, list what you tried, and ask for access to an environment that reproduces it, a captured artifact (HAR, log dump, core dump, timestamped recording) or permission to add temporary production instrumentation. Do not hypothesise without a loop.
 
@@ -28,6 +30,10 @@ Phase 1 is done when you can name one command that you have already run, that dr
 ## Phase 2 — Reproduce and minimise
 
 Run the loop and watch it go red with the symptom the user described, across several runs. Capture the exact symptom so later phases can verify the fix. Then shrink the repro to the smallest scenario that still goes red, cutting inputs, callers, config, data and steps one at a time.
+
+Minimisation ends when every remaining input, step, setting and piece of data is load-bearing: removing any one turns the loop green. A repro where a removal stays red is not yet minimal, so keep cutting.
+
+If you force the failure by editing code or a fixture, keep an untouched copy from before the edit, and before you claim the red show `diff -r <untouched copy> <working copy>` with the edit in it. A red from an edit that never landed proves nothing.
 
 ## Phase 3 — Hypothesise
 
