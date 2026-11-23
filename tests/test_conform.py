@@ -317,6 +317,40 @@ class TestFleetPrivate(ConformBase):
         self.assertEqual("skip", self.check({"private": True}, []).status)
 
 
+class TestIssues(ConformBase):
+    """The open issues of the OliverCode repo never name a fleet repo, so the public board never leaks one (#814)."""
+
+    def setUp(self):
+        super().setUp()
+        (self.repo / "docs" / "backlog-config.json").write_text(json.dumps({"repoOwner": "acme", "repoName": "OliverCode"}))
+
+    def issues(self, found, names=("zz-example-repo",), offline=False):
+        with mock.patch.object(conform.repo_name_guard, "default_names", return_value=list(names)):
+            return conform.issues(self.repo, offline=offline, fetch=lambda slug: found)
+
+    def test_an_open_issue_whose_title_names_a_fleet_repo_fails_naming_its_number(self):
+        row = self.issues([{"number": 42, "title": "Sync zz-example-repo", "body": ""}, {"number": 43, "title": "Clean", "body": "fine"}])
+        self.assertEqual("fail", row.status)
+        self.assertIn("#42", row.detail)
+        self.assertNotIn("#43", row.detail)
+        self.assertNotIn("zz-example-repo", row.detail + row.fix)
+
+    def test_an_open_issue_whose_body_names_a_fleet_repo_fails(self):
+        row = self.issues([{"number": 7, "title": "Docs", "body": "Copy the layout from zz-example-repo."}])
+        self.assertEqual("fail", row.status)
+        self.assertIn("#7", row.detail)
+
+    def test_open_issues_that_name_no_fleet_repo_pass(self):
+        self.assertEqual("pass", self.issues([{"number": 1, "title": "Board sync", "body": "Keep it in step."}]).status)
+
+    def test_it_skips_offline_for_another_repo_with_no_names_and_when_github_is_silent(self):
+        self.assertEqual("skip", self.issues([], offline=True).status)
+        self.assertEqual("skip", self.issues([{"number": 1, "title": "zz-example-repo", "body": ""}], names=()).status)
+        self.assertEqual("skip", self.issues(None).status)
+        (self.repo / "docs" / "backlog-config.json").write_text(json.dumps({"repoOwner": "acme", "repoName": "widgets"}))
+        self.assertEqual("skip", self.issues([{"number": 1, "title": "zz-example-repo", "body": ""}]).status)
+
+
 class TestTimeouts(ConformBase):
     def test_a_check_that_times_out_fails_its_row_and_the_rest_still_run(self):
         def slow(repo, **_):

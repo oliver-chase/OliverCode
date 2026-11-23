@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from lib import backlog_setup, engine_only as engine_gate, features as features_register, live_copy, local_config, machines as machine_records, queue_bypass as bypass_gate, repo_gates, schedules
+from lib import backlog_setup, engine_only as engine_gate, features as features_register, live_copy, local_config, machines as machine_records, open_issues, queue_bypass as bypass_gate, repo_gates, repo_name_guard, schedules
 from lib.gitfiles import tracked_files
 from lib.local_config import OC_ROOT
 
@@ -163,6 +163,24 @@ def board(repo: Path, *, offline: bool, api=None, oc_root: Path = OC_ROOT, **_) 
         why = "the board sweep job is not loaded on this machine, so closed issues stay open on the board and new issues stay off it"
         return _fail("board", "; ".join([why, *off]), "Run `olivercode board sync --schedule`")
     return Row("board", "skip" if skipped else "pass", detail if skipped else "")
+
+
+def issues(repo: Path, *, offline: bool, names: list[str] | None = None, fetch=open_issues.fetch, **_) -> Row:
+    """No open issue of the OliverCode repo names a fleet repo, so the public board never leaks one (#814). The names come from the local registry and never print."""
+    slug = repo_slug(repo)
+    if offline or slug is None or not repo_name_guard.is_olivercode("/".join(slug)):
+        return Row("issues", "skip", "offline" if offline else "not the OliverCode repo")
+    names = repo_name_guard.default_names(repo) if names is None else names
+    if not names:
+        return Row("issues", "skip", "no fleet repo names in the registry")
+    found = fetch("/".join(slug))
+    if found is None:
+        return Row("issues", "skip", "GitHub could not be read")
+    named = sorted({row["number"] for row in found if repo_name_guard.hits(f"{row.get('title') or ''}\n{row.get('body') or ''}", names)})
+    if named:
+        return _fail("issues", "open issue(s) " + ", ".join(f"#{n}" for n in named) + " name a fleet repo",
+                     "reword the title and body of each named issue so it says another repo, then run `olivercode conform` again")
+    return Row("issues", "pass")
 
 
 def hooks(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant: str = "", **_) -> Row:
@@ -475,7 +493,7 @@ def sleep_setting(repo: Path, *, offline: bool = False, runner=None, system: str
     return Row("sleep-setting", "pass")
 
 
-CHECKS = (layout, ignore, readme, folders, validation, queue_bypass, engine_only, fleet_private, sleep_setting, board, hooks, managed_files, dead_selftest, tests, docs, learning, research, audit,
+CHECKS = (layout, ignore, readme, folders, validation, queue_bypass, engine_only, fleet_private, sleep_setting, board, issues, hooks, managed_files, dead_selftest, tests, docs, learning, research, audit,
           automation, live_launcher, branches, delete_on_merge, features, machines)
 
 
