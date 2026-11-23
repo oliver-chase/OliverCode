@@ -268,11 +268,13 @@ class CloseGateDimension(unittest.TestCase):
     CFG = {"repoOwner": "o", "repoName": "r", "closeGateFromIssue": 50}
 
     @staticmethod
-    def runner(comments_by_issue):
+    def runner(comments_by_issue, reasons=None):
         def run(args):
             number = int(args[-1].split("/")[-2] if args[-1].endswith("/comments") else args[0].split("/")[-1])
             if "--slurp" in args:
                 return subprocess.CompletedProcess([], 0, json.dumps([comments_by_issue.get(number, [])]), "")
+            if ".state_reason" in args:
+                return subprocess.CompletedProcess([], 0, f"{(reasons or {}).get(number, 'null')}\n", "")
             return subprocess.CompletedProcess([], 0, "", "")
         return run
 
@@ -281,6 +283,16 @@ class CloseGateDimension(unittest.TestCase):
         found = bh.check_close_gate(items, self.CFG, runner=self.runner({61: [{"body": "done\n\nClosed by complete_story.py."}], 60: [{"body": "Closing."}]}))
         self.assertEqual(1, len(found))
         self.assertIn("#60", found[0])
+        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
+
+    def test_a_duplicate_closed_as_not_planned_is_not_flagged(self):
+        comments = {60: [{"body": "Duplicate of #70. Findings folded into #70."}]}
+        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "not_planned"})))
+
+    def test_a_completed_close_without_the_mark_is_still_flagged(self):
+        comments = {60: [{"body": "Closing."}]}
+        found = bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "completed"}))
+        self.assertEqual(1, len(found))
         self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
 
     def test_a_comment_that_only_quotes_the_mark_does_not_count(self):

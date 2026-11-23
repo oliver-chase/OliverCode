@@ -172,10 +172,20 @@ def check_duplicate_cards(items):
     return problems
 
 
+def closed_as_not_planned(repo, number, runner):
+    """True when GitHub records the issue as closed not planned. A duplicate is closed that way once its findings moved
+    to a surviving story, so it has no evidence comment by design (#1074). Raises RuntimeError on a failed read."""
+    result = runner([f"repos/{repo}/issues/{number}", "--jq", ".state_reason"])
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or "gh api failed").strip())
+    return result.stdout.strip() == "not_planned"
+
+
 def check_close_gate(items, config, finished="Complete", runner=gh_api):
     """Every finished item of the config's own repo numbered at or above `closeGateFromIssue` has a comment
     holding the line complete_story.py ends its evidence with. A story closed through the REST API, `gh issue close`
-    or the web has none, and skipped the QA, live and hook or job checks (#836). A null or absent key switches the
+    or the web has none, and skipped the QA, live and hook or job checks (#836). An issue closed as not planned is a
+    duplicate whose findings moved to a surviving story, so it is skipped (#1074). A null or absent key switches the
     dimension off, and a failed read exits so a cut-short read can never pass as clean."""
     start = config.get("closeGateFromIssue")
     if start is None:
@@ -192,6 +202,8 @@ def check_close_gate(items, config, finished="Complete", runner=gh_api):
         if (c.get("repository") or own).lower() != own.lower():
             continue
         try:
+            if closed_as_not_planned(own, number, runner):
+                continue
             data, _ = cs.fetch(own, number, runner)
         except (RuntimeError, ValueError) as exc:
             sys.exit(f"cannot read #{number} to check how it closed: {exc}")
