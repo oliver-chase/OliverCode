@@ -16,6 +16,10 @@ def item(**kw):
     return base
 
 
+def confirm(led, fid, priority="P1"):
+    findings.verdict(led, "lead", fid, "fresh-reader", "confirmed", priority)
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -66,6 +70,7 @@ class OneCoordinator(Base):
         findings.cross(self.led, "lead")
         with self.assertRaises(findings.Refused):
             findings.file_issue(self.led, "chunk-session", "F1", 900)
+        confirm(self.led, "F1")
         findings.file_issue(self.led, "lead", "F1", "#900")
         with self.assertRaises(findings.Refused):
             findings.report(self.led, "chunk-session")
@@ -92,6 +97,7 @@ class CrossPass(Base):
         self.assertEqual(merges, [("F2", "F1")])
         f1 = self.led["findings"][0]
         self.assertEqual((f1["priority"], f1["chunks"], f1["where"]), ("P0", ["scripts", "skills"], ["a.py:1", "z.py:9"]))
+        confirm(self.led, "F1")
         self.assertEqual(findings.file_issue(self.led, "lead", "F2", 901), "F1")
         with self.assertRaises(findings.Refused):
             findings.add(self.led, "skills", item(defect="late"))
@@ -130,6 +136,8 @@ class OneReport(Base):
         findings.cross(self.led, "lead")
         with self.assertRaises(findings.Refused):
             findings.report(self.led, "lead")
+        confirm(self.led, "F1", "P2")
+        confirm(self.led, "F2", "P0")
         findings.file_issue(self.led, "lead", "F1", 910)
         findings.file_issue(self.led, "lead", "F2", 911)
         table = findings.report(self.led, "lead")
@@ -141,6 +149,53 @@ class OneReport(Base):
         for rx in check_report.LENSES.values():
             self.assertRegex(body, "(?i)" + rx)
         self.assertEqual(check_report.rows_without_issue(table.splitlines()), [])
+
+
+class Verdicts(Base):
+    def crossed(self, n=1):
+        for i in range(n):
+            findings.add(self.led, "skills", item(where=f"a.py:{i}", defect=f"d{i}"))
+        for c in self.led["chunks"]:
+            findings.done(self.led, c)
+        findings.cross(self.led, "lead")
+
+    def test_an_unjudged_or_unconfirmed_finding_is_not_filed_or_reported(self):
+        self.crossed()
+        with self.assertRaises(findings.Refused):
+            findings.file_issue(self.led, "lead", "F1", 900)
+        with self.assertRaises(findings.Refused):
+            findings.report(self.led, "lead")
+
+    def test_the_writer_of_a_finding_cannot_judge_it(self):
+        self.crossed()
+        with self.assertRaises(findings.Refused):
+            findings.verdict(self.led, "lead", "F1", "skills", "confirmed", "P1")
+
+    def test_unproven_names_its_blocker_carries_no_priority_and_is_reported_unfiled(self):
+        self.crossed()
+        with self.assertRaises(findings.Refused):
+            findings.verdict(self.led, "lead", "F1", "reader", "unproven")
+        findings.verdict(self.led, "lead", "F1", "reader", "unproven", blocker="needs the prod log")
+        self.assertIsNone(self.led["findings"][0]["priority"])
+        with self.assertRaises(findings.Refused):
+            findings.file_issue(self.led, "lead", "F1", 900)
+        table = findings.report(self.led, "lead")
+        self.assertIn("Unproven, no priority", table)
+        self.assertIn("needs the prod log", table)
+        self.assertEqual(check_report.rows_without_issue(table.splitlines()), [])
+
+    def test_a_rejected_finding_leaves_the_report(self):
+        self.crossed(2)
+        findings.verdict(self.led, "lead", "F1", "reader", "rejected")
+        confirm(self.led, "F2")
+        findings.file_issue(self.led, "lead", "F2", 901)
+        self.assertNotIn("F1", findings.report(self.led, "lead"))
+
+    def test_a_confirmed_finding_needs_a_priority_and_a_known_status(self):
+        self.crossed()
+        for status, prio in (("confirmed", ""), ("maybe", "P1")):
+            with self.assertRaises(findings.Refused):
+                findings.verdict(self.led, "lead", "F1", "reader", status, prio)
 
 
 if __name__ == "__main__":

@@ -107,3 +107,13 @@ class ReportCheckTest(unittest.TestCase):
         self.assertTrue(any("1 files (1 lines)" in p for p in check_report.unread(root)))
         audit_ledger.mark(root, ["b.py"])
         self.assertEqual(check_report.unread(root), [])
+
+    def test_a_stopped_audit_passes_only_with_every_unread_file_deferred_and_no_full_coverage_claim(self):
+        from test_audit_ledger import repo
+        import audit_ledger
+        root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
+        audit_ledger.mark(root, ["a.py"])
+        self.assertEqual(check_report.unread(root, "Deferred: b.py, out of budget"), [])
+        self.assertTrue(check_report.unread(root, "Deferred: c.py"))
+        self.assertTrue(check_report.unread(root, "Deferred: b.py. Full coverage."))
+        self.assertTrue(check_report.unread(root, "b.py was not read"))

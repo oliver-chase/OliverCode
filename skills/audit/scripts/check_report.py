@@ -51,7 +51,7 @@ def rows_without_issue(lines):
             continue
         if i + 1 < len(lines) and SEPARATOR.match(lines[i + 1].strip()):
             continue  # a table header
-        if ISSUE.search(s) or "nothing found" in s.lower():
+        if ISSUE.search(s) or "nothing found" in s.lower() or "unproven" in s.lower():
             continue
         bad.append(s)
     return bad
@@ -108,13 +108,17 @@ def check(text):
     return problems
 
 
-def unread(repo):
-    """The coverage gate: a whole-repo report goes out only once the ledger lists nothing as pending."""
+def unread(repo, text=""):
+    """The coverage gate: a whole-repo report goes out only once the ledger lists nothing as pending, or, for an audit
+    that stopped, once it lists every unread file as deferred and claims no full coverage."""
     rows = audit_ledger.pending(repo)
     if not rows:
         return []
+    if re.search(r"\bdeferred\b", text, re.I) and all(p in text for p in rows) \
+            and not re.search(r"full coverage|every file (was |were )?read|all files (were )?read", text, re.I):
+        return []
     lines = sum(audit_ledger.line_count(repo, p) for p in rows)
-    return [f"{len(rows)} files ({lines} lines) in {repo} are still unread. Fix: run the next reader wave from `audit_ledger.py --batches 3000`, mark each batch, and report when --pending lists nothing"]
+    return [f"{len(rows)} files ({lines} lines) in {repo} are still unread. Fix: run the next reader wave from `audit_ledger.py --batches 3000`, mark each batch, and report when --pending lists nothing. A stopped audit instead lists each unread file as deferred and claims no full coverage"]
 
 
 SMALL_ROUTES = ("plan", "docs", "changes")
@@ -143,7 +147,7 @@ def main(argv):
         print("REPORT: the report was delivered as a file. Fix: pipe it on stdin with `check_report.py -` and print it as one message in the thread")
         return 1
     text = sys.stdin.read()
-    problems = check_small(text) if route else check(text) + (unread(repo) if repo else [])
+    problems = check_small(text) if route else check(text) + (unread(repo, text) if repo else [])
     for p in problems:
         print("REPORT: " + p)
     if not problems:

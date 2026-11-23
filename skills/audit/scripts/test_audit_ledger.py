@@ -106,3 +106,15 @@ class LedgerTest(unittest.TestCase):
         found = audit_ledger.batches(root, 4)
         self.assertEqual(found, [(["a/2.py", "b/3.py"], 4), (["c/big.py"], 9)])
         self.assertEqual(sorted(p for b, _ in found for p in b), audit_ledger.pending(root))
+
+    def test_a_rejected_claim_is_reported_until_the_file_changes_and_survives_marks(self):
+        root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
+        self.assertTrue(audit_ledger.reject(root, "a.py", "Wrong count!"))
+        audit_ledger.mark(root, ["a.py", "b.py"])
+        self.assertIn("rejected earlier", audit_ledger.earlier_rejection(root, "a.py", "wrong  count"))
+        self.assertIsNone(audit_ledger.earlier_rejection(root, "b.py", "wrong count"))
+        self.assertEqual(audit_ledger.pending(root), [])
+        commit(root, {"a.py": "x = 2\n"})
+        self.assertIsNone(audit_ledger.earlier_rejection(root, "a.py", "wrong count"))
+        audit_ledger.mark(root, ["a.py"])
+        self.assertEqual(audit_ledger.rejections(root), [])

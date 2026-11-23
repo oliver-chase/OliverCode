@@ -7,6 +7,8 @@ Usage:
     audit_ledger.py [repo] --mark FILE          # record the files listed in FILE (one path per line) at HEAD
     audit_ledger.py [repo] --mark FILE --findings N   # also add a run line with today's date and the finding count
     audit_ledger.py [repo] --mark-all           # record every tracked file at HEAD (after a full audit)
+    audit_ledger.py [repo] --reject FILE --claim TEXT        # remember a claim a fresh reader refuted, against FILE's current hash
+    audit_ledger.py [repo] --check-claim FILE --claim TEXT   # exit 1 and name the earlier rejection when FILE is unchanged since
 The ledger is docs/AUDITED.txt: `# run DATE findings N files M` lines, oldest first, then one `blob-hash path`
 line per file read, sorted. A file counts as read
 while its blob hash is unchanged, so an edit, a rename or a new file is pending and nothing else is.
@@ -15,6 +17,7 @@ Tests: python3 -m unittest test_audit_ledger
 
 import codecs
 from datetime import date
+import re
 import sys
 from pathlib import Path
 
@@ -56,12 +59,48 @@ def run_lines(repo):
     return [l for l in f.read_text(encoding="utf-8").splitlines() if l.startswith("# run ")] if f.exists() else []
 
 
-def write_ledger(repo, entries, run=None):
-    """Write the entries, keeping every earlier run line and appending `run` when given."""
+def _claim(text):
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", text.lower()).split())
+
+
+def rejections(repo):
+    """[(blob, path, claim)] from the ledger's `# rejected BLOB PATH :: CLAIM` lines."""
+    f = Path(repo) / LEDGER
+    out = []
+    for l in f.read_text(encoding="utf-8").splitlines() if f.exists() else []:
+        if l.startswith("# rejected ") and " :: " in l:
+            head, claim = l[len("# rejected "):].split(" :: ", 1)
+            blob, _, path = head.partition(" ")
+            out.append((blob, path, claim))
+    return out
+
+
+def earlier_rejection(repo, path, claim):
+    """The earlier rejection of this claim on this file, while the file's blob is unchanged, else None."""
+    h = blobs(repo).get(path)
+    return next((f"rejected earlier: {c} ({path})" for b, p, c in rejections(repo) if p == path and b == h and c == _claim(claim)), None)
+
+
+def reject(repo, path, claim):
+    """Remember a rejected claim against the file's current blob, so a later audit of the unchanged file does not refile it."""
+    h = blobs(repo).get(path)
+    if h is None:
+        return False
+    if not earlier_rejection(repo, path, claim):
+        write_ledger(repo, read_ledger(repo), extra=[(h, path, _claim(claim))])
+    return True
+
+
+def write_ledger(repo, entries, run=None, extra=()):
+    """Write the entries, keeping every earlier run line and every rejection whose file is unchanged, and appending `run` when given."""
     f = Path(repo) / LEDGER
     runs = run_lines(repo) + ([run] if run else [])
+    live = blobs(repo)
+    kept = [r for r in rejections(repo) + list(extra) if live.get(r[1]) == r[0]]
+    kept = [r for i, r in enumerate(kept) if r not in kept[:i]]
     f.parent.mkdir(exist_ok=True)
-    f.write_text("".join(f"{r}\n" for r in runs) + "".join(f"{h} {p}\n" for p, h in sorted(entries.items())), encoding="utf-8")
+    f.write_text("".join(f"{r}\n" for r in runs) + "".join(f"# rejected {b} {p} :: {c}\n" for b, p, c in kept)
+                 + "".join(f"{h} {p}\n" for p, h in sorted(entries.items())), encoding="utf-8")
 
 
 def pending(repo):
@@ -112,7 +151,7 @@ def mark(repo, paths, rev="HEAD", findings=None, today=None):
 
 def main(argv):
     args = argv[1:]
-    repo = scan_root([a for i, a in enumerate(args) if not (a.startswith("--") or (i and args[i - 1] in ("--mark", "--findings", "--batches")))], Path("."))
+    repo = scan_root([a for i, a in enumerate(args) if not (a.startswith("--") or (i and args[i - 1] in ("--mark", "--findings", "--batches", "--reject", "--check-claim", "--claim")))], Path("."))
     if "--pending" in args:
         rows = pending(repo)
         lines = sum(line_count(repo, p) for p in rows)
@@ -136,6 +175,15 @@ def main(argv):
         findings = args[args.index("--findings") + 1] if "--findings" in args else None
         print(f"marked {mark(repo, listing, findings=findings)} file(s)")
         return 0
+    if "--reject" in args or "--check-claim" in args:
+        flag = "--reject" if "--reject" in args else "--check-claim"
+        path, claim = args[args.index(flag) + 1], args[args.index("--claim") + 1] if "--claim" in args else ""
+        if flag == "--reject":
+            print("rejection recorded" if reject(repo, path, claim) else f"{path} is not at HEAD, nothing recorded")
+            return 0
+        found = earlier_rejection(repo, path, claim)
+        print(found or "no earlier rejection")
+        return 1 if found else 0
     if "--mark-all" in args:
         print(f"marked {mark(repo, list(blobs(repo)))} file(s)")
         return 0

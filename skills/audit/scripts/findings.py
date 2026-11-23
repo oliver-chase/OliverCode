@@ -7,6 +7,7 @@ Usage:
     findings.py LEDGER add --chunk C --from FILE.json      # a list of objects with the same fields
     findings.py LEDGER done --chunk C
     findings.py LEDGER cross --session S                   # merge duplicates and rules broken in more than one chunk
+    findings.py LEDGER verdict --session S --id F3 --reader R --status confirmed|unproven|rejected [--priority P1] [--blocker TEXT]
     findings.py LEDGER file --session S --id F3 --issue 812
     findings.py LEDGER report --session S                  # one Findings table in one priority order
 LEDGER is one JSON file for the whole audit, such as <target>/docs/AUDIT-FINDINGS.json. Ids run F1, F2 and so on
@@ -22,6 +23,7 @@ from pathlib import Path
 from check_report import LENSES
 
 SCALE = ("P0", "P1", "P2")
+VERDICTS = ("confirmed", "unproven", "rejected")
 FIELDS = ("lens", "priority", "where", "defect", "evidence", "fix")
 
 
@@ -75,7 +77,7 @@ def add(led, chunk, item):
     led["next"] += 1
     row = {"id": fid, "chunks": [chunk], "lens": lens.lower(), "priority": item["priority"], "where": where,
            "defect": item["defect"].strip(), "evidence": item["evidence"].strip(), "fix": item["fix"].strip(),
-           "rule": (item.get("rule") or "").strip(), "issue": None}
+           "rule": (item.get("rule") or "").strip(), "issue": None, "verdict": None}
     led["findings"].append(row)
     return fid
 
@@ -139,6 +141,31 @@ def cross(led, session):
     return merges, checks
 
 
+def verdict(led, session, fid, reader, status, priority="", blocker=""):
+    """A reader who did not write the finding tries to refute it. Confirmed takes a priority, unproven names its blocker
+    and carries no priority, rejected leaves the board and the report."""
+    _owner(led, session)
+    if not led["cross"]:
+        raise Refused("the cross-cutting pass has not run. Fix: run cross first, so each merged finding gets one verdict")
+    row = next((f for f in led["findings"] if f["id"] == led["merged"].get(fid, fid)), None)
+    if row is None:
+        raise Refused(f"no finding {fid}")
+    if not reader.strip() or reader in row["chunks"] or reader == row.get("author"):
+        raise Refused(f"reader {reader!r} wrote or has not been named for {row['id']}. Fix: a fresh reader who did not write it gives the verdict")
+    if status not in VERDICTS:
+        raise Refused(f"status {status!r} is not a verdict. Fix: use confirmed, unproven or rejected")
+    if status == "unproven" and not blocker.strip():
+        raise Refused("an unproven finding names its blocker. Fix: pass --blocker with what stopped the proof")
+    if status == "confirmed":
+        if priority not in SCALE:
+            raise Refused("a confirmed finding takes its priority here. Fix: pass --priority P0, P1 or P2")
+        row["priority"] = priority
+    else:
+        row["priority"] = None
+    row["verdict"] = {"status": status, "reader": reader, "blocker": blocker.strip()}
+    return row["id"]
+
+
 def file_issue(led, session, fid, issue):
     _owner(led, session)
     if not led["cross"]:
@@ -147,6 +174,8 @@ def file_issue(led, session, fid, issue):
     row = next((f for f in led["findings"] if f["id"] == fid), None)
     if row is None:
         raise Refused(f"no finding {fid}")
+    if (row["verdict"] or {}).get("status") != "confirmed":
+        raise Refused(f"{fid} is not confirmed. Fix: a fresh reader gives it a verdict first, and only a confirmed finding is filed")
     number = str(issue).lstrip("#")
     if not number.isdigit() or int(number) == 0:
         raise Refused(f"issue {issue!r} is not an issue number. Fix: pass --issue 812")
@@ -159,16 +188,24 @@ def report(led, session):
     _owner(led, session)
     if not led["cross"]:
         raise Refused("the cross-cutting pass has not run. Fix: run cross first")
-    unfiled = [f["id"] for f in led["findings"] if not f["issue"]]
+    unjudged = [f["id"] for f in led["findings"] if not f.get("verdict")]
+    if unjudged:
+        raise Refused(f"findings with no verdict: {', '.join(unjudged)}. Fix: a fresh reader confirms, rejects or marks each one unproven")
+    unfiled = [f["id"] for f in led["findings"] if f["verdict"]["status"] == "confirmed" and not f["issue"]]
     if unfiled:
         raise Refused(f"findings with no issue: {', '.join(unfiled)}. Fix: file each one")
-    order = sorted(led["findings"], key=lambda f: (f["priority"], int(f["id"][1:])))
+    unproven = [f for f in led["findings"] if f["verdict"]["status"] == "unproven"]
+    order = sorted((f for f in led["findings"] if f["verdict"]["status"] == "confirmed"), key=lambda f: (f["priority"], int(f["id"][1:])))
     lines = ["| Lens | Priority | Id | Where | Defect | Evidence | Fix | Issue |", "|---|---|---|---|---|---|---|---|"]
     for f in order:
         cell = lambda s: s.replace("|", "\\|").replace("\n", " ")
         lines.append(f"| {f['lens'].capitalize()} | {f['priority']} | {f['id']} | {cell(', '.join(f['where']))} | "
                      f"{cell(f['defect'])} | {cell(f['evidence'])} | {cell(f['fix'])} | #{f['issue']} |")
-    seen = {f["lens"] for f in order}
+    for f in unproven:
+        cell = lambda s: s.replace("|", "\\|").replace("\n", " ")
+        lines.append(f"| {f['lens'].capitalize()} | Unproven, no priority | {f['id']} | {cell(', '.join(f['where']))} | "
+                     f"{cell(f['defect'])} | Blocker: {cell(f['verdict']['blocker'])} | | |")
+    seen = {f["lens"] for f in order + unproven}
     lines += [f"| {lens.capitalize()} | Checked, nothing found across every chunk | | | | | | |" for lens in LENSES if lens not in seen]
     return "\n".join(lines)
 
@@ -199,6 +236,10 @@ def main(argv):
             for c in checks:
                 print(c)
             print(f"cross pass: {len(merges)} merged, {len(led['findings'])} findings, {len(checks)} rule check(s)")
+        elif cmd == "verdict":
+            fid = verdict(led, opts.get("session", ""), opts.get("id", ""), opts.get("reader", ""), opts.get("status", ""),
+                          opts.get("priority", ""), opts.get("blocker", ""))
+            print(f"{fid} {opts['status']}")
         elif cmd == "file":
             print(f"{file_issue(led, opts.get('session', ''), opts.get('id', ''), opts.get('issue', '0'))} filed as #{str(opts.get('issue')).lstrip('#')}")
         elif cmd == "report":
