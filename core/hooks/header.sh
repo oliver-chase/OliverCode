@@ -38,5 +38,29 @@ staged_content() {
     git -C "$REPO_ROOT" show ":$1" 2>/dev/null || cat -- "$1"
   fi
 }
+# TEXT_FILES is STAGED_FILES minus every binary file, so a gate that reads content never runs sed or grep
+# over a PNG, a font or a PDF. One `git grep -I` over the index lists the text files with git's own test
+# (a NUL in the first 8000 bytes, or a binary attribute), and the staged list is cut to those. A gate that
+# reads only names or sizes keeps using STAGED_FILES, so a staged binary still counts there.
+TEXT_FILES=""
+if [ -n "$STAGED_FILES" ]; then
+  TEXT_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off grep --cached -I --name-only -e '' 2>/dev/null \
+    | grep -Fxf - <(printf '%s\n' "$STAGED_FILES") || true)
+fi
+# gate_list FILE KEY prints each string in the JSON array KEY of the staged FILE.
+gate_list() {
+  git show ":$1" 2>/dev/null | tr '\n' ' ' \
+    | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' \
+    | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true
+}
+# matches_glob PATH GLOBS succeeds when PATH matches one of the newline-separated GLOBS.
+matches_glob() {
+  local glob
+  while IFS= read -r glob; do
+    [ -n "$glob" ] || continue
+    case "$1" in $glob) return 0 ;; esac
+  done <<< "$2"
+  return 1
+}
 
 VIOLATIONS=0

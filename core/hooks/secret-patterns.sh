@@ -24,16 +24,28 @@ SECRET_PATTERNS=(
 
 # secret_filter PATTERN: reads `grep -n` hits on stdin and prints those that hold a real secret.
 # The commit gate and the pre-push scan both call it, so a line one passes the other passes.
-# Exempt: the public supabase anon-key meta tag, a line marked "secret-scan: allow", and a hit
+# Exempt: a line marked "secret-scan: allow", and a hit
 # whose every matched value is a placeholder (EXAMPLE, placeholder, your_key, a run of x).
-SECRET_ANON_META='<meta name="supabase-anon-key" content="eyJ'
 SECRET_PLACEHOLDER='EXAMPLE|[Ee]xample|[Pp]laceholder|PLACEHOLDER|[Yy]our[_-]?([Aa]pi[_-]?)?([Kk]ey|[Tt]oken|[Ss]ecret)|YOUR_|(^|[^A-Za-z0-9])[xX]{8,}([^A-Za-z0-9]|$)'
+# A generic `key`-style hit whose value is a lowercase hyphenated slug (wedding-invite-wildflower-5x7) is a name, not a
+# credential: real secrets carry mixed case or no hyphens, and every vendor shape above is matched by its own pattern.
+secret_not_slug() {
+  local m v
+  while IFS= read -r m; do
+    v=$(printf '%s' "$m" | sed -E "s/^[A-Za-z_]+[\"' :=]+//")
+    # A UUID (8-4-4-4-12 hex) and a value after a password name are credentials, never slugs.
+    case "$pattern" in '(TOKEN|SECRET'*)
+      [[ "$v" =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] || [[ "$m" =~ ^[Pp][Aa][Ss][Ss] ]] ||
+        { [[ "$v" =~ ^[a-z0-9]+(-[a-z0-9]+)+$ ]] && continue; } ;; esac
+    printf '%s\n' "$m"
+  done
+}
 secret_filter() {
   local pattern="$1" hit
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
-    case "$hit" in *'secret-scan: allow'*|*"$SECRET_ANON_META"*) continue ;; esac
-    if printf '%s\n' "$hit" | grep -oE -e "$pattern" | grep -vE -e "$SECRET_PLACEHOLDER" >/dev/null; then
+    case "$hit" in *'secret-scan: allow'*) continue ;; esac
+    if printf '%s\n' "$hit" | grep -oE -e "$pattern" | grep -vE -e "$SECRET_PLACEHOLDER" | secret_not_slug | grep . >/dev/null; then
       printf '%s\n' "$hit"
     fi
   done

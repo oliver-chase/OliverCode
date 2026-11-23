@@ -7,6 +7,6 @@
   ],
   "localDataReasons": {
     "LICENSE": "The MIT license text must name its copyright holder.",
-    "docs/AUDIT-ACCEPTED.md": "It names the history addresses the owner accepted, which done_check matches by value."
+    "docs/AUDIT-ACCEPTED.md": "It lists the audit rows the owner accepted, and done_check skips each one."
   }
 }

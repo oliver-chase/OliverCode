@@ -6,13 +6,13 @@ echo "[pre-commit] Gate {{N}}/{{TOTAL}}: Secret scan..."
 # per-pattern loop below. A file matches the union exactly when it matches at least one pattern, so the
 # verdict is unchanged. grep -c reads to the end, so a large file never closes the pipe early.
 SECRET_CANDIDATES=""
-if [ -n "$STAGED_FILES" ]; then
+if [ -n "$TEXT_FILES" ]; then
   SECRET_GREP_ARGS=()
   for pattern in "${SECRET_PATTERNS[@]}"; do SECRET_GREP_ARGS+=(-e "$pattern"); done
   while IFS= read -r file; do
     count=$(staged_content "$file" 2>/dev/null | grep -cE "${SECRET_GREP_ARGS[@]}" || true)
     if [ "${count:-0}" -gt 0 ]; then SECRET_CANDIDATES="${SECRET_CANDIDATES}${file}"$'\n'; fi
-  done <<< "$STAGED_FILES"
+  done <<< "$TEXT_FILES"
 fi
 if [ -n "$SECRET_CANDIDATES" ]; then
   secret_tmp=$(mktemp)

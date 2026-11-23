@@ -12,12 +12,25 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from lib.local_config import OC_ROOT, private_repos, repo_paths
+from lib import repo_state
+from lib.local_config import DEFAULT_FLEET_REGISTRY, OC_ROOT, fleet_registry_path, other_device, private_repos, repo_paths
 
 REGISTRY_DIR = "olivercode"
 
 
 REGISTRY_NAME = "repo-profiles.json"
+LOCAL_REGISTRY_NAME = "repo-profiles.local.json"  # git-ignored: `discover --register` writes the user's repo names here
+
+
+def _configured_registry() -> Path | None:
+    """The registry file `fleetRegistry` names, or None when it is missing or resolves to a tracked shared/ example (#845)."""
+    configured = fleet_registry_path()
+    if not configured.is_file():
+        return None
+    target = configured.resolve()
+    if target.name == REGISTRY_NAME and target.parent.name == "shared" and (target.parent.parent / "scripts" / "olivercode").is_file():
+        return None
+    return configured
 
 
 def registry_file(repo_root: Path) -> Path:
@@ -27,21 +40,45 @@ def registry_file(repo_root: Path) -> Path:
     test or a fork run against another root reads that root's own `shared/` file.
     """
     if Path(repo_root).resolve() == OC_ROOT.resolve():
+        configured = _configured_registry()
+        if configured:
+            return configured
         for repo in private_repos().values():
             candidate = repo / REGISTRY_DIR / REGISTRY_NAME
             if candidate.is_file():
                 return candidate
-    return Path(repo_root) / "shared" / REGISTRY_NAME
+    local = Path(repo_root) / "shared" / LOCAL_REGISTRY_NAME
+    return local if local.is_file() else Path(repo_root) / "shared" / REGISTRY_NAME
+
+
+def registry_write_file(repo_root: Path) -> Path:
+    """Where `discover --register` writes: the registry a private repo holds, else the ignored local file, never the tracked example."""
+    path = registry_file(repo_root)
+    if path == Path(repo_root) / "shared" / REGISTRY_NAME:
+        return Path(repo_root) / "shared" / LOCAL_REGISTRY_NAME
+    return path
+
+
+NO_FLEET = ("no fleet is set. Run `olivercode init-fleet` to create one, or name an existing registry with "
+            "`fleetRegistry` in olivercode.local.json (default " + DEFAULT_FLEET_REGISTRY + ")")
 
 
 def registry_gap(repo_root: Path) -> str:
     """Why this checkout reads no real registry although it names private repos, or ""."""
     private = private_repos() if Path(repo_root).resolve() == OC_ROOT.resolve() else {}
-    if not private or registry_file(repo_root) != Path(repo_root) / "shared" / "repo-profiles.json":
+    if not private or registry_file(repo_root).parent != Path(repo_root) / "shared":
         return ""
     names = ", ".join(f"{n} ({p})" for n, p in private.items())
     return (f"no private repo holds {REGISTRY_DIR}/repo-profiles.json, so the fleet reads as empty. Checked: {names}. "
             "Name the repo that holds it under privateRepos in olivercode.local.json")
+
+
+def load_local_profiles(repo_root: Path) -> dict:
+    """The profiles in the registry this checkout reads, or {} when it is missing or unreadable."""
+    try:
+        return json.loads(registry_file(repo_root).read_text()).get("profiles", {})
+    except (OSError, ValueError):
+        return {}
 
 
 def load_repo_profiles(repo_root):
@@ -86,14 +123,26 @@ def configured_location(name: str, profile: dict) -> str | None:
     return None
 
 
-def iter_fleet(profiles: dict, fleet_root: Path):
+def iter_fleet(profiles: dict, fleet_root: Path, skip_archived: bool = True):
     """Yield (name, profile, repo_path) for every fleet repo, framework repo excluded.
+
+    A repo that belongs to another device (`otherDeviceRepos`, or an origin in `otherDeviceOwners`, see
+    local_config.other_device) is never yielded, so no fleet walk touches it (#637).
+
+    A repo GitHub archived or deleted is skipped with one line (lib/repo_state.py), so every fleet walk
+    leaves it alone. A caller that only looks a repo up by path passes skip_archived=False.
 
     Health and sync-hooks share this one filter. It compares the self-skip
     case-insensitively, so a profile named "OliverCode" -- the casing `discover` emits
     from a directory name -- is skipped by both.
     """
+    other_repos, other_owners = other_device()
     for name, profile in profiles.items():
-        if name.lower() == "olivercode":
+        if name.lower() == "olivercode" or name.lower() in other_repos:
             continue
-        yield name, profile, resolve_repo_path(name, profile, fleet_root)
+        path = resolve_repo_path(name, profile, fleet_root)
+        if other_owners and (path / ".git").exists() and (repo_state.origin(path) or "/").split("/")[0].lower() in other_owners:
+            continue
+        if skip_archived and (path / ".git").exists() and repo_state.skipped(name, path):
+            continue
+        yield name, profile, path

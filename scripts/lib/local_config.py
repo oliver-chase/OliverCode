@@ -25,6 +25,11 @@ def claude_dir() -> Path:
 LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 
+# A setting a release adds gets its default here. The saved value wins, so a default only fills a key the user never set.
+DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "autoCoverLessons": False, "retroEpic": 0, "personalRepos": []}
+BACKLOG_CONFIG = "docs/backlog-config.json"
+LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
+
 
 def load_local() -> dict:
     """The local file's contents. OLIVERCODE_LOCAL_CONFIG names another file; the test harness
@@ -49,9 +54,31 @@ def private_repos() -> dict[str, Path]:
     return repos
 
 
+DEFAULT_FLEET_REGISTRY = "~/.olivercode/fleet/repo-profiles.json"
+
+
+def fleet_registry_path() -> Path:
+    """Where this machine keeps the fleet registry: `fleetRegistry` in olivercode.local.json, else the default
+    under ~/.olivercode. `olivercode init-fleet` creates the file there. The environment variable
+    OLIVERCODE_FLEET_REGISTRY wins over both."""
+    value = os.environ.get("OLIVERCODE_FLEET_REGISTRY") or load_local().get("fleetRegistry") or DEFAULT_FLEET_REGISTRY
+    return Path(value).expanduser()
+
+
 def skills_root() -> Path | None:
     """The personal skills folder that health and audit-fleet check."""
     return _path(os.environ.get("OLIVERCODE_SKILLS_ROOT") or load_local().get("skillsRoot"))
+
+
+def other_device() -> tuple[set[str], set[str]]:
+    """(repo names, GitHub accounts) that belong to another of the owner's devices, lowercased.
+
+    `otherDeviceRepos` names repos that never belong on this machine and `otherDeviceOwners` names the GitHub
+    accounts or orgs whose repos stay off it. Every fleet walk skips the first, and `health` and the clone
+    guard refuse a checkout of either (#637)."""
+    local = load_local()
+    return ({str(n).lower() for n in local.get("otherDeviceRepos", [])},
+            {str(o).lower() for o in local.get("otherDeviceOwners", [])})
 
 
 def repo_paths() -> dict[str, Path]:
@@ -64,3 +91,61 @@ def voice_file(oc_root: Path = OC_ROOT) -> Path:
     OLIVERCODE_VOICE_FILE) names one that exists, else the neutral voice this checkout ships."""
     own = _path(os.environ.get("OLIVERCODE_VOICE_FILE") or load_local().get("voiceFile"))
     return own if own and own.is_file() else oc_root / "docs" / "VOICE.md"
+
+
+def design_file(oc_root: Path = OC_ROOT) -> Path:
+    """The design file install links as ~/.claude/DESIGN.md: the user's own file when `designFile` (or
+    OLIVERCODE_DESIGN_FILE) names one that exists, else the design standard this checkout ships (#719)."""
+    own = _path(os.environ.get("OLIVERCODE_DESIGN_FILE") or load_local().get("designFile"))
+    return own if own and own.is_file() else oc_root / "docs" / "DESIGN.md"
+
+
+def local_path() -> Path:
+    """The file load_local reads: OLIVERCODE_LOCAL_CONFIG when set, else olivercode.local.json."""
+    return Path(os.environ["OLIVERCODE_LOCAL_CONFIG"]) if "OLIVERCODE_LOCAL_CONFIG" in os.environ else LOCAL_FILE
+
+
+def save_local(updates: dict) -> None:
+    """Merge `updates` into the local file and keep every other key. Refuses /dev/null, which means no file."""
+    path = local_path()
+    if str(path) == os.devnull:
+        raise RuntimeError("no local config file in use (OLIVERCODE_LOCAL_CONFIG is /dev/null)")
+    data = json.loads(path.read_text()) if path.is_file() else {}
+    data.update(updates)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.replace(path)
+
+
+def settings() -> dict:
+    """Every setting: the shipped DEFAULTS with the user's saved values on top, so only a missing key takes a default."""
+    return {**DEFAULTS, **load_local()}
+
+
+def setting(key: str):
+    """One setting: the user's saved value, else the default a release ships, else None."""
+    return settings().get(key)
+
+
+def _overlay(base: dict, top: dict) -> dict:
+    """base with top's values on top, merging nested objects key by key."""
+    out = dict(base)
+    for key, value in top.items():
+        out[key] = _overlay(out[key], value) if isinstance(value, dict) and isinstance(out.get(key), dict) else value
+    return out
+
+
+def has_backlog_config(repo: Path) -> bool:
+    """True when the repo holds the tracked backlog config or the user's own local one."""
+    return (Path(repo) / BACKLOG_CONFIG).is_file() or (Path(repo) / LOCAL_BACKLOG_CONFIG).is_file()
+
+
+def backlog_config(repo: Path) -> dict:
+    """The repo's backlog config: the tracked docs/backlog-config.json with the git-ignored
+    docs/backlog-config.local.json on top, so a user who cannot push names their own repo and Project
+    without editing a tracked file. Raises OSError or ValueError as reading one file would."""
+    tracked, local = Path(repo) / BACKLOG_CONFIG, Path(repo) / LOCAL_BACKLOG_CONFIG
+    base = json.loads(tracked.read_text(encoding="utf-8")) if tracked.is_file() or not local.is_file() else {}
+    if local.is_file():
+        base = _overlay(base, json.loads(local.read_text(encoding="utf-8")))
+    return base

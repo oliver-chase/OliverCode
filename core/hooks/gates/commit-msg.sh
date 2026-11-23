@@ -7,10 +7,12 @@ if [ -z "$MSG_FILE" ] || [ ! -r "$MSG_FILE" ]; then
   exit 1
 fi
 
-# An owner opts a repo out by creating .githooks/commit-msg.optout. The hook never creates it,
-# and every commit it lets through says so.
-if [ -e "$HOOK_DIR/commit-msg.optout" ]; then
-  echo "[commit-msg] Every commit-msg check is off (story, voice, test and size cap): $HOOK_DIR/commit-msg.optout exists."
+# An owner opts a repo out by committing .githooks/commit-msg.optout. The file counts only once HEAD holds it, so
+# the commit that adds it is checked like any other. The hook never creates it, and every commit it lets through says so.
+OPTOUT_REL="$(cd "$HOOK_DIR" && pwd -P)"
+OPTOUT_REL="${OPTOUT_REL#"$(git rev-parse --show-toplevel 2>/dev/null)"/}/commit-msg.optout"
+if git cat-file -e "HEAD:$OPTOUT_REL" 2>/dev/null; then
+  echo "[commit-msg] Every commit-msg check is off (story, voice and test): $OPTOUT_REL is committed."
   exit 0
 fi
 
@@ -28,36 +30,26 @@ if grep -qF "$COMMENT_CHAR Please enter the commit message" "$MSG_FILE"; then
 else
   MESSAGE="$(cat "$MSG_FILE")"
 fi
-# sed quits at the first non-blank line, so a long message can close the pipe before printf finishes.
-SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}' || true)"
-
-# SIZE-RAISE-1. A commit that raises "lines" in docs/SIZE-BASELINE.json by more than
-# raiseCapPercent of the committed value (default 2) must declare a story sized L or XL with a
-# "Size: L" or "Size: XL" line, copied from that story's Size field. Without the cap an edit to
-# the baseline defeats the size ratchet, because the ratchet trusts the staged baseline. The cap is
-# read from HEAD so the same commit cannot change it, and the check runs before the merge, revert
-# and first-commit exits below so no message prefix skips it.
-if [ -n "$(git diff --cached --name-only -- docs/SIZE-BASELINE.json)" ]; then
-  baseline_field() {
-    printf '%s\n' "$2" | sed -n '/"'"$1"'"[[:space:]]*:/{s/.*"'"$1"'"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p;q;}'
-  }
-  NEW_LINES="$(baseline_field lines "$(git show ":docs/SIZE-BASELINE.json" 2>/dev/null || true)")"
-  OLD_JSON="$(git show "HEAD:docs/SIZE-BASELINE.json" 2>/dev/null || true)"
-  OLD_LINES="$(baseline_field lines "$OLD_JSON")"
-  CAP_PCT="$(baseline_field raiseCapPercent "$OLD_JSON")"
-  # A baseline whose committed "lines" is null counts as 0, so the first real number is a raise.
-  if [ -z "$OLD_LINES" ] && [ -n "$OLD_JSON" ]; then OLD_LINES=0; fi
-  if [ -n "$NEW_LINES" ] && [ -n "$OLD_LINES" ] && [ "$NEW_LINES" -gt "$OLD_LINES" ]; then
-    CAP=$(( OLD_LINES * ${CAP_PCT:-2} / 100 ))
-    RAISE=$(( NEW_LINES - OLD_LINES ))
-    if [ "$RAISE" -gt "$CAP" ] && ! printf '%s\n' "$MESSAGE" | grep -Eiq '^[[:space:]]*size:[[:space:]]*(L|XL)[[:space:]]*$'; then
-      echo "[commit-msg] BLOCKED: this commit raises the size baseline by $RAISE lines, over the cap of $CAP."
-      echo "  A raise that large needs a story sized L or XL. Add a line \"Size: L\" or \"Size: XL\" copied from the story's Size field,"
-      echo "  or split the work so each commit stays inside the cap."
-      exit 1
-    fi
+# Every blocking finding is printed and counted, and the hook refuses once at the end, so one run lists all of them. A voice finding is a
+# warning and never counts. `olivercode commit-check` sets OLIVERCODE_COMMIT_CHECK to run these checks on a draft: it changes nothing and queues nothing (#881).
+BLOCK_COUNT=0
+block() { BLOCK_COUNT=$((BLOCK_COUNT + 1)); }
+# REPO-NAME-1. The framework's own commits never name the owner's other repos. The names come from the local
+# registry through scripts/lib/repo_name_guard.py, which only the framework's checkout holds, so every other repo skips this check.
+GUARD_TOP="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$GUARD_TOP" ] && [ -f "$GUARD_TOP/scripts/lib/repo_name_guard.py" ] && command -v python3 >/dev/null 2>&1; then
+  GUARD_FILE="$(mktemp "${TMPDIR:-/tmp}/oc-commit-text.XXXXXX")"
+  printf '%s\n' "$MESSAGE" > "$GUARD_FILE"
+  GUARD_RC=0
+  (cd "$GUARD_TOP/scripts" && python3 -m lib.repo_name_guard --text-file "$GUARD_FILE") || GUARD_RC=$?
+  rm -f "$GUARD_FILE"
+  if [ "$GUARD_RC" -ne 0 ]; then
+    echo "[commit-msg] BLOCKED: the message names another repo. Write \"another repo\" instead."
+    exit 1
   fi
 fi
+# sed quits at the first non-blank line, so a long message can close the pipe before printf finishes.
+SUBJECT="$(printf '%s\n' "$MESSAGE" | sed -n '/[^[:space:]]/{p;q;}' || true)"
 
 # COAUTHOR-1. Every co-author line has one form, "Co-Authored-By: Name <email>", and a Claude
 # co-author uses Anthropic's noreply address, so the attribution reads the same on every commit,
@@ -65,21 +57,46 @@ fi
 BAD_COAUTHOR="$(printf '%s\n' "$MESSAGE" | grep -Ei '^[[:space:]]*co-authored-by:' \
   | grep -Ev '^Co-Authored-By: [^<>]+ <[^<>@ ]+@[^<> ]+>$' || true)"
 CLAUDE_MAIL="noreply@""anthropic.com"
-BAD_COAUTHOR="$BAD_COAUTHOR$(printf '%s\n' "$MESSAGE" | grep -E '^Co-Authored-By: Claude' | grep -vF "<$CLAUDE_MAIL>" || true)"
+BAD_COAUTHOR="$BAD_COAUTHOR$(printf '%s\n' "$MESSAGE" | grep -Ei '^Co-Authored-By: Claude' | grep -vF "<$CLAUDE_MAIL>" || true)"
 if [ -n "$BAD_COAUTHOR" ]; then
   echo "[commit-msg] BLOCKED: a co-author line is not in the standard form:"
   printf '%s\n' "$BAD_COAUTHOR" | sed 's/^/    /'
   echo "  Write it as \"Co-Authored-By: Name <email>\"; a Claude co-author uses <$CLAUDE_MAIL>."
-  exit 1
+  block
 fi
 
-# Revert and autosquash commits carry the message of work that already has a reference, and a real merge is
-# known by MERGE_HEAD, so a subject that only starts with "Merge" still passes every check.
-# The first commit of a repo has no story to name yet.
+# One definition of a test path and of a file that is not code, shared by the merge exemption and TEST-WITH-CODE-1.
+# Code is every staged file except documentation and data: markup, styles, images, data and
+# config formats, and the plain repo files such as LICENSE. A language the hook has never heard of counts as code.
+TEST_PATH='(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$|^scripts/(live-check|check-)[^/]*$'
+NON_CODE='\.(md|txt|json|jsonl|csv|tsv|ya?ml|toml|html?|css|svg|png|jpe?g|gif|ico|webp|pdf|lock|xml|ini|cfg|conf|example|sample)$|(^|/)(LICENSE|CODEOWNERS|\.gitignore|\.gitattributes|\.mailmap)$'
+staged_code() { git diff --cached --name-only --no-renames "$@" | grep -vE "$NON_CODE" || true; }
+
+# A revert or autosquash commit carries the message of work that already has a reference, so it is exempt
+# from the story check only when it names a commit that exists: a "fixup! X", "squash! X" or "amend! X" whose X is the subject of a
+# commit in history, and a Revert "X" whose X is one or whose body names a real commit. A merge that stages no code
+# is exempt too. A subject that only starts with "Merge" is known by MERGE_HEAD, and a repo's first commit has no story to name yet.
+names_a_commit() {
+  target="$SUBJECT"
+  while :; do
+    case "$target" in
+      "fixup! "*) target="${target#fixup! }" ;;
+      "squash! "*) target="${target#squash! }" ;;
+      "amend! "*) target="${target#amend! }" ;;
+      *) break ;;
+    esac
+  done
+  case "$SUBJECT" in "Revert "*) ;; *) [ "$target" != "$SUBJECT" ] || return 1 ;; esac
+  # A fixup, squash or amend subject names its target by subject. A revert names its commit by hash, as git writes it.
+  case "$SUBJECT" in "Revert "*) ;; *) git log --format=%s 2>/dev/null | grep -qxF -- "$target" && return 0 ;; esac
+  sha="$(printf '%s\n' "$MESSAGE" | sed -n 's/^This reverts commit \([0-9a-f]\{7,40\}\).*/\1/p' | head -1)"
+  [ -n "$sha" ] && git cat-file -e "$sha^{commit}" 2>/dev/null
+}
 case "$SUBJECT" in
-  "Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+  "Revert "*|"fixup! "*|"squash! "*|"amend! "*) if names_a_commit; then EXEMPT_STORY=1; fi ;;
 esac
-if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
+    && [ -z "$(staged_code)" ]; then
   exit 0
 fi
 if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
@@ -87,45 +104,44 @@ if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
 fi
 
 # VOICE-1. A repo that ships docs/VOICE.md opts in to voice enforcement; every other repo skips it. A commit message follows docs/VOICE.md: no bullet that ends in a period and no contrast
-# framing ("rather than", "instead of", "not X but Y", ", not a ..."). Lines starting with # are dropped
-# by git before the hook sees the message, and a trailer such as Co-Authored-By is never a bullet.
+# framing ("rather than", "instead of", "not X but Y", ", not a ..."). With an editor git drops lines starting with #
+# before the hook sees the message, and with -m it keeps them, and a trailer such as Co-Authored-By is never a bullet.
 VOICE_BREAKS=""
 if [ -f "$(git rev-parse --show-toplevel)/docs/VOICE.md" ]; then
 VOICE_BREAKS="$(printf '%s\n' "$MESSAGE" | grep -nE '^[[:space:]]*[-*][[:space:]]+.*[^.]\.$|rather than|instead of|it is not about|[Ll]ess [^.]{1,40}, more |[Nn]ot [^.]{1,60} but |, not (a|an|the) ' || true)"
 fi
 if [ -n "$VOICE_BREAKS" ]; then
-  echo "[commit-msg] BLOCKED: the message breaks the voice rules (docs/VOICE.md):"
+  echo "[commit-msg] WARNING: the message may break the voice rules (docs/VOICE.md). This never blocks the commit:"
   printf '%s\n' "$VOICE_BREAKS" | sed -n '1,5s/^/    /p'
   echo "  End bullets without a period and state the plain fact without contrast framing."
-  exit 1
 fi
 
 # A reference is a standalone # and a positive number that ends the token: "(#53)", "#53 fix",
 # "Story: #53" or "org/repo#53". A hex colour such as #123abc, "Fix 5#3", "&#39;" and "#0" do not count.
 TOKEN_END='([^[:alnum:]_]|$)'
 NUMBER='#0*[1-9][0-9]*'
-if ! printf '%s\n' "$MESSAGE" | grep -Eq "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}"; then
+STORY_REF="(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}"
+if [ -z "${EXEMPT_STORY:-}" ] && ! printf '%s\n' "$MESSAGE" | grep -Eq "$STORY_REF"; then
   echo "[commit-msg] BLOCKED: the commit message names no story."
   echo "  Add the story number, for example \"Fix the sync (#53)\" or a line \"Story: #53\"."
-  echo "  Merge, revert, fixup/squash commits and a repo's first commit are exempt."
-  echo "  To turn the check off for a repo, the owner creates $HOOK_DIR/commit-msg.optout."
-  exit 1
+  echo "  A revert or fixup/squash commit that names an existing commit, a merge that stages no code and a repo's first commit are exempt."
+  echo "  To turn the check off for a repo, the owner commits $OPTOUT_REL."
+  block
 fi
 
 # TEST-WITH-CODE-1. A commit that adds or changes code also changes a test, or says why not on a
-# line "No test: <reason>". Code is a .py, .sh, .js, .mjs, .ts or .tsx file outside a test path; a
+# line "No test: <reason>". Code is a staged file outside a test path that NON_CODE does not name; a
 # test is anything under tests/ or named test_*, *_test.* or *.test.*, and a check script directly under
 # scripts/ named check-* or live-check*, which is itself the test it runs. An .html page is markup and
 # does not count: script worth a test belongs in a .js file, which does.
-TEST_PATH='(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.test\.[^/]*$|^scripts/(live-check|check-)[^/]*$'
-CODE_CHANGED="$(git diff --cached --name-only --no-renames --diff-filter=AM | grep -E '\.(py|sh|js|mjs|ts|tsx)$' | grep -vE "$TEST_PATH" || true)"
-TEST_CHANGED="$(git diff --cached --name-only --no-renames --diff-filter=AMD | grep -E "$TEST_PATH" || true)"
+CODE_CHANGED="$(staged_code --diff-filter=AM | grep -vE "$TEST_PATH" || true)"
+TEST_CHANGED="$(git diff --cached --name-only --no-renames --diff-filter=AM | grep -E "$TEST_PATH" || true)"
 if [ -n "$CODE_CHANGED" ] && [ -z "$TEST_CHANGED" ] \
     && ! printf '%s\n' "$MESSAGE" | grep -Eiq '^[[:space:]]*no test:[[:space:]]*[^[:space:]]'; then
   echo "[commit-msg] BLOCKED: this commit changes code and no test:"
   printf '%s\n' "$CODE_CHANGED" | sed -n '1,5s/^/    /p'
   echo "  Add or update a test in the same commit, or add a line \"No test: <reason>\" to the message."
-  exit 1
+  block
 fi
 
 # STORY-EXISTS-1. A number must name a story that exists, so the hook asks GitHub about each reference: a plain #N is looked up in the repo
@@ -133,22 +149,33 @@ fi
 # A yes is cached in .git/story-exists-cache so later commits skip the call. A repo without the config is
 # not checked, and one that still holds the shipped placeholders says how to fill it. When gh is missing or the call fails for any reason but a 404 (offline, rate limit, no
 # login) the hook prints a warning and lets the commit through, so an offline commit is never blocked.
+# A config whose repo is not this checkout's origin came with a fork or clone, so its numbers are not this repo's and are not checked.
 CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || true)/docs/backlog-config.json"
-if [ -r "$CONFIG_FILE" ] && grep -Eq '"repoOwner"[[:space:]]*:[[:space:]]*"your-' "$CONFIG_FILE"; then
+config_value() { sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_FILE" | head -1; }
+ORIGIN_REPO="$({ git remote get-url origin 2>/dev/null || true; } | sed -E 's#/+$##; s#\.git$##; s#^.*[:/]([^/:]+/[^/:]+)$#\1#' | tr '[:upper:]' '[:lower:]')"
+CONFIG_REPO=""
+if [ -r "$CONFIG_FILE" ]; then
+  CONFIG_REPO="$(printf '%s/%s' "$(config_value repoOwner)" "$(config_value repoName)" | tr '[:upper:]' '[:lower:]')"
+fi
+if [ -n "$ORIGIN_REPO" ] && [ -n "$CONFIG_REPO" ] && [ "$CONFIG_REPO" != "/" ] && [ "$ORIGIN_REPO" != "$CONFIG_REPO" ] \
+    && ! grep -Eq '"repoOwner"[[:space:]]*:[[:space:]]*"your-' "$CONFIG_FILE"; then
+  echo "[commit-msg] Note: docs/backlog-config.json names $CONFIG_REPO but this checkout's origin is $ORIGIN_REPO, so story numbers were not checked."
+  echo "  Run \`olivercode backlog-setup --apply\` to give this repo its own board and config."
+elif [ -r "$CONFIG_FILE" ] && grep -Eq '"repoOwner"[[:space:]]*:[[:space:]]*"your-' "$CONFIG_FILE"; then
   echo "[commit-msg] Note: docs/backlog-config.json still holds placeholders, so story numbers were not checked against GitHub."
   echo "  Fill it with the repo's real owner, name and Project IDs: run \`olivercode backlog-setup --apply\`, or copy them from \`gh project field-list <number> --owner <owner> --format json\`."
+elif [ -r "$CONFIG_FILE" ] && ! grep -Eq '"repoOwner"[[:space:]]*:[[:space:]]*"[^"]' "$CONFIG_FILE"; then
+  echo "[commit-msg] Note: docs/backlog-config.json names no repoOwner, so story numbers were not checked against GitHub."
 elif [ -r "$CONFIG_FILE" ]; then
-  config_value() { sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG_FILE" | head -1; }
   HOME_REPO="$(config_value repoOwner)/$(config_value repoName)"
   CACHE_FILE="$(git rev-parse --git-dir)/story-exists-cache"
-  REFS="$(printf '%s\n' "$MESSAGE" | { grep -Eo "(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}" || true; } \
+  REFS="$(printf '%s\n' "$MESSAGE" | { grep -Eo "$STORY_REF" || true; } \
     | sed -E 's/^[^[:alnum:]#]+//; s/[^0-9]+$//' | sort -u)"
   MISSING=""
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     case "$ref" in */*) repo="${ref%%#*}" ;; *) repo="$HOME_REPO" ;; esac
     num="$(printf '%s' "${ref##*#}" | sed 's/^0*//')"
-    case "$repo" in */*) ;; *) continue ;; esac
     [ "$repo" != "/" ] || continue
     key="$repo#$num"
     if [ -r "$CACHE_FILE" ] && grep -qxF "$key" "$CACHE_FILE"; then continue; fi
@@ -170,7 +197,44 @@ EOF_REFS
   if [ -n "$MISSING" ]; then
     echo "[commit-msg] BLOCKED: no such story:$MISSING"
     echo "  Cite a story that exists in this repo, or write owner/repo#N for a story in another repo."
-    exit 1
+    block
   fi
+fi
+
+# CLOSES-CARD-1. A commit that says "closes #N" or "resolves #N" ("Fix #N" stays a plain reference) queues Status Complete for that card through
+# batch_project.py, so closing an issue never leaves a stale card (the 12 issues closed by hand with a card still open).
+# A message with a bare "(#N)" queues nothing. When the queue cannot take the request the commit is refused with the fix.
+CLOSES="$(printf '%s\n' "$MESSAGE" | grep -Eio '(^|[^[:alnum:]_])(close[sd]?|resolve[sd]?):?[[:space:]]+#0*[1-9][0-9]*([^[:alnum:]_]|$)' \
+  | grep -Eo '#0*[1-9][0-9]*' | sed 's/^#0*//' | sort -un || true)"
+if [ -n "$CLOSES" ]; then
+  CARD_LAUNCHER="${OLIVERCODE_LAUNCHER:-$(command -v olivercode 2>/dev/null || cat "${OLIVERCODE_HOME:-$HOME/.olivercode}/launcher" 2>/dev/null || true)}"
+  CARD_BATCH=""
+  if [ -n "$CARD_LAUNCHER" ]; then
+    CARD_BATCH="$(cd "$(dirname "$(readlink -f "$CARD_LAUNCHER" 2>/dev/null || echo "$CARD_LAUNCHER")")/.." 2>/dev/null && pwd)/skills/backlog/scripts/batch_project.py"
+  fi
+  CARD_CONFIG="$(git rev-parse --show-toplevel 2>/dev/null || true)/docs/backlog-config.json"
+  if [ ! -r "$CARD_CONFIG" ] || [ ! -f "$CARD_BATCH" ]; then
+    echo "[commit-msg] BLOCKED: the message closes #$(printf '%s' "$CLOSES" | tr '\n' ' ' | sed 's/ *$//;s/ / #/g'), and the card cannot be queued: ${CARD_CONFIG} or the backlog scripts are missing."
+    echo "  Run \`olivercode backlog-setup --apply\` to write the config, or drop the closing keyword and write \"(#N)\"."
+    block
+  elif [ -n "${OLIVERCODE_COMMIT_CHECK:-}" ]; then
+    echo "[commit-check] The message closes #$(printf '%s' "$CLOSES" | tr '\n' ' ' | sed 's/ *$//;s/ / #/g'); a real commit queues Status Complete for each card, and this check queues nothing."
+  else
+    CARD_JSON="$(printf '%s\n' "$CLOSES" | awk 'BEGIN{printf "{\"issues\":["} {printf "%s{\"number\":%s,\"fields\":{\"status\":\"Complete\"}}", (NR>1?",":""), $1} END{print "]}"}')"
+    CARD_OK=1
+    CARD_OUT="$(printf '%s\n' "$CARD_JSON" | python3 "$CARD_BATCH" --config "$CARD_CONFIG" --input - 2>&1)" || CARD_OK=0
+    if [ "$CARD_OK" -eq 0 ] && ! printf '%s' "$CARD_OUT" | grep -q 'stays queued'; then
+      echo "[commit-msg] BLOCKED: the Status Complete request for the closed card could not be queued: $(printf '%s' "$CARD_OUT" | tail -1)"
+      echo "  Run \`olivercode backlog-setup --apply\` to repair the config, then commit again."
+      block
+    fi
+  fi
+fi
+if [ "$BLOCK_COUNT" -gt 0 ]; then
+  echo "[commit-msg] $BLOCK_COUNT blocking finding$([ "$BLOCK_COUNT" -eq 1 ] || echo s). Fix all of them, then commit again."
+  exit 1
+fi
+if [ -n "${OLIVERCODE_COMMIT_CHECK:-}" ]; then
+  echo "[commit-check] no blocking findings."
 fi
 exit 0

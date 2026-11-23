@@ -2,9 +2,7 @@
 # A repo whose own files must hold a pattern, such as a gate that names the patterns it blocks, lists
 # those files under "exempt" in docs/PII-GATE.json, each with a line in "reasons".
 echo "[pre-commit] Gate {{N}}/{{TOTAL}}: PII scan..."
-PII_EXEMPT="$(git show ":docs/PII-GATE.json" 2>/dev/null | tr '\n' ' ' \
-  | sed -n 's/.*"exempt"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' \
-  | grep -o '"[^"]*"' | sed 's/^"//; s/"$//' || true)"
+PII_EXEMPT="$(gate_list docs/PII-GATE.json exempt)"
 
 PII_PATTERNS=(
   '(^|[^[:alnum:]._/-])/Users/[A-Za-z0-9._-]+([/"'\'' ]|$)'                   # macOS home directory paths, with or without a trailing slash
@@ -13,17 +11,12 @@ PII_PATTERNS=(
 )
 
 for pattern in "${PII_PATTERNS[@]}"; do
-  if [ -n "$STAGED_FILES" ]; then
+  if [ -n "$TEXT_FILES" ]; then
     while IFS= read -r file; do
       case "$file" in
         *.env.example|*/mocks/*|*.mock.*|*_mock.*|tests/*|*/tests/*|*.test.*|*_test.*|*__tests__*|.gitignore|docs/PII-GATE.json|.githooks/*) continue ;;
       esac
-      pii_skip=0
-      while IFS= read -r pii_glob; do
-        [ -n "$pii_glob" ] || continue
-        case "$file" in $pii_glob) pii_skip=1; break ;; esac
-      done <<< "$PII_EXEMPT"
-      [ "$pii_skip" = 1 ] && continue
+      matches_glob "$file" "$PII_EXEMPT" && continue
       # Strip known non-PII strings before matching. `git@github.com` is the SSH form npm
       # writes into package-lock.json for a git dependency, a protocol user on a public host,
       # so a lockfile with a git dependency stays committable.
@@ -33,12 +26,12 @@ for pattern in "${PII_PATTERNS[@]}"; do
       # so a separator after the repo name ends the strip. The `#<sha>` fragment is left in
       # place, since a tag name after it could hide an address. The left boundary stops a
       # longer word such as `notgit@github.com` from anchoring the exemption.
-      if staged_content "$file" 2>/dev/null | sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' | grep -nE -e "$pattern" >/dev/null; then
-        staged_content "$file" 2>/dev/null | sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' | grep -nE -e "$pattern"
+      if hits=$(staged_content "$file" 2>/dev/null | sed -E 's#(^|[^A-Za-z0-9._%+-])git\+ssh://git@github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g; s#(^|[^A-Za-z0-9._%+-])git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#\1#g' | grep -nE -e "$pattern"); then
+        echo "$hits"
         echo "  BLOCKED: $file contains PII matching pattern: $pattern"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi
-    done <<< "$STAGED_FILES"
+    done <<< "$TEXT_FILES"
   fi
 done
 

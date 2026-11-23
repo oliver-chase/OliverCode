@@ -21,6 +21,11 @@ import subprocess
 import time
 from pathlib import Path
 
+try:
+    from lib.failure_log import home
+except ImportError:  # loaded bare, with scripts/lib on the path
+    from failure_log import home
+
 HOLD_SECONDS = 1200
 # GitHub also throttles a steady burst of writes whatever the points left, so the machine as a whole gets a
 # rolling cap on writes.
@@ -33,10 +38,6 @@ POINTS_TTL = 60
 LIMIT_TEXT = re.compile(r"rate limit (already )?exceeded|secondary rate limit|abuse detection|graphql_rate_limit", re.IGNORECASE)
 
 
-def home() -> Path:
-    return Path(os.environ.get("OLIVERCODE_HOME") or Path.home() / ".olivercode")
-
-
 def _state() -> dict:
     try:
         return json.loads((home() / "gh-limit.json").read_text(encoding="utf-8"))
@@ -44,32 +45,136 @@ def _state() -> dict:
         return {}
 
 
-def blocked_until() -> float:
-    """The epoch time GitHub calls are held until, or 0 when nothing is held."""
-    until = float(_state().get("until", 0))
+RESOURCES = ("rest", "graphql")
+
+
+def _until(resource: str, state: dict | None = None) -> float:
+    """The epoch time one resource is held until, 0 when it is free. "" asks about both, and a record with no
+    resource (written before the two were tracked apart) holds both."""
+    state = _state() if state is None else state
+    names = RESOURCES if resource in ("", None) else (resource,)
+    times = [float(state.get(n, 0)) for n in names] + [float(state.get("until", 0))]
+    until = max(times)
     return until if until > time.time() else 0.0
 
 
-def note_limit(seconds: int = HOLD_SECONDS, who: str = "") -> float:
-    """Record that a limit was seen. Returns the time calls are held until; a longer hold is never shortened."""
-    until = max(time.time() + seconds, blocked_until())
+def blocked_until(resource: str = "") -> float:
+    """The epoch time calls of one resource ("rest" or "graphql", or "" for either) are held until, 0 when free."""
+    return _until(resource)
+
+
+def _fetch_rates() -> dict:
+    """The account's REST and GraphQL budgets from `gh api rate_limit`, which costs nothing."""
+    out = subprocess.run(["gh", "api", "rate_limit", "--jq",
+                          ".resources|[.core.remaining,.core.reset,.graphql.remaining,.graphql.reset]|@tsv"],
+                         capture_output=True, text=True, timeout=5, check=True).stdout.split()
+    return {"rest": {"remaining": int(out[0]), "reset": int(out[1])}, "graphql": {"remaining": int(out[2]), "reset": int(out[3])}}
+
+
+def limit_resources(command: str, output: str) -> tuple[str, ...]:
+    """Which resources a limit message holds. GraphQL text holds GraphQL only, a secondary or abuse limit holds both,
+    and any other limit holds what the command spends: REST for a `gh api` call, GraphQL for the rest."""
+    low = output.lower()
+    if "secondary rate limit" in low or "abuse detection" in low:
+        return RESOURCES
+    if "graphql" in low:
+        return ("graphql",)
+    try:
+        from gh_guard import spends_points
+    except ImportError:  # loaded outside the hook, where the guard is not on the path
+        return ("graphql",)
+    return ("graphql",) if spends_points(command) else ("rest",)
+
+
+def note_limit(seconds: int = HOLD_SECONDS, who: str = "", resources: tuple[str, ...] = RESOURCES, fetch=None) -> float:
+    """Record that a limit was seen on the named resources. Each is held until the reset the account reports when it
+    is out, else for `seconds`; a longer hold is never shortened. Returns the latest time held until."""
+    now = time.time()
+    state = _state()
+    rates: dict = {}
+    if os.environ.get("OLIVERCODE_GH_PROBE", "1") != "0":
+        try:
+            rates = (fetch or _fetch_rates)()
+        except Exception:  # noqa: BLE001 -- fall back to the default hold
+            rates = {}
+    held = 0.0
+    for name in resources:
+        rate = rates.get(name) or {}
+        reset = rate.get("reset", 0)
+        until = reset if rate.get("remaining", 1) == 0 and reset > now else now + seconds
+        state[name] = max(until, _until(name, state))
+        held = max(held, state[name])
+    state.pop("until", None)
+    state.update({"seen": now, "by": who})
     home().mkdir(parents=True, exist_ok=True)
-    (home() / "gh-limit.json").write_text(json.dumps({"until": until, "seen": time.time(), "by": who}) + "\n", encoding="utf-8")
-    return until
+    (home() / "gh-limit.json").write_text(json.dumps(state) + "\n", encoding="utf-8")
+    return held
 
 
 def clear() -> None:
     (home() / "gh-limit.json").unlink(missing_ok=True)
 
 
-def refusal() -> str:
-    """The text that stops a gh call, or '' when GitHub may be called."""
-    until = blocked_until()
+def refusal(resource: str = "") -> str:
+    """The text that stops a gh call, or '' when GitHub may be called. `resource` is what the call spends: "rest",
+    "graphql", or "" to ask whether anything is held."""
+    until = blocked_until(resource)
     if not until:
         return ""
     when = time.strftime("%H:%M", time.localtime(until))
-    return (f"GitHub's rate limit was hit and is shared by every agent on this machine. Hold all gh calls until about {when}. "
-            "Queue the pending board writes in your report and make no further gh calls; `olivercode gh-limit clear` lifts the hold early.")
+    if resource == "graphql":
+        return (f"GitHub's GraphQL rate limit is out until about {when}, and REST calls still run. Use `gh api`, or queue the call "
+                "with `olivercode gh-limit queue -- gh ...`. See docs/RULES.md, Execution.")
+    return (f"GitHub's rate limit was hit, and every agent on this machine shares the hold until about {when}. Queue board writes with "
+            "`olivercode gh-limit queue -- gh ...`. See docs/RULES.md, Execution.")
+
+
+QUEUE = "gh-queue.jsonl"
+QUEUE_REPORT = "gh-queue-report.txt"
+
+
+def enqueue(argv: list[str], cwd: str = "") -> int:
+    """Queue one gh command to run at the GraphQL reset. Returns the queue length."""
+    if not argv or os.path.basename(argv[0]) != "gh":
+        raise ValueError("only gh commands are queued")
+    home().mkdir(parents=True, exist_ok=True)
+    with open(home() / QUEUE, "a+", encoding="utf-8") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        fh.write(json.dumps({"argv": argv, "cwd": cwd or os.getcwd(), "queued": time.time()}) + "\n")
+        fh.seek(0)
+        return len(fh.read().splitlines())
+
+
+def replay(run=None) -> str:
+    """Run the queued gh commands once GraphQL is free, keep the ones that fail, and report what each wrote. Returns the
+    report, also saved in ~/.olivercode/gh-queue-report.txt. While GraphQL is held nothing runs."""
+    path = home() / QUEUE
+    try:
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except (OSError, ValueError):
+        rows = []
+    if not rows:
+        return "The GitHub queue is empty."
+    if blocked_until("graphql"):
+        when = time.strftime("%H:%M", time.localtime(blocked_until("graphql")))
+        return f"{len(rows)} queued gh command(s) wait for the GraphQL reset at about {when}."
+    run = run or (lambda argv, cwd: subprocess.run(argv, cwd=cwd if os.path.isdir(cwd) else None, capture_output=True, text=True, timeout=120))
+    lines, kept = [], []
+    for row in rows:
+        done = run(row["argv"], row["cwd"])
+        cmd = " ".join(row["argv"])[:80]
+        if done.returncode == 0:
+            lines.append(f"wrote: {cmd}")
+        else:
+            err = (done.stderr or done.stdout or "").strip().splitlines()
+            if is_limit("\n".join(err)):
+                note_limit(who="replay", resources=limit_resources(cmd, "\n".join(err)))
+            kept.append(row)
+            lines.append(f"kept: {cmd} ({err[-1][:100] if err else 'failed'})")
+    path.write_text("".join(json.dumps(r) + "\n" for r in kept), encoding="utf-8")
+    report = f"{len(rows) - len(kept)} of {len(rows)} queued gh command(s) written.\n" + "\n".join(lines)
+    (home() / QUEUE_REPORT).write_text(report + "\n", encoding="utf-8")
+    return report
 
 
 def _reserve(name: str, window: int, cap: int, now: float) -> float:
@@ -103,8 +208,8 @@ def reserve_write(now: float | None = None) -> str:
     if not free_at:
         return ""
     when = time.strftime("%H:%M", time.localtime(free_at))
-    return (f"This machine has made {WRITES_PER_HOUR} GitHub writes in the last hour, the cap that keeps every agent under "
-            f"GitHub's burst limit. Queue the rest in your report and write again after about {when}.")
+    return (f"This machine has made {WRITES_PER_HOUR} GitHub writes in the last hour, the cap under GitHub's burst limit. "
+            f"Write again after about {when}. See docs/RULES.md, Execution.")
 
 
 def reserve_call(now: float | None = None) -> str:
@@ -114,14 +219,16 @@ def reserve_call(now: float | None = None) -> str:
     free_at = _reserve("gh-calls.json", 60, CALLS_PER_MINUTE, now)
     if not free_at:
         return ""
-    return (f"This machine has made {CALLS_PER_MINUTE} gh calls in the last minute, the cap that keeps every agent under "
-            f"GitHub's limit. Try again in {math.ceil(free_at - now)} seconds.")
+    return (f"This machine has made {CALLS_PER_MINUTE} gh calls in the last minute, the cap under GitHub's limit. "
+            f"Try again in {math.ceil(free_at - now)} seconds. See docs/RULES.md, Execution.")
 
 
 def _fetch_points() -> dict:
-    out = subprocess.run(["gh", "api", "rate_limit", "--jq", ".resources.graphql|[.remaining,.reset]|@tsv"],
+    """GraphQL points left and their reset, plus the REST (core) requests left. Reading the rate limit costs nothing."""
+    out = subprocess.run(["gh", "api", "rate_limit", "--jq",
+                          "[.resources.graphql.remaining,.resources.graphql.reset,.resources.core.remaining]|@tsv"],
                          capture_output=True, text=True, timeout=5, check=True).stdout.split()
-    return {"remaining": int(out[0]), "reset": int(out[1])}
+    return {"remaining": int(out[0]), "reset": int(out[1]), "rest": int(out[2])}
 
 
 def points_refusal(fetch=None, now: float | None = None) -> str:
@@ -148,9 +255,113 @@ def points_refusal(fetch=None, now: float | None = None) -> str:
             pass
     if data.get("remaining", floor) < floor and data.get("reset", 0) > now:
         when = time.strftime("%H:%M", time.localtime(data["reset"]))
-        return (f"GitHub has {data['remaining']} GraphQL points left, under the shared reserve of {floor}, so every agent "
-                f"on this machine holds gh calls until about {when}. Queue the pending work in your report.")
+        return (f"GitHub has {data['remaining']} GraphQL points left, under the shared reserve of {floor}, so gh calls hold "
+                f"until about {when}. Queue the pending work. See docs/RULES.md, Execution.")
     return ""
+
+
+COST_LOG = "gh-cost.jsonl"
+COST_KEEP = 86400
+GRAPHQL_HOURLY = 5000
+REST_HOURLY = 5000
+
+
+def _read_rows(now: float, window: int) -> list[dict]:
+    rows = []
+    try:
+        for line in (home() / COST_LOG).read_text(encoding="utf-8").splitlines():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if now - row.get("t", 0) <= window:
+                rows.append(row)
+    except OSError:
+        pass
+    return rows
+
+
+def note_before(key: str, fetch=None, now: float | None = None) -> None:
+    """Remember the GraphQL points and REST requests left before a gh call, keyed by the tool call. Fails open."""
+    try:
+        now = now or time.time()
+        path = home() / "gh-pending.json"
+        try:
+            pending = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pending = {}
+        pending = {k: v for k, v in pending.items() if now - v["t"] < 600}
+        left = (fetch or _fetch_points)()
+        pending[key] = {"t": now, "remaining": left["remaining"], "rest": left.get("rest")}
+        home().mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(pending), encoding="utf-8")
+    except Exception:  # noqa: BLE001 -- fail open
+        pass
+
+
+def note_after(key: str, session: str, command: str, fetch=None, now: float | None = None) -> None:
+    """Log what a finished gh call spent: the drop in GraphQL points and in REST requests since note_before. The figures
+    are approximate when other agents spend at the same moment. One line per call in ~/.olivercode/gh-cost.jsonl, kept for 24 hours."""
+    try:
+        now = now or time.time()
+        path = home() / "gh-pending.json"
+        pending = json.loads(path.read_text(encoding="utf-8"))
+        before = pending.pop(key)
+        path.write_text(json.dumps(pending), encoding="utf-8")
+        left = (fetch or _fetch_points)()
+        points = max(0, before["remaining"] - left["remaining"])
+        rest = max(0, before["rest"] - left["rest"]) if before.get("rest") is not None and left.get("rest") is not None else 0
+        row = {"t": now, "session": session, "cmd": " ".join(command.split())[:60], "points": points, "rest": rest}
+        log = home() / COST_LOG
+        kept = _read_rows(now, COST_KEEP)
+        try:
+            total = len(log.read_text(encoding="utf-8").splitlines())
+        except OSError:
+            total = 0
+        if total != len(kept):  # a line is older than 24 hours, so rewrite the file without it
+            log.write_text("".join(json.dumps(r) + "\n" for r in kept), encoding="utf-8")
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except Exception:  # noqa: BLE001 -- fail open
+        pass
+
+
+def share_refusal(session: str, now: float | None = None) -> str:
+    """Hold a session that has spent more than its fair share of the hour's points while others are also active."""
+    floor = int(os.environ.get("OLIVERCODE_GH_POINTS_FLOOR") or POINTS_FLOOR)
+    if not session or floor <= 0:
+        return ""
+    rows = _read_rows(now or time.time(), 3600)
+    sessions = {r["session"] for r in rows} | {session}
+    if len(sessions) < 2:
+        return ""
+    share = (GRAPHQL_HOURLY - floor) // len(sessions)
+    mine = sum(r["points"] for r in rows if r["session"] == session)
+    if mine <= share:
+        return ""
+    return (f"This session has spent {mine} GraphQL points this hour, over its share of {share} among {len(sessions)} "
+            "active sessions, so it holds. See docs/RULES.md, Execution.")
+
+
+def report(now: float | None = None) -> str:
+    """GraphQL points and REST requests spent in the last hour, each on its own line, then by session and by command."""
+    rows = _read_rows(now or time.time(), 3600)
+    if not rows:
+        return "No gh calls were costed in the last hour."
+    graphql = sum(r.get("points", 0) for r in rows)
+    rest = sum(r.get("rest", 0) for r in rows)
+    out = [f"{len(rows)} gh calls were costed in the last hour.",
+           f"GraphQL: {graphql} of the {GRAPHQL_HOURLY:,} hourly points, shared by gh project, gh issue and gh api graphql",
+           f"REST: {rest} of the {REST_HOURLY:,} hourly requests, used by gh api repos/..."]
+    for title, key in (("By session", "session"), ("By command", "cmd")):
+        totals: dict[str, list[int]] = {}
+        for r in rows:
+            pair = totals.setdefault(r[key], [0, 0])
+            pair[0] += r.get("points", 0)
+            pair[1] += r.get("rest", 0)
+        out.append(f"{title} (GraphQL points, REST requests):")
+        out += [f"  {g:5d}  {q:5d}  {name[:60]}" for name, (g, q) in sorted(totals.items(), key=lambda kv: (-kv[1][0], -kv[1][1]))[:8]]
+    return "\n".join(out)
 
 
 def is_limit(text: str) -> bool:

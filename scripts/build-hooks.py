@@ -2,14 +2,17 @@
 """Build the two pre-commit templates from one ordered gate list, and the pre-push and commit-msg templates.
 
 OliverCode's own .githooks are links to these templates. The public and private templates run the same
-gates, so each gate's body lives once in core/hooks/gates/ and this script assembles every variant.
+gates, so each gate's body lives once in core/hooks/gates/ and this script assembles every variant. The
+built hooks are gitignored (HOOK-OUTPUTS-1), so install, bootstrap, sync-hooks, conform and validate.sh
+run this script before they read them. A hook is rewritten only when its build differs, through a
+temporary file and a rename, so parallel runs never leave a half-written hook.
 
 Usage:
     scripts/build-hooks.py           write the hooks
-    scripts/build-hooks.py --check   exit 1 when a committed hook differs from the build
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -37,32 +40,24 @@ COMMIT_MSG_HEADER += FAILURE_LOG.read_text(encoding="utf-8") + 'GATE_NAME="Commi
 
 TITLES = {
     "secrets": "Secrets",
-    "emojis": "Icons / Emojis",
     "pii": "PII",
-    "workflow-auth": "Workflow push auth safety",
-    "archived-content": "Archived content",
-    "skill-citations": "Skill citations",
-    "size-ratchet": "Size ratchet",
     "owner-identifiers": "Owner identifiers",
-    "duplication": "Duplicate text",
+    "version-files": "Version files",
     "repo-local": "Repo-local gates",
 }
 # Runs after the numbered gates and prints no "Gate N/M" banner, so it is not counted.
-UNNUMBERED = {"repo-local"}
+UNNUMBERED = {"version-files", "repo-local"}
 
 # The one gate list. Private repos hold personal data by design, so they skip PII and
 # the public-repo checks.
 VARIANTS = {
     "core/templates/project/pre-commit": {
         "variant": "public repos",
-        "gates": ["secrets", "emojis", "pii", "workflow-auth",
-                  "archived-content", "skill-citations", "size-ratchet",
-                  "owner-identifiers", "duplication", "repo-local"],
+        "gates": ["secrets", "pii", "owner-identifiers", "version-files", "repo-local"],
     },
     "core/templates/project/pre-commit-private": {
         "variant": "private repos",
-        "gates": ["secrets", "emojis", "archived-content", "skill-citations",
-                  "size-ratchet", "owner-identifiers", "duplication", "repo-local"],
+        "gates": ["secrets", "owner-identifiers", "version-files", "repo-local"],
     },
 }
 
@@ -95,8 +90,6 @@ def build(spec: dict) -> str:
 
 
 def main() -> int:
-    check = "--check" in sys.argv[1:]
-    stale = []
     pre_push = PRE_PUSH.read_text(encoding="utf-8").replace(
         "{{SECRET_PATTERNS}}", SECRET_PATTERNS.read_text(encoding="utf-8"))
     builds = {rel: build(spec) for rel, spec in VARIANTS.items()}
@@ -105,16 +98,13 @@ def main() -> int:
     builds.update({rel: commit_msg for rel in COMMIT_MSG_TARGETS})
     for rel, text in builds.items():
         path = OC_ROOT / rel
-        if check:
-            if not path.is_file() or path.read_text(encoding="utf-8") != text:
-                stale.append(rel)
-        else:
-            path.write_text(text, encoding="utf-8")
-            path.chmod(0o755)
-    for rel in stale:
-        print(f"  [HOOKS] {rel} differs from the build. Edit core/hooks/ and run "
-              f"scripts/build-hooks.py; never edit a generated hook by hand.")
-    return 1 if stale else 0
+        if path.is_file() and path.read_text(encoding="utf-8") == text and os.access(path, os.X_OK):
+            continue
+        temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        temp.write_text(text, encoding="utf-8")
+        temp.chmod(0o755)
+        temp.replace(path)
+    return 0
 
 
 if __name__ == "__main__":

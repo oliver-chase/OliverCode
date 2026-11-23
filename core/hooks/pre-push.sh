@@ -2,24 +2,59 @@
 # Pre-push hook. Block = no push.
 # Generated from a shared hook source, and `olivercode sync-hooks` replaces a hand edit made here.
 # The secret patterns below are the same list the pre-commit secrets gate uses.
-# Gate 1 refuses a history rewrite of an existing remote ref. Gate 2 scans every commit
-# the push sends for secrets, including a secret added and removed inside the range.
+# Gate 0 refuses a push to any branch but the default. Gate 1 refuses a history rewrite of an existing remote ref. Gate 2 scans every commit
+# the push sends for secrets, including a secret added and removed inside the range. Gate 3 refuses a commit whose subject starts with WIP. Gate 4 refuses a
+# push to the default branch (or main or master) whose tree has no passing full validation on record (olivercode validated).
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 ZERO_SHA="0000000000000000000000000000000000000000"
+# The launcher: OLIVERCODE_LAUNCHER, else the first executable of `olivercode` on PATH, the path a passing validation recorded
+# and the scripts/olivercode of the checkout ~/.claude/CLAUDE.md links to, which is where `olivercode land` runs from. A recorded path
+# whose worktree is gone is skipped, so a plain push from a fleet-repo worktree resolves with no setup.
+resolve_launcher() {
+  local c oc
+  [ -n "${OLIVERCODE_LAUNCHER:-}" ] && { printf '%s' "$OLIVERCODE_LAUNCHER"; return; }
+  oc="$(dirname "$(readlink "$HOME/.claude/CLAUDE.md" 2>/dev/null)" 2>/dev/null || true)"
+  for c in "$(command -v olivercode 2>/dev/null || true)" "$(cat "${OLIVERCODE_HOME:-$HOME/.olivercode}/launcher" 2>/dev/null || true)" "$oc/scripts/olivercode"; do
+    if [ -n "$c" ] && [ -x "$c" ]; then printf '%s' "$c"; return; fi
+  done
+}
+LAUNCHER="$(resolve_launcher)"
 REMOTE="${1:-}"   # git passes the remote's name, or the URL when the push names one
 PUSH_INPUT="$(cat)"
 VIOLATIONS=0
 
 {{SECRET_PATTERNS}}
-echo "[pre-push] Gate 1/2: force-push / history-rewrite check..."
+DEFAULT_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)"
+echo "[pre-push] Gate 0/4: only the default branch is pushed..."
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+  [ "$local_sha" = "$ZERO_SHA" ] && continue    # deleting a ref is the clean-up this gate wants
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+  case "$remote_ref" in refs/heads/main|refs/heads/master|"refs/heads/${DEFAULT_BRANCH:-main}") continue ;; esac
+  if [ "${ALLOW_BRANCH_PUSH:-}" = "1" ]; then
+    echo "  ALLOW_BRANCH_PUSH=1 used: $remote_ref pushed on purpose."
+    continue
+  fi
+  echo "  BLOCKED: $remote_ref is not the default branch. Work never waits on a remote branch."
+  echo "  Decide now, without asking the owner: (1) fix it and land it on ${DEFAULT_BRANCH:-main}, (2) discard it with its reason on the story, or (3) save it with olivercode wip."
+  echo "  A repo that needs this ref on purpose: ALLOW_BRANCH_PUSH=1 git push ..."
+  VIOLATIONS=$((VIOLATIONS + 1))
+done <<< "$PUSH_INPUT"
+if [ $VIOLATIONS -gt 0 ]; then
+  echo "PUSH BLOCKED: $VIOLATIONS push(es) to a branch besides the default."
+  exit 1
+fi
+
+echo "[pre-push] Gate 1/4: force-push / history-rewrite check..."
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
   [ "$local_sha" = "$ZERO_SHA" ] && continue    # deleting a ref -- nothing to check
   [ "$remote_sha" = "$ZERO_SHA" ] && continue   # new ref -- nothing to rewrite
+  git cat-file -e "$remote_sha^{commit}" 2>/dev/null || continue   # a remote commit this clone lacks: git reports the non-fast-forward itself, and gate 2 still scans
   if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
     if [ "${ALLOW_FORCE_PUSH:-}" != "1" ]; then
       echo "  BLOCKED: $remote_ref would be force-pushed (history rewrite) -- $remote_sha is not an ancestor of $local_sha."
@@ -35,7 +70,7 @@ if [ $VIOLATIONS -gt 0 ]; then
 fi
 echo "  Gate 1 passed."
 
-echo "[pre-push] Gate 2/2: Secret scan on every commit being pushed..."
+echo "[pre-push] Gate 2/4: Secret scan on every commit being pushed..."
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
   [ "$local_sha" = "$ZERO_SHA" ] && continue
@@ -63,5 +98,53 @@ if [ $VIOLATIONS -gt 0 ]; then
   exit 1
 fi
 echo "  Gate 2 passed."
+echo "[pre-push] Gate 3/4: no commit whose subject starts with WIP..."
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+  [ "$local_sha" = "$ZERO_SHA" ] && continue
+  if [ "$remote_sha" != "$ZERO_SHA" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    SUBJECTS="$(git log --format='%h %s' "$remote_sha..$local_sha" -- 2>/dev/null || true)"
+  else
+    SUBJECTS="$(git log --format='%h %s' "$local_sha" --not --remotes="$REMOTE" -- 2>/dev/null || true)"
+  fi
+  HIT="$(printf '%s\n' "$SUBJECTS" | grep -E '^[0-9a-f]+ [Ww][Ii][Pp]([^A-Za-z0-9]|$)' || true)"
+  if [ -n "$HIT" ]; then
+    printf '%s\n' "$HIT" | sed -n '1,3p' | sed 's/^/  BLOCKED: WIP commit /'
+    VIOLATIONS=$((VIOLATIONS + 1))
+  fi
+done <<< "$PUSH_INPUT"
+if [ $VIOLATIONS -gt 0 ]; then
+  echo "PUSH BLOCKED: $VIOLATIONS push(es) hold a commit whose subject starts with WIP. Validate the work and reword the commit, or save it with olivercode wip."
+  exit 1
+fi
+echo "  Gate 3 passed."
+echo "[pre-push] Gate 4/4: passing validation on record for a push to the default branch..."
+GATE3_REFS=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+  [ "$local_sha" = "$ZERO_SHA" ] && continue
+  case "$remote_ref" in refs/heads/main|refs/heads/master|"refs/heads/${DEFAULT_BRANCH:-main}") GATE3_REFS=$((GATE3_REFS + 1)) ;; esac
+done <<< "$PUSH_INPUT"
+if [ "$GATE3_REFS" -eq 0 ]; then
+  echo "  Gate 4 not needed (no push to the default branch)."
+elif [ ! -x "$LAUNCHER" ]; then
+  echo "  BLOCKED: no olivercode launcher resolves, so Gate 4 cannot check for a passing validation."
+  echo "  Fix: ln -sf <path to your olivercode checkout>/scripts/olivercode /usr/local/bin/olivercode"
+  echo "  or: export OLIVERCODE_LAUNCHER=<path to your olivercode checkout>/scripts/olivercode"
+  echo "PUSH BLOCKED: the launcher is missing."
+  exit 1
+else
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -z "$local_ref" ] && continue
+    [ "$local_sha" = "$ZERO_SHA" ] && continue
+    case "$remote_ref" in refs/heads/main|refs/heads/master|"refs/heads/${DEFAULT_BRANCH:-main}") ;; *) continue ;; esac
+    "$LAUNCHER" validated check "$local_sha" || VIOLATIONS=$((VIOLATIONS + 1))
+  done <<< "$PUSH_INPUT"
+  if [ $VIOLATIONS -gt 0 ]; then
+    echo "PUSH BLOCKED: no passing full validation on record for the tree pushed to the default branch."
+    exit 1
+  fi
+  echo "  Gate 4 passed."
+fi
 echo "[pre-push] All gates passed."
 exit 0

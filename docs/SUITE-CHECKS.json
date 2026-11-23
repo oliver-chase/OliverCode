@@ -1,0 +1,12 @@
+{
+  "_comment": "Checks the pre-commit gate runs on staged files that match their globs, and the unit tests read. Each check is {name, files, command}.",
+  "checks": [
+    {
+      "name": "engine only",
+      "files": [
+        "*"
+      ],
+      "command": "PYTHONPATH=scripts python3 -m lib.engine_only"
+    }
+  ]
+}

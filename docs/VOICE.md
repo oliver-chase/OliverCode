@@ -26,6 +26,7 @@ This applies to everything written for a person: chat replies, emails, notes, do
 - Never use contrast framing: no "not X, but Y", "rather than", "instead of", "less X, more Y", "it is not about X" or "X matters more than Y". State the plain fact
 - Keep process notes, history and implementation detail out of anything a person reads
 - Use straight quotation marks, sentence-case headings, and bullets without trailing periods
+- Never print a personal email address, a secret value or the commit hash of a secret in a reply, report, log or file. Give the count and the file or repo, and fix the cause
 
 ## Examples
 
@@ -50,3 +51,7 @@ A finding the data cannot support yet says so plainly:
 > **Conversion growth is not yet measurable.** The checkout page has converted at 3.1% over the last two days, which is too little history for a trend.
 >
 > For now: Reassess after seven days of tracking.
+
+## Design
+
+Anything visual made for a person follows `DESIGN.md`, which sits beside this file and loads on visual work only. Read it before the first visual step.

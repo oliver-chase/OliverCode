@@ -2,13 +2,11 @@
   "_comment": "Files the PII gate skips because they hold the patterns it blocks, each with a reason.",
   "exempt": [
     ".githooks/pre-commit",
-    "core/templates/project/pre-commit",
     "core/hooks/*",
     "docs/AUDIT-ACCEPTED.md"
   ],
   "reasons": {
     ".githooks/pre-commit": "The hook holds the PII patterns it blocks.",
-    "core/templates/project/pre-commit": "The template hook holds the PII patterns it blocks.",
     "core/hooks/*": "The gate sources hold the PII patterns they block.",
     "docs/AUDIT-ACCEPTED.md": "It names the history addresses the owner accepted, which done_check matches by value."
   }
