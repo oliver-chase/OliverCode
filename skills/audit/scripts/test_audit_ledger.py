@@ -106,3 +106,10 @@ class LedgerTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(root), "commit", "-qm", "rm"], check=True, capture_output=True, env=ENV)
         audit_ledger.mark(root, [])
         self.assertNotIn("b.py", audit_ledger.read_ledger(root))
+
+    def test_batches_split_the_pending_files_and_cover_each_exactly_once(self):
+        root = repo({"a/1.py": "x\n" * 2, "a/2.py": "x\n" * 2, "b/3.py": "x\n" * 2, "c/big.py": "x\n" * 9})
+        audit_ledger.mark(root, ["a/1.py"])
+        found = audit_ledger.batches(root, 4)
+        self.assertEqual(found, [(["a/2.py", "b/3.py"], 4), (["c/big.py"], 9)])
+        self.assertEqual(sorted(p for b, _ in found for p in b), audit_ledger.pending(root))

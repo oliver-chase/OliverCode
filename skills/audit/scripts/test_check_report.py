@@ -83,3 +83,12 @@ class ReportCheckTest(unittest.TestCase):
         self.assertEqual(1, check_report.main(["check_report.py", "report.md"]))
         with mock.patch.object(sys, "stdin", io.StringIO(GOOD)):
             self.assertEqual(0, check_report.main(["check_report.py", "-"]))
+
+    def test_a_whole_repo_report_fails_while_files_are_pending(self):
+        from test_audit_ledger import repo
+        import audit_ledger
+        root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
+        audit_ledger.mark(root, ["a.py"])
+        self.assertTrue(any("1 files (1 lines)" in p for p in check_report.unread(root)))
+        audit_ledger.mark(root, ["b.py"])
+        self.assertEqual(check_report.unread(root), [])

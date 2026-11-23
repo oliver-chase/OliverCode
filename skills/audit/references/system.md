@@ -19,11 +19,11 @@ for d in $(git ls-files | cut -d/ -f1 | sort -u); do printf "%-30s %5s files %7s
 
 ## The reviewer brief
 
-Give each reader this brief, with the readers and the cap from the procedure, all started at once, one per facet: each skill, each part of the tool (hooks and gates, scripts, config), the tests and the docs.
+Give each reader this brief, one reader per batch from `audit_ledger.py --batches`, run in waves as step 3 of the procedure says until no batch is left.
 
 > You are auditing one slice of `<target>`, line by line. Make no edits.
 >
-> The target is meant to be: `<one sentence>`. Your slice: every tracked file under `<paths>`, listed with `git ls-files <paths>`. Read every line of every file in full.
+> The target is meant to be: `<one sentence>`. Your slice is this batch: `<the batch's files>`. Read every line of every file in full, and name any file you did not finish.
 >
 > Apply the ten lenses in `<path to lenses.md>`, and verify each finding against the code before you report it. Read `<path to VOICE.md>` first.
 >

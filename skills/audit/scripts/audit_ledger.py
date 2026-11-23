@@ -3,6 +3,7 @@
 
 Usage:
     audit_ledger.py [repo] --pending            # files new or changed since the ledger, then their count, total lines and the paths gone
+    audit_ledger.py [repo] --batches N          # the pending files in batches of about N lines, one batch per reader
     audit_ledger.py [repo] --mark FILE          # record the files listed in FILE (one path per line) at HEAD
     audit_ledger.py [repo] --mark FILE --findings N   # also add a run line with today's date and the finding count
     audit_ledger.py [repo] --mark-all           # record every tracked file at HEAD (after a full audit)
@@ -69,6 +70,27 @@ def pending(repo):
     return sorted(p for p, h in now.items() if have.get(p) != h)
 
 
+def line_count(repo, path):
+    f = Path(repo) / path
+    return len(f.read_text(encoding="utf-8", errors="ignore").splitlines()) if f.is_file() else 0
+
+
+def batches(repo, size):
+    """The pending files as [(paths, lines)], in path order so a folder's files stay together. A batch closes
+    before it passes `size` lines, and a file longer than `size` gets a batch of its own."""
+    out, cur, n = [], [], 0
+    for p in pending(repo):
+        k = line_count(repo, p)
+        if cur and n + k > size:
+            out.append((cur, n))
+            cur, n = [], 0
+        cur.append(p)
+        n += k
+    if cur:
+        out.append((cur, n))
+    return out
+
+
 def gone(repo):
     """Ledger paths no longer at HEAD. Each is named here until the next mark drops it."""
     now = blobs(repo)
@@ -91,15 +113,23 @@ def mark(repo, paths, rev="HEAD", findings=None, today=None):
 
 def main(argv):
     args = argv[1:]
-    repo = scan_root([a for i, a in enumerate(args) if not (a.startswith("--") or (i and args[i - 1] in ("--mark", "--seed", "--findings")))], Path("."))
+    repo = scan_root([a for i, a in enumerate(args) if not (a.startswith("--") or (i and args[i - 1] in ("--mark", "--seed", "--findings", "--batches")))], Path("."))
     if "--pending" in args:
         rows = pending(repo)
-        lines = sum(len((Path(repo) / p).read_text(encoding="utf-8", errors="ignore").splitlines()) for p in rows if (Path(repo) / p).is_file())
+        lines = sum(line_count(repo, p) for p in rows)
         print("\n".join(rows))
         total = len(blobs(repo))
         print(f"pending: {len(rows)} of {total} files, {lines} lines" + ("" if read_ledger(repo) else " (no ledger yet: a full audit)"))
         for p in gone(repo):
             print(f"gone since the audit: {p}")
+        return 0
+    if "--batches" in args:
+        size = int(args[args.index("--batches") + 1])
+        found = batches(repo, size)
+        for i, (paths, n) in enumerate(found, 1):
+            print(f"# batch {i}: {len(paths)} files, {n} lines")
+            print("\n".join(paths))
+        print(f"batches: {len(found)} of about {size} lines, {sum(len(b) for b, _ in found)} files, {sum(n for _, n in found)} lines")
         return 0
     if "--mark" in args:
         # One path per line: a path may hold spaces, such as "01 - Skills/a/SKILL.md".

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Check an audit report against the report rules in SKILL.md. Exit 1 and list every gap.
 
-Usage: <report> | check_report.py -
-The report arrives on stdin. A file path fails the check, since the report is one message in the thread and never a file.
+Usage: <report> | check_report.py - [--repo DIR]
+The report arrives on stdin. With --repo, a whole-repo report also fails while the audit ledger lists any file as pending. A file path fails the check, since the report is one message in the thread and never a file.
 """
 import re
 import sys
+
+import audit_ledger
 
 HEADINGS = ["what it is", "goal", "size today", "findings", "cuts and simplifications",
             "outcomes", "added to the board", "read and unknown", "coverage", "engine parts to cut or merge"]
@@ -106,14 +108,27 @@ def check(text):
     return problems
 
 
+def unread(repo):
+    """The coverage gate: a whole-repo report goes out only once the ledger lists nothing as pending."""
+    rows = audit_ledger.pending(repo)
+    if not rows:
+        return []
+    lines = sum(audit_ledger.line_count(repo, p) for p in rows)
+    return [f"{len(rows)} files ({lines} lines) in {repo} are still unread. Fix: run the next reader wave from `audit_ledger.py --batches 3000`, mark each batch, and report when --pending lists nothing"]
+
+
 def main(argv):
+    repo = None
+    if "--repo" in argv:
+        i = argv.index("--repo")
+        repo, argv = argv[i + 1], argv[:i] + argv[i + 2:]
     if len(argv) != 2:
         print(__doc__.strip())
         return 2
     if argv[1] != "-":
         print("REPORT: the report was delivered as a file. Fix: pipe it on stdin with `check_report.py -` and print it as one message in the thread")
         return 1
-    problems = check(sys.stdin.read())
+    problems = check(sys.stdin.read()) + (unread(repo) if repo else [])
     for p in problems:
         print("REPORT: " + p)
     if not problems:
