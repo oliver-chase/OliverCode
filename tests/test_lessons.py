@@ -91,15 +91,15 @@ class TestLessons(Isolated):
 class TestSeeds(Isolated):
     def test_the_seeds_have_every_field_and_seed_copies_them_once(self):
         seeds = [json.loads(x) for x in lessons.SEED_FILE.read_text(encoding="utf-8").splitlines() if x.strip()]
-        self.assertEqual(len(seeds), 9)
+        self.assertEqual(len(seeds), 6)
         for s in seeds:
             self.assertEqual(sorted(s), sorted(FIELDS))
             self.assertTrue(all(s[k].strip() for k in ("what", "why", "rule")), s["id"])
             self.assertEqual(s["scope"], "structure")
-        self.assertEqual(len({s["id"] for s in seeds}), 9)
-        self.assertEqual(lessons.seed(), 9)
+        self.assertEqual(len({s["id"] for s in seeds}), len(seeds))
+        self.assertEqual(lessons.seed(), len(seeds))
         self.assertEqual(lessons.seed(), 0)
-        self.assertEqual(len(self.lines()), 9)
+        self.assertEqual(len(self.lines()), len(seeds))
         self.assertEqual(len(lessons.uncovered()), len([s for s in seeds if not s["covered_by"]]))
 
     def test_a_seeded_log_is_mode_600(self):

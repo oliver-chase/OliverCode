@@ -43,7 +43,7 @@ class TestErrorPaste(unittest.TestCase):
         self.assertEqual(1, len((home / "candidates.jsonl").read_text().splitlines()))
 
     def test_prose_stories_and_secrets_file_nothing_and_a_user_repo_gets_no_epic(self):
-        for prompt in ("the tab 'Shop' could not be read", "Story body: Traceback (most recent call last): is mentioned in prose",
+        for prompt in ("the tab 'Settings' could not be read", "Story body: Traceback (most recent call last): is mentioned in prose",
                        "please add a button", TRACE.replace("\n```\n", "\ntoken=abcdef123456\n```\n")):
             self.assertEqual("", self.run_hook(prompt, temp_dir(self)), prompt)
         home = temp_dir(self)

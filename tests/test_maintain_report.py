@@ -114,7 +114,7 @@ class TestTidy(Base):
         self.assertNotIn("merged (", text)
 
     def test_another_accounts_old_process_is_not_reported(self):
-        ps = "12 2-03:04:05 me /usr/bin/ffmpeg\n14 4-00:00:00 other /usr/bin/python3\n"
+        ps = "12 2-03:04:05 me /usr/bin/python3\n14 4-00:00:00 other /usr/bin/python3\n"
         with mock.patch("getpass.getuser", return_value="me"):
             text = " ".join(p.text for p in self.tidy(False, ps)[0])
         self.assertIn("process 12", text)
@@ -122,10 +122,10 @@ class TestTidy(Base):
         self.assertNotIn("other", text)
 
     def test_a_stray_process_older_than_a_day_is_listed_with_age_and_owner(self):
-        ps = "11 05:00 me claude\n12 2-03:04:05 me /usr/bin/ffmpeg\n13 3-00:00:01 root launchd\n"
+        ps = "11 05:00 me claude\n12 2-03:04:05 me /usr/bin/python3\n13 3-00:00:01 root launchd\n"
         with mock.patch("getpass.getuser", return_value="me"):
             text = " ".join(p.text for p in self.tidy(False, ps)[0])
-        self.assertIn("process 12 (ffmpeg) owned by me has run 2 day(s)", text)
+        self.assertIn("process 12 (python3) owned by me has run 2 day(s)", text)
         self.assertNotIn("process 11", text)
         self.assertNotIn("launchd", text)
 

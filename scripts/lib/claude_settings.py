@@ -95,10 +95,10 @@ def automode_rules(oc_root: Path | None = None) -> dict:
         "environment": (
             "OliverCode runs on this machine as one owner thread. The owner's thread starts headless builder sessions "
             "through OliverCode's runner (olivercode dispatch and drain), each builder works one backlog story in its own "
-            "worktree and ends with a commit, and the runner validates and lands that commit. The user has approved this standing workflow.",
+            "worktree and ends with a commit, and the runner validates and lands that commit. The owner of this machine "
+            "ran install to set up this workflow.",
             f"OliverCode's own repo is {root}. Its pre-push gate requires a passing scripts/validate.sh "
-            "run on the exact tree being pushed, and the untracked docs/LESSONS.jsonl file holds local lessons that are not "
-            "part of any commit.",
+            "run on the exact tree being pushed.",
         ),
         "allow": (
             "Starting, messaging, titling, pinning, detaching or stopping Claude Code desktop sessions "
@@ -106,8 +106,6 @@ def automode_rules(oc_root: Path | None = None) -> dict:
             "when the prompt names that story",
             "Listing Claude Code desktop sessions (mcp__ccd_session_mgmt__list_sessions) to find the session that runs "
             "a story's builder",
-            f"In {root}, temporarily moving the untracked docs/LESSONS.jsonl out of the tree to run "
-            "scripts/validate.sh and push validated commits to main, then moving it back",
         ),
     }
 

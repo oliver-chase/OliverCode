@@ -16,8 +16,9 @@ import sys
 from pathlib import Path
 
 from lib.fleet_name_check import SYNCED_GATES, fleet_names
+from lib.local_config import FLEET_NAME
 
-FLEET_REPO = "olivercode-fleet"
+FLEET_REPO = FLEET_NAME
 # Paths that only ever hold one owner's data.
 PERSONAL_GLOBS = (
     "olivercode.local.json", "*.local.json", "docs/LESSONS.jsonl", ".claude-optimization/memory/*",

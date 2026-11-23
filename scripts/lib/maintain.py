@@ -280,12 +280,12 @@ def check_health() -> list[Problem]:
     return [Problem("health", l) for l in lines] if code else []
 
 
-STRAY_COMMANDS = {"claude", "ffmpeg", "python", "python3", "Python"}
+STRAY_COMMANDS = {"claude", "python", "python3", "Python"}
 ONE_TIME_DATE = re.compile(r"-(\d{4}-\d{2}-\d{2})$")
 
 
 def _stray_processes(ps_text: str, own_pid: int, user: str | None = None) -> list[str]:
-    """One line per claude, ffmpeg or python process of this user that has run for a day or more, from `ps -axo pid=,etime=,user=,comm=` text.
+    """One line per claude or python process of this user that has run for a day or more, from `ps -axo pid=,etime=,user=,comm=` text.
     Another account's processes are not this user's to report."""
     user = user or getpass.getuser()
     out = []
@@ -300,7 +300,7 @@ def _stray_processes(ps_text: str, own_pid: int, user: str | None = None) -> lis
 
 def check_tidy(cfg: placement.Config, fix: bool, ps_text: str | None = None, tasks_dir: Path | None = None, today: str | None = None) -> list[Problem]:
     """The daily tidy: with --fix, remove merged and clean worktrees (the `olivercode clean --apply` step). List, and delete none of, the
-    worktrees that stay and why, branches with commits not on the default branch, claude, ffmpeg and python processes older than a day,
+    worktrees that stay and why, branches with commits not on the default branch, claude and python processes older than a day,
     and one-time scheduled tasks whose dated name has passed."""
     found: list[Problem] = []
     removed, kept = [], []

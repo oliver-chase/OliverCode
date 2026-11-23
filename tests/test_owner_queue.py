@@ -67,16 +67,16 @@ class TestPreparedOwnerSteps(unittest.TestCase):
         home = temp_dir(self)
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             code, _ = self.run_cmd("add", "--session", "s1", "--step", "Create the Kit account",
-                                   "--tab", "https://app.kit.com/signup", "--after", "queues the first newsletter",
-                                   "--check", "the Kit API account endpoint")
+                                   "--tab", "https://example.test/signup", "--after", "queues the first reminder",
+                                   "--check", "the account API endpoint")
             self.assertEqual(0, code)
             _, listed = self.run_cmd("list")
-            self.assertIn("https://app.kit.com/signup", listed)
-            self.assertIn("queues the first newsletter", listed)
+            self.assertIn("https://example.test/signup", listed)
+            self.assertIn("queues the first reminder", listed)
             code, closed = self.run_cmd("done", "1")
             self.assertEqual(0, code)
-            self.assertIn("Resume: check the result in the Kit API account endpoint", closed)
-            self.assertIn("queues the first newsletter", closed)
+            self.assertIn("Resume: check the result in the account API endpoint", closed)
+            self.assertIn("queues the first reminder", closed)
 
     def test_a_secret_or_a_half_prepared_step_is_refused_and_nothing_is_written(self):
         home = temp_dir(self)

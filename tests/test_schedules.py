@@ -43,12 +43,12 @@ class Schedules(unittest.TestCase):
         return schedules.check(self.tasks, self.agents, repo_root=self.root, home=self.tmp, **kw)
 
     def test_a_page_refresh_task_is_listed_with_its_cost_and_warns_naming_the_token_free_path(self):
-        self.task("dash-refresh", "Rebuild the dashboard and republish it to its artifact each morning.")
+        self.task("report-refresh", "Rebuild the report page and republish it each morning.")
         self.task("other", "Count the files.")
         self.plist("p.plist", "co.x.pageRefresh", ["/bin/sh", "-c", f"{self.repo}/run.py dashboard refresh"])
         self.assertEqual(schedules.refreshes(self.tasks, self.agents, self.tmp, prefixes=("co.x",)),
-                         [("dash-refresh", True), ("co.x.pageRefresh", False)])
-        found = [f for f in self.check() if f.task == "dash-refresh"]
+                         [("report-refresh", True), ("co.x.pageRefresh", False)])
+        found = [f for f in self.check() if f.task == "report-refresh"]
         self.assertEqual(len(found), 1)
         self.assertIn("starts a Claude session", found[0].text)
         self.assertIn("starts no Claude session", found[0].text)
