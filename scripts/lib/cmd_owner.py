@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -60,8 +61,34 @@ def _append(item: dict) -> None:
         fh.write(json.dumps(item) + "\n")
 
 
+def _expire_notes() -> None:
+    """Drop info notes older than a week from the file, so the queue does not grow by the notes of every night (#1024)."""
+    p = path()
+    if not p.is_file():
+        return
+    cutoff = (_now() - WEEK).isoformat(timespec="seconds")
+    rows = [l for l in p.read_text(encoding="utf-8").splitlines()]
+
+    def stale(line: str) -> bool:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            return False
+        return isinstance(row, dict) and row.get("status") == "info" and str(row.get("created", "")) < cutoff
+
+    if not any(stale(l) for l in rows):
+        return
+    with failure_log.locked(p):
+        kept = [l for l in p.read_text(encoding="utf-8").splitlines() if not stale(l)]
+        failure_log.write_private(p, "".join(l + "\n" for l in kept))
+
+
 def items() -> list[dict]:
-    """The latest line per id, in id order. A done line keeps the step, command and error of the line it closes."""
+    """The latest line per id, in id order. A done line keeps the step, command and error of the line it closes. An info note older than seven days is dropped from the file first."""
+    try:
+        _expire_notes()
+    except OSError:
+        pass
     latest: dict[int, dict] = {}
     for line in _lines():
         latest[line["id"]] = {**latest.get(line["id"], {}), **line}
@@ -99,8 +126,55 @@ def add(session: str, step: str, command: str = "", error: str = "", tab: str = 
     return item
 
 
-def close(item_id: int) -> None:
-    _append({"id": item_id, "status": "done", "closed": _now().isoformat(timespec="seconds")})
+def close(item_id: int, reason: str = "") -> None:
+    _append({"id": item_id, "status": "done", "closed": _now().isoformat(timespec="seconds"), **({"reason": reason} if reason else {})})
+
+
+def add_once(session: str, key: str, step: str, command: str, error: str, prefix: str = "") -> dict:
+    """One open item per KEY. A second call with the key open rewrites its step to the latest (a new count) and queues nothing new.
+    An older open item with no key whose step begins with PREFIX counts as the same subject (#1024)."""
+    held = next((i for i in items() if i["status"] == "open" and (i.get("key") == key or (prefix and not i.get("key") and i["step"].startswith(prefix)))), None)
+    if held is None:
+        return add(session, step, command, error, extra={"key": key})
+    if held["step"] != step:
+        _append({"id": held["id"], "step": step, "command": command, "error": error, "status": "open"})
+    return {**held, "step": step}
+
+
+def close_where(test, reason: str) -> list[int]:
+    """Mark done, with REASON, every open item TEST accepts. Returns their ids."""
+    done = [i["id"] for i in items() if i["status"] == "open" and test(i)]
+    for n in done:
+        close(n, reason)
+    return done
+
+
+def story_of(item: dict) -> int | None:
+    """The story an item waits on: its story field, else the number in a step that begins "Story #N"."""
+    if isinstance(item.get("story"), int):
+        return item["story"]
+    found = re.match(r"Story #(\d+) ", item.get("step") or "")
+    return int(found.group(1)) if found else None
+
+
+def story_closed(slug: str, number: int) -> bool:
+    """True when the story reads closed over REST. A story that cannot be read counts as still open."""
+    try:
+        done = subprocess.run(["gh", "api", f"repos/{slug}/issues/{number}", "--jq", ".state"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0 and done.stdout.strip() == "closed"
+
+
+def clear_stories(slug: str, closed=story_closed, only: int | None = None) -> list[int]:
+    """Close the open items that wait on a story now closed. An item whose key names another repo is left alone."""
+    def test(item: dict) -> bool:
+        n = story_of(item)
+        if n is None or (only is not None and n != only):
+            return False
+        other = re.match(r"policy-stop:(.+)#\d+$", item.get("key") or "")
+        return (other.group(1) == slug if other else True) and closed(slug, n)
+    return close_where(test, "the story is closed")
 
 
 def queue_denied(session: str, key: str, step: str, command: str, error: str, resolve: dict) -> dict | None:

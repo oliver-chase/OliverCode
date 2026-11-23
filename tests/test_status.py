@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -15,7 +15,7 @@ from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_boardsweep as sweep  # noqa: E402
-from lib import cmd_status  # noqa: E402
+from lib import cmd_fleetsync, cmd_groom, cmd_owner, cmd_status  # noqa: E402
 
 NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
 
@@ -28,15 +28,21 @@ class TestStatus(unittest.TestCase):
     def status(self, open_now, rows, slug="o/r"):
         out = io.StringIO()
         code = cmd_status.run(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"),
-                              live=lambda now, count, rows: [], waiting=lambda: [])
+                              live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "")
         return code, out.getvalue()
 
     def test_status_names_a_story_a_policy_stop_left_waiting_on_the_owner(self):
         step = "Story #1012 waits on you: triggers.gateFailures stopped its builder at the Owner identifiers gate, so drain did not restart it."
         out = io.StringIO()
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
-                       live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"])
+                       live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"], cands=lambda: "")
         self.assertIn("Waits on the owner:\n- #7 " + step, out.getvalue())
+
+    def test_status_names_the_candidates_waiting(self):
+        out = io.StringIO()
+        cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
+                       live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "- 3 candidate(s) wait: run `olivercode candidates` to review them.")
+        self.assertIn("3 candidate(s) wait: run `olivercode candidates`", out.getvalue())
 
     def test_a_falling_count_prints_the_rate_and_a_zero_date(self):
         rows = [issue("2026-11-01", "2026-11-20")] * 14 + [issue("2026-11-20")] * 7
@@ -107,7 +113,7 @@ class TestDigest(unittest.TestCase):
         target = Path(self.tmp.name) / "status-digest.md"
         code = cmd_status.digest(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows or [issue("2026-11-20")] * 3, now=NOW,
                                  out=lambda t: out.write(t + "\n"), decisions=lambda: decisions, runs=lambda: runs, target=target,
-                                 opened=lambda slug: opened if opened is not None else [], waiting=lambda: waiting or [])
+                                 opened=lambda slug: opened if opened is not None else [], waiting=lambda: waiting or [], cands=lambda: "")
         return code, out.getvalue(), target
 
     def setUp(self):
@@ -314,6 +320,78 @@ class TestBoardRead(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             sweep.read(self.config)
         self.rest.repo_issues.assert_not_called()
+
+
+class TestOwnerClears(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.old = os.environ.get("OLIVERCODE_HOME")
+        os.environ["OLIVERCODE_HOME"] = self.tmp.name
+
+    def tearDown(self):
+        if self.old is None:
+            os.environ.pop("OLIVERCODE_HOME")
+        else:
+            os.environ["OLIVERCODE_HOME"] = self.old
+        self.tmp.cleanup()
+
+    def open_steps(self):
+        return [i["step"] for i in cmd_owner.items() if i["status"] == "open"]
+
+    def test_old_notes_are_dropped_from_the_file(self):
+        cmd_owner.note("s", "fresh")
+        old = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat(timespec="seconds")
+        cmd_owner._append({"id": 99, "created": old, "session": "s", "step": "old", "command": "", "error": "", "status": "info"})
+        steps = [i["step"] for i in cmd_owner.items()]
+        self.assertEqual(["fresh"], steps)
+        self.assertNotIn("old", cmd_owner.path().read_text())
+
+    def test_one_open_item_per_repo_with_the_latest_count(self):
+        cmd_owner.add_once("f", "fleet-sync:r", "Bring r level with origin: 2 uncommitted file(s)", "c", "e")
+        cmd_owner.add_once("f", "fleet-sync:r", "Bring r level with origin: 3 uncommitted file(s)", "c", "e")
+        self.assertEqual(["Bring r level with origin: 3 uncommitted file(s)"], self.open_steps())
+
+    def test_an_older_item_without_a_key_is_the_same_subject(self):
+        cmd_owner.add("f", "Bring r level with origin: 2 uncommitted file(s)", "c", "e")
+        cmd_owner.add_once("f", "fleet-sync:r", "Bring r level with origin: 3 uncommitted file(s)", "c", "e", prefix="Bring r level with origin")
+        self.assertEqual(["Bring r level with origin: 3 uncommitted file(s)"], self.open_steps())
+
+    def test_fleet_sync_closes_a_level_repo_and_keeps_a_dirty_one(self):
+        repos = [("a", Path("a")), ("b", Path("b"))]
+        results = {"a": ("2 uncommitted file(s)", "c", "e"), "b": ("2 uncommitted file(s)", "c", "e")}
+        orig = cmd_fleetsync.sync_repo
+        cmd_fleetsync.sync_repo = lambda path, check=None: results[path.name]
+        try:
+            cmd_fleetsync.run(repos, out=lambda t: None)
+            results["a"] = ("level with origin", "", "")
+            cmd_fleetsync.run(repos, out=lambda t: None)
+        finally:
+            cmd_fleetsync.sync_repo = orig
+        self.assertEqual(["Bring b level with origin: 2 uncommitted file(s)"], self.open_steps())
+        done = [i for i in cmd_owner.items() if i["status"] == "done"]
+        self.assertEqual("the repo is level with origin", done[0]["reason"])
+
+    def test_a_wait_on_a_closed_story_is_marked_done(self):
+        cmd_owner.add("x", "Story #841 is finished", extra={})
+        cmd_owner.add("x", "Story #900 is finished", extra={})
+        cmd_owner.clear_stories("o/r", closed=lambda slug, n: n == 841)
+        self.assertEqual(["Story #900 is finished"], self.open_steps())
+
+    def test_a_wait_on_an_open_story_stays_open(self):
+        cmd_owner.add("x", "Story #900 is finished", extra={})
+        cmd_owner.clear_stories("o/r", closed=lambda slug, n: False)
+        self.assertEqual(["Story #900 is finished"], self.open_steps())
+
+
+class TestRerankClears(unittest.TestCase):
+    def test_a_dropped_rerank_candidate_clears_its_state_and_is_refiled(self):
+        stories = {n: {"number": n, "title": f"Imported {n}", "body": f"Source: gap-analysis-2.md (S{n}).\nPriority: P1. Size: S.", "labels": []} for n in range(1, 11)}
+        mine, filed = {}, []
+        args = ("o/r", stories, mine, 722)
+        cmd_groom.review_imported(*args, run=lambda a: "", file=lambda *a: filed.append(a), queued=lambda slug, title: True)
+        cmd_groom.review_imported(*args, run=lambda a: "", file=lambda *a: filed.append(a), queued=lambda slug, title: False)
+        self.assertEqual(2, len(filed))
+        self.assertEqual({"numbers": list(range(1, 11)), "seen": False}, mine["rerank"])
 
 
 if __name__ == "__main__":

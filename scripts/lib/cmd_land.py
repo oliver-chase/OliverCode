@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, validated
+from lib import agent_loop, backlog_setup, cmd_owner, failure_log, intake, local_config, maintain, validated
 from lib.validate_gates import PROGRESS  # the lines that also print on the terminal while a land validates (#776)
 from lib.local_config import OC_ROOT
 
@@ -455,6 +455,9 @@ def command_land(argv: list[str]) -> int:
     if result != "pushed":
         print(f"Handover written to {write_handover(wt, story, result, path, key)}. No branch was pushed.")
         return 1
+    slug = _story_slug(wt)
+    if slug and str(story).isdigit():  # the runner closes the story after this, so the landing itself ends a wait on it (#1024)
+        cmd_owner.clear_stories(slug, closed=lambda s, n: True, only=int(story))
     root, branch = _main_checkout(wt) or OC_ROOT, default_branch(wt)  # read before cleanup removes the worktree
     for line in cleanup(wt):
         print(line)

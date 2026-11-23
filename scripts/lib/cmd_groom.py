@@ -142,7 +142,13 @@ def imported(stories):
                   and REVIEWED not in (s.get("labels") or []) and not RERANK.match(s.get("title") or ""))
 
 
-def review_imported(slug, stories, mine, epic=1, run=gh, file=None):
+def _queued(slug, title):
+    """True when the story waits in the candidates list or the story outbox."""
+    from lib import candidates
+    return candidates.has(slug, title)
+
+
+def review_imported(slug, stories, mine, epic=1, run=gh, file=None, queued=None):
     """Flag each imported story priority-not-reviewed and file one rerank story; clear the flags its closing covers.
     Returns an owner line, or "" when nothing changed. `mine["rerank"]` holds the numbers the rerank story covers."""
     from lib import intake
@@ -159,6 +165,9 @@ def review_imported(slug, stories, mine, epic=1, run=gh, file=None):
     open_rerank = any(RERANK.match(s.get("title") or "") for s in stories.values())
     if rerank and open_rerank:
         rerank["seen"] = True
+    if queued and rerank and not rerank.get("seen") and not open_rerank and not queued(slug, RERANK_TITLE.format(n=len(rerank.get("numbers", [])))):
+        mine.pop("rerank", None)  # the candidate was dropped and no story is open, so refile it if still needed (#1024)
+        rerank = {}
     if rerank.get("seen") and not open_rerank:
         label(REVIEWED, "Priority judged against the code after an import")
         done = [n for n in rerank.get("numbers", []) if n in stories]
@@ -263,7 +272,7 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs)  # flagged stories stay in Backlog until the owner acts (#1014)
         fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
                                 for n, k in check_board_hygiene.status_drift(items, states, slug)], hold)
-        if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run):
+        if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run, queued=_queued):
             cmd_owner.note("groom", f"{name}: {line}")
         if flagged and json.dumps(flagged) != mine.get("split"):
             cmd_owner.note("groom", f"{name}: {len(flagged)} story(ies) need a rewrite before dispatch: " + "; ".join(flagged)[:600])

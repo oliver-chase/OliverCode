@@ -17,7 +17,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock
+from lib import candidates, cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -194,7 +194,7 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
-        waiting=lambda: waiting_lines()) -> int:
+        waiting=None, cands=None) -> int:
     if not slug:
         out("Error: this repo has no GitHub origin.")
         return 1
@@ -211,11 +211,15 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
     out(f"{slug}: " + summary(open_now, rows, now))
     for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
         out(line)
-    steps = waiting()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
+    steps = (waiting or (lambda: waiting_lines(slug)))()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
     if steps:
         out("Waits on the owner:")
         for line in steps:
             out(line)
+    line = (cands or candidate_line)()
+    if line:
+        out("Candidates:")
+        out(line)
     held = run_lock.active(slug, now.timestamp())
     if held:
         out("Run: " + run_lock.describe(held, now.timestamp()))
@@ -284,9 +288,20 @@ def open_lines(opened: list[dict]) -> list[str]:
     return [_story_line(r) + (OWNER_GATED if open_issues.owner_gated(r) else "") for r in sorted(opened, key=open_issues.rank)[:OPEN_SHOWN]]
 
 
-def waiting_lines() -> list[str]:
-    """The owner-queue steps that are open, one line each."""
+def candidate_line() -> str:
+    """One line with the count of candidates waiting and the command that reviews them, or "" when none wait."""
     try:
+        n = candidates.count()
+    except (OSError, ValueError):
+        return ""
+    return f"- {n} candidate(s) wait: run `olivercode candidates` to review them." if n else ""
+
+
+def waiting_lines(slug: str | None = None, closed=cmd_owner.story_closed) -> list[str]:
+    """The owner-queue steps that are open, one line each, after the waits whose story has closed are marked done (#1024)."""
+    try:
+        if slug:
+            cmd_owner.clear_stories(slug, closed)
         found = [i for i in cmd_owner.items() if i["status"] == "open"]
     except (OSError, ValueError, KeyError):
         return []
@@ -343,7 +358,7 @@ def build_digest(board: str, decisions: list[dict], runs: list[dict], now: datet
 
 
 def write_digest(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print,
-                 decisions=relay.records, runs=run_log, target: Path | None = None, opened=open_issues.fetch, waiting=waiting_lines):
+                 decisions=relay.records, runs=run_log, target: Path | None = None, opened=open_issues.fetch, waiting=None, cands=None):
     """Write the status digest. Returns (path, text, open count), or None after printing why through OUT. It reads gh REST and local logs and calls no model."""
     if not slug:
         out("Error: this repo has no GitHub origin.")
@@ -360,7 +375,7 @@ def write_digest(slug: str | None, count=issue_count.count_issues, fetch=recent,
         out(f"Error: the issues of {slug} were not read.")
         return None
     path = target or digest_path()
-    text = build_digest(f"{slug}: " + summary(open_now, rows, now), decisions(), runs(), now, stories, rows, waiting())
+    text = build_digest(f"{slug}: " + summary(open_now, rows, now), decisions(), runs(), now, stories, rows, (waiting or (lambda: waiting_lines(slug)))() + [l for l in [(cands or candidate_line)()] if l])
     try:
         path.write_text(text, encoding="utf-8")
     except OSError as err:
