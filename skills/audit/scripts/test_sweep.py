@@ -67,3 +67,10 @@ class SweepTest(unittest.TestCase):
         })
         orphans = {w for k, w, _ in sweep.sweep(root) if k == "orphan"}
         self.assertEqual(orphans, {"scripts/word.py"})
+
+    def test_a_shortcut_comment_is_debt_and_never_a_candidate(self):
+        root = git_repo({"scripts/lib/a.py": "# shortcut: 500 rows, move to sqlite\ndef f():\n    pass\n",
+                         "tests/test_a.py": "# shortcut: fixture only\n"})
+        rows = sweep.sweep(root)
+        self.assertEqual([("debt", "scripts/lib/a.py:1", "500 rows, move to sqlite")], [r for r in rows if r[0] == "debt"])
+        self.assertEqual([], [r for r in rows if r[0] != "debt" and r[1] == "scripts/lib/a.py:1"])

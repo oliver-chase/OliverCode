@@ -8,6 +8,7 @@ Kinds:
     test-only    a top-level function or class that only its own tests name
     orphan       a tracked script, doc or reference under scripts/, docs/, core/ or a skill's scripts/ and references/ that nothing else names by path or basename
     oversized    a tracked code file over 400 lines
+    debt         a `shortcut: <limit>, <when to upgrade>` comment in non-test code, printed in its own section and never a candidate
 Every row is a candidate for a reader to judge: a hook entry point or a CLI
 handler is named by a string the sweep cannot see. It edits nothing and exits 0 on a finished run.
 Tests: python3 -m unittest test_sweep   (from this scripts/ folder)
@@ -27,6 +28,7 @@ DEF = re.compile(r"^(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)", re.M)
 # Module-level dunders, entry points and the unittest hooks are called by the runtime, never by name. Only top-level defs are scanned.
 RUNTIME = {"main", "setUp", "tearDown", "setUpClass", "tearDownClass"}
 LIMIT = 400
+SHORTCUT = re.compile(r"(?:#|//)[ \t]*shortcut:[ \t]*([^\n]+)")
 
 
 def tracked(repo):
@@ -66,14 +68,29 @@ def sweep(repo):
             n = text[rel].count("\n")
             if n > LIMIT:
                 rows.append(("oversized", f"{rel}:1", f"{n} lines"))
+        if Path(rel).suffix in CODE and not is_test(rel):
+            for m in SHORTCUT.finditer(text[rel]):
+                line = text[rel].count("\n", 0, m.start()) + 1
+                rows.append(("debt", f"{rel}:{line}", m.group(1).strip()))
     return rows
+
+
+def show(kind, where, detail):
+    shown = '"' + where + '"' if any(c.isspace() for c in where) else where
+    print(f"{kind:11} {shown}  {detail}")
 
 
 def main(argv):
     repo = argv[1] if len(argv) > 1 else "."
-    for kind, where, detail in sweep(repo):
-        shown = '"' + where + '"' if any(c.isspace() for c in where) else where
-        print(f"{kind:11} {shown}  {detail}")
+    rows = sweep(repo)
+    for kind, where, detail in rows:
+        if kind != "debt":
+            show(kind, where, detail)
+    debt = [r for r in rows if r[0] == "debt"]
+    if debt:
+        print("debt:")
+        for kind, where, detail in debt:
+            show(kind, where, detail)
     return 0
 
 

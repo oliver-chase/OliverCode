@@ -43,6 +43,8 @@ Every claim is checked against the code, and the code wins.
 - A mechanism bigger than its job: a mode no one selects, a baseline that never drops, a gate that cannot name the defect it prevents, a menu no real user takes, a workaround for a problem that no longer exists (rerun the problem to check), or a skill that fires on nothing a person says
 - Data bloat: a file per day, week or run, or a readings file that never rolls up (skill-creation rule 14)
 - Size: a file over 400 lines, tests or docs that outweigh the code they cover, a module with one consumer, two files that merge, a custom script a standard tool replaces, a config file that restates defaults. Each is a finding with its lines
+- **Protections are never cut.** A finding that would delete trust-boundary validation, data-loss error handling, a security check or an accessibility attribute is dropped as a protection and never filed
+- **Shortcuts are decisions.** A comment `shortcut: <limit>, <when to upgrade>` is a recorded decision. `sweep.py` lists it in a debt section, and this lens does not report it as over-engineering
 
 **Usage evidence.** For each command, scheduler, gate or flag ask "has it ever run?" and record evidence a person could check: an installed job (`ls ~/Library/LaunchAgents`, `crontab -l`), a state or log file, a registered repo, a commit or release that used it, or a nonzero count in a log. A part referenced only by docs, its own tests or an unfilled registry entry counts as unused.
 

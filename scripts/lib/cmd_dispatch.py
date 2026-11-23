@@ -32,6 +32,8 @@ HEADLESS_RULES = """Builder rules:
 - Leave production deploys, payments, credentials and the owner's rules files (CLAUDE.md, VOICE.md, DESIGN.md) to the owner
 - Read an issue and its comments over REST with `gh api repos/OWNER/REPO/issues/N` and `.../issues/N/comments`, which spend no GraphQL points. `gh issue` and `gh project` spend the shared 5,000-point GraphQL hour
 - {model}. When you wait for a result, end your turn and never poll
+- Reuse before you write: check in order whether the code needs to exist, already exists here, is in the standard library, is in an installed dependency, or fits one line. Write the minimum only after that
+- A deliberate shortcut gets a comment `shortcut: <limit>, <when to upgrade>`, which the audit lists as debt and never flags as over-engineering
 - Report the branch and the commits
 - Start no session. When you need a decision, choose the option you recommend and write the reason in the commit message"""
 

@@ -329,3 +329,13 @@ class TestFileExcerpts(unittest.TestCase):
         repo = self.make_repo()
         self.assertEqual("", cmd_dispatch.file_excerpts("Files area: scripts/thing.py", repo))
         self.assertEqual("", cmd_dispatch.file_excerpts("Fix build_thing.", repo))
+
+
+class TestBriefRules(unittest.TestCase):
+    """#1069: the builder brief tells a builder to reuse before it writes, and to mark a shortcut as a decision."""
+
+    def test_the_brief_carries_the_reuse_ladder_and_the_shortcut_comment(self):
+        brief = cmd_dispatch.headless_brief(77, STORY, "dispatch")
+        self.assertIn("Reuse before you write", brief)
+        self.assertIn("already exists here, is in the standard library", brief)
+        self.assertIn("`shortcut: <limit>, <when to upgrade>`", brief)
