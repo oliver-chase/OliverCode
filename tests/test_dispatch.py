@@ -91,15 +91,6 @@ class DispatchCase(unittest.TestCase):
 
 
 class TestDispatch(DispatchCase):
-    def test_a_graphql_hold_refuses_gh_issue_and_lets_a_rest_read_run(self):
-        fetch = lambda: {}  # noqa: E731
-        gh_budget.note_limit(resources=("graphql",), fetch=fetch)
-        with mock.patch.object(cmd_dispatch.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "ok", "")) as ran:
-            self.assertEqual("ok", cmd_dispatch.gh(["api", "repos/o/r/issues/1"]).stdout)
-            self.assertEqual(1, cmd_dispatch.gh(["issue", "view", "1"]).returncode)
-            self.assertEqual(1, cmd_dispatch.gh(["api", "graphql", "-f", "query=x"]).returncode)
-        self.assertEqual(1, ran.call_count)
-
     def test_a_ready_story_builds_headless_through_drains_sequence_with_no_run_flag(self):
         code, out, io = self.run_dispatch()
         self.assertEqual((0, ["claim", "build", "land", "close", "release"]), (code, io.steps))

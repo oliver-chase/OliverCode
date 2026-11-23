@@ -294,9 +294,7 @@ class CutAndLand(unittest.TestCase):
         git(self.oc, "push", "-q", "origin", "main")
         git(self.oc, "fetch", "-q", "origin")
         self.landed = []
-        cfg = mock.Mock(worktrees=self.oc.parent / "_worktrees")
         for patcher in (mock.patch.object(cmd_version, "OC_ROOT", self.oc),
-                        mock.patch.object(cmd_version.placement, "config", return_value=cfg),
                         mock.patch.object(cmd_version.cmd_land, "command_land", side_effect=lambda argv: self.landed.append(argv) or 0)):
             patcher.start()
             self.addCleanup(patcher.stop)

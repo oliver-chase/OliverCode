@@ -10,7 +10,7 @@ import os
 import subprocess
 from datetime import date
 
-from lib import cmd_land, denials, failure_log, launchd, placement
+from lib import cmd_land, denials, failure_log, launchd
 from lib.local_config import OC_ROOT
 
 LABEL = "com.olivercode.version-cut"
@@ -69,7 +69,7 @@ def _cut_and_land(cutter, day: str, story: str) -> int:
     """Commits the cut in a worktree of origin/main and lands it, so the installed checkout only fast-forwards (#785). `land` retries
     while main moves for up to ten minutes and ends sooner only on a rebase conflict or failed validation (#784, #789)."""
     subprocess.run(["git", "-C", str(OC_ROOT), "fetch", "-q", "origin"], capture_output=True)
-    wt = placement.config().worktrees / f"oc-cut-{day}"
+    wt = OC_ROOT.parent / "_worktrees" / f"oc-cut-{day}"
     if wt.exists():
         print(f"version-cut: {wt} already exists. Land it or remove it, then cut again")
         return 1
