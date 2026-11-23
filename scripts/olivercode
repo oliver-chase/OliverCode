@@ -220,8 +220,7 @@ def main() -> int:
         _reject_extra(cmd, argv[1:])
         return command_guide(OC_ROOT, argv[0] if argv else None)
 
-    print(f"Error: '{cmd}' is not a valid command.")
-    print_usage()
+    print(f"Error: '{cmd}' is not a valid command. Guide: olivercode guide")
     return 1
 
 

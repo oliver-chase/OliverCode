@@ -213,7 +213,7 @@ def replay(run=None) -> str:
     """Run the queued gh commands once GraphQL is free. A command that succeeds leaves the queue at once, so it is never sent
     twice. One that fails stays queued with the failure counted, and after OWNER_AFTER failures it moves to the owner queue. A rate
     limit stops the run and counts as no failure. A replay that starts while another runs is refused. Returns the report, also saved
-    in ~/.olivercode/gh-queue-report.txt. While GraphQL is held nothing runs."""
+    in ~/.olivercode/gh-queue-report.txt. While GraphQL is held nothing runs. An empty queue returns '' and makes no gh call."""
     home().mkdir(parents=True, exist_ok=True)
     with open(home() / REPLAY_LOCK, "a+", encoding="utf-8") as lock:
         try:
@@ -229,7 +229,7 @@ def replay(run=None) -> str:
 def _replay(run) -> str:
     rows = _read()
     if not rows:
-        return "The GitHub queue is empty."
+        return ""
     if blocked_until("graphql"):
         when = time.strftime("%H:%M", time.localtime(blocked_until("graphql")))
         return f"{len(rows)} queued gh command(s) wait for the GraphQL reset at about {when}."
@@ -320,12 +320,10 @@ def _fetch_points() -> dict:
     return {"remaining": int(out[0]), "reset": int(out[1]), "rest": int(out[2])}
 
 
-def points_refusal(fetch=None, now: float | None = None) -> str:
-    """Stop gh calls while the account's GraphQL points are under the floor, before GitHub refuses them. The reading
-    is cached for a minute in ~/.olivercode so a hook that runs on every call usually reads one file. Fails open."""
-    floor = int(os.environ.get("OLIVERCODE_GH_POINTS_FLOOR") or POINTS_FLOOR)
-    if floor <= 0:
-        return ""
+def points_reading(fetch=None, now: float | None = None) -> dict:
+    """The GraphQL points and REST requests left, from the reading cached for a minute in ~/.olivercode/gh-points.json, or a
+    fresh one saved over it. Every gh hook call reads this, so a minute holds one `gh api rate_limit` call however many calls
+    run. A failed read is saved as an empty reading for the same minute, so calls do not retry it. Fails open."""
     now = now or time.time()
     path = home() / "gh-points.json"
     try:
@@ -342,6 +340,17 @@ def points_refusal(fetch=None, now: float | None = None) -> str:
             path.write_text(json.dumps(data), encoding="utf-8")
         except OSError:
             pass
+    return data
+
+
+def points_refusal(fetch=None, now: float | None = None) -> str:
+    """Stop gh calls while the account's GraphQL points are under the floor, before GitHub refuses them. It reads the cached
+    points reading, so a hook that runs on every call usually reads one file. Fails open."""
+    floor = int(os.environ.get("OLIVERCODE_GH_POINTS_FLOOR") or POINTS_FLOOR)
+    if floor <= 0:
+        return ""
+    now = now or time.time()
+    data = points_reading(fetch, now)
     if data.get("remaining", floor) < floor and data.get("reset", 0) > now:
         when = time.strftime("%H:%M", time.localtime(data["reset"]))
         return (f"GitHub has {data['remaining']} GraphQL points left, under the shared reserve of {floor}, so gh calls hold "
@@ -371,7 +380,8 @@ def _read_rows(now: float, window: int) -> list[dict]:
 
 
 def note_before(key: str, fetch=None, now: float | None = None) -> None:
-    """Remember the GraphQL points and REST requests left before a gh call, keyed by the tool call. Fails open."""
+    """Remember the GraphQL points and REST requests left before a gh call, keyed by the tool call. The reading is the cached one
+    from points_reading, so this adds no rate-limit call of its own. Fails open."""
     try:
         now = now or time.time()
         path = home() / "gh-pending.json"
@@ -380,7 +390,9 @@ def note_before(key: str, fetch=None, now: float | None = None) -> None:
         except (OSError, ValueError):
             pending = {}
         pending = {k: v for k, v in pending.items() if now - v["t"] < 600}
-        left = (fetch or _fetch_points)()
+        left = points_reading(fetch, now)
+        if "remaining" not in left:  # the read failed, so there is nothing to measure this call against
+            return
         pending[key] = {"t": now, "remaining": left["remaining"], "rest": left.get("rest")}
         home().mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(pending), encoding="utf-8")
@@ -389,15 +401,18 @@ def note_before(key: str, fetch=None, now: float | None = None) -> None:
 
 
 def note_after(key: str, session: str, command: str, fetch=None, now: float | None = None) -> None:
-    """Log what a finished gh call spent: the drop in GraphQL points and in REST requests since note_before. The figures
-    are approximate when other agents spend at the same moment. One line per call in ~/.olivercode/gh-cost.jsonl, kept for 24 hours."""
+    """Log what a finished gh call spent: the drop in GraphQL points and in REST requests since note_before. The readings come
+    from the one-minute cache, so a call that finishes within a minute of its start can show no spend, and the figures are
+    approximate when other agents spend at the same moment. One line per call in ~/.olivercode/gh-cost.jsonl, kept for 24 hours."""
     try:
         now = now or time.time()
         path = home() / "gh-pending.json"
         pending = json.loads(path.read_text(encoding="utf-8"))
         before = pending.pop(key)
         path.write_text(json.dumps(pending), encoding="utf-8")
-        left = (fetch or _fetch_points)()
+        left = points_reading(fetch, now)
+        if "remaining" not in left:
+            return
         points = max(0, before["remaining"] - left["remaining"])
         rest = max(0, before["rest"] - left["rest"]) if before.get("rest") is not None and left.get("rest") is not None else 0
         row = {"t": now, "session": session, "cmd": " ".join(command.split())[:60], "points": points, "rest": rest}

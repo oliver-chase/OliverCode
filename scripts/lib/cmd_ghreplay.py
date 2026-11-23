@@ -19,8 +19,9 @@ LABEL = "com.olivercode.gh-replay"
 
 def run(story_runner=None) -> str:
     """One replay run: the gh queue, then the story outbox. The outbox stops at a hold or the hourly write cap, so over the cap
-    nothing is sent and the requests wait for the next run. The report names each issue number filed."""
-    lines = [gh_budget.replay()]
+    nothing is sent and the requests wait for the next run. The report names each issue number filed. With both queues empty
+    the run returns '', so an idle job prints nothing to its log."""
+    lines = [line for line in [gh_budget.replay()] if line]
     try:
         filed, left, why = story_outbox.flush(story_runner) if story_runner else story_outbox.flush()
     except Exception as exc:  # noqa: BLE001 -- a missing gh must not hide the gh queue report above

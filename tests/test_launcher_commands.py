@@ -437,6 +437,9 @@ class TestUninstall(HomeCase):
                                 capture_output=True, text=True, cwd=str(self.tmp), env=env)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unexpected argument", result.stdout)
+        self.assertIn("olivercode uninstall", result.stdout)
+        self.assertIn("olivercode guide uninstall", result.stdout)
+        self.assertEqual(1, len(result.stdout.strip().splitlines()), result.stdout)
         self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
         # Every command that takes no extra word refuses one before it acts.
         for cmd in ("install", "health", "update", "sync-hooks",
@@ -446,6 +449,7 @@ class TestUninstall(HomeCase):
                                       capture_output=True, text=True, cwd=str(self.tmp), env=env)
                 self.assertEqual(1, done.returncode, done.stdout + done.stderr)
                 self.assertIn("unexpected argument", done.stdout)
+                self.assertEqual(1, len(done.stdout.strip().splitlines()), done.stdout)
 
 
 class TestRootFlag(unittest.TestCase):

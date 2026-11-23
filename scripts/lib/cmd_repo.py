@@ -380,7 +380,9 @@ def command_gh_limit(argv: list[str]) -> int:
         return 0
     if argv == ["replay"]:
         from lib import cmd_ghreplay
-        print(cmd_ghreplay.run())
+        report = cmd_ghreplay.run()
+        if report:  # an idle run prints nothing, so the launchd log holds only the runs that did work
+            print(report)
         return 0
     if argv in (["--schedule"], ["--unschedule"]):
         from lib import cmd_ghreplay

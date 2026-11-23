@@ -116,16 +116,25 @@ def require_dir(path: Path) -> bool:
     return False
 
 
+def usage_line(cmd: str) -> str:
+    """The usage line of the command's row in COMMANDS, or the bare name when the table has no row for it."""
+    for row, _ in COMMANDS:
+        if row.split()[1:2] == [cmd]:
+            return row
+    return f"olivercode {cmd}"
+
+
 def reject_extra(cmd: str, rest: list[str]) -> None:
     """Unknown arguments must fail loudly.
 
     Rejecting them beats ignoring them: `sync-hooks --root /somewhere` would otherwise
     sync the DEFAULT fleet and print "6 targets synced", giving a fork with a different
-    layout a success message for work done on the wrong repos.
+    layout a success message for work done on the wrong repos. The error is one line with
+    the command's usage and the guide command, so a typo costs a line, not the whole table.
     """
     if rest:
-        print(f"Error: unexpected argument(s) for '{cmd}': {' '.join(rest)}")
-        print_usage()
+        print(f"Error: unexpected argument(s) for '{cmd}': {' '.join(rest)}. Usage: {usage_line(cmd)}. "
+              f"Guide: olivercode guide {cmd}")
         sys.exit(1)
 
 
