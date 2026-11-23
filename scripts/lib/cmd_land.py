@@ -2,7 +2,7 @@
 
 It rebases the worktree on origin/main, squashes a branch of several commits into one whose message is the first commit's title and the story number (#898), runs the repo's validation up to twice unless a passing run already recorded the same tree (#910), pushes HEAD:main and retries up to four times when main moves. After a push it fast-forwards the main
 checkout when that is clean and prints how far behind an edited or diverged one is. The log is ~/.olivercode/land/land-REPO-N.log (under OLIVERCODE_HOME when set) and ends
-with `RESULT pushed SHA`, `RESULT rebase-conflict`, `RESULT validate-failed`, `RESULT push-failed` (the push failed while main stood still) or `RESULT main-kept-moving` (a land keeps retrying with a short pause for ten minutes while main moves and each rebase is clean). A second land for a story that is already running refuses. Land never edits docs/LIMITS.json: the size ceiling only warns (#879).
+with `RESULT pushed SHA`, `RESULT rebase-conflict`, `RESULT validate-failed`, `RESULT squash-failed` (the commits could not be squashed), `RESULT push-failed` (the push failed while main stood still) or `RESULT main-kept-moving` (a land keeps retrying with a short pause for ten minutes while main moves and each rebase is clean). A second land for a story that is already running refuses. Land never edits docs/LIMITS.json: the size ceiling only warns (#879).
 A commit that changes a file outside its story's Files area ends with `RESULT outside-area` and gets a comment on the story; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
 
 A landed story is cleaned up here (#712): the worktree, the local branch and the remote branch are deleted, so no session needs a removal permission. Work that did not land
@@ -307,7 +307,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
             _run(wt, log, "git", "rebase", "--abort")
             return "rebase-conflict", ""
         if not squash(wt, story, log):
-            return "push-failed", ""
+            return "squash-failed", ""
         refused = _scope_refusal(wt, base, area, story, log)
         if refused:
             return refused, ""
@@ -348,6 +348,10 @@ def cleanup(wt: Path) -> list[str]:
     if _git(Path(common), "ls-remote", "--exit-code", "--heads", "origin", branch).returncode == 0:
         done = _git(Path(common), "push", "origin", "--delete", branch)
         lines.append(f"Deleted remote branch {branch}." if done.returncode == 0 else f"Remote branch {branch} stays: {done.stderr.strip()[:100]}")
+    runner = f"agent/story-{branch.rsplit('/', 1)[-1].removeprefix('story-')}" if branch.startswith(("story/", "agent/")) else ""
+    if runner and runner != branch and _git(Path(common), "ls-remote", "--exit-code", "--heads", "origin", runner).returncode == 0:
+        done = _git(Path(common), "push", "origin", "--delete", runner)  # the runner's own pushed branch (#1035)
+        lines.append(f"Deleted remote branch {runner}." if done.returncode == 0 else f"Remote branch {runner} stays: {done.stderr.strip()[:100]}")
     return lines
 
 
@@ -454,6 +458,8 @@ def command_land(argv: list[str]) -> int:
     root, branch = _main_checkout(wt) or OC_ROOT, default_branch(wt)  # read before cleanup removes the worktree
     for line in cleanup(wt):
         print(line)
+    for stale in (folder / f"handover-{key}.md", folder / f"handover-{story}.md"):
+        stale.unlink(missing_ok=True)  # an earlier failed land left it; the story landed, so it is stale
     behind, state, moved = maintain.fast_forward(root, fetch=True, branch=branch)  # the story's own repo, never OliverCode's checkout (#1012)
     if moved:
         print(f"Main checkout fast-forwarded {behind} commit(s).")

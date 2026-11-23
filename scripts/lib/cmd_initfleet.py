@@ -189,7 +189,7 @@ def command_init_fleet(argv: list[str], runner=run) -> int:
         return _registry_hint(dest)
     if kind == "other":
         print(f"{owner}/{name} already exists on GitHub and has no {REGISTRY}, so it is not a fleet repo. Nothing was pushed. "
-              "Delete or rename it on GitHub, then run this again.")
+              f"Remove it with `{_remove_hint(owner, name)}` or rename it, then run this again.")
         return 1
     dest.mkdir(parents=True, exist_ok=True)
     if local:
@@ -207,12 +207,12 @@ def command_init_fleet(argv: list[str], runner=run) -> int:
         return 1
     rc, out = runner(["gh", "api", f"repos/{owner}/{name}", "--jq", ".private"])
     if rc or out != "true":
-        print(f"{owner}/{name} is not confirmed private, so nothing was pushed. Make it private on GitHub, then push from {dest}.")
+        print(f"{owner}/{name} is not confirmed private, so nothing was pushed. Make it private on GitHub, then push from {dest}, or remove the repo with `{_remove_hint(owner, name)}`.")
         return 1
     rc, out = runner(["gh", "api", f"repos/{owner}/{name}/collaborators?affiliation=direct", "--jq", "[.[].login]"])
     others = [] if rc else [c for c in json.loads(out or "[]") if c.lower() != owner.lower()]
     if rc or others:
-        print(f"{owner}/{name} must have no collaborators ({out}), so nothing was pushed. Remove them, then push from {dest}.")
+        print(f"{owner}/{name} must have no collaborators ({out}), so nothing was pushed. Remove them, then push from {dest}, or remove the repo with `{_remove_hint(owner, name)}`.")
         return 1
     url = f"https://github.com/{owner}/{name}.git"
     steps = [["remote", "add", "origin", url], ["push", "-q", "-u", "origin", "main"]]
@@ -221,10 +221,15 @@ def command_init_fleet(argv: list[str], runner=run) -> int:
     for step in steps:
         rc, out = runner(["git", "-C", str(dest), *step])
         if rc:
-            print(f"git {step[0]} failed in {dest}: {out}")
+            print(f"git {step[0]} failed in {dest}: {out}. {owner}/{name} was created on GitHub: finish from {dest}, or remove it with `{_remove_hint(owner, name)}`.")
             return 1
     print(f"Created private repo {owner}/{name} in {dest}. Registry: {dest / REGISTRY}")
     return _registry_hint(dest)
+
+
+def _remove_hint(owner: str, name: str) -> str:
+    """The command that removes a repo this command created, for a run that stopped after the create."""
+    return f"gh repo delete {owner}/{name} --yes"
 
 
 def _registry_hint(dest: Path) -> int:

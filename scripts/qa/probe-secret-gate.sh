@@ -22,6 +22,10 @@ if [ -z "$(git config user.email 2>/dev/null)" ]; then
   export GIT_AUTHOR_NAME=probe GIT_AUTHOR_EMAIL=probe@localhost
   export GIT_COMMITTER_NAME=probe GIT_COMMITTER_EMAIL=probe@localhost
 fi
+if [ -e leak-probe.txt ]; then
+  echo "[probe] leak-probe.txt already exists here and is not the probe's to overwrite -- move it aside and run again" >&2
+  exit 2
+fi
 printf 'KEY="sk-%s"\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > leak-probe.txt
 git add leak-probe.txt
 COMMIT_OUT="$(git commit -m probe -- leak-probe.txt 2>&1)"
@@ -45,6 +49,8 @@ else
   echo "[probe] FAIL -- the commit with a fake secret SUCCEEDED. Hooks are not installed." >&2
   echo "[probe] Check: git config --get core.hooksPath   (expect .githooks)" >&2
   echo "[probe] Fix:   scripts/olivercode sync-hooks" >&2
-  echo "[probe] A real commit now exists in this repo's history (leak-probe.txt) -- reset it by hand." >&2
+  git reset -q --soft HEAD~1 >/dev/null 2>&1 && git rm -q --cached leak-probe.txt >/dev/null 2>&1 && rm -f leak-probe.txt \
+    && echo "[probe] The probe commit was undone and leak-probe.txt removed." >&2 \
+    || echo "[probe] A real commit now exists in this repo's history (leak-probe.txt) -- reset it by hand." >&2
   exit 1
 fi

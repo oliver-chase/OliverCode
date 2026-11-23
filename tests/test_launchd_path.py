@@ -2,6 +2,7 @@
 
 import plistlib
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +17,7 @@ from lib import cmd_boardsweep, cmd_ghreplay, launchd, maintain  # noqa: E402
 class TestJobPath(unittest.TestCase):
     def installed(self, module):
         home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         with mock.patch.object(launchd.shutil, "which", return_value="/opt/homebrew/bin/gh"), \
                 mock.patch.object(launchd.subprocess, "run") as run, mock.patch.object(Path, "home", return_value=home), \
                 mock.patch.dict("os.environ", {"OLIVERCODE_HOME": str(home)}):

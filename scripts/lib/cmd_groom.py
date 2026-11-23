@@ -244,9 +244,10 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
             cmd_owner.note("groom", f"{name}: " + name_drift.summary(names)[:700])
         mine["names"] = json.dumps(names)
         if fixes:
-            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
                 json.dump({"issues": fixes}, f)
-            batch_project.main(["--config", str(config), "--input", f.name])
+                f.flush()
+                batch_project.main(["--config", str(config), "--input", f.name])
             cmd_owner.note("groom", f"{name}: groom fixed {len(fixes)} card(s) that had drifted, were missing or lacked Priority, Size or Ready")
         mine.update(ok=now, fp=fingerprint(slug, root, run), failed="")
         return True

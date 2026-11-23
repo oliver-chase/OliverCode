@@ -349,6 +349,13 @@ def _backup_settings(settings_path: Path) -> Path | None:
     return backup
 
 
+def _stale_rules(rules: tuple, existing: list) -> list:
+    """Entries in `existing` that are one of `rules` written for another checkout path, so a moved checkout leaves no old path behind (#1035)."""
+    root = str(OC_ROOT)
+    shapes = [re.compile("^" + "(.+?)".join(re.escape(part) for part in r.split(root)) + "$", re.S) for r in rules if root in r]
+    return [e for e in existing if isinstance(e, str) and e not in rules and any(m.match(e) for m in shapes)]
+
+
 def install_automode(settings_path: Path) -> tuple[str, Path | None]:
     """Add the AUTOMODE rules beside the owner's own, after backing the settings up. Returns ("added" or
     "already", the backup path or None). Raises ValueError, leaving the file untouched, for an unreadable shape."""
@@ -368,6 +375,8 @@ def install_automode(settings_path: Path) -> tuple[str, Path | None]:
     am = out.setdefault("autoMode", {})
     for key, rules in AUTOMODE.items():
         lst = am.setdefault(key, [DEFAULTS])
+        gone = _stale_rules(rules, lst)
+        lst[:] = [e for e in lst if e not in gone]
         lst.extend(r for r in rules if r not in lst)
     _write(settings_path, out)
     return "added", backup

@@ -78,6 +78,8 @@ def scan(repo: Path) -> dict:
 
 def release(repo: Path, dest: Path) -> Path:
     """Tracked files of `repo` as one commit with a neutral author in `dest`."""
+    if dest.exists() and any(dest.iterdir()):
+        raise SystemExit(f"{dest} is not empty, so nothing was written. Pass an empty or new folder.")
     dest.mkdir(parents=True, exist_ok=True)
     archive = subprocess.run(["git", "-C", str(repo), "archive", "HEAD"], capture_output=True, check=True).stdout
     subprocess.run(["tar", "-x", "-C", str(dest)], input=archive, check=True)

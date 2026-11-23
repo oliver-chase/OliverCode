@@ -81,16 +81,22 @@ def _cut_and_land(cutter, day: str, story: str) -> int:
         _, version = cutter.cut(wt, day, "origin/main")
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"version-cut: no version cut: {exc}")
-        cmd_land.cleanup(wt)
+        _discard(wt, day)
         return 1
     if not version:
-        cmd_land.cleanup(wt)
+        _discard(wt, day)
         return 0
     cutter.commit_cut(wt, version, story)
     code = cmd_land.command_land([str(wt), story.lstrip("#")])
     if code:
         _queue_denial(wt, story.lstrip("#"))
     return code
+
+
+def _discard(wt, day: str) -> None:
+    """Remove the cut's worktree and branch when nothing was cut, even with half-written files, so the run leaves nothing behind (#1035)."""
+    subprocess.run(["git", "-C", str(OC_ROOT), "worktree", "remove", "--force", str(wt)], capture_output=True)
+    subprocess.run(["git", "-C", str(OC_ROOT), "branch", "-D", f"version-cut-{day}"], capture_output=True)
 
 
 def _queue_denial(wt, story: str) -> None:

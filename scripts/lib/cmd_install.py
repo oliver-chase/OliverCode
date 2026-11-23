@@ -348,7 +348,10 @@ def board_step(repos: list[tuple[str, Path]]) -> str:
         rel = backlog_setup.config_path(path).relative_to(path)
         claude = path / "CLAUDE.md"
         if claude.is_file() and "backlog-config.json" not in claude.read_text(encoding="utf-8", errors="ignore"):
+            clean = subprocess.run(["git", "-C", str(path), "status", "--porcelain", "--", "CLAUDE.md"], capture_output=True, text=True).stdout.strip() == ""
             claude.write_text(claude.read_text(encoding="utf-8", errors="ignore") + f"\nBacklog config: `{rel}` names this repo's board.\n", encoding="utf-8")
+            if clean:  # commit the line by explicit path so it does not sit as a stray change (#1035)
+                subprocess.run(["git", "-C", str(path), "commit", "-q", "-m", "Name the backlog config in CLAUDE.md (#1035)", "--", "CLAUDE.md"], capture_output=True)
         if config is None:
             print(f"{name}: the board was not confirmed. Run `olivercode backlog-setup {path}` to see why")
         else:
