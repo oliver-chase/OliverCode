@@ -7,7 +7,6 @@ Usage:
     audit_ledger.py [repo] --mark FILE          # record the files listed in FILE (one path per line) at HEAD
     audit_ledger.py [repo] --mark FILE --findings N   # also add a run line with today's date and the finding count
     audit_ledger.py [repo] --mark-all           # record every tracked file at HEAD (after a full audit)
-    audit_ledger.py [repo] --seed SHA           # record every file as it was at SHA (an audit done earlier)
 The ledger is docs/AUDITED.txt: `# run DATE findings N files M` lines, oldest first, then one `blob-hash path`
 line per file read, sorted. A file counts as read
 while its blob hash is unchanged, so an edit, a rename or a new file is pending and nothing else is.
@@ -113,7 +112,7 @@ def mark(repo, paths, rev="HEAD", findings=None, today=None):
 
 def main(argv):
     args = argv[1:]
-    repo = scan_root([a for i, a in enumerate(args) if not (a.startswith("--") or (i and args[i - 1] in ("--mark", "--seed", "--findings", "--batches")))], Path("."))
+    repo = scan_root([a for i, a in enumerate(args) if not (a.startswith("--") or (i and args[i - 1] in ("--mark", "--findings", "--batches")))], Path("."))
     if "--pending" in args:
         rows = pending(repo)
         lines = sum(line_count(repo, p) for p in rows)
@@ -139,12 +138,6 @@ def main(argv):
         return 0
     if "--mark-all" in args:
         print(f"marked {mark(repo, list(blobs(repo)))} file(s)")
-        return 0
-    if "--seed" in args:
-        rev = args[args.index("--seed") + 1]
-        live = blobs(repo)
-        write_ledger(repo, {p: h for p, h in blobs(repo, rev).items() if p in live})
-        print(f"seeded from {rev}")
         return 0
     print(__doc__.strip())
     return 2

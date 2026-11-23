@@ -1,5 +1,6 @@
 """The fleet root, the skill walk and the scan-root argument that the audit scripts share."""
 
+import json
 import os
 import re
 import subprocess
@@ -26,35 +27,55 @@ def is_test(rel):
     return bool(TEST.search(rel))
 
 
-def personal_repos():
-    """Names listed under `personalRepos` in olivercode.local.json (git-ignored, so a name stays on this machine). Those repos are left out of every fleet audit. A copy of this skill outside a checkout skips nothing."""
-    lib = Path(__file__).resolve().parents[3] / "scripts"
-    if not (lib / "lib" / "local_config.py").is_file():
-        return set()
-    sys.path.insert(0, str(lib))
+def local_config_path():
+    """The settings file: `$OLIVERCODE_LOCAL_CONFIG` when set, else `olivercode.local.json` at the root of the git repo
+    this skill sits in, else in the working folder."""
+    if os.environ.get("OLIVERCODE_LOCAL_CONFIG"):
+        return Path(os.environ["OLIVERCODE_LOCAL_CONFIG"]).expanduser()
+    here = Path(__file__).resolve()
+    root = next((d for d in here.parents if (d / ".git").exists()), Path.cwd())
+    return root / "olivercode.local.json"
+
+
+def load_local():
+    """The settings file's contents, or {} when it is missing or unreadable."""
     try:
-        from lib import local_config
-        return set(local_config.load_local().get("personalRepos", []))
-    except Exception:  # noqa: BLE001 -- fail open, a config bug never stops an audit
-        return set()
-    finally:
-        sys.path.remove(str(lib))
+        return json.loads(local_config_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_local(values):
+    """Merge `values` into the settings file, keeping every other key."""
+    path = local_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({**load_local(), **values}, indent=2) + "\n", encoding="utf-8")
 
 
 def archived_state(repo):
-    """"archived" or "deleted" when GitHub says the repo is, else None. The check lives in OliverCode's
-    scripts/lib/repo_state.py; a copy of this skill outside a checkout has no lookup and skips nothing."""
-    lib = Path(__file__).resolve().parents[3] / "scripts"
-    if not (lib / "lib" / "repo_state.py").is_file():
+    """"archived" or "deleted" when GitHub says the repo is, else None. It runs OliverCode's scripts/lib/repo_state.py
+    as a program when this skill sits in a checkout of it; a copy elsewhere has no lookup and skips nothing."""
+    script = Path(__file__).resolve().parents[3] / "scripts" / "lib" / "repo_state.py"
+    if not script.is_file():
         return None
-    sys.path.insert(0, str(lib))
     try:
-        from lib import repo_state
-        return repo_state.archived(repo)
-    except Exception:  # noqa: BLE001 -- fail open, a lookup bug never stops an audit
+        done = subprocess.run([sys.executable, str(script), str(repo)], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
         return None
-    finally:
-        sys.path.remove(str(lib))
+    state = done.stdout.strip().splitlines()[-1:] or [""]
+    return state[0] if done.returncode == 0 and state[0] in ("archived", "deleted") else None
+
+
+def validation_command(repo):
+    """The repo's own validation: scripts/validate.sh, else its package's validate script, else its check script."""
+    repo = Path(repo)
+    if (repo / "scripts/validate.sh").exists():
+        return "bash scripts/validate.sh"
+    try:
+        scripts = json.loads((repo / "package.json").read_text(encoding="utf-8")).get("scripts", {})
+    except (OSError, ValueError):
+        scripts = {}
+    return "npm run check" if "validate" not in scripts and "check" in scripts else "npm run validate"
 
 
 def read(repo, rel):

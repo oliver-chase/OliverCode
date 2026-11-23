@@ -90,8 +90,17 @@ def _norm(text):
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
+def _join(keep, other):
+    """The text of two findings, each part once, so a merge loses neither defect or fix."""
+    parts = [t.strip() for t in (keep, other) if t.strip()]
+    return "; ".join(p for i, p in enumerate(parts) if _norm(p) not in [_norm(q) for q in parts[:i]])
+
+
 def _absorb(keep, other, led):
     keep["priority"] = min(keep["priority"], other["priority"])
+    for field in ("defect", "evidence", "fix"):
+        keep[field] = _join(keep[field], other[field])
+    keep["rule"] = keep["rule"] or other["rule"]
     keep["chunks"] = sorted(set(keep["chunks"]) | set(other["chunks"]))
     keep["where"] = keep["where"] + [w for w in other["where"] if w not in keep["where"]]
     keep.setdefault("merged_from", []).append(other["id"])

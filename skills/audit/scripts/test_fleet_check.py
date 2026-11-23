@@ -49,12 +49,25 @@ class Tests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_time_runs_the_tests_and_names_the_slowest(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = make_repo(tmp, {"tests/test_a.py": "import unittest\nclass T(unittest.TestCase):\n    def test_one(self): pass\n"})
+    def test_time_runs_the_repos_validation_once_and_reports_failure(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fleet_check.os, "getloadavg", return_value=(0, 0, 0)), \
+                mock.patch.object(fleet_check, "queued", side_effect=lambda c: c):
+            repo = make_repo(tmp, {"scripts/validate.sh": "echo run >> ran.txt\n"})
             code, out = run("--time", str(repo))
             self.assertEqual(code, 0)
-            self.assertRegex(out, r"slowest test files: test_a \d+\.\ds")
+            self.assertRegex(out, r"tests: the repo's validation passed in \d+\.\ds")
+            self.assertEqual(["run"], (repo / "ran.txt").read_text().split())
+            (repo / "scripts/validate.sh").write_text("echo boom\nexit 1\n")
+            code, out = run("--time", str(repo))
+            self.assertEqual(code, 1)
+            self.assertIn("failed", out)
+
+    def test_time_waits_when_the_machine_is_overloaded(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fleet_check.os, "getloadavg", return_value=(999, 0, 0)):
+            repo = make_repo(tmp, {"scripts/validate.sh": "exit 1\n"})
+            code, out = run("--time", str(repo))
+            self.assertEqual(code, 0)
+            self.assertIn("tests: not run", out)
 
 
 class AloneBoard(unittest.TestCase):

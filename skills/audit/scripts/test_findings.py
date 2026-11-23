@@ -108,6 +108,19 @@ class CrossPass(Base):
         self.assertEqual(checks, ['check rule "one home" (F3, found in skills) in scripts'])
 
 
+class MergeKeepsText(Base):
+    def test_two_findings_on_one_line_keep_both_defects_fixes_and_the_higher_priority(self):
+        findings.add(self.led, "skills", item(priority="P1", where="a.py:5", defect="drops text", evidence="e1", fix="fix one"))
+        findings.add(self.led, "scripts", item(priority="P0", where="a.py:5", defect="wrong id", evidence="e2", fix="fix two"))
+        for c in self.led["chunks"]:
+            findings.done(self.led, c)
+        findings.cross(self.led, "lead")
+        (row,) = self.led["findings"]
+        self.assertEqual("P0", row["priority"])
+        for text in ("drops text", "wrong id", "e1", "e2", "fix one", "fix two"):
+            self.assertIn(text, " ".join((row["defect"], row["evidence"], row["fix"])))
+
+
 class OneReport(Base):
     def test_report_is_one_priority_order_that_passes_the_report_check(self):
         findings.add(self.led, "skills", item(priority="P2", lens="Voice", defect="fragment"))

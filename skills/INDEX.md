@@ -9,7 +9,7 @@
 | Skill | Domain |
 |-------|--------|
 | `diagnosing-bugs` | Bug diagnosis through a tight feedback loop |
-| `audit` | The one audit: a whole repo to done, a skill or family, the docs, a commit range or a plan |
+| `audit` | The one audit: a whole repo to a report and filed issues, a skill or family, the docs, a commit range or a plan |
 | `olivercode-adoption` | Onboarding a fork into an existing setup |
 | `plan` | Markdown planning before work starts |
 | `backlog` | A repo's GitHub Project backlog: file, close and sweep the board |

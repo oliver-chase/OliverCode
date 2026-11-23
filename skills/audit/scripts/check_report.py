@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Check an audit report against the report rules in SKILL.md. Exit 1 and list every gap.
 
-Usage: <report> | check_report.py - [--repo DIR]
-The report arrives on stdin. With --repo, a whole-repo report also fails while the audit ledger lists any file as pending. A file path fails the check, since the report is one message in the thread and never a file.
+Usage: <report> | check_report.py - [--repo DIR] [--route plan|docs|changes]
+The report arrives on stdin. A plan, docs or changes audit is small, so with --route a findings list is enough. With --repo, a whole-repo report also fails while the audit ledger lists any file as pending. A file path fails the check, since the report is one message in the thread and never a file.
 """
 import re
 import sys
@@ -32,7 +32,7 @@ def sections(text):
     parts, name = {}, None
     order = []
     for line in text.splitlines():
-        m = re.match(r"^#{1,3}\s*(?:\d+\.\s*)?(.+?)\.?\s*$", line)
+        m = re.match(r"^#{1,3}\s+(?:\d+\.\s*)?(.+?)\.?\s*$", line)
         if m:
             name = m.group(1).strip().lower()
             order.append(name)
@@ -117,8 +117,22 @@ def unread(repo):
     return [f"{len(rows)} files ({lines} lines) in {repo} are still unread. Fix: run the next reader wave from `audit_ledger.py --batches 3000`, mark each batch, and report when --pending lists nothing"]
 
 
+SMALL_ROUTES = ("plan", "docs", "changes")
+
+
+def check_small(text):
+    """A small route's report is a findings list: at least one line, and a report with nothing found says what was checked."""
+    return [] if text.strip() else ["the report is empty. Fix: list each finding with its file:line and fix, or write \"Checked, nothing found\" with what was checked"]
+
+
 def main(argv):
-    repo = None
+    repo, route = None, None
+    if "--route" in argv:
+        i = argv.index("--route")
+        route, argv = argv[i + 1] if i + 1 < len(argv) else "", argv[:i] + argv[i + 2:]
+        if route not in SMALL_ROUTES:
+            print(f"REPORT: unknown route {route!r}. Fix: use plan, docs or changes, or leave --route off for the full report")
+            return 2
     if "--repo" in argv:
         i = argv.index("--repo")
         repo, argv = argv[i + 1], argv[:i] + argv[i + 2:]
@@ -128,7 +142,8 @@ def main(argv):
     if argv[1] != "-":
         print("REPORT: the report was delivered as a file. Fix: pipe it on stdin with `check_report.py -` and print it as one message in the thread")
         return 1
-    problems = check(sys.stdin.read()) + (unread(repo) if repo else [])
+    text = sys.stdin.read()
+    problems = check_small(text) if route else check(text) + (unread(repo) if repo else [])
     for p in problems:
         print("REPORT: " + p)
     if not problems:

@@ -3,8 +3,7 @@
 
 Usage:
     done_check.py [repo] [--epic N]... [--validate "command"]   # exit 0 only when every check passes
-Checks: the repo's validation passes (scripts/validate.sh, else npm run validate or check, which fails when neither exists); fleet_check.py --time reports no failing test file, voice violation or
-board difference; sweep.py finds nothing; a sharing verdict is recorded ("Sharing:
+Checks: the repo's validation passes (scripts/validate.sh, else npm run validate or check, which fails when neither exists); fleet_check.py reports no voice violation or board difference; sweep.py finds nothing; a sharing verdict is recorded ("Sharing:
 portable" or "Sharing: personal" with a reason, in the README or docs/SHARING.md) and portability.py
 finds no blocker that the verdict says matters; and, with --epic, the epic and every story citing it are
 closed (--epic repeats for each epic); the repo has no open issue except one labeled
@@ -19,6 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _fleet import FLEET_ROOT, validation_command
 
 HERE = Path(__file__).resolve().parent
 # "personal" counts only with its reason after a dash or colon.
@@ -26,7 +26,7 @@ VERDICT = re.compile(r"^\W*Sharing:\W*\s*(portable\b|personal(?=[ \t]*[-:\u2013\
 ACCEPTED = re.compile(r"^Accepted:[ \t]*(\S+)[ \t]+(\"[^\"]*\"|\S+)[ \t]+-[ \t]*\S", re.M)  # a row without its reason does not count
 ROW = re.compile(r"^([a-z-]+)\s+(\"[^\"]*\"|\S+)")
 PERSONAL_BLOCKERS = {"secret-file", "history-secret"}
-HYGIENE = HERE.parents[1] / "backlog" / "scripts" / "check_board_hygiene.py"
+HYGIENE = FLEET_ROOT / "backlog" / "scripts" / "check_board_hygiene.py"
 OWNER_ACTION = "owner-action"  # an open issue only the owner can do, with its steps in the body
 PROGRAM = "program"  # an open issue of a fleet program tracked on its own epic, outside this repo's audit
 
@@ -70,28 +70,17 @@ def crashed(text, rc=0):
     return [f"helper exited {rc}: {last}"] if rc > 1 else []
 
 
-def default_validation(repo):
-    """scripts/validate.sh, or the package's validate script, or its check script."""
-    if (repo / "scripts/validate.sh").exists():
-        return "bash scripts/validate.sh"
-    try:
-        scripts = json.loads((repo / "package.json").read_text(encoding="utf-8")).get("scripts", {})
-    except (OSError, ValueError):
-        scripts = {}
-    return "npm run check" if "validate" not in scripts and "check" in scripts else "npm run validate"
-
-
 def checks(repo, epics=(), validate=None, run=sh):
     repo = Path(repo)
     skip = accepted(repo)
     out = []
-    cmd = validate or default_validation(repo)
+    cmd = validate or validation_command(repo)
     rc, text = run(cmd, repo)
     out.append(("validation", rc == 0, "" if rc == 0 else text.strip().splitlines()[-1][:120] if text.strip() else "failed"))
-    rc, text = run([sys.executable, str(HERE / "fleet_check.py"), "--time", str(repo)], repo)
+    rc, text = run([sys.executable, str(HERE / "fleet_check.py"), str(repo)], repo)
     bad = crashed(text, rc) + [l for l in text.splitlines() if (l.startswith("voice:") and "no violations" not in l) or "difference(s)" in l
-           or l.startswith("board: not checked (") or l.startswith("failing test files:")]
-    out.append(("tests, voice and board", not bad, "; ".join(bad)[:200]))
+           or l.startswith("board: not checked (")]
+    out.append(("voice and board", not bad, "; ".join(bad)[:200]))
     rc, text = run([sys.executable, str(HERE / "sweep.py"), str(repo)], repo)
     # A sweep row names `file:line`, and an accepted row holds while the file keeps the def, so the line number is not compared.
     kept = {(k, re.sub(r":\d+$", "", w)) for k, w in skip}

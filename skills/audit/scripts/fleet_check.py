@@ -3,10 +3,10 @@
 
 Usage:
     fleet_check.py [repo]                  # voice, plus board drift when the repo has a backlog config
-    fleet_check.py --time [repo]           # also runs the repo's tests and names each failing file
+    fleet_check.py --time [repo]           # also runs the repo's own validation once, behind load_guard, and times it
     fleet_check.py --fields-file F [repo]  # board drift from a saved `gh project field-list` JSON
 
-Each line of output is a voice finding as `file:line`, a failing test file or a board difference.
+Each line of output is a voice finding as `file:line`, a failed validation or a board difference.
 Exit status is 1 when anything is flagged. It edits nothing.
 Tests: python3 -m unittest test_fleet_check   (from this scripts/ folder)
 """
@@ -19,12 +19,12 @@ import re
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from _fleet import archived_state, read, tracked
+import load_guard
+from _fleet import FLEET_ROOT, archived_state, load_local, read, tracked, validation_command
 
-BASELINE_SCRIPT = Path(__file__).resolve().parents[2] / "backlog" / "scripts" / "check_kanban_baseline.py"
+BASELINE_SCRIPT = FLEET_ROOT / "backlog" / "scripts" / "check_kanban_baseline.py"
 
 CONTRAST = re.compile(
     r"\b(?:not\b[^.\n]{1,60}?,?\s*\bbut\b|rather than\b|instead of\b|less\b[^.\n]{1,40}?,\s*more\b|it is not about\b)"
@@ -40,31 +40,18 @@ def queued(command):
     uses), so a timing run waits for a slot like any validation. Inside a held slot, or with no helper, the command runs as given."""
     shim = Path.home() / ".local" / "bin" / "validate-queue"
     inside = any(os.environ.get(v, "").endswith(".json") for v in ("OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT"))
-    return command if inside or not shim.is_file() else [str(shim), "run", *command]
+    return command if inside or not shim.is_file() else f"{shim} run {command}"
 
 
-def run_tests(repo, per_module=None, failed=None):
-    """Wall seconds to run every `tests/test_*.py` and `skills/*/scripts/test_*.py` module, each in its own
-    process from its own folder as validate.sh does, or None when the repo has no such module. A dict passed
-    as `per_module` gets each module's seconds, and a list passed as `failed` gets each module that failed."""
-    root = Path(repo)
-    found = sorted(root.glob("tests/test_*.py")) + sorted(root.glob("skills/*/scripts/test_*.py"))
-    modules = [(p.parent, p.stem) for p in found]
-    if not modules:
+def run_validation(repo):
+    """(seconds, passed, last line of output) for the repo's own validation, run once while the machine has room,
+    or None when load_guard says to wait."""
+    if load_guard.advice(os.getloadavg()[0], os.cpu_count() or 1)[0] == 0:
         return None
-    def run_one(entry):
-        folder, module = entry
-        began = time.monotonic()
-        done = subprocess.run(queued([sys.executable, "-m", "unittest", "-b", module]), cwd=folder, capture_output=True)
-        if done.returncode and failed is not None:
-            failed.append(module)
-        if per_module is not None:
-            per_module[module] = time.monotonic() - began
-
     start = time.monotonic()
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        list(pool.map(run_one, modules))
-    return round(time.monotonic() - start, 1)
+    done = subprocess.run(queued(validation_command(repo)), cwd=repo, shell=True, capture_output=True, text=True)
+    last = ((done.stdout + done.stderr).strip().splitlines() or [""])[-1][:120]
+    return round(time.monotonic() - start, 1), done.returncode == 0, last
 
 
 def title_case(text):
@@ -83,12 +70,8 @@ def voice_configured():
     """True when the user has a voice file: OLIVERCODE_VOICE_FILE, `voiceFile` in olivercode.local.json, or ~/.claude/VOICE.md (#719)."""
     if os.environ.get("OLIVERCODE_VOICE_FILE"):
         return Path(os.environ["OLIVERCODE_VOICE_FILE"]).expanduser().is_file()
-    local = Path(os.environ.get("OLIVERCODE_LOCAL_CONFIG") or Path(__file__).resolve().parents[3] / "olivercode.local.json")
-    try:
-        if json.loads(local.read_text(encoding="utf-8")).get("voiceFile"):
-            return True
-    except (OSError, ValueError, AttributeError):
-        pass
+    if load_local().get("voiceFile"):
+        return True
     return (Path.home() / ".claude" / "VOICE.md").is_file()
 
 
@@ -163,17 +146,15 @@ def main(argv=None):
     files = tracked(repo)
     problems = 0
 
-    per_module, failed = {}, []
     if args.time:
         print("== Tests")
-        seconds = run_tests(repo, per_module, failed)
-        print("tests: no tests/test_*.py to run" if seconds is None else f"tests: {len(per_module)} files in {seconds}s")
-        if per_module:
-            slowest = sorted(per_module.items(), key=lambda kv: kv[1], reverse=True)[:3]
-            print("slowest test files: " + ", ".join(f"{m} {t:.1f}s" for m, t in slowest))
-        if failed:
-            print("failing test files: " + ", ".join(sorted(failed)))
-        problems += len(failed)
+        result = run_validation(repo)
+        if result is None:
+            print("tests: not run, the machine is busy. Ask again in five minutes")
+        else:
+            seconds, passed, last = result
+            print(f"tests: the repo's validation {'passed' if passed else 'failed'} in {seconds}s" + ("" if passed else f": {last}"))
+            problems += 0 if passed else 1
 
     print("== Voice")
     findings = voice_findings(repo, files) if voice_configured() else []

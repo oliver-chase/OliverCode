@@ -8,6 +8,7 @@ import unittest.mock
 from pathlib import Path
 
 import done_check
+from _fleet import validation_command
 
 
 def fake(outputs):
@@ -46,13 +47,13 @@ class DoneCheckTest(unittest.TestCase):
     def test_voice_and_sweep_rows_fail(self):
         out = {"fleet_check": (0, "voice: 2 contrast framing\n"),
                "sweep.py": (0, "unused-def  a.py:3  dead\n")}
-        self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))), {"tests, voice and board", "sweep"})
+        self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))), {"voice and board", "sweep"})
 
     def test_a_helper_crash_or_an_unread_board_fails_its_check(self):
         trace = "Traceback (most recent call last):\n  File x\nKeyError: 'k'\n"
         out = {"fleet_check": (1, "board: not checked (gh failed)\n"), "sweep.py": (1, trace), "portability.py": (1, trace)}
         self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))),
-                         {"tests, voice and board", "sweep", "portability"})
+                         {"voice and board", "sweep", "portability"})
 
     def test_a_sweep_traceback_ending_in_a_bare_exception_name_still_fails(self):
         out = {"sweep.py": (0, "Traceback (most recent call last):\n  File x\nStopIteration\n")}
@@ -86,9 +87,14 @@ class DoneCheckTest(unittest.TestCase):
     def test_a_path_with_a_space_is_one_row_and_one_accepted_where(self):
         self.assertEqual([("home-path", "my dir/notes.md")], done_check.rows('home-path       "my dir/notes.md"  names x\n'))
 
-    def test_a_failing_test_file_in_the_fleet_check_fails_the_tests_row(self):
-        out = {"fleet_check": (1, "failing test files: test_x\n")}
-        self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))), {"tests, voice and board"})
+    def test_the_tests_run_once_through_the_validation_and_fleet_check_skips_them(self):
+        calls = []
+        def run(cmd, cwd):
+            calls.append(cmd)
+            return 0, ""
+        done_check.checks(repo("Sharing: portable\n"), run=run)
+        self.assertEqual(1, sum("validate" in str(c) for c in calls))
+        self.assertTrue(all("--time" not in c for c in calls if isinstance(c, list)))
 
     def test_a_prose_line_is_not_a_sharing_verdict(self):
         self.assertIn("sharing verdict recorded", self.names(done_check.checks(repo("Sharing portable tools are easy to clone.\n"), run=fake({}))))
@@ -97,7 +103,7 @@ class DoneCheckTest(unittest.TestCase):
         gone = (2, "python3: can't open file 'x.py'\n")
         out = {"fleet_check": gone, "sweep.py": gone, "portability.py": gone}
         self.assertEqual(self.names(done_check.checks(repo("Sharing: portable\n"), run=fake(out))),
-                         {"tests, voice and board", "sweep", "portability"})
+                         {"voice and board", "sweep", "portability"})
 
     def test_a_personal_verdict_needs_its_reason(self):
         self.assertIn("sharing verdict recorded", self.names(done_check.checks(repo("Sharing: personal\n"), run=fake({}))))
@@ -108,7 +114,7 @@ class DoneCheckTest(unittest.TestCase):
     def test_a_package_with_only_a_check_script_runs_it(self):
         root = repo("Sharing: portable\n")
         (root / "package.json").write_text('{"scripts": {"check": "x"}}')
-        self.assertEqual("npm run check", done_check.default_validation(root))
+        self.assertEqual("npm run check", validation_command(root))
 
     def test_the_clean_voice_line_that_fleet_check_prints_passes(self):
         out = {"fleet_check": (0, "== Voice\nvoice: no violations found\n== Board\nboard: matches the baseline\n")}

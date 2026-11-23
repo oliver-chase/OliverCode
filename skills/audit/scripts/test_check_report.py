@@ -84,6 +84,21 @@ class ReportCheckTest(unittest.TestCase):
         with mock.patch.object(sys, "stdin", io.StringIO(GOOD)):
             self.assertEqual(0, check_report.main(["check_report.py", "-"]))
 
+    def test_an_issue_number_at_the_start_of_a_line_is_not_a_heading(self):
+        order, _ = check_report.sections(GOOD.replace("| Voice | contrast framing | #28 |", "#812 holds the voice fix\n| Voice | contrast framing | #28 |"))
+        self.assertFalse(any(o.startswith("812") for o in order))
+
+    def test_a_small_route_needs_only_a_findings_list(self):
+        import io, sys
+        from unittest import mock
+        for route in ("plan", "docs", "changes"):
+            with mock.patch.object(sys, "stdin", io.StringIO("- plan.md:4 step 2 names a missing file. Fix: add it\n")):
+                self.assertEqual(0, check_report.main(["check_report.py", "-", "--route", route]))
+        with mock.patch.object(sys, "stdin", io.StringIO("  \n")):
+            self.assertEqual(1, check_report.main(["check_report.py", "-", "--route", "plan"]))
+        with mock.patch.object(sys, "stdin", io.StringIO("- a finding\n")):
+            self.assertEqual(1, check_report.main(["check_report.py", "-"]))
+
     def test_a_whole_repo_report_fails_while_files_are_pending(self):
         from test_audit_ledger import repo
         import audit_ledger

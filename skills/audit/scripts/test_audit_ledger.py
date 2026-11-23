@@ -84,13 +84,6 @@ class LedgerTest(unittest.TestCase):
             audit_ledger.main(["audit_ledger.py", str(root), "--mark", str(listing)])
         self.assertEqual(audit_ledger.pending(root), ["b.py"])
 
-    def test_seeding_from_an_earlier_commit_marks_files_as_they_were_then(self):
-        root = repo({"a.py": "x = 1\n"})
-        first = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-        commit(root, {"a.py": "x = 9\n", "n.py": "n = 1\n"})
-        audit_ledger.main(["audit_ledger.py", str(root), "--seed", first])
-        self.assertEqual(audit_ledger.pending(root), ["a.py", "n.py"])
-
     def test_a_ledger_path_deleted_from_head_is_named_as_gone_and_not_pending(self):
         root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
         audit_ledger.mark(root, list(audit_ledger.blobs(root)))

@@ -11,30 +11,23 @@ Tests: python3 -m unittest test_audit_mode
 """
 
 import sys
-from pathlib import Path
+
+from _fleet import load_local, save_local
 
 MODES = ("full", "gated")
 REMINDER = "Full automation fixes everything with no prompt; switch with `python3 scripts/audit_mode.py set full`."
 
 
-def _config():
-    scripts = str(Path(__file__).resolve().parents[3] / "scripts")
-    if scripts not in sys.path:
-        sys.path.insert(0, scripts)
-    from lib import local_config
-    return local_config
-
-
 def get_mode():
     """"full", "gated" or None when no valid mode is stored."""
-    value = _config().load_local().get("auditMode")
+    value = load_local().get("auditMode")
     return value if value in MODES else None
 
 
 def set_mode(mode):
     if mode not in MODES:
         raise ValueError(f"mode must be full or gated, got {mode!r}")
-    _config().save_local({"auditMode": mode})
+    save_local({"auditMode": mode})
 
 
 def next_step(mode, report_only=False, fix=False):
