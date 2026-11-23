@@ -130,6 +130,10 @@ class RemotesResolve(HealthBase):
             self.check([("work", work)], "fatal: repository 'https://example.invalid/gone.git/' not found", 128),
         )
 
+    def test_a_missing_tool_is_unverified_not_a_missing_repo(self):
+        work = self.repo("work", origin="https://example.invalid/x.git")
+        self.assertEqual((0, 0, 1), self.check([("work", work)], "git: command not found", 127))
+
     def test_a_network_error_and_an_unknown_error_only_warn(self):
         work = self.repo("work", origin="https://example.invalid/x.git")
         self.assertEqual((0, 0, 1), self.check([("work", work)], "Could not resolve host: example.invalid", 128))
@@ -244,6 +248,15 @@ class LauncherLink(HealthBase):
         self.assertEqual(result, (0, 1, 0))
         self.assertIn(str(self.root / "gone"), out)
         self.assertIn(f"ln -sf /oc/scripts/olivercode {link}", out)
+
+    def test_the_launcher_is_checked_where_install_puts_it(self):
+        link = self.root / "installed"
+        link.symlink_to(self.root / "gone")
+        with mock.patch.dict(os.environ, {}, clear=False), mock.patch("lib.queue_shim.launcher_path", return_value=link):
+            os.environ.pop("OLIVERCODE_LAUNCHER", None)
+            result, out = quiet(health._check_launcher, self.oc)
+        self.assertEqual(result, (0, 1, 0))
+        self.assertIn(str(link), out)
 
     def test_a_live_link_passes(self):
         real = self.root / "real"

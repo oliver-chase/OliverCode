@@ -40,6 +40,13 @@ class ParallelGates(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertLess(time.monotonic() - began, 3.0)
 
+    def test_a_gate_that_exits_reports_its_real_exit_code(self):
+        real_sleep = validate_gates.time.sleep
+        with mock.patch.object(validate_gates.time, "sleep", lambda _s: real_sleep(0.8)):  # the gate exits while the loop sleeps past the 0.5s deadline
+            code, out, err = run([("quick", "exit 3")], timeout=0.5)
+        self.assertNotIn("stalled", out)
+        self.assertEqual(3, code)
+
     def test_a_stalled_gate_is_stopped_once_named_and_never_started_again(self):
         """#1072: a gate past the budget fails the run with exit 124 and its name, and no retry starts it a second time."""
         marker = temp_dir(self) / "starts"
@@ -120,6 +127,27 @@ class QueueBypassGate(unittest.TestCase):
 
     def test_this_repo_has_no_bypass(self):
         self.assertEqual([], queue_bypass.check(REPO_ROOT))
+
+    def test_a_mention_of_the_queue_in_a_comment_or_an_env_value_does_not_queue_the_line(self):
+        for line in ("pytest  # validate_queue run", 'echo "validate_queue run"; pytest', "VALIDATE_QUEUE_SLOT=none pytest", "echo validate_queue; npm test"):
+            repo = self.repo_with({"scripts/nightly.sh": f"#!/usr/bin/env bash\n{line}\n"})
+            self.assertEqual(1, len(queue_bypass.check(repo)), line)
+
+    def test_a_quoted_or_variable_path_to_the_queue_passes(self):
+        for line in ('python3 "$validate_queue" run -- pytest', "python3 $validate_queue run -- pytest"):
+            repo = self.repo_with({"scripts/nightly.sh": f"#!/usr/bin/env bash\n{line}\n"})
+            self.assertEqual([], queue_bypass.check(repo), line)
+
+    def test_a_line_that_runs_the_queue_passes(self):
+        repo = self.repo_with({"scripts/nightly.sh": "#!/usr/bin/env bash\nvalidate-queue run -- pytest\n"})
+        self.assertEqual([], queue_bypass.check(repo))
+
+    def test_git_failing_fails_the_gate_and_names_the_cause(self):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            code = queue_bypass.main(["/nonexistent-olivercode-path"])
+        self.assertEqual(1, code)
+        self.assertIn("unknown", out.getvalue())
 
     def test_a_script_that_runs_the_suite_directly_is_named_with_the_entry_point(self):
         repo = self.repo_with({"scripts/nightly.sh": "#!/usr/bin/env bash\npython3 -m unittest discover -s tests\n"})

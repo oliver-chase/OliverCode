@@ -234,6 +234,27 @@ class TestFleetPrivate(ConformBase):
         self.assertIn("collaborator", row.detail)
         self.assertIn("Collaborators", row.fix)
 
+    def test_a_failed_collaborators_call_is_unknown_not_private(self):
+        def gh(args, **_):
+            failed = args[-1].endswith("/collaborators")
+            return subprocess.CompletedProcess(args, 1 if failed else 0, stdout="" if failed else json.dumps({"private": True}), stderr="HTTP 403")
+        with mock.patch.object(conform.local_config, "fleet_registry_path", return_value=self.fleet / "repo-profiles.json"):
+            row = conform.fleet_private(self.repo, offline=False, runner=gh)
+        self.assertEqual("skip", row.status)
+        self.assertIn("unknown", row.detail)
+        self.assertIn("collaborators", row.detail)
+
+    def test_a_signed_out_gh_is_unknown(self):
+        row = self.check(None, None)
+        self.assertIn("unknown", row.detail)
+
+    def test_an_unreadable_gh_answer_is_unknown(self):
+        def gh(args, **_):
+            return subprocess.CompletedProcess(args, 0, stdout="not json", stderr="")
+        with mock.patch.object(conform.local_config, "fleet_registry_path", return_value=self.fleet / "repo-profiles.json"):
+            row = conform.fleet_private(self.repo, offline=False, runner=gh)
+        self.assertIn("unknown", row.detail)
+
     def test_it_skips_offline_off_the_engine_and_when_gh_is_silent(self):
         self.assertEqual("skip", self.check({"private": True}, [], offline=True).status)
         self.assertEqual("skip", self.check(None, None).status)

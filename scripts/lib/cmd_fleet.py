@@ -107,7 +107,7 @@ def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None,
             touches, apply = _local_fix(oc_root, path, local, private, variant)
             result = commit_after(path, apply, f"Bring the repo in line with the OliverCode contract ({story})",
                                   "Fixes: " + ", ".join(sorted(local)) + " (olivercode conform --fix).", touches)
-            print(f"  [{'SKIP' if result.startswith('not committed') else 'FIX'}] {name}: {result}")
+            print(f"  [{'FIX' if result.startswith('committed') else 'SKIP'}] {name}: {result}")
         slug = _conform.repo_slug(path)
         owned = bool(((settings or {}).get(f"{slug[0]}/{slug[1]}".lower()) or {}).get("viewerCanAdminister")) if slug else False
         for row in (r for r in failing if _conform.fix_kind(r) != "local"):

@@ -7,6 +7,7 @@ Every check returns (passed, failed, skipped) for the launcher's tally.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -84,7 +85,7 @@ def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int
         err = (r.stderr or "").lower()
         if r.returncode == 0:
             passed += 1
-        elif "not found" in err or "does not exist" in err or "repository not found" in err:
+        elif re.search(r"repository\b.*\bnot found|does not exist", err):  # a bare "not found" is a missing tool or path, not a missing repo
             print(f"  [FAIL] {name}: origin does not exist ({url}) — this repo is not backed up")
             failed += 1
         elif "could not resolve host" in err or "network" in err or "timed out" in err:

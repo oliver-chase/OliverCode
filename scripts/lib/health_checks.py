@@ -573,12 +573,13 @@ def _check_sleep(runner=None, system: str | None = None) -> tuple[int, int, int]
 
 
 def _check_launcher(oc_root: Path, launcher: Path | None = None) -> tuple[int, int, int]:
-    """A launcher at /usr/local/bin/olivercode (or the path in OLIVERCODE_LAUNCHER) must reach a launcher that exists.
+    """A launcher at ~/.local/bin/olivercode, where install puts it (or the path in OLIVERCODE_LAUNCHER), must reach a launcher that exists.
 
     After the checkout moves, the link or wrapper keeps pointing at the old folder and every
     `olivercode` call dies with a bare "No such file". No launcher there is a skip.
     """
-    launcher = launcher or Path(os.environ.get("OLIVERCODE_LAUNCHER") or "/usr/local/bin/olivercode")
+    from lib.queue_shim import launcher_path
+    launcher = launcher or Path(os.environ.get("OLIVERCODE_LAUNCHER") or launcher_path())
     print("\nLauncher:")
     repair = f"ln -sf {oc_root / 'scripts' / 'olivercode'} {launcher}"
     if not launcher.is_symlink() and not launcher.exists():

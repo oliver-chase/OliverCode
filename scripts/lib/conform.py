@@ -266,16 +266,28 @@ def fleet_private(repo: Path, *, offline: bool, runner=subprocess.run, **_) -> R
     if offline or not (repo / ENGINE_GATE).is_file():
         return Row("fleet-private", "skip", "offline" if offline else "not an engine checkout")
     folder = local_config.fleet_registry_path().parent
-    url = subprocess.run(["git", "-C", str(folder), "remote", "get-url", "origin"], capture_output=True, text=True, timeout=15).stdout
+    try:
+        done = subprocess.run(["git", "-C", str(folder), "remote", "get-url", "origin"], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return Row("fleet-private", "skip", f"unknown: git could not read the remote of {folder}")
+    url = done.stdout if done.returncode == 0 else ""
     match = re.search(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?\s*$", url)
     if not match:
         return Row("fleet-private", "skip", f"no fleet repo with a GitHub remote at {folder}")
     owner, name = match.groups()
-    got = [runner(["gh", "api", f"repos/{owner}/{name}{tail}"], capture_output=True, text=True, timeout=30) for tail in ("", "/collaborators")]
+    try:
+        got = [runner(["gh", "api", f"repos/{owner}/{name}{tail}"], capture_output=True, text=True, timeout=30) for tail in ("", "/collaborators")]
+    except (OSError, subprocess.TimeoutExpired):
+        return Row("fleet-private", "skip", "unknown: gh did not answer")
     if got[0].returncode:
-        return Row("fleet-private", "skip", "gh cannot reach the fleet repo")
-    public = not json.loads(got[0].stdout).get("private")
-    others = [p["login"] for p in json.loads(got[1].stdout or "[]") if p["login"].lower() != owner.lower()] if not got[1].returncode else []
+        return Row("fleet-private", "skip", "unknown: gh cannot reach the fleet repo (signed out or offline)")
+    try:
+        public = not json.loads(got[0].stdout).get("private")
+        others = [p["login"] for p in json.loads(got[1].stdout or "[]") if p["login"].lower() != owner.lower()] if not got[1].returncode else []
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return Row("fleet-private", "skip", "unknown: gh answered with text that could not be read")
+    if got[1].returncode and not public:
+        return Row("fleet-private", "skip", "unknown: gh could not read the collaborators of the fleet repo")
     if public or others:
         return _fail("fleet-private", "the fleet repo " + " and ".join((["is public"] if public else []) + ([f"has {len(others)} collaborator(s) beyond the owner"] if others else [])),
                      "; ".join((["`gh repo edit %s/%s --visibility private --accept-visibility-change-consequences`" % (owner, name)] if public else []) + (["remove each collaborator in the repo settings under Collaborators"] if others else [])))

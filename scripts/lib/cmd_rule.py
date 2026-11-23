@@ -21,17 +21,27 @@ def _rules_file(repo: Path) -> Path:
     return repo / "owner-rules.json"
 
 
+class RulesUnreadable(Exception):
+    """owner-rules.json exists and cannot be read as a list of rules."""
+
+
 def load(repo: Path) -> list[dict]:
-    try:
-        data = json.loads(_rules_file(repo).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    """The rules in the repo's owner-rules.json. No file is no rules, and a file that cannot be read raises RulesUnreadable."""
+    path = _rules_file(repo)
+    if not path.exists():
         return []
-    return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RulesUnreadable(f"{path} could not be read ({exc})") from exc
+    if not isinstance(data, list):
+        raise RulesUnreadable(f"{path} must hold a list of rules")
+    return [r for r in data if isinstance(r, dict)]
 
 
 def add(repo: Path, rid: str, text: str, paths: str, forbid: str) -> None:
     re.compile(forbid)
-    rules = [r for r in load(repo) if r.get("id") != rid]
+    rules = [r for r in load(repo) if r.get("id") != rid]  # a malformed file raises here, so add never overwrites it
     rules.append({"id": rid, "text": text, "paths": [paths], "forbid": forbid})
     _rules_file(repo).write_text(json.dumps(rules, indent=2) + "\n", encoding="utf-8")
 
@@ -57,14 +67,22 @@ def command_rule(argv: list[str]) -> int:
     if sub == "add" and all(k in vals for k in ("--id", "--text", "--paths", "--forbid")):
         try:
             add(repo, vals["--id"], vals["--text"], vals["--paths"], vals["--forbid"])
+        except RulesUnreadable as exc:
+            print(f"Refused: {exc}. Nothing was written. Fix the file first.")
+            return 1
         except re.error as exc:
             print(f"Refused: the forbid pattern does not compile ({exc}). Nothing was written.")
             return 1
         print(f"Rule {vals['--id']} is in {_rules_file(repo)}. Run `olivercode rule check --repo {repo}` in the repo's validation.")
         return 0
     if sub == "check":
-        found = violations(repo)
-        print("\n".join(found) if found else f"{len(load(repo))} owner rule(s) hold.")
+        try:
+            found = violations(repo)
+            held = len(load(repo))
+        except RulesUnreadable as exc:
+            print(f"Unknown: {exc}, so no owner rule was checked. Fix the file.")
+            return 1
+        print("\n".join(found) if found else f"{held} owner rule(s) hold.")
         return 1 if found else 0
     print(USAGE)
     return 1
