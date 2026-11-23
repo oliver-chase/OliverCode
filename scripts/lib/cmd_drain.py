@@ -23,23 +23,26 @@ from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
 from lib.placement import config as placement_config
 
+sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))  # the board copy's reader lives beside the backlog skill (#1014)
+
 USAGE = "Usage: olivercode drain REPO [--parallel N]"
 RESTARTS = 3
 PARALLEL = 1  # builders one drain runs at once; more only when the owner asks with --parallel N (#979)
 LOAD_WAITS = 12
-FILE_TOKEN = re.compile(r"`([\w./-]+\.\w+|[\w.-]+/[\w./-]*)`")
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
-FILES_AREA = re.compile(r"files area:\s*(.+)", re.IGNORECASE)
 
 
-def story_files(issue: dict) -> set[str]:
-    """The paths a story names in backticks, which decide whether two stories can run side by side."""
-    return {m.rstrip("/") for m in FILE_TOKEN.findall(issue.get("body") or "")}
-
-
-def files_area(issue: dict) -> set[str]:
-    """The paths on a story's Files area line, bare or in backticks, for the check that finds a mate's work already on main (#988)."""
-    return {part.strip(" `.").rstrip("/") for line in FILES_AREA.findall(issue.get("body") or "") for part in line.split(",") if part.strip(" `.")}
+def skip_reason(issue: dict) -> str:
+    """Why drain does not start an open story now, or '' when it may. Only a Ready story with a board Size and a Files area is built (#1014)."""
+    if owner_gated(issue):
+        return "it is owner-gated"
+    if issue.get("status") != "Ready":
+        return f"its board Status is {issue.get('status') or 'empty'}, not Ready"
+    if not issue.get("size"):
+        return "it has no Size on the board"
+    if not intake.files_area(issue.get("body") or ""):
+        return "it names no Files area"
+    return ""
 
 
 def is_epic(issue: dict) -> bool:
@@ -67,7 +70,27 @@ class Io:
         return cmd_dispatch._default_branch(self.repo)
 
     def list_open(self) -> list[dict] | None:
-        return fetch_open(self.slug)
+        """The open stories, each with its board Status and Size attached, or None when either read fails (#1014)."""
+        issues = fetch_open(self.slug)
+        if issues is None:
+            return None
+        cards = self.board_cards()
+        if cards is None:
+            return None
+        for issue in issues:
+            card = cards.get(issue["number"], {})
+            issue["status"], issue["size"] = card.get("status") or "", card.get("size") or ""
+        return issues
+
+    def board_cards(self) -> dict[int, dict] | None:
+        """The board's card for each story number, from the shared board copy groom keeps. None when the board cannot be read, so drain stops
+        rather than treat an unread story as Ready (#1014)."""
+        import check_board_hygiene
+        try:
+            items = check_board_hygiene.load_items(backlog_config(self.repo))
+        except (Exception, SystemExit):
+            return None
+        return {(i.get("content") or {}).get("number"): i for i in items}
 
     def claimed(self, issue: dict) -> bool:
         """True when another session holds a live claim."""
@@ -131,7 +154,7 @@ class Io:
         """(sha, subject) of the newest commit on origin's default branch that names another story and changed a file in this story's Files area.
         It answers only for a story with no commit of its own, whose close was refused for want of one, so a mate left by a batched build is
         recognized and is not built again (#988)."""
-        n, area = issue["number"], files_area(issue)
+        n, area = issue["number"], intake.files_area(issue.get("body") or "")
         if not area:
             return None
         branch = self.branch()
@@ -148,7 +171,7 @@ class Io:
                 rows[-1][2].add(line.strip())
         if any(f"(#{n})" in subject for _, subject, _ in rows):
             return None
-        lead = next(((sha, subject) for sha, subject, files in rows if files & area and re.search(r"\(#\d+\)", subject)), None)
+        lead = next(((sha, subject) for sha, subject, files in rows if intake.overlaps(sorted(files), area) and re.search(r"\(#\d+\)", subject)), None)
         if lead is None or not issue.get("comments"):
             return None
         done = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments"])
@@ -312,7 +335,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     """Run the loop until no story is left to start. Returns 0 when it ended, 1 when GitHub could not be read."""
     running: dict = {}
     pool = ThreadPoolExecutor(max_workers=max(1, io.capacity()))
-    waits = 0
+    waits, reported = 0, set()
     try:
         while True:
             issues = io.list_open()
@@ -320,20 +343,27 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 say("Drain stopped: the open stories were not read.")
                 return 1
             skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()}
-            todo = sorted((i for i in issues if i["number"] not in skip and not is_epic(i) and not owner_gated(i)), key=rank)
-            busy = set().union(*(story_files(i) for i in running.values())) if running else set()
+            todo = []
+            for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
+                if why := skip_reason(issue):  # each skipped story is named once per drain, with the reason (#1014)
+                    if issue["number"] not in reported:
+                        reported.add(issue["number"])
+                        say(f"Skipped #{issue['number']}: {why}.")
+                    continue
+                todo.append(issue)
+            busy = [intake.files_area(i.get("body") or "") for i in running.values()]  # one overlap rule, shared with the planner (#1014)
             started = False
             for issue in todo:
                 if len(running) >= io.capacity():
                     break
-                files = story_files(issue)
-                if files & busy or io.claimed(issue):
+                areas = intake.files_area(issue.get("body") or "")
+                if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
                     continue
                 if not io.load_ok():
                     break
                 io.claim(issue["number"])
                 running[pool.submit(work_story, io, issue, state)] = issue
-                busy |= files
+                busy.append(areas)
                 started = True
             io.beat([i["number"] for i in running.values()])
             if not running:

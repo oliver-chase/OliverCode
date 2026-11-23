@@ -15,8 +15,11 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_drain  # noqa: E402
 
 
-def issue(n, body="", labels=(), title=None):
-    return {"number": n, "title": title or f"Story {n}", "body": body, "labels": [{"name": l} for l in labels], "comments": 0}
+def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
+    """A story Ready on the board and sized, with a Files area of its own unless the body names one (#1014)."""
+    if "Files area:" not in body:
+        body = f"{body}\nFiles area: scripts/story_{n}.py".lstrip()
+    return {"number": n, "title": title or f"Story {n}", "body": body, "labels": [{"name": l} for l in labels], "comments": 0, "status": status, "size": size}
 
 
 class FakeIo:
@@ -92,11 +95,28 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_never_two_builders_on_the_same_files(self):
-        io = FakeIo([issue(1, "Edit `scripts/lib/cmd_drain.py`."), issue(2, "Edit `scripts/lib/cmd_drain.py`."), issue(3, "Edit `scripts/lib/cmd_land.py`.")], cap=3)
+        io = FakeIo([issue(1, "Files area: scripts/lib/cmd_drain.py"), issue(2, "Files area: scripts/lib/cmd_drain.py"), issue(3, "Files area: scripts/lib/cmd_land.py")], cap=3)
         self.run_drain(io)
         self.assertEqual(sorted(io.closed), [1, 2, 3])
         for active in io.peak_overlap:
             self.assertFalse({1, 2} <= active)
+
+    def test_a_folder_and_a_file_inside_it_overlap_through_the_one_rule(self):
+        io = FakeIo([issue(1, "Files area: scripts/lib"), issue(2, "Files area: scripts/lib/cmd_drain.py")], cap=2)
+        self.run_drain(io)
+        self.assertEqual(sorted(io.closed), [1, 2])
+        for active in io.peak_overlap:
+            self.assertFalse({1, 2} <= active)
+
+    def test_only_ready_sized_stories_with_a_files_area_are_built_and_each_skip_is_named_once(self):
+        io = FakeIo([issue(1, status="Backlog"), issue(2, size=""), {**issue(3), "body": "Priority: P0"}, issue(4)], cap=4)
+        code, out, _ = self.run_drain(io)
+        self.assertEqual(io.started, [4])
+        self.assertIn("Skipped #1: its board Status is Backlog, not Ready.", out)
+        self.assertIn("Skipped #2: it has no Size on the board.", out)
+        self.assertIn("Skipped #3: it names no Files area.", out)
+        self.assertEqual(1, out.count("Skipped #1:"))
+        self.assertEqual(code, 0)
 
     def test_restarts_an_early_exit_then_lands(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "claude exited 1"}]})

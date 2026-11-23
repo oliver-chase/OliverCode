@@ -80,8 +80,9 @@ def size_of(story):
     return next((name for limit, name in SIZES if len(body) < limit), "XL")
 
 
-def filled(items, stories, fixes):
-    """Merge into `fixes` a Priority and Size for each open story that lacks one and a move to Ready for each unblocked Backlog story."""
+def filled(items, stories, fixes, hold=frozenset()):
+    """Merge into `fixes` a Priority and Size for each open story that lacks one and a move to Ready for each unblocked Backlog story that `hold` does not name,
+    so a flagged story waits in Backlog for the owner (#1014)."""
     import board_grooming
     by = {f["number"]: f for f in fixes}
     carded = {(i.get("content") or {}).get("number"): i for i in items}
@@ -95,7 +96,7 @@ def filled(items, stories, fixes):
         status = by.get(number, {}).get("fields", {}).get("status") or card.get("status") or "Backlog"
         epic = str(board_grooming.field(card, "work type") or "").lower() == "epic"
         held = HELD_LABELS & set(story.get("labels") or []) or BLOCKED.search(story.get("body") or "")
-        if status == "Backlog" and not epic and not held:
+        if status == "Backlog" and not epic and not held and number not in hold:
             want["status"] = "Ready"
         if want:
             by.setdefault(number, {"number": number, "fields": {}})["fields"].update(want)
@@ -176,6 +177,11 @@ def duplicates(items):
     return board_grooming.overlapping_titles(items, {"Backlog", "Ready", "In Progress"})
 
 
+def pair_numbers(pairs):
+    """The story numbers named in each duplicate line, so both stories of a pair stay in Backlog (#1014)."""
+    return {int(n) for pair in pairs for n in re.match(r"#(\d+) and #(\d+) share", pair).groups()}
+
+
 def last_ok(state=None, slugs=None):
     """The oldest success time across the boards (all of `slugs`, else every repo in the state), or None when one never succeeded."""
     state = load_state() if state is None else state
@@ -214,17 +220,18 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         states = {i["number"]: i["state"] for i in issues}
         items = check_board_hygiene.load_items(cfg)
         stories = open_stories(slug, run)
-        fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
-                                for n, k in check_board_hygiene.status_drift(items, states, slug)])
-        if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run):
-            cmd_owner.note("groom", f"{name}: {line}")
         from lib import intake
         found = intake.plan(list(stories.values()))
         flagged = [f"#{n} names no files area, rewrite it" for n in found["rewrite"]] + [f"#{n} {why}" for n, why in found["waits"].items()]
+        pairs = duplicates(items)
+        hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs)  # flagged stories stay in Backlog until the owner acts (#1014)
+        fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
+                                for n, k in check_board_hygiene.status_drift(items, states, slug)], hold)
+        if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run):
+            cmd_owner.note("groom", f"{name}: {line}")
         if flagged and json.dumps(flagged) != mine.get("split"):
             cmd_owner.note("groom", f"{name}: {len(flagged)} story(ies) need a rewrite before dispatch: " + "; ".join(flagged)[:600])
         mine["split"] = json.dumps(flagged)
-        pairs = duplicates(items)
         if pairs and json.dumps(pairs) != mine.get("dups"):
             cmd_owner.note("groom", f"{name}: {len(pairs)} possible duplicate pair(s): " + "; ".join(pairs)[:600])
         mine["dups"] = json.dumps(pairs)

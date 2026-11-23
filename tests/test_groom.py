@@ -88,6 +88,16 @@ class TestGroomFields(unittest.TestCase):
         self.assertNotIn("status", got[4])
         self.assertNotIn("status", got[5])
 
+    def test_a_flagged_story_stays_in_backlog_while_an_unflagged_one_is_readied(self):
+        items = [self.card(1), self.card(2)]
+        stories = {1: {"title": "Add a thing", "body": "Priority: P1. Size: M."}, 2: {"title": "Rewrite me", "body": "Priority: P1. Size: M."}}
+        got = {f["number"]: f["fields"] for f in cmd_groom.filled(items, stories, [], hold={2})}
+        self.assertEqual(got[1]["status"], "Ready")
+        self.assertNotIn("status", got.get(2, {}))
+
+    def test_both_stories_of_a_duplicate_pair_are_held(self):
+        self.assertEqual({12, 34}, cmd_groom.pair_numbers(["#12 and #34 share add, thing: possible duplicate or superseded pair, close one or link them"]))
+
     def test_a_card_that_is_missing_is_added_with_its_fields_in_one_fix(self):
         got = cmd_groom.filled([], {7: {"title": "bug: it fails", "body": "x" * 1500}}, drift([], {7: "OPEN"}))
         self.assertEqual(got, [{"number": 7, "fields": {"status": "Ready", "priority": "P1", "size": "M"}}])
