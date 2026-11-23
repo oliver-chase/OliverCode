@@ -74,7 +74,7 @@ class QueueRobustnessTest(unittest.TestCase):
         patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
         patcher.start()
         self.addCleanup(patcher.stop)
-        for name in ("OLIVERCODE_VALIDATE_SLOTS", "OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT", "OLIVERCODE_VALIDATE_HARD_CAP", "OLIVERCODE_VALIDATE_WAIT"):
+        for name in ("OLIVERCODE_VALIDATE_SLOTS", "OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT", "OLIVERCODE_VALIDATE_HARD_CAP", "OLIVERCODE_VALIDATE_WAIT"):  # set by an old shell, they must change nothing
             os.environ.pop(name, None)
         validate_queue._TOLD.clear()
 
@@ -86,6 +86,15 @@ class QueueRobustnessTest(unittest.TestCase):
         with mock.patch("sys.stderr", err):
             result = fn()
         return result, err.getvalue()
+
+    def test_the_wait_and_the_hard_cap_are_fixed_and_no_variable_changes_them(self):
+        """#1072: nothing sets these, so they are constants."""
+        self.assertFalse(hasattr(validate_queue, "wait_seconds") or hasattr(validate_queue, "hard_cap_seconds"))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_HARD_CAP": "1"}):
+            folder = validate_queue.slots_dir()
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "slot-1.json").write_text(json.dumps({"pid": os.getpid(), "started": time.time() - 60}))
+            self.assertEqual([], validate_queue.reap())
 
     def test_a_fresh_install_with_no_state_folder_takes_and_frees_a_slot(self):
         self.assertFalse(self.home.exists() and any(self.home.iterdir()))

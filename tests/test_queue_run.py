@@ -164,8 +164,8 @@ class TestRenderQueue(unittest.TestCase):
         self.assertNotEqual(validate_queue.slots_dir("render"), validate_queue.slots_dir())
         self.assertEqual("render-slots", validate_queue.slots_dir("render").name)
         self.assertEqual(1, validate_queue.slot_count("render"))
-        os.environ["OLIVERCODE_RENDER_SLOTS"] = "3"
-        self.assertEqual(3, validate_queue.slot_count("render"))
+        os.environ["OLIVERCODE_RENDER_SLOTS"] = "3"  # #1072: the render queue is one slot, with no setting to change it
+        self.assertEqual(1, validate_queue.slot_count("render"))
 
     def test_a_second_render_run_waits_while_one_holds_the_slot(self):
         first = validate_queue.acquire(os.getpid(), "a", queue="render")

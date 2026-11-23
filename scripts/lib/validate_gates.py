@@ -2,7 +2,7 @@
 """Run validate.sh's independent gates together, report each as it starts and finishes, replay each one's output in order, and
 hold the run to a time budget (#757, #776).
 
-    validate_gates.py [--timeout SECONDS] [--retries N] [--max-gates N] NAME=COMMAND...
+    validate_gates.py [--timeout SECONDS] [--max-gates N] NAME=COMMAND...
 
 Each argument is a gate: a name, then `=`, then a shell command. Up to OLIVERCODE_VALIDATE_GATES gates run at once (default: the
 core count), each writing to its own file, and the rest start as running gates finish. A line goes to stderr the moment a gate
@@ -14,7 +14,6 @@ The budget is OLIVERCODE_VALIDATE_TIMEOUT seconds. Unset, it is BASE_BUDGET seco
 one-minute load average over the core count, at least 1 and at most MAX_SCALE). BASE_BUDGET comes from measured runs with headroom
 (the measurements are on #776). A run past its budget stops every gate still running with its whole process group, and fails
 with exit 124 and a line that names each such gate, its elapsed seconds and the load, so the builder reruns that one gate.
-OLIVERCODE_VALIDATE_RETRIES (default 0) starts the stopped gates again with a fresh budget, and finished gates keep their result.
 No GNU `timeout` is involved.
 """
 
@@ -59,15 +58,6 @@ def default_timeout() -> float:
     return BASE_BUDGET * min(MAX_SCALE, max(1.0, _load() / (os.cpu_count() or 1)))
 
 
-def default_retries() -> int:
-    raw = os.environ.get("OLIVERCODE_VALIDATE_RETRIES", "")
-    try:
-        return max(0, int(raw)) if raw != "" else 0
-    except ValueError:
-        print(f"validate: OLIVERCODE_VALIDATE_RETRIES={raw!r} is not a whole number, using 0", file=sys.stderr)
-        return 0
-
-
 def default_max_gates() -> int:
     """How many gates run at once: OLIVERCODE_VALIDATE_GATES, or the core count."""
     return max(1, int(_number("OLIVERCODE_VALIDATE_GATES", os.cpu_count() or 1)))
@@ -99,11 +89,10 @@ def _say(err, line: str) -> None:
     print(line, file=err, flush=True)
 
 
-def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, retries: int | None = None, out=sys.stdout,
+def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sys.stdout,
               err=sys.stderr, max_gates: int | None = None) -> int:
     """Run (name, command) gates, at most max_gates at once, and replay them in order. Returns the run's exit code."""
     timeout = default_timeout() if timeout is None else timeout
-    retries = default_retries() if retries is None else retries
     max_gates = max(1, default_max_gates() if max_gates is None else max_gates)
     env = {**os.environ}
     env.setdefault("VALIDATE_QUEUE_SLOT", "none")  # a gate is part of this run, so it takes no slot of its own
@@ -113,46 +102,38 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, retrie
     run_began = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="olivercode-gates-") as tmp:
         logs = {name: Path(tmp) / f"{i}-{name}.log" for i, (name, _) in enumerate(gates)}
-        pending = [name for name, _ in gates]
         commands = dict(gates)
-        for attempt in range(retries + 1):
-            waiting, procs, started = list(pending), {}, {}
-            deadline = time.monotonic() + timeout
-            while (waiting or procs) and time.monotonic() < deadline:
-                for name in [n for n, p in procs.items() if p.poll() is not None]:
-                    codes[name] = procs.pop(name).returncode
-                    took[name] = took.get(name, 0.0) + time.monotonic() - started[name]
-                    word = "passed" if codes[name] == 0 else f"failed (exit {codes[name]})"
-                    _say(err, f"{PROGRESS}'{name}' {word} in {took[name]:.0f}s ===")
-                while waiting and len(procs) < max_gates:
-                    name = waiting.pop(0)
-                    procs[name], started[name] = _start(commands[name], logs[name], env), time.monotonic()
-                    _say(err, f"{PROGRESS}'{name}' started ({len(procs)} running, {len(waiting)} waiting) ===")
-                if procs:
-                    time.sleep(0.1)
-            now = time.monotonic()
-            for proc in procs.values():
-                _kill(proc)
-            pending = list(procs) + waiting
-            if not pending:
-                break
-            load, cores = _load(), os.cpu_count() or 1
-            for name in procs:
-                took[name] = took.get(name, 0.0) + now - started[name]
-                _say(err, f"{PROGRESS}'{name}' still running after {now - started[name]:.0f}s at the {timeout:.0f}s budget "
-                          f"(OLIVERCODE_VALIDATE_TIMEOUT), load {load:.1f} on {cores} cores; stopped. "
-                          f"Rerun it alone: bash scripts/validate.sh --gate {name} ===")
-            if waiting:
-                _say(err, f"=== validate: never started before the budget: {', '.join(waiting)} ===")
-            if attempt < retries:
-                _say(err, f"=== validate: running {', '.join(pending)} again ({attempt + 1} of {retries} retry) ===")
-        stalled = pending
+        waiting, procs, started = [name for name, _ in gates], {}, {}
+        deadline = time.monotonic() + timeout
+        while (waiting or procs) and time.monotonic() < deadline:
+            for name in [n for n, p in procs.items() if p.poll() is not None]:
+                codes[name] = procs.pop(name).returncode
+                took[name] = took.get(name, 0.0) + time.monotonic() - started[name]
+                word = "passed" if codes[name] == 0 else f"failed (exit {codes[name]})"
+                _say(err, f"{PROGRESS}'{name}' {word} in {took[name]:.0f}s ===")
+            while waiting and len(procs) < max_gates:
+                name = waiting.pop(0)
+                procs[name], started[name] = _start(commands[name], logs[name], env), time.monotonic()
+                _say(err, f"{PROGRESS}'{name}' started ({len(procs)} running, {len(waiting)} waiting) ===")
+            if procs:
+                time.sleep(0.1)
+        now = time.monotonic()
+        for proc in procs.values():
+            _kill(proc)
+        stalled = list(procs) + waiting
+        load, cores = _load(), os.cpu_count() or 1
+        for name in procs:
+            took[name] = took.get(name, 0.0) + now - started[name]
+            _say(err, f"{PROGRESS}'{name}' still running after {now - started[name]:.0f}s at the {timeout:.0f}s budget "
+                      f"(OLIVERCODE_VALIDATE_TIMEOUT), load {load:.1f} on {cores} cores; stopped. "
+                      f"Rerun it alone: bash scripts/validate.sh --gate {name} ===")
+        if waiting:
+            _say(err, f"=== validate: never started before the budget: {', '.join(waiting)} ===")
         for name, _ in gates:
             if logs[name].exists():  # a gate the budget never reached has no log
                 out.write(logs[name].read_text(encoding="utf-8", errors="replace"))
             if name in stalled:
-                print(f"=== validate: stalled gate '{name}': no result within the {timeout:.0f}s budget on each of {retries + 1} "
-                      f"tries ===", file=out)
+                print(f"=== validate: stalled gate '{name}': no result within the {timeout:.0f}s budget ===", file=out)
     print(f"validate: gates took {time.monotonic() - run_began:.0f}s in all, at most {max_gates} at once, load {_load():.1f} "
           f"on {os.cpu_count() or 1} cores. Gate seconds: "
           + ", ".join(f"{n} {took[n]:.0f}" for n, _ in gates if n in took), file=err)
@@ -163,14 +144,12 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, retrie
 
 
 def main(argv: list[str]) -> int:
-    timeout = retries = max_gates = None
+    timeout = max_gates = None
     gates: list[tuple[str, str]] = []
     it = iter(argv)
     for arg in it:
         if arg == "--timeout":
             timeout = float(next(it))
-        elif arg == "--retries":
-            retries = int(next(it))
         elif arg == "--max-gates":
             max_gates = int(next(it))
         elif "=" in arg:
@@ -182,7 +161,7 @@ def main(argv: list[str]) -> int:
     if not gates:
         print(__doc__.strip())
         return 2
-    return run_gates(gates, timeout, retries, max_gates=max_gates)
+    return run_gates(gates, timeout, max_gates=max_gates)
 
 
 if __name__ == "__main__":

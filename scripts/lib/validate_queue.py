@@ -17,9 +17,8 @@ the queue never blocks validation. A damaged or old state file is repaired with 
 A second queue holds ffmpeg and render commands to one at a time under ~/.olivercode/render-slots, and `run --render` runs
 the command under `nice -n 10`.
 
-OLIVERCODE_VALIDATE_SLOTS sets N (default: an eighth of this machine's cores, at least 1, measured on #776). OLIVERCODE_RENDER_SLOTS sets
-the render N (default 1). OLIVERCODE_VALIDATE_WAIT sets the seconds a run waits for a slot, and OLIVERCODE_VALIDATE_HARD_CAP
-the age in seconds past which a slot is reaped even when its holder lives. OLIVERCODE_HOME moves the state folder.
+OLIVERCODE_VALIDATE_SLOTS sets N (default: an eighth of this machine's cores, at least 1, measured on #776). The render queue is
+one slot. OLIVERCODE_HOME moves the state folder.
 """
 
 from __future__ import annotations
@@ -40,7 +39,7 @@ RENDER_NICE = "10"
 QUEUES = {
     "validate": {"folder": "validate-slots", "count_env": "OLIVERCODE_VALIDATE_SLOTS", "default": None,
                  "slot_env": "OLIVERCODE_VALIDATE_SLOT", "alias_env": "VALIDATE_QUEUE_SLOT", "title": "Validation"},
-    "render": {"folder": "render-slots", "count_env": "OLIVERCODE_RENDER_SLOTS", "default": 1,
+    "render": {"folder": "render-slots", "count_env": None, "default": 1,
                "slot_env": "OLIVERCODE_RENDER_SLOT", "title": "Render"},
 }
 
@@ -73,31 +72,9 @@ def default_slots(queue: str = "validate") -> int:
     return fixed if fixed else max(1, cores() // 8)
 
 
-def _env_number(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    if raw is None or raw == "":
-        return default
-    try:
-        value = float(raw)
-        if value <= 0:
-            raise ValueError
-        return value
-    except ValueError:
-        _note(f"queue: {name}={raw!r} is not a positive number, using {default:g}")
-        return default
-
-
-def wait_seconds() -> float:
-    return _env_number("OLIVERCODE_VALIDATE_WAIT", WAIT_SECONDS)
-
-
-def hard_cap_seconds() -> float:
-    return _env_number("OLIVERCODE_VALIDATE_HARD_CAP", HARD_CAP_SECONDS)
-
-
 def slot_count(queue: str = "validate") -> int:
     q = QUEUES[queue]
-    raw = os.environ.get(q["count_env"])
+    raw = os.environ.get(q["count_env"]) if q["count_env"] else None
     if raw is None or raw == "":
         return default_slots(queue)
     try:
@@ -179,8 +156,8 @@ def reap(now: float | None = None, queue: str = "validate") -> list[str]:
                 except (TypeError, ValueError):
                     age = 0.0
                     why = "its start time is not a number"
-                if why is None and age > hard_cap_seconds():
-                    why = f"it is {int(age / 60)} min old, past the {int(hard_cap_seconds() / 60)} min hard cap"
+                if why is None and age > HARD_CAP_SECONDS:
+                    why = f"it is {int(age / 60)} min old, past the {HARD_CAP_SECONDS // 60} min hard cap"
         if why:
             path.unlink(missing_ok=True)
             reaped.append(path.name)
@@ -216,7 +193,7 @@ def try_acquire(pid: int, label: str = "", queue: str = "validate") -> Path | No
 
 def acquire(pid: int, label: str = "", wait: float | None = None, poll: float = 2.0, say=print, queue: str = "validate") -> Path | None:
     """Block until a slot is free. Returns the slot, or None after `wait` seconds so the run goes ahead."""
-    wait = wait_seconds() if wait is None else wait
+    wait = WAIT_SECONDS if wait is None else wait
     deadline = time.time() + wait
     told = False
     while True:
