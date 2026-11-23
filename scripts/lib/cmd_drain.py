@@ -11,8 +11,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
+import threading
 import time
 from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -421,11 +423,29 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     return False, tokens
 
 
+def stop_builders(io, running: dict) -> None:
+    """Put each story this run was building back on Ready and release its claim, so a stopped run strands no claim (#1076). Each effect is tried on its own."""
+    for issue in running.values():
+        n = issue["number"]
+        for effect in (lambda: io.keep_open(n, "drain was stopped before the builder landed"), lambda: io.release(n)):
+            try:
+                effect()
+            except Exception:
+                pass
+
+
+def _stop_on_term(signum, frame):
+    """SIGTERM ends a run the same way Ctrl-C does, so the run releases its claims and lock on the way out (#1076)."""
+    raise KeyboardInterrupt
+
+
 def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
-    """Run the loop until no story is left to start. Returns 0 when it ended, 1 when GitHub could not be read."""
+    """Run the loop until no story is left to start. Returns 0 when it ended, 1 when GitHub could not be read. A stop (Ctrl-C or SIGTERM) releases
+    the claims of the stories it was building and returns to Ready without waiting for their builders (#1076)."""
     running: dict = {}
     pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
     waits, reported = 0, set()
+    stopped = False
     try:
         while True:
             issues = io.list_open()
@@ -482,8 +502,13 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 state["tokens"] += used
                 (state["closed"] if closed else state["blocked"]).append(issue["number"])
             io.beat([i["number"] for i in running.values()])
+    except BaseException:  # Ctrl-C or SIGTERM (#1076): the stories in flight go back to Ready and their claims go, then the stop goes on
+        stopped = True
+        stop_builders(io, running)
+        say(f"Drain stopped: {len(running)} building stories released to Ready. Their builders are not waited for.")
+        raise
     finally:
-        pool.shutdown(wait=True)
+        pool.shutdown(wait=not stopped)
     say(f"Drain done: {len(state['closed'])} stories closed, {len(state['blocked'])} blocked, {state['sessions']} sessions, {state['tokens']:,} tokens.")
     return 0
 
@@ -505,6 +530,17 @@ def status_page() -> str:
         return ""
 
 
+def local_claims(slug: str) -> list[int]:
+    """The story numbers of `slug` that hold a local claim. Only a runner writes one, so when a run takes the repo's lock, each is a claim its
+    process left behind (#1076)."""
+    try:
+        claims = json.loads((gh_budget.home() / "dispatch-claims.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    prefix = f"{slug}#"
+    return sorted(int(key[len(prefix):]) for key in claims if key.startswith(prefix) and key[len(prefix):].isdigit())
+
+
 def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) -> bool:
     """Take the repo's run lock, or join the run that holds it (#992). True when this process now holds the run. When another run is live, `want` is
     appended to its queue, the holder is named and nothing starts. A dead holder's lock is taken over, its claims are released and the queue resumes from the board."""
@@ -516,12 +552,15 @@ def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) 
         return False
     if taken:
         say(f"Took over the run lock for {slug} from {taken.get('who')}, because {why}. The queue resumes from the board.")
-        for n in taken.get("building") or []:
-            io.release(n)
+    stale = sorted(set(taken.get("building") or []) | set(local_claims(slug)))  # no live run holds the repo, so every claim it left is stale (#1076)
+    if stale:
+        say(f"Released the claims no run holds: {', '.join(f'#{n}' for n in stale)}.")
+    for n in stale:
+        io.release(n)
     return True
 
 
-def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
+def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit) -> int:
     """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055). One run holds a repo at a time (#992)."""
     args, parallel, rest = list(argv), None, []
     while args:
@@ -543,14 +582,25 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
     cfg = backlog_config(repo)
     slug = cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)
     io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
-    if not take_run(io, slug, f"drain {repo.name}"):
-        return 0
-    state = new_state()
+    on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
+    previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
+    code = 0
     try:
+        if not take_run(io, slug, f"drain {repo.name}"):
+            return 0
+        state = new_state()
         with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
             code = drain(io, state, sleep=sleep)
             while code == 0 and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
                 code = drain(io, state, sleep=sleep)
-        return code
+    except KeyboardInterrupt:  # drain has released its claims and said so; the lock goes in the finally below (#1076)
+        code = 130
     finally:
         run_lock.release(slug, pid)
+        if on_main:
+            signal.signal(signal.SIGTERM, previous)
+    if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        exit_now(130)
+    return code

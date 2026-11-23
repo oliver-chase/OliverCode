@@ -191,6 +191,20 @@ class TestDigest(unittest.TestCase):
         self.assertIn("the runner has stalled on #7", lines[-1])
         self.assertIn("olivercode dispatch 7", lines[-1])
 
+    def test_a_stalled_claim_while_a_run_holds_the_repo_names_the_kill_that_releases_it_and_never_dispatch(self):
+        """#1076: dispatch would only join the holding run's queue, so the warning names that run's kill instead."""
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 3600}}
+        log = [{"story": "story-7", "round": 1, "at": "2026-11-21T22:00:00Z"}]
+        lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 1, "", None, {"pid": 4242, "who": "drain r"})
+        self.assertIn("#7 holds a claim by drain with no progress for 60 minutes", lines[-1])
+        self.assertIn("`kill 4242`", lines[-1])
+        self.assertNotIn("dispatch", lines[-1])
+
+    def test_a_last_run_that_stopped_badly_names_no_dispatch_while_a_run_holds_the_repo(self):
+        log = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}]
+        lines = cmd_status.activity(NOW.timestamp(), {}, log, True, 2, "", None, {"pid": 4242, "who": "drain r"})
+        self.assertEqual("Warning: the last run on story-5 stopped with max_turns.", lines[-1])
+
     def test_a_claim_without_a_live_runner_names_the_stale_claim_and_its_release(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
         lines = cmd_status.activity(NOW.timestamp(), claims, [], False, 1, "", None)

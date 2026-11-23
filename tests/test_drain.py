@@ -2,9 +2,11 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -12,7 +14,7 @@ from unittest import mock
 from _support import REPO_ROOT, git, quiet, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_drain  # noqa: E402
+from lib import cmd_drain, run_lock  # noqa: E402
 
 
 def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
@@ -610,6 +612,69 @@ class TestRealIo(unittest.TestCase):
         with mock.patch.object(cmd_drain.cmd_dispatch.gh_budget, "refusal", return_value="held"):
             self.io.release(7)
         self.assertEqual(cmd_drain.cmd_dispatch._local_claim("o/r", 7, cmd_drain.time.time()), "")
+
+
+class Held(FakeIo):
+    """A FakeIo whose builders wait on a gate, so a stop finds every story still in flight (#1076)."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.gate = threading.Event()
+
+    def build(self, i, wt, note):
+        self.gate.wait(5)
+        return super().build(i, wt, note)
+
+
+class StoppedRun(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_stop_releases_the_stories_in_flight_and_returns_them_to_ready(self):
+        """#1076: Ctrl-C or SIGTERM releases the claim on every story the run was building and does not wait for their builders."""
+        io = Held([issue(1), issue(2)], cap=2)
+        self.addCleanup(io.gate.set)
+        with mock.patch.object(cmd_drain, "wait", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
+            cmd_drain.drain(io, state(), sleep=lambda s: None, say=lambda t: None)
+        self.assertEqual(([1, 2], [1, 2]), (sorted(io.kept), sorted(io.released)))
+
+    def test_sigterm_releases_the_run_lock_and_the_handler_is_put_back(self):
+        """#1076: SIGTERM raises inside the run, so the lock goes and the process ends with 130 instead of being killed mid-claim."""
+        def stopped(io, st, sleep=None):
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(5)  # the handler raises before this returns
+            return 0
+
+        ended = []
+        previous = signal.getsignal(signal.SIGTERM)
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
+                mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", side_effect=stopped):
+            code, _ = quiet(cmd_drain.command_drain, ["r"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
+        self.assertEqual([130], ended)
+        self.assertFalse(run_lock.path("o/r").exists())
+        self.assertEqual(previous, signal.getsignal(signal.SIGTERM))
+
+    def test_a_new_run_releases_the_local_claims_no_live_run_holds_and_leaves_other_repos_alone(self):
+        """#1076: a claim a stopped run left behind is released when the next run takes the lock, so the story is eligible in its normal order."""
+        now = time.time()
+        cmd_drain.cmd_dispatch._local_claim("o/r", 7, now, write="drain")
+        cmd_drain.cmd_dispatch._local_claim("o/s", 8, now, write="drain")
+        io = FakeIo([])
+        out = []
+        with mock.patch.object(cmd_drain, "status_page", return_value=""):
+            self.assertTrue(cmd_drain.take_run(io, "o/r", "drain r", say=out.append))
+        self.assertEqual([7], io.released)
+        self.assertIn("Released the claims no run holds: #7", out[-1])
+        self.assertEqual("held by drain", cmd_drain.cmd_dispatch._local_claim("o/s", 8, now))
+
+    def test_a_finished_run_returns_its_code_without_ending_the_process(self):
+        """#1076: only a stopped run ends the process, so a run that finishes returns to its caller."""
+        ended = []
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
+                mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", return_value=0):
+            code, _ = quiet(cmd_drain.command_drain, ["r"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
+        self.assertEqual((0, []), (code, ended))
 
 
 if __name__ == "__main__":

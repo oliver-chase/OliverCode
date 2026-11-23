@@ -113,9 +113,20 @@ def next_ready(path: Path) -> str:
     return ""
 
 
-def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, landed_row: dict | None) -> list[str]:
+def stall_line(n: str, mine: dict, minutes: int, holder: dict | None) -> str:
+    """The warning for a claim with no progress for STALL_MINUTES. While a run holds the repo, the warning names that run's process and the kill that
+    stops it, which releases the claim (#1076). Dispatch would only join that run's queue, so it is named only when no run holds the repo."""
+    if not holder:
+        return f"Warning: the runner has stalled on #{n}. Nothing has moved for {minutes} minutes. Resume it with `olivercode dispatch {n}`."
+    pid = holder.get("pid")
+    return (f"Warning: #{n} holds a claim by {mine.get('agent')} with no progress for {minutes} minutes, while process {pid} holds the repo. "
+            f"Stop that run with `kill {pid}`: its SIGTERM releases the claim and the run lock, and the story goes back to Ready. Then `olivercode drain REPO` builds it again.")
+
+
+def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, landed_row: dict | None, holder: dict | None = None) -> list[str]:
     """The live status lines: one line for each story building (its minutes, its round), or the idle or running line, then the last landing and the next
-    Ready story, then a warning for a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). It reads only what it is given."""
+    Ready story, then a warning for a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). `holder` is the live run
+    that holds the repo, if any (#1076). It reads only what it is given."""
     lines, warnings = [], []
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
@@ -125,8 +136,7 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
             warnings.append(f"Warning: #{n} holds a claim by {mine.get('agent')} but no drain or dispatch process is running. The claim expires by itself "
                             f"after {log_action.CLAIM_HOURS} hours, or delete its entry in {claims_path()} to release it now.")
         elif (now - progress) / 60 > STALL_MINUTES:
-            warnings.append(f"Warning: the runner has stalled on #{n}. Nothing has moved for {int((now - progress) // 60)} minutes. "
-                            f"Resume it with `olivercode dispatch {n}`.")
+            warnings.append(stall_line(n, mine, int((now - progress) // 60), holder))
         else:
             lines.append(f"Building #{n} for {int((now - float(mine.get('at', 0))) // 60)} minutes on round {rows[-1].get('round', 0) if rows else 0}.")
     if not lines:
@@ -139,7 +149,8 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
     lines.append(last + (f" Next Ready: {ready}." if ready else ""))
     if log and log[-1].get("stop", "") not in CLEAN_STOPS:
         story = str(log[-1].get("story", ""))
-        warnings.append(f"Warning: the last run on {story} stopped with {log[-1].get('stop')}. Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`.")
+        resume = "" if holder else f" Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`."
+        warnings.append(f"Warning: the last run on {story} stopped with {log[-1].get('stop')}.{resume}")
     return lines + warnings
 
 
@@ -154,15 +165,17 @@ def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
     return f"Tokens per closed story: {sum(counted) // len(counted):,} across {len(counted)} stories closed in the last {DAYS} days."
 
 
-def live_lines(now: datetime, open_now: int, rows: list[dict]) -> list[str]:
-    """The status lines for this machine right now, read from the claims, the run log, the process table and the digest."""
+def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -> list[str]:
+    """The status lines for this machine right now, read from the claims, the run log, the process table, the run lock and the digest."""
     stamp = now.timestamp()
     log = run_log()
     from lib import gated
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), (landed(rows) or [None])[0])
+    holder = run_lock.active(slug, stamp) if slug else {}
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()),
+                                                                           (landed(rows) or [None])[0], holder)
 
 
-def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=live_lines,
+def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
         waiting=lambda: waiting_lines()) -> int:
     if not slug:
         out("Error: this repo has no GitHub origin.")
@@ -178,7 +191,7 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
         out(f"Error: the issues of {slug} were not read.")
         return 1
     out(f"{slug}: " + summary(open_now, rows, now))
-    for line in live(now, open_now, rows):
+    for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
         out(line)
     steps = waiting()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
     if steps:
