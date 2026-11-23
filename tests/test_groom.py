@@ -160,7 +160,7 @@ class TestGroomRunsTheSweepsChecks(unittest.TestCase):
         config = Path("/x/r/docs/backlog-config.json")
         with mock.patch.object(cmd_groom, "groom_board", return_value=True), mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), \
                 mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), \
-                mock.patch("lib.cmd_sweep.boards", return_value=[("R", config)]), mock.patch("lib.cmd_sweep.repos", return_value=[("R", "o/r", 3)]), \
+                mock.patch.object(cmd_groom, "boards", return_value=[("R", config)]), mock.patch("lib.cmd_sweep.repos", return_value=[("R", "o/r", 3)]), \
                 mock.patch("lib.intake.prevention", return_value=[]) as prevention, mock.patch("lib.intake.run", return_value=1) as intake_run:
             self.assertEqual(1, cmd_groom.command_groom(["--all"]))
         prevention.assert_called_once_with("o/r", 3)
