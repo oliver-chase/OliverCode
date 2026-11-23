@@ -48,7 +48,7 @@ Working rules that hold in every session:
 - `gh_watch.py` (`PostToolUse`) records a GitHub rate limit seen in command output, and `lesson_capture.py` and `error_paste.py` (`UserPromptSubmit`) record a correction phrase for `olivercode lesson add`, keep each owner message that names a story for that story's builder and file a pasted error as a story
 - `early-stop-guard.py` and `wip_save.py` (`Stop`) send a turn back to work when it promises work it did not do, and snapshot uncommitted work into `refs/wip/` at most every 10 minutes (`olivercode wip list|restore`)
 
-The owner works in one thread. `olivercode dispatch N` and `olivercode drain REPO` build each story in one fresh headless session, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
+The owner works in one thread. `olivercode dispatch N --run` and `olivercode drain REPO` build each story in one fresh headless session, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
 
 ### Prepared owner steps
 
@@ -118,3 +118,7 @@ Work ends landed or discarded and never parks on a branch. Before a session stop
 ### CLAUDE.md
 
 `CLAUDE.md` loads into every session, so every word in it is paid on every turn. It holds only the rules a session must follow from any folder, each as a short paragraph or bullet that says what to do and when. The detail behind a rule lives in the document it names. A repo's own `CLAUDE.md` holds only what is true of that repo.
+
+In a `CLAUDE.md`, a bare path means the repo the session is in, and no machine path is hardcoded. The `audit` skill runs only when the owner names it.
+
+The memory rule's detail is here. A fresh clone has no `$OC/.claude-optimization/memory/` folder and uses Claude Code's own memory. `scripts/hooks/memory_guard.py` refuses any write that puts a rule into the local memory folder, and it refuses every write to auto-memory under `~/.claude/projects/`.

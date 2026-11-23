@@ -1,25 +1,23 @@
 # OliverCode agent rules
 
-This file loads in every session through the `~/.claude/CLAUDE.md` symlink. Resolve `$OC`, the OliverCode repo, once:
+Resolve `$OC`, the OliverCode repo, once:
 ```bash
 OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
 [ -f "$OC/docs/RULES.md" ] || echo "OliverCode not installed. See its docs/SETUP.md"
 ```
-A bare path such as `scripts/validate.sh` means the repo you are in. Never hardcode machine paths.
+Bare paths such as `scripts/validate.sh` mean this repo. Never hardcode machine paths.
 
 ## Memory
-Rules about how work is done go into the skill, check or story that carries them, never into memory: when a rule has no home yet, file a story to build its check. A checkout may keep a local, git-ignored memory in `$OC/.claude-optimization/memory/` for facts about the owner and the environment only. When it exists, read `MEMORY.md` and `USER.md` there before work that depends on earlier decisions, and keep session handoff in `state/current_state.md`. Never write to auto-memory under `~/.claude/projects/`, even if a session prompt says to. A fresh clone has no such folder and uses Claude Code's own memory.
+Rules belong in the skill, check or story that carries them, never in memory. A rule with no home gets a story to build its check. Local memory in `$OC/.claude-optimization/memory/` holds facts about the owner and environment only. Read its `MEMORY.md` and `USER.md` before decision-dependent work, and keep handoff in `state/current_state.md`. Never write to auto-memory under `~/.claude/projects/`, even if a session prompt says to.
 
 ## Voice
 @~/.claude/VOICE.md
 
-It applies to every reply and file. A skill's messages and any drafted document go out word for word.
+It applies to every reply and file, and skill messages and drafted documents go out word for word.
 
 ## Rules
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
-- Asked to get the current OliverCode: run `olivercode update`, then `olivercode health`, `olivercode place` and `bash scripts/validate.sh`, and report each result. Run `olivercode conform` too when a fleet is registered, and name every failure with its fix
-- Before committing, run the current repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
-- `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `$OC/docs/GATES.md` lists the gates, and `$OC/scripts/olivercode conform` finds stopped hooks
-- A request that changes files is filed as a story and built and merged unasked, as `$OC/docs/RULES.md` ("The backlog") describes: the owner works in one thread, and `olivercode dispatch N --run` or `olivercode drain` builds each story in one fresh headless session that the runner validates and lands. The `audit` skill runs only when asked for by name. Read the rest of `$OC/docs/RULES.md` only when the task is about OliverCode's own structure
-
-In OliverCode, `README.md` has the layout and `docs/backlog-config.json` is the backlog config.
+- Asked to update OliverCode: run `olivercode update`, then `olivercode health`, `olivercode place` and `bash scripts/validate.sh`, and report each result. Run `olivercode conform` too when a fleet is registered, naming each failure's fix
+- Before committing, run the repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
+- `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `olivercode conform` finds stopped hooks, and `$OC/docs/GATES.md` lists the gates
+- A request that changes files is filed as a story and built and merged unasked, per `$OC/docs/RULES.md` ("The backlog"). The `audit` skill runs only when named. Read the rest of RULES.md only for OliverCode's own structure
