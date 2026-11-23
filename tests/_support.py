@@ -35,6 +35,10 @@ REAL_HOME = os.environ.get("HOME")
 TEST_HOME = tempfile.mkdtemp(prefix="olivercode-test-home-")
 atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
 os.environ["HOME"] = TEST_HOME
+# Install keeps the fleet repo beside the checkout, which for this checkout is the owner's real repo root. A test that installs gets a scratch folder instead (#1057).
+TEST_FLEET_ROOT = tempfile.mkdtemp(prefix="olivercode-test-fleet-")
+atexit.register(shutil.rmtree, TEST_FLEET_ROOT, ignore_errors=True)
+os.environ["OLIVERCODE_FLEET_DIR"] = str(Path(TEST_FLEET_ROOT) / "olivercode-fleet")
 
 # The built hooks are untracked (HOOK-OUTPUTS-1), and many tests copy or run them, so a fresh clone
 # builds them before any test reads one. The build rewrites only a hook that changed.

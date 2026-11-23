@@ -76,6 +76,8 @@ class FleetRepo(unittest.TestCase):
 
         def runner(args):
             calls.append(args)
+            if args[:3] == ["gh", "api", "repos/me/olivercode-fleet"] and ".name" in args:
+                return 1, "gh: Not Found (HTTP 404)"
             if args[:3] == ["gh", "api", "repos/me/olivercode-fleet"] and args[-1] == ".private":
                 return 0, "true"
             if args[:3] == ["gh", "api", "repos/me/olivercode-fleet/collaborators?affiliation=direct"]:
@@ -229,6 +231,91 @@ class DesignFile(unittest.TestCase):
             self.assertIn("DESIGN.md changes the shared text", out)
 
 
+
+
+def _commits(dest: Path) -> int:
+    done = subprocess.run(["git", "-C", str(dest), "rev-list", "--count", "HEAD"], capture_output=True, text=True)
+    return int(done.stdout.strip()) if done.returncode == 0 else 0
+
+
+class FleetStep(unittest.TestCase):
+    """Install connects the one fleet repo beside the checkout, merges other copies into it and names it as fleetRegistry (#1057)."""
+
+    def setUp(self):
+        self.root = temp_dir(self)
+        self.checkout = self.root / "OliverCode"
+        self.checkout.mkdir()
+        self.home = self.root / "home"
+        self.config = self.root / "olivercode.local.json"
+        patch = mock.patch.dict(os.environ, {**IDENTITY, "HOME": str(self.home), "OLIVERCODE_LOCAL_CONFIG": str(self.config)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        os.environ.pop("OLIVERCODE_FLEET_DIR", None)
+        self.fleet = self.root / "olivercode-fleet"
+
+    def saved(self) -> dict:
+        return json.loads(self.config.read_text()) if self.config.is_file() else {}
+
+    def test_a_first_install_names_the_fleet_olivercode_fleet_beside_the_checkout(self):
+        error, _ = quiet(cmd_install.fleet_step, self.checkout)
+        self.assertEqual("", error)
+        self.assertTrue((self.fleet / "repo-profiles.json").is_file())
+        self.assertEqual(1, _commits(self.fleet))
+        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
+        self.assertFalse((self.home / ".olivercode" / "fleet").exists())
+
+    def test_a_clone_beside_the_checkout_is_used_and_no_folder_is_made_under_olivercode(self):
+        cmd_initfleet.scaffold_local(self.fleet)
+        cmd_initfleet.make_local_repo(self.fleet)
+        _, out = quiet(cmd_install.fleet_step, self.checkout)
+        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
+        self.assertIn(str(self.fleet), out)
+        self.assertFalse((self.home / ".olivercode" / "fleet").exists())
+        self.assertEqual(1, _commits(self.fleet))
+
+    def test_other_copies_merge_into_olivercode_fleet_and_the_other_copy_is_removed(self):
+        cmd_initfleet.scaffold_local(self.fleet)
+        cmd_initfleet.make_local_repo(self.fleet)
+        (self.checkout / "shared-profiles.json").write_text("{}")
+        other = self.home / ".olivercode" / "fleet"
+        other.mkdir(parents=True)
+        (other / "repo-profiles.json").symlink_to(self.checkout / "shared-profiles.json")
+        (other / "owner-rules.json").write_text('{"from": "other"}')
+        (other / "review-config.json").write_text('{"old": true}')
+        (other / "notes.md").write_text("only in the other copy")
+        self.config.write_text(json.dumps({"fleetRegistry": str(other / "repo-profiles.json")}))
+        owner_rules = (self.fleet / "owner-rules.json").read_text()
+
+        _, out = quiet(cmd_install.fleet_step, self.checkout)
+
+        self.assertEqual("only in the other copy", (self.fleet / "notes.md").read_text())
+        self.assertEqual(owner_rules, (self.fleet / "owner-rules.json").read_text())
+        self.assertFalse((self.fleet / "repo-profiles.json").is_symlink())
+        self.assertFalse(other.exists())
+        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
+        self.assertEqual(2, _commits(self.fleet))
+        for line in ("moved notes.md", "kept owner-rules.json", "kept review-config.json", "dropped repo-profiles.json"):
+            self.assertIn(line, out)
+
+    def test_nothing_else_found_prints_the_path_once_and_changes_nothing(self):
+        cmd_initfleet.scaffold_local(self.fleet)
+        cmd_initfleet.make_local_repo(self.fleet)
+        self.config.write_text(json.dumps({"fleetRegistry": str(self.fleet / "repo-profiles.json")}))
+        before = self.config.read_text()
+        _, out = quiet(cmd_install.fleet_step, self.checkout)
+        self.assertEqual(before, self.config.read_text())
+        self.assertEqual(1, out.count("Fleet repo:"))
+        self.assertEqual(1, _commits(self.fleet))
+
+    def test_a_github_copy_is_cloned_on_yes_and_no_repo_is_created(self):
+        with mock.patch("lib.cmd_initfleet.github_login", return_value=("me", "")), \
+                mock.patch("lib.cmd_initfleet.github_repo_kind", return_value=("fleet", "")), \
+                mock.patch("lib.cmd_initfleet.connect_fleet", return_value=0) as connect:
+            error, _ = quiet(cmd_install.fleet_step, self.checkout, lambda question: "y")
+        self.assertEqual("", error)
+        connect.assert_called_once_with(self.fleet, "me", "olivercode-fleet")
+        self.assertFalse(self.fleet.exists())
+        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
 
 
 if __name__ == "__main__":

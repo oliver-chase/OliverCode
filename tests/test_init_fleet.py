@@ -11,10 +11,14 @@ from _support import REPO_ROOT, temp_dir, quiet  # noqa: E402
 from lib import cmd_initfleet  # noqa: E402
 
 
-def fake(private="true", collaborators='["me"]', calls=None):
+def fake(private="true", collaborators='["me"]', calls=None, github="none"):
     def runner(args):
         calls.append(args)
         text = " ".join(args)
+        if args[2:3] == ["repos/me/olivercode-fleet"] and ".name" in args:
+            return (1, "gh: Not Found (HTTP 404)") if github == "none" else (0, "olivercode-fleet")
+        if "contents/repo-profiles.json" in text:
+            return (0, "repo-profiles.json") if github == "fleet" else (1, "gh: Not Found (HTTP 404)")
         if "collaborators" in text:
             return 0, collaborators
         if args[:2] == ["gh", "api"] and "--jq" in args and ".private" in args:
@@ -74,6 +78,22 @@ class InitFleet(unittest.TestCase):
         rc, _, dest = self.run_cmd(fake(calls=calls))
         rc2, out = quiet(cmd_initfleet.command_init_fleet, ["--dir", str(dest)], fake(calls=calls))
         self.assertEqual(rc2, 1)
+
+    def test_a_name_taken_by_a_repo_that_is_not_a_fleet_stops_before_any_write(self):
+        calls = []
+        rc, out, dest = self.run_cmd(fake(calls=calls, github="other"))
+        self.assertEqual(rc, 1)
+        self.assertIn("not a fleet repo", out)
+        self.assertFalse(any("POST" in " ".join(c) or " push " in " ".join(c) for c in calls))
+        self.assertFalse(dest.exists())
+
+    def test_a_fleet_repo_already_on_github_is_cloned_and_nothing_is_created(self):
+        calls = []
+        rc, out, dest = self.run_cmd(fake(calls=calls, github="fleet"))
+        self.assertEqual(rc, 0, out)
+        flat = [" ".join(c) for c in calls]
+        self.assertTrue(any(c.startswith("git clone") and "me/olivercode-fleet.git" in c for c in flat))
+        self.assertFalse(any("POST" in c for c in flat))
 
     def test_adoption_and_setup_run_it(self):
         for doc in ("docs/SETUP.md", "skills/olivercode-adoption/SKILL.md"):

@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, temp_dir
@@ -59,7 +60,9 @@ class UntrackedFilesDoNotBlockTheUpdate(WithIgnore):
         self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]), out)
         self.assertEqual((self.clone / "skills" / "shipped" / "SKILL.md").read_text(), "shipped v2")
         self.assertEqual((self.clone / "notes.txt").read_text(), "mine")
-        self.assertEqual(json.loads((self.clone / "olivercode.local.json").read_text()), {"auditMode": "gated"})
+        settings = json.loads((self.clone / "olivercode.local.json").read_text())
+        self.assertEqual(settings.pop("fleetRegistry"), str(Path(os.environ["OLIVERCODE_FLEET_DIR"]) / "repo-profiles.json"))
+        self.assertEqual(settings, {"auditMode": "gated"})
         self.assertIn('{"id": "L-old"}', lessons.path(self.clone).read_text())
 
     def test_an_untracked_file_the_release_adds_is_refused_with_a_stash_of_that_file_only(self):

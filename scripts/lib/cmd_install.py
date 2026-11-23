@@ -13,7 +13,7 @@ from pathlib import Path
 from lib import launchd
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import OC_ROOT, design_file, fleet_registry_path, load_local, save_local, voice_file
+from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, load_local, local_path, save_local, voice_file
 
 from lib import claude_settings as _claude_settings
 from lib import cmd_guide
@@ -233,6 +233,46 @@ def fleet_repo_step(dest: Path, ask=None, push=None) -> str:
     print(f"Fleet repo: {dest}")
     if made and ask is not None and ask("Push a private copy of the fleet repo to GitHub now? [y/N] ").strip().lower() in ("y", "yes"):
         (push or command_init_fleet)(["--dir", str(dest)])
+    return ""
+
+
+def _offer_github_copy(dest: Path, ask) -> bool:
+    """Offers the owner's GitHub copy of olivercode-fleet when it exists and no local fleet does, and clones it on a yes (#1057). True when cloned."""
+    from lib.cmd_initfleet import connect_fleet, github_login, github_repo_kind
+    owner, _ = github_login()
+    if not owner or github_repo_kind(owner, FLEET_NAME)[0] != "fleet":
+        return False
+    if ask(f"A fleet repo {owner}/{FLEET_NAME} already exists on GitHub. Clone it into {dest} instead? [y/N] ").strip().lower() not in ("y", "yes"):
+        return False
+    return connect_fleet(dest, owner, FLEET_NAME) == 0
+
+
+def _set_fleet_registry(path: Path) -> None:
+    """Names path as fleetRegistry in the local file. A run that reads no local file (a test with OLIVERCODE_LOCAL_CONFIG at /dev/null) saves nothing."""
+    if str(local_path()) == os.devnull:
+        return
+    save_local({"fleetRegistry": str(path)})
+    print(f"fleetRegistry set to {path} in olivercode.local.json.")
+
+
+def fleet_step(oc_root: Path, ask=None) -> str:
+    """Install's fleet step (#1057). Merges every other fleet copy on this machine into olivercode-fleet beside the checkout, offers the GitHub copy
+    when there is no local one, makes the folder a git repo (#993) and names its registry as fleetRegistry when that is unset or named a copy just
+    merged. Returns the error from fleet_repo_step, or "" when it worked."""
+    from lib.cmd_initfleet import REGISTRY, fleet_copies, merge_fleet_copies
+    dest = fleet_home(oc_root)
+    copies = fleet_copies(oc_root)
+    merged = {copy.resolve() for copy in copies}
+    for line in (merge_fleet_copies(dest, copies, oc_root) if copies else []):
+        print(line)
+    connected = not copies and ask is not None and not (dest / REGISTRY).exists() and not (dest / ".git").exists() and _offer_github_copy(dest, ask)
+    if not connected:
+        error = fleet_repo_step(dest, ask=ask)
+        if error:
+            return error
+    configured = load_local().get("fleetRegistry")
+    if configured is None or Path(configured).expanduser().resolve().parent in merged:
+        _set_fleet_registry(dest / REGISTRY)
     return ""
 
 
@@ -498,7 +538,7 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    fleet_repo_step(fleet_registry_path().parent, ask=input if owner_terminal() else None)
+    fleet_step(oc_root, ask=input if owner_terminal() else None)
     if owner_terminal():
         board_step(registered_repos())
     else:
