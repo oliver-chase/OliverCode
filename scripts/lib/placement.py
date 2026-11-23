@@ -13,12 +13,12 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from lib.local_config import OC_ROOT, load_local
+from lib import repo_gates
+from lib.local_config import OC_ROOT, load_local, other_device
 
 SKIP_DIRS = {"node_modules", ".git", "Library", ".Trash", ".venv", "venv", "__pycache__", ".next", "dist", "build"}
 BACKUP_NAME = re.compile(r"(backup|\.bak$|-old$|-copy$)", re.IGNORECASE)
@@ -65,7 +65,7 @@ def inside(path: Path, parent: Path) -> bool:
 # Folders a sync service mirrors and can evict when the disk fills, which takes a repo's working files away.
 SYNCED_PLACES = ("Documents", "Desktop", "Library/Mobile Documents", "Library/CloudStorage", "Dropbox", "OneDrive", "Google Drive")
 FILE_PROVIDER_XATTR = "com.apple.file-provider-domain-id"
-SAFE_ROOT = "~/Developer/Repos"
+SAFE_ROOT = "~/Developer/Repos"  # the suggested default for the fix text; the owner's own repoRoot is what counts
 # Ignored files a worktree may hold that exist nowhere else: environment files, secrets and local settings.
 LOCAL_ONLY = re.compile(r"(^|/)(\.env[^/]*|\.secrets/|[^/]*\.local(\.[^/]*)?)$|(^|/)\.secrets/")
 
@@ -148,6 +148,18 @@ def linked_worktrees(cfg: Config) -> list[tuple[Path, Path]]:
     return found
 
 
+def belongs_to_other_device(name: str, slug: str | None) -> bool:
+    """True when a repo's folder or clone name is listed in otherDeviceRepos, or its GitHub owner in otherDeviceOwners."""
+    repos, owners = other_device()
+    return name.lower() in repos or bool(slug and slug.split("/")[0].lower() in owners)
+
+
+def _origin_slug(path: Path) -> str | None:
+    out = _git(path, "remote", "get-url", "origin")
+    found = re.search(r"github\.com[:/]([^/:\s]+)/([^/\s]+?)(?:\.git)?/?$", out.stdout.strip()) if out.returncode == 0 else None
+    return f"{found.group(1)}/{found.group(2)}" if found else None
+
+
 def findings(cfg: Config | None = None) -> list[Finding]:
     """Everything out of place: repos and worktrees outside the root, worktrees outside _worktrees, backups and broken links."""
     cfg = cfg or config()
@@ -173,15 +185,23 @@ def findings(cfg: Config | None = None) -> list[Finding]:
                 out.append(Finding("repo", child, f"replace the link with the real folder {child.resolve()}"))
             elif is_worktree(child):
                 out.append(Finding("worktree", child, f"move it to {cfg.worktrees}/{child.name}"))
+            elif (child / ".git").exists() and belongs_to_other_device(child.name, _origin_slug(child)):
+                out.append(Finding("other-device", child, "it belongs to another device: move it out of the repo root or remove it"))
             elif BACKUP_NAME.search(child.name):
                 out.append(Finding("backup", child, f"move it to {cfg.archive}/{child.name}"))
     for path, repo in linked_worktrees(cfg):
+        if path.resolve().parent == (repo / ".claude" / "worktrees").resolve():
+            continue  # Claude Code puts a subagent's isolated worktree here and removes it when the agent ends
         if path.resolve() not in seen and not inside(path, cfg.worktrees) and not any(f.path == path for f in out):
             out.append(Finding("worktree", path, f"move it with `git -C {repo} worktree move {path} {cfg.worktrees}/{path.name}`"))
     if cfg.worktrees.is_dir():
         for child in sorted(cfg.worktrees.iterdir()):
-            if not child.name.startswith(".") and not is_worktree(child):
+            if child.name.startswith("."):
+                continue
+            if not is_worktree(child):
                 out.append(Finding("repo", child, "only linked worktrees belong in _worktrees"))
+            elif repo_gates.has_gates(child) and repo_gates.gate_problem(child):
+                out.append(Finding("worktree-hooks", child, f"run `{repo_gates.fix_command(child)}`, so its first commit is not refused ({repo_gates.gate_problem(child)})"))
     return out
 
 
@@ -221,19 +241,70 @@ def worktrees(cfg: Config | None = None) -> list[Worktree]:
     return found
 
 
+def _story_of(wt: Worktree) -> str:
+    """The story a worktree's unlanded work belongs to: the number in its last commit subject or its branch name."""
+    subject = _git(wt.path, "log", "-1", "--format=%s").stdout
+    found = re.search(r"\(#(\d+)\)", subject) or re.search(r"(\d+)", wt.branch or "")
+    return f"story #{found.group(1)}" if found else "its story"
+
+
 def clean(cfg: Config | None = None, apply: bool = False) -> list[str]:
-    """Lines saying what happens to each worktree: merged and clean ones are removed, the rest kept and why."""
+    """Lines saying what happens to each worktree: merged and clean ones are removed, the rest kept and why.
+    Remote branches merged into their repo's default branch follow, see remote_branches."""
+    cfg = cfg or config()
     lines = []
     for wt in worktrees(cfg):
         if wt.dirty:
             lines.append(f"KEEP   {wt.path} (uncommitted changes)")
         elif not wt.merged:
-            lines.append(f"KEEP   {wt.path} (branch {wt.branch or 'detached'} has commits not on origin/main)")
+            lines.append(f"KEEP   {wt.path} (finish or discard {_story_of(wt)}: branch {wt.branch or 'detached'} has commits not on origin/main)")
         elif apply:
             done = _git(wt.common, "worktree", "remove", str(wt.path))
             lines.append(f"REMOVE {wt.path}" if done.returncode == 0 else f"FAILED {wt.path}: {done.stderr.strip()[:80]}")
         else:
             lines.append(f"REMOVE {wt.path} (merged and clean; run with --apply)")
+    lines += remote_branches(cfg, apply=apply)
+    return lines
+
+
+PROTECTED_REMOTE_BRANCHES = {"main", "master", "develop"}
+
+
+def _default_ref(repo: Path) -> str:
+    """The default branch as a remote-tracking ref: origin's HEAD when it names one, else origin/main."""
+    head = _git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    return head.stdout.strip() if head.returncode == 0 and head.stdout.strip() else "origin/main"
+
+
+def remote_branches(cfg: Config | None = None, apply: bool = False) -> list[str]:
+    """One line per origin branch merged into its repo's default branch. With apply it is deleted on origin.
+    A branch a worktree has checked out, and the protected names, are never touched."""
+    cfg = cfg or config()
+    if not cfg.root.is_dir():
+        return []
+    lines = []
+    for repo in sorted(cfg.root.iterdir()):
+        if repo.name.startswith("_") or not (repo / ".git").is_dir():
+            continue
+        if apply and _git(repo, "fetch", "--prune", "--quiet", "origin").returncode != 0:
+            lines.append(f"FAILED {repo.name}: could not fetch origin, so no remote branch was checked")
+            continue
+        default = _default_ref(repo)
+        listing = _git(repo, "worktree", "list", "--porcelain").stdout.splitlines()
+        busy = {line[len("branch refs/heads/"):] for line in listing if line.startswith("branch refs/heads/")}
+        merged = _git(repo, "branch", "-r", "--merged", default, "--format=%(refname:short)").stdout.split()
+        for ref in sorted(merged):
+            name = ref[len("origin/"):] if ref.startswith("origin/") else ""
+            if not name or name == "HEAD" or ref == default or name in busy or name in PROTECTED_REMOTE_BRANCHES:
+                continue
+            if not apply:
+                lines.append(f"REMOVE {repo.name}: {ref} (merged into {default}; run with --apply)")
+                continue
+            # The lease makes the push refuse if origin's branch has moved since the merge check, so unmerged commits survive.
+            sha = _git(repo, "rev-parse", "--verify", "--quiet", ref).stdout.strip()
+            done = _git(repo, "push", f"--force-with-lease=refs/heads/{name}:{sha}", "origin", "--delete", name)
+            lines.append(f"REMOVE {repo.name}: {ref} (merged into {default})" if done.returncode == 0
+                         else f"FAILED {repo.name}: {ref} {done.stderr.strip()[:80]}")
     return lines
 
 
@@ -242,6 +313,19 @@ def clean(cfg: Config | None = None, apply: bool = False) -> list[str]:
 _VALUE_OPTIONS_ADD = {"-b", "-B", "--reason"}
 _VALUE_OPTIONS_CLONE = {"-b", "--branch", "--depth", "-o", "--origin", "--reference", "--separate-git-dir",
                         "--template", "-c", "--config", "-j", "--jobs", "--filter", "-u", "--upload-pack", "--shallow-since"}
+
+
+def _positional(args: list[str], value_options) -> list[str]:
+    """The arguments that are not options, skipping the value each of `value_options` takes."""
+    skip, positional = False, []
+    for a in args:
+        if skip:
+            skip = False
+        elif a in value_options:
+            skip = True
+        elif not a.startswith("-"):
+            positional.append(a)
+    return positional
 
 
 def violation(command_words: list[str], cwd: Path, cfg: Config | None = None) -> str:
@@ -254,40 +338,50 @@ def violation(command_words: list[str], cwd: Path, cfg: Config | None = None) ->
     while rest and rest[0].startswith("-"):
         rest = rest[2:] if rest[0] in ("-C", "-c", "--git-dir", "--work-tree") else rest[1:]
     if rest[:2] == ["worktree", "add"]:
-        args, skip, positional = rest[2:], False, []
-        for a in args:
-            if skip:
-                skip = False
-            elif a in _VALUE_OPTIONS_ADD:
-                skip = True
-            elif not a.startswith("-"):
-                positional.append(a)
+        positional = _positional(rest[2:], _VALUE_OPTIONS_ADD)
         if not positional:
             return ""
         dest = (cwd / _p(positional[0])).resolve()
         if not inside(dest, cfg.worktrees):
-            return (f"Worktrees live under {cfg.worktrees}, so this one goes in {cfg.worktrees}/{dest.name}: "
-                    f"`git worktree add {cfg.worktrees}/{dest.name} ...`.")
+            return (f"Worktrees live under {cfg.worktrees.name}, so this one goes in {cfg.worktrees.name}/{dest.name}. "
+                    "See docs/RULES.md, File locations.")
     elif rest[:1] == ["clone"]:
-        args, skip, positional = rest[1:], False, []
-        for a in args:
-            if skip:
-                skip = False
-            elif a in _VALUE_OPTIONS_CLONE:
-                skip = True
-            elif not a.startswith("-"):
-                positional.append(a)
+        positional = _positional(rest[1:], _VALUE_OPTIONS_CLONE)
         if not positional:
             return ""
         name = re.sub(r"\.git$", "", positional[0].rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1])
         dest = (cwd / _p(positional[1])).resolve() if len(positional) > 1 else (cwd / name).resolve()
         if not inside(dest, cfg.root):
-            return f"Repos live under {cfg.root}, so clone into {cfg.root}/{dest.name}."
+            return f"Repos live under the repo root, so clone it as {dest.name}. See docs/RULES.md, File locations."
+        owner = re.search(r"github\.com[:/]([^/:\s]+)/", positional[0])
+        if belongs_to_other_device(name, f"{owner.group(1)}/{name}" if owner else None):
+            return f"{name} belongs to another device and never lives on this machine, so do not clone it. See docs/RULES.md, Execution."
     return ""
 
 
-def split(command: str) -> list[str]:
-    try:
-        return shlex.split(command, comments=False)
-    except ValueError:
-        return []
+def repo_create_violation(command_words: list[str], cwd: Path) -> str:
+    """The refusal text when `gh repo create` would publish a folder that has no origin, or ''.
+
+    An agent never creates a GitHub repo for a folder: a folder without an origin is reported to the owner (#637)."""
+    words = list(command_words)
+    if "gh" not in words:
+        return ""
+    rest = words[words.index("gh") + 1:]
+    if rest[:2] != ["repo", "create"]:
+        return ""
+    args = rest[2:]
+    source = None
+    for i, a in enumerate(args):
+        if a == "--source" and i + 1 < len(args):
+            source = args[i + 1]
+        elif a.startswith("--source="):
+            source = a.split("=", 1)[1]
+    positional = _positional(args, {"--source", "-d", "--description", "-h", "--homepage", "-g", "--gitignore", "-l", "--license",
+                                    "-p", "--template", "-r", "--remote", "--team"})
+    if source is None and positional:
+        return ""  # a new empty repo by name touches no folder
+    folder = (cwd / _p(source)).resolve() if source else cwd.resolve()
+    if (folder / ".git").exists() and _origin_slug(folder):
+        return ""
+    return (f"{folder.name} has no origin, and no agent creates a GitHub repo for a folder: report the folder to the owner "
+            "and stop. See docs/RULES.md, Execution.")

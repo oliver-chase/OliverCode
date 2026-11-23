@@ -1,16 +1,16 @@
-"""Launcher commands that read or stamp one repo: skills, discover, bootstrap and size."""
+"""Launcher commands that read or stamp one repo: skills, discover and bootstrap."""
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
-from datetime import datetime
 from pathlib import Path
 
 from lib.cli import reject_extra as _reject_extra
-from lib import repo_gates
+from lib import repo_gates, repo_state
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
-from lib.repo_profiles import registry_file
+from lib.repo_profiles import REGISTRY_NAME, registry_file, registry_write_file
 from lib.skills_catalog import _load_skills
 
 
@@ -110,6 +110,22 @@ def _report_claude_dir(oc_root: Path) -> None:
             print(f"    {name}")
 
 
+_NOISE = {"node_modules", ".next", "vendor", "worktrees", "_worktrees"}
+
+
+def _git_entries(root: Path):
+    """Every `.git` file or folder under root, never descending into vendored or nested-checkout noise or into a `.git` folder."""
+    if _NOISE & set(root.parts):
+        return
+    for here, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in _NOISE]
+        if ".git" in dirs:
+            dirs.remove(".git")
+            yield Path(here) / ".git"
+        if ".git" in files:
+            yield Path(here) / ".git"
+
+
 def command_discover(oc_root: Path, roots: list[Path], register: bool = False) -> int:
     """Find git repos under the given roots and report what governance they already have.
 
@@ -124,15 +140,14 @@ def command_discover(oc_root: Path, roots: list[Path], register: bool = False) -
     print("=" * 40)
     found: list[tuple[str, Path, str, str]] = []
     for root in roots:
-        for git_dir in sorted(root.rglob(".git")):
+        for git_dir in sorted(_git_entries(root)):
             repo = git_dir.parent
             if git_dir.is_file():
                 continue  # a linked worktree points back to its repo through a .git file
-            # Don't descend into vendored or nested-checkout noise.
-            if any(part in {"node_modules", ".next", "vendor", "worktrees", "_worktrees"} for part in repo.parts):
-                continue
             if repo.resolve() == oc_root.resolve():
                 continue  # the framework repo governs the fleet; it is not part of it
+            if repo_state.skipped(repo.name, repo):
+                continue
             rules = next((n for n in ("CLAUDE.md", "AGENTS.md", ".cursorrules") if (repo / n).is_file()), "none")
             hooks = subprocess.run(
                 ["git", "-C", str(repo), "config", "--get", "core.hooksPath"],
@@ -159,15 +174,19 @@ def command_discover(oc_root: Path, roots: list[Path], register: bool = False) -
     }
     path = registry_file(oc_root)
     if not register:
-        print(f"\nProfiles for {path}. Run again with --register to add the new ones there:\n")
+        print(f"\nProfiles for {registry_write_file(oc_root)}. Run again with --register to add the new ones there:\n")
         print(json.dumps(skeleton, indent=2))
         return 0
-    data = json.loads(path.read_text()) if path.is_file() else {"profiles": {}}
+    tracked = Path(oc_root) / "shared" / REGISTRY_NAME
+    path = registry_write_file(oc_root)
+    source = path if path.is_file() else tracked
+    data = json.loads(source.read_text()) if source.is_file() else {"profiles": {}}
     profiles = data.setdefault("profiles", {})
     added = [name for name in skeleton if name not in profiles]
     for name in added:
         profiles[name] = skeleton[name]
     path.write_text(json.dumps(data, indent=2) + "\n")
+    os.chmod(path, 0o600)
     print(f"\nRegistered {len(added)} repo(s) in {path}: {', '.join(added) or 'none new'}.")
     unknown = [n for n in added if profiles[n]["canonicalValidationCommand"] == "<command>"]
     if unknown:
@@ -190,10 +209,18 @@ def _validation_command(repo: Path) -> str:
     return "<command>"
 
 
-def _backlog_setup_origin(repo: Path):
-    """(owner, name) of a repo's origin remote, or None."""
-    from lib.backlog_setup import origin_owner_name
-    return origin_owner_name(repo)
+def repo_visibility(slug: tuple[str, str] | None) -> tuple[str, str]:
+    """The repo's GitHub visibility as ("public" | "private", reason). Anything unreadable is private, the stricter variant."""
+    if not slug:
+        return "private", "the repo has no origin remote"
+    try:
+        done = subprocess.run(["gh", "api", f"repos/{slug[0]}/{slug[1]}", "--jq", ".visibility"],
+                              capture_output=True, text=True, timeout=30)
+        if done.returncode == 0 and done.stdout.strip():
+            return ("public" if done.stdout.strip() == "public" else "private"), ""
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "private", "gh could not read the repo's visibility"
 
 
 def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
@@ -212,6 +239,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
         print(f"  [FAIL] manifest not found: {manifest_path}")
         return 1
     manifest = json.loads(manifest_path.read_text())
+    repo_gates.hook_templates(oc_root)  # the manifest copies the built hooks
 
     if not (target / ".git").exists():
         print(f"  [FAIL] {target} is not a git repository.")
@@ -234,16 +262,21 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
 
     # Placeholders the template ships, filled from the target's and this checkout's origin remotes.
     fills = {}
-    target_origin = _backlog_setup_origin(target)
+    from lib.backlog_setup import origin_owner_name
+    target_origin = origin_owner_name(target)
     if target_origin:
         fills["<your-github-owner>"] = target_origin[0]
     fills["<Repo>"] = target.name
+    visibility, why = repo_visibility(target_origin)
+    if why: print(f"  pre-commit: private variant written, because {why}.")
 
     new = overwritten = kept = 0
     first_run = not (target / "QUALITY_BASELINE.md").exists()
     missing_src = []
     for entry in manifest.get("templatedFiles", []):
         src, dst_rel, mode = oc_root / entry["source"], entry["target"], entry.get("mode", "presence")
+        if dst_rel == ".githooks/pre-commit" and visibility != "public":
+            src = src.with_name("pre-commit-private")
         dst = target / dst_rel
         if not src.is_file():
             missing_src.append(entry["source"])
@@ -273,6 +306,10 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     print(f"\n  {new} new, {overwritten} overwritten (strict), {kept} kept (presence, already present)")
     for rel in missing_src:
         print(f"  [FAIL] template source missing from this checkout: {rel}")
+    from lib import validate_snippet
+    line = validate_snippet.report(target.name, *validate_snippet.ensure_queue_snippet(oc_root, target, dry_run), dry_run=dry_run)
+    if line:
+        print(line)
 
     if dry_run:
         print("\nRe-run without --dry-run to apply.")
@@ -281,45 +318,6 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
         if not target_origin:
             print("The repo has no origin remote, so .github/CODEOWNERS still names <your-github-owner>.")
     return 1 if missing_src else 0
-
-
-def command_size(oc_root: Path, target: Path, lower: bool) -> int:
-    """Print a repo's line total against docs/SIZE-BASELINE.json, or lower the baseline to it.
-
-    The total comes from skills/audit/scripts/size.sh --total, the counter the size-ratchet gate
-    uses. The baseline only moves down here: raising it is an edit to the file in a commit that
-    names a story (docs/GATES.md, "Size ratchet").
-    """
-    baseline_path = target / "docs" / "SIZE-BASELINE.json"
-    try:
-        total, baseline = repo_gates.size_report(target, oc_root)
-    except repo_gates.SizeError as exc:
-        print({"missing": f"  [FAIL] {baseline_path} not found. `olivercode bootstrap` adds it.",
-               "invalid": f"  [FAIL] {baseline_path} is not valid JSON: {exc.detail}",
-               "count": f"  [FAIL] could not count lines in {target}: {exc.detail}"}[exc.kind])
-        return 1
-    recorded = baseline.get("lines")
-    percent = baseline.get("allowancePercent", 5)
-
-    if lower:
-        if recorded is not None and total > recorded:
-            print(f"  [FAIL] {total} lines is above the baseline of {recorded}; --lower never raises it.")
-            print("         To grow the repo for a story, edit docs/SIZE-BASELINE.json in that story's commit.")
-            return 1
-        baseline.update({"lines": total, "allowancePercent": percent,
-                         "updated": datetime.now().date().isoformat()})
-        baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
-        print(f"Baseline set to {total} lines (was {recorded if recorded is not None else 'unset'}).")
-        return 0
-
-    print(f"Total lines: {total}")
-    if recorded is None:
-        print("Baseline: unset (run `olivercode size --lower` to record the current total)")
-        return 0
-    allowed = repo_gates.size_allowance(baseline)
-    print(f"Baseline: {recorded} lines, allowance {percent}% ({allowed} lines)")
-    print(f"Headroom: {recorded + allowed - total} lines before the commit gate blocks")
-    return 0
 
 
 def command_place() -> int:
@@ -336,12 +334,51 @@ def command_place() -> int:
     return 1 if found else 0
 
 
+def rebuild_stale_hooks(apply: bool) -> list[str]:
+    """Rebuild the hooks of each clean, unmerged worktree whose hooks predate origin/main (#902): rebase it onto origin/main, then build its hooks again.
+    A merged worktree is retired by `clean` itself, and a dirty one is kept. A rebase that conflicts is aborted and named."""
+    from lib import cmd_land, health_checks, placement
+    lines = []
+    for wt in placement.worktrees():
+        if wt.dirty or wt.merged or not health_checks.stale_hook(wt.path):
+            continue
+        if not apply:
+            lines.append(f"REBUILD {wt.path} (its hooks predate origin/main; run with --apply to rebase it and rebuild them)")
+            continue
+        rebased = subprocess.run(["git", "-C", str(wt.path), "rebase", "origin/main"], capture_output=True, text=True)
+        if rebased.returncode:
+            subprocess.run(["git", "-C", str(wt.path), "rebase", "--abort"], capture_output=True)
+            lines.append(f"FAILED {wt.path}: the rebase onto origin/main conflicts, so rebase it by hand")
+            continue
+        problems = cmd_land.prepare_worktree(wt.path)
+        lines.append(f"FAILED {wt.path}: {problems[0]}" if problems else f"REBUILT {wt.path} (rebased onto origin/main, hooks built)")
+    return lines
+
+
 def command_clean(apply: bool) -> int:
-    """`olivercode clean [--apply]`: remove merged, clean worktrees and say why the rest stay."""
+    """`olivercode clean [--apply]`: remove merged, clean worktrees, rebuild the hooks of stale clean ones and say why the rest stay."""
     from lib import placement
-    lines = placement.clean(apply=apply)
+    lines = placement.clean(apply=apply) + rebuild_stale_hooks(apply)
     print("\n".join(lines) if lines else "No linked worktrees found.")
     return 1 if any(line.startswith("FAILED") for line in lines) else 0
+
+
+def command_worktree(argv: list[str]) -> int:
+    """`olivercode worktree add N` makes story N's worktree ready to commit, `fix [PATH]` repairs one made by hand (#786)."""
+    from lib import cmd_land, placement
+    usage = "Usage: olivercode worktree add N | olivercode worktree fix [PATH]"
+    if len(argv) == 2 and argv[0] == "add" and argv[1].isdigit():
+        repo = Path(subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True).stdout.strip() or ".git").parent
+        wt = placement.config().worktrees / f"{repo.name}-{argv[1]}"
+        problems = cmd_land.add_worktree(repo, wt, argv[1])
+    elif argv[:1] == ["fix"] and len(argv) <= 2:
+        wt = Path(argv[1] if len(argv) > 1 else ".").expanduser().resolve()
+        problems = cmd_land.prepare_worktree(wt) if placement.is_worktree(wt) else [f"{wt} is not a linked worktree"]
+    else:
+        print(usage)
+        return 1
+    print("\n".join(f"Error: {p}" for p in problems) if problems else f"{wt} is ready: hooks set and built, virtualenv linked. Commit there.")
+    return 1 if problems else 0
 
 
 def command_policy(argv: list[str]) -> int:
@@ -362,15 +399,43 @@ def command_policy(argv: list[str]) -> int:
 
 
 def command_gh_limit(argv: list[str]) -> int:
-    """`olivercode gh-limit [clear]`: the shared GitHub rate-limit hold."""
+    """`olivercode gh-limit [clear|report]`: the shared GitHub rate-limit hold and what each session spent."""
     from lib import gh_budget
     if argv == ["clear"]:
         gh_budget.clear()
         print("GitHub hold cleared.")
         return 0
+    if argv == ["report"]:
+        print(gh_budget.report())
+        return 0
+    if argv[:1] == ["queue"] and argv[1:2] in (["--"], []) and argv[2:3] == ["gh"]:
+        print(f"Queued. {gh_budget.enqueue(argv[2:])} gh command(s) wait for the GraphQL reset.")
+        return 0
+    if argv == ["replay"]:
+        print(gh_budget.replay())
+        return 0
+    if argv in (["--schedule"], ["--unschedule"]):
+        from lib import cmd_ghreplay
+        return cmd_ghreplay.schedule(argv == ["--schedule"])
     if argv:
-        print("Usage: olivercode gh-limit [clear]")
+        print("Usage: olivercode gh-limit [clear|report|replay|--schedule|--unschedule|queue -- gh ...]")
         return 1
     why = gh_budget.refusal()
     print(why or "No GitHub rate-limit hold is on.")
     return 1 if why else 0
+
+
+def command_queue(argv: list[str]) -> int:
+    """`olivercode queue show` lists the runs holding a validation or render slot, and `queue run [--render] -- COMMAND...` runs one inside a queue."""
+    from lib import validate_queue
+    if argv[:1] == ["run"]:
+        queue = "render" if argv[1:2] == ["--render"] else "validate"
+        rest = argv[2:] if queue == "render" else argv[1:]
+        command = rest[1:] if rest[:1] == ["--"] else rest
+        if command:
+            return validate_queue.run(command, queue)
+    if argv in ([], ["show"]):
+        print(validate_queue.show())
+        return 0
+    print("Usage: olivercode queue show | olivercode queue run [--render] -- COMMAND...")
+    return 1
