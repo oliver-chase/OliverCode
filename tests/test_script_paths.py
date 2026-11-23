@@ -29,11 +29,3 @@ class QuotedCheckout(unittest.TestCase):
     def test_link_check_runs_in_a_path_with_a_single_quote(self):
         result = self.run_script("scripts/link-check.sh", "--quiet")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-
-    def test_the_consistency_check_runs_in_a_path_with_a_single_quote(self):
-        result = self.run_script("scripts/validate.sh", "--check-consistency")
-        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-
-
-if __name__ == "__main__":
-    unittest.main()

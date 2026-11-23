@@ -31,8 +31,9 @@ class TestSmokeGateRunsSkillTests(unittest.TestCase):
 
     def smoke(self, skill_test):
         repo = Path(tempfile.mkdtemp(dir=self.base))
-        (repo / "scripts").mkdir()
+        (repo / "scripts" / "lib").mkdir(parents=True)
         (repo / "scripts" / "validate.sh").write_text(self.script, encoding="utf-8")
+        shutil.copy(REPO_ROOT / "scripts" / "lib" / "smoke_runner.py", repo / "scripts" / "lib" / "smoke_runner.py")
         (repo / "tests").mkdir()
         (repo / "tests" / "test_stub.py").write_text(PASSING, encoding="utf-8")
         scripts = repo / "skills" / "demo" / "scripts"
@@ -51,7 +52,3 @@ class TestSmokeGateRunsSkillTests(unittest.TestCase):
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertIn("planted failure", done.stdout)
         self.assertIn("python smoke tests FAILED", done.stdout)
-
-
-if __name__ == "__main__":
-    unittest.main()

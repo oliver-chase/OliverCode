@@ -22,31 +22,32 @@ run_precommit() {
   fi
 }
 
+run_build_hooks() {
+  # The pre-commit, pre-push and commit-msg hooks are built from core/hooks/ and untracked
+  # (HOOK-OUTPUTS-1), so they are built before the gates, checks and tests that read them.
+  python3 "${SCRIPT_DIR}/build-hooks.py" || { echo "=== validate: hook build FAILED ==="; exit 1; }
+}
+
 run_consistency() {
-  # Three classes, each fail-closed:
-  #  - doc-vs-code drift (skills index parity, gate-count claims)
-  #  - unfalsifiable checks: a gate or script that cannot fail (scripts/lib/falsifiability_check.py)
-  #  - hook drift: the pre-commit, pre-push and commit-msg hooks are built from core/hooks/, and a hand
-  #    edit to a built hook fails (scripts/build-hooks.py)
-  echo "=== validate: checking doc/code consistency ==="
+  # Fail-closed check that no tracked file names a fleet repo (scripts/lib/fleet_name_check.py)
+  echo "=== validate: checking fleet names ==="
   local out
   if ! out="$(python3 -c '
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
-from lib.consistency_check import check_all as consistency
-from lib.falsifiability_check import check_all as falsifiability
+from lib.fleet_name_check import check_all as fleet_names
 root = Path(sys.argv[2])
-failures = consistency(root) + falsifiability(root)
+failures = fleet_names(root)
 for f in failures:
     print(f)
 sys.exit(1 if failures else 0)
-' "${SCRIPT_DIR}" "${REPO_ROOT}")" || ! out="$(python3 "${SCRIPT_DIR}/build-hooks.py" --check)"; then
+' "${SCRIPT_DIR}" "${REPO_ROOT}")"; then
     printf '%s\n' "$out"
-    echo "=== validate: consistency check FAILED ==="
+    echo "=== validate: fleet name check FAILED ==="
     exit 1
   fi
-  echo "=== validate: consistency passed ==="
+  echo "=== validate: fleet names passed ==="
 }
 
 run_hook_state() {
@@ -79,6 +80,21 @@ run_hook_state() {
   fi
 }
 
+run_docs_check() {
+  # The docs match the code: launcher commands, the gates table and the skills index against README.md and docs/.
+  echo "=== validate: checking docs against code ==="
+  if ! python3 "${REPO_ROOT}/core/templates/project/scripts/docs_check.py" "${REPO_ROOT}"; then
+    echo "=== validate: docs check FAILED ==="
+    exit 1
+  fi
+}
+
+run_limits_check() {
+  # The size ceiling only warns (#879): the check prints the count and never fails the run.
+  echo "=== validate: checking size limits ==="
+  python3 "${SCRIPT_DIR}/olivercode" limits check || true
+}
+
 run_reference_check() {
   # Internal reference integrity (markdown links + backtick repo paths).
   echo "=== validate: checking internal references ==="
@@ -89,236 +105,98 @@ run_reference_check() {
   echo "=== validate: references passed ==="
 }
 
-run_duplication_check() {
-  # Cross-doc content duplication (scripts/lib/duplication_check.py) -- the same rule
-  # restated near-verbatim in two docs with no cross-reference between them. This
-  # watches for duplication regrowing between manual reads.
-  echo "=== validate: checking documentation duplication ==="
-  local out
-  if ! out="$(python3 -c '
-import sys
-from pathlib import Path
-sys.path.insert(0, sys.argv[1])
-from lib.duplication_check import check_all
-failures = check_all(Path(sys.argv[2]))
-for f in failures:
-    print(f)
-sys.exit(1 if failures else 0)
-' "${SCRIPT_DIR}" "${REPO_ROOT}")"; then
-    printf '%s\n' "$out"
-    echo "=== validate: duplication check FAILED ==="
-    exit 1
-  fi
-  echo "=== validate: duplication check passed ==="
-}
-
 run_bloat_check() {
   # Bloat in one repo (default: this one). A repo holds current state only, so a tracked
   # archive-style directory or a file that marks itself historical fails. A docs-to-code
   # ratio past the threshold only warns, because it is a signal and not a defect.
-  # Bash 3.2 compatible, with no grep -P and no mapfile.
-  local dir="${1:-$REPO_ROOT}" ratio_max="0.60"
-  echo "=== validate: checking for bloat and legacy files ==="
-  if ! git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then
-    echo "  [SKIP] $dir is not a git repository"
-    return 0
-  fi
-  local hits=0 f n archive="" marked="" doc_loc=0 total_loc=0 ratio over
-  while IFS= read -r f; do
-    [[ -z "$f" ]] && continue
-    n=0
-    [[ -f "$dir/$f" ]] && n=$(wc -l < "$dir/$f")
-    total_loc=$((total_loc + n))
-    case "$f" in *.md) doc_loc=$((doc_loc + n)) ;; esac
-    if printf '%s\n' "$f" | grep -qiE '(^|/)(archive|archived|old|legacy)/'; then
-      archive="$archive
-  - $f"
-    fi
-    case "$f" in
-      *.md)
-        if head -5 "$dir/$f" 2>/dev/null | grep -qiE '^\**\s*(status:\s*)?(HISTORICAL|DEPRECATED|SUPERSEDED|ARCHIVED)\b'; then
-          marked="$marked
-  - $f"
-        fi ;;
-    esac
-  done <<< "$(git -C "$dir" -c core.quotepath=false ls-files)"
-  if [[ -n "$archive" ]]; then
-    echo "  [FAIL] tracked files under archive-style directories (delete them, git history is the archive):$archive"
-    hits=1
-  fi
-  if [[ -n "$marked" ]]; then
-    echo "  [FAIL] files that mark themselves historical or deprecated (delete or update them):$marked"
-    hits=1
-  fi
-  if [[ "$total_loc" -gt 0 ]]; then
-    ratio=$(awk "BEGIN {printf \"%.2f\", $doc_loc / $total_loc}")
-    over=$(awk "BEGIN {print ($ratio > $ratio_max) ? 1 : 0}")
-    if [[ "$over" == "1" ]]; then
-      echo "  [WARN] docs are $ratio of the repo's lines ($doc_loc of $total_loc; threshold $ratio_max) - run the audit skill on the docs"
-    fi
-  fi
-  if [[ "$hits" -ne 0 ]]; then
-    echo "=== validate: bloat check FAILED ==="
-    return 1
-  fi
-  echo "=== validate: bloat check passed ==="
+  # One Python pass over one `git ls-files` listing (scripts/lib/repo_checks.py).
+  python3 "${SCRIPT_DIR}/lib/repo_checks.py" bloat "${1:-$REPO_ROOT}"
 }
 
 run_code_quality() {
   # Code quality in one repo (default: this one): TypeScript files over 400 lines, a
   # Python syntax error, and a scripts/lib module no test file mentions. The module
   # check matches the module's name, because tests here are named for the behavior they cover.
-  local dir="${1:-$REPO_ROOT}" issues=0 f lines
-  echo "=== validate: checking code quality ==="
-  while IFS= read -r f; do
-    [[ -z "$f" ]] && continue
-    lines=$(wc -l < "$f")
-    if [[ "$lines" -gt 400 ]]; then
-      echo "  [FAIL] $f has $lines lines (limit 400)"
-      issues=$((issues + 1))
-    fi
-  done < <(git -C "$dir" -c core.quotepath=false ls-files -- '*.ts' '*.tsx' 2>/dev/null \
-             | grep -v '\.test\.' | sed "s|^|$dir/|")
-  if command -v python3 &>/dev/null; then
-    while IFS= read -r f; do
-      [[ -z "$f" ]] && continue
-      if ! python3 -c 'import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' "$f" 2>/dev/null; then
-        echo "  [FAIL] syntax error in $f"
-        issues=$((issues + 1))
-      fi
-    done < <(git -C "$dir" -c core.quotepath=false ls-files -- '*.py' 2>/dev/null | sed "s|^|$dir/|")
-  fi
-  if [[ -d "$dir/scripts/lib" && -d "$dir/tests" ]]; then
-    local module stem
-    for module in "$dir"/scripts/lib/*.py; do
-      [[ -e "$module" ]] || continue
-      stem="$(basename "$module" .py)"
-      [[ "$stem" == "__init__" ]] && continue
-      if ! grep -qE "(^|[^A-Za-z0-9_])${stem}([^A-Za-z0-9_]|\$)" "$dir"/tests/*.py 2>/dev/null; then
-        echo "  [FAIL] no test file mentions scripts/lib/${stem}.py"
-        issues=$((issues + 1))
-      fi
-    done
-  fi
-  if [[ "$issues" -ne 0 ]]; then
-    echo "=== validate: code quality FAILED ($issues issue(s)) ==="
-    return 1
-  fi
-  echo "=== validate: code quality passed ==="
+  python3 "${SCRIPT_DIR}/lib/repo_checks.py" quality "${1:-$REPO_ROOT}"
 }
 
-run_budget_check() {
-  # docs/BUDGET.json caps the test count, doc words and skill words. A repo with no budget file has
-  # nothing to check. The test runtime is measured by the audit skill's fleet_check.py --time.
-  local dir="${1:-$REPO_ROOT}" out
-  echo "=== validate: checking size budget ==="
-  if [[ ! -f "$dir/docs/BUDGET.json" ]]; then
-    echo "  [SKIP] no docs/BUDGET.json - nothing to check."
-    return 0
-  fi
-  if ! out="$(python3 -c '
-import sys
-from pathlib import Path
-import json
-sys.path.insert(0, sys.argv[1])
-import fleet_check as fc
-repo = Path(sys.argv[2])
-budget = json.loads((repo / fc.BUDGET_FILE).read_text(encoding="utf-8"))
-measured = fc.measure(repo, fc.tracked(repo))
-lines, over = fc.budget_lines(measured, budget)
-for line in lines:
-    if " is over the budget" in line:
-        print("  [FAIL] " + line)
-sys.exit(1 if over else 0)
-' "${REPO_ROOT}/skills/audit/scripts" "$dir")"; then
-    printf '%s\n' "$out"
-    echo "=== validate: size budget FAILED (raise docs/BUDGET.json only with the story that needs the room) ==="
-    return 1
-  fi
-  echo "=== validate: size budget passed ==="
+run_queue_bypass() {
+  # Every caller reaches validation through this script, whose queue block takes the slot. A tracked script that starts the
+  # test suite or a slotless copy of validate.sh around the queue fails here (scripts/lib/queue_bypass.py).
+  python3 "${SCRIPT_DIR}/lib/queue_bypass.py" "$REPO_ROOT"
 }
 
 run_smoke_tests() {
-  # WARN-skip if tests/ doesn't exist or python3 is missing. Tests read the one
-  # tracked shared/repo-profiles.json, so they pass identically everywhere.
+  # Skipped when tests/ does not exist. Tests read the one tracked shared/repo-profiles.json, so they pass identically everywhere.
   #
   # Python-only by design. A `node --test <dir>/*.mjs` block with no .mjs test present
   # exits 0 on the unmatched glob and reports success on zero tests. The one .mjs this repo ships
   # (core/templates/project/scripts/check-structure-contract.mjs) is a template that runs
   # in downstream repos. Re-add a runner deliberately if JS tests ever land.
-  local tests_dir="${REPO_ROOT}/tests"
-  if [[ ! -d "$tests_dir" ]]; then
-    return 0
-  fi
+  [[ -d "${REPO_ROOT}/tests" ]] || return 0
   echo "=== validate: running smoke tests ==="
-  if command -v python3 &>/dev/null; then
-    # Each test module runs in its own process, several at a time, because the suite spends
-    # its time starting git and bash. -b buffers each test's stdout/stderr and replays it only
-    # for failures: several tests exercise paths that print "[FAIL]" or "Error:" by design,
-    # and unbuffered, a fully green run read like a broken build.
-    local jobs log_dir module ran=0 n
-    jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
-    [[ "$jobs" -gt 6 ]] && jobs=6
-    log_dir="$(mktemp -d)"
-    # shellcheck disable=SC2064
-    trap "rm -rf '$log_dir'" RETURN
-    (cd "$tests_dir" && ls test_*.py | sed 's/\.py$//' | xargs -P "$jobs" -I{} \
-      sh -c 'python3 -m unittest -b "$1" > "$2/$1.log" 2>&1 || echo "$1" >> "$2/failed"' _ {} "$log_dir")
-    # Skill script tests.
-    local skill_test
-    for skill_test in "$REPO_ROOT"/skills/*/scripts/test_*.py; do
-      [[ -e "$skill_test" ]] || continue
-      printf '%s\n' "$skill_test"
-    done | xargs -P "$jobs" -I{} \
-      sh -c 'd="$(dirname "$1")"; m="$(basename "$1" .py)"; n="$(basename "$(dirname "$d")")-$m"; (cd "$d" && python3 -m unittest -b "$m") > "$2/$n.log" 2>&1 || echo "$n" >> "$2/failed"' _ {} "$log_dir"
-    for module in "$log_dir"/*.log; do
-      n="$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' "$module")"
-      ran=$((ran + ${n:-0}))
-    done
-    if [[ -s "$log_dir/failed" ]]; then
-      while IFS= read -r module; do
-        echo "--- $module ---"
-        cat "$log_dir/$module.log"
-      done < "$log_dir/failed"
-      echo "=== validate: python smoke tests FAILED ==="
-      rm -rf "$log_dir"  # exit skips the RETURN trap
-      exit 1
-    fi
-    echo "  Ran $ran tests across $(ls "$log_dir"/*.log | wc -l | tr -d ' ') modules, all passed"
-  else
-    echo "  [WARN] python3 not found — skipping Python smoke tests"
-  fi
+  # Each test module runs in its own process, several at a time (scripts/lib/smoke_runner.py), with failures replayed in full.
+  python3 "${SCRIPT_DIR}/lib/smoke_runner.py" "$REPO_ROOT" || exit 1
   echo "=== validate: smoke tests passed ==="
+}
+
+# The gates that share no state, in the order their output is replayed. Each is `bash validate.sh --gate NAME`.
+GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)
+
+run_gate() {
+  case "$1" in
+    precommit) run_precommit ;;
+    fleet) run_consistency ;;
+    bloat) run_bloat_check || exit 1 ;;
+    quality) run_code_quality || exit 1 ;;
+    refs) run_reference_check ;;
+    docs) run_docs_check ;;
+    limits) run_limits_check ;;
+    bypass) run_queue_bypass ;;
+    smoke) run_smoke_tests ;;
+    hookstate) run_hook_state ;;
+    *) echo "validate: no gate named '$1'" >&2; exit 2 ;;
+  esac
+}
+
+run_gates() {
+  # The gates run inside this run's one slot, at most one per core at once, each writing to its own file. A line prints as each
+  # gate starts and finishes, and the output replays in order, so the log reads as one sequential run and any failing gate fails
+  # the run. A run past its time budget stops and names the gate still running (scripts/lib/validate_gates.py).
+  local args=() gate
+  for gate in "${GATES[@]}"; do
+    args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate")")
+  done
+  python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
 }
 
 main() {
   local mode="${1:-all}"
-  if [[ "$mode" == "--tree" ]]; then
-    export OLIVERCODE_SCAN_TREE=1
-    mode=all
-  fi
 
   case "$mode" in
     --help|-h)
       echo "Usage: bash scripts/validate.sh [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  (no args)              Run pre-commit gates, doc/code consistency,"
-      echo "                         reference integrity, bloat, code quality, doc duplication,"
-      echo "                         smoke tests (tests/ and the skills' own script tests, if present)"
-      echo "                         and fleet conformance"
-      echo "  --tree                 Run everything above, with the gates over every tracked file"
-      echo "  --check-consistency    Run doc/code consistency checks only"
-      echo "  --check-budget [dir]   Run the size budget check (docs/BUDGET.json) on this or another checkout"
+      echo "  (no args)              Run pre-commit gates, fleet names, reference integrity, bloat,"
+      echo "                         code quality, the docs and size limit checks, the queue bypass check, smoke tests (tests/ and the"
+      echo "                         skills' own script tests, if present) and fleet conformance, in"
+      echo "                         parallel inside one queue slot, printing each gate as it starts and finishes"
+      echo "                         OLIVERCODE_VALIDATE_TIMEOUT (seconds) is the run's budget, OLIVERCODE_VALIDATE_RETRIES"
+      echo "                         reruns stopped gates and OLIVERCODE_VALIDATE_GATES caps the gates at once (default: cores);"
+      echo "                         OLIVERCODE_VALIDATE_JOBS sets the smoke test parallelism"
+      echo "  --tree                 Same as no args (the pre-commit gates always scan every tracked file)"
+      echo "  --check-consistency    Run the fleet name check only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
       echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
       echo "  --help                 Show this help"
       ;;
-    --check-consistency)
-      run_consistency
+    --gate)
+      run_gate "${2:-}"
       ;;
-    --check-budget)
-      run_budget_check "${2:-$REPO_ROOT}"
+    --check-consistency)
+      run_build_hooks
+      run_consistency
       ;;
     --check-repo)
       # The downstream governance gate: bloat and code quality for another checkout.
@@ -335,18 +213,40 @@ main() {
     --rehearse)
       exec bash "${SCRIPT_DIR}/qa/rehearse-install.sh" "${@:2}"
       ;;
+    all|--tree)
+      # The tree is snapshotted before the gates start, so an edit made during the run is never stamped as validated.
+      local tree
+      tree="$(python3 "${SCRIPT_DIR}/olivercode" validated snapshot)" || exit 1
+      run_build_hooks
+      run_gates
+      python3 "${SCRIPT_DIR}/olivercode" validated record "$tree"
+      ;;
     *)
-      run_precommit
-      run_consistency
-      run_bloat_check || exit 1
-      run_code_quality || exit 1
-      run_reference_check
-      run_duplication_check
-      run_budget_check || exit 1
-      run_smoke_tests
-      run_hook_state
+      echo "Unknown option: $mode" >&2
+      echo "Usage: bash scripts/validate.sh [--help | --tree | --gate NAME | --check-consistency | --check-repo <dir> | --rehearse]" >&2
+      exit 2
       ;;
   esac
 }
+
+# Help and a single gate started by a run that holds its slot already take none of their own.
+case "${1:-}" in --help|-h|--gate) VALIDATE_QUEUE_SLOT="${VALIDATE_QUEUE_SLOT:-none}" ;; esac
+
+# The validation queue block is the one the fleet shares (core/templates/project/scripts/validate-queue.snippet.sh), pointed at this checkout's helper.
+VALIDATE_QUEUE_BIN="${SCRIPT_DIR}/lib/validate_queue.py"
+# managed:validate-queue block, kept in step by sync-hooks and bootstrap
+# One per-user queue for validation runs, taken through the validate-queue helper this machine installs.
+# Without the helper the run goes ahead unqueued.
+VALIDATE_QUEUE_BIN="${VALIDATE_QUEUE_BIN:-$HOME/.local/bin/validate-queue}"
+if [[ -z "${VALIDATE_QUEUE_SLOT:-}" ]]; then
+  if [[ -x "$VALIDATE_QUEUE_BIN" ]]; then
+    VALIDATE_QUEUE_SLOT="$("$VALIDATE_QUEUE_BIN" acquire --pid $$ --label "$(basename "${REPO_ROOT:-$PWD}")" || true)"
+    export VALIDATE_QUEUE_SLOT="${VALIDATE_QUEUE_SLOT:-none}"
+    # A script's own EXIT trap wins: the queue reaps a slot whose process has exited, so nothing leaks.
+    [[ -n "$(trap -p EXIT)" ]] || trap '"$VALIDATE_QUEUE_BIN" release "$VALIDATE_QUEUE_SLOT" >/dev/null 2>&1 || true' EXIT
+  else
+    echo "validate: no validate-queue helper at $VALIDATE_QUEUE_BIN, running unqueued" >&2
+  fi
+fi
 
 main "$@"

@@ -1,10 +1,8 @@
 """scripts/run-tests.sh runs the suite from a clean clone of HEAD and names the commit."""
 import subprocess
-import tempfile
 import unittest
-from pathlib import Path
 
-from _support import REPO_ROOT, git, git_env, scratch_repo
+from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
 
 RUNNER = REPO_ROOT / "scripts" / "run-tests.sh"
 PASSING = "import unittest\nclass T(unittest.TestCase):\n    def test_ok(self):\n        pass\n"
@@ -13,9 +11,7 @@ FAILING = PASSING.replace("pass", "self.fail('boom')")
 
 class RunTestsSnapshot(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.repo = scratch_repo(Path(self.tmp.name) / "repo")
+        self.repo = scratch_repo(temp_dir(self) / "repo")
         (self.repo / "tests").mkdir()
         self.test_file = self.repo / "tests" / "test_x.py"
         self.test_file.write_text(PASSING)
@@ -43,5 +39,16 @@ class RunTestsSnapshot(unittest.TestCase):
         self.assertIn(sha, result.stdout)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class RunTestsSeparateProcesses(unittest.TestCase):
+    """Two modules named test_sweep (tests/ and skills/audit/scripts/) run green because each module has its own process (#770)."""
+
+    def test_same_named_modules_both_run(self):
+        repo = scratch_repo(temp_dir(self) / "repo")
+        for rel in ("tests/test_sweep.py", "skills/audit/scripts/test_sweep.py"):
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            (repo / rel).write_text(PASSING)
+        git(repo, "add", ".")
+        git(repo, "commit", "-q", "-m", "base")
+        result = subprocess.run(["bash", str(RUNNER), str(repo)], env=git_env(), capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("2 modules", result.stdout)

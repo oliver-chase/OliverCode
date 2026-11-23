@@ -3,9 +3,16 @@
 #
 # Usage: scripts/run-tests.sh [repo_dir]     (default: the repo this script lives in)
 #
+# Every test module runs in its own process (scripts/lib/smoke_runner.py, as validate.sh does), because two modules share the
+# name test_sweep and one process cannot import both (#770).
+#
 # Uncommitted edits, another session's work in progress and untracked files are never read,
 # because the suite runs in a fresh clone under a temporary HOME. The last line names the
 # commit, so a failure points at a commit and not at a moving working tree.
+#
+# The run holds one slot in the per-user validation queue (scripts/lib/validate_queue.py), like every validation run, so
+# a suite started here waits behind the runs already going. The queue state stays in the real home, and the tests see the temporary one,
+# so a record or log in this machine's ~/.olivercode cannot change a verdict.
 set -u
 
 repo="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -17,7 +24,10 @@ git clone -q --no-hardlinks --no-local "$repo" "$work/clone" || { echo "run-test
 git -C "$work/clone" checkout -q --detach "$sha" || { echo "run-tests: could not check out $sha" >&2; exit 2; }
 mkdir "$work/home"
 
-( cd "$work/clone" && HOME="$work/home" python3 -m unittest discover -b -s tests )
+smoke_runner="$(cd "$(dirname "$0")" && pwd)/lib/smoke_runner.py"
+validate_queue="$(cd "$(dirname "$0")" && pwd)/lib/validate_queue.py"
+OLIVERCODE_HOME="${OLIVERCODE_HOME:-$HOME/.olivercode}" python3 "$validate_queue" run \
+  env -u OLIVERCODE_HOME HOME="$work/home" python3 "$smoke_runner" "$work/clone"
 status=$?
 
 if [[ "$status" -eq 0 ]]; then verdict="passed"; else verdict="FAILED"; fi
