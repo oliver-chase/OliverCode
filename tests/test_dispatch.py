@@ -61,6 +61,7 @@ class RunIo:
         return True, ""
     def release(self, n): self.steps.append("release")
     def keep_open(self, n, reason=""): self.steps.append(f"open:{reason}")
+    def landed_lead(self, issue): return None
 
 
 class DispatchCase(unittest.TestCase):

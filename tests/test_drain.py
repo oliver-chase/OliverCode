@@ -27,6 +27,9 @@ class FakeIo:
         self.slug, self.issues, self.cap, self.builds, self.land_ok, self.tokens = "o/r", list(issues), cap, builds or {}, land_ok, tokens
         self.closed, self.comments, self.started, self.claims, self.lock = [], [], [], set(), threading.Lock()
         self.active, self.peak_overlap = set(), []
+        self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
+
+    def landed_lead(self, i): return self.leads.get(i["number"])
 
     def list_open(self):
         return [i for i in self.issues if i["number"] not in self.closed]
@@ -108,6 +111,16 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([n for n, _ in io.comments if n == 1], [1])
         self.assertIn("out of budget", io.comments[0][1])
         self.assertEqual(st["blocked"], [1])
+
+    def test_a_mate_whose_work_landed_under_a_lead_is_not_built_again(self):
+        """#988: no builder starts, the story stays open on Ready, and one comment names the lead commit for the owner."""
+        io = FakeIo([issue(1)])
+        io.leads[1] = ("0123456789ab", "Fix the thing (#976)")
+        _, _, st = self.run_drain(io)
+        self.assertEqual([], io.started)
+        self.assertEqual([1], io.kept)
+        self.assertEqual([1], st["blocked"])
+        self.assertIn("Fix the thing (#976)", io.comments[0][1])
 
     def test_the_default_drain_builds_one_story_at_a_time_and_parallel_is_opt_in(self):
         """#979: one builder unless --parallel N asks for more, and a bad N is refused with the usage line."""
@@ -278,6 +291,40 @@ class TestRealIo(unittest.TestCase):
                 mock.patch.object(cmd_drain.cmd_land, "add_worktree", lambda *a: ["hooks failed"]):
             with self.assertRaises(RuntimeError):
                 self.io.worktree(8)
+
+    def commit_file(self, path: str, subject: str) -> None:
+        (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (self.repo / path).write_text(subject + "\n", encoding="utf-8")
+        git(self.repo, "add", path)
+        git(self.repo, "commit", "-qm", subject)
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def mate_io(self, notes: list) -> cmd_drain.Io:
+        """An Io whose REST reads return the story's comments as `notes`."""
+        return cmd_drain.Io(self.repo, "o/r", "dispatch", lambda args: subprocess.CompletedProcess(args, 0, json.dumps(notes), ""))
+
+    def test_a_mate_is_recognized_when_a_lead_commit_changed_its_files_and_its_close_was_refused(self):
+        """#988: the lead commit is named, and the mate's work is not built again."""
+        self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
+        mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
+        lead = self.mate_io(refused).landed_lead(mate)
+        self.assertEqual("Fix the thing (#976)", lead[1])
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD").stdout.strip(), lead[0])
+
+    def test_a_story_is_built_as_before_without_a_refused_close_an_overlapping_file_or_a_comment(self):
+        self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
+        mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
+        self.assertIsNone(self.mate_io([]).landed_lead(mate))
+        self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_land.py"), "comments": 1}))
+        self.assertIsNone(self.mate_io(refused).landed_lead(issue(974, "Files area: scripts/lib/cmd_drain.py")))
+
+    def test_a_story_with_its_own_commit_on_main_is_not_a_mate(self):
+        self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
+        self.commit_file("scripts/lib/cmd_drain.py", "Fix the story (#974)")
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
+        self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}))
 
     def test_head_that_names_the_story_and_sits_on_the_default_branch_is_landed(self):
         git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")

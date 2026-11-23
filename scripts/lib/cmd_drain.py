@@ -28,11 +28,17 @@ PARALLEL = 1  # builders one drain runs at once; more only when the owner asks w
 LOAD_WAITS = 12
 FILE_TOKEN = re.compile(r"`([\w./-]+\.\w+|[\w.-]+/[\w./-]*)`")
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
+FILES_AREA = re.compile(r"files area:\s*(.+)", re.IGNORECASE)
 
 
 def story_files(issue: dict) -> set[str]:
     """The paths a story names in backticks, which decide whether two stories can run side by side."""
     return {m.rstrip("/") for m in FILE_TOKEN.findall(issue.get("body") or "")}
+
+
+def files_area(issue: dict) -> set[str]:
+    """The paths on a story's Files area line, bare or in backticks, for the check that finds a mate's work already on main (#988)."""
+    return {part.strip(" `.").rstrip("/") for line in FILES_AREA.findall(issue.get("body") or "") for part in line.split(",") if part.strip(" `.")}
 
 
 def is_epic(issue: dict) -> bool:
@@ -109,6 +115,38 @@ class Io:
         subprocess.run(["git", "-C", str(self.repo), "fetch", "-q", "origin", branch], capture_output=True, text=True)
         ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--format=%s"], capture_output=True, text=True)
         return ran.returncode == 0 and any(f"(#{n})" in line for line in ran.stdout.splitlines())
+
+    def landed_lead(self, issue: dict) -> tuple[str, str] | None:
+        """(sha, subject) of the newest commit on origin's default branch that names another story and changed a file in this story's Files area.
+        It answers only for a story with no commit of its own, whose close was refused for want of one, so a mate left by a batched build is
+        recognized and is not built again (#988)."""
+        n, area = issue["number"], files_area(issue)
+        if not area:
+            return None
+        branch = self.branch()
+        ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--name-only", "--format=COMMIT%x09%H%x09%s"],
+                             capture_output=True, text=True)
+        if ran.returncode != 0:
+            return None
+        rows: list[tuple[str, str, set[str]]] = []
+        for line in ran.stdout.splitlines():
+            if line.startswith("COMMIT\t"):
+                _, sha, subject = line.split("\t", 2)
+                rows.append((sha, subject, set()))
+            elif line.strip() and rows:
+                rows[-1][2].add(line.strip())
+        if any(f"(#{n})" in subject for _, subject, _ in rows):
+            return None
+        lead = next(((sha, subject) for sha, subject, files in rows if files & area and re.search(r"\(#\d+\)", subject)), None)
+        if lead is None or not issue.get("comments"):
+            return None
+        done = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments"])
+        try:
+            notes = json.loads(done.stdout) if done.returncode == 0 else []
+        except ValueError:
+            notes = []
+        refused = any(f"no commit for (#{n})" in str(note.get("body") or "") for note in notes if isinstance(note, dict))
+        return lead if refused else None
 
     def land(self, worktree: Path, n: int) -> tuple[bool, str]:
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
@@ -220,6 +258,10 @@ def held_comment(worktree: Path, finding: str) -> str:
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n, tokens, note = issue["number"], 0, ""
+    lead = io.landed_lead(issue)
+    if lead:  # the work landed under another story, so a fresh build would repeat it on main; the owner decides (#988)
+        io.comment(n, f"Not built: commit {lead[0][:12]} ({lead[1]}) on the default branch changed this story's files, so its work most likely landed under that story. The owner decides whether this story closes.")
+        return False, 0
     try:
         worktree = io.worktree(n)
     except RuntimeError as exc:
