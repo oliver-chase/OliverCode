@@ -1,4 +1,4 @@
-"""Launcher commands that read or stamp one repo: skills, discover and bootstrap."""
+"""Launcher commands that read or stamp one repo: discover and bootstrap."""
 
 from __future__ import annotations
 
@@ -11,39 +11,6 @@ from lib.cli import reject_extra as _reject_extra
 from lib import repo_gates, repo_state
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 from lib.repo_profiles import REGISTRY_NAME, registry_file, registry_write_file
-from lib.skills_catalog import _load_skills
-
-
-def command_skills(argv: list[str]) -> int:
-    """List every skill under skills/, optionally filtered by --grep TERM."""
-    term = None
-    rest = list(argv)
-    if "--grep" in rest:
-        idx = rest.index("--grep")
-        if idx + 1 >= len(rest):
-            print("Error: --grep requires a search term.")
-            return 1
-        term = rest[idx + 1].lower()
-        del rest[idx : idx + 2]
-    _reject_extra("skills", rest)
-
-    skills = _load_skills(OC_ROOT)
-    if not skills:
-        print("No skills found under skills/.")
-        return 1
-
-    if term:
-        skills = [(n, d) for n, d in skills if term in n.lower() or term in d.lower()]
-        if not skills:
-            print(f"No skills match '{term}'.")
-            return 0
-
-    width = max((len(n) for n, _ in skills), default=0)
-    for name, description in skills:
-        summary = description if len(description) <= 100 else description[:97] + "..."
-        print(f"{name:<{width}}  {summary}")
-    print(f"\n{len(skills)} skill(s).")
-    return 0
 
 
 def _report_claude_dir(oc_root: Path) -> None:

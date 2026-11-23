@@ -24,7 +24,6 @@ from lib import cmd_fleet, maintain, placement, repo_profiles, repo_state  # noq
 AUDIT = str(REPO_ROOT / "skills" / "audit" / "scripts")
 sys.path.insert(0, AUDIT)
 import fleet_check  # noqa: E402
-import ledger_report  # noqa: E402
 
 FAKE_GH = """#!/bin/sh
 echo "$3" >> "$FAKE_GH_LOG"
@@ -170,12 +169,7 @@ class TestEveryCommandSkips(FakeGh):
         check.assert_not_called()
         self.assertIn("skip old-app: archived on GitHub", out)
 
-    def test_ledger_and_fleet_check_skip_it(self):
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            found = ledger_report.repos(self.fleet)
-        self.assertEqual(["live-app"], [p.name for p in found])
-        self.assertIn("skip old-app: archived on GitHub", err.getvalue())
+    def test_fleet_check_skips_it(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(0, fleet_check.main([str(self.old)]))

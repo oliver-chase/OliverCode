@@ -1,4 +1,4 @@
-"""Direct tests for the launcher commands that had none: skills, discover, audit-fleet and placement drift.
+"""Direct tests for the launcher commands that had none: discover and placement drift.
 
 Every test runs against a scratch checkout and a scratch HOME. Nothing reaches the network, and
 git reads no machine config (tests/_support.py).
@@ -18,43 +18,6 @@ TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import local_config  # noqa: E402  (load_script put scripts/ on the path)
 from lib import cmd_fleet, cmd_health, cmd_repo  # noqa: E402
-
-
-class TestCommandSkills(ScratchHome):
-    def run_skills(self, *argv):
-        with mock.patch.object(cmd_repo, "OC_ROOT", self.oc):
-            return quiet(launcher.command_skills, list(argv))
-
-    def test_grep_filters_by_name_and_description(self):
-        self.add_skill("alpha", "Sorts mail.")
-        self.add_skill("beta", "Pulls reports.")
-        code, out = self.run_skills("--grep", "REPORTS")
-        self.assertEqual(code, 0)
-        self.assertIn("beta", out)
-        self.assertNotIn("alpha", out)
-
-    def test_a_grep_with_no_match_says_so_and_exits_zero(self):
-        self.add_skill("alpha")
-        code, out = self.run_skills("--grep", "zzz")
-        self.assertEqual(code, 0)
-        self.assertIn("No skills match 'zzz'.", out)
-
-    def test_a_checkout_with_no_skills_fails(self):
-        code, out = self.run_skills()
-        self.assertEqual(code, 1)
-        self.assertIn("No skills found", out)
-
-    def test_grep_without_a_term_fails(self):
-        self.add_skill("alpha")
-        code, out = self.run_skills("--grep")
-        self.assertEqual(code, 1)
-        self.assertIn("--grep requires a search term", out)
-
-    def test_a_long_description_is_cut_to_100_characters(self):
-        self.add_skill("alpha", "w" * 150)
-        _, out = self.run_skills()
-        self.assertIn("w" * 97 + "...", out)
-        self.assertNotIn("w" * 98, out)
 
 
 class TestCommandDiscover(ScratchHome):
@@ -132,60 +95,6 @@ class TestCommandDiscover(ScratchHome):
         self.discover(self.fleet)
         self.assertEqual(git(repo, "status", "--porcelain").stdout, before)
         self.assertFalse((repo / ".githooks").exists())
-
-
-class TestCommandAuditFleet(ScratchHome):
-    def setUp(self):
-        super().setUp()
-        (self.oc / "skills" / "audit" / "scripts").mkdir(parents=True)
-
-    def audit(self, skills_root=None, runner=None):
-        done = subprocess.CompletedProcess([], 0, stdout="12 skills, 0 findings\n", stderr="")
-        runner = runner or mock.Mock(return_value=done)
-        with mock.patch.object(cmd_fleet, "_skills_root", return_value=skills_root), \
-                mock.patch.object(launcher.subprocess, "run", runner):
-            code, out = quiet(launcher.command_audit_fleet, self.oc)
-        return code, out, runner
-
-    def test_a_check_that_crashes_exits_one_and_findings_exit_zero(self):
-        for returncode, stderr in ((2, ""), (1, "Traceback (most recent call last):")):
-            done = subprocess.CompletedProcess([], returncode, stdout="a finding\n", stderr=stderr)
-            code, _, _ = self.audit(runner=mock.Mock(return_value=done))
-            self.assertEqual(code, 1)
-
-    def test_a_checkout_without_the_audit_skill_fails(self):
-        shutil.rmtree(self.oc / "skills" / "audit")
-        code, out, _ = self.audit()
-        self.assertEqual(code, 1)
-        self.assertIn("this checkout is missing skills/audit", out)
-
-    def test_prints_one_line_per_check(self):
-        code, out, _ = self.audit()
-        self.assertEqual(code, 0)
-        self.assertIn("12 skills", out)
-        self.assertIn("no skills folder", out)
-
-    def test_checks_the_machines_skills_folder_too_and_skips_one_that_is_gone(self):
-        mine = self.tmp / "my-skills"
-        mine.mkdir()
-        _, out, runner = self.audit(skills_root=mine)
-        self.assertEqual(runner.call_count, 2)
-        scanned = [call.args[0][-1] for call in runner.call_args_list]
-        self.assertEqual(scanned, [str(mine), str(self.oc / "skills")])
-        _, out, runner = self.audit(skills_root=self.tmp / "gone")
-        self.assertEqual(runner.call_count, 1)
-        self.assertIn("[SKIP] skills:", out)
-
-    def test_a_finding_is_reported_as_fail_and_never_fixed(self):
-        failing = mock.Mock(return_value=subprocess.CompletedProcess([], 1, stdout="1 finding\n", stderr=""))
-        code, out, _ = self.audit(runner=failing)
-        self.assertEqual(code, 0)
-        self.assertIn("[FAIL]", out)
-
-    def test_a_check_that_prints_nothing_is_still_logged(self):
-        silent = mock.Mock(return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""))
-        _, out, _ = self.audit(runner=silent)
-        self.assertIn("(no output)", out)
 
 
 class TestPlacementDrift(ScratchHome):

@@ -37,7 +37,7 @@ if __name__ == "__main__":
     _use_newer_python()  # before the imports below, which may not parse on an old Python
 
 from lib.cmd_fleet import (  # noqa: E402
-    command_audit_fleet, command_backlog_setup, command_conform, command_ledger, command_sync_hooks, command_update,
+    command_backlog_setup, command_conform, command_sync_hooks, command_update,
 )
 from lib.cmd_dispatch import command_dispatch  # noqa: E402
 from lib.cmd_drain import command_drain  # noqa: E402
@@ -50,16 +50,12 @@ from lib.cmd_lesson import command_lesson  # noqa: E402
 from lib.story_outbox import command_story  # noqa: E402
 from lib.candidates import command_candidates  # noqa: E402
 from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
-from lib.cmd_batch import command_batch  # noqa: E402
-from lib.cmd_audit_mode import command_audit_mode  # noqa: E402
 from lib.cmd_initfleet import command_init_fleet  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
 from lib.cmd_owner import command_owner  # noqa: E402
-from lib.push_approval import command_push_blocked  # noqa: E402
 from lib.cmd_rule import command_rule  # noqa: E402
 from lib.decisions import command_decisions  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
-from lib.failure_log import command_report  # noqa: E402
 from lib.validated import command as command_validated  # noqa: E402
 from lib.cmd_health import command_health  # noqa: E402
 from lib.cmd_status import command_status  # noqa: E402
@@ -69,7 +65,6 @@ from lib.cmd_install import command_install, command_uninstall  # noqa: E402
 from lib.cmd_repo import (
     command_bootstrap, command_clean, command_discover, command_gh_limit, command_place, command_queue,
     command_policy, command_worktree,
-    command_skills,
 )  # noqa: E402
 from lib.local_config import OC_ROOT  # noqa: E402
 
@@ -150,18 +145,12 @@ def main() -> int:
         return command_decisions(argv)
     if cmd == "fleet-sync":
         return command_fleet_sync(argv)
-    if cmd == "batch":
-        return command_batch(argv)
-    if cmd == "audit-mode":
-        return command_audit_mode(argv)
     if cmd == "limits":
         return command_limits(argv)
     if cmd == "init-fleet":
         return command_init_fleet(argv)
     if cmd == "owner":
         return command_owner(argv)
-    if cmd == "push-blocked":
-        return command_push_blocked(argv)
     if cmd == "rule":
         return command_rule(argv)
     if cmd == "lesson":
@@ -220,19 +209,8 @@ def main() -> int:
         root, rest = _take_root_flag(rest)
         _reject_extra(cmd, rest)
         return command_sync_hooks(OC_ROOT, root, commit, story)
-    if cmd == "audit-fleet":
-        _reject_extra(cmd, argv)
-        return command_audit_fleet(OC_ROOT)
-    if cmd == "ledger":
-        root, rest = _take_root_flag(argv)
-        _reject_extra(cmd, rest)
-        return command_ledger(OC_ROOT, root)
-    if cmd == "skills":
-        return command_skills(argv)
     if cmd == "maintain":
         return command_maintain(argv)
-    if cmd == "report":
-        return command_report(argv)
     if cmd == "wip":
         return command_wip(argv)
     if cmd == "guide":

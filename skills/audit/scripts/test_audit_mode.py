@@ -33,7 +33,7 @@ class AuditModeTest(unittest.TestCase):
     def test_the_gated_path_asks_once_for_approval_and_shows_the_reminder(self):
         action, reminder = audit_mode.next_step("gated")
         self.assertEqual("approve", action)
-        self.assertIn("olivercode audit-mode full", reminder)
+        self.assertIn("audit_mode.py set full", reminder)
 
     def test_the_full_path_runs_with_no_prompt_and_no_reminder(self):
         self.assertEqual(("run", None), audit_mode.next_step("full"))

@@ -102,7 +102,7 @@ The manifest gives every file a mode: `presence` files are created only if absen
 ```bash
 bash scripts/validate.sh
 scripts/olivercode conform --offline
-scripts/olivercode skills
+scripts/olivercode guide
 cd <one of your repos> && bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
 ```
 
@@ -167,7 +167,7 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 - `watchRoots` and `allowOutside`: the folders `olivercode place` scans for strays, and checkouts allowed to stay elsewhere
 - `repoPaths`: a repo outside the fleet folder
 - `liveCopies`: each path a running bot reads, mapped to its agent copy. `install` and `conform` fail when OliverCode runs from a live path and name the agent copy to use
-- `auditMode`: `full` or `gated`. Unset, the audit stops at its report and filed issues, and `olivercode audit-mode full|gated` stores the opt-in to fix them too
+- `auditMode`: `full` or `gated`. Unset, the audit stops at its report and filed issues, and `python3 skills/audit/scripts/audit_mode.py set full|gated` stores the opt-in to fix them too
 - `voiceFile`: the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of `docs/VOICE.md`
 - `designFile`: your own design file, which `install` links as `~/.claude/DESIGN.md` in place of `docs/DESIGN.md`. `install` keeps a `~/.claude/VOICE.md` or `DESIGN.md` you already have and prints `[KEPT]`
 
@@ -201,8 +201,7 @@ In a repo with commit gates, a new interactive session refreshes `status-digest.
 - `land WORKTREE STORY` rebases the worktree on origin/main, runs `scripts/validate.sh` up to twice unless the runner already recorded a pass for the same tree (the log names the record it used, #910), pushes `HEAD:main` (retrying while main moves, see "A land resumes and retries"), fast-forwards a clean main checkout and deletes the worktree and its branches. Work that does not land stays in its worktree with a handover file at `~/.olivercode/land/handover-REPO-N.md`
 - `limits check` prints the tracked line count against the one ceiling number in `docs/LIMITS.json` (tests are not counted) and exits 0 always. A count over the ceiling prints a warning and blocks nothing, and `validate.sh` and `land` never edit the file. Edit the number by hand to accept growth
 - `board` (`groom` and `sync`), `fleet-sync`, `maintain` and `gh-limit` run without a model call, and each takes `--schedule` where `--help` shows it. `gh-limit clear` lifts the shared GitHub rate-limit hold
-- `owner`, `decisions`, `lesson`, `batch` and `story outbox` keep the owner's decisions, corrections and queued story requests in `~/.olivercode/`
-- `push-blocked --session SID` answers a blocked OliverCode push. It reads the decision record `standing-push-olivercode` that the owner made with `decisions record ... --by owner`, names the one rule to allow and exits 0, and nobody asks the owner again. With no record it exits 1, leaves the push blocked and queues one owner line that asks once. It edits no settings file: the rule itself reaches `~/.claude/settings.json` through the installer's autoMode story
+- `owner`, `decisions`, `lesson` and `story outbox` keep the owner's decisions, corrections and queued story requests in `~/.olivercode/`
 - `install` links `docs/VOICE.md` and `docs/DESIGN.md` into `~/.claude`, links each skill, merges the hook entries listed in `docs/RULES.md` ("Execution") into `~/.claude/settings.json` and sets `core.hooksPath` to `.githooks` here when unset. Any other file at a target path moves to `<name>.pre-olivercode` and is printed. `uninstall` reverses exactly that
 - `validated record|check SHA` keeps the passing full validations that the pre-push hook requires before a push to main
 - `queue show` lists the validation runs holding one of the slots that every `scripts/validate.sh` waits for. The slot count is `OLIVERCODE_VALIDATE_SLOTS`, which defaults to an eighth of this machine's cores (at least 1), so an 8-core laptop runs one validation at a time and a 16-core desktop runs two. A holder keeps its slot while its process lives and for up to 4 hours (`OLIVERCODE_VALIDATE_HARD_CAP`, in seconds), and a run waits up to an hour (`OLIVERCODE_VALIDATE_WAIT`, in seconds) before it goes ahead with a message that names why. A slot whose holder died, whose pid now belongs to another process or whose file is damaged is reclaimed with a line that names the repair The pretool guard routes `npm test`, `pytest` and the other commands in `QUEUED_COMMANDS` (`scripts/hooks/queue_guard.py`) through `queue run`

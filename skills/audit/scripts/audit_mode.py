@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 MODES = ("full", "gated")
-REMINDER = "Full automation fixes everything with no prompt; switch with `olivercode audit-mode full`."
+REMINDER = "Full automation fixes everything with no prompt; switch with `python3 scripts/audit_mode.py set full`."
 
 
 def _config():

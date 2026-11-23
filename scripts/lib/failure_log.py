@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -103,23 +102,3 @@ def repeated(minimum: int = REPEAT) -> dict[tuple[str, str], list[str]]:
         if gate != "maintain":
             seen.setdefault((gate, reason), []).append(when)
     return {k: v for k, v in seen.items() if len(v) >= minimum}
-
-
-def command_report(argv: list[str]) -> int:
-    """`olivercode report [--days N]`: how many times each gate blocked in the last N days."""
-    rest = list(argv)
-    try:
-        if rest and (rest[:1] != ["--days"] or len(rest) != 2):
-            raise ValueError
-        days = int(rest[1]) if rest else 7
-    except ValueError:
-        print("Usage: olivercode report [--days N]")
-        return 1
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    # maintain logs each unrepaired machine finding on every run, so it is a finding count and never a block.
-    blocks = Counter(g for when, _r, g, _x in entries() if when >= f"{since:%Y-%m-%dT%H:%M:%SZ}" and g != "maintain")
-    print(f"Harness report, last {days} days")
-    print("Gate blocks:" + ("" if blocks else " none logged"))
-    for gate, n in blocks.most_common():
-        print(f"  {gate}: {n}")
-    return 0

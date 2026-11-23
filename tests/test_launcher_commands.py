@@ -439,7 +439,7 @@ class TestUninstall(HomeCase):
         self.assertIn("unexpected argument", result.stdout)
         self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
         # Every command that takes no extra word refuses one before it acts.
-        for cmd in ("install", "health", "update", "sync-hooks", "audit-fleet", "skills",
+        for cmd in ("install", "health", "update", "sync-hooks",
                     "conform . ", "discover --root . "):
             with self.subTest(cmd):
                 done = subprocess.run([sys.executable, str(LAUNCHER), *cmd.split(), "--bogus"],

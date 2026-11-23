@@ -1,7 +1,7 @@
 """Launcher command `rule`: an owner rule becomes a check in the repo it governs (#628).
 
 owner-rules.json in a repo holds [{"id", "text", "paths": [glob], "forbid": regex}]. `rule check` fails when a file matching
-a rule's paths matches its forbid pattern, so the repo's tests can run it. Batches live in cmd_batch.py. Standard library only.
+a rule's paths matches its forbid pattern, so the repo's tests can run it. Standard library only.
 """
 
 from __future__ import annotations

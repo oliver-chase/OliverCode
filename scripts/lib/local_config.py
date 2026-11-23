@@ -66,7 +66,7 @@ def fleet_registry_path() -> Path:
 
 
 def skills_root() -> Path | None:
-    """The personal skills folder that health and audit-fleet check."""
+    """The personal skills folder that health checks."""
     return _path(os.environ.get("OLIVERCODE_SKILLS_ROOT") or load_local().get("skillsRoot"))
 
 

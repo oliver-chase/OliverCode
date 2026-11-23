@@ -1,4 +1,4 @@
-"""Launcher commands that act on the fleet: conform, backlog-setup, sync-hooks, audit-fleet, ledger and update."""
+"""Launcher commands that act on the fleet: conform, backlog-setup, sync-hooks and update."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from lib import cmd_owner as _owner
 from lib.local_config import OC_ROOT
 from lib import repo_state as _repo_state
 from lib.local_config import private_repos as _private_repos
-from lib.local_config import skills_root as _skills_root
 from lib.repo_profiles import iter_fleet as _iter_fleet
 from lib.repo_profiles import NO_FLEET, load_repo_profiles, registry_file, registry_gap
 
@@ -335,58 +334,6 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None, commit: bo
     return 1 if failed_repos else 0
 
 
-def command_audit_fleet(oc_root: Path) -> int:
-    """Run the audit skill's structure check against every known skill root.
-
-    Targets exactly 2 roots -- this machine's skills folder (local_config) and
-    OliverCode's own skills/ -- not the fleet-repo iteration sync-hooks uses. Fleet
-    iteration walks git repos for hook management; this walks 2 known skill-directory
-    trees, a different job with a different unit. repo-profiles.json lists repos, which
-    hold no skill trees, so reusing it here would scan the wrong places.
-
-    Non-interactive: prints one line per check and writes no file,
-    never fixes anything: a scheduled job with nobody watching never auto-fixes.
-    The audit ships in this checkout, so it runs on any machine; the personal skills
-    folder is checked only when this machine names one.
-    """
-    scripts_dir = oc_root / "skills" / "audit" / "scripts"
-    if not scripts_dir.is_dir():
-        print(f"Error: {scripts_dir} not found -- this checkout is missing skills/audit.")
-        return 1
-
-    targets = {"olivercode-skills": oc_root / "skills"}
-    skills = _skills_root()
-    if skills is None:
-        print("  [INFO] no skills folder set for this machine (skillsRoot) — only OliverCode's skills are checked")
-    else:
-        targets = {"skills": skills, **targets}
-    check = "check_skill_structure.py"
-
-    broken = False
-    for target_name, target_path in targets.items():
-        if not target_path.is_dir():
-            print(f"  [SKIP] {target_name}: {target_path} not found")
-            continue
-        print(f"-- {target_name} ({target_path}) --")
-        result = subprocess.run(
-            [sys.executable, str(scripts_dir / check),
-             *([f"--with={skills}"] if skills and target_name == "olivercode-skills" else []), str(target_path)],
-            capture_output=True, text=True,
-        )
-        out_lines = result.stdout.strip().splitlines()
-        summary = out_lines[-1] if out_lines else "(no output)"
-        # A check exits 1 when it has findings. Any other nonzero exit, or a traceback, means it did not run.
-        crashed = result.returncode > 1 or "Traceback" in result.stderr
-        broken = broken or crashed
-        status = "ERROR" if crashed else "FAIL" if result.returncode != 0 else "ok"
-        print(f"  [{status}] {check}: {summary}")
-
-    print("\nFindings are heuristic. Read the flagged locations before treating any as a real "
-          "defect -- this command never fixes anything on its own.")
-    # Findings exit 0; only a check that could not run exits 1.
-    return 1 if broken else 0
-
-
 def command_update(oc_root: Path | None = None, story: str | None = None) -> int:
     """Pull this checkout's tracking branch, re-run install, converge fleet hooks, then run conform on the fleet.
 
@@ -422,12 +369,3 @@ def command_update(oc_root: Path | None = None, story: str | None = None) -> int
     if conform_code:
         print("Conform found failures in the fleet. Each Fix line above names the repair; `olivercode conform --fix --story N` applies the ones it can.")
     return install_code or sync_code or conform_code
-
-
-def command_ledger(oc_root: Path, root: Path | None) -> int:
-    """`olivercode ledger [--root DIR]`: the audit skill's fleet ledger report, over every repo under the root."""
-    script = oc_root / "skills" / "audit" / "scripts" / "ledger_report.py"
-    if not script.is_file():
-        print(f"Error: {script} not found -- this checkout is missing skills/audit.")
-        return 1
-    return subprocess.run([sys.executable, str(script), str(root or oc_root.parent)]).returncode

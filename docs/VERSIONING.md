@@ -19,7 +19,7 @@ The cut picks the highest level any commit since the previous cut reaches.
 
 | Level | A story did this | Example |
 |---|---|---|
-| MAJOR | Removed or renamed a command, skill, gate, config key or file layout that a user or fleet repo relies on | A story removes `olivercode ledger`, or renames `docs/AUDITED.txt` |
+| MAJOR | Removed or renamed a command, skill, gate, config key or file layout that a user or fleet repo relies on | A story removes `olivercode land`, or renames `docs/AUDITED.txt` |
 | MINOR | Added a command, skill, gate or file the reader uses | A story adds `olivercode drain` or a new skill under `skills/` |
 | PATCH | Only fixed or trimmed something that already existed | A story makes `olivercode land` retry a push, or shortens a message |
 

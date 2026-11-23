@@ -21,29 +21,14 @@ class Base(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
 
-class TestReport(Base):
-    def test_blocks_are_counted_per_gate(self):
-        failure_log.record("Secrets", "BLOCKED", "r")
-        failure_log.record("Secrets", "BLOCKED", "r")
-        failure_log.record("Size ratchet", "BLOCKED", "r")
-        failure_log.record("maintain", "links: a dangling link", "machine")
-        text = run(failure_log.command_report, [])[1]
-        self.assertIn("Secrets: 2", text)
-        self.assertIn("Size ratchet: 1", text)
-        self.assertNotIn("maintain", text)
-        # A log past twice its kept size keeps only its newest lines.
+class TestFailureLog(Base):
+    def test_a_log_past_twice_its_kept_size_keeps_only_its_newest_lines(self):
         path = failure_log.log_path()
         path.write_text("".join(f"line {i}\n" for i in range(2 * failure_log.KEEP_LINES)))
         failure_log.record("Secrets", "BLOCKED", "r")
         lines = path.read_text().splitlines()
         self.assertEqual(failure_log.KEEP_LINES, len(lines))
         self.assertIn("Secrets", lines[-1])
-
-    def test_a_non_number_for_days_prints_the_usage_line(self):
-        for args in (["--days", "x"], ["--weeks", "2"]):
-            code, text = run(failure_log.command_report, args)
-            self.assertEqual(code, 1, args)
-            self.assertIn("Usage: olivercode report [--days N]", text)
 
 
 class TestMemoryAndVersion(Base):

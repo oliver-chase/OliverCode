@@ -46,11 +46,7 @@ GROUPS = (
         ("status", "Show how many stories are open and how fast they close"),
         ("status digest", "Write the one-page summary a new thread starts from"),
         ("conform", "Check repos against the shared standard"),
-        ("ledger", "Show which repos have a current audit"),
-        ("audit-fleet", "Check the skills for structure problems"),
-        ("audit-mode", "Choose whether an audit fixes what it finds"),
         ("maintain", "Repair what is safe to repair on this machine"),
-        ("report", "Count how often each gate blocked a commit"),
         ("limits", "Check the size of the repo against its ceiling"),
     )),
     ("Run and land work", (
@@ -61,7 +57,6 @@ GROUPS = (
         ("wip", "Save uncommitted work without touching the working tree"),
         ("validated", "Record or check that a commit passed full validation"),
         ("queue", "Take a turn in the validation queue"),
-        ("batch", "Hold a batch of content until the owner approves one sample"),
     )),
     ("Version and docs", (
         ("version-cut", "Cut a version from what landed on main"),
@@ -77,7 +72,6 @@ GROUPS = (
     )),
     ("Owner and decisions", (
         ("owner", "Keep the steps only the owner can take"),
-        ("push-blocked", "Handle a push the safety system blocked"),
         ("decisions", "Keep the owner's decisions in their own words"),
     )),
     ("Learning", (
@@ -90,7 +84,6 @@ GROUPS = (
         ("policy", "Write the permission policy for a repo"),
     )),
     ("Orientation", (
-        ("skills", "List every skill"),
         ("guide", "Say what everything does, or what one command, gate, guard, job or skill does"),
     )),
 )

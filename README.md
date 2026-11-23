@@ -103,14 +103,14 @@ python3 scripts/olivercode conform
 | Job | Commands |
 | --- | --- |
 | Install and update | `olivercode install`, `olivercode uninstall`, `olivercode update`, `olivercode bootstrap`, `olivercode sync-hooks`, `olivercode place`, `olivercode clean`, `olivercode worktree`, `olivercode commit-check` |
-| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode ledger`, `olivercode audit-fleet`, `olivercode audit-mode`, `olivercode maintain`, `olivercode report`, `olivercode limits` |
-| Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode land`, `olivercode wip`, `olivercode validated`, `olivercode queue`, `olivercode batch` |
+| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode maintain`, `olivercode limits` |
+| Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode land`, `olivercode wip`, `olivercode validated`, `olivercode queue` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode story`, `olivercode candidates`, `olivercode gh-limit` |
-| Owner and decisions | `olivercode owner`, `olivercode push-blocked`, `olivercode decisions` |
+| Owner and decisions | `olivercode owner`, `olivercode decisions` |
 | Learning | `olivercode lesson` |
 | Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode policy` |
-| Orientation | `olivercode skills`, `olivercode guide` |
+| Orientation | `olivercode guide` |
 
 The scheduled jobs (`board sync`, `fleet-sync`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
 
