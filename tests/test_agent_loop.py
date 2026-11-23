@@ -372,6 +372,22 @@ class TestLoop(unittest.TestCase):
         self.assertNotIn("Commit by explicit path", seen["system"])
         self.assertNotIn("Builder rules", seen["prompt"])
 
+    def test_the_reader_can_read_and_search_and_is_told_to_check_a_doubt_first(self):
+        """#1079: a one-turn reader with no tool call held #1024 for a helper it could not look up."""
+        seen = {}
+
+        def run(prompt, cwd, **kw):
+            seen.update(prompt=prompt, **kw)
+            return reply("PASS")
+
+        agent_loop.review("the story", self.repo, "s1", "gate", run=run, say=lambda *_: None)
+        self.assertGreaterEqual(seen["max_turns"], 10)
+        for tool in ("Read", "Grep", "Glob"):
+            self.assertIn(tool, seen["allowed_tools"])
+        self.assertNotIn("Edit", seen["allowed_tools"])
+        self.assertNotIn("make no tool call", seen["system"] + seen["prompt"])
+        self.assertIn("not a finding", seen["prompt"])
+
     def test_a_restart_after_three_rounds_starts_the_next_build_one_level_up(self):
         run = Scripted(reply("built"), reply("fixed"), reply("again"))
         out = self.loop(run, [(False, "a"), (False, "b"), (False, "c")], model_name="haiku", rounds=3)

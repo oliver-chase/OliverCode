@@ -34,7 +34,9 @@ RISKY_DIRS = ("core/hooks", "scripts/hooks")
 SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
-                 "and make no tool call and no change.")
+                 "and change nothing. Read or search the worktree only to settle a point the diff alone cannot.")
+READER_TOOLS = "Read,Grep,Glob"  # read-only, so the reader can open the file a diff calls into (#1079)
+READER_TURNS = 10  # enough for a few lookups and the answer; a one-turn reader could never open a file (#1079)
 
 
 NO_VALIDATION_FIX = "add scripts/validate.sh, or an npm validate or check script, and name it in the repo's CLAUDE.md."
@@ -176,8 +178,9 @@ def reader_for(builder: str) -> str:
     return LADDER[max(LADDER.index(READER), LADDER.index(builder) if builder in LADDER else 0)]
 
 
-REVIEW_BRIEF = ("You are a fresh reader. You see only the story, the diff and the test output below, and you make no tool call. Check that the diff does what the story's "
-                "scenarios say and breaks nothing the diff itself shows. If the diff says it was cut, name the files you could not check. Answer PASS on the first line "
+REVIEW_BRIEF = ("You are a fresh reader. You get the story, the diff and the test output below, and you may read and search the worktree. Check that the diff does what the "
+                "story's scenarios say and breaks nothing. When the diff alone cannot settle a point, such as whether a helper it calls exists, open the file and check: a "
+                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. Answer PASS on the first line "
                 "when it does. Otherwise list each finding on its own line with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
@@ -199,7 +202,7 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     failure = ""
     for attempt in (1, 2):
         try:
-            reply = run(prompt, str(cwd), allowed_tools="Read", max_turns=1, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
+            reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=READER_TURNS, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
         else:
