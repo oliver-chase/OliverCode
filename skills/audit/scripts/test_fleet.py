@@ -75,7 +75,3 @@ class DescriptionWords(unittest.TestCase):
 
     def test_no_description_is_zero(self):
         self.assertEqual(_fleet.description_words("---\nname: x\n---\n"), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()

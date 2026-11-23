@@ -4,50 +4,25 @@
 
 ## Config shape
 
-A new repo adopting this skill, and every fork, copies `$OC/shared/backlog-config.example.json` (tracked,
-placeholder values) as its starting point. A fork never uses the owner's `docs/backlog-config.json`: the sweep script's `--verify-config` check refuses it. Every `backlog-config.json` this skill reads has
-this shape:
-
-```json
-{
-  "repoOwner": "...",
-  "repoName": "...",
-  "projectOwner": "...",
-  "projectNumber": 1,
-  "projectId": "PVT_...",
-  "fields": {
-    "status": {"id": "...", "options": {"Backlog": "...", "Ready": "...", "In Progress": "...", "QA": "...", "Complete": "..."}},
-    "priority": {"id": "...", "options": {"P0": "...", "P1": "...", "P2": "..."}},
-    "size": {"id": "...", "options": {"XS": "...", "S": "...", "M": "...", "L": "...", "XL": "..."}},
-    "workType": {"id": "...", "options": {"Epic": "...", "Story": "..."}}
-  },
-  "qaRequiredFromIssue": null,
-  "areaPolicy": {"parked": [], "catchAll": []}
-}
-```
-
-`qaRequiredFromIssue` is optional: set it to an issue number and the `qa-signoff` sweep flags every Complete item at or above that number that lacks an accepted independent QA sign-off, while null or an absent key switches the check off.
-
-`areaPolicy` is optional. It lists the Area options that match no skill folder: `parked` for a family with no folder in the repo, `catchAll` for cross-family work.
+A new repo and every fork start from `$OC/shared/backlog-config.example.json`, whose `_comment` explains each key. A fork never uses the owner's `docs/backlog-config.json`: the sweep script's `--verify-config` check refuses it.
 
 If a field or option is missing, re-fetch with `gh project field-list <number> --owner <owner> --format json` and update that repo's own config in the same session. Never guess an ID or skip setting a field because the ID isn't there yet.
 
 ## Load
 
 ```bash
-PROJECT_ID=$(jq -r '.projectId' "$CONFIG")
 REPO="$(jq -r '.repoOwner' "$CONFIG")/$(jq -r '.repoName' "$CONFIG")"
-STATUS_ID=$(jq -r '.fields.status.id' "$CONFIG")
 ```
 
 ## Create + add + set (queue fields, then one batch)
 
 ```bash
-url=$(gh issue create --repo "$REPO" --title "<title>" --body "<body>")
-number=${url##*/}
+number=$(gh api -X POST "repos/$REPO/issues" -f title="<title>" -F body=@BODY_FILE --jq .number)
 jq -n --argjson n "$number" '{issues: [{number: $n, fields: {status: "Backlog", priority: "P2", size: "S", workType: "Story"}}]}' |
   python3 "$OC/skills/backlog/scripts/batch_project.py" --config "$CONFIG" --input -
 ```
+
+Create every issue first, then send one batch.
 
 `batch_project.py` validates config options, coalesces requests, adds missing cards, and updates up to
 15 fields per mutation. A hold only queues work in `~/.olivercode/gh-project-queue.json`; rerun it
@@ -56,15 +31,12 @@ after the hold. Do not loop `gh project item-edit`.
 ## Search before creating
 
 ```bash
-gh issue list --repo "$REPO" --search "<topic>" --state all
+gh api -X GET search/issues -f q="repo:$REPO is:issue <topic>" --jq '.items[] | "\(.number) \(.state) \(.title)"'
 ```
 
-## Comment on close
+## Spend GraphQL sparingly
 
-```bash
-gh issue comment <number> --repo "$REPO" --body "<evidence>"
-gh issue close <number> --repo "$REPO" --reason completed
-```
+`gh project`, `gh issue` and `gh api graphql` share one 5,000-point hourly GraphQL budget across every agent on the machine, and the REST commands above use the core budget. Read an issue, its comments and post a comment through `gh api repos/$REPO/issues/N` (and `.../comments`), and set a story's Status, Priority, Size and Work type in one `batch_project.py` run per story. `olivercode gh-limit report` prints the hour's GraphQL points and REST requests as separate lines, then each by session and command. `gh api rate_limit` costs nothing. `check_board_hygiene.py` reuses a board list under 10 minutes old (`--no-cache` reads live) and stops below 500 points.
 
 ## Check a parent Epic's real completion before closing
 
@@ -98,10 +70,12 @@ Pick the node whose `project.number` equals `projectNumber` in the config. Read 
 
 ## Sweep dimensions
 
-- **Required fields**: every open item has Priority and Size, plus Work Type and Area where the config defines them
-- **Status drift**: the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board
-- **Duplicate cards**: no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues
-- **QA sign-off**: every Complete item numbered at or above the config's `qaRequiredFromIssue` has an accepted independent sign-off, as `check_qa_signoff.py` defines it. A null or absent key switches the dimension off
-- **Grooming**: a Backlog or Ready item with a builder entry belongs in QA. An epic whose sub-issues are all closed belongs in the finished column, and one with some closed belongs in In Progress. Two open stories sharing three or more title words, most of the shorter title, may duplicate each other
+Each dimension's `--dimension` name is in brackets.
+
+- **Required fields** (`fields`): every open item has Priority and Size, plus Work Type and Area where the config defines them
+- **Status drift** (`drift`): the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board
+- **Duplicate cards** (`duplicates`): no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues
+- **Close gate** (`close-gate`): every Complete item numbered at or above the config's `closeGateFromIssue` has a comment ending in `Closed by complete_story.py.`, which only `complete_story.py` writes. A story closed through the API, `gh issue close` or the web has none and is listed with the fix: reopen it and run `complete_story.py`. A null or absent key switches the dimension off
+- **Grooming** (`groom`): a Backlog or Ready item with a builder entry belongs in QA. An epic whose sub-issues are all closed belongs in the finished column, and one with some closed belongs in In Progress. Two open stories sharing three or more title words, most of the shorter title, may duplicate each other
 
 The board list, issue lists and comment history are read with explicit limits and pagination. Without `--config`, or with a path that holds no file, the script stops with one line that names the example config a fork starts from.

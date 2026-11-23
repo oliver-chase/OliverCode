@@ -16,6 +16,7 @@ PRIORITY = re.compile(r"\bPriority:\s*(\S+?)[.,;\s]", re.I)
 SIZE = re.compile(r"\bSize:\s*(\S+?)[.,;\s]", re.I)
 WORK_TYPE = re.compile(r"\bWork type:\s*(\w+)", re.I)
 PLACEHOLDER = re.compile(r"<[A-Za-z][A-Za-z /|-]*>")
+COVERAGE_LINE = re.compile(r"^\s*(?:[-*]\s*)?Existing coverage checked:\s*\S", re.I | re.M)
 STEP = re.compile(r"^\s*(Given|When|Then|And|But)\b", re.I)
 
 PRIORITIES = ("P0", "P1", "P2")
@@ -55,8 +56,11 @@ def gherkin_problems(body):
     return problems
 
 
-def check_body(body, kind=None):
-    """Return a list of (missing part, fix) for the body. An empty list means it is complete."""
+def check_body(body, kind=None, coverage=True):
+    """Return a list of (missing part, fix) for the body. An empty list means it is complete.
+
+    `coverage=False` skips the Existing coverage checked line, for a scan of stories filed before it was required.
+    """
     problems = []
     wt = WORK_TYPE.search(body)
     work_type = wt.group(1).capitalize() if wt else None
@@ -69,6 +73,9 @@ def check_body(body, kind=None):
     if kind == "Story" and not EPIC_LINE.search(body):
         problems.append(("Epic link", "add a line `Epic: #<number>` naming the epic this story belongs to; "
                                       "pick or create one first"))
+    if coverage and kind == "Story" and not COVERAGE_LINE.search(body):
+        problems.append(("Existing coverage checked line",
+                         "add `Existing coverage checked:` naming the code, doc or issue you searched and what you found, as in " + TEMPLATE))
     p = PRIORITY.search(body + " ")
     if not p:
         problems.append(("Priority", "add `Priority: P0`, `P1` or `P2`"))

@@ -43,29 +43,18 @@ def fields(lanes):
                        single("Area", ["Core"])]}
 
 
-class Budgets(unittest.TestCase):
-    def test_reports_counts_against_the_budget_and_flags_the_overrun(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = make_repo(tmp, {
-                "docs/BUDGET.json": json.dumps({"testCount": 1, "testSeconds": 60, "docWords": 1000, "skillWords": 1}),
-                "tests/test_a.py": "import unittest\nclass T(unittest.TestCase):\n    def test_one(self): pass\n    def test_two(self): pass\n",
-                "README.md": "one two three\n",
-                "skills/x/SKILL.md": "---\nname: x\n---\nfour five six\n",
-            })
-            code, out = run("--time", str(repo))
-            self.assertEqual(code, 1)
-            self.assertIn("testCount: 2 is over the budget of 1", out)
-            self.assertIn("docWords: 3 within the budget of 1000", out)
-            self.assertIn("skillWords: 7 is over the budget of 1", out)
-            seconds = [line for line in out.splitlines() if line.startswith("testSeconds:")][0]
-            self.assertIn("within the budget of 60", seconds)
-            self.assertRegex(out, r"slowest test files: test_a \d+\.\ds")
+class Tests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(fleet_check, "voice_configured", return_value=True)  # these tests run the voice scan; the next class covers its absence
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
-    def test_runtime_is_not_measured_without_the_flag(self):
+    def test_time_runs_the_tests_and_names_the_slowest(self):
         with tempfile.TemporaryDirectory() as tmp:
-            repo = make_repo(tmp, {"README.md": "word\n"})
-            _, out = run(str(repo))
-            self.assertIn("not measured", out)
+            repo = make_repo(tmp, {"tests/test_a.py": "import unittest\nclass T(unittest.TestCase):\n    def test_one(self): pass\n"})
+            code, out = run("--time", str(repo))
+            self.assertEqual(code, 0)
+            self.assertRegex(out, r"slowest test files: test_a \d+\.\ds")
 
 
 class AloneBoard(unittest.TestCase):
@@ -79,24 +68,20 @@ class AloneBoard(unittest.TestCase):
             self.assertIn("voice:", out)
 
 
-class Target(unittest.TestCase):
-    def test_a_skill_folder_counts_its_references_as_skill_words(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = make_repo(tmp, {"SKILL.md": "one two\n", "references/a.md": "three four five\n", "README.md": "six\n"})
-            _, out = run("--time", str(repo))
-            self.assertIn("skillWords: 5", out)
-            self.assertIn("docWords: 1", out)
-            self.assertIn("testSeconds: not measured (no tests/test_*.py to run)", out)
-
-    def test_a_folder_that_is_not_a_git_repo_is_measured_from_its_files(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            Path(tmp, "README.md").write_text("one\n")
-            code, out = run(tmp)
-        self.assertEqual(0, code)
-        self.assertIn("docWords: 1, no budget set", out)
-
-
 class Voice(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(fleet_check, "voice_configured", return_value=True)  # the scan runs only with a voice file, which a clean home lacks
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_the_scan_is_skipped_when_no_voice_file_is_configured(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(tmp, {"A.md": "It is a guide, not a rule.\n"})
+            with mock.patch.object(fleet_check, "voice_configured", return_value=False):
+                code, out = run(str(repo))
+            self.assertEqual(code, 0)
+            self.assertIn("voice: skipped, no voice file is configured", out)
+
     def test_names_the_file_and_line_of_each_violation(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = make_repo(tmp, {"docs/A.md": "# Title\n\nIt is fast, not slow, but steady.\n- ends with a period.\n- fine\n"
@@ -135,6 +120,13 @@ class Voice(unittest.TestCase):
             self.assertIn("A.md:1: Title Case heading", out)
             self.assertIn("A.md:3: curly quotes", out)
             self.assertNotIn("A.md:5", out)
+
+    def test_a_title_that_spells_the_repo_name_is_a_proper_noun(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            named = make_repo(Path(tmp) / "sample-planning-tool", {"A.md": "# Sample Planning Tool\n\n## How The Gates Work\n"})
+            _, out = run(str(named))
+            self.assertNotIn("A.md:1", out)
+            self.assertIn("A.md:3: Title Case heading", out)
 
     def test_clean_text_reports_no_violations(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -196,5 +188,12 @@ class BoardDriftEdges(unittest.TestCase):
             self.assertIn("unreadable", error)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TestForkConfig(unittest.TestCase):
+    def test_a_config_for_another_repo_is_not_read_as_this_repos_board(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = {"repoOwner": "owner", "repoName": "OliverCode", "projectOwner": "owner", "projectNumber": 15, "projectId": "PVT_1", "fields": {}}
+            repo = make_repo(tmp, {"docs/backlog-config.json": json.dumps(config)})
+            subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/me/my-fork.git"], check=True)
+            name, drift, error = fleet_check.board_drift(str(repo), None)
+        self.assertIsNone(drift)
+        self.assertIn("this is a fork carrying the owner's config", error)

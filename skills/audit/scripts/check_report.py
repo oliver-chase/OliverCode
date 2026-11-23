@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Check an audit report against the report rules in SKILL.md. Exit 1 and list every gap.
 
-Usage: check_report.py REPORT.md
+Usage: <report> | check_report.py -
+The report arrives on stdin. A file path fails the check, since the report is one message in the thread and never a file.
 """
 import re
 import sys
 
 HEADINGS = ["what it is", "goal", "size today", "findings", "cuts and simplifications",
-            "outcomes", "added to the board", "read and unknown", "coverage"]
+            "outcomes", "added to the board", "read and unknown", "coverage", "engine parts to cut or merge"]
 LENSES = {
     "autonomy and user flow": r"autonomy|user flow",
     "self-containment": r"self-contain",
@@ -54,6 +55,25 @@ def rows_without_issue(lines):
     return bad
 
 
+def why_problems(lines):
+    """Stories in the first table of the board section that have no Why cell, or an empty one."""
+    rows = [l.strip() for l in lines if l.strip().startswith("|")]
+    if len(rows) < 2 or not SEPARATOR.match(rows[1]):
+        return []
+    cells = lambda r: [c.strip() for c in r.strip("|").split("|")]
+    head = [c.lower() for c in cells(rows[0])]
+    col = head.index("why") if "why" in head else None
+    out = []
+    for row in rows[2:]:
+        c = cells(row)
+        story = next((x for x in c if ISSUE.search(x)), c[0])
+        if col is None:
+            out.append(f"board table has no Why column, so story {story[:40]} has no Why. Fix: add a Why column with the finding in one sentence")
+        elif col >= len(c) or not c[col]:
+            out.append(f"story {story[:40]} has an empty Why. Fix: write the finding in one sentence")
+    return out
+
+
 def check(text):
     problems = []
     order, parts = sections(text)
@@ -63,9 +83,9 @@ def check(text):
             problems.append(f"missing section: {h}. Fix: add a heading named \"{h}\"")
     present = [order.index(f) for f in found if f is not None]
     if present != sorted(present):
-        problems.append("sections are out of order. Fix: use the order in SKILL.md, with Coverage last")
+        problems.append("sections are out of order. Fix: use the order in SKILL.md, with Engine parts to cut or merge last")
     if found[-1] is not None and order[-1] != found[-1]:
-        problems.append("Coverage is not the last section")
+        problems.append(f"{HEADINGS[-1]} is not the last section")
     # A lens counts when a finding row or a "Checked" line names it in its first cell or leading words, so a
     # passing mention deep inside an unrelated row does not satisfy it.
     body = "\n".join(l.strip("| ").split("|")[0] if l.lstrip().startswith("|") else l[:80]
@@ -73,9 +93,10 @@ def check(text):
     for lens, rx in LENSES.items():
         if not re.search(rx, body, re.I):
             problems.append(f"findings never mention the lens: {lens}. Fix: add a row, or \"Checked, nothing found\" with what was checked")
-    for key in (found[3], found[4], found[8]):
+    for key in (found[3], found[4], found[8], found[9]):
         for row in rows_without_issue(parts.get(key or "", [])):
             problems.append(f"row with no issue number: {row[:90]}. Fix: file it and cite #number")
+    problems.extend(why_problems(parts.get(found[6] or "", [])))
     cov = parts.get(found[8] or "", [])
     if found[8] and not any(ISSUE.search(l) for l in cov):
         problems.append("coverage lists no issue numbers. Fix: list every finding with its issue")
@@ -89,7 +110,10 @@ def main(argv):
     if len(argv) != 2:
         print(__doc__.strip())
         return 2
-    problems = check(open(argv[1]).read())
+    if argv[1] != "-":
+        print("REPORT: the report was delivered as a file. Fix: pipe it on stdin with `check_report.py -` and print it as one message in the thread")
+        return 1
+    problems = check(sys.stdin.read())
     for p in problems:
         print("REPORT: " + p)
     if not problems:

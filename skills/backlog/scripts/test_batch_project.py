@@ -104,7 +104,3 @@ class BatchProject(unittest.TestCase):
     def test_unknown_config_value_refuses_before_queueing(self):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Nope"}}]}))
         self.assertEqual(2, bp.main(["--config", str(self.cfg), "--input", str(self.input)], err=io.StringIO()))
-
-
-if __name__ == "__main__":
-    unittest.main()

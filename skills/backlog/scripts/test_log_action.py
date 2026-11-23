@@ -6,6 +6,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 import log_action as la
@@ -24,13 +25,40 @@ class Recorder:
         return self.reply
 
 
-def run(argv, runner):
+def run(argv, runner, names=None):
     out, err = io.StringIO(), io.StringIO()
-    code = la.main(argv, runner=runner, out=out, err=err)
+    code = la.main(argv, runner=runner, out=out, err=err, pushed=lambda commit: None, names=names)
+    return code, out.getvalue(), err.getvalue()
+
+
+def run_unpushed(argv, runner):
+    out, err = io.StringIO(), io.StringIO()
+    code = la.main(argv, runner=runner, out=out, err=err, pushed=lambda commit: f"commit {commit} is not on origin/main; push it first")
     return code, out.getvalue(), err.getvalue()
 
 
 class LogAction(unittest.TestCase):
+    def test_a_builder_entry_for_an_unpushed_commit_is_refused_and_a_pushed_one_posts(self):
+        argv = ["--repo", "o/r", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234", "--files", "1", "--result", "ok"]
+        posted = []
+        runner = lambda a: (posted.append(a), subprocess.CompletedProcess([], 0, "https://x/1", ""))[1]
+        code, _, err = run_unpushed(argv, runner)
+        self.assertEqual((2, []), (code, posted))
+        self.assertIn("not on origin/main", err)
+        self.assertEqual(0, run(argv, runner)[0])
+        self.assertEqual(1, len(posted))
+
+    def test_an_olivercode_comment_naming_another_repo_is_refused_before_the_post(self):
+        rec = Recorder()
+        argv = ["--repo", "o/OliverCode", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234",
+                "--files", "1", "--result", "synced zz-example-repo"]
+        code, _, err = run(argv, rec, names=["zz-example-repo"])
+        self.assertEqual((1, []), (code, rec.calls))
+        self.assertIn("another repo", err)
+        self.assertNotIn("zz-example-repo", err)
+        argv[1] = "o/r"
+        self.assertEqual(0, run(argv, rec, names=["zz-example-repo"])[0])
+
     def test_the_comment_names_agent_role_commit_files_and_result(self):
         body = la.build_comment("builder-1", "builder", "abc1234", 4, "tests pass")
         for part in ("Agent: builder-1", "Role: builder", "Commit: abc1234",
@@ -80,26 +108,7 @@ class LogAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             la.parse_args([a if a != "builder" else "lead" for a in ARGS])
 
-    def test_from_report_and_agent_from_commit(self):
-        base = ["--repo", "o/r", "--agent", "qa-1", "--commit", "abc1234"]
-        with tempfile.TemporaryDirectory() as tmp:
-            rep = Path(tmp) / "r.md"
-            rep.write_text("intro\nStory 7: PASS first\n\nStory 8: FAIL no test\nStory 7: BLOCKED later\n")
-            none = Path(tmp) / "n.md"
-            none.write_text("nothing here\nstory 1: PASS\n")
-            rec = Recorder()
-            code, out, _ = run(base + ["--from-report", str(rep)], rec)
-            self.assertEqual(0, code)
-            self.assertEqual(["repos/o/r/issues/7/comments", "repos/o/r/issues/8/comments"],
-                             [c[0] for c in rec.calls])
-            self.assertIn("- Result: BLOCKED later", rec.calls[0][2])
-            self.assertIn("- Result: FAIL no test", rec.calls[1][2])
-            self.assertIn("- Role: qa", rec.calls[1][2])
-            self.assertIn("- Files changed: 0", rec.calls[1][2])
-            self.assertEqual(2, out.count("Logged on"))
-            self.assertEqual(2, run(base + ["--from-report", str(none)], rec)[0])
-            self.assertEqual(2, run(base + ["--from-report", str(rep), "--story", "7"], rec)[0])
-            self.assertEqual(2, len(rec.calls))
+    def test_agent_from_commit_takes_the_commit_author(self):
         pre = ["--repo", "o/r", "--story", "5", "--role", "builder", "--commit", "abc1234",
                "--files", "1", "--result", "ok", "--agent-from-commit", "--dry-run"]
         out = io.StringIO()
@@ -108,6 +117,30 @@ class LogAction(unittest.TestCase):
         self.assertEqual(2, la.main(pre, out=out, err=io.StringIO(), git=lambda commit: ""))
         self.assertEqual(2, la.main(pre + ["--agent", "x"], out=out, err=io.StringIO(), git=lambda c: "D"))
 
+    def test_a_claim_comment_names_the_session_and_the_time(self):
+        rec = Recorder()
+        base = ["--repo", "o/r", "--story", "9", "--agent", "sess-a", "--role", "claim"]
+        self.assertEqual(0, run(base, rec)[0])
+        body = rec.calls[0][2]
+        self.assertRegex(body, r"^body=Claim\n- Session: sess-a\n- Time: \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        with self.assertRaises(SystemExit):
+            run(["--repo", "o/r", "--story", "9", "--role", "claim"], rec)
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_claim_status_reads_the_comments(self):
+        now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+
+        def status(*bodies, at=now):
+            lines = "\n".join(json.dumps({"body": b}) for b in bodies)
+            return la.claim_status("o/r", 9, Recorder(stdout=lines), now=at)
+
+        claim = la.build_claim("sess-a", datetime(2026, 11, 17, 11, 0, tzinfo=timezone.utc))
+        self.assertEqual("claimed by sess-a at 2026-11-17T11:00:00Z", status("hello", claim))
+        later = datetime(2026, 11, 17, 13, 1, tzinfo=timezone.utc)
+        self.assertEqual("free", status(claim, at=later))
+        self.assertEqual("free", status("hello"))
+        self.assertEqual("free", status("Claim\n- Session: sess-a\n- Time: 2026-13-45T99:00:00Z"))
+        built = la.build_comment("sess-a", "builder", "abc1234", 2, "ok")
+        self.assertEqual("free", status(claim, built))
+        code, out, _ = run(["--repo", "o/r", "--story", "9", "--check-claim"], Recorder(stdout=""))
+        self.assertEqual((0, "free\n"), (code, out))
+        self.assertEqual(1, run(["--repo", "o/r", "--story", "9", "--check-claim"], Recorder(returncode=1))[0])

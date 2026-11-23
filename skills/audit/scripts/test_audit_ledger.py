@@ -1,3 +1,5 @@
+import atexit
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -12,6 +14,7 @@ ENV = {"GIT_AUTHOR_NAME": "t", "GIT_COMMITTER_NAME": "t", "GIT_AUTHOR_EMAIL": "t
 
 def repo(files):
     root = Path(tempfile.mkdtemp())
+    atexit.register(shutil.rmtree, root, True)
     run = lambda *a: subprocess.run(["git", "-C", str(root), *a], check=True, capture_output=True, env=ENV)
     run("init", "-q")
     commit(root, files)
@@ -27,6 +30,31 @@ def commit(root, files):
 
 
 class LedgerTest(unittest.TestCase):
+    def test_a_run_line_records_the_date_and_finding_count_and_survives_later_marks(self):
+        root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
+        audit_ledger.mark(root, ["a.py"], findings=3, today="2026-11-19")
+        commit(root, {"a.py": "x = 2\n"})
+        audit_ledger.mark(root, ["a.py", "b.py"])
+        audit_ledger.mark(root, ["b.py"], findings=0, today="2026-11-20")
+        self.assertEqual(audit_ledger.run_lines(root), ["# run 2026-11-19 findings 3 files 1", "# run 2026-11-20 findings 0 files 1"])
+        self.assertEqual(audit_ledger.pending(root), [])
+        listing = root / "read.txt"
+        listing.write_text("a.py\n")
+        self.assertEqual(audit_ledger.main(["audit_ledger.py", str(root), "--mark", str(listing), "--findings", "2"]), 0)
+        self.assertEqual(len(audit_ledger.run_lines(root)), 3)
+
+    def test_a_non_ascii_path_is_listed_and_marked_by_its_real_name(self):
+        name = "AI\u2019s plan \u2014 v2.md"
+        root = repo({name: "x\n"})
+        self.assertEqual(audit_ledger.pending(root), [name])
+        self.assertEqual(audit_ledger.mark(root, [name]), 1)
+        self.assertEqual(audit_ledger.pending(root), [])
+        # A ledger written before the fix holds git's quoted form, and it still counts as read.
+        ledger = root / audit_ledger.LEDGER
+        blob = ledger.read_text(encoding="utf-8").split(" ", 1)[0]
+        ledger.write_text(f'{blob} "AI\\342\\200\\231s plan \\342\\200\\224 v2.md"\n', encoding="utf-8")
+        self.assertEqual(audit_ledger.pending(root), [])
+
     def test_with_no_ledger_every_file_is_pending(self):
         root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
         self.assertEqual(audit_ledger.pending(root), ["a.py", "b.py"])
@@ -47,12 +75,29 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(1, audit_ledger.mark(root, ["a.py", "gone.py"]))  # only a path at HEAD is recorded and counted
         self.assertEqual(audit_ledger.pending(root), ["b.py"])
 
+    def test_mark_reads_a_file_list_whose_paths_hold_spaces(self):
+        import contextlib, io
+        root = repo({"01 - Skills/a/SKILL.md": "x\n", "b.py": "y = 2\n"})
+        listing = root / "read.txt"
+        listing.write_text("01 - Skills/a/SKILL.md\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            audit_ledger.main(["audit_ledger.py", str(root), "--mark", str(listing)])
+        self.assertEqual(audit_ledger.pending(root), ["b.py"])
+
     def test_seeding_from_an_earlier_commit_marks_files_as_they_were_then(self):
         root = repo({"a.py": "x = 1\n"})
         first = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
         commit(root, {"a.py": "x = 9\n", "n.py": "n = 1\n"})
         audit_ledger.main(["audit_ledger.py", str(root), "--seed", first])
         self.assertEqual(audit_ledger.pending(root), ["a.py", "n.py"])
+
+    def test_a_ledger_path_deleted_from_head_is_named_as_gone_and_not_pending(self):
+        root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
+        audit_ledger.mark(root, list(audit_ledger.blobs(root)))
+        subprocess.run(["git", "-C", str(root), "rm", "-q", "b.py"], check=True, capture_output=True, env=ENV)
+        subprocess.run(["git", "-C", str(root), "commit", "-qm", "rm"], check=True, capture_output=True, env=ENV)
+        self.assertEqual(audit_ledger.gone(root), ["b.py"])
+        self.assertEqual(audit_ledger.pending(root), [])
 
     def test_a_deleted_file_leaves_the_ledger(self):
         root = repo({"a.py": "x = 1\n", "b.py": "y = 2\n"})
@@ -61,7 +106,3 @@ class LedgerTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(root), "commit", "-qm", "rm"], check=True, capture_output=True, env=ENV)
         audit_ledger.mark(root, [])
         self.assertNotIn("b.py", audit_ledger.read_ledger(root))
-
-
-if __name__ == "__main__":
-    unittest.main()

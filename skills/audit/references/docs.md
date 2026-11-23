@@ -28,6 +28,7 @@ git log --oneline -20
 4. **Find contradictions.** Grep each key fact across all docs. The same fact in two files is a finding even when both agree today, since one goes wrong at the next change
 5. **Check the backlog** where the repo names one: its open items against what the docs say is open or done
 6. **Plan the structure.** Each fact gets one home, and every other file points to it by name. Before merging or removing a doc, grep code, scripts, CI and templates for its path, so the change updates every reference
+7. **Rerun the evidence before recommending a deletion.** For each docs passage the report recommends deleting, make the cut in a scratch edit, search the remaining docs for each command, flag, path and rule it names, and show the search in the finding. A fact that appears nowhere else stays in the docs
 
 ## Leave alone
 

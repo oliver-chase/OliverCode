@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Checks the live GitHub Project board for hygiene findings. Never auto-fixes. Needs `gh` on PATH.
-`backlog/SKILL.md` states what each dimension checks.
+`references/project-fields.md` ("Sweep dimensions") states what each dimension checks.
 
 Usage:
     check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension
-    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, qa-signoff, groom
+    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, close-gate, groom
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
     check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
@@ -17,8 +17,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-import check_kanban_baseline as kanban
-import check_qa_signoff as qa
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+import check_kanban_baseline as kanban  # noqa: E402
+import board_mirror  # noqa: E402
+import board_rest  # noqa: E402
+import gh_budget  # noqa: E402
+import complete_story as cs  # noqa: E402
+from log_action import gh_api  # noqa: E402
+from board_grooming import WAITING_STATUSES, built_not_moved, epic_rollup, field, overlapping_titles  # noqa: E402
 
 ITEM_LIMIT = 2000
 
@@ -36,7 +43,28 @@ def run_gh(args):
     return result.stdout
 
 
-def load_items(config):
+def run_gh_soft(args):
+    """A gh command's stdout, or None when it failed, so a REST read can fall back to the GraphQL command."""
+    result = subprocess.run(["gh"] + args, capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else None
+
+
+def load_items(config, use_cache=True):
+    """The board's items from the shared local copy (`scripts/lib/board_mirror.py`), else one live read behind the
+    shared budget check."""
+    def live():
+        refusal = gh_budget.points_refusal()
+        if refusal:
+            sys.exit(f"The sweep did not run. {refusal} A skipped sweep is not a clean board.")
+        return fetch_items(config)
+    return board_mirror.read(config["projectOwner"], config["projectNumber"], live, use_cache=use_cache)
+
+
+def fetch_items(config):
+    """The board through REST (core budget), else through `gh project item-list` (GraphQL budget)."""
+    items = board_rest.project_items(config, run_gh_soft)
+    if items is not None:
+        return items
     out = run_gh([
         "project", "item-list", str(config["projectNumber"]),
         "--owner", config["projectOwner"], "--format", "json", "--limit", str(ITEM_LIMIT),
@@ -73,11 +101,6 @@ def live_status_names(config):
     return {o["id"]: o["name"] for o in json.loads(out)["data"]["node"]["options"]}
 
 
-def field(item, name):
-    """An item's value for a field, matched without case: gh keys a field by the board's own spelling."""
-    return next((v for k, v in item.items() if k.lower() == name.lower()), None)
-
-
 def check_required_fields(items, config, open_statuses=REQUIRED_STATUSES):
     # Work Type and Area are required only on a board whose config defines the field.
     required = ("priority", "size") + (("work Type",) if "workType" in config["fields"] else ()) \
@@ -98,36 +121,37 @@ def check_required_fields(items, config, open_statuses=REQUIRED_STATUSES):
     return problems
 
 
+def status_drift(items, states, repo=None, finished="Complete"):
+    """The one drift rule (#853): [(issue number, "close" | "reopen" | "add")] for a repo's cards against its issue states.
+    A closed issue's card not at `finished` closes, an open issue's card at `finished` reopens, an open issue with no card is added."""
+    cards = {c["number"]: i.get("status") for i in items if (c := i.get("content") or {}).get("number") and (c.get("repository") or repo) == repo}
+    return [(n, "close" if s == "CLOSED" else "reopen" if n in cards else "add") for n, s in sorted(states.items())
+            if (s == "CLOSED" and n in cards and cards[n] != finished) or (s == "OPEN" and (n not in cards or cards[n] == finished))]
+
+
 def check_status_drift(items, config, finished="Complete"):
     # Board Status and issue state are two stores; a close or a status edit moves only one of them.
     problems = []
     repos = {i["content"].get("repository") for i in items if i.get("content", {}).get("repository")}
     for repo in sorted(repos):
-        issues = json.loads(run_gh([
-            "issue", "list", "--repo", repo, "--state", "all", "--limit", str(ITEM_LIMIT),
-            "--json", "number,state,title",
-        ]))
+        issues = board_rest.repo_issues(repo, run_gh_soft)
+        if issues is None:
+            issues = json.loads(run_gh([
+                "issue", "list", "--repo", repo, "--state", "all", "--limit", str(ITEM_LIMIT),
+                "--json", "number,state,title",
+            ]))
         if len(issues) >= ITEM_LIMIT:
             sys.exit(f"{repo} returned {len(issues)} issues, the list limit, so status drift may be cut short. "
                      "Raise ITEM_LIMIT in check_board_hygiene.py and run again.")
         by_number = {x["number"]: x for x in issues}
-        on_board = set()
-        for i in items:
-            c = i.get("content", {})
-            if c.get("repository") != repo or c.get("number") not in by_number:
-                continue
-            on_board.add(c["number"])
-            closed = by_number[c["number"]]["state"] == "CLOSED"
-            if (i.get("status") == finished) != closed:
-                problems.append(
-                    f"{repo}#{c['number']} \"{c.get('title', '')[:50]}\": board {i.get('status')}, "
-                    f"issue {by_number[c['number']]['state']}"
-                )
-        # Only the config's own repo is expected to be fully on this board.
-        if repo == f"{config['repoOwner']}/{config['repoName']}":
-            for n, x in sorted(by_number.items()):
-                if x["state"] == "OPEN" and n not in on_board:
-                    problems.append(f"{repo}#{n} \"{x['title'][:50]}\": open issue not on the board")
+        cards = {(i.get("content") or {}).get("number"): i for i in items if (i.get("content") or {}).get("repository") == repo}
+        own = repo == f"{config['repoOwner']}/{config['repoName']}"  # only the config's own repo is expected to be fully on this board
+        for n, kind in status_drift(items, {n: x["state"] for n, x in by_number.items()}, repo, finished):
+            if kind != "add":
+                c = cards[n]
+                problems.append(f"{repo}#{n} \"{c['content'].get('title', '')[:50]}\": board {c.get('status')}, issue {by_number[n]['state']}")
+            elif own:
+                problems.append(f"{repo}#{n} \"{by_number[n]['title'][:50]}\": open issue not on the board")
     return problems
 
 
@@ -148,16 +172,16 @@ def check_duplicate_cards(items):
     return problems
 
 
-def check_qa_signoff(items, config, finished="Complete", runner=qa.gh_api):
-    """Every finished item of the config's own repo numbered at or above `qaRequiredFromIssue` needs an
-    accepted independent QA sign-off (check_qa_signoff.check). A null or absent key switches the
-    dimension off. Comments come through `runner`, the REST runner `qa.fetch` takes, and a failed read
-    exits so a cut-short read can never pass as clean."""
-    start = config.get("qaRequiredFromIssue")
+def check_close_gate(items, config, finished="Complete", runner=gh_api):
+    """Every finished item of the config's own repo numbered at or above `closeGateFromIssue` has a comment
+    holding the line complete_story.py ends its evidence with. A story closed through the REST API, `gh issue close`
+    or the web has none, and skipped the QA, live and hook or job checks (#836). A null or absent key switches the
+    dimension off, and a failed read exits so a cut-short read can never pass as clean."""
+    start = config.get("closeGateFromIssue")
     if start is None:
         return []
     if isinstance(start, bool) or not isinstance(start, int):
-        sys.exit(f"qaRequiredFromIssue must be an issue number or null, not {start!r}")
+        sys.exit(f"closeGateFromIssue must be an issue number or null, not {start!r}")
     own = f"{config['repoOwner']}/{config['repoName']}"
     problems = []
     for i in items:
@@ -165,103 +189,69 @@ def check_qa_signoff(items, config, finished="Complete", runner=qa.gh_api):
         number = c.get("number")
         if i.get("status") != finished or not number or number < start:
             continue
-        repo = c.get("repository") or own
-        if repo.lower() != own.lower():
+        if (c.get("repository") or own).lower() != own.lower():
             continue
         try:
-            data, body = qa.fetch(repo, number, runner)
+            data, _ = cs.fetch(own, number, runner)
         except (RuntimeError, ValueError) as exc:
-            sys.exit(f"cannot read #{number} to check its QA sign-off: {exc}")
-        ok, lines = qa.check(qa.flatten(data), body)
-        if not ok:
-            problems.append(f"#{number} \"{c.get('title', '')[:50]}\" ({finished}): no accepted QA sign-off: {'; '.join(lines)}")
+            sys.exit(f"cannot read #{number} to check how it closed: {exc}")
+        if not cs.closed_by_script(data):
+            problems.append(f"#{number} \"{c.get('title', '')[:50]}\": closed without complete_story.py. "
+                            f"Fix: reopen #{number} and run complete_story.py --story {number} --config CONFIG --evidence TEXT")
     return problems
 
 
-# Grooming finds work the board has not caught up with. Every finding is a judgment for the owner.
-WAITING_STATUSES = {"Backlog", "Ready"}
-STOPWORDS = {"the", "and", "for", "with", "that", "this", "from", "into", "every", "each", "when",
-             "make", "makes", "only", "its", "their", "them", "they", "one", "all", "add", "fix", "put", "move",
-             "bring"}
+EPIC_CHUNK = 25
 
 
-def title_words(title):
-    words = re.findall(r"[a-z0-9][a-z0-9-]*", title.lower())
-    return {w[:-1] if w.endswith("s") and len(w) > 4 else w for w in words if len(w) > 2 and w not in STOPWORDS}
+def is_foreign(item, config):
+    """A card whose issue lives in a repo other than the config's own."""
+    repo = item.get("content", {}).get("repository")
+    return bool(repo) and repo.lower() != f"{config['repoOwner']}/{config['repoName']}".lower()
 
 
-def overlapping_titles(items, open_statuses, min_shared=3, ratio=0.6):
-    """Pairs of open stories whose titles share most of the shorter title's content words. An epic
-    shares words with its own stories by design, so epics are left out."""
-    open_items = [(i["content"]["number"], title_words(i["content"].get("title", "")))
-                  for i in items if i.get("status") in open_statuses and i.get("content", {}).get("number")
-                  and field(i, "work type") != "Epic"]
-    problems = []
-    for a in range(len(open_items)):
-        for b in range(a + 1, len(open_items)):
-            (na, wa), (nb, wb) = open_items[a], open_items[b]
-            shared = wa & wb
-            if len(shared) >= min_shared and len(shared) / min(len(wa), len(wb)) >= ratio:
-                problems.append(f"#{na} and #{nb} share {', '.join(sorted(shared))}: "
-                                "possible duplicate or superseded pair, close one or link them")
-    return problems
-
-
-def built_not_moved(items, comments_by_number):
-    """Open items still in Backlog or Ready whose issue carries a log_action builder entry."""
-    problems = []
-    for i in items:
-        number = i.get("content", {}).get("number")
-        if i.get("status") not in WAITING_STATUSES or number not in comments_by_number:
-            continue
-        if any("- Role: builder" in (c.get("body") or "") for c in comments_by_number[number]):
-            problems.append(f"#{number} \"{i['content'].get('title', '')[:50]}\" ({i.get('status')}): "
-                            "has a builder entry, move it to QA")
-    return problems
-
-
-def epic_rollup(items, summaries, finished):
-    """Open epics whose Status lags their sub-issues. `summaries` maps number to (total, completed)."""
-    problems = []
-    for i in items:
-        number = i.get("content", {}).get("number")
-        if field(i, "work type") != "Epic" or i.get("status") == finished or number not in summaries:
-            continue
-        total, completed = summaries[number]
-        title = i["content"].get("title", "")[:50]
-        if total and completed == total:
-            problems.append(f"#{number} \"{title}\": all {total} sub-issues closed, move the epic to {finished}")
-        elif completed and i.get("status") in WAITING_STATUSES:
-            problems.append(f"#{number} \"{title}\" ({i.get('status')}): {completed} of {total} "
-                            "sub-issues closed, move the epic to In Progress")
-    return problems
-
-
-def open_issue_comments(config):
+def open_issue_comments(items, config, runner=run_gh):
+    """Comments for the open items still in a waiting lane, the only ones built_not_moved reads.
+    Each read is one REST call, so the shared GraphQL budget stays untouched. A card of another repo
+    is skipped: its number belongs to that repo, so the lookup here would be a 404."""
     repo = f"{config['repoOwner']}/{config['repoName']}"
-    issues = json.loads(run_gh(["issue", "list", "--repo", repo, "--state", "open",
-                                "--limit", str(ITEM_LIMIT), "--json", "number,comments"]))
-    return {x["number"]: x["comments"] for x in issues}
-
-
-def epic_summaries(items, config, finished):
     out = {}
     for i in items:
         number = i.get("content", {}).get("number")
-        if field(i, "work type") != "Epic" or i.get("status") == finished or not number:
+        if i.get("status") not in WAITING_STATUSES or not number or is_foreign(i, config):
             continue
-        data = json.loads(run_gh(["api", "graphql", "-f",
-            f'query={{ repository(owner: "{config["repoOwner"]}", name: "{config["repoName"]}") '
-            f'{{ issue(number: {number}) {{ subIssuesSummary {{ total completed }} }} }} }}']))
-        summary = data["data"]["repository"]["issue"]["subIssuesSummary"]
-        out[number] = (summary["total"], summary["completed"])
+        pages = json.loads(runner(["api", "--paginate", "--slurp", f"repos/{repo}/issues/{number}/comments"]) or "[]")
+        out[number] = [{"body": b} for b in cs.flatten(pages)]
     return out
 
 
-def check_grooming(items, config, finished, open_statuses):
-    return (built_not_moved(items, open_issue_comments(config))
-            + epic_rollup(items, epic_summaries(items, config, finished), finished)
-            + overlapping_titles(items, open_statuses))
+def epic_summaries(items, config, finished, runner=run_gh):
+    """Sub-issue totals for the open epics, read in aliased GraphQL queries of EPIC_CHUNK epics each."""
+    own = f'{config["repoOwner"]}/{config["repoName"]}'.lower()
+    numbers = [i["content"]["number"] for i in items
+               if i.get("content", {}).get("number") and field(i, "work type") == "Epic" and i.get("status") != finished
+               and (i["content"].get("repository") or own).lower() == own]
+    out = {}
+    for start in range(0, len(numbers), EPIC_CHUNK):
+        chunk = numbers[start:start + EPIC_CHUNK]
+        aliases = " ".join(f"e{n}: issue(number: {n}) {{ subIssuesSummary {{ total completed }} }}" for n in chunk)
+        data = json.loads(runner(["api", "graphql", "-f",
+            f'query={{ repository(owner: "{config["repoOwner"]}", name: "{config["repoName"]}") {{ {aliases} }} }}']))
+        repo_data = data["data"]["repository"]
+        for n in chunk:
+            summary = repo_data[f"e{n}"]["subIssuesSummary"]
+            out[n] = (summary["total"], summary["completed"])
+    return out
+
+
+def check_grooming(items, config, finished, open_statuses, runner=run_gh):
+    foreign = [f"{i['content']['repository']}#{i['content']['number']} \"{i['content'].get('title', '')[:50]}\": "
+               "card of another repo on this board, skipped by the groom checks"
+               for i in items if is_foreign(i, config) and i.get("content", {}).get("number")]
+    own = [i for i in items if not is_foreign(i, config)]
+    return (foreign + built_not_moved(own, open_issue_comments(own, config, runner))
+            + epic_rollup(own, epic_summaries(own, config, finished, runner), finished)
+            + overlapping_titles(own, open_statuses))
 
 
 def placeholder_values(config):
@@ -316,7 +306,7 @@ def load_config(path):
     return config
 
 
-DIMENSIONS = ["fields", "drift", "duplicates", "qa-signoff", "groom"]
+DIMENSIONS = ["fields", "drift", "duplicates", "groom", "close-gate"]
 
 
 def wanted(selected, name):
@@ -333,6 +323,8 @@ def main():
                         help="compare the board's field list with shared/kanban-baseline.json, then stop")
     parser.add_argument("--fields-file", type=Path,
                         help="with --verify-baseline: field list JSON from `gh project field-list --format json`; without it gh is read")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="read the board live instead of reusing a list under 10 minutes old")
     parser.add_argument("--verify-config", action="store_true",
                         help="check the config is placeholder-free and belongs to this checkout, then stop")
     args = parser.parse_args()
@@ -348,7 +340,7 @@ def main():
         fields = json.loads(args.fields_file.read_text(encoding="utf-8")) if args.fields_file \
             else kanban.read_fields_from_gh(config)
         sys.exit(1 if kanban.run(fields, config) else 0)
-    items = load_items(config)
+    items = load_items(config, use_cache=not args.no_cache)
     finished, open_statuses = resolve_statuses(config, live_status_names(config))
 
     checks = []
@@ -358,8 +350,8 @@ def main():
         checks.append(("status-drift", lambda: check_status_drift(items, config, finished)))
     if wanted(args.dimension, "duplicates"):
         checks.append(("duplicate-cards", lambda: check_duplicate_cards(items)))
-    if wanted(args.dimension, "qa-signoff"):
-        checks.append(("qa-signoff", lambda: check_qa_signoff(items, config, finished)))
+    if wanted(args.dimension, "close-gate"):
+        checks.append(("close-gate", lambda: check_close_gate(items, config, finished)))
     if wanted(args.dimension, "groom"):
         checks.append(("groom", lambda: check_grooming(items, config, finished, open_statuses)))
 

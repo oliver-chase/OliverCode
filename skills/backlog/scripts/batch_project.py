@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+import board_mirror  # noqa: E402
 import gh_budget  # noqa: E402
 
 CHUNK = 15
@@ -206,6 +207,7 @@ def main(argv=None, runner=run_gh, out=sys.stdout, err=sys.stderr):
         print(f"batch_project: {result}; rate-limited work stays queued", file=err)
         return 1
     count, updates, dropped = result
+    board_mirror.invalidate()  # the board changed, so the shared item list is stale
     print(f"batch_project: applied {updates} field update(s) across {count} queued issue(s)", file=out)
     for line in dropped:
         print(f"batch_project: dropped {line}; it cannot succeed, so it left the queue", file=err)

@@ -15,3 +15,5 @@ Feature: Backup failure alert
 
 Epic: #50
 Priority: P1. Size: S. Work type: Story.
+
+Existing coverage checked: a search of the repo for this behavior finds none.

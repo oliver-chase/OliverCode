@@ -32,11 +32,18 @@ Smaller.
 ## 6. Outcomes
 Smaller.
 ## 7. Added to the board
-| #23 | epic |
+| Story | Title | Why |
+|---|---|---|
+| #23 | epic | The audit found waste |
+| #24 | cut | Dead files cost reads |
 ## 8. Read and unknown
 Read all files. Not checked: screen widths.
 ## 9. Coverage
 - Stale comment: #25
+## 10. Engine parts to cut or merge
+| Part | Issue |
+|---|---|
+| audit script | #24 |
 """
 
 
@@ -52,24 +59,27 @@ class ReportCheckTest(unittest.TestCase):
         for heading in headings:
             self.assertTrue(any(re.search(rx, heading, re.I) for rx in check_report.LENSES.values()), heading)
 
-    def test_a_missing_section_fails(self):
-        self.assertTrue(any("missing section: goal" in p for p in problems(GOOD.replace("## 2. Goal\nSmaller.\n", ""))))
+    def test_each_gap_in_a_report_fails_with_its_reason(self):
+        # A missing section or coverage, a finding with no issue, an unstated lens, silence about what
+        # was not checked, and coverage that is not the last section.
+        for reason, report in (("missing section: goal", GOOD.replace("## 2. Goal\nSmaller.\n", "")),
+                               ("coverage", GOOD.split("## 9. Coverage")[0]),
+                               ("no issue number", GOOD.replace("| #25 |\n| One", "|  |\n| One")),
+                               ("lens: voice", GOOD.replace("| Voice | contrast framing | #28 |\n", "")),
+                               ("read and unknown", GOOD.replace("Not checked: screen widths.", "")),
+                               ("not the last", GOOD + "## 11. Extra\ntext\n"),
+                               ("no Why column", GOOD.replace(" | Why |", " | Note |")),
+                               ("empty Why", GOOD.replace("| The audit found waste |", "|  |")),
+                               ("engine parts", GOOD.split("## 10.")[0])):
+            with self.subTest(reason=reason):
+                self.assertTrue(any(reason in p for p in problems(report)))
 
-    def test_missing_coverage_fails(self):
-        self.assertTrue(any("coverage" in p for p in problems(GOOD.split("## 9. Coverage")[0])))
+    def test_the_empty_why_failure_names_the_story(self):
+        self.assertTrue(any("#23" in p for p in problems(GOOD.replace("| The audit found waste |", "|  |"))))
 
-    def test_a_finding_with_no_issue_fails(self):
-        self.assertTrue(any("no issue number" in p for p in problems(GOOD.replace("| #25 |\n| One", "|  |\n| One"))))
-
-    def test_an_unstated_lens_fails(self):
-        self.assertTrue(any("lens: voice" in p for p in problems(GOOD.replace("| Voice | contrast framing | #28 |\n", ""))))
-
-    def test_silence_about_what_was_not_checked_fails(self):
-        self.assertTrue(any("read and unknown" in p for p in problems(GOOD.replace("Not checked: screen widths.", ""))))
-
-    def test_coverage_not_last_fails(self):
-        self.assertTrue(any("not the last" in p for p in problems(GOOD + "## 10. Extra\ntext\n")))
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_a_report_delivered_as_a_file_fails_and_stdin_passes(self):
+        import io, sys
+        from unittest import mock
+        self.assertEqual(1, check_report.main(["check_report.py", "report.md"]))
+        with mock.patch.object(sys, "stdin", io.StringIO(GOOD)):
+            self.assertEqual(0, check_report.main(["check_report.py", "-"]))

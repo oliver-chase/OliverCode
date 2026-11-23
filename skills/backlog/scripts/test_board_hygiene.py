@@ -1,7 +1,9 @@
-"""Test the sweep checks (status drift, required fields, duplicate cards, QA sign-off), the REST reads and the config guards.
+"""Test the sweep checks (status drift, required fields, duplicate cards, close gate), the REST reads and the config guards.
 Run: python3 -m unittest discover -p "test_*.py"   (from this folder)
 """
+import contextlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -36,22 +38,18 @@ class DimensionScoping(unittest.TestCase):
             mock.patch.object(bh, "check_required_fields", spy("fields")),
             mock.patch.object(bh, "check_status_drift", spy("drift")),
             mock.patch.object(bh, "check_duplicate_cards", spy("duplicates")),
-            mock.patch.object(bh, "check_qa_signoff", spy("qa-signoff")),
+            mock.patch.object(bh, "check_close_gate", spy("close-gate")),
             mock.patch.object(bh, "check_grooming", spy("groom")),
             mock.patch("sys.argv", ["check_board_hygiene.py", "--config", "x.json", *flags]),
         ]
-        out = io.StringIO()
-        for p in patches:
-            p.start()
-        try:
-            with redirect_stdout(out):
-                bh.main()
-        finally:
-            mock.patch.stopall()
+        with contextlib.ExitStack() as stack, redirect_stdout(io.StringIO()):
+            for p in patches:
+                stack.enter_context(p)
+            bh.main()
         return calls
 
     def test_no_flag_runs_every_dimension(self):
-        self.assertEqual({"fields", "drift", "duplicates", "qa-signoff", "groom"},
+        self.assertEqual({"fields", "drift", "duplicates", "close-gate", "groom"},
                          set(self.run_main()))
 
     def test_one_dimension_runs_alone(self):
@@ -64,15 +62,12 @@ class DimensionScoping(unittest.TestCase):
 
 class Drift(unittest.TestCase):
     def setUp(self):
-        self.real_run_gh = bh.run_gh
-        bh.run_gh = lambda args: json.dumps([
+        self.enterContext(mock.patch.object(bh, "run_gh_soft", return_value=None))  # no REST read, so the fake gh below answers
+        self.enterContext(mock.patch.object(bh, "run_gh", lambda args: json.dumps([
             {"number": 1, "state": "CLOSED", "title": "t"},
             {"number": 2, "state": "OPEN", "title": "t"},
             {"number": 3, "state": "OPEN", "title": "t"},
-        ])
-
-    def tearDown(self):
-        bh.run_gh = self.real_run_gh
+        ])))
 
     def test_closed_issue_on_open_status_and_open_issue_off_board_are_flagged(self):
         problems = bh.check_status_drift([item(1, "In Progress"), item(2, "Complete")], CONFIG)
@@ -122,12 +117,18 @@ class BoardSpelling(unittest.TestCase):
             self.assertEqual(set(keys) - {finished_key}, open_names)
 
     def test_done_on_a_closed_issue_is_clean(self):
-        real = bh.run_gh
-        bh.run_gh = lambda args: json.dumps([{"number": 1, "state": "CLOSED", "title": "t"}])
-        try:
+        with mock.patch.object(bh, "run_gh_soft", return_value=None), \
+                mock.patch.object(bh, "run_gh", lambda args: json.dumps([{"number": 1, "state": "CLOSED", "title": "t"}])):
             self.assertEqual([], bh.check_status_drift([item(1, "Done")], self.CFG, "Done"))
-        finally:
-            bh.run_gh = real
+
+    def test_the_issue_list_and_the_board_come_from_rest_when_it_answers(self):
+        rest_issues = [{"number": 1, "state": "CLOSED", "title": "t"}]
+        with mock.patch.object(bh.board_rest, "repo_issues", return_value=rest_issues), \
+                mock.patch.object(bh, "run_gh", side_effect=AssertionError("GraphQL read")):
+            self.assertEqual([], bh.check_status_drift([item(1, "Done")], self.CFG, "Done"))
+        with mock.patch.object(bh.board_rest, "project_items", return_value=[{"id": 1}]), \
+                mock.patch.object(bh, "run_gh", side_effect=AssertionError("GraphQL read")):
+            self.assertEqual([{"id": 1}], bh.fetch_items(self.CFG))
 
     def test_work_type_is_not_required_when_the_board_has_no_such_field(self):
         it = item(2, "In progress")
@@ -180,6 +181,60 @@ class Grooming(unittest.TestCase):
         found = bh.overlapping_titles(stories, {"Ready", "Backlog"})
         self.assertEqual(1, len(found))
         self.assertIn("#20 and #21", found[0])
+        template = [self.titled(30, "Ready", "sampleeditor is audited and its ledger is current"),
+                    self.titled(31, "Ready", "sample-planning-tool is audited and its ledger is current")]
+        self.assertEqual([], bh.overlapping_titles(template, {"Ready"}), "one template, two subjects")
+
+
+class EpicSummariesScope(unittest.TestCase):
+    def test_an_epic_of_another_repo_is_not_queried(self):
+        own = {"number": 1, "repository": "acme/widgets"}
+        other = {"number": 2, "repository": "acme/other"}
+        items = [{"content": c, "status": "Backlog", "work Type": "Epic"} for c in (own, other)]
+        asked = []
+
+        def runner(args):
+            asked.append(args[-1])
+            return '{"data": {"repository": {"e1": {"subIssuesSummary": {"total": 3, "completed": 1}}}}}'
+
+        out = bh.epic_summaries(items, {"repoOwner": "acme", "repoName": "widgets"}, "Complete", runner)
+        self.assertEqual({1: (3, 1)}, out)
+        self.assertIn("e1:", asked[0])
+        self.assertNotIn("e2:", asked[0])
+
+
+class GroomingReads(unittest.TestCase):
+    """The grooming sweep batches its epic reads and reads comments only for waiting items."""
+
+    def test_epics_share_aliased_queries_and_only_waiting_items_have_comments_read(self):
+        items = [Grooming.titled(n, "In Progress", "e", "Epic") for n in range(100, 130)]
+        items += [Grooming.titled(1, "Ready", "story one"), Grooming.titled(2, "QA", "story two"),
+                  Grooming.titled(3, "Backlog", "story three"), Grooming.titled(4, "Complete", "story four")]
+        foreign = Grooming.titled(9, "Ready", "story of another repo")
+        foreign["content"]["repository"] = "o/other"
+        items.append(foreign)
+        calls = []
+
+        def runner(args):
+            calls.append(args)
+            if args[:2] == ["api", "graphql"]:
+                query = args[3]
+                numbers = [int(n) for n in re.findall(r"\be(\d+):", query)]
+                repo = {f"e{n}": {"subIssuesSummary": {"total": 2, "completed": 2}} for n in numbers}
+                return json.dumps({"data": {"repository": repo}})
+            if args[-1] == "repos/o/r/issues/1/comments":
+                return json.dumps([[{"body": "Agent action\n- Agent: b\n- Role: builder\n- Result: built"}]])
+            return "[]"
+
+        found = bh.check_grooming(items, CONFIG, "Complete", {"Ready", "Backlog"}, runner)
+        graphql = [c for c in calls if c[:2] == ["api", "graphql"]]
+        rest = [c[-1] for c in calls if c[:2] != ["api", "graphql"]]
+        self.assertEqual(2, len(graphql), "30 epics fit in two chunks, not 30 calls")
+        self.assertEqual(["repos/o/r/issues/1/comments", "repos/o/r/issues/3/comments"], rest)
+        self.assertEqual(len(calls), 4, "the card of another repo is never looked up")
+        self.assertTrue(any(f.startswith("o/other#9") and "another repo" in f for f in found))
+        self.assertEqual(30, sum(1 for f in found if "sub-issues closed" in f))
+        self.assertTrue(any(f.startswith("#1 ") and "builder entry" in f for f in found))
 
 
 class ConfigLoading(unittest.TestCase):
@@ -188,6 +243,7 @@ class ConfigLoading(unittest.TestCase):
             with self.assertRaises(SystemExit) as raised:
                 bh.load_config(path)
             self.assertIn("--config", str(raised.exception))
+        self.assertIn("shared/backlog-config.example.json", str(raised.exception))
 
     def test_existing_file_loads(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -198,69 +254,54 @@ class ConfigLoading(unittest.TestCase):
 
 class ListLimit(unittest.TestCase):
     def test_a_board_at_the_list_limit_stops_the_run(self):
-        real = bh.run_gh
-        bh.run_gh = lambda args: json.dumps({"items": [{}] * bh.ITEM_LIMIT})
-        try:
-            with self.assertRaises(SystemExit) as raised:
-                bh.load_items({"projectNumber": 1, "projectOwner": "o"})
-        finally:
-            bh.run_gh = real
+        with tempfile.TemporaryDirectory() as home, \
+                mock.patch.dict("os.environ", {"OLIVERCODE_HOME": home}), \
+                mock.patch.object(bh.gh_budget, "points_refusal", return_value=""), \
+                mock.patch.object(bh, "run_gh_soft", return_value=None), \
+                mock.patch.object(bh, "run_gh", lambda args: json.dumps({"items": [{}] * bh.ITEM_LIMIT})), \
+                self.assertRaises(SystemExit) as raised:
+            bh.load_items({"projectNumber": 1, "projectOwner": "o"})
         self.assertIn("limit", str(raised.exception))
 
 
-class QaSignoffDimension(unittest.TestCase):
-    CFG = {"repoOwner": "o", "repoName": "r", "qaRequiredFromIssue": 50}
-    BODY = "Scenario: Work is finished\n"
+class CloseGateDimension(unittest.TestCase):
+    CFG = {"repoOwner": "o", "repoName": "r", "closeGateFromIssue": 50}
 
     @staticmethod
-    def comment(agent, role, result):
-        return {"body": f"Agent action\n- Agent: {agent}\n- Role: {role}\n- Result: {result}"}
-
-    def runner(self, comments_by_issue, calls=None):
+    def runner(comments_by_issue):
         def run(args):
-            if calls is not None:
-                calls.append(args)
             number = int(args[-1].split("/")[-2] if args[-1].endswith("/comments") else args[0].split("/")[-1])
             if "--slurp" in args:
                 return subprocess.CompletedProcess([], 0, json.dumps([comments_by_issue.get(number, [])]), "")
-            return subprocess.CompletedProcess([], 0, self.BODY, "")
+            return subprocess.CompletedProcess([], 0, "", "")
         return run
 
-    GOOD = [comment.__func__("b", "builder", "built"), comment.__func__("q", "qa", "PASS; confirmed: Work is finished")]
-
-    def test_a_complete_item_without_a_sign_off_is_flagged_and_a_signed_one_is_not(self):
+    def test_an_issue_closed_without_the_mark_is_flagged_with_its_number_and_fix(self):
         items = [item(60, "Complete"), item(61, "Complete")]
-        found = bh.check_qa_signoff(items, self.CFG, runner=self.runner({61: self.GOOD}))
+        found = bh.check_close_gate(items, self.CFG, runner=self.runner({61: [{"body": "done\n\nClosed by complete_story.py."}], 60: [{"body": "Closing."}]}))
         self.assertEqual(1, len(found))
         self.assertIn("#60", found[0])
+        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
 
-    def test_issues_below_the_start_and_open_items_are_not_read(self):
-        calls = []
-        items = [item(49, "Complete"), item(70, "In Progress")]
-        self.assertEqual([], bh.check_qa_signoff(items, self.CFG, runner=self.runner({}, calls)))
-        self.assertEqual([], calls)
+    def test_a_comment_that_only_quotes_the_mark_does_not_count(self):
+        quoted = {60: [{"body": "> Closed by complete_story.py."}, {"body": "Closed by complete_story.py. is the mark\nthanks"}]}
+        self.assertEqual(1, len(bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(quoted))))
 
-    def test_a_null_or_absent_key_turns_the_dimension_off(self):
-        calls = []
-        for cfg in ({"repoOwner": "o", "repoName": "r"}, dict(self.CFG, qaRequiredFromIssue=None)):
-            self.assertEqual([], bh.check_qa_signoff([item(60, "Complete")], cfg, runner=self.runner({}, calls)))
-        self.assertEqual([], calls)
+    def test_older_and_open_items_and_a_null_key_are_not_read(self):
+        def boom(args):
+            raise AssertionError("read")
+        self.assertEqual([], bh.check_close_gate([item(49, "Complete"), item(70, "In Progress")], self.CFG, runner=boom))
+        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], dict(self.CFG, closeGateFromIssue=None), runner=boom))
 
-    def test_a_lone_qa_comment_does_not_count(self):
-        lone = [self.comment("A", "qa", "PASS; confirmed: Work is finished")]
-        self.assertEqual(1, len(bh.check_qa_signoff([item(60, "Complete")], self.CFG, runner=self.runner({60: lone}))))
-
-    def test_a_failed_read_stops_the_run(self):
-        def bad(args):
-            return subprocess.CompletedProcess([], 1, "", "boom")
-        with self.assertRaises(SystemExit) as raised:
-            bh.check_qa_signoff([item(60, "Complete")], self.CFG, runner=bad)
-        self.assertIn("boom", str(raised.exception))
-
-    def test_a_non_number_key_is_refused(self):
+    def test_a_failed_read_stops_the_check_and_a_bad_key_is_refused(self):
+        bad = lambda args: subprocess.CompletedProcess([], 1, "", "boom")
         with self.assertRaises(SystemExit):
-            bh.check_qa_signoff([], dict(self.CFG, qaRequiredFromIssue="50"))
+            bh.check_close_gate([item(60, "Complete")], self.CFG, runner=bad)
+        with self.assertRaises(SystemExit):
+            bh.check_close_gate([], dict(self.CFG, closeGateFromIssue="50"))
 
+
+class ImportIsolation(unittest.TestCase):
     def test_no_test_module_reads_the_live_config_at_import(self):
         here = Path(__file__).resolve().parent
         code = ("import sys, pathlib, importlib\n"
@@ -317,11 +358,35 @@ class ForkGuard(unittest.TestCase):
             bh.load_config(example)
         self.assertIn("placeholder", str(raised.exception))
 
-    def test_a_missing_config_message_names_the_example(self):
-        with self.assertRaises(SystemExit) as raised:
-            bh.load_config(Path("/nonexistent/backlog-config.json"))
-        self.assertIn("shared/backlog-config.example.json", str(raised.exception))
 
+class BudgetAndCache(unittest.TestCase):
+    CFG = {"projectOwner": "o", "projectNumber": 1}
 
-if __name__ == "__main__":
-    unittest.main()
+    def setUp(self):
+        home = tempfile.TemporaryDirectory()
+        self.addCleanup(home.cleanup)
+        patcher = mock.patch.dict("os.environ", {"OLIVERCODE_HOME": home.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_fresh_shared_copy_is_reused_without_a_gh_call(self):
+        with mock.patch.object(bh, "fetch_items", return_value=[{"id": 1}]) as fetch, \
+                mock.patch.object(bh.gh_budget, "points_refusal", return_value=""):
+            self.assertEqual(bh.load_items(self.CFG), [{"id": 1}])
+            self.assertEqual(bh.load_items(self.CFG), [{"id": 1}])
+            self.assertEqual(fetch.call_count, 1)
+
+    def test_no_cache_reads_live_again(self):
+        with mock.patch.object(bh, "fetch_items", return_value=[]) as fetch, \
+                mock.patch.object(bh.gh_budget, "points_refusal", return_value=""):
+            bh.load_items(self.CFG)
+            bh.load_items(self.CFG, use_cache=False)
+            self.assertEqual(fetch.call_count, 2)
+
+    def test_a_low_budget_stops_the_sweep_and_says_it_did_not_run(self):
+        with mock.patch.object(bh, "fetch_items") as fetch, \
+                mock.patch.object(bh.gh_budget, "points_refusal", return_value="GitHub has 100 GraphQL points left."):
+            with self.assertRaises(SystemExit) as cm:
+                bh.load_items(self.CFG)
+            self.assertIn("did not run", str(cm.exception))
+            fetch.assert_not_called()

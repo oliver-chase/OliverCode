@@ -9,6 +9,5 @@
     "priority": {"id": "PVTSSF_priority", "options": {"P0": "p0", "P1": "p1", "P2": "p2"}},
     "size": {"id": "PVTSSF_size", "options": {"XS": "z0", "S": "z1", "M": "z2", "L": "z3", "XL": "z4"}},
     "workType": {"id": "PVTSSF_worktype", "options": {"Epic": "w0", "Story": "w1"}}
-  },
-  "qaRequiredFromIssue": null
+  }
 }

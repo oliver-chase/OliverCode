@@ -3,6 +3,7 @@
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT_ENV = "SKILL_FLEET_ROOT"
@@ -21,8 +22,53 @@ TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.(?:test|spec)\
 
 
 def is_test(rel):
-    """Whether a repo-relative path is a test file. size.sh keeps the same rule in shell."""
+    """Whether a repo-relative path is a test file."""
     return bool(TEST.search(rel))
+
+
+def personal_repos():
+    """Names listed under `personalRepos` in olivercode.local.json (git-ignored, so a name stays on this machine). Those repos are left out of every fleet audit. A copy of this skill outside a checkout skips nothing."""
+    lib = Path(__file__).resolve().parents[3] / "scripts"
+    if not (lib / "lib" / "local_config.py").is_file():
+        return set()
+    sys.path.insert(0, str(lib))
+    try:
+        from lib import local_config
+        return set(local_config.load_local().get("personalRepos", []))
+    except Exception:  # noqa: BLE001 -- fail open, a config bug never stops an audit
+        return set()
+    finally:
+        sys.path.remove(str(lib))
+
+
+def archived_state(repo):
+    """"archived" or "deleted" when GitHub says the repo is, else None. The check lives in OliverCode's
+    scripts/lib/repo_state.py; a copy of this skill outside a checkout has no lookup and skips nothing."""
+    lib = Path(__file__).resolve().parents[3] / "scripts"
+    if not (lib / "lib" / "repo_state.py").is_file():
+        return None
+    sys.path.insert(0, str(lib))
+    try:
+        from lib import repo_state
+        return repo_state.archived(repo)
+    except Exception:  # noqa: BLE001 -- fail open, a lookup bug never stops an audit
+        return None
+    finally:
+        sys.path.remove(str(lib))
+
+
+def read(repo, rel):
+    """A repo file's text, or "" when it cannot be read as UTF-8."""
+    try:
+        return (Path(repo) / rel).read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return ""
+
+
+def git(repo, *args):
+    """The output of `git -C repo ...`, or "" when git fails."""
+    done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    return done.stdout if done.returncode == 0 else ""
 
 
 def tracked(repo):

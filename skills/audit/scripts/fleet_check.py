@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Fleet budgets, voice violations and board drift for one repo, as the audit's lean-fleet pass.
+"""Failing tests, voice violations and board drift for one repo, as the audit's lean-fleet pass.
 
 Usage:
-    fleet_check.py [repo]                  # budgets and voice, plus board drift when the repo has a backlog config
-    fleet_check.py --time [repo]           # also runs the repo's tests and reports the runtime
+    fleet_check.py [repo]                  # voice, plus board drift when the repo has a backlog config
+    fleet_check.py --time [repo]           # also runs the repo's tests and names each failing file
     fleet_check.py --fields-file F [repo]  # board drift from a saved `gh project field-list` JSON
 
-The budget file is `docs/BUDGET.json` in the repo, with testCount, testSeconds, docWords and skillWords.
-Each line of output is a measure against its budget, a voice finding as `file:line`, or a board difference.
-Exit status is 1 when anything is over budget or flagged. It edits nothing.
+Each line of output is a voice finding as `file:line`, a failing test file or a board difference.
+Exit status is 1 when anything is flagged. It edits nothing.
 Tests: python3 -m unittest test_fleet_check   (from this scripts/ folder)
 """
 
 import argparse
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -22,9 +22,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from _fleet import is_test, tracked
+from _fleet import archived_state, read, tracked
 
-BUDGET_FILE = "docs/BUDGET.json"
 BASELINE_SCRIPT = Path(__file__).resolve().parents[2] / "backlog" / "scripts" / "check_kanban_baseline.py"
 
 CONTRAST = re.compile(
@@ -36,25 +35,12 @@ SMALL = {"a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "
 CURLY = "‘’“”"
 
 
-def read(repo, rel):
-    try:
-        return (Path(repo) / rel).read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
-        return ""
-
-
-def measure(repo, files):
-    docs = skills = tests = 0
-    for rel in files:
-        if rel.endswith(".md"):
-            words = len(read(repo, rel).split())
-            if rel.startswith(("skills/", "references/")) or "/skills/" in rel or "/references/" in rel or Path(rel).name == "SKILL.md":
-                skills += words
-            else:
-                docs += words
-        elif rel.endswith(".py") and is_test(rel):
-            tests += len(re.findall(r"^\s*(?:async\s+)?def test_", read(repo, rel), re.M))
-    return {"testCount": tests, "docWords": docs, "skillWords": skills}
+def queued(command):
+    """The command behind the machine's validation queue helper (the same neutral `validate-queue` shim every repo's validate.sh
+    uses), so a timing run waits for a slot like any validation. Inside a held slot, or with no helper, the command runs as given."""
+    shim = Path.home() / ".local" / "bin" / "validate-queue"
+    inside = any(os.environ.get(v, "").endswith(".json") for v in ("OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT"))
+    return command if inside or not shim.is_file() else [str(shim), "run", *command]
 
 
 def run_tests(repo, per_module=None, failed=None):
@@ -69,7 +55,7 @@ def run_tests(repo, per_module=None, failed=None):
     def run_one(entry):
         folder, module = entry
         began = time.monotonic()
-        done = subprocess.run([sys.executable, "-m", "unittest", "-b", module], cwd=folder, capture_output=True)
+        done = subprocess.run(queued([sys.executable, "-m", "unittest", "-b", module]), cwd=folder, capture_output=True)
         if done.returncode and failed is not None:
             failed.append(module)
         if per_module is not None:
@@ -81,28 +67,29 @@ def run_tests(repo, per_module=None, failed=None):
     return round(time.monotonic() - start, 1)
 
 
-def budget_lines(measured, budget, timed=False):
-    """One line per measure against its budget, and how many are over."""
-    lines, over = [], 0
-    for key in ("testCount", "testSeconds", "docWords", "skillWords"):
-        value, limit = measured.get(key), budget.get(key)
-        if value is None:
-            hint = (" (no tests/test_*.py to run)" if timed else " (pass --time)") if key == "testSeconds" else ""
-            lines.append(f"{key}: not measured{hint}")
-        elif limit is None:
-            lines.append(f"{key}: {value}, no budget set")
-        elif value > limit:
-            over += 1
-            lines.append(f"{key}: {value} is over the budget of {limit}")
-        else:
-            lines.append(f"{key}: {value} within the budget of {limit}")
-    return lines, over
-
-
 def title_case(text):
     words = re.findall(r"[A-Za-z][A-Za-z'-]*", text)
     major = [w for w in words[1:] if w.lower() not in SMALL and not w.isupper()]
     return len(major) >= 2 and all(w[0].isupper() for w in major)
+
+
+def names_the_repo(text, repo, stripped):
+    """A top-level title that spells the repo's own name is a proper noun, so Title Case is its name."""
+    squash = lambda t: re.sub(r"[^a-z0-9]", "", t.lower())
+    return stripped.startswith("# ") and squash(text) == squash(Path(repo).resolve().name)
+
+
+def voice_configured():
+    """True when the user has a voice file: OLIVERCODE_VOICE_FILE, `voiceFile` in olivercode.local.json, or ~/.claude/VOICE.md (#719)."""
+    if os.environ.get("OLIVERCODE_VOICE_FILE"):
+        return Path(os.environ["OLIVERCODE_VOICE_FILE"]).expanduser().is_file()
+    local = Path(os.environ.get("OLIVERCODE_LOCAL_CONFIG") or Path(__file__).resolve().parents[3] / "olivercode.local.json")
+    try:
+        if json.loads(local.read_text(encoding="utf-8")).get("voiceFile"):
+            return True
+    except (OSError, ValueError, AttributeError):
+        pass
+    return (Path.home() / ".claude" / "VOICE.md").is_file()
 
 
 def voice_findings(repo, files):
@@ -126,7 +113,7 @@ def voice_findings(repo, files):
                 found.append((rel, n, "trailing period on a bullet"))
             if any(c in line for c in CURLY):
                 found.append((rel, n, "curly quotes"))
-            if heading and title_case(heading.group(1)):
+            if heading and title_case(heading.group(1)) and not names_the_repo(heading.group(1), repo, stripped):
                 found.append((rel, n, "Title Case heading"))
     return found
 
@@ -147,6 +134,12 @@ def board_drift(repo, fields_file):
         spec = importlib.util.spec_from_file_location("check_kanban_baseline", BASELINE_SCRIPT)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        if config:
+            check = importlib.util.spec_from_file_location("check_board_hygiene", Path(BASELINE_SCRIPT).with_name("check_board_hygiene.py"))
+            hygiene = importlib.util.module_from_spec(check)
+            sys.path.insert(0, str(Path(BASELINE_SCRIPT).parent))
+            check.loader.exec_module(hygiene)
+            hygiene.verify_config(config, config_path)  # a fork's inherited config names another repo's board (#687)
         fields = json.loads(Path(fields_file).read_text(encoding="utf-8")) if fields_file else mod.read_fields_from_gh(config)
     except (SystemExit, OSError, ValueError) as exc:
         return name, None, str(exc)
@@ -163,31 +156,32 @@ def main(argv=None):
     parser.add_argument("--fields-file", help="saved board field list, in place of a gh call")
     args = parser.parse_args(argv)
     repo = Path(args.repo).resolve()
+    state = archived_state(repo)
+    if state:
+        print(f"skip {repo.name}: {state} on GitHub")
+        return 0
     files = tracked(repo)
     problems = 0
 
-    budget_path = repo / BUDGET_FILE
-    budget = json.loads(budget_path.read_text(encoding="utf-8")) if budget_path.is_file() else {}
-    measured = measure(repo, files)
     per_module, failed = {}, []
-    measured["testSeconds"] = run_tests(repo, per_module, failed) if args.time else None
-    print(f"== Budgets ({BUDGET_FILE if budget else 'no budget file'})")
-    lines, over = budget_lines(measured, budget, args.time)
-    print("\n".join(lines))
-    if per_module:
-        slowest = sorted(per_module.items(), key=lambda kv: kv[1], reverse=True)[:3]
-        print("slowest test files: " + ", ".join(f"{m} {t:.1f}s" for m, t in slowest))
-    if failed:
-        print("failing test files: " + ", ".join(sorted(failed)))
-    problems += over + len(failed)
+    if args.time:
+        print("== Tests")
+        seconds = run_tests(repo, per_module, failed)
+        print("tests: no tests/test_*.py to run" if seconds is None else f"tests: {len(per_module)} files in {seconds}s")
+        if per_module:
+            slowest = sorted(per_module.items(), key=lambda kv: kv[1], reverse=True)[:3]
+            print("slowest test files: " + ", ".join(f"{m} {t:.1f}s" for m, t in slowest))
+        if failed:
+            print("failing test files: " + ", ".join(sorted(failed)))
+        problems += len(failed)
 
     print("== Voice")
-    findings = voice_findings(repo, files)
+    findings = voice_findings(repo, files) if voice_configured() else []
     kinds = {}
     for rel, n, kind in findings:
         print(f"{rel}:{n}: {kind}")
         kinds[kind] = kinds.get(kind, 0) + 1
-    print("voice: " + (", ".join(f"{v} {k}" for k, v in sorted(kinds.items())) if kinds else "no violations found"))
+    print("voice: " + ("skipped, no voice file is configured" if not voice_configured() else ", ".join(f"{v} {k}" for k, v in sorted(kinds.items())) if kinds else "no violations found"))
     problems += len(findings)
 
     print("== Board")

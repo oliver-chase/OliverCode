@@ -26,6 +26,8 @@ bash "$OC/scripts/qa/rehearse-install.sh"
 
 If it fails, stop and report the fork as broken. Everything below assumes a sound checkout.
 
+After install, point the user to "How work runs" in README.md and do not restate it. Then run `olivercode features --explain` and show the user its output, which says in plain sentences what each feature and scheduled job does and which are loaded on this machine.
+
 ## The two decisions only a human can make
 
 Bring the user exactly these two, each with your recommendation and its evidence. Never decide one silently, and keep the full inventory out of the question.
@@ -51,13 +53,16 @@ which they do not want governed. Do not register a repo they did not confirm.
 
 Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It holds every command. At each step, an agent also does this:
 
-- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. Any repo under `~/Documents`, `~/Desktop` or a cloud-sync folder moves to `~/Developer/Repos` by a fresh clone plus its untracked files, because sync services evict working files when the disk fills. Install nothing unasked
-- **Step 2, install.** Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
+- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. Any repo under `~/Documents`, `~/Desktop` or a cloud-sync folder moves to `~/Developer/Repos` by a fresh clone plus its untracked files, because sync services evict working files when the disk fills. Ask the user to confirm each move before you make it, and leave the original in place until they confirm the new clone Install nothing unasked
+- **Step 2, install.** Run `olivercode install --show-allow` first and show the user the proposed allow rules with the one line each says it permits. Ask once: "Add these rules to your allow list?" On a yes, install writes them, and on a no, run install and tell the user that `olivercode health` will fail until they are added. Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
 - **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
-- **Step 5, register.** Add each repo's confirmed validation command
+- **Step 5, register.** Run `olivercode init-fleet` first and tell the user the new private repo it reports, then add each repo's confirmed validation command
+- **Step 5b, lessons.** Ask once: "Should a recorded lesson file its own story in your backlog? Say yes to turn on autoCoverLessons." Write the answer as `"autoCoverLessons": true` or `false` in `olivercode.local.json`, which stays on this machine. With no backlog config of its own, the checkout writes each request to `docs/BACKLOG.md` and files nothing upstream
 - **Step 6, enforcement.** Tell the user plainly when hook enforcement fails open (`docs/GATES.md`), and point at `docs/SETUP.md` ("Troubleshooting")
+- **Step 6c, board workflows.** After `backlog-setup --apply` creates or repairs a board, give the user the board's page `https://github.com/users/OWNER/projects/N/workflows` (the command prints it) and walk them through both toggles, because GitHub has no API for them. Open the page, pick "Item closed" in the left list, turn it on, set Status to Complete and save. Pick "Auto-add to project", choose the repo, set the filter to `is:issue is:open` and save. Reload the page and confirm both show on. Add the step to the owner queue until the user confirms, and repeat it for every new repo
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
+- **Step 3b, sleep.** Apply the sleep line `olivercode health` prints, because a Mac that sleeps stops every session while the owner is away. Name the System Settings path or the `caffeinate -dimsu` command it gives
 - **Step 8, reconcile.** Ask before deleting any backup
 
 ## Output

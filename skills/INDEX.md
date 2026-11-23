@@ -17,20 +17,4 @@
 
 ## Rules
 
-- Keep only orchestration/security/optimization skills in `skills/<name>/SKILL.md`. Anything
-  that isn't an engineering-method skill or the framework's own tooling doesn't belong here —
-  no exceptions. A skill that only makes sense inside one product repo belongs in that repo's
-  own `.claude/skills/`. Personal/business skills belong in the personal skills folder
-  (`skillsRoot` in `olivercode.local.json`).
-- Update this table in the same change when a skill is added or removed. This index is the
-  hand-written list of skills. `docs/CATALOG.md` is generated from the code by the audit skill's `catalog.py`, so never edit it.
-- Remove references to retired skills, and keep no dead aliases
-- Adding one: `docs/RULES.md` ("Skill placement") has the full contract (real content, index row, and
-  the `~/.claude/skills/<name>` symlink — all three in the same session).
-
-## Validation
-
-Mechanical: `bash scripts/validate.sh` fails if a row here has no matching
-`skills/<name>/SKILL.md`, if a skill directory has no row, or if a `SKILL.md`'s frontmatter
-`name:` disagrees with its directory name (the launcher lists by frontmatter, humans read
-this table). See `scripts/lib/consistency_check.py`.
+Add, move or retire a skill per `docs/RULES.md` ("Skill placement") and update this table in the same change. `bash scripts/validate.sh` checks the table against each `skills/<name>/SKILL.md` and its `name:`. Remove references to retired skills, and keep no dead aliases.

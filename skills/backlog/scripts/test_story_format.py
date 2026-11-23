@@ -41,6 +41,20 @@ class StoryFormat(unittest.TestCase):
         good = body("story-good.body") + "\nRun `size.sh <target>` before and after.\n"
         self.assertEqual([], [p for p, _ in sf.check_body(good) if "placeholder" in p])
 
+    def test_a_story_without_an_existing_coverage_line_is_rejected_with_a_fix(self):
+        text = body("story-good.body").replace("Existing coverage checked:", "Searched:")
+        problems = sf.check_body(text)
+        self.assertEqual(["Existing coverage checked line"], [p for p, _ in problems])
+        self.assertIn("Existing coverage checked:", problems[0][1])
+
+    def test_a_story_that_names_its_search_passes_that_part(self):
+        self.assertEqual([], parts("story-good.body"))
+
+    def test_an_epic_and_an_old_story_scan_need_no_coverage_line(self):
+        self.assertNotIn("Existing coverage checked line", parts("epic-good.body"))
+        text = body("story-good.body").replace("Existing coverage checked:", "Searched:")
+        self.assertEqual([], sf.check_body(text, coverage=False))
+
     def test_a_story_without_an_epic_link_is_rejected(self):
         self.assertEqual(["Epic link"], parts("story-no-epic.body"))
 
@@ -79,7 +93,3 @@ class StoryFormat(unittest.TestCase):
         self.assertEqual(0, good.returncode)
         self.assertEqual(1, bad.returncode)
         self.assertIn("MISSING Gherkin Feature. Fix:", bad.stdout)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -138,7 +138,3 @@ class Command(unittest.TestCase):
             self.assertFalse((Path(tmp) / "gh-was-called").exists())
         self.assertEqual(1, result.returncode, result.stderr)
         self.assertIn("missing option QA", result.stdout)
-
-
-if __name__ == "__main__":
-    unittest.main()

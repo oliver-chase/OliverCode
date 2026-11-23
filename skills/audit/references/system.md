@@ -5,7 +5,7 @@ The default route: a repo, a suite or a system read end to end.
 ## Before reading
 
 1. State what the target is meant to be, from the README's first lines and the entry skill, and check it against the code
-2. Add the per-folder view to the `size.sh` table from the procedure:
+2. Count the files and lines per folder:
 
 ```bash
 git ls-files | wc -l
@@ -14,7 +14,7 @@ for d in $(git ls-files | cut -d/ -f1 | sort -u); do printf "%-30s %5s files %7s
 ```
 
 3. Measure what loads: the `CLAUDE.md` chain and its imports, and each skill's description and body
-4. Run `python3 scripts/catalog.py <target> --check` and `python3 scripts/portability.py <target>`, and hand their rows to the docs and self-containment readers
+4. Run `python3 "$OC/skills/audit/scripts/portability.py" <target>`, and hand its rows to the docs and self-containment readers
 5. A reader judges the sweep rows and does not search for them again
 
 ## The reviewer brief
@@ -32,9 +32,9 @@ Give each reader this brief, with the readers and the cap from the procedure, al
 ## After the reviewers return
 
 - Re-check the biggest claims yourself and drop any that do not reproduce
-- Merge duplicates across readers, and add findings only visible across areas, such as one rule in two areas
+- Merge duplicates across readers, and add findings only visible across areas, such as one rule in two areas. An audit split across sessions does this with `findings.py cross`, as "A chunked audit" in `SKILL.md` describes
 - Judge the shape, which no reviewer sees from one slice: name each small skill that its nearest neighbor could absorb, and what a core with add-ons off by default would hold
 
 ## Filing
 
-Build a ledger first: one row per finding and per "Simplify" item, each with its issue number, before the report goes out. The epic states a size target in lines and the order of the stories. One epic named for the result, such as "Every job has one home". One story per boundary that can land on its own: a security fix, a set of deletions, one merge of skills, the docs, the voice, the tests. Order them so deletions land before the docs and voice work that would otherwise rewrite text about to go.
+Build a ledger first: one row per finding and per "Simplify" item, each with its issue number, before the report goes out. The epic states `Size target: at most N lines` and the order of the stories. One epic named for the result, such as "Every job has one home". One story per boundary that can land on its own: a security fix, a set of deletions, one merge of skills, the docs, the voice, the tests. Order them so deletions land before the docs and voice work that would otherwise rewrite text about to go.
