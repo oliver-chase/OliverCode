@@ -21,6 +21,14 @@ def parts(name, kind=None):
     return [p for p, _ in sf.check_body(body(name), kind)]
 
 
+def parts_of(text, **flags):
+    return [p for p, _ in sf.check_body(text, **flags)]
+
+
+def with_blocker(text):
+    return text.replace("Priority:", "Blocked by: none.\nPriority:", 1)
+
+
 class StoryFormat(unittest.TestCase):
     def test_a_files_area_that_names_a_folder_is_rejected_and_a_file_is_not(self):
         """#1077: a folder in the Files area holds every other story back, so filing names it; a file with no extension passes."""
@@ -41,7 +49,7 @@ class StoryFormat(unittest.TestCase):
         examples = re.findall(r"````markdown\n(.*?)````", TEMPLATE.read_text(encoding="utf-8"), re.S)
         self.assertTrue(examples)
         for example in examples:
-            self.assertEqual([], sf.check_body(example))
+            self.assertEqual([], sf.check_body(example, blocker=True, line_numbers=True))
         skill = (HERE.parent / "SKILL.md").read_text(encoding="utf-8")
         delegating = (HERE.parent / "references" / "delegating-a-backlog.md").read_text(encoding="utf-8")
         self.assertNotRegex(skill, r"(?i)pull request|\bweekly\b|ask where a config|Which dimension should I check")
@@ -98,9 +106,44 @@ class StoryFormat(unittest.TestCase):
         found = [p for p, _ in sf.check_body(body("story-good.body") + "\nSee <the plan>")]
         self.assertTrue(any("placeholder" in p for p in found))
 
+    def test_a_story_with_no_blocker_line_fails_and_prints_the_fix(self):
+        """A story is one session of work: it names what must land first, or says none."""
+        self.assertEqual(["Blocked by line"], [p for p, _ in sf.check_body(body("story-good.body"), blocker=True)])
+        self.assertIn("Blocked by: none.", sf.check_body(body("story-good.body"), blocker=True)[0][1])
+        completed = subprocess.run([sys.executable, str(HERE / "check_story_format.py"),
+                                    str(HERE / "fixtures" / "story-good.body")],
+                                   capture_output=True, text=True)
+        self.assertEqual(1, completed.returncode)
+        self.assertIn("MISSING Blocked by line. Fix:", completed.stdout)
+
+    def test_a_blocker_naming_a_story_or_none_passes(self):
+        good = with_blocker(body("story-good.body"))
+        self.assertEqual([], sf.check_body(good.replace("Blocked by: none.", "Blocked by: #1067"), blocker=True))
+        self.assertEqual([], sf.check_body(good.replace("Blocked by: none.", "Blocked by: o/r#1067"), blocker=True))
+
+    def test_a_body_that_names_a_line_number_is_flagged(self):
+        flagged = body("story-good.body") + "\nThe call at scripts/hooks/error_paste.py:84 files the story.\n"
+        self.assertTrue(any(p.startswith("Line number") for p in parts_of(flagged, line_numbers=True)))
+        prose = body("story-good.body") + "\nSee line 84 of the hook.\n"
+        self.assertTrue(any(p.startswith("Line number") for p in parts_of(prose, line_numbers=True)))
+
+    def test_the_library_default_leaves_line_numbers_unchecked_for_intake_scans(self):
+        """Intake's scan of older stories and the generated bodies use the library default, so an old body naming a line is not queued."""
+        old = body("story-good.body") + "\nSee line 84 of the hook.\n"
+        self.assertEqual([], [p for p, _ in sf.check_body(old) if p.startswith("Line number")])
+
+    def test_a_line_number_inside_a_pasted_code_block_is_not_flagged(self):
+        pasted = body("story-good.body") + "\nPasted error:\n\n```\nFile \"x.py\", line 84, in run\n```\n"
+        self.assertEqual([], [p for p in parts_of(pasted, line_numbers=True) if p.startswith("Line number")])
+
+    def test_the_closed_search_for_rejected_ideas_is_in_the_skill(self):
+        skill = (HERE.parent / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn('is:closed reason:\\"not planned\\"', skill)
+        self.assertRegex(skill, r"(?i)file nothing until the owner decides")
+
     def test_the_command_reads_stdin_and_sets_the_exit_status(self):
         script = str(HERE / "check_story_format.py")
-        good = subprocess.run([sys.executable, script], input=body("story-good.body"),
+        good = subprocess.run([sys.executable, script], input=with_blocker(body("story-good.body")),
                               capture_output=True, text=True)
         bad = subprocess.run([sys.executable, script, str(HERE / "fixtures" / "story-no-gherkin.body")],
                              capture_output=True, text=True)

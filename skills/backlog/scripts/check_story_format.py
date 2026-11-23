@@ -14,6 +14,9 @@ from pathlib import Path
 
 STORY_SENTENCE = re.compile(r"\bAs (?:the|an?)\s+[^,\n]+?,?\s+I want\s+.+?,\s*so that\s+\S", re.I | re.S)
 EPIC_LINE = re.compile(r"^\s*Epic:\s*(?:[\w.-]+/[\w.-]+)?#\d+\s*$", re.M)
+BLOCKER_LINE = re.compile(r"^\s*(?:[-*]\s*)?Blocked by:\s*(?:none\b|(?:[\w.-]+/[\w.-]+)?#\d+)", re.I | re.M)
+FENCE = re.compile(r"^\s*```.*?^\s*```", re.M | re.S)
+LINE_NUMBER = re.compile(r"\blines? \d+\b|[\w/.-]+\.(?:py|sh|md|js|ts|tsx|jsx|json|ya?ml|go|rb|rs|java|c|h|cpp|txt):\d+\b", re.I)
 PRIORITY = re.compile(r"\bPriority:\s*(\S+?)[.,;\s]", re.I)
 SIZE = re.compile(r"\bSize:\s*(\S+?)[.,;\s]", re.I)
 WORK_TYPE = re.compile(r"\bWork type:\s*(\w+)", re.I)
@@ -59,10 +62,12 @@ def gherkin_problems(body):
     return problems
 
 
-def check_body(body, kind=None, coverage=True, root=None):
+def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False, root=None):
     """Return a list of (missing part, fix) for the body. An empty list means it is complete.
 
     `coverage=False` skips the Existing coverage checked line, for a scan of stories filed before it was required.
+    `blocker=True` requires the Blocked by line and `line_numbers=True` flags a line number; the command sets both,
+    and the library default leaves them off so intake's scan and the generated bodies are judged as they were.
     `root` is the repo the story changes, so a Files area entry that is a folder there is named.
     """
     problems = []
@@ -77,6 +82,9 @@ def check_body(body, kind=None, coverage=True, root=None):
     if kind == "Story" and not EPIC_LINE.search(body):
         problems.append(("Epic link", "add a line `Epic: #<number>` naming the epic this story belongs to; "
                                       "pick or create one first"))
+    if blocker and kind == "Story" and not BLOCKER_LINE.search(body):
+        problems.append(("Blocked by line", "add `Blocked by: none.` or `Blocked by: #<number>` naming the story "
+                                            "that must land first, as in " + TEMPLATE))
     if coverage and kind == "Story" and not COVERAGE_LINE.search(body):
         problems.append(("Existing coverage checked line",
                          "add `Existing coverage checked:` naming the code, doc or issue you searched and what you found, as in " + TEMPLATE))
@@ -102,6 +110,10 @@ def check_body(body, kind=None, coverage=True, root=None):
         if entry and (entry.endswith("/") or (root is not None and (Path(root) / entry).is_dir())):
             problems.append((f"Files area names the folder {entry}",
                              "name the files the story changes, because a folder holds back every story that touches a file inside it"))
+    ln = LINE_NUMBER.search(FENCE.sub("", body)) if line_numbers else None
+    if ln:
+        problems.append((f"Line number \"{ln.group(0)}\" in the body",
+                         "name the function, section or file instead, because a line number goes stale at the next commit"))
     ph = PLACEHOLDER.search(re.sub(r"`[^`]*`", "", body))
     if ph:
         problems.append((f"Unfilled placeholder {ph.group(0)}", "replace every <...> with the real text"))
@@ -122,7 +134,8 @@ def main(argv=None):
         print("The body is empty. Write it from " + TEMPLATE + ".", file=sys.stderr)
         return 1
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
-    problems = check_body(body, args.kind, root=(top.stdout.strip() or None) if top.returncode == 0 else None)
+    problems = check_body(body, args.kind, blocker=True, line_numbers=True,
+                          root=(top.stdout.strip() or None) if top.returncode == 0 else None)
     for part, fix in problems:
         print(f"MISSING {part}. Fix: {fix}")
     if problems:

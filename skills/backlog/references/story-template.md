@@ -8,7 +8,7 @@ A story body has these parts, in this order:
 
 1. The user story sentence: `**As the <role>**, I want <the ask>, so that <the outcome>.`
 2. Gherkin acceptance criteria in a `gherkin` fence: one `Feature:`, and one or more `Scenario:` blocks that each hold Given, When and Then lines (And and But continue a step)
-3. The epic link on its own line: `Epic: #<number>`, or `Epic: <owner>/<repo>#<number>` for an epic in another repo
+3. The epic link on its own line: `Epic: #<number>`, or `Epic: <owner>/<repo>#<number>` for an epic in another repo. A story then has a `Blocked by:` line: `Blocked by: none.` when it can start now, or `Blocked by: #<number>` naming the story that must land first. A story is one thin slice that one builder session finishes, and its body names no line number, since a line number goes stale at the next commit
 4. The fields on one line: `Priority: P0|P1|P2. Size: XS|S|M|L|XL. Work type: Story.`
 5. For a story, the line `Existing coverage checked:` naming the code, doc or issue you searched and what you found, so no story rebuilds something that exists
 6. Optional detail after the fields, such as the fit check from `SKILL.md` and a re-runnable audit command for an L or XL item
@@ -38,6 +38,7 @@ Feature: Backup failure alert
 ```
 
 Epic: #50
+Blocked by: none.
 Priority: P1. Size: S. Work type: Story.
 
 Existing coverage checked: a search of the repo for `backup alert` finds none. The nightly backup job exits non-zero on failure and nothing reads that status.

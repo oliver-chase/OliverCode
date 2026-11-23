@@ -25,7 +25,9 @@ Run `python3 scripts/check_board_hygiene.py --config CONFIG --verify-baseline`. 
 
 Every owner request that changes files becomes a story before any work starts, so nothing the owner asks for is lost or done untracked. The exception is a small change (`docs/RULES.md`, "The backlog"): it runs the repo's validation and commits with the number of the open epic whose goal fits. The rule lives in `docs/RULES.md` ("The backlog") and the body format in `references/story-template.md`.
 
-1. **Search the open stories first** (command in `references/project-fields.md`). A request that duplicates an open story is added to it as a comment.
+1. **Search the open stories first** (command in `references/project-fields.md`). A request that duplicates an open story is added to it as a comment. Then search the closed ones for an idea the owner already rejected:
+   `gh api -X GET search/issues -f q="repo:$REPO is:issue is:closed reason:\"not planned\" <topic>" --jq '.items[] | "\(.number) \(.title)"'`
+   A match is shown to the owner with its number, title and the closing comment that gives the reason. File nothing until the owner decides whether the new request overturns it.
 2. **Write the body** from the template, and pick the open epic whose goal the request serves. When none fits, file an epic first with `Work type: Epic`: the container whose body lists its stories and carries no `Epic:` line.
 3. **Check the body** with `python3 scripts/check_story_format.py BODY_FILE` and fix every part it prints.
    In OliverCode, also run `python3 scripts/lib/repo_name_guard.py --text-file BODY_FILE` before any post: a story or comment never names the owner's other repos, and `--scan-issues` lists the issue numbers that already do.
