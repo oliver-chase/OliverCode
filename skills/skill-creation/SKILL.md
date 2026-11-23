@@ -40,13 +40,13 @@ A request to repair or audit an existing skill against the baseline loads `refer
 12. **Self-installing.** One setup mode takes a fresh copy to working with no manual step: it installs dependencies, creates the config from the example file, connects each connector (rule 4) and writes the schedule, such as a launchd or cron entry, for any recurring job. It is safe to run twice and prints what works
 13. **Portable.** Paths use forward slashes and come from the home folder or the skill's own folder, and the skill names any platform it needs. The clean-room copy in step 3 proves it
 14. **One data file per kind.** No file per day, week or run. A reading taken over time rolls up to one row a week once the file passes 1,000 rows and 90 days, and the skill names the file and that point
-15. **Written for the model that reads it.** The description is in the third person. Add only what Claude does not know, give one default in place of a menu, and use one term per idea. `SKILL.md` stays under 500 lines, references sit one level deep, and the name never contains `claude` or `anthropic`
+15. **Written for the model that reads it.** The description is in the third person. Add only what Claude does not know, give one default in place of a menu, and use one term per idea. `SKILL.md` stays under 500 lines, references sit one level deep, and the name never contains `claude` or `anthropic`. Every numbered step ends on a criterion a second reader can verify: a step that ends "until it looks right" or similar goes back with a request for a checkable end
 16. **Steps call scripts.** A skill that ships scripts names the script or command in each step it runs, and the script holds the logic. A step that must happen every time is code, and a rule that must hold is a check that fails
 17. **Token-free by default.** A refresh, heartbeat or poll is a script with no model call, and a page refresh never starts a model. A recurring job that needs judgment runs a named gate script first and starts a model only when the gate finds work
 
 ## 0. Write the target in four lines
 
-Before any file, write four lines and get a yes: what the skill does, which values it needs and where each lives, what the folder holds, and each platform limit tested or guessed. Test each guessed limit before building on it.
+Before any file, write four lines and get a yes: what the skill does and the outcome it is judged on, which values it needs and where each lives, what the folder holds, and each platform limit tested or guessed. Test each guessed limit before building on it.
 
 ## 1. Does an existing skill already cover this?
 
@@ -58,4 +58,4 @@ A tracker or growing list needs a home the person's machine can reach, named in 
 
 ## 3. Build and close
 
-Create the skill, its symlink and `skills/INDEX.md` row, then run `$OC/skills/audit/scripts/check_skill_structure.py` on the folder and a clean-room run: copy the skill alone into an empty skills folder and run its setup mode, then its main script. Test the skill on Haiku, Sonnet and Opus with three real requests. Fix each gap a check names and run it again.
+Create the skill, its symlink and `skills/INDEX.md` row, then run `$OC/skills/audit/scripts/check_skill_structure.py` on the folder and a clean-room run: copy the skill alone into an empty skills folder and run its setup mode, then its main script. Run one real request twice on the default model, once with the skill loaded and once without it, each in a fresh session. The skill ships only if its result beats the run without it on the outcome stated in step 0. Fix each gap a check names and run it again.
