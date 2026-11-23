@@ -68,7 +68,8 @@ def closing_lines(oc_root: Path) -> str:
 Walk through the rest of setup: say "set up OliverCode" in Claude Code, and the olivercode-adoption skill takes you through it."""
 
 
-RULE_LINKS = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md", "DESIGN.md": Path("docs") / "DESIGN.md"}
+# "olivercode" is ~/.claude/olivercode, which points at the checkout itself, so a rule names its paths under one stable folder and needs no shell step to find the repo (#1017).
+RULE_LINKS = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md", "DESIGN.md": Path("docs") / "DESIGN.md", "olivercode": Path(".")}
 
 
 def _managed_links(oc_root: Path) -> dict[str, Path]:
@@ -436,6 +437,8 @@ def command_install(oc_root: Path) -> int:
         target.symlink_to(source)
         return "linked"
 
+    status = _link(claude_dir / "olivercode", oc_root)
+    print(f"  [{status.upper()}] ~/.claude/olivercode")
     status = _link(claude_dir / "CLAUDE.md", oc_root / "CLAUDE.md")
     print(f"  [{status.upper()}] ~/.claude/CLAUDE.md")
     # CLAUDE.md imports the voice by this fixed path. A relative import from a symlinked

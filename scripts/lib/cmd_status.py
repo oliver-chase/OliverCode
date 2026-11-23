@@ -5,7 +5,7 @@ landed per day and the date the count reaches zero at that pace. A flat or risin
 
 `olivercode status digest [--root DIR]` writes the same board figures with the open stories in priority order, the last five landed, what waits on the owner,
 the latest decisions and the run-log rows to `status-digest.md` in the OliverCode home, at most DIGEST_TOKENS tokens. A new owner thread starts from that file
-alone (#892), and the session-start hook refreshes it and prints `session_lines` (#985). It calls no model.
+alone (#892). The session-start hook refreshes it once it is older than DIGEST_TTL and prints one line with the open count (#985, #1017). It calls no model.
 """
 
 from __future__ import annotations
@@ -28,6 +28,8 @@ DAYS = 7
 STALL_MINUTES = run_lock.STALL_MINUTES  # a building story whose progress has not moved for this long is reported as stalled (#987, #1020)
 CLEAN_STOPS = ("", "end_turn", "completed")  # the stop reasons that end a round without trouble
 DIGEST_TOKENS = 1500
+DIGEST_TTL = 600  # seconds a written digest serves a new session, so a session that starts soon after another makes no GitHub call (#1017)
+BOARD_RE = re.compile(r"^Board: (\S+): (\d+) open\.", re.MULTILINE)  # the repo and open count the digest's board line states
 DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four, and ids, paths and code run shorter, so three keeps the digest under the limit
 OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
 DIGEST_ITEMS = 5  # the latest decisions and the latest run-log rows the digest keeps before it trims to the limit
@@ -291,6 +293,19 @@ def waiting_lines() -> list[str]:
     return [f"- #{i['id']} {_text(i.get('step'), 120)}" for i in found[:DIGEST_ITEMS]] + ([f"- and {len(found) - DIGEST_ITEMS} more"] if len(found) > DIGEST_ITEMS else [])
 
 
+def cached_open(slug: str, now: datetime, path: Path | None = None) -> int | None:
+    """The open count of SLUG from the digest at PATH when it was written under DIGEST_TTL seconds ago, else None, so the caller reads GitHub (#1017)."""
+    path = path or digest_path()
+    try:
+        if now.timestamp() - path.stat().st_mtime >= DIGEST_TTL:
+            return None
+        found = BOARD_RE.search(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    return int(found.group(2)) if found and found.group(1) == slug else None
+
+
+# shortcut: session_lines is no longer called by the digest or the hook; tests/test_status.py is outside story #1017's Files area and still tests it, so delete both together.
 def session_lines(slug: str, open_now: int, rows: list[dict], path: Path) -> list[str]:
     """The three lines a new session prints: the open count, the last story landed and the digest to read."""
     last = landed(rows)
@@ -329,7 +344,7 @@ def build_digest(board: str, decisions: list[dict], runs: list[dict], now: datet
 
 def write_digest(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print,
                  decisions=relay.records, runs=run_log, target: Path | None = None, opened=open_issues.fetch, waiting=waiting_lines):
-    """Write the status digest. Returns (path, text, session lines), or None after printing why through OUT. It reads gh REST and local logs and calls no model."""
+    """Write the status digest. Returns (path, text, open count), or None after printing why through OUT. It reads gh REST and local logs and calls no model."""
     if not slug:
         out("Error: this repo has no GitHub origin.")
         return None
@@ -351,7 +366,7 @@ def write_digest(slug: str | None, count=issue_count.count_issues, fetch=recent,
     except OSError as err:
         out(f"Error: the digest could not be written to {path}: {err}")
         return None
-    return path, text, session_lines(slug, open_now, rows, path)
+    return path, text, open_now
 
 
 def digest(slug: str | None, out=print, **kw) -> int:

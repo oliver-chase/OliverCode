@@ -11,8 +11,8 @@ This runs in every session, in whatever folder it starts, and names these gaps:
 - a repo, worktree or backup sits outside repoRoot (scripts/lib/placement.py)
 - the OliverCode checkout holds commits origin/main lacks, or trails it with edits (the fast-forward and the board groom belong to `olivercode maintain --fix`)
 
-In a repo that has commit gates, a session that is not headless also refreshes the status digest with no model call and prints three lines: the open
-count, the last story landed and the digest to read before acting (#985).
+In a repo that has commit gates, a session that is not headless prints one line: the open count and the story building. The count comes from the status
+digest when it is under DIGEST_TTL old, and from a fresh read of GitHub when it is not (#985, #1017). The line tells the session nothing to read.
 
 It prints nothing else when nothing is wrong, so a healthy session pays no context for it.
 """
@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -56,6 +57,38 @@ def headless() -> bool:
     return os.environ.get("OLIVERCODE_HEADLESS") == "1"  # model.HEADLESS_ENV
 
 
+def status_line(cwd: Path) -> list[str]:
+    """The one session-start line for a governed repo: its open count and the story building (#985, #992, #1017). The count comes from the status digest
+    when that is under DIGEST_TTL old, so a session that starts soon after another calls no GitHub. Nothing in a headless builder, an ungoverned folder or
+    a failed read."""
+    if headless():
+        return []
+    try:
+        root = repo_gates.repo_root(cwd)
+        if not root or not repo_gates.has_gates(root):
+            return []
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from lib import cmd_status, repo_state, run_lock
+        slug = repo_state.origin(root)
+        if not slug:
+            return []
+        now = datetime.now(timezone.utc)
+        open_now = cmd_status.cached_open(slug, now)
+        if open_now is None:
+            done = cmd_status.write_digest(slug, out=lambda _text: None)
+            if done is None:
+                return []
+            open_now = done[2]
+        held = run_lock.active(slug, now.timestamp())
+    except Exception as exc:  # noqa: BLE001 -- a digest bug never blocks a session
+        print(f"session_check: status line failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
+    building = ", ".join(f"#{n}" for n in held.get("building") or []) if held else ""
+    state = f"building {building}" if building else "none building"
+    return [f"{slug}: {open_now} open stories, {state}." + (" A request joins the queue as a story." if held else "")]
+
+
+# shortcut: digest_notes and run_notes are no longer called by the hook (status_line replaced them); tests outside story #1017's Files area still exercise them, so delete them with those tests.
 def digest_notes(cwd: Path) -> list[str]:
     """The three session-start lines from a refreshed status digest, or nothing in a headless builder, an ungoverned folder or a failed read (#985)."""
     if headless():
@@ -141,7 +174,7 @@ def main() -> int:
         data = {}
     cwd = Path(data.get("cwd") or ".")
     found = notes(cwd, Path.home() / ".claude", str(data.get("session_id") or ""))
-    parts = (["OliverCode session check: " + " ".join(found)] if found else []) + run_notes(cwd) + digest_notes(cwd)
+    parts = (["OliverCode session check: " + " ".join(found)] if found else []) + status_line(cwd)
     if parts:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}))
     return 0
