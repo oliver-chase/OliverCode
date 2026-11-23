@@ -4,6 +4,7 @@ Each step returns the problems it found and, with --fix, repairs the ones that c
 a dangling activation link, prunes a worktree whose folder is gone, deletes merged local branches, downloads git files that iCloud evicted
 from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). A problem that is not safe to change on its own (hooks
 that drifted, a repo inside a synced folder, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
+With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scripts/run-tests.sh and records the commit, exit code and test count for `olivercode health` (#977).
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
 """
 
@@ -398,11 +399,94 @@ def check_outsiders(fix: bool) -> list[Problem]:
     return []
 
 
+def suite_record(code: int, out: str) -> dict:
+    """The record of one clean-clone run: the commit it tested, its exit code, its test count and the modules that failed (#977).
+    The count is the summary line smoke_runner prints last, since a failed module's own `Ran` line comes first."""
+    commit = re.search(r"on commit (\w+)", out)
+    ran = re.findall(r"Ran (\d+) tests across", out)
+    return {"commit": commit.group(1) if commit else "", "exit": code, "tests": int(ran[-1]) if ran else 0,
+            "failed": re.findall(r"^--- (.+) ---$", out, re.M), "at": datetime.now(timezone.utc).timestamp()}
+
+
+def run_clean_clone_suite(root: Path) -> dict:
+    """Runs scripts/run-tests.sh on root, which tests a fresh clone of its HEAD, so uncommitted edits and this machine's branch names cannot pass it."""
+    done = subprocess.run(["bash", str(root / "scripts" / "run-tests.sh"), str(root)], capture_output=True, text=True)
+    return suite_record(done.returncode, done.stdout + done.stderr)
+
+
+def check_suite(fix: bool, root: Path | None = None, record: Path | None = None) -> list[Problem]:
+    """The daily job runs the clean-clone suite once and writes its record for `olivercode health` (#977). A failing run is a problem that names its modules."""
+    if not fix:
+        return []
+    from lib.health_checks import suite_record_path
+    result = run_clean_clone_suite(root or OC_ROOT)
+    record = record or suite_record_path()
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps(result))
+    if not result["exit"]:
+        return []
+    return [Problem("suite", f"the clean-clone suite failed on commit {result['commit'] or 'unknown'}: {', '.join(result['failed']) or 'no module was named'}")]
+
+
+def _origin_slug(repo: Path) -> str:
+    """owner/name of a checkout's origin on GitHub, or "" when it has no origin or the origin is not on GitHub."""
+    url = _git(repo, "remote", "get-url", "origin").stdout.strip()
+    match = re.search(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?$", url)
+    return f"{match.group(1)}/{match.group(2)}" if match else ""
+
+
+def engine_slug() -> str:
+    """OliverCode's own owner/name, from its backlog config."""
+    cfg = json.loads((OC_ROOT / "docs" / "backlog-config.json").read_text(encoding="utf-8"))
+    return f"{cfg['repoOwner']}/{cfg['repoName']}"
+
+
+def failure_gaps() -> list[tuple[str, str, str]]:
+    """(repo, title, body) for each failing check the nightly run can name a repo for (#978): a worktree whose commit hooks predate
+    origin/main is filed under its own origin, and a scheduled task that starts a model with no gate command is filed under OliverCode,
+    because a task names no repo of its own."""
+    from lib import placement, schedules
+    from lib.health_checks import stale_hook
+    gaps = []
+    for wt in placement.worktrees():
+        path = Path(wt.path)
+        why = stale_hook(path)
+        slug = _origin_slug(path) if why else ""
+        if slug:
+            gaps.append((slug, f"Rebase {path.name} onto origin/main to refresh its commit hooks",
+                         f"The nightly maintenance job finds the commit hooks in {path} older than origin/main ({why}).\n\n"
+                         f"Fix: `git -C \"{path}\" rebase origin/main`, then `olivercode worktree fix \"{path}\"`.\n"))
+    for name, _per_day in schedules.ungated(claude_dir() / "scheduled-tasks", schedules.task_crons()):
+        gaps.append((engine_slug(), f"Gate command for scheduled task {name}",
+                     f"The nightly maintenance job finds the scheduled task {name} starting a model with no gate command.\n\n"
+                     f"Fix: {schedules.GATE_HINT}\n"))
+    return gaps
+
+
+def file_failure_candidates(gaps: list[tuple[str, str, str]]) -> int:
+    """Adds each gap as a candidate. The candidates list holds a repeat once, so a second run adds nothing (#978). Nothing reaches a board until the owner promotes it."""
+    from lib import candidates
+    for repo, title, body in gaps:
+        candidates.add("maintain", repo, title, body)
+    return len(gaps)
+
+
+def check_failure_candidates(fix: bool) -> list[Problem]:
+    """The daily run files each failing check as a candidate for its own repo (#978). A check that cannot read its inputs is reported."""
+    if not fix:
+        return []
+    try:
+        file_failure_candidates(failure_gaps())
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+        return [Problem("candidates", f"the failing checks were not filed as candidates: {error}", fixable=False)]
+    return []
+
+
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
     fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's registry
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
-                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
+                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_candidates(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
     return problems

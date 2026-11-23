@@ -31,7 +31,7 @@ class InitFleet(unittest.TestCase):
 
     def test_the_template_is_generic(self):
         names = {p.name for p in cmd_initfleet.TEMPLATE.iterdir()}
-        self.assertEqual(names, {"repo-profiles.json", "owner-rules.json", "owner-queue.jsonl", "backlog-config.json", "review-config.json", "CLAUDE.md"})
+        self.assertEqual(names, {"repo-profiles.json", "owner-rules.json", "owner-queue.jsonl", "review-config.json", "CLAUDE.md"})
         text = " ".join(p.read_text() for p in cmd_initfleet.TEMPLATE.iterdir()).lower()
         import subprocess
         who = subprocess.run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"], capture_output=True, text=True).stdout
@@ -54,7 +54,7 @@ class InitFleet(unittest.TestCase):
         check = next(i for i, c in enumerate(flat) if "collaborators" in c)
         self.assertLess(create, check)
         self.assertLess(check, push)
-        self.assertIn('"repoOwner": "me"', (dest / "backlog-config.json").read_text())
+        self.assertFalse((dest / "backlog-config.json").exists())
         self.assertFalse(any("graphql" in c for c in flat))
 
     def test_a_public_repo_is_never_pushed(self):

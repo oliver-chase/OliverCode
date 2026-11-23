@@ -12,7 +12,7 @@ from pathlib import Path
 
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import design_file, voice_file
+from lib.local_config import OC_ROOT, design_file, fleet_registry_path, load_local, save_local, voice_file
 
 from lib import claude_settings as _claude_settings
 from lib import cmd_guide
@@ -228,6 +228,83 @@ def _install_automode(settings_path: Path) -> bool:
     return False
 
 
+def fleet_repo_step(dest: Path, ask=None, push=None) -> str:
+    """Makes the fleet folder a local git repo with its files in one commit, prints its path and, on a first install, offers a private
+    GitHub copy once (#993). `ask` is None outside the owner's terminal, where nothing is pushed. Returns the error, or "" when it worked."""
+    from lib.cmd_initfleet import command_init_fleet, make_local_repo, scaffold_local
+    if not (dest / "repo-profiles.json").exists():
+        scaffold_local(dest)
+    made, error = make_local_repo(dest)
+    if error:
+        print(f"The fleet folder {dest} could not be made a git repo: {error}")
+        return error
+    print(f"Fleet repo: {dest}")
+    if made and ask is not None and ask("Push a private copy of the fleet repo to GitHub now? [y/N] ").strip().lower() in ("y", "yes"):
+        (push or command_init_fleet)(["--dir", str(dest)])
+    return ""
+
+
+def design_step(ask=None) -> str:
+    """Asks once for the owner's own design file (#995). A path to an existing file is saved as `designFile` in the local config, and a blank
+    answer keeps the shipped docs/DESIGN.md. Either way the question is not asked again, because `designAsked` is saved. `ask` is None outside the
+    owner's terminal, where nothing is asked. Returns the saved path, or "" when none was saved."""
+    local = load_local()
+    if ask is None or "designFile" in local or local.get("designAsked"):
+        return ""
+    answer = ask("Path to your own design file, or Enter to keep the shipped docs/DESIGN.md: ").strip()
+    own = Path(answer).expanduser() if answer else None
+    updates = {"designAsked": True}
+    if own is not None and own.is_file():
+        updates["designFile"] = str(own)
+        print(f"Design file: {own}, linked as ~/.claude/DESIGN.md below.")
+    elif answer:
+        print(f"{answer} is not a file, so the shipped docs/DESIGN.md stays. Set designFile in olivercode.local.json to change it.")
+    else:
+        print("Design file: the shipped docs/DESIGN.md. Set designFile in olivercode.local.json to change it.")
+    save_local(updates)
+    return str(own) if "designFile" in updates else ""
+
+
+def registered_repos() -> list[tuple[str, Path]]:
+    """OliverCode and each cloned repo in the fleet registry: the repos install gives a board (#994)."""
+    from lib.repo_profiles import iter_fleet, load_repo_profiles
+    profiles, _ = load_repo_profiles(OC_ROOT)
+    return [("OliverCode", OC_ROOT), *[(name, path) for name, _, path in iter_fleet(profiles, OC_ROOT.parent) if (path / ".git").exists()]]
+
+
+def board_step(repos: list[tuple[str, Path]]) -> str:
+    """Install's board step (#994). With gh signed in and holding the project scope, it runs `backlog-setup --apply` for each repo whose
+    backlog config is absent or still the example's, names that config in the repo's CLAUDE.md and prints the board URL. A repo with a
+    valid config is left alone. Returns the line that stopped the step before any board, or "" when it ran."""
+    from lib import backlog_setup
+    from lib.cmd_fleet import command_backlog_setup
+    from lib.health_checks import gh_ready
+    problem = gh_ready()
+    if problem:
+        print(problem)
+        return problem
+    for name, path in repos:
+        try:
+            if backlog_setup.load_config(backlog_setup.config_path(path)) is not None:
+                continue
+            if command_backlog_setup([str(path), "--apply"]) != 0:
+                print(f"{name}: backlog-setup did not finish. Fix the cause, then run `olivercode backlog-setup {path} --apply`")
+                continue
+            config = backlog_setup.load_config(backlog_setup.config_path(path))
+        except backlog_setup.SetupError as error:
+            print(f"{name}: {error}")
+            continue
+        rel = backlog_setup.config_path(path).relative_to(path)
+        claude = path / "CLAUDE.md"
+        if claude.is_file() and "backlog-config.json" not in claude.read_text(encoding="utf-8", errors="ignore"):
+            claude.write_text(claude.read_text(encoding="utf-8", errors="ignore") + f"\nBacklog config: `{rel}` names this repo's board.\n", encoding="utf-8")
+        if config is None:
+            print(f"{name}: the board was not confirmed. Run `olivercode backlog-setup {path}` to see why")
+        else:
+            print(f"{name}: board https://github.com/users/{config['projectOwner']}/projects/{config.get('projectNumber', 0)}, config {rel}")
+    return ""
+
+
 def command_install(oc_root: Path) -> int:
     """Activate this checkout: symlink CLAUDE.md, the voice and every skill into ~/.claude.
 
@@ -308,6 +385,7 @@ def command_install(oc_root: Path) -> int:
 
     status = _link(claude_dir / "VOICE.md", voice_file(oc_root), keep_own=True)
     print(f"  [{status.upper()}] ~/.claude/VOICE.md")
+    design_step(input if owner_terminal() else None)
     # DESIGN.md is read on visual work only, so CLAUDE.md does not import it.
     status = _link(claude_dir / "DESIGN.md", design_file(oc_root), keep_own=True)
     print(f"  [{status.upper()}] ~/.claude/DESIGN.md")
@@ -410,6 +488,11 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
+    fleet_repo_step(fleet_registry_path(), ask=input if owner_terminal() else None)
+    if owner_terminal():
+        board_step(registered_repos())
+    else:
+        print("Board step skipped here. Run `olivercode install` in your own terminal, or `olivercode backlog-setup DIR --apply` for each repo.")
     if first_install:
         print(INTRODUCTION)
     else:

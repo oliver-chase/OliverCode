@@ -142,6 +142,7 @@ def run(root: Path, out=sys.stdout) -> int:
             for name in failed:
                 print(f"--- {name} ---", file=out)
                 print((log_dir / f"{name}.log").read_text(encoding="utf-8", errors="replace"), end="", file=out)
+            print(f"  Ran {ran} tests across {len(mods)} modules, {len(failed)} failed: {', '.join(failed)}", file=out)
             print("=== validate: python smoke tests FAILED ===", file=out)
             return 1
         spent: dict[str, float] = {}

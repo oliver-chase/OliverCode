@@ -7,14 +7,18 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from lib import claude_settings as _claude_settings
+from lib import failure_log
 from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, python_version
 from lib.local_config import claude_dir as _claude_dir
+from lib.local_config import design_file, fleet_registry_path
 
 from lib.skill_links import broken_links, link_states
 from lib.skills_catalog import skill_dirs
@@ -124,14 +128,19 @@ def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]
         else:
             print(f"  [FAIL] {root.name}/docs/VOICE.md changes the shared text — copy it from {canonical} and keep its own sections after it")
             failed += 1
-    design = oc_root / "docs" / "DESIGN.md"
-    if design.is_file():
+    # A repo may follow the shipped DESIGN.md or the owner's own designFile (#995), so either one passes and a repo matching neither fails.
+    sources = []
+    for candidate in (oc_root / "docs" / "DESIGN.md", design_file(oc_root)):
+        if candidate.is_file() and candidate.read_bytes() not in [s.read_bytes() for s in sources]:
+            sources.append(candidate)
+    if sources:
         for root in sorted(r for r in all_roots if (r / "docs" / "DESIGN.md").is_file()):
-            if (root / "docs" / "DESIGN.md").read_bytes().startswith(design.read_bytes()):
+            text = (root / "docs" / "DESIGN.md").read_bytes()
+            if any(text.startswith(source.read_bytes()) for source in sources):
                 print(f"  [OK] {root.name}/docs/DESIGN.md keeps the shared text")
                 passed += 1
             else:
-                print(f"  [FAIL] {root.name}/docs/DESIGN.md changes the shared text — copy it from {design} and keep its own sections after it")
+                print(f"  [FAIL] {root.name}/docs/DESIGN.md changes the shared text — copy it from {design_file(oc_root)} and keep its own sections after it")
                 failed += 1
     return passed, failed, 0
 
@@ -342,6 +351,56 @@ def _check_commits_behind(oc_root: Path) -> tuple[int, int, int]:
     return 0, 0, 1
 
 
+SUITE_STALE_DAYS = 2
+
+
+def suite_record_path() -> Path:
+    """Where the daily job writes the clean-clone suite's record (maintain.check_suite)."""
+    return failure_log.home() / "clean-clone-suite.json"
+
+
+def _check_clean_clone_suite(record: Path | None = None, now: float | None = None) -> tuple[int, int, int]:
+    """The clean-clone suite must have passed on a commit within two days (#977). A failed record names its failing modules, and a
+    stale one means the daily job has not run. A machine with no record yet is skipped, since the job has not run there."""
+    print("\nClean-clone suite:")
+    path = record or suite_record_path()
+    if not path.is_file():
+        print("  [INFO] no clean-clone run recorded yet; the daily job runs it")
+        return 0, 0, 1
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        print(f"  [FAIL] {path} does not parse; run `olivercode maintain --fix` to rewrite it")
+        return 0, 1, 0
+    commit = data.get("commit") or "unknown"
+    if data.get("exit"):
+        print(f"  [FAIL] the clean-clone suite failed on commit {commit}: {', '.join(data.get('failed') or ['no module was named'])}")
+        return 0, 1, 0
+    age = ((time.time() if now is None else now) - data.get("at", 0)) / 86400
+    if age > SUITE_STALE_DAYS:
+        print(f"  [FAIL] the clean-clone suite last ran {age:.1f} days ago on commit {commit}; run `olivercode maintain --fix` or check the daily job")
+        return 0, 1, 0
+    print(f"  [OK] the clean-clone suite passed on commit {commit}: {data.get('tests', 0)} tests, {age:.1f} days ago")
+    return 1, 0, 0
+
+
+def _check_fleet_repo(dest: Path | None = None) -> tuple[int, int, int]:
+    """The fleet folder holds the registry and owner rules, and it must be a git repo (#993). A loose folder is made one here with its
+    files committed and keeps every file; a folder that cannot be made one fails."""
+    from lib.cmd_initfleet import make_local_repo
+    dest = dest or fleet_registry_path().parent
+    print("\nFleet repo:")
+    if not (dest / "repo-profiles.json").exists():
+        print("  [INFO] no fleet folder here yet; `olivercode install` makes one")
+        return 0, 0, 1
+    made, error = make_local_repo(dest)
+    if error:
+        print(f"  [FAIL] {dest} is not a git repo and could not be made one: {error}")
+        return 0, 1, 0
+    print(f"  [OK] {dest} was a loose folder; it is now a git repo with its files committed" if made else f"  [OK] {dest} is a git repo")
+    return 1, 0, 0
+
+
 def _check_python() -> tuple[int, int, int]:
     """The `python3` a shell finds must meet MIN_PYTHON (lib/cli.py).
 
@@ -379,10 +438,33 @@ def _check_gh_auth(runner=None) -> tuple[int, int, int]:
         print("  [WARN] gh is not installed or did not answer, so its sign-in was not checked. Install it from https://cli.github.com")
         return 0, 0, 1
     if result.returncode == 0:
-        print("  [OK] gh is signed in")
+        if "project" not in _scopes(result):
+            print("  [FAIL] gh is signed in without the project scope, so no board can take a story. Run: gh auth refresh -s project")
+            return 0, 1, 0
+        print("  [OK] gh is signed in with the repo and project scopes")
         return 1, 0, 0
     print("  [WARN] gh is signed out, so the backlog and board checks cannot reach GitHub. Run: gh auth login")
     return 0, 0, 1
+
+
+def _scopes(result) -> set[str]:
+    """The token scopes `gh auth status` lists. It reads the token's own record, so no GraphQL point is spent (#994)."""
+    text = f"{result.stdout or ''}{result.stderr or ''}"
+    found = re.search(r"Token scopes:\s*(.+)", text)
+    return set(re.findall(r"'([^']+)'", found.group(1))) if found else set()
+
+
+def gh_ready() -> str:
+    """"" when gh is installed, signed in and holds the project scope, else the one line that names the fix (#994)."""
+    try:
+        result = _gh_auth_status()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return "gh is not installed or did not answer. Install it from https://cli.github.com, then run: gh auth login"
+    if result.returncode:
+        return "gh is not signed in. Run: gh auth login, then gh auth refresh -s project"
+    if "project" not in _scopes(result):
+        return "gh is signed in without the project scope. Run: gh auth refresh -s project"
+    return ""
 
 
 SLEEP_FIX = ("In System Settings, open Battery or Energy and turn off sleep on power adapter and display sleep (Never), "

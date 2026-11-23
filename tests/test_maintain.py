@@ -1,5 +1,8 @@
 """olivercode maintain repairs what is safe, reports what is not, and writes both to the logs."""
 
+import contextlib
+import io
+import json
 import os
 import plistlib
 import subprocess
@@ -11,7 +14,7 @@ from _maintain_case import Base
 from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import failure_log, hygiene, maintain, placement  # noqa: E402
+from lib import failure_log, health_checks, hygiene, maintain, placement  # noqa: E402
 
 
 class TestRetiredJobs(Base):
@@ -227,6 +230,106 @@ class TestCopies(Base):
         repo = self.make()
         (repo / "Chapter 2.txt").write_text("x")
         self.assertEqual(maintain.check_copies(self.cfg, False), [])
+
+
+SUITE_PASS = "  Ran 40 tests across 3 modules, all passed\nrun-tests: tests passed on commit abc123\n"
+SUITE_FAIL = ("--- test_maintain ---\nRan 9 tests in 2.0s\nFAILED (failures=2)\n"
+              "--- test_policy ---\nRan 12 tests in 1.0s\nFAILED (failures=1)\n"
+              "  Ran 40 tests across 3 modules, 2 failed: test_maintain, test_policy\n"
+              "=== validate: python smoke tests FAILED ===\nrun-tests: tests FAILED on commit abc123\n")
+
+
+class TestCleanCloneSuite(unittest.TestCase):
+    """The daily job runs the clean-clone suite once and records it; health fails a failed or stale record and names its modules (#977)."""
+
+    def setUp(self):
+        self.record = temp_dir(self) / "clean-clone-suite.json"
+
+    def test_a_green_run_records_its_commit_exit_code_and_test_count(self):
+        self.assertEqual({"commit": "abc123", "exit": 0, "tests": 40, "failed": []}, {k: v for k, v in maintain.suite_record(0, SUITE_PASS).items() if k != "at"})
+
+    def test_a_failed_run_records_the_failing_modules(self):
+        record = maintain.suite_record(1, SUITE_FAIL)
+        self.assertEqual((1, 40, ["test_maintain", "test_policy"]), (record["exit"], record["tests"], record["failed"]))
+
+    def test_the_daily_run_runs_the_suite_once_and_writes_the_record(self):
+        with mock.patch.object(maintain, "run_clean_clone_suite", return_value=maintain.suite_record(0, SUITE_PASS)) as run:
+            self.assertEqual([], maintain.check_suite(True, record=self.record))
+        run.assert_called_once()
+        self.assertEqual(0, json.loads(self.record.read_text())["exit"])
+
+    def test_a_check_only_run_runs_no_suite(self):
+        with mock.patch.object(maintain, "run_clean_clone_suite") as run:
+            self.assertEqual([], maintain.check_suite(False, record=self.record))
+        run.assert_not_called()
+        self.assertFalse(self.record.exists())
+
+    def test_a_failed_daily_run_is_a_problem_that_names_the_modules(self):
+        with mock.patch.object(maintain, "run_clean_clone_suite", return_value=maintain.suite_record(1, SUITE_FAIL)):
+            problems = maintain.check_suite(True, record=self.record)
+        self.assertEqual(["suite"], [p.step for p in problems])
+        self.assertIn("test_maintain, test_policy", problems[0].text)
+
+    def test_health_fails_a_recorded_failure_and_names_its_modules(self):
+        self.record.write_text(json.dumps(maintain.suite_record(1, SUITE_FAIL)))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = health_checks._check_clean_clone_suite(self.record)
+        self.assertEqual((0, 1, 0), result)
+        self.assertIn("[FAIL]", out.getvalue())
+        self.assertIn("test_maintain, test_policy", out.getvalue())
+
+    def test_health_fails_a_record_older_than_two_days(self):
+        record = maintain.suite_record(0, SUITE_PASS)
+        record["at"] -= 3 * 86400
+        self.record.write_text(json.dumps(record))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            result = health_checks._check_clean_clone_suite(self.record)
+        self.assertEqual((0, 1, 0), result)
+        self.assertIn("3.0 days ago", out.getvalue())
+
+    def test_health_passes_a_fresh_green_record(self):
+        self.record.write_text(json.dumps(maintain.suite_record(0, SUITE_PASS)))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual((1, 0, 0), health_checks._check_clean_clone_suite(self.record))
+
+
+class TestFailureCandidates(unittest.TestCase):
+    """A failing check becomes one candidate for its own repo, and a second nightly run adds nothing (#978)."""
+
+    def setUp(self):
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_a_gap_becomes_one_candidate_and_a_second_run_adds_nothing(self):
+        from lib import candidates
+        gaps = [("acme/widget", "Rebase widget onto origin/main to refresh its commit hooks", "Fix: rebase")]
+        maintain.file_failure_candidates(gaps)
+        maintain.file_failure_candidates(gaps)
+        self.assertEqual(1, candidates.count())
+        self.assertEqual("acme/widget", candidates.items()[0]["repo"])
+
+    def test_the_nightly_run_files_each_failing_check_under_its_repo_and_check_only_files_none(self):
+        from lib import candidates
+        gaps = [("acme/widget", "Rebase widget", "Fix: x"), ("acme/gadget", "Gate for task nightly", "Fix: y")]
+        with mock.patch.object(maintain, "failure_gaps", return_value=gaps):
+            self.assertEqual([], maintain.check_failure_candidates(True))
+            self.assertEqual({"acme/widget", "acme/gadget"}, {i["repo"] for i in candidates.items()})
+            self.assertEqual([], maintain.check_failure_candidates(False))
+        self.assertEqual(2, candidates.count())
+
+    def test_a_stale_worktree_names_its_own_repo_and_a_task_names_the_engine(self):
+        repo = scratch_repo(temp_dir(self) / "widget")
+        git(repo, "remote", "add", "origin", "git@github.com:acme/widget.git")
+        wt = mock.Mock(path=repo)
+        with mock.patch.object(maintain.placement, "worktrees", return_value=[wt]), \
+                mock.patch("lib.health_checks.stale_hook", return_value="hooks.py changed on origin/main"), \
+                mock.patch("lib.schedules.ungated", return_value=[("nightly", 1.0)]), \
+                mock.patch("lib.schedules.task_crons", return_value={}):
+            gaps = maintain.failure_gaps()
+        self.assertEqual(["acme/widget"], [g[0] for g in gaps if g[1].startswith("Rebase")])
+        self.assertEqual([maintain.engine_slug()], [g[0] for g in gaps if g[1].startswith("Gate command")])
 
 
 if __name__ == "__main__":

@@ -65,7 +65,7 @@ Start from `core/templates/project/CLAUDE.md`, keep only what is specific to the
 
 ## Step 5: register your fleet
 
-Run `scripts/olivercode init-fleet` first to create your private fleet repo from the template, then run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads, with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none.
+`install` makes your fleet folder a local git repo from the template and offers a private GitHub copy once. Run `scripts/olivercode init-fleet` to push that copy when you decline it at install, then run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads, with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none.
 
 Your fleet's own stories, registry, owner-rule carriers and owner queue live in that private fleet repo and never in this one. File a story about one of your repos there, and keep this repo's issues to the engine.
 

@@ -184,6 +184,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
         print(f"\n{job}")
         for cmd, desc in cmds:
             print(f"  {cmd:<16} {desc}")
+    print("\nYour design file: set designFile in olivercode.local.json to your own path, then run `olivercode install` to link it as ~/.claude/DESIGN.md")
     print("\nSkills: say the phrase to Claude Code and the skill loads")
     for skill, phrases in skill_triggers(oc_root):
         print(f"  {skill}\n      {phrases}")

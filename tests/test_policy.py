@@ -131,9 +131,10 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(("ask", "triggers.push"), (d.kind, d.rule))
 
     def test_a_push_to_a_branch_besides_the_default_is_denied_with_the_three_exits(self):
+        repo = self.on_branch("feat")  # no origin here, so the default branch is main on any checkout, whatever branch the suite runs from
         for command in ("git push origin feat", "git push -u origin story-x", "git push origin local:refs/heads/wip-x",
                         "git -C /tmp/x push origin HEAD:refs/heads/wip-x", "git push origin main feat"):
-            d = policy.evaluate_bash(policy.DEFAULT, command)
+            d = policy.evaluate_bash(policy.DEFAULT, command, repo)
             self.assertEqual(("deny", "git push branch"), (d.kind, d.rule), command)
         for words in ("fix it and land it on main", "discard it", "olivercode wip", "without asking the owner", "ALLOW_BRANCH_PUSH=1"):
             self.assertIn(words, d.reason)

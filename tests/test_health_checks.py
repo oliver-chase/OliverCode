@@ -271,11 +271,18 @@ class GhAuth(unittest.TestCase):
     """`olivercode health` names a signed-out gh. A fake runner stands in for `gh auth status`, so no live call is made."""
 
     @staticmethod
-    def fake(code):
-        return lambda: subprocess.CompletedProcess(["gh", "auth", "status"], code, "", "not logged in")
+    def fake(code, scopes="'project', 'repo'"):
+        stderr = f"Token scopes: {scopes}" if code == 0 else "not logged in"
+        return lambda: subprocess.CompletedProcess(["gh", "auth", "status"], code, "", stderr)
 
     def test_a_signed_in_gh_passes(self):
         self.assertEqual(quiet(health._check_gh_auth, self.fake(0))[0], (1, 0, 0))
+
+    def test_a_token_without_the_project_scope_fails_one_line_naming_the_refresh(self):
+        result, out = quiet(health._check_gh_auth, self.fake(0, "'repo'"))
+        self.assertEqual(result, (0, 1, 0))
+        self.assertEqual(1, out.count("[FAIL]"))
+        self.assertIn("gh auth refresh -s project", out)
 
     def test_a_signed_out_gh_warns_and_names_the_fix(self):
         result, out = quiet(health._check_gh_auth, self.fake(1))

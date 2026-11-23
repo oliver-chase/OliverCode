@@ -109,6 +109,8 @@ class TestInstallCommand(unittest.TestCase):
                 mock.patch.object(cmd_install, "owner_terminal", return_value=owner), \
                 mock.patch.object(cmd_install, "_schedule_replay"), \
                 mock.patch.object(cmd_install, "_queue_shim"), \
+                mock.patch.object(cmd_install, "fleet_repo_step"), mock.patch.object(cmd_install, "board_step"), \
+                mock.patch.object(cmd_install, "design_step"), \
                 contextlib.redirect_stdout(out):
             cmd_install.command_install(REPO_ROOT)
         return claude / "settings.json", out.getvalue()
