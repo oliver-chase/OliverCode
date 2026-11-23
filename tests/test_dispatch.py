@@ -1,0 +1,320 @@
+"""`olivercode dispatch N` prepares a builder session: brief, refusals, claim and queue. No network, no real load."""
+
+import json
+import os
+import subprocess
+import sys
+import time
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from _support import REPO_ROOT, git, quiet, scratch_repo, temp_dir
+
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
+import gh_budget  # noqa: E402
+from lib import cmd_dispatch, cmd_drain  # noqa: E402
+
+NOW = 1_800_000_000.0
+STORY = {"number": 77, "title": "Fixture story title", "state": "OPEN", "body": "Do the fixture thing.\nSecond line.\nFiles area: scripts/lib/x.py.",
+         "labels": [{"name": "story"}], "comments": []}
+CALM = lambda: (12, True)  # noqa: E731
+
+
+def runner_for(story, posted, others=()):
+    def run(args):
+        if args[:1] == ["api"] and "issues?state=open" in args[1]:
+            return subprocess.CompletedProcess(args, 0, json.dumps([[story, *others]]), "")
+        if args[:1] == ["api"] and args[1].endswith("/comments") and "--paginate" in args:
+            return subprocess.CompletedProcess(args, 0, json.dumps([story.get("comments") or []]), "")
+        if args[:1] == ["api"] and len(args) == 2 and "/issues/" in args[1]:
+            return subprocess.CompletedProcess(args, 0, json.dumps({k: v for k, v in story.items() if k != "comments"}), "")
+        posted.append(args)
+        return subprocess.CompletedProcess(args, 0, "https://example.test/c/1\n", "")
+    return run
+
+
+class RunIo:
+    """The outside effects of one dispatched story, recorded in order."""
+
+    def __init__(self, land_ok=True, builds=None):
+        self.agent, self.land_ok, self.steps, self.on_main, self.ghost_land = "dispatch", land_ok, [], set(), False
+        self.builds, self.issue = builds, None
+
+    def worktree(self, n): return Path(f"/wt/{n}")
+    def claim(self, n): self.steps.append("claim")
+    def build(self, issue, wt, note):
+        self.steps.append("build")
+        self.issue = issue
+        return self.builds.pop(0) if self.builds else {"done": True, "reason": "ok", "rounds": 1, "tokens": 5, "summary": ""}
+    def landed(self, wt, n): return n in self.on_main
+    def commits(self, wt): return 1
+    def land(self, wt, n):
+        self.steps.append("land")
+        if self.land_ok and not self.ghost_land:
+            self.on_main.add(n)
+        return self.land_ok, "pushed abc1234" if self.land_ok else "validate-failed"
+    def comment(self, n, body): self.steps.append("comment")
+    def close_by_script(self, wt, n, why):
+        self.steps.append("close")
+        return True, ""
+    def release(self, n): self.steps.append("release")
+    def keep_open(self, n, reason=""): self.steps.append(f"open:{reason}")
+
+
+class DispatchCase(unittest.TestCase):
+    def setUp(self):
+        self.home = temp_dir(self)
+        self.repo = temp_dir(self)
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "backlog-config.json").write_text(json.dumps(
+            {"repoOwner": "o", "repoName": "r", "projectId": "P", "fields": {"status": {"id": "F", "options": {"In Progress": "x"}}}}))
+        self.root = temp_dir(self)
+        local = self.root / "local.json"
+        local.write_text(json.dumps({"repoRoot": str(self.root)}))
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_LOCAL_CONFIG": str(local)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_dispatch(self, story=STORY, load=CALM, argv=("77",), others=(), io=None, **kw):
+        io = io or RunIo()
+        code, out = quiet(cmd_dispatch.command_dispatch, list(argv), runner=runner_for(story, [], others), load_check=load,
+                          clock=lambda: NOW, repo=self.repo, io=io, **kw)
+        return code, out, io
+
+
+class TestDispatch(DispatchCase):
+    def test_a_ready_story_builds_headless_through_drains_sequence_with_no_run_flag(self):
+        code, out, io = self.run_dispatch()
+        self.assertEqual((0, ["claim", "build", "land", "close", "release"]), (code, io.steps))
+        self.assertIn("Story #77 landed and closed", out)
+        self.assertEqual("Fixture story title", io.issue["title"])
+        code, _, io = self.run_dispatch(argv=("77", "--run"))  # the old flag is accepted and changes nothing
+        self.assertEqual((0, ["claim", "build", "land", "close", "release"]), (code, io.steps))
+
+    def test_the_story_runs_the_same_work_story_drain_uses(self):
+        with mock.patch.object(cmd_drain, "work_story", return_value=(True, 5)) as work:
+            code, _, _ = self.run_dispatch()
+        self.assertEqual(0, code)
+        self.assertEqual(77, work.call_args.args[1]["number"])
+
+    def test_dry_run_claims_and_builds_nothing(self):
+        code, out, io = self.run_dispatch(argv=("77", "--dry-run"))
+        self.assertEqual((0, []), (code, io.steps))
+        self.assertIn("Dry run", out)
+        self.assertFalse((self.home / "gh-project-queue.json").exists())
+
+    def test_idle_sessions_allow_a_dispatch_and_four_held_slots_refuse_one(self):
+        code, _out, io = self.run_dispatch()  # ten idle sessions hold no slot, so the cap is not reached
+        self.assertEqual((code, "build" in io.steps), (0, True))
+        for queue, count in (("validate-slots", 3), ("render-slots", 1)):
+            folder = self.home / queue
+            folder.mkdir(parents=True, exist_ok=True)
+            for i in range(count):
+                (folder / f"slot-{i}.json").write_text(json.dumps({"pid": os.getpid(), "started": time.time(), "label": "held"}))
+        code, out, io = self.run_dispatch()
+        self.assertEqual((code, io.steps), (1, []))
+        self.assertIn("4 validation, test or render runs hold slots", out)
+
+    def test_it_refuses_a_full_load_a_closed_story_and_a_claimed_story(self):
+        code, out, io = self.run_dispatch(load=lambda: (0, False))
+        self.assertEqual((code, io.steps), (1, []))
+        self.assertIn("load", out)
+        code, out, io = self.run_dispatch(story={**STORY, "state": "CLOSED"})
+        self.assertEqual((code, io.steps), (1, []))
+        self.assertIn("closed", out)
+        stamp = "2027-01-15T07:59:00Z"  # inside two hours of NOW
+        claimed = {**STORY, "comments": [{"body": f"Claim\n- Session: other-session\n- Time: {stamp}"}]}
+        code, out, io = self.run_dispatch(story=claimed)
+        self.assertEqual((code, io.steps), (1, []))
+        self.assertIn("other-session", out)
+
+
+class TestForkOrigin(DispatchCase):
+    def with_origin(self, url):
+        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "remote", "add", "origin", url], check=True)
+
+    def seen_reads(self):
+        seen = []
+        base = runner_for(STORY, [])
+        code, out = quiet(cmd_dispatch.command_dispatch, ["77", "--dry-run"], runner=lambda a: (seen.append(a), base(a))[1],
+                          load_check=CALM, clock=lambda: NOW, repo=self.repo)
+        self.assertEqual(0, code, out)
+        return seen
+
+    def slug_read(self):
+        view = next(a for a in self.seen_reads() if a[:1] == ["api"] and len(a) == 2)
+        return view[1].removeprefix("repos/").split("/issues/")[0]
+
+    def test_the_story_is_read_over_rest_and_never_through_gh_issue(self):
+        seen = self.seen_reads()
+        self.assertTrue(seen)
+        self.assertTrue(all(a[0] == "api" and not a[1].startswith("graphql") for a in seen), seen)
+
+    def test_a_config_naming_another_repo_reads_the_origin_remotes_repo(self):
+        self.with_origin("git@github.com:me/my-fork.git")
+        self.assertEqual("me/my-fork", self.slug_read())
+
+    def test_a_config_matching_origin_is_used_as_before(self):
+        self.with_origin("https://github.com/O/R.git")
+        self.assertEqual("o/r", self.slug_read())
+
+
+class ClaimIo(RunIo):
+    """RunIo with drain's real claim, so the claim goes through the injected GitHub runner."""
+
+    def __init__(self, repo, runner):
+        super().__init__()
+        self.repo, self.slug, self.runner = repo, "o/r", runner
+
+    gh = cmd_drain.Io.gh
+    claim = cmd_drain.Io.claim
+
+    def release(self, n): cmd_dispatch._local_claim(self.slug, n, time.time(), clear=True)
+
+
+class TestOneBuilderPerStory(DispatchCase):
+    """#710: a live claim stops a second builder, and the claim is written before the builder starts."""
+    STAMP = "2027-01-15T07:59:00Z"  # inside two hours of NOW
+
+    def claimed(self, who="b1"):
+        return {**STORY, "comments": [{"body": f"Claim\n- Session: {who}\n- Time: {self.STAMP}"}]}
+
+    def test_a_live_claim_from_another_session_stops_dispatch_and_names_it(self):
+        code, out, io = self.run_dispatch(story=self.claimed())
+        self.assertEqual((code, io.steps), (1, []))
+        self.assertIn("claimed by b1", out)
+        self.assertIn("Take the next open story", out)
+
+    def test_a_claim_released_by_comment_frees_the_story_for_the_next_look(self):
+        release = "Claim released\n- Session: b1\n- Reason: gone\n- Time: 2027-01-15T07:59:30Z"
+        story = {**self.claimed(), "comments": self.claimed()["comments"] + [{"body": release}]}
+        code, _out, io = self.run_dispatch(story=story)
+        self.assertEqual((code, "claim" in io.steps), (0, True))
+
+    def test_the_claim_is_written_before_the_builder_starts_and_a_second_dispatch_is_refused(self):
+        order = []
+        story = {**STORY, "comments": []}
+        runner = runner_for(story, [])
+
+        def tracking(args):
+            if args[0] == "api" and any(a.startswith("body=") for a in args):
+                order.append("claim")
+                story["comments"].append({"body": "Claim\n- Session: dispatch\n- Time: 2027-01-15T07:59:30Z"})
+            return runner(args)
+
+        io = ClaimIo(self.repo, tracking)
+        build = io.build
+        io.build = lambda *a: order.append("builder") or build(*a)
+        code, _ = quiet(cmd_dispatch.command_dispatch, ["77"], runner=tracking, load_check=CALM, clock=lambda: NOW, repo=self.repo, io=io)
+        self.assertEqual((code, order), (0, ["claim", "builder"]))
+        code, out, io2 = self.run_dispatch(story=story)
+        self.assertEqual((code, io2.steps), (1, []))
+        self.assertIn("claimed by dispatch", out)
+
+
+def small(number, area="scripts/lib/x.py", size="XS", priority="P2"):
+    return {"number": number, "title": f"Small {number}", "state": "open", "labels": [],
+            "body": f"Do {number}.\nPriority: {priority}. Size: {size}. Work type: Story.\nFiles area: {area}"}
+
+
+class TestBatching(DispatchCase):
+    def lead(self, size="XS"):
+        return {**STORY, "body": f"Do the lead.\nPriority: P1. Size: {size}. Work type: Story.\nFiles area: scripts/lib/x.py"}
+
+    def test_three_small_stories_on_one_file_share_a_session_and_the_brief_names_them(self):
+        code, _, io = self.run_dispatch(story=self.lead(), others=(small(78), small(79)))
+        self.assertEqual(code, 0)
+        self.assertEqual([78, 79], [m["number"] for m in io.issue["mates"]])
+        brief = cmd_dispatch.batch_section(io.issue, io.issue["mates"])
+        for text in ("builds 3 small stories that share files: #77, #78, #79", "commit each as its own commit", "Story #79: Small 79"):
+            self.assertIn(text, brief)
+
+    def test_a_session_takes_at_most_five_and_only_overlapping_xs_and_s_stories(self):
+        others = tuple(small(n) for n in range(80, 88)) + (small(90, size="M"), small(91, area="scripts/lib/other.py"))
+        mates = cmd_dispatch.batch_mates(self.lead(size="S"), [self.lead(), *others])
+        self.assertEqual([i["number"] for i in mates], [80, 81, 82, 83])
+
+    def test_an_m_story_runs_alone(self):
+        self.assertEqual(cmd_dispatch.batch_mates(self.lead(size="M"), [small(78)]), [])
+        _, _, io = self.run_dispatch(story=self.lead(size="M"), others=(small(78),))
+        self.assertEqual([], io.issue["mates"])
+
+    def test_a_batched_story_without_its_own_commit_stays_open_on_ready(self):
+        code, _, io = self.run_dispatch(story=self.lead(), others=(small(78),))
+        self.assertEqual((0, ["claim", "build", "land", "close", "open:no commit for (#78) is on the default branch after the batch session with #77.",
+                              "release", "release"]), (code, io.steps))
+
+    def test_each_batched_story_closes_on_its_own_commit(self):
+        io = RunIo()
+        io.on_main.add(78)
+        code, _, io = self.run_dispatch(io=io, story=self.lead(), others=(small(78),))
+        self.assertEqual((0, ["claim", "build", "land", "close", "close", "release", "release"]), (code, io.steps))
+
+
+class TestDispatchRun(DispatchCase):
+    def test_a_builder_that_never_finishes_comments_the_blocker_returns_the_story_to_ready_and_releases(self):
+        dead = [{"done": False, "reason": "no", "rounds": 3, "tokens": 9, "summary": ""} for _ in range(4)]
+        code, out, io = self.run_dispatch(io=RunIo(builds=dead))
+        self.assertEqual((1, ["claim"] + ["build"] * 4 + ["comment", "open:", "release"]), (code, io.steps))
+        self.assertIn("stayed open", out)
+
+    def test_a_refused_landing_leaves_the_story_open_and_releases_the_claim(self):
+        code, _, io = self.run_dispatch(io=RunIo(land_ok=False))
+        self.assertEqual(1, code)
+        self.assertNotIn("close", io.steps)
+        self.assertEqual(["comment", "open:", "release"], io.steps[-3:])
+
+    def test_a_builder_that_landed_and_lost_its_worktree_is_reported_landed(self):
+        io = RunIo()
+        io.on_main.add(77)  # the commit is on origin's default branch and the worktree is gone
+        io.commits = lambda wt: 0
+        code, out, _ = self.run_dispatch(io=io)
+        self.assertEqual((0, ["claim", "build", "close", "release"]), (code, io.steps))
+        self.assertIn("landed and closed", out)
+
+    def test_a_story_is_never_closed_unless_its_commit_is_on_the_default_branch(self):
+        io = RunIo()
+        io.ghost_land = True  # land says yes but nothing reaches origin
+        code, _, _ = self.run_dispatch(io=io)
+        self.assertEqual(1, code)
+        self.assertNotIn("close", io.steps)
+
+    def test_a_worktree_that_cannot_be_made_comments_and_builds_nothing(self):
+        io = RunIo()
+        def refuse(n): raise RuntimeError("no worktree")
+        io.worktree = refuse
+        code, out, _ = self.run_dispatch(io=io)
+        self.assertEqual((1, ["claim", "comment", "open:", "release"]), (code, io.steps))
+        self.assertIn("stayed open", out)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class TestFileExcerpts(unittest.TestCase):
+    """#887: the brief holds the functions and callers a story's Files area names."""
+
+    def make_repo(self):
+        repo = scratch_repo(temp_dir(self))
+        (repo / "scripts").mkdir(exist_ok=True)
+        (repo / "scripts" / "thing.py").write_text("def build_thing(x):\n    return x + 1\n\n\ndef other():\n    return 0\n", encoding="utf-8")
+        (repo / "scripts" / "user.py").write_text("from thing import build_thing\n\nvalue = build_thing(2)\n", encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-m", "fixture")
+        return repo
+
+    def test_the_named_function_and_its_callers_are_in_the_excerpts(self):
+        repo = self.make_repo()
+        out = cmd_dispatch.file_excerpts("Fix build_thing.\n\nFiles area: scripts/thing.py", repo)
+        self.assertIn("def build_thing(x):", out)
+        self.assertIn("scripts/user.py:3", out)
+        self.assertNotIn("def other", out)
+
+    def test_a_story_that_names_no_function_or_file_adds_nothing(self):
+        repo = self.make_repo()
+        self.assertEqual("", cmd_dispatch.file_excerpts("Files area: scripts/thing.py", repo))
+        self.assertEqual("", cmd_dispatch.file_excerpts("Fix build_thing.", repo))
