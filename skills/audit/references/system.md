@@ -34,6 +34,7 @@ Give each reader this brief, one reader per batch from `audit_ledger.py --batche
 - Re-check the biggest claims yourself and drop any that do not reproduce
 - Merge duplicates across readers, and add findings only visible across areas, such as one rule in two areas. An audit split across sessions does this with `findings.py cross`, as "A chunked audit" in `SKILL.md` describes
 - Judge the shape, which no reviewer sees from one slice: name each small skill that its nearest neighbor could absorb, and what a core with add-ons off by default would hold
+- Write each lens's opening sentence for the owner before its table: what the lens's findings mean and the next step, in one or two sentences
 
 ## Filing
 

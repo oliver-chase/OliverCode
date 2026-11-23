@@ -12,6 +12,17 @@ Smaller.
 ## 3. Size today
 100 lines.
 ## 4. Findings
+Autonomy and user flow: one card needs a mouse, which blocks keyboard users. Next: make every card reachable by keyboard.
+Self-containment: nothing found, so no fix is needed for this lens.
+Accuracy: one comment is stale and misleads the next reader. Next: correct it with the change in #25.
+One home per concept: two copies of one rule drift apart. Next: keep one copy and point to it, in #25.
+Over-engineering and unused parts: one file is dead. Next: delete it in #24.
+Cost in use: a whole file is read on each call. Next: read only the section needed, in #29.
+Voice: contrast framing appears in one reply. Next: rewrite it per the voice rules, in #28.
+Documentation coverage: two scripts have no docs. Next: document them in #27.
+Functionality gaps: nothing found, so no story is needed for this lens.
+Portability and sharing: a personal email sits in history. Next: remove it, in #30.
+Test necessity: three tests duplicate one another. Next: cut the duplicates in #24.
 | Lens | Finding | Issue |
 |---|---|---|
 | Autonomy and user flow | cards need a mouse | #26 |
@@ -62,10 +73,14 @@ class ReportCheckTest(unittest.TestCase):
     def test_each_gap_in_a_report_fails_with_its_reason(self):
         # A missing section or coverage, a finding with no issue, an unstated lens, silence about what
         # was not checked, and coverage that is not the last section.
+        voice_opener = "Voice: contrast framing appears in one reply. Next: rewrite it per the voice rules, in #28.\n"
         for reason, report in (("missing section: goal", GOOD.replace("## 2. Goal\nSmaller.\n", "")),
                                ("coverage", GOOD.split("## 9. Coverage")[0]),
                                ("no issue number", GOOD.replace("| #25 |\n| One", "|  |\n| One")),
                                ("lens: voice", GOOD.replace("| Voice | contrast framing | #28 |\n", "")),
+                               ("lens has no opening sentence: voice", GOOD.replace(voice_opener, "")),
+                               ("lens has no opening sentence: voice", GOOD.replace(voice_opener, "").replace(
+                                   "| Voice | contrast framing | #28 |\n", "| Voice | contrast framing | #28 |\n" + voice_opener)),
                                ("read and unknown", GOOD.replace("Not checked: screen widths.", "")),
                                ("not the last", GOOD + "## 11. Extra\ntext\n"),
                                ("no Why column", GOOD.replace(" | Why |", " | Note |")),

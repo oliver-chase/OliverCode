@@ -89,12 +89,19 @@ def check(text):
     if found[-1] is not None and order[-1] != found[-1]:
         problems.append(f"{HEADINGS[-1]} is not the last section")
     # A lens counts when a finding row or a "Checked" line names it in its first cell or leading words, so a
-    # passing mention deep inside an unrelated row does not satisfy it.
+    # passing mention deep inside an unrelated row does not satisfy it, and an opening sentence alone does not either.
+    section = parts.get(found[3] or "", [])
     body = "\n".join(l.strip("| ").split("|")[0] if l.lstrip().startswith("|") else l[:80]
-                     for l in parts.get(found[3] or "", []))
+                     for l in section if l.lstrip().startswith("|") or "Checked" in l[:80])
     for lens, rx in LENSES.items():
         if not re.search(rx, body, re.I):
             problems.append(f"findings never mention the lens: {lens}. Fix: add a row, or \"Checked, nothing found\" with what was checked")
+    # Each lens opens with one or two plain sentences before its first table row, so the owner reads its meaning first.
+    for lens, rx in LENSES.items():
+        opener = next((i for i, l in enumerate(section) if l.strip() and not l.lstrip().startswith("|") and re.search(rx, l[:80], re.I)), None)
+        row = next((i for i, l in enumerate(section) if l.lstrip().startswith("|") and re.search(rx, l.strip("| ").split("|")[0], re.I)), None)
+        if opener is None or (row is not None and row < opener):
+            problems.append(f"lens has no opening sentence: {lens}. Fix: write one or two plain sentences before its table on what its findings mean for the owner and what to do next")
     for key in (found[3], found[4], found[8], found[9]):
         for row in rows_without_issue(parts.get(key or "", [])):
             problems.append(f"row with no issue number: {row[:90]}. Fix: file it and cite #number")
