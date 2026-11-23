@@ -109,6 +109,31 @@ class DrainCase(unittest.TestCase):
         self.assertIn("out of budget", io.comments[0][1])
         self.assertEqual(st["blocked"], [1])
 
+    def test_the_default_drain_builds_one_story_at_a_time_and_parallel_is_opt_in(self):
+        """#979: one builder unless --parallel N asks for more, and a bad N is refused with the usage line."""
+        self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
+        self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
+        seen = []
+        factory = lambda repo, slug, parallel=None: seen.append(parallel) or FakeIo([])
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/nonexistent")), mock.patch.object(cmd_drain, "backlog_config",
+                                                                                                             return_value={"repoOwner": "o", "repoName": "r"}):
+            quiet(cmd_drain.command_drain, ["r"], factory, lambda s: None)
+            quiet(cmd_drain.command_drain, ["r", "--parallel", "2"], factory, lambda s: None)
+            code, _ = quiet(cmd_drain.command_drain, ["r", "--parallel", "0"], factory, lambda s: None)
+        self.assertEqual([1, 2], seen)
+        self.assertEqual(2, code)
+
+    def test_a_held_story_is_not_restarted_or_pushed_and_one_comment_holds_the_finding(self):
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "held": "scripts/a.py: no test"}]})
+        _, _, st = self.run_drain(io)
+        self.assertEqual(io.started, [1])
+        self.assertEqual(set(), io.on_main)
+        self.assertEqual(io.kept, [1])
+        self.assertEqual(st["blocked"], [1])
+        self.assertEqual([1], [n for n, _ in io.comments])
+        self.assertIn("scripts/a.py: no test", io.comments[0][1])
+        self.assertIn("nothing was pushed", io.comments[0][1])
+
     def test_failed_landing_counts_as_a_restart(self):
         io = FakeIo([issue(1)], land_ok=False)
         self.run_drain(io)

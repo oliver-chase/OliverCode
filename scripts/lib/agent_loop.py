@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lib import failure_log, model
+from lib import failure_log, model, usage_sessions
 from lib.local_config import OC_ROOT
 
 MAX_ROUNDS = 2  # the builder session and one short fix session (#888)
@@ -89,6 +89,15 @@ REVIEW_BRIEF = ("You are a fresh reader. You see only the story, the diff and th
                 "with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
+FIX_BRIEF = ("A fresh reader checked your story's commit and reports a problem below. Fix it, commit by explicit path and stop: the runner validates "
+             "and the reader reads the commit again.\n\nThe story:\n{task}\n\nThe diff so far:\n{diff}\n\nThe reader's finding:\n{finding}")
+
+
+def review_brief(task: str, cwd: str | Path, finding: str) -> str:
+    """The brief of the one fix session a reader's finding earns: the story, its diff and the finding, and nothing from the builder's session (#975)."""
+    return FIX_BRIEF.format(task=task, diff=branch_diff(cwd), finding=finding)
+
+
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print) -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str}
     and appends one line for it to the run log. A reader that fails never stops a landing."""
@@ -114,6 +123,27 @@ def log_review(story: str, verdict: str, text: str) -> None:
             fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000]}) + "\n")
     except OSError:
         pass
+
+
+def start_size(session_id: str, projects: Path | None = None) -> int | None:
+    """The context size of a session's first call (#976): the input, cache read and cache write tokens on the first assistant line of its transcript.
+    Only that line is read, so the start size costs no pass over the whole session. None when the transcript or its usage is not there."""
+    path = usage_sessions.transcript(session_id, projects)
+    if path is None:
+        return None
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    message = json.loads(line).get("message") or {}
+                except (ValueError, AttributeError):
+                    continue
+                usage = message.get("usage") or {}
+                if message.get("role") == "assistant" and usage:
+                    return sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+    except OSError:
+        return None
+    return None
 
 
 def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None) -> None:
@@ -147,7 +177,8 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
              run=None, check=None, say=print, size: str = "") -> dict:
-    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}. `run` and `check` default to model.run_cli and validate."""
+    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
+    finds a problem, so nothing is pushed (#975). `run` and `check` default to model.run_cli and validate."""
     return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, size)
 
 
@@ -156,7 +187,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, si
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
-    start, failures = model_name, 0
+    start, failures, findings = model_name, 0, 0
     for n in range(1, rounds + 1):
         model_name = escalate(start, failures)
         resumed = False
@@ -176,7 +207,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, si
             reply = {**reply, "resumed": resumed}
             tokens += reply["tokens"]
             claude_session = reply["session_id"] or claude_session
-            log_round(session, n, model_name, reply, (reply.get("usage") or {}).get("cache_write", 0) if n == 1 and not resumed else None)
+            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None)
             summary = reply["text"]
             say(f"Round {n}: {summary.strip()[:300]}")
             if reply["code"] != 0 and reply.get("stop") in RESUMABLE and not resumed and claude_session:
@@ -196,7 +227,15 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, si
         if passed:
             from lib import cmd_land  # land imports this module's neighbours, so the import waits until a story passes
             if cmd_land.needs_review(size, cmd_land.changed_paths(Path(cwd))):
-                review(task, cwd, session, tail, run=run, say=say)
+                verdict = review(task, cwd, session, tail, run=run, say=say)
+                if verdict["verdict"] == "findings":
+                    findings += 1
+                    if findings == 1 and n < rounds:  # one fix session, then the reader reads again (#975)
+                        say(f"Round {n}: the reader found a problem. One fix session, then the reader reads again.")
+                        prompt, claude_session = review_brief(task, cwd, verdict["text"]), ""
+                        continue
+                    return {"done": False, "held": verdict["text"], "reason": f"The fresh reader reports a problem, so nothing is pushed: {verdict['text'][:300]}",
+                            "rounds": n, "tokens": tokens, "summary": summary}
             return {"done": True, "reason": "The repo's validation passes.", "rounds": n, "tokens": tokens, "summary": summary}
         failures += 1
         say(f"Round {n}: validation failed.")

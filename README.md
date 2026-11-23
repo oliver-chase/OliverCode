@@ -39,6 +39,31 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 You work in one thread, and you say what you want. Each request becomes a story on the repo's board. `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main, logs the story and closes it. `olivercode status` shows what is open. You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
 
+## How it works, in plain terms
+
+Think of a professional kitchen. Claude Code is a talented chef who can cook anything. OliverCode is everything around the chef that makes a kitchen run: the order tickets, the recipe standards, the pass where every plate is checked and the health inspector. You are the owner. You say what you want, and you never stand at the stove.
+
+| In the kitchen | In OliverCode | What it does |
+|---|---|---|
+| You tell the front desk what you want | Your one thread | Turns each request into a written ticket |
+| The ticket rail | The board, one per repo | Each story says what done means and which files it touches |
+| The expediter, who calls tickets one at a time | The runner, a script with no model | Picks the next story, sets up a clean station and picks the cook |
+| A line cook with a clean station | The builder, one fresh headless session | Cooks one ticket and stops, carrying nothing over from the last one |
+| A junior cook for toast, a senior for the tasting menu | Model by story size | A smaller model for small stories and a larger one for the rest |
+| The pass, where every plate is checked | Validation | Runs every gate and test, and a failed plate goes back with only the failure noted |
+| A second cook tastes the complicated dishes | The reviewer | A fresh reader checks medium and larger changes against the ticket |
+| The plate goes out and the ticket is spiked | Land and close | One commit on main, the test output attached and the story closed by script |
+| The health code posted on the wall | Commit gates | No secrets, no personal data, and every change tied to a ticket |
+| The manager who stops a cook from doing something dangerous | Tool guards | Refuse unsafe commands, unsafe pushes and overspending GitHub |
+| The suggestion box | The candidates list | Automatic checks drop ideas in, and nothing becomes a ticket until you pick it |
+| The nightly close-down checklist | Scheduled jobs | Health, maintenance and board sweeps, with no model |
+| The recipe binder every cook follows | Rules, voice and design files | Loaded into every session |
+| The training manuals | Skills | How to audit, file a story, plan and diagnose a bug |
+| The franchise inspection | Fleet checks | Checks every one of your repos against the same standard |
+| The incident log | Lessons and decisions | What went wrong, and what you decided |
+
+Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
+
 ## Dispatch planning
 
 `olivercode dispatch --plan` reads each story's Files area, holds back stories that overlap and runs the rest in parallel, and sets the model by story size. A story with no Files area is refused until it gets one.

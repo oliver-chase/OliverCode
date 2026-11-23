@@ -131,7 +131,7 @@ class TestExitOne(unittest.TestCase):
 
 
 class TestRunLog(unittest.TestCase):
-    """#878, #909: a run-log line holds the CLI's usage, cost and stop reason and the start size, and no transcript is read to count calls."""
+    """#878, #909, #976: a run-log line holds the CLI's usage, cost and stop reason and the start size, which is the first call's context and never the session's total."""
 
     def setUp(self):
         self.repo, self.home = temp_dir(self), temp_dir(self)
@@ -140,32 +140,70 @@ class TestRunLog(unittest.TestCase):
         patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
         patcher.start()
         self.addCleanup(patcher.stop)
+        no_transcript = mock.patch.object(agent_loop, "start_size", return_value=None)
+        no_transcript.start()
+        self.addCleanup(no_transcript.stop)
 
     def rows(self):
         return [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
 
-    def test_the_first_round_logs_the_cache_write_as_the_start_size_and_no_flag(self):
+    def test_the_first_round_logs_the_first_call_size_and_never_the_session_total(self):
         said = []
-        usage = {"input": 3, "output": 4, "cache_read": 0, "cache_write": 31_000}
-        out = agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "usage": usage}), check=lambda cwd: (True, ""), say=said.append)
+        usage = {"input": 3, "output": 4, "cache_read": 0, "cache_write": 99_000}
+        with mock.patch.object(agent_loop, "start_size", return_value=31_000) as start:
+            out = agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "usage": usage}), check=lambda cwd: (True, ""), say=said.append)
         row = self.rows()[0]
-        self.assertEqual((31_000, 3, 4), (row["start_tokens"], row["input"], row["output"]))
+        self.assertEqual(("c1",), start.call_args[0])
+        self.assertEqual((31_000, 99_000, 3, 4), (row["start_tokens"], row["cache_write"], row["input"], row["output"]))
         self.assertTrue({"cost_usd", "stop"} <= set(row))
         self.assertFalse({"start_source", "start_over_limit", "calls_before_first_edit"} & set(row))
         self.assertNotIn("start_tokens", out)
         self.assertFalse(any("limit" in line for line in said))
 
+    def test_a_first_round_with_no_transcript_logs_no_start_size_rather_than_a_guess(self):
+        agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "usage": {"cache_write": 99_000}}), check=lambda cwd: (True, ""), say=lambda line: None)
+        self.assertNotIn("start_tokens", self.rows()[0])
+
     def test_a_later_round_logs_no_start_size(self):
         run = Scripted({**reply(), "usage": {"cache_write": 900}}, {**reply(), "usage": {"cache_write": 50}})
-        agent_loop.run_loop("do it", self.repo, "story-1", run=run, check=lambda cwd, results=iter([(False, "x"), (True, "")]): next(results), say=lambda line: None)
+        with mock.patch.object(agent_loop, "start_size", return_value=900):
+            agent_loop.run_loop("do it", self.repo, "story-1", run=run, check=lambda cwd, results=iter([(False, "x"), (True, "")]): next(results), say=lambda line: None)
         self.assertEqual([900, None], [r.get("start_tokens") for r in self.rows()])
 
     def test_the_run_log_names_which_setup_each_start_ran(self):
         """#911: the two start sizes are told apart by the setup that ran, current or project."""
-        agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "settings": "project", "usage": {"cache_write": 900}}),
-                            check=lambda cwd: (True, ""), say=lambda line: None)
+        with mock.patch.object(agent_loop, "start_size", return_value=900):
+            agent_loop.run_loop("do it", self.repo, "story-1", run=Scripted({**reply(), "settings": "project", "usage": {"cache_write": 900}}),
+                                check=lambda cwd: (True, ""), say=lambda line: None)
         row = self.rows()[0]
         self.assertEqual(("project", 900), (row["settings"], row["start_tokens"]))
+
+
+class TestStartSize(unittest.TestCase):
+    """#976: the start size is the context of the session's first call, read from the first assistant line of its transcript and nothing after it."""
+
+    def setUp(self):
+        self.projects = temp_dir(self)
+        (self.projects / "-repo").mkdir()
+        self.path = self.projects / "-repo" / "s9.jsonl"
+
+    def write(self, *lines):
+        self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_the_first_assistant_line_gives_the_context_and_later_calls_are_ignored(self):
+        self.write(json.dumps({"type": "user", "message": {"role": "user", "content": "go"}}),
+                   json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {"input_tokens": 2, "cache_read_input_tokens": 30_000, "cache_creation_input_tokens": 1_000, "output_tokens": 9}}}),
+                   json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {"input_tokens": 5, "cache_read_input_tokens": 60_000}}}),
+                   "not json at all")
+        self.assertEqual(31_002, agent_loop.start_size("s9", self.projects))
+
+    def test_a_transcript_with_no_assistant_usage_gives_no_start_size(self):
+        self.write(json.dumps({"type": "user", "message": {"role": "user", "content": "go"}}))
+        self.assertIsNone(agent_loop.start_size("s9", self.projects))
+
+    def test_a_session_with_no_transcript_gives_no_start_size(self):
+        self.assertIsNone(agent_loop.start_size("missing", self.projects))
+        self.assertIsNone(agent_loop.start_size("", self.projects))
 
 
 class TestLoop(unittest.TestCase):
@@ -204,11 +242,34 @@ class TestLoop(unittest.TestCase):
 
     def test_the_reader_logs_its_findings_on_the_story(self):
         home = temp_dir(self)
-        run = Scripted(reply("built"), reply("scripts/a.py: no test"))
+        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("PASS"))
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
-            self.loop(run, [(True, "")], size="L")
+            self.loop(run, [(True, ""), (True, "")], size="L")
         rows = [json.loads(l) for l in (home / "run-log.jsonl").read_text().splitlines()]
-        self.assertEqual([("s1", "findings", "scripts/a.py: no test")], [(r["story"], r["review"], r["findings"]) for r in rows if "review" in r])
+        self.assertEqual([("s1", "findings", "scripts/a.py: no test"), ("s1", "pass", "")], [(r["story"], r["review"], r["findings"]) for r in rows if "review" in r])
+
+    def test_a_finding_sends_the_story_back_once_with_the_finding_and_the_reader_reads_again(self):
+        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("PASS"))
+        with mock.patch.object(agent_loop, "branch_diff", return_value="THE-DIFF"), mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
+            out = self.loop(run, [(True, ""), (True, "")], size="M")
+        self.assertEqual((True, 2), (out["done"], out["rounds"]))
+        self.assertEqual(4, len(run.prompts))
+        for text in ("do it", "THE-DIFF", "scripts/a.py: no test"):
+            self.assertIn(text, run.prompts[2])  # the fix session gets the story, the diff and the finding
+        self.assertNotIn("held", out)
+
+    def test_a_second_finding_holds_the_story_and_nothing_is_pushed(self):
+        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("scripts/b.py: still wrong"))
+        out = self.loop(run, [(True, ""), (True, "")], size="M")
+        self.assertFalse(out["done"])
+        self.assertEqual("scripts/b.py: still wrong", out["held"])
+        self.assertIn("nothing is pushed", out["reason"])
+        self.assertEqual(4, len(run.prompts))
+
+    def test_a_finding_with_no_round_left_for_a_fix_holds_at_once(self):
+        run = Scripted(reply("built"), reply("scripts/a.py: no test"))
+        out = self.loop(run, [(True, "")], size="M", rounds=1)
+        self.assertEqual(("scripts/a.py: no test", 2), (out["held"], len(run.prompts)))
 
     def test_a_small_story_that_touches_no_hook_runs_no_reader(self):
         run = Scripted(reply("built"))

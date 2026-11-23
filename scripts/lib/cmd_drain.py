@@ -22,9 +22,9 @@ from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
 from lib.placement import config as placement_config
 
-USAGE = "Usage: olivercode drain REPO"
+USAGE = "Usage: olivercode drain REPO [--parallel N]"
 RESTARTS = 3
-MAX_BUILDERS = 3  # builders one drain runs at once
+PARALLEL = 1  # builders one drain runs at once; more only when the owner asks with --parallel N (#979)
 LOAD_WAITS = 12
 FILE_TOKEN = re.compile(r"`([\w./-]+\.\w+|[\w.-]+/[\w./-]*)`")
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
@@ -47,8 +47,8 @@ def new_state() -> dict:
 class Io:
     """Every outside effect of a drain. Tests replace the methods; the defaults use REST, git, the headless loop and `olivercode land`."""
 
-    def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None):
-        self.repo, self.slug, self.agent, self.runner = repo, slug, agent, runner
+    def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int = PARALLEL):
+        self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
 
     def gh(self, args: list[str]):
@@ -76,7 +76,7 @@ class Io:
         return bool(cmd_dispatch.live_claim(self.gh, self.slug, n, story, now))
 
     def capacity(self) -> int:
-        return MAX_BUILDERS
+        return self.parallel
 
     def load_ok(self) -> bool:
         return cmd_dispatch.machine_load()[0] > 0
@@ -237,6 +237,11 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             io.release(mate["number"])
 
 
+def held_comment(worktree: Path, finding: str) -> str:
+    """The one comment a held story gets: that nothing was pushed, where the branch is kept, and the finding itself (#975)."""
+    return f"Held by the fresh reader, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.\n\nFinding:\n{finding[:2000]}"
+
+
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n, tokens, note = issue["number"], 0, ""
     try:
@@ -249,6 +254,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
+        if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
+            io.comment(n, held_comment(worktree, out["held"]))
+            return False, tokens
         if not out["done"]:
             note = out["reason"]
             continue
@@ -316,13 +324,24 @@ def resolve_repo(name: str) -> Path | None:
 
 
 def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
-    if len(argv) != 1 or argv[0].startswith("-"):
+    """`drain REPO`, one story at a time, or `drain REPO --parallel N` for up to N builders at once (#979)."""
+    args, parallel, rest = list(argv), PARALLEL, []
+    while args:
+        arg = args.pop(0)
+        if arg == "--parallel":
+            if not args or not args[0].isdigit() or int(args[0]) < 1:
+                print(USAGE)
+                return 2
+            parallel = int(args.pop(0))
+        else:
+            rest.append(arg)
+    if len(rest) != 1 or rest[0].startswith("-"):
         print(USAGE)
         return 2
-    repo = resolve_repo(argv[0])
+    repo = resolve_repo(rest[0])
     if repo is None:
-        print(f"Refused: {argv[0]} is not a repo with docs/backlog-config.json.")
+        print(f"Refused: {rest[0]} is not a repo with docs/backlog-config.json.")
         return 1
     cfg = backlog_config(repo)
     slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
-    return drain(io_factory(repo, slug), new_state(), sleep=sleep)
+    return drain(io_factory(repo, slug, parallel=parallel), new_state(), sleep=sleep)

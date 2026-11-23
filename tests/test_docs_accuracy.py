@@ -39,6 +39,38 @@ class TestDocsAccuracy(unittest.TestCase):
         help_text = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True).stdout
         self.assertEqual([], sorted(w for w in listed if f"olivercode {w}" not in help_text))
 
+    def test_the_plain_terms_table_sits_after_how_work_runs_and_each_part_it_names_exists(self):
+        """#974: the kitchen table in the README names one real file per part, so a reader can find each part it describes."""
+        text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        start, end = text.index("## How work runs"), text.index("## How it works, in plain terms")
+        self.assertLess(start, end)
+        section = text[end:text.index("## Dispatch planning")]
+        rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in section.splitlines()
+                if line.startswith("| ") and not line.startswith("| In the kitchen")]
+        parts = {
+            "Your one thread": ["skills/backlog/SKILL.md"],
+            "The board, one per repo": ["docs/backlog-config.json"],
+            "The runner, a script with no model": ["scripts/lib/cmd_drain.py"],
+            "The builder, one fresh headless session": ["scripts/lib/agent_loop.py"],
+            "Model by story size": ["scripts/lib/agent_loop.py"],
+            "Validation": ["scripts/validate.sh"],
+            "The reviewer": ["scripts/lib/agent_loop.py"],
+            "Land and close": ["scripts/lib/cmd_land.py"],
+            "Commit gates": ["docs/GATES.md"],
+            "Tool guards": ["scripts/hooks/pretool_guard.py"],
+            "The candidates list": ["scripts/lib/candidates.py"],
+            "Scheduled jobs": ["scripts/lib/schedules.py"],
+            "Rules, voice and design files": ["docs/RULES.md", "docs/VOICE.md", "docs/DESIGN.md"],
+            "Skills": ["skills/INDEX.md"],
+            "Fleet checks": ["scripts/lib/conform.py"],
+            "Lessons and decisions": ["scripts/lib/cmd_lesson.py", "scripts/lib/decisions.py"],
+        }
+        self.assertEqual(16, len(rows))
+        self.assertEqual(set(parts), {cells[1] for cells in rows})
+        self.assertTrue(all(len(cells) == 3 for cells in rows))
+        missing = [path for paths in parts.values() for path in paths if not (REPO_ROOT / path).is_file()]
+        self.assertEqual([], missing)
+
     def test_a_doc_that_names_a_command_the_launcher_lacks_fails_the_docs_check(self):
         root = temp_dir(self)
         (root / "scripts" / "lib").mkdir(parents=True)
