@@ -81,7 +81,7 @@ def ahead_refusal(root: Path) -> str:
     commits = update_state.ahead_commits(root)
     if not commits:
         return ""
-    behind = int(_git(root, "rev-list", "--count", "HEAD..origin/main").stdout.strip() or 0)
+    behind = int(_git(root, "rev-list", "--count", f"HEAD..{update_state.upstream(root)}").stdout.strip() or 0)
     diverged = f" and trails it by {behind}, so a merged fix cannot reach it and the old hooks keep running (#823)" if behind else ""
     return (f"{root.name} holds {len(commits)} commit(s) that origin/main lacks{diverged}: {'; '.join(commits)}. "
             f"Run `{update_state.ahead_fix(root)}` to move them to a local branch and leave the checkout level with origin/main")

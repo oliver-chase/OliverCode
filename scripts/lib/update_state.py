@@ -36,16 +36,44 @@ def _free_branch(root: Path) -> str:
     return name
 
 
+def upstream(root: Path) -> str:
+    """The branch this checkout tracks, or origin/main when none is set (#1032)."""
+    out = _git(root, "rev-parse", "--abbrev-ref", "@{u}")
+    return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else "origin/main"
+
+
 def ahead_commits(root: Path) -> list[str]:
-    """One line per commit this checkout holds that origin/main lacks, as `SHA AUTHOR: subject`. Empty when there are none or origin is unknown (#785)."""
-    out = _git(root, "log", "--format=%h %an: %s", "origin/main..HEAD")
+    """One line per commit this checkout holds that its upstream lacks, as `SHA AUTHOR: subject`. Empty when there are none or no upstream is known (#785, #1032)."""
+    out = _git(root, "log", "--format=%h %an: %s", f"{upstream(root)}..HEAD")
     return [line for line in out.stdout.splitlines() if line.strip()] if out.returncode == 0 else []
 
 
 def ahead_fix(root: Path) -> str:
-    """The one command that moves this checkout's local commits to a branch and leaves it level with origin/main. It needs no write access to origin (#785)."""
+    """The one command that moves this checkout's local commits to a branch and leaves it level with its upstream. It needs no write access to origin (#785)."""
     q = shlex.quote(str(root))
-    return f"git -C {q} branch {_free_branch(root)} && git -C {q} reset --keep origin/main"
+    return f"git -C {q} branch {_free_branch(root)} && git -C {q} reset --keep {upstream(root)}"
+
+
+def rewritten(root: Path) -> bool:
+    """True when the remote history was rewritten: the upstream holds a replaced copy of a commit this checkout holds, matched by subject (#1032).
+    A local commit beside an ordinary release shares no subject with it, so it is not a rewrite and stays refused (#785).
+    Reads refs already fetched, so the caller fetches first."""
+    up = upstream(root)
+    theirs = _git(root, "log", "--format=%s", f"HEAD..{up}")
+    mine = _git(root, "log", "--format=%s", f"{up}..HEAD")
+    if theirs.returncode != 0 or mine.returncode != 0:
+        return False
+    return bool(_lines(mine) & _lines(theirs))
+
+
+def realign(root: Path) -> tuple[str, str] | None:
+    """Save the old main to a free backup branch and reset to the upstream. Returns (backup branch, upstream), or None when git refused (#1032).
+    `reset --keep` leaves a tracked edit alone, so the caller has already refused a dirty checkout."""
+    target = upstream(root)
+    backup = _free_branch(root)
+    if _git(root, "branch", backup).returncode != 0 or _git(root, "reset", "--keep", target).returncode != 0:
+        return None
+    return backup, target
 
 
 def problem(root: Path) -> tuple[str, str] | None:
@@ -64,7 +92,7 @@ def problem(root: Path) -> tuple[str, str] | None:
         return ("could not fetch from origin", f"git -C {q} fetch")
     behind = int(_git(root, "rev-list", "--count", "HEAD..@{u}").stdout.strip() or 0)
     held = ahead_commits(root)
-    if held:  # a checkout that holds commits origin lacks is refused, and the fix moves them to a branch (#785)
+    if held and not rewritten(root):  # a checkout that holds commits origin lacks is refused, and the fix moves them to a branch (#785)
         more = f", and origin has {behind} more" if behind else ""
         return (f"{len(held)} commit(s) on this checkout are not on origin{more}: {'; '.join(held)}. The fix keeps them on a local branch, "
                 "needs no write access to origin, and leaves the checkout level with origin/main", ahead_fix(root))

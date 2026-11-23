@@ -165,8 +165,22 @@ class TestSyncHooksCommit(ScratchHome):
         head = git(repo, "rev-parse", "HEAD").stdout
         code, out = self.sync()
         self.assertEqual(0, code, out)
-        self.assertIn("alpha: not committed, .githooks/pre-push already had uncommitted changes", out)
+        self.assertIn("alpha: not committed, .githooks/pre-push already had uncommitted changes that are not the template", out)
         self.assertEqual(head, git(repo, "rev-parse", "HEAD").stdout)
+        self.assertEqual("local edit\n", (repo / ".githooks" / "pre-push").read_text())
+        code, out = self.sync()  # a re-run asks again and never commits the template over the edit (#1032)
+        self.assertIn("not the template", out)
+        self.assertEqual(head, git(repo, "rev-parse", "HEAD").stdout)
+
+    def test_uncommitted_hooks_that_already_match_the_template_are_committed_with_the_story(self):
+        repo = self.repo()
+        self.sync(commit=False)  # hooks written but left uncommitted, as an earlier update did
+        self.assertNotEqual("", git(repo, "status", "--porcelain", "--", ".githooks").stdout)
+        code, out = self.sync()
+        self.assertEqual(0, code, out)
+        self.assertRegex(out, r"alpha: committed [0-9a-f]{7,}")
+        self.assertEqual("", git(repo, "status", "--porcelain", "--", ".githooks").stdout)
+        self.assertIn("(acme/widgets#7)", git(repo, "log", "-1", "--format=%B").stdout)
 
     def test_an_archived_repo_is_skipped_and_nothing_is_staged(self):
         repo = self.repo()

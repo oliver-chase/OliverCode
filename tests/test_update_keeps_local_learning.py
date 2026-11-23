@@ -139,11 +139,25 @@ class ScenarioTwoRefusesADirtyOrDivergedCheckout(Checkout):
         self.assertNotIn("push", fix)
 
     def test_a_diverged_checkout_is_refused_and_a_fix_with_no_push_is_named(self):
+        """A local commit beside an ordinary release is not a rewrite, so it is refused and never moved unasked (#1032)."""
         git(self.clone, "commit", "-q", "--allow-empty", "-m", "local work (#661)")
         self.release("skills/shipped/SKILL.md", "shipped v2")
         fix = self.refused(git(self.clone, "rev-parse", "HEAD"), self.update())
         self.assertIn("branch olivercode-local", fix)
         self.assertNotIn("push", fix)
+
+    def test_a_rewritten_origin_is_realigned_after_saving_the_old_main_to_a_backup_branch(self):
+        """origin holds a replaced copy of the local commit, so update saves the old main and realigns (#1032)."""
+        git(self.clone, "commit", "-q", "--allow-empty", "-m", "local work (#661)")
+        mine = git(self.clone, "rev-parse", "HEAD")
+        write(self.seed, "skills/shipped/SKILL.md", "shipped v2")
+        git(self.seed, "commit", "-q", "-am", "local work (#661)")
+        git(self.seed, "push", "-q", "origin", "main")
+        code, calls, out = self.update()
+        self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]), out)
+        self.assertIn("olivercode-local", out)
+        self.assertIn("origin/main", out)
+        self.assertEqual(git(self.clone, "rev-parse", "olivercode-local"), mine)
 
 
 if __name__ == "__main__":

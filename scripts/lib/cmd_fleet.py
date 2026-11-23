@@ -235,15 +235,29 @@ def _commit_synced(name: str, repo_path: Path, before: dict, story: str, archive
         return say(f"not committed, {state} on GitHub")
     if _git(repo_path, "rev-parse", "-q", "--verify", "HEAD").returncode != 0:
         return say("not committed, the repo has no commits")
-    dirty = [rel for rel, was in before.items() if was["dirty"]]
-    if dirty:
-        return say(f"not committed, {', '.join(dirty)} already had uncommitted changes")
-    changed = []
+    changed, already = [], []
+    foreign = []  # uncommitted edits that sync overwrote, so they were not the template (#1032)
     for rel, was in before.items():
         path = repo_path / rel
         now = (path.read_bytes() if path.is_file() else None, path.is_file() and os.access(path, os.X_OK))
-        if now != (was["data"], was["exec"]):
+        differs = now != (was["data"], was["exec"])
+        if differs and was["dirty"]:
+            foreign.append(rel)
+        elif differs:
             changed.append(rel)
+        elif was["dirty"] and path.is_file():
+            already.append(rel)  # uncommitted but already equal to the template: sync leaves it, so commit it
+    if foreign:  # put the owner's edits back, so a re-run asks again instead of committing the template over them
+        for rel in foreign:
+            path, was = repo_path / rel, before[rel]
+            if was["data"] is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(was["data"])
+                path.chmod(0o755 if was["exec"] else 0o644)
+        return say(f"not committed, {', '.join(foreign)} already had uncommitted changes that are not the template, so they are kept as they were. "
+                   "Tell me whether those edits are yours, then commit or discard them and re-run")
+    changed += already
     if not changed:
         return say("nothing to commit")
     queue_line = ("scripts/validate.sh now takes a slot in the per-user validation queue, so a script that calls it "
@@ -356,6 +370,12 @@ def command_update(oc_root: Path | None = None, story: str | None = None) -> int
     """
     root = oc_root or OC_ROOT
     stuck = update_state.problem(root)
+    if not stuck and update_state.rewritten(root):  # origin replaced commits this checkout holds (#1032)
+        saved = update_state.realign(root)
+        if not saved:
+            print("olivercode update changed nothing: could not save the old main to a backup branch and realign.")
+            return 1
+        print(f"origin's history was rewritten. The old main is saved on branch {saved[0]}, and this checkout now matches {saved[1]}.")
     if stuck:
         what, fix = stuck
         print(f"olivercode update changed nothing: {what}.")

@@ -13,6 +13,11 @@ launcher = load_script("scripts/olivercode", "olivercode_update")
 
 
 class UpdateRunsInstall(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch("lib.update_state.rewritten", return_value=False)  # never realign the real checkout
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_update(self, codes):
         """codes: the exit code for pull, install, sync-hooks and conform, in order. The clean-checkout check is
         stubbed here, since this test is about what runs after a pull (tests/test_update_keeps_local_learning.py
