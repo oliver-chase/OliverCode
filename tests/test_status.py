@@ -74,11 +74,12 @@ def round_row(n: int) -> dict:
 
 
 class TestDigest(unittest.TestCase):
-    def write(self, decisions, runs, rows=None, open_now=14, slug="o/r"):
+    def write(self, decisions, runs, rows=None, open_now=14, slug="o/r", opened=None, waiting=None):
         out = io.StringIO()
         target = Path(self.tmp.name) / "status-digest.md"
         code = cmd_status.digest(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows or [issue("2026-11-20")] * 3, now=NOW,
-                                 out=lambda t: out.write(t + "\n"), decisions=lambda: decisions, runs=lambda: runs, target=target)
+                                 out=lambda t: out.write(t + "\n"), decisions=lambda: decisions, runs=lambda: runs, target=target,
+                                 opened=lambda slug: opened if opened is not None else [], waiting=lambda: waiting or [])
         return code, out.getvalue(), target
 
     def setUp(self):
@@ -115,6 +116,22 @@ class TestDigest(unittest.TestCase):
         _, _, target = self.write([], [{"story": "#7", "review": "findings", "findings": "The gate fails on line 3."}])
         self.assertIn("- #7 review findings. Findings: The gate fails on line 3.", target.read_text(encoding="utf-8"))
 
+    def test_the_digest_lists_open_stories_by_priority_the_last_five_landed_and_what_waits(self):
+        opened = [{"number": 3, "title": "Low", "body": "Priority: P2.", "labels": []}, {"number": 9, "title": "First", "body": "Priority: P0.", "labels": []}]
+        rows = [{"number": n, "title": f"Done {n}", "closed_at": f"2026-11-{10 + n}T00:00:00Z", "created_at": "2026-11-01T00:00:00Z"} for n in range(1, 8)]
+        _, _, target = self.write([], [], rows=rows, opened=opened, waiting=["- #4 Approve the push"])
+        body = target.read_text(encoding="utf-8")
+        self.assertLess(body.index("P0 #9 First"), body.index("P2 #3 Low"))
+        landed = body.split("## Landed, the last five\n")[1].split("\n\n")[0].splitlines()
+        self.assertEqual(["- #7 Done 7 (2026-11-17)", "- #6 Done 6 (2026-11-16)", "- #5 Done 5 (2026-11-15)", "- #4 Done 4 (2026-11-14)", "- #3 Done 3 (2026-11-13)"], landed)
+        self.assertIn("## Waits on the owner\n- #4 Approve the push", body)
+
+    def test_the_session_lines_are_three_and_name_the_open_count_the_last_landing_and_the_digest(self):
+        rows = [{"number": 5, "title": "Newest", "closed_at": "2026-11-20T00:00:00Z"}, {"number": 4, "title": "Older", "closed_at": "2026-11-19T00:00:00Z"}]
+        lines = cmd_status.session_lines("o/r", 14, rows, Path("/x/status-digest.md"))
+        self.assertEqual(["o/r: 14 open stories.", "Last story landed: #5 Newest.", "Read /x/status-digest.md before acting."], lines)
+        self.assertIn("No story landed", cmd_status.session_lines("o/r", 0, [], Path("/x"))[1])
+
     def test_no_origin_writes_nothing_and_exits_one(self):
         code, text, target = self.write([], [], slug=None)
         self.assertEqual(1, code)
@@ -125,7 +142,7 @@ class TestDigest(unittest.TestCase):
         out = io.StringIO()
         target = Path(self.tmp.name) / "status-digest.md"
         code = cmd_status.digest("o/r", count=lambda s, state: None, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
-                                 decisions=lambda: [], runs=lambda: [], target=target)
+                                 decisions=lambda: [], runs=lambda: [], target=target, opened=lambda slug: [], waiting=lambda: [])
         self.assertEqual(1, code)
         self.assertIn("were not read", out.getvalue())
         self.assertFalse(target.exists())

@@ -89,7 +89,7 @@ python3 scripts/olivercode conform
 
 ## Commands
 
-`python3 scripts/olivercode --help` prints every command with its arguments, and `python3 scripts/olivercode guide` prints the same list with a plain-language overview. `docs/SETUP.md` ("Launcher commands") holds what the help line cannot say. The table below names each command once, by job.
+`python3 scripts/olivercode --help` prints every command with its arguments, and `python3 scripts/olivercode guide` prints how work runs, the first steps and these same rows with one plain line per command, and `olivercode guide NAME` says what one command, gate, guard, scheduled job or skill does and where it lives. `docs/SETUP.md` ("Launcher commands") holds what the help line cannot say. The table below names each command once, by job.
 
 | Job | Commands |
 | --- | --- |

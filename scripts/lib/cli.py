@@ -90,7 +90,7 @@ COMMANDS = [
     ("olivercode eval [--guard NAME]", "Replay the fixed guard scenarios through the real hooks and print one line per mismatch, exiting 1 on any."),
     ("olivercode wip save|list|restore REF [--to DIR]", "Snapshot uncommitted work (tracked and untracked) in this repo and its worktrees into refs/wip/ without touching the working tree, index or any branch. list shows the snapshots, restore checks one out into a new folder, and refs older than 7 days are pruned"),
     ("olivercode land WORKTREE STORY", "Land a story's worktree on main: rebase on origin/main, validate (twice at most), push HEAD:main (4 tries), then fast-forward a clean main checkout and delete the story's worktree, local branch and remote branch. Work that does not land gets a handover file and no pushed branch. The log is ~/.olivercode/land/landN.log and ends RESULT pushed SHA"),
-    ("olivercode guide","Print a plain-language overview: first steps, every command, and every skill with the phrases that load it"),
+    ("olivercode guide [NAME]","Print how work runs, the first steps, every command grouped by the job it does and every skill with the phrases that load it. With NAME, say what that command, gate, guard, scheduled job or skill does and where it lives"),
 ]
 
 

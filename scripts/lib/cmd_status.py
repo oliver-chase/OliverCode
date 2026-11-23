@@ -3,8 +3,9 @@
 `olivercode status [--root DIR]` reads the repo's open count and the stories opened and closed in the last seven days. A falling count prints the stories
 landed per day and the date the count reaches zero at that pace. A flat or rising count prints the same figures and says the date is not reachable.
 
-`olivercode status digest [--root DIR]` writes the same board figures with the latest decisions and run-log rows to `status-digest.md` in the OliverCode
-home, at most DIGEST_TOKENS tokens. A new owner thread starts from that file alone (#892). It calls no model.
+`olivercode status digest [--root DIR]` writes the same board figures with the open stories in priority order, the last five landed, what waits on the owner,
+the latest decisions and the run-log rows to `status-digest.md` in the OliverCode home, at most DIGEST_TOKENS tokens. A new owner thread starts from that file
+alone (#892), and the session-start hook refreshes it and prints `session_lines` (#985). It calls no model.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import failure_log, gh_budget, relay, repo_state
+from lib import cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -24,6 +25,7 @@ import issue_count  # noqa: E402
 DAYS = 7
 DIGEST_TOKENS = 1500
 DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four, and ids, paths and code run shorter, so three keeps the digest under the limit
+OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
 DIGEST_ITEMS = 5  # the latest decisions and the latest run-log rows the digest keeps before it trims to the limit
 USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR]"
 
@@ -126,14 +128,54 @@ def _run_line(row: dict) -> str:
             f"{row.get('input', 0)} in and {row.get('output', 0)} out tokens, {spent}")
 
 
+def landed(rows: list[dict]) -> list[dict]:
+    """The issues closed in ROWS, newest close first."""
+    return sorted((r for r in rows if r.get("closed_at")), key=lambda r: r["closed_at"], reverse=True)
+
+
+def _story_line(row: dict, closed: bool = False) -> str:
+    tag = f" ({str(row.get('closed_at'))[:10]})" if closed else ""
+    return f"- {open_issues.priority(row) + ' ' if not closed and open_issues.priority(row) else ''}#{row.get('number')} {_text(row.get('title'), 90)}{tag}"
+
+
+def open_lines(opened: list[dict]) -> list[str]:
+    """The open stories in priority order, at most OPEN_SHOWN."""
+    return [_story_line(r) for r in sorted(opened, key=open_issues.rank)[:OPEN_SHOWN]]
+
+
+def waiting_lines() -> list[str]:
+    """The owner-queue steps that are open, one line each."""
+    try:
+        found = [i for i in cmd_owner.items() if i["status"] == "open"]
+    except (OSError, ValueError, KeyError):
+        return []
+    return [f"- #{i['id']} {_text(i.get('step'), 120)}" for i in found[:DIGEST_ITEMS]] + ([f"- and {len(found) - DIGEST_ITEMS} more"] if len(found) > DIGEST_ITEMS else [])
+
+
+def session_lines(slug: str, open_now: int, rows: list[dict], path: Path) -> list[str]:
+    """The three lines a new session prints: the open count, the last story landed and the digest to read."""
+    last = landed(rows)
+    done = f"Last story landed: #{last[0].get('number')} {_text(last[0].get('title'), 90)}." if last else f"No story landed in the last {DAYS} days."
+    return [f"{slug}: {open_now} open stories.", done, f"Read {path} before acting."]
+
+
 def _render(head: list[str], decisions: list[str], decision_total: int, runs: list[str], run_total: int) -> str:
     lines = head + [f"## Decisions, {len(decisions)} of {decision_total}"] + decisions + ["", f"## Run log, {len(runs)} of {run_total}"] + runs
     return "\n".join(lines) + "\n"
 
 
-def build_digest(board: str, decisions: list[dict], runs: list[dict], now: datetime) -> str:
-    """The digest text: the board line, then the latest decisions and run-log rows, oldest first. It drops the oldest rows until it fits DIGEST_TOKENS."""
+def _section(title: str, lines: list[str], none: str) -> list[str]:
+    return [f"## {title}"] + (lines or [none]) + [""]
+
+
+def build_digest(board: str, decisions: list[dict], runs: list[dict], now: datetime, opened: list[dict] | None = None,
+                 rows: list[dict] | None = None, waiting: list[str] | None = None) -> str:
+    """The digest text: the board line, the open stories in priority order, the last five landed, what waits on the owner, then the latest decisions and
+    run-log rows, oldest first. It drops the oldest decisions and run rows until it fits DIGEST_TOKENS."""
     head = ["# Status digest", f"Written {now:%Y-%m-%d %H:%M} UTC.", f"Board: {board}", ""]
+    head += _section(f"Open, {len(opened or [])} in priority order", open_lines(opened or []), "None.")
+    head += _section("Landed, the last five", [_story_line(r, True) for r in landed(rows or [])[:DIGEST_ITEMS]], f"None in the last {DAYS} days.")
+    head += _section("Waits on the owner", waiting or [], "Nothing.")
     dec = [_decision_line(r) for r in decisions[-DIGEST_ITEMS:]]
     run = [_run_line(r) for r in runs[-DIGEST_ITEMS:]]
     text = _render(head, dec, len(decisions), run, len(runs))
@@ -146,29 +188,39 @@ def build_digest(board: str, decisions: list[dict], runs: list[dict], now: datet
     return text[: DIGEST_TOKENS * DIGEST_CHARS]
 
 
-def digest(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print,
-           decisions=relay.records, runs=run_log, target: Path | None = None) -> int:
-    """Write the status digest and print where it went and its token count. It reads gh REST and two local logs and calls no model."""
+def write_digest(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print,
+                 decisions=relay.records, runs=run_log, target: Path | None = None, opened=open_issues.fetch, waiting=waiting_lines):
+    """Write the status digest. Returns (path, text, session lines), or None after printing why through OUT. It reads gh REST and local logs and calls no model."""
     if not slug:
         out("Error: this repo has no GitHub origin.")
-        return 1
+        return None
     held = gh_budget.refusal("rest")
     if held:
         out(held)
-        return 1
+        return None
     now = now or datetime.now(timezone.utc)
     open_now = count(slug, "open")
     rows = fetch(slug, now - timedelta(days=DAYS))
-    if open_now is None or rows is None:
+    stories = opened(slug)
+    if open_now is None or rows is None or stories is None:
         out(f"Error: the issues of {slug} were not read.")
-        return 1
-    text = build_digest(f"{slug}: " + summary(open_now, rows, now), decisions(), runs(), now)
+        return None
     path = target or digest_path()
+    text = build_digest(f"{slug}: " + summary(open_now, rows, now), decisions(), runs(), now, stories, rows, waiting())
     try:
         path.write_text(text, encoding="utf-8")
     except OSError as err:
         out(f"Error: the digest could not be written to {path}: {err}")
+        return None
+    return path, text, session_lines(slug, open_now, rows, path)
+
+
+def digest(slug: str | None, out=print, **kw) -> int:
+    """Write the status digest and print where it went and its token count."""
+    done = write_digest(slug, out=out, **kw)
+    if done is None:
         return 1
+    path, text, _ = done
     out(f"Digest written to {path} ({tokens(text)} tokens, limit {DIGEST_TOKENS}).")
     return 0
 

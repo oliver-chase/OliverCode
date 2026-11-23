@@ -40,6 +40,33 @@ class RepoCase(unittest.TestCase):
             git(self.repo, "config", "core.hooksPath", ".githooks")
 
 
+class TestSessionDigest(RepoCase):
+    LINES = ["o/r: 3 open stories.", "Last story landed: #5 Done.", "Read /h/status-digest.md before acting."]
+
+    def digest(self, env=None):
+        with mock.patch.dict(os.environ, env or {}), mock.patch("lib.cmd_status.write_digest", return_value=(Path("/h/x"), "t", self.LINES)) as write:
+            return session.digest_notes(self.repo), write
+
+    def test_a_governed_repo_gets_the_three_lines(self):
+        self.gates(point_git_at_them=True)
+        os.environ.pop("OLIVERCODE_HEADLESS", None)
+        found, write = self.digest()
+        self.assertEqual(self.LINES, found)
+        write.assert_called_once()
+
+    def test_a_headless_builder_gets_none_and_refreshes_nothing(self):
+        self.gates(point_git_at_them=True)
+        found, write = self.digest({"OLIVERCODE_HEADLESS": "1"})
+        self.assertEqual([], found)
+        write.assert_not_called()
+
+    def test_a_repo_without_gates_gets_none(self):
+        os.environ.pop("OLIVERCODE_HEADLESS", None)
+        found, write = self.digest()
+        self.assertEqual([], found)
+        write.assert_not_called()
+
+
 class TestCommitGuard(RepoCase):
     def test_refuses_a_commit_when_the_repo_has_gates_and_git_skips_them(self):
         self.gates(point_git_at_them=False)

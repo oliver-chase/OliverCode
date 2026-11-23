@@ -261,8 +261,8 @@ def main() -> int:
     if cmd == "wip":
         return command_wip(argv)
     if cmd == "guide":
-        _reject_extra(cmd, argv)
-        return command_guide(OC_ROOT)
+        _reject_extra(cmd, argv[1:])
+        return command_guide(OC_ROOT, argv[0] if argv else None)
 
     print(f"Error: '{cmd}' is not a valid command.")
     print_usage()

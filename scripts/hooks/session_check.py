@@ -11,7 +11,10 @@ This runs in every session, in whatever folder it starts, and names these gaps:
 - a repo, worktree or backup sits outside repoRoot (scripts/lib/placement.py)
 - the OliverCode checkout holds commits origin/main lacks, or trails it with edits (the fast-forward and the board groom belong to `olivercode maintain --fix`)
 
-It prints nothing when nothing is wrong, so a healthy session pays no context for it.
+In a repo that has commit gates, a session that is not headless also refreshes the status digest with no model call and prints three lines: the open
+count, the last story landed and the digest to read before acting (#985).
+
+It prints nothing else when nothing is wrong, so a healthy session pays no context for it.
 """
 
 from __future__ import annotations
@@ -52,6 +55,23 @@ def notes(cwd: Path, claude_dir: Path, session_id: str = "") -> list[str]:
 def headless() -> bool:
     """True inside a session that run_cli started. A builder starts near its token budget, so it skips the placement scan (#911)."""
     return os.environ.get("OLIVERCODE_HEADLESS") == "1"  # model.HEADLESS_ENV
+
+
+def digest_notes(cwd: Path) -> list[str]:
+    """The three session-start lines from a refreshed status digest, or nothing in a headless builder, an ungoverned folder or a failed read (#985)."""
+    if headless():
+        return []
+    try:
+        root = repo_gates.repo_root(cwd)
+        if not root or not repo_gates.has_gates(root):
+            return []
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from lib import cmd_status, repo_state
+        done = cmd_status.write_digest(repo_state.origin(root), out=lambda _text: None)
+    except Exception as exc:  # noqa: BLE001 -- a digest bug never blocks a session
+        print(f"session_check: status digest failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
+    return done[2] if done else []
 
 
 def placement_notes() -> list[str]:
@@ -98,10 +118,11 @@ def main() -> int:
         data = json.load(sys.stdin)
     except json.JSONDecodeError:
         data = {}
-    found = notes(Path(data.get("cwd") or "."), Path.home() / ".claude", str(data.get("session_id") or ""))
-    if found:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
-                                                 "additionalContext": "OliverCode session check: " + " ".join(found)}}))
+    cwd = Path(data.get("cwd") or ".")
+    found = notes(cwd, Path.home() / ".claude", str(data.get("session_id") or ""))
+    parts = (["OliverCode session check: " + " ".join(found)] if found else []) + digest_notes(cwd)
+    if parts:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}))
     return 0
 
 
