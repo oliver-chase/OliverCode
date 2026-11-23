@@ -1,0 +1,4 @@
+{
+  "_comment": "The tracked-line ceiling outside tests. `olivercode limits check` prints the count against it, warns when over and never blocks. Edit the number by hand to accept growth (scripts/lib/limits.py).",
+  "limit": 35132
+}
