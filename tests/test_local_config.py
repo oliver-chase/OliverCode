@@ -26,6 +26,18 @@ class LocalConfig(unittest.TestCase):
     def write(self, data):
         self.file.write_text(json.dumps(data))
 
+    def test_the_builder_limit_follows_cores_and_memory_unless_the_owner_sets_it(self):
+        """#1055: half the cores or the memory in GB less 4, whichever is smaller, and never below 1."""
+        self.assertEqual(4, local_config.default_builders(cores=8, mem_gb=8))
+        self.assertEqual(8, local_config.default_builders(cores=16, mem_gb=32))
+        self.assertEqual(1, local_config.default_builders(cores=2, mem_gb=4))
+        with mock.patch.object(local_config, "default_builders", return_value=4):
+            self.write({"maxBuilders": 6})
+            self.assertEqual(6, local_config.max_builders())
+            for bad in (0, -2, "four", True, 2.5):
+                self.write({"maxBuilders": bad})
+                self.assertEqual(4, local_config.max_builders(), bad)
+
     def test_unset_means_this_machine_has_none(self):
         self.assertEqual(local_config.private_repos(), {})
         self.assertIsNone(local_config.skills_root())

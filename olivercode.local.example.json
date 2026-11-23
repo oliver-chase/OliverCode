@@ -3,6 +3,7 @@
   "repoRoot": "~/Developer/Repos",
   "allowOutside": [],
   "auditMode": "gated",
+  "maxBuilders": 4,
   "fleetRegistry": "~/.olivercode/fleet/repo-profiles.json",
   "privateRepos": {
     "notes": "~/path/to/a-private-repo"

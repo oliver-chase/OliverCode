@@ -269,18 +269,6 @@ def run(command: list[str], queue: str = "validate", poll: float = 2.0) -> int:
             release(slot)
 
 
-HEAVY_CAP = 4  # `olivercode dispatch` starts no builder while this many validation, test or render runs hold slots
-
-
-def heavy_runs() -> int:
-    """The number of live heavy runs: slot files held in the validate and render queues, after reaping dead holders (#544)."""
-    total = 0
-    for queue in QUEUES:
-        reap(queue=queue)
-        total += len(list(slots_dir(queue).glob("slot-*.json")))
-    return total
-
-
 def show_queue(queue: str) -> str:
     reap(queue=queue)
     rows = []

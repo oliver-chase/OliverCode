@@ -81,6 +81,18 @@ def active(slug: str, now: float | None = None, alive=None) -> dict:
     return {} if dead_reason(rec, now if now is not None else time.time(), alive) else rec
 
 
+def building_elsewhere(slug: str, now: float | None = None, alive=None) -> int:
+    """How many stories live runs in other repos are building, which count against the machine-wide builder limit (#1055)."""
+    now = time.time() if now is None else now
+    own = path(slug).name
+    total = 0
+    for record in path(slug).parent.glob("*.json"):
+        rec = _read(record)
+        if record.name != own and not dead_reason(rec, now, alive):
+            total += len(rec.get("building") or [])
+    return total
+
+
 def acquire(slug: str, who: str, now: float, page: str = "", want: list[int] | None = None, pid: int | None = None, alive=None) -> tuple[dict, dict, str]:
     """Take the repo's lock. Returns (held, taken, why): `held` is the live holder's record when another run holds it, and then `want` is appended to its queue
     and nothing is taken. `taken` and `why` describe a dead holder this call replaced, else ({}, '')."""

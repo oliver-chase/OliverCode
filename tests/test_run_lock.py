@@ -78,6 +78,21 @@ class TestRunLock(LockCase):
         self.assertEqual(({}, {}, ""), run_lock.acquire("o/other", "drain other", NOW, pid=222, alive=lambda p: True))
 
 
+class TestBuildingElsewhere(LockCase):
+    def test_it_counts_the_live_builders_of_other_repos_only(self):
+        """#1055: the machine-wide limit counts what other runs are building, never this repo's own run or a dead one."""
+        alive = lambda p: self.alive.get(p, False)
+        run_lock.acquire("o/r", "drain r", NOW, pid=111, alive=alive)
+        run_lock.beat("o/r", 111, NOW, [1, 2])
+        run_lock.acquire("o/s", "drain s", NOW, pid=222, alive=alive)
+        run_lock.beat("o/s", 222, NOW, [3, 4, 5])
+        run_lock.acquire("o/t", "drain t", NOW, pid=333, alive=alive)
+        run_lock.beat("o/t", 333, NOW, [6])
+        self.assertEqual(3, run_lock.building_elsewhere("o/r", NOW, alive))
+        self.assertEqual(2, run_lock.building_elsewhere("o/s", NOW, alive))
+        self.assertEqual(5, run_lock.building_elsewhere("o/u", NOW, alive))
+
+
 class TestTakeRun(LockCase):
     def take(self, io, who, want=None, pid=None):
         with mock.patch.object(run_lock.os, "getpid", return_value=pid), mock.patch.object(cmd_drain, "status_page", return_value="/h/status.md"), \

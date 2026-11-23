@@ -127,6 +127,26 @@ def setting(key: str):
     return settings().get(key)
 
 
+def default_builders(cores: int | None = None, mem_gb: int | None = None) -> int:
+    """The builder limit with no saved value: half the cores or the memory in GB less 4, whichever is smaller, never below 1.
+    A builder session holds 150 to 350 MB and mostly waits on the model, and 4 GB stays free for the system and the one validation run (#1055)."""
+    cores = cores or os.cpu_count() or 1
+    if mem_gb is None:
+        try:
+            mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") // 2**30
+        except (ValueError, OSError, AttributeError):  # a platform without sysconf gets the 8 GB this default was measured on
+            mem_gb = 8
+    return max(1, min(cores // 2, mem_gb - 4))
+
+
+def max_builders() -> int:
+    """The machine-wide builder limit drain and dispatch share: maxBuilders in the local file, else the default for this machine."""
+    saved = setting("maxBuilders")
+    if isinstance(saved, int) and not isinstance(saved, bool) and saved >= 1:
+        return saved
+    return default_builders()
+
+
 def _overlay(base: dict, top: dict) -> dict:
     """base with top's values on top, merging nested objects key by key."""
     out = dict(base)

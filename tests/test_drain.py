@@ -38,8 +38,9 @@ class FakeIo:
         return [i for i in self.issues if i["number"] not in self.closed]
 
     def claimed(self, i): return i["number"] in self.claims
-    def capacity(self): return self.cap
-    def load_ok(self): return True
+    def capacity(self):
+        return self.cap.pop(0) if isinstance(self.cap, list) and len(self.cap) > 1 else (self.cap[0] if isinstance(self.cap, list) else self.cap)
+    def limit(self): return 4
     def claim(self, n): pass
     def beat(self, building): self.beats = getattr(self, "beats", []) + [list(building)]
     def worktree(self, n): return Path(f"/wt/{n}")
@@ -145,10 +146,15 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], st["blocked"])
         self.assertIn("Fix the thing (#976)", io.comments[0][1])
 
-    def test_the_default_drain_builds_one_story_at_a_time_and_parallel_is_opt_in(self):
-        """#979: one builder unless --parallel N asks for more, and a bad N is refused with the usage line."""
-        self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
-        self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
+    def test_the_default_drain_fills_the_machine_limit_and_parallel_overrides_it(self):
+        """#1055: with no flag a drain runs up to maxBuilders less what other repos build; --parallel N wins; a bad N is refused."""
+        with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
+                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=3):
+            self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
+            self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
+        with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
+                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=6):
+            self.assertEqual(0, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
         seen = []
         factory = lambda repo, slug, parallel=None: seen.append(parallel) or FakeIo([])
         with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/nonexistent")), mock.patch.object(cmd_drain, "backlog_config",
@@ -156,8 +162,16 @@ class DrainCase(unittest.TestCase):
             quiet(cmd_drain.command_drain, ["r"], factory, lambda s: None)
             quiet(cmd_drain.command_drain, ["r", "--parallel", "2"], factory, lambda s: None)
             code, _ = quiet(cmd_drain.command_drain, ["r", "--parallel", "0"], factory, lambda s: None)
-        self.assertEqual([1, 2], seen)
+        self.assertEqual([None, 2], seen)
         self.assertEqual(2, code)
+
+    def test_a_full_machine_waits_for_a_free_builder_and_never_reads_the_load(self):
+        """#1055: no free builder means wait, then start; the load average plays no part."""
+        io = FakeIo([issue(1)], cap=[0, 0, 1])
+        naps = []
+        with mock.patch.object(cmd_drain.cmd_dispatch, "machine_load", side_effect=AssertionError("load read"), create=True):
+            quiet(cmd_drain.drain, io, cmd_drain.new_state(), sleep=naps.append)
+        self.assertEqual(([1], 1), (io.started, len(naps)))
 
     def test_a_held_story_is_not_restarted_or_pushed_and_one_comment_holds_the_finding(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "held": "scripts/a.py: no test"}]})

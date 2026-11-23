@@ -16,14 +16,13 @@ import sys
 import time
 from pathlib import Path
 
-from lib import backlog_setup, cmd_groom, intake, gh_budget, local_config, open_issues, run_lock, validate_queue
+from lib import backlog_setup, cmd_groom, intake, gh_budget, local_config, open_issues, run_lock
 from lib.local_config import OC_ROOT
 from lib.placement import config as placement_config
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 sys.path.insert(0, str(OC_ROOT / "skills" / "audit" / "scripts"))
 import batch_project  # noqa: E402
-import load_guard  # noqa: E402
 import log_action  # noqa: E402
 
 USAGE = "Usage: olivercode dispatch N [--from SID] [--dry-run] | olivercode dispatch --plan"
@@ -99,13 +98,6 @@ def gh(args: list[str]):
     if why:
         return subprocess.CompletedProcess(args, 1, "", why)
     return subprocess.run(["gh", *args], capture_output=True, text=True)
-
-
-def machine_load() -> tuple[int, bool]:
-    """(readers, mutations allowed) from load_guard. Every interactive session is a `claude` process and a
-    subagent runs inside its parent, so a process count cannot tell builders apart; the load average is the cap.
-    The heavy-run cap counts held queue slots, never claude processes (#544)."""
-    return load_guard.advice(os.getloadavg()[0], os.cpu_count() or 1)
 
 
 def _toplevel() -> Path:
@@ -210,7 +202,7 @@ def _plan(repo) -> int:
     return 0
 
 
-def command_dispatch(argv: list[str], runner=gh, load_check=machine_load, clock=None, repo=None, heavy=None, io=None) -> int:
+def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=None, io=None) -> int:
     if argv == ["--plan"]:
         return _plan(repo or _toplevel())
     parsed = _parse(argv)
@@ -238,7 +230,7 @@ def command_dispatch(argv: list[str], runner=gh, load_check=machine_load, clock=
     agent = sid or "dispatch"
     worktree = placement_config().worktrees / f"{repo.name}-{n}"
     if dry:
-        refused = _start_checks(runner, slug, n, story, clock, load_check, heavy)
+        refused = _start_checks(runner, slug, n, story, clock, busy)
         if refused:
             return refused
         print(f"Dry run: story #{n} would build headless in {worktree}, claimed as {agent}. No claim posted.")
@@ -250,7 +242,7 @@ def command_dispatch(argv: list[str], runner=gh, load_check=machine_load, clock=
         return 0
     try:
         with run_lock.Heartbeat(slug, pid):
-            refused = _start_checks(runner, slug, n, story, clock, load_check, heavy)
+            refused = _start_checks(runner, slug, n, story, clock, busy)
             if refused:
                 return refused
             code = _build(io, cmd_drain, story, n, worktree)
@@ -267,17 +259,14 @@ def command_dispatch(argv: list[str], runner=gh, load_check=machine_load, clock=
         run_lock.release(slug, pid)
 
 
-def _start_checks(runner, slug: str, n: int, story: dict, clock, load_check, heavy) -> int:
-    """The refusals before a builder starts: a live claim, a busy machine, full validation slots. 0 when none applies."""
+def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> int:
+    """The refusals before a builder starts: a live claim, or a machine already at its builder limit (#1055). 0 when none applies."""
     claim = live_claim(runner, slug, n, story, clock())
     if claim:
         return _refuse(f"story #{n} is {claim}. Take the next open story.")
-    readers, _mutations = load_check()
-    if readers == 0:
-        return _refuse("the machine load is too high to start a builder. Ask again in five minutes.")
-    held = (heavy or validate_queue.heavy_runs)()
-    if held >= validate_queue.HEAVY_CAP:
-        return _refuse(f"{held} validation, test or render runs hold slots, which is the cap of {validate_queue.HEAVY_CAP}. Ask again when one finishes.")
+    held, limit = (busy or run_lock.building_elsewhere)(slug), local_config.max_builders()
+    if held >= limit:
+        return _refuse(f"other runs are building {held} stories, which is this machine's limit of {limit} (maxBuilders in olivercode.local.json). Ask again when one lands.")
     return 0
 
 

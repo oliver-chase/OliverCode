@@ -19,7 +19,7 @@ from lib import cmd_dispatch, cmd_drain  # noqa: E402
 NOW = 1_800_000_000.0
 STORY = {"number": 77, "title": "Fixture story title", "state": "OPEN", "body": "Do the fixture thing.\nSecond line.\nFiles area: scripts/lib/x.py.",
          "labels": [{"name": "story"}], "comments": []}
-CALM = lambda: (12, True)  # noqa: E731
+FREE = lambda slug: 0  # noqa: E731
 
 
 def runner_for(story, posted, others=()):
@@ -81,9 +81,9 @@ class DispatchCase(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def run_dispatch(self, story=STORY, load=CALM, argv=("77",), others=(), io=None, **kw):
+    def run_dispatch(self, story=STORY, busy=FREE, argv=("77",), others=(), io=None, **kw):
         io = io or RunIo()
-        code, out = quiet(cmd_dispatch.command_dispatch, list(argv), runner=runner_for(story, [], others), load_check=load,
+        code, out = quiet(cmd_dispatch.command_dispatch, list(argv), runner=runner_for(story, [], others), busy=busy,
                           clock=lambda: NOW, repo=self.repo, io=io, **kw)
         return code, out, io
 
@@ -132,22 +132,19 @@ class TestDispatch(DispatchCase):
         self.assertIn("Dry run", out)
         self.assertFalse((self.home / "gh-project-queue.json").exists())
 
-    def test_idle_sessions_allow_a_dispatch_and_four_held_slots_refuse_one(self):
-        code, _out, io = self.run_dispatch()  # ten idle sessions hold no slot, so the cap is not reached
-        self.assertEqual((code, "build" in io.steps), (0, True))
-        for queue, count in (("validate-slots", 3), ("render-slots", 1)):
-            folder = self.home / queue
+    def test_a_dispatch_starts_below_the_machine_limit_and_refuses_at_it(self):
+        """#1055: other runs' builders count against maxBuilders; held validation slots and the load average do not."""
+        with mock.patch.object(cmd_dispatch.local_config, "max_builders", return_value=4):
+            folder = self.home / "validate-slots"
             folder.mkdir(parents=True, exist_ok=True)
-            for i in range(count):
-                (folder / f"slot-{i}.json").write_text(json.dumps({"pid": os.getpid(), "started": time.time(), "label": "held"}))
-        code, out, io = self.run_dispatch()
+            (folder / "slot-1.json").write_text(json.dumps({"pid": os.getpid(), "started": time.time(), "label": "held"}))
+            code, _out, io = self.run_dispatch(busy=lambda slug: 3)
+            self.assertEqual((code, "build" in io.steps), (0, True))
+            code, out, io = self.run_dispatch(busy=lambda slug: 4)
         self.assertEqual((code, io.steps), (1, []))
-        self.assertIn("4 validation, test or render runs hold slots", out)
+        self.assertIn("limit of 4", out)
 
-    def test_it_refuses_a_full_load_a_closed_story_and_a_claimed_story(self):
-        code, out, io = self.run_dispatch(load=lambda: (0, False))
-        self.assertEqual((code, io.steps), (1, []))
-        self.assertIn("load", out)
+    def test_it_refuses_a_closed_story_and_a_claimed_story(self):
         code, out, io = self.run_dispatch(story={**STORY, "state": "CLOSED"})
         self.assertEqual((code, io.steps), (1, []))
         self.assertIn("closed", out)
@@ -167,7 +164,7 @@ class TestForkOrigin(DispatchCase):
         seen = []
         base = runner_for(STORY, [])
         code, out = quiet(cmd_dispatch.command_dispatch, ["77", "--dry-run"], runner=lambda a: (seen.append(a), base(a))[1],
-                          load_check=CALM, clock=lambda: NOW, repo=self.repo)
+                          busy=FREE, clock=lambda: NOW, repo=self.repo)
         self.assertEqual(0, code, out)
         return seen
 
@@ -235,7 +232,7 @@ class TestOneBuilderPerStory(DispatchCase):
         io = ClaimIo(self.repo, tracking)
         build = io.build
         io.build = lambda *a: order.append("builder") or build(*a)
-        code, _ = quiet(cmd_dispatch.command_dispatch, ["77"], runner=tracking, load_check=CALM, clock=lambda: NOW, repo=self.repo, io=io)
+        code, _ = quiet(cmd_dispatch.command_dispatch, ["77"], runner=tracking, busy=FREE, clock=lambda: NOW, repo=self.repo, io=io)
         self.assertEqual((code, order), (0, ["claim", "builder"]))
         code, out, io2 = self.run_dispatch(story=story)
         self.assertEqual((code, io2.steps), (1, []))

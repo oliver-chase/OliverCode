@@ -17,7 +17,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, gh_budget, intake, owner_decisions, run_lock
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, gh_budget, intake, local_config, owner_decisions, run_lock
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -27,8 +27,7 @@ sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))  # the board
 
 USAGE = "Usage: olivercode drain REPO [--parallel N]"
 RESTARTS = 3
-PARALLEL = 1  # builders one drain runs at once; more only when the owner asks with --parallel N (#979)
-LOAD_WAITS = 12
+FULL_WAITS = 12  # five-minute waits for another repo's run to free a builder before a full machine ends the drain (#1055)
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
 
 
@@ -57,7 +56,7 @@ def new_state() -> dict:
 class Io:
     """Every outside effect of a drain. Tests replace the methods; the defaults use REST, git, the headless loop and `olivercode land`."""
 
-    def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int = PARALLEL):
+    def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int | None = None):
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
 
@@ -105,15 +104,17 @@ class Io:
         story = {"comments": rows}
         return bool(cmd_dispatch.live_claim(self.gh, self.slug, n, story, now))
 
+    def limit(self) -> int:
+        """The most builders this run may hold: --parallel N, else the machine-wide limit (#1055)."""
+        return self.parallel or local_config.max_builders()
+
     def capacity(self) -> int:
-        return self.parallel
+        """Builders this run may hold now: --parallel N, else the machine limit less what other repos' runs are building."""
+        return self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
 
     def beat(self, building: list[int]) -> None:
         """Tell the repo's run lock which stories are building now (#992)."""
         run_lock.beat(self.slug, os.getpid(), time.time(), building)
-
-    def load_ok(self) -> bool:
-        return cmd_dispatch.machine_load()[0] > 0
 
     def worktree(self, n: int) -> Path:
         """Create story/N's worktree from origin's default branch, or reuse the one a restart finds."""
@@ -335,7 +336,7 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
 def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     """Run the loop until no story is left to start. Returns 0 when it ended, 1 when GitHub could not be read."""
     running: dict = {}
-    pool = ThreadPoolExecutor(max_workers=max(1, io.capacity()))
+    pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
     waits, reported = 0, set()
     try:
         while True:
@@ -360,15 +361,13 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 areas = intake.files_area(issue.get("body") or "")
                 if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
                     continue
-                if not io.load_ok():
-                    break
                 io.claim(issue["number"])
                 running[pool.submit(work_story, io, issue, state)] = issue
                 busy.append(areas)
                 started = True
             io.beat([i["number"] for i in running.values()])
             if not running:
-                if todo and not started and waits < LOAD_WAITS and not io.load_ok():
+                if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
                     waits += 1
                     sleep(300)
                     continue
@@ -430,8 +429,8 @@ def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) 
 
 
 def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
-    """`drain REPO`, one story at a time, or `drain REPO --parallel N` for up to N builders at once (#979). One run holds a repo at a time (#992)."""
-    args, parallel, rest = list(argv), PARALLEL, []
+    """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055). One run holds a repo at a time (#992)."""
+    args, parallel, rest = list(argv), None, []
     while args:
         arg = args.pop(0)
         if arg == "--parallel":
