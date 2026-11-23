@@ -24,16 +24,29 @@ import uuid
 from pathlib import Path
 
 try:
+    from lib import failure_log
     from lib.failure_log import home
 except ImportError:  # loaded bare, with scripts/lib on the path
+    import failure_log
     from failure_log import home
 
 HOLD_SECONDS = 1200
+
+
+def _env_int(name: str, default: int) -> int:
+    """A positive whole number from the environment, else the default, so a bad value never fails the import."""
+    try:
+        value = int(os.environ.get(name) or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 # GitHub also throttles a steady burst of writes whatever the points left, so the machine as a whole gets a
 # rolling cap on writes.
-WRITES_PER_HOUR = int(os.environ.get("OLIVERCODE_GH_WRITES_PER_HOUR") or 90)
+WRITES_PER_HOUR = _env_int("OLIVERCODE_GH_WRITES_PER_HOUR", 90)
 # Every gh call, read or write, counts against a per-minute cap so parallel agents slow down together.
-CALLS_PER_MINUTE = int(os.environ.get("OLIVERCODE_GH_CALLS_PER_MINUTE") or 30)
+CALLS_PER_MINUTE = _env_int("OLIVERCODE_GH_CALLS_PER_MINUTE", 30)
 # Stop before GitHub does: below this many GraphQL points every agent holds until the reset. 0 switches it off.
 POINTS_FLOOR = 500  # OLIVERCODE_GH_POINTS_FLOOR overrides it, read on each call so a test or session can change it
 POINTS_TTL = 60
@@ -109,7 +122,12 @@ def note_limit(seconds: int = HOLD_SECONDS, who: str = "", resources: tuple[str,
     state.pop("until", None)
     state.update({"seen": now, "by": who})
     home().mkdir(parents=True, exist_ok=True)
-    (home() / "gh-limit.json").write_text(json.dumps(state) + "\n", encoding="utf-8")
+    with failure_log.locked(home() / "gh-limit.json"):
+        # the file is read again under the lock, so a limit another agent noted meanwhile keeps its longer hold
+        latest = _state()
+        for name in RESOURCES:
+            state[name] = max(float(state.get(name, 0)), float(latest.get(name, 0)))
+        failure_log.write_private(home() / "gh-limit.json", json.dumps(state) + "\n")
     return held
 
 
@@ -262,7 +280,7 @@ def _replay(run) -> str:
             lines.append(f"kept: {cmd} ({err.splitlines()[-1][:100] if err else 'failed'})")
     moved = f", {owned} moved to the owner queue" if owned else ""
     report = f"{sent} of {len(rows)} queued gh command(s) written{moved}.\n" + "\n".join(lines)
-    (home() / QUEUE_REPORT).write_text(report + "\n", encoding="utf-8")
+    failure_log.write_private(home() / QUEUE_REPORT, report + "\n")
     return report
 
 

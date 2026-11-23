@@ -60,6 +60,7 @@ class Io:
     def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int | None = None):
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
+        self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
@@ -244,8 +245,21 @@ class Io:
         cfg = backlog_config(self.repo)
         cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "Ready"}}]}]))
 
+    def refresh_claims(self, now: float | None = None) -> None:
+        """While this run is alive, renew each claim it holds: the local claim every call, and the claim comment once a quarter of the
+        claim window has passed. A run that dies stops renewing, so its claim expires (#1033)."""
+        now = now or time.time()
+        for n, posted in list(self.claimed_at.items()):
+            cmd_dispatch._local_claim(self.slug, n, now, write=self.agent)
+            if now - posted < cmd_dispatch.log_action.CLAIM_HOURS * 900 or gh_budget.refusal() or gh_budget.reserve_write():
+                continue
+            body = cmd_dispatch.log_action.build_claim(self.agent, cmd_dispatch.datetime.datetime.fromtimestamp(now, cmd_dispatch.datetime.timezone.utc))
+            cmd_dispatch.log_action.post_comment(self.slug, n, body, lambda args: self.gh(["api", *args]))
+            self.claimed_at[n] = now
+
     def release(self, n: int) -> None:
         """Drop the local claim and post the release comment, so no outcome leaves the story held (#877)."""
+        self.claimed_at.pop(n, None)
         cmd_dispatch._local_claim(self.slug, n, time.time(), clear=True)
         if gh_budget.refusal() or gh_budget.reserve_write():
             return
@@ -260,6 +274,7 @@ class Io:
         """Write the claim, locally and as a comment, before the builder starts. While the GitHub budget is held, the comment waits and the card's move to In Progress is queued."""
         now = time.time()
         cmd_dispatch._local_claim(self.slug, n, now, write=self.agent)
+        self.claimed_at[n] = now
         if gh_budget.refusal() or gh_budget.reserve_write():
             cfg = backlog_config(self.repo)
             cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "In Progress"}}]}]))
@@ -512,7 +527,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep) -> int:
         return 0
     state = new_state()
     try:
-        with run_lock.Heartbeat(slug, pid):
+        with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
             code = drain(io, state, sleep=sleep)
             while code == 0 and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
                 code = drain(io, state, sleep=sleep)

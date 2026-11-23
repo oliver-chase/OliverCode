@@ -293,9 +293,9 @@ def _claimed(number: str) -> bool:
                for key, v in claims.items())
 
 
-def clean(cfg: Config | None = None, apply: bool = False) -> list[str]:
+def clean(cfg: Config | None = None, apply: bool = False, remote: bool = True) -> list[str]:
     """Lines saying what happens to each worktree: merged and clean ones are removed unless held_reason keeps them, and the rest are
-    kept and why. Remote branches merged into their repo's default branch follow, see remote_branches."""
+    kept and why. Remote branches merged into their repo's default branch follow, see remote_branches, unless `remote` is False."""
     cfg = cfg or config()
     lines = []
     for wt in worktrees(cfg):
@@ -310,7 +310,8 @@ def clean(cfg: Config | None = None, apply: bool = False) -> list[str]:
             lines.append(f"REMOVE {wt.path}" if done.returncode == 0 else f"FAILED {wt.path}: {done.stderr.strip()[:80]}")
         else:
             lines.append(f"REMOVE {wt.path} (merged and clean; run with --apply)")
-    lines += remote_branches(cfg, apply=apply)
+    if remote:
+        lines += remote_branches(cfg, apply=apply)
     return lines
 
 

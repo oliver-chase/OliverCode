@@ -62,7 +62,8 @@ def add(what: str, why: str, rule: str, covered_by: str | None = None, repo: str
            "rule": rule.strip(), "covered_by": (covered_by or "").strip() or None}
     p = path(repo)
     p.parent.mkdir(parents=True, exist_ok=True)
-    failure_log.append_private(p, json.dumps(rec) + "\n")
+    with failure_log.locked(p):  # a cover rewrites the file, so an append waits for it
+        failure_log.append_private(p, json.dumps(rec) + "\n")
     return rec
 
 
@@ -75,6 +76,11 @@ def cover(lesson_id: str, ref: str, repo: str | Path | None = None) -> dict:
     if not (ref or "").strip():
         raise ValueError("a cover needs a check or story reference")
     p = path(repo)
+    with failure_log.locked(p):
+        return _cover(p, lesson_id, ref)
+
+
+def _cover(p: Path, lesson_id: str, ref: str) -> dict:
     lines = p.read_text(encoding="utf-8").splitlines() if p.is_file() else []
     found, out = None, []
     for line in lines:
@@ -90,10 +96,7 @@ def cover(lesson_id: str, ref: str, repo: str | Path | None = None) -> dict:
         out.append(line)
     if found is None:
         raise ValueError(f"no lesson {lesson_id}")
-    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".")
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(out) + "\n")
-    os.replace(tmp, p)
+    failure_log.write_private(p, "\n".join(out) + "\n")
     return found
 
 
@@ -109,5 +112,6 @@ def seed() -> int:
     if new:
         p = path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        failure_log.append_private(p, "\n".join(new) + "\n")
+        with failure_log.locked(p):
+            failure_log.append_private(p, "\n".join(new) + "\n")
     return len(new)

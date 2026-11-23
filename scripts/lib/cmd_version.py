@@ -10,7 +10,7 @@ import os
 import subprocess
 from datetime import date
 
-from lib import cmd_land, denials, launchd
+from lib import cmd_land, denials, failure_log, launchd
 from lib.local_config import OC_ROOT
 
 LABEL = "com.olivercode.version-cut"
@@ -58,7 +58,7 @@ def cut_and_land(cutter, day: str, story: str) -> int:
     lock = directory / cmd_land.CUT_LOCK
     if cmd_land.cut_running(directory):
         return print("version-cut: a cut is already running.") or 1
-    lock.write_text(str(os.getpid()))
+    failure_log.write_private(lock, str(os.getpid()))  # renamed into place, so a reader never sees a half-written pid
     try:
         return _cut_and_land(cutter, day, story)
     finally:

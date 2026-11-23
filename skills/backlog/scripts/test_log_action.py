@@ -138,10 +138,17 @@ class LogAction(unittest.TestCase):
         self.assertEqual(2, la.main(pre + ["--agent", "x"], out=out, err=io.StringIO(), git=lambda c: "D"))
 
     def test_a_claim_comment_names_the_session_and_the_time(self):
-        rec = Recorder()
+        posted = []
+
+        def rec(args):  # a post is kept, and the reread returns it as the one claim
+            if "-f" in args:
+                posted.append(args)
+                return subprocess.CompletedProcess([], 0, "https://example.invalid/c/1\n", "")
+            body = posted[-1][2].removeprefix("body=")
+            return subprocess.CompletedProcess([], 0, json.dumps({"body": body}) + "\n", "")
         base = ["--repo", "o/r", "--story", "9", "--agent", "sess-a", "--role", "claim"]
         self.assertEqual(0, run(base, rec)[0])
-        body = rec.calls[0][2]
+        body = posted[0][2]
         self.assertRegex(body, r"^body=Claim\n- Session: sess-a\n- Time: \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
         with self.assertRaises(SystemExit):
             run(["--repo", "o/r", "--story", "9", "--role", "claim"], rec)

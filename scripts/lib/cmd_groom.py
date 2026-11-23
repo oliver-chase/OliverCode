@@ -255,8 +255,10 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         cmd_owner.note("groom", f"{name}: grooming failed: {mine['failed']}")
         return False
     finally:
-        _state().parent.mkdir(parents=True, exist_ok=True)
-        _state().write_text(json.dumps(state, indent=1), encoding="utf-8")
+        with failure_log.locked(_state()):  # merge this board's record into the file as it is now, so another groom's record is kept
+            latest = load_state()
+            latest[slug] = mine
+            failure_log.write_private(_state(), json.dumps(latest, indent=1))
 
 
 RELATED = re.compile(r"^Related:.*$", re.M)

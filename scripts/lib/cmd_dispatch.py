@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import backlog_setup, intake, gh_budget, local_config, open_issues, run_lock
+from lib import backlog_setup, failure_log, intake, gh_budget, local_config, open_issues, run_lock
 from lib.local_config import OC_ROOT
 from lib.placement import config as placement_config
 
@@ -153,22 +153,21 @@ def _local_claim(slug: str, n: int, now: float, write: str = "", clear: bool = F
     """A claim kept in ~/.olivercode while GitHub holds the comment back: 'held by NAME' for one under CLAIM_HOURS old, else ''.
     `write` records a claim for that agent and `clear` drops it."""
     path = gh_budget.home() / "dispatch-claims.json"
-    try:
-        claims = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        claims = {}
     key, limit = f"{slug}#{n}", log_action.CLAIM_HOURS * 3600
-    if clear:
-        claims.pop(key, None)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(claims), encoding="utf-8")
-        return ""
-    if write:
-        claims = {k: v for k, v in claims.items() if now - float(v.get("at", 0)) < limit}
-        claims[key] = {"agent": write, "at": now}
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(claims), encoding="utf-8")
-        return ""
+    with failure_log.locked(path):  # read, change and write are one step, so two claimers never overwrite each other
+        try:
+            claims = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            claims = {}
+        if clear:
+            claims.pop(key, None)
+            failure_log.write_private(path, json.dumps(claims))
+            return ""
+        if write:
+            claims = {k: v for k, v in claims.items() if now - float(v.get("at", 0)) < limit}
+            claims[key] = {"agent": write, "at": now}
+            failure_log.write_private(path, json.dumps(claims))
+            return ""
     mine = claims.get(key) or {}
     return f"held by {mine.get('agent')}" if mine and now - float(mine.get("at", 0)) < limit else ""
 
@@ -247,7 +246,7 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
     if not cmd_drain.take_run(io, slug, f"dispatch {n}" + (f" from {sid}" if sid else ""), [n]):  # one run per repo: a second thread's story joins the running queue (#992)
         return 0
     try:
-        with run_lock.Heartbeat(slug, pid):
+        with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
             refused = _start_checks(runner, slug, n, story, clock, busy)
             if refused:
                 return refused

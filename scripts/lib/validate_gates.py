@@ -105,18 +105,23 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sy
         commands = dict(gates)
         waiting, procs, started = [name for name, _ in gates], {}, {}
         deadline = time.monotonic() + timeout
-        while (waiting or procs) and time.monotonic() < deadline:
-            for name in [n for n, p in procs.items() if p.poll() is not None]:
-                codes[name] = procs.pop(name).returncode
-                took[name] = took.get(name, 0.0) + time.monotonic() - started[name]
-                word = "passed" if codes[name] == 0 else f"failed (exit {codes[name]})"
-                _say(err, f"{PROGRESS}'{name}' {word} in {took[name]:.0f}s ===")
-            while waiting and len(procs) < max_gates:
-                name = waiting.pop(0)
-                procs[name], started[name] = _start(commands[name], logs[name], env), time.monotonic()
-                _say(err, f"{PROGRESS}'{name}' started ({len(procs)} running, {len(waiting)} waiting) ===")
-            if procs:
-                time.sleep(0.1)
+        try:
+            while (waiting or procs) and time.monotonic() < deadline:
+                for name in [n for n, p in procs.items() if p.poll() is not None]:
+                    codes[name] = procs.pop(name).returncode
+                    took[name] = took.get(name, 0.0) + time.monotonic() - started[name]
+                    word = "passed" if codes[name] == 0 else f"failed (exit {codes[name]})"
+                    _say(err, f"{PROGRESS}'{name}' {word} in {took[name]:.0f}s ===")
+                while waiting and len(procs) < max_gates:
+                    name = waiting.pop(0)
+                    procs[name], started[name] = _start(commands[name], logs[name], env), time.monotonic()
+                    _say(err, f"{PROGRESS}'{name}' started ({len(procs)} running, {len(waiting)} waiting) ===")
+                if procs:
+                    time.sleep(0.1)
+        except BaseException:  # Ctrl-C or a crash leaves no gate running
+            for proc in procs.values():
+                _kill(proc)
+            raise
         now = time.monotonic()
         for proc in procs.values():
             _kill(proc)

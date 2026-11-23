@@ -77,6 +77,19 @@ def build_claim(agent, now):
     return f"Claim\n- Session: {agent}\n- Time: {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
 
 
+def _parse_time(text):
+    try:
+        return datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+
+
+def _expired(claimed_at, now):
+    """True when a claim time is CLAIM_HOURS or more before `now`, or cannot be read (a claim with no readable time holds nothing)."""
+    at = _parse_time(claimed_at)
+    return at is None or now - at >= datetime.timedelta(hours=CLAIM_HOURS)
+
+
 def claim_status(repo, story, runner=gh_api, now=None):
     """'claimed by NAME at TIME' for a claim under two hours old with no later commit comment, else 'free'
     (no claim, a stale claim or a claim followed by a commit). Reads comments over REST. Raises RuntimeError."""
@@ -89,18 +102,14 @@ def claim_status(repo, story, runner=gh_api, now=None):
         body = json.loads(line)["body"] if line.strip() else ""
         m = re.match(r"Claim\n- Session: (.+)\n- Time: (\S+)$", body)
         if m:
-            claim = (m.group(1), m.group(2))
+            if claim is None or claim[0] == m.group(1) or _expired(claim[1], _parse_time(m.group(2)) or now):
+                claim = (m.group(1), m.group(2))  # the earliest live claim stands; its own session refreshes it and a dead one is replaced
         elif claim and body.startswith("Claim released\n"):
             claim = None
         elif claim and re.search(r"^- Commit: [0-9a-f]{7,40}$", body, re.M):
             claim = None
-    if claim:
-        try:
-            at = datetime.datetime.strptime(claim[1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
-        except ValueError:
-            return "free"  # a claim with no readable time holds nothing
-        if now - at < datetime.timedelta(hours=CLAIM_HOURS):
-            return f"claimed by {claim[0]} at {claim[1]}"
+    if claim and not _expired(claim[1], now):
+        return f"claimed by {claim[0]} at {claim[1]}"
     return "free"
 
 
@@ -216,6 +225,15 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_autho
     except RuntimeError as exc:
         print(f"log_action: the comment on {repo}#{args.story} was not posted: {exc}", file=err)
         return 1
+    if args.role == "claim":  # two sessions can both read a story as free, so reread and let the earliest claim win
+        try:
+            holder = claim_status(repo, args.story, runner)
+        except RuntimeError as exc:
+            print(f"log_action: the claim on {repo}#{args.story} was posted at {url} but not confirmed: {exc}", file=err)
+            return 1
+        if not holder.startswith(f"claimed by {agent} at "):
+            print(f"log_action: the claim on {repo}#{args.story} lost to an earlier one ({holder}); do not build it", file=err)
+            return 1
     print(f"Logged on {repo}#{args.story}: {url}", file=out)
     return 0
 

@@ -101,7 +101,7 @@ class TestTidy(Base):
 
     def test_merged_and_clean_worktrees_are_removed_with_fix_and_only_listed_without(self):
         found, clean = self.tidy(True)
-        clean.assert_called_once_with(self.cfg, apply=True)
+        clean.assert_called_once_with(self.cfg, apply=True, remote=False)
         self.assertTrue(any(p.fixed and "removed 1" in p.text for p in found))
         found, clean = self.tidy(False)
         clean.assert_not_called()

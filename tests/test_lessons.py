@@ -61,7 +61,7 @@ class TestLessons(Isolated):
         self.assertEqual(after[0], before[0])
         self.assertEqual(json.loads(after[1]), {**second, "covered_by": "#514", "covered_on": date.today().isoformat()})
         self.assertEqual(len(after), 2)
-        self.assertEqual([p.name for p in lessons.path(self.repo).parent.iterdir()], [lessons.path(self.repo).name])
+        self.assertEqual([p.name for p in lessons.path(self.repo).parent.iterdir() if p.suffix != ".lock"], [lessons.path(self.repo).name])
         with self.assertRaises(ValueError):
             lessons.cover("L-nope", "#1", repo=self.repo)
         self.assertEqual(first["covered_by"], None)

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 
 from lib.local_config import OC_ROOT, claude_dir
@@ -69,7 +70,10 @@ def _record(total: int) -> None:
     path = record_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"words": total}) + "\n", encoding="utf-8")
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"words": total}) + "\n")
+        os.replace(tmp, path)  # mkstemp makes the file mode 600
     except OSError:
         pass
 

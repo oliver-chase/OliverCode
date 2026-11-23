@@ -6,8 +6,10 @@ One line per blocked commit or audit finding: time, repo, gate, reason, tab sepa
 
 from __future__ import annotations
 
+import fcntl
 import os
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -56,6 +58,26 @@ def append_private(path: Path, text: str) -> None:
     with os.fdopen(fd, "a", encoding="utf-8") as handle:
         handle.write(text)
     os.chmod(path, 0o600)
+
+
+@contextmanager
+def locked(path: Path):
+    """One writer at a time for a state file: hold an exclusive flock on a sibling .lock file (the pattern of candidates._locked)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path.with_name(path.name + ".lock"), os.O_WRONLY | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
+
+
+def write_private(path: Path, text: str) -> None:
+    """Replace a file with text through a temp file and a rename, so a reader sees the old or the new file, never half of one. Mode 600."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
 
 
 def stamp() -> str:

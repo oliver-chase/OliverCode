@@ -12,8 +12,10 @@ import time
 from pathlib import Path
 
 try:
+    from lib import failure_log
     from lib.failure_log import home
 except ImportError:  # loaded bare, with scripts/lib on the path
+    import failure_log
     from failure_log import home
 
 FILE = "owner-decisions.jsonl"
@@ -36,10 +38,10 @@ def record(prompt: str, session_id: str = "", now: float | None = None) -> int:
         return 0
     when = time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now if now is not None else time.time()))
     try:
-        with open(home() / FILE, "a", encoding="utf-8") as fh:
-            for n in numbers:
-                fh.write(json.dumps({"story": n, "at": when, "session": session_id, "text": prompt.strip()[:MAX_CHARS]}) + "\n")
-        _trim(home() / FILE)
+        rows = "".join(json.dumps({"story": n, "at": when, "session": session_id, "text": prompt.strip()[:MAX_CHARS]}) + "\n" for n in numbers)
+        with failure_log.locked(home() / FILE):  # the trim rewrites the file, so an append waits for it
+            failure_log.append_private(home() / FILE, rows)  # mode 600: the file holds the owner's full prompts
+            _trim(home() / FILE)
     except OSError:
         return 0
     return len(numbers)
@@ -49,7 +51,7 @@ def _trim(path: Path) -> None:
     """Keep only the newest MAX_ROWS lines of the file."""
     lines = path.read_text(encoding="utf-8").splitlines()
     if len(lines) > MAX_ROWS:
-        path.write_text("\n".join(lines[-MAX_ROWS:]) + "\n", encoding="utf-8")
+        failure_log.write_private(path, "\n".join(lines[-MAX_ROWS:]) + "\n")
 
 
 def entries(n: int) -> list[dict]:

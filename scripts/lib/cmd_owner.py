@@ -85,18 +85,17 @@ def add(session: str, step: str, command: str = "", error: str = "", tab: str = 
         raise ValueError("a prepared step carries its tab and what happens after submit together")
     if tab.strip() and (command.strip() or error.strip()):
         raise ValueError("a prepared step is the tab and the after-submit line, not a command and error")
-    if tab.strip():
-        nxt = max((i["id"] for i in _lines()), default=0) + 1
-        item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
-                "command": "", "error": "", "tab": tab, "after": after, "check": check, "status": "open"}
-        _append(item)
-        return item
-    if bool(command.strip()) != bool(error.strip()):
+    if not tab.strip() and bool(command.strip()) != bool(error.strip()):
         raise ValueError("a step carries the command tried and its error together")
-    nxt = max((i["id"] for i in _lines()), default=0) + 1
-    item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
-            "command": command, "error": error, "status": "open", **(extra or {})}
-    _append(item)
+    with failure_log.locked(path()):  # the next id and the append are one step, so two writers never share an id
+        nxt = max((i["id"] for i in _lines()), default=0) + 1
+        if tab.strip():
+            item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
+                    "command": "", "error": "", "tab": tab, "after": after, "check": check, "status": "open"}
+        else:
+            item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
+                    "command": command, "error": error, "status": "open", **(extra or {})}
+        _append(item)
     return item
 
 

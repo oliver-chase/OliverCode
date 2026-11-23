@@ -385,19 +385,17 @@ def _check_clean_clone_suite(record: Path | None = None, now: float | None = Non
 
 
 def _check_fleet_repo(dest: Path | None = None) -> tuple[int, int, int]:
-    """The fleet folder holds the registry and owner rules, and it must be a git repo (#993). A loose folder is made one here with its
-    files committed and keeps every file; a folder that cannot be made one fails."""
-    from lib.cmd_initfleet import make_local_repo
+    """The fleet folder holds the registry and owner rules, and it must be a git repo (#993). Health only reads: a loose folder fails
+    and names the command that makes it a repo."""
     dest = dest or fleet_registry_path().parent
     print("\nFleet repo:")
     if not (dest / "repo-profiles.json").exists():
         print("  [INFO] no fleet folder here yet; `olivercode install` makes one")
         return 0, 0, 1
-    made, error = make_local_repo(dest)
-    if error:
-        print(f"  [FAIL] {dest} is not a git repo and could not be made one: {error}")
+    if not (dest / ".git").exists():
+        print(f"  [FAIL] {dest} is a loose folder, not a git repo; run `git -C {dest} init` and commit its files")
         return 0, 1, 0
-    print(f"  [OK] {dest} was a loose folder; it is now a git repo with its files committed" if made else f"  [OK] {dest} is a git repo")
+    print(f"  [OK] {dest} is a git repo")
     return 1, 0, 0
 
 

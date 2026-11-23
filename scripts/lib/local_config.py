@@ -26,7 +26,7 @@ LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 
 # A setting a release adds gets its default here. The saved value wins, so a default only fills a key the user never set.
-DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": []}
+DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False}
 BACKLOG_CONFIG = "docs/backlog-config.json"
 LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
 
@@ -41,6 +41,11 @@ def load_local() -> dict:
         return {}
     with open(path) as f:
         return json.load(f)
+
+
+def delete_merged_remote_branches() -> bool:
+    """True only when the owner set deleteMergedRemoteBranches in olivercode.local.json. The daily job lists merged origin branches and deletes them only with this."""
+    return load_local().get("deleteMergedRemoteBranches") is True
 
 
 def _path(value: str | None) -> Path | None:

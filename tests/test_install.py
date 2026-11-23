@@ -51,13 +51,14 @@ class FleetRepo(unittest.TestCase):
         self.assertEqual(1, len(pushed))
         self.assertEqual(1, self.commits(other))
 
-    def test_a_loose_folder_keeps_its_files_and_health_makes_it_a_repo(self):
+    def test_a_loose_folder_fails_health_and_stays_untouched_until_made_a_repo(self):
         dest = temp_dir(self) / "fleet"
         dest.mkdir()
         (dest / "repo-profiles.json").write_text('{"repos": []}')
-        self.assertEqual((1, 0, 0), quiet(health_checks._check_fleet_repo, dest)[0])
+        self.assertEqual((0, 1, 0), quiet(health_checks._check_fleet_repo, dest)[0])
         self.assertEqual('{"repos": []}', (dest / "repo-profiles.json").read_text())
-        self.assertEqual(1, self.commits(dest))
+        self.assertFalse((dest / ".git").exists())
+        cmd_initfleet.make_local_repo(dest)
         self.assertEqual((1, 0, 0), quiet(health_checks._check_fleet_repo, dest)[0])
         self.assertEqual(1, self.commits(dest))
 

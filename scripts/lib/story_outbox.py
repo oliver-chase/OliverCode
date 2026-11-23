@@ -67,12 +67,13 @@ def add(repo: str, title: str, body: str) -> dict:
     pattern = repo_name_guard._pattern(repo_name_guard.default_names()) if repo_name_guard.is_olivercode(repo) else None
     if pattern:
         title, body = (pattern.sub(repo_name_guard.REPLACEMENT, t) for t in (title, body))
-    for held in waiting():
-        if held["repo"] == repo and held["title"] == title:
-            return held
     item = {"created": datetime.now(timezone.utc).isoformat(timespec="seconds"), "repo": repo, "title": title, "body": body}
-    with _locked(), outbox_file().open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(item) + "\n")
+    with _locked():  # the duplicate check and the append are one step, so two adds of one story queue it once
+        for held in waiting():
+            if held["repo"] == repo and held["title"] == title:
+                return held
+        with outbox_file().open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(item) + "\n")
     return item
 
 

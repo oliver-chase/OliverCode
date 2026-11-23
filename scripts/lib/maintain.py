@@ -26,6 +26,7 @@ from pathlib import Path
 
 from lib.cli import MIN_PYTHON, newer_python
 from lib import failure_log, hygiene, launchd, placement, repo_gates, repo_state
+from lib import local_config
 from lib.local_config import OC_ROOT, claude_dir
 
 LABEL = "com.olivercode.maintain"
@@ -123,13 +124,13 @@ def check_branches(cfg: placement.Config, fix: bool, now: float | None = None) -
                         if "/HEAD" not in b and b.split("/", 1)[-1] not in PROTECTED_BRANCHES and b != "origin")
         if mergeable or remote:
             text = f"{repo.name}: {len(mergeable)} merged local branch(es)" + (f" ({', '.join(mergeable[:4])})" if mergeable else "")
-            text += f" and {len(remote)} merged remote branch(es) left undeleted" if remote else ""
+            text += f" and {len(remote)} merged remote branch(es) on origin, deleted only when deleteMergedRemoteBranches is true in olivercode.local.json" if remote else ""
             problem = Problem("branches", text, fixable=bool(mergeable))
             if fix and mergeable:
                 for name in mergeable:
                     _git(repo, "branch", "-d", name)
                 after = set(_git(repo, "branch", "--format=%(refname:short)").stdout.split())
-                problem.fixed = not (set(mergeable) & after) and not remote
+                problem.fixed = not (set(mergeable) & after)
             found.append(problem)
         stale = []
         for line in _git(repo, "for-each-ref", "--format=%(refname:short) %(committerdate:unix)", "refs/heads").stdout.splitlines():
@@ -303,7 +304,7 @@ def check_tidy(cfg: placement.Config, fix: bool, ps_text: str | None = None, tas
     removed, kept = [], []
     trees = placement.worktrees(cfg)
     if fix:
-        lines = placement.clean(cfg, apply=True)
+        lines = placement.clean(cfg, apply=True, remote=local_config.delete_merged_remote_branches())  # deleting on origin is the owner's call
         removed = [l for l in lines if l.startswith("REMOVE")]
         found += [Problem("tidy", l, fixable=True) for l in lines if l.startswith("FAILED")]
     gone = {l.split(" ", 1)[1] for l in removed}

@@ -157,8 +157,8 @@ def describe(rec: dict, now: float) -> str:
 class Heartbeat:
     """A background thread that reports every BEAT_SECONDS while a run builds, since a single builder can run past the stall limit."""
 
-    def __init__(self, slug: str, pid: int, every: float = BEAT_SECONDS, clock=time.time):
-        self.slug, self.pid, self.every, self.clock = slug, pid, every, clock
+    def __init__(self, slug: str, pid: int, every: float = BEAT_SECONDS, clock=time.time, also=None):
+        self.slug, self.pid, self.every, self.clock, self.also = slug, pid, every, clock, also  # `also` runs on each beat, for the claims a live run keeps
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -166,7 +166,9 @@ class Heartbeat:
         while not self.stop.wait(self.every):
             try:
                 beat(self.slug, self.pid, self.clock())
-            except OSError:
+                if self.also:
+                    self.also()
+            except (OSError, RuntimeError):
                 pass
 
     def __enter__(self):

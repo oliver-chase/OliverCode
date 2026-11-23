@@ -108,6 +108,11 @@ def clear_copies(repo: Path, archive: Path, copies: list[Copy]) -> int:
         elif c.verdict == "older":
             dest = archive / "stray-copies" / repo.name / c.path.relative_to(repo)
             dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():  # the archived copy is the only one of its version, so a second move gets a fresh name
+                stem, n = dest.name, 1
+                while dest.with_name(f"{stem}.{n}").exists():
+                    n += 1
+                dest = dest.with_name(f"{stem}.{n}")
             shutil.move(str(c.path), str(dest))
         else:
             continue
