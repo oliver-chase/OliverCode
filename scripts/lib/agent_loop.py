@@ -181,8 +181,8 @@ REVIEW_BRIEF = ("You are a fresh reader. You see only the story, the diff and th
                 "when it does. Otherwise list each finding on its own line with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
-FIX_BRIEF = ("A fresh reader checked your story's commit and reports a problem below. Fix it, commit by explicit path and stop: the runner validates "
-             "and the reader reads the commit again.\n\nThe story:\n{task}\n\nThe diff so far:\n{diff}\n\nThe reader's finding:\n{finding}")
+FIX_BRIEF = ("You are a new session, not the story's builder. A fresh reader checked the story's commit and reports the findings below. Fix every finding "
+             "in one commit by explicit path and stop: the runner validates and the reader reads the commit again.\n\nThe story:\n{task}\n\nThe diff so far:\n{diff}\n\nThe reader's finding:\n{finding}")
 
 
 def review_brief(task: str, cwd: str | Path, finding: str) -> str:

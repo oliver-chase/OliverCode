@@ -31,9 +31,14 @@ class FakeIo:
         self.stops, self.owner = stops or {}, []  # story number -> the policy stop its builder hit; the owner-queue lines written
         self.closed, self.comments, self.started, self.claims, self.lock = [], [], [], set(), threading.Lock()
         self.active, self.peak_overlap = set(), []
+        self.deps = {}  # story number -> the numbers of the stories that block it (#1064)
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
 
     def landed_lead(self, i): return self.leads.get(i["number"])
+
+    def blockers(self, i):
+        """The blockers of a story that are still open, as GitHub's dependency link would name them."""
+        return [b for b in self.deps.get(i["number"], []) if b not in self.closed]
 
     def list_open(self):
         return [i for i in self.issues if i["number"] not in self.closed]
@@ -123,6 +128,36 @@ class DrainCase(unittest.TestCase):
         self.assertIn("Skipped #3: it names no Files area.", out)
         self.assertEqual(1, out.count("Skipped #1:"))
         self.assertEqual(code, 0)
+
+    def test_a_blocked_story_waits_and_names_its_blocker(self):
+        io = FakeIo([issue(1), issue(2)], cap=1)
+        io.deps = {1: [9]}
+        code, out, _ = self.run_drain(io)
+        self.assertEqual(io.started, [2])
+        self.assertIn("Skipped #1: it is blocked by open #9.", out)
+        self.assertEqual(1, out.count("Skipped #1:"))
+
+    def test_a_story_whose_blocker_closes_runs_in_priority_order(self):
+        io = FakeIo([issue(1, "Priority: P0"), issue(2, "Priority: P1")], cap=1)
+        io.deps = {1: [2]}
+        code, out, _ = self.run_drain(io)
+        self.assertEqual(io.started, [2, 1])
+        self.assertIn("Skipped #1: it is blocked by open #2.", out)
+
+    def test_the_default_blockers_read_only_open_ones_and_skip_the_call_when_none_are_open(self):
+        calls = []
+
+        def gh(args):
+            calls.append(args)
+            rows = [{"number": 7, "state": "open"}, {"number": 8, "state": "closed"}]
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps(rows), stderr="")
+
+        io = cmd_drain.Io(Path("/repo"), "o/r", runner=gh)
+        self.assertEqual([], io.blockers({"number": 1}))
+        self.assertEqual([], io.blockers({"number": 1, "issue_dependencies_summary": {"blocked_by": 0, "total_blocked_by": 2}}))
+        self.assertEqual([], calls)
+        self.assertEqual([7], io.blockers({"number": 1, "issue_dependencies_summary": {"blocked_by": 1}}))
+        self.assertEqual(["api", "repos/o/r/issues/1/dependencies/blocked_by"], calls[0])
 
     def test_a_repo_with_no_validation_is_refused_before_any_builder_starts(self):
         io = FakeIo([issue(1)], cap=1)

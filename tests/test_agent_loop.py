@@ -297,6 +297,8 @@ class TestLoop(unittest.TestCase):
         for text in ("do it", "THE-DIFF", "scripts/a.py: no test"):
             self.assertIn(text, run.prompts[2])  # the fix session gets the story, the diff and the finding
         self.assertNotIn("held", out)
+        self.assertEqual("", run.resumes[2])  # a new session, never the builder's resumed one (#1064)
+        self.assertIn("one commit", run.prompts[2])
 
     def test_a_second_finding_holds_the_story_and_nothing_is_pushed(self):
         run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("scripts/b.py: still wrong"))

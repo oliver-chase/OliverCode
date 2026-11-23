@@ -101,6 +101,18 @@ class Io:
             return None
         return {(i.get("content") or {}).get("number"): i for i in items}
 
+    def blockers(self, issue: dict) -> list[int]:
+        """The numbers of the open stories that block this one, through GitHub's REST dependency link. The list read says how many are open, so a story
+        with none costs no call. A read that fails holds nothing back (#1064)."""
+        if not (issue.get("issue_dependencies_summary") or {}).get("blocked_by"):
+            return []
+        done = self.gh(["api", f"repos/{self.slug}/issues/{issue['number']}/dependencies/blocked_by"])
+        try:
+            rows = json.loads(done.stdout) if done.returncode == 0 else []
+        except ValueError:
+            rows = []
+        return sorted(r["number"] for r in rows if isinstance(r, dict) and r.get("state") == "open" and "number" in r)
+
     def claimed(self, issue: dict) -> bool:
         """True when another session holds a live claim."""
         n, now = issue["number"], time.time()
@@ -427,6 +439,11 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     if issue["number"] not in reported:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")
+                    continue
+                if held := io.blockers(issue):  # a story waits until every blocker is closed, and the skip names the blocker (#1064)
+                    if (issue["number"], tuple(held)) not in reported:
+                        reported.add((issue["number"], tuple(held)))
+                        say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
                     continue
                 todo.append(issue)
             busy = [intake.files_area(i.get("body") or "") for i in running.values()]  # one overlap rule, shared with the planner (#1014)
