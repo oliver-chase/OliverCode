@@ -189,6 +189,16 @@ class DesignFile(unittest.TestCase):
         self.assertEqual(str(own), local_config.load_local()["designFile"])
         self.assertEqual(1, len(asked))
 
+    def test_an_existing_design_file_setting_does_not_prompt_again(self):
+        from lib import local_config
+        own = temp_dir(self) / "mine.md"
+        own.write_text("mine\n")
+        self.config.write_text(json.dumps({"designFile": str(own)}))
+        asked = []
+        quiet(cmd_install.design_step, lambda q: asked.append(q) or "")
+        self.assertEqual([], asked)
+        self.assertEqual(str(own), local_config.load_local()["designFile"])
+
     def test_a_blank_answer_keeps_the_shipped_design_and_is_not_asked_again(self):
         from lib import local_config
         asked = []
