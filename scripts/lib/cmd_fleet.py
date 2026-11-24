@@ -56,6 +56,10 @@ def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None,
                 print(f"  [FAIL] the fleet registry is empty in {registry_file(oc_root)}, so no repo was checked. {fleet_message}")
                 return 1
             print(f"  [SKIP] no fleet registered in {registry_file(oc_root)}. {fleet_message}")
+        if repos:
+            print("\nRepo names:")
+            from lib import cmd_health
+            cmd_health.repo_names_check(profiles, fleet_root or oc_root.parent)  # an open name question is a warning, so the result does not change the exit code (#1034)
     results, settings = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)
     failed = 0
     for (name, _, _, _), rows in zip(repos, results):
