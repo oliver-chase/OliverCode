@@ -15,7 +15,7 @@ from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_boardsweep as sweep  # noqa: E402
-from lib import cmd_fleetsync, cmd_groom, cmd_owner, cmd_status  # noqa: E402
+from lib import cmd_fleetsync, cmd_groom, cmd_owner, cmd_status, status_page  # noqa: E402
 
 NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
 
@@ -508,6 +508,61 @@ class TestRerankClears(unittest.TestCase):
         cmd_groom.review_imported(*args, run=lambda a: "", file=lambda *a: filed.append(a), queued=lambda slug, title: False)
         self.assertEqual(2, len(filed))
         self.assertEqual({"numbers": list(range(1, 11)), "seen": False}, mine["rerank"])
+
+
+class RevampNumbersCase(unittest.TestCase):
+    """#896: the four revamp numbers for the last seven days, printed by status and shown on the City page."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.handovers = self.root / "land"
+        self.handovers.mkdir()
+        self.repo = self.root / "work" / "repo-a"
+        self.projects = self.root / "projects"
+        self.folder = status_page.project_dir(self.repo, self.projects)
+        self.folder.mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def age(self, path, days):
+        stamp = (NOW - timedelta(days=days)).timestamp()
+        os.utime(path, (stamp, stamp))
+
+    def transcript(self, name, entrypoint, days):
+        path = self.folder / name
+        path.write_text(json.dumps({"type": "user", "entrypoint": entrypoint}) + "\n", encoding="utf-8")
+        self.age(path, days)
+
+    def test_the_four_numbers_count_the_last_seven_days(self):
+        rows = [dict(issue("2026-11-01", "2026-11-20"), number=4), dict(issue("2026-11-01", "2026-11-21"), number=5), dict(issue("2026-11-01"), number=6)]
+        log = [{"story": "story-4", "input": 600, "output": 400}, {"story": "story-5", "input": 1000, "output": 0}]
+        for name, days in (("handover-4.md", 1), ("handover-5.md", 30)):
+            path = self.handovers / name
+            path.write_text("# Story did not land\n", encoding="utf-8")
+            self.age(path, days)
+        self.transcript("a.jsonl", "cli", days=0.1)
+        self.transcript("b.jsonl", "sdk-cli", days=0.1)
+        self.transcript("c.jsonl", "cli", days=30)
+        numbers = cmd_status.four_numbers(NOW, 14, rows, log, self.repo, self.projects, self.handovers)
+        self.assertEqual({"tokens_per_closed": 1000, "handovers": 1, "threads": 1, "open": 14}, numbers)
+
+    def test_run_prints_the_four_numbers_and_makes_no_model_call(self):
+        rows = [dict(issue("2026-11-01", "2026-11-20"), number=4)]
+        out = io.StringIO()
+        with mock.patch.object(cmd_status, "run_log", return_value=[{"story": "story-4", "input": 10, "output": 5}]), \
+                mock.patch.object(cmd_status.subprocess, "run", side_effect=AssertionError("no model call")):
+            cmd_status.run("o/r", count=lambda s, state: 3, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"),
+                           live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "", folder=self.repo,
+                           numbers=lambda: cmd_status.four_numbers(NOW, 3, rows, [{"story": "story-4", "input": 10, "output": 5}], self.repo,
+                                                                    self.projects, self.handovers))
+        self.assertIn("Revamp numbers, last 7 days: tokens per closed story 15, handovers 0, threads typed into 0, open stories 3.", out.getvalue())
+
+    def test_no_closed_story_says_the_tokens_are_not_recorded(self):
+        numbers = cmd_status.four_numbers(NOW, 2, [], [], self.repo, self.projects, self.handovers)
+        self.assertIsNone(numbers["tokens_per_closed"])
+        self.assertIn("tokens per closed story not recorded", cmd_status.numbers_line(numbers))
 
 
 if __name__ == "__main__":

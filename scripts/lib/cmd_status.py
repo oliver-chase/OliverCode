@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import agent_loop, candidates, cmd_groom, cmd_owner, intake, failure_log, gh_budget, open_issues, relay, repo_state, run_lock, validate_queue
+from lib import agent_loop, candidates, cmd_groom, cmd_owner, intake, failure_log, gh_budget, open_issues, relay, repo_state, run_lock, status_page, validate_queue
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -270,15 +270,61 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
     return lines + warnings
 
 
-def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
-    """The tokens the runner spent per story closed in ROWS, from the run log's input and output counts for each of those stories (#982)."""
+def tokens_per_closed(rows: list[dict], log: list[dict]) -> tuple[int, int] | None:
+    """The average tokens and the count of the stories closed in ROWS that the run log counted, or None when it counted none (#982)."""
     spent = {}
     for entry in log:
         spent[str(entry.get("story"))] = spent.get(str(entry.get("story")), 0) + int(entry.get("input") or 0) + int(entry.get("output") or 0)
     counted = [spent[f"story-{r.get('number')}"] for r in landed(rows) if spent.get(f"story-{r.get('number')}")]
     if not counted:
+        return None
+    return sum(counted) // len(counted), len(counted)
+
+
+def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
+    """The tokens the runner spent per story closed in ROWS, from the run log's input and output counts for each of those stories (#982)."""
+    found = tokens_per_closed(rows, log)
+    if not found:
         return f"Tokens per closed story: not recorded for the last {DAYS} days."
-    return f"Tokens per closed story: {sum(counted) // len(counted):,} across {len(counted)} stories closed in the last {DAYS} days."
+    return f"Tokens per closed story: {found[0]:,} across {found[1]} stories closed in the last {DAYS} days."
+
+
+def handovers(now: datetime, folder: Path | None = None, days: int = DAYS) -> int:
+    """The handover files written in the last DAYS: the stories that did not land and wait for a next session (#896)."""
+    from lib import cmd_land
+    since = (now - timedelta(days=days)).timestamp()
+    return sum(1 for path in (folder or cmd_land.log_dir()).glob("handover-*.md") if path.stat().st_mtime >= since)
+
+
+def typed_threads(folder: Path, now: datetime, projects: Path | None = None, days: int = DAYS) -> int:
+    """The interactive Claude threads in FOLDER whose transcript changed in the last DAYS. A runner's headless builder is not a thread (#896)."""
+    projects = projects or Path.home() / ".claude" / "projects"
+    since = (now - timedelta(days=days)).timestamp()
+    count = 0
+    for path in status_page.project_dir(folder, projects).glob("*.jsonl"):
+        try:
+            if path.stat().st_mtime < since or any(row.get("entrypoint") == status_page.HEADLESS for row in status_page._first_lines(path)):
+                continue
+        except OSError:
+            continue
+        count += 1
+    return count
+
+
+def four_numbers(now: datetime, open_now: int, rows: list[dict], log: list[dict], folder: Path, projects: Path | None = None,
+                 handover_dir: Path | None = None) -> dict:
+    """The four revamp numbers for the last DAYS (#896): tokens per closed story (None when not recorded), handovers, threads typed into and open stories."""
+    found = tokens_per_closed(rows, log)
+    return {"tokens_per_closed": found[0] if found else None, "handovers": handovers(now, handover_dir),
+            "threads": typed_threads(folder, now, projects), "open": open_now}
+
+
+def numbers_line(numbers: dict) -> str:
+    """The one line that prints the four revamp numbers (#896)."""
+    tokens = numbers["tokens_per_closed"]
+    spent = f"{tokens:,}" if tokens is not None else "not recorded"
+    return (f"Revamp numbers, last {DAYS} days: tokens per closed story {spent}, handovers {numbers['handovers']}, "
+            f"threads typed into {numbers['threads']}, open stories {numbers['open']}.")
 
 
 def _slot_name(label: str) -> str:
@@ -370,7 +416,7 @@ def no_origin(folder: Path) -> str:
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
-        waiting=None, cands=None, folder: Path | None = None) -> int:
+        waiting=None, cands=None, folder: Path | None = None, numbers=None) -> int:
     if not slug:
         out(no_origin(folder or Path.cwd()))
         return 1
@@ -385,6 +431,7 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
         out(f"Error: the issues of {slug} were not read.")
         return 1
     out(f"{slug}: " + summary(open_now, rows, now))
+    out(numbers_line((numbers or (lambda: four_numbers(now, open_now, rows, run_log(), folder or Path.cwd())))()))
     for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
         out(line)
     steps = (waiting or (lambda: waiting_lines(slug)))()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)

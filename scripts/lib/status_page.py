@@ -6,7 +6,8 @@
 The data is a dict: `run` (None when idle, else repo, title, models, builders, finish, plan, building), `last_landed`, `repos` (name, slug,
 description, pushed, activity, issues, threads) and `landed` (number, title, repo, landed_at, commit, model). An issue carries number, title, priority,
 status, body_html, updated_at and building. `threads` (#1003) is `{"active": [...], "recent": [...]}` from `threads(folders, now)`: each thread has
-title, minutes, tokens, mtime and last_activity.
+title, minutes, tokens, mtime and last_activity. `numbers` (#896) is `cmd_status.four_numbers(...)` for the last seven days: tokens_per_closed
+(None when the run log counted none), handovers, threads and open. Without it the Revamp numbers section says not recorded yet.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ TERMS = {  # one line each, shown as a tooltip wherever the term appears in the 
     "claim": "A builder marks a story as its own so no second builder takes it.",
     "gate": "A check that must pass before a commit or a landing goes through.",
 }
-SECTIONS = (("building", "Building now"), ("org", "Organization"), ("stories", "Open stories"), ("landed", "Landed"))
+SECTIONS = (("building", "Building now"), ("org", "Organization"), ("stories", "Open stories"), ("numbers", "Revamp numbers"), ("landed", "Landed"))
 STYLE = """
 :root{--field:%(field)s;--text:%(text)s;--sub:%(sub)s;--line:%(line)s;--hi:%(highlight)s;--serif:%(serif)s;--sans:%(sans)s;--mono:%(mono)s;
 --s1:8px;--s2:16px;--s3:24px;--s4:40px;--tap:44px}
@@ -191,6 +192,21 @@ def landed(items) -> str:
     return f'<section id="landed"><h2>Landed</h2><div class="panel"><ul style="list-style:none;padding:0">{rows or "<li>Nothing landed yet.</li>"}</ul></div></section>'
 
 
+def numbers_block(numbers: dict | None) -> str:
+    """The four revamp numbers for the last seven days (#896): tokens per closed story, handovers, threads typed into and open stories."""
+    if not numbers:
+        return '<section id="numbers"><h2>Revamp numbers</h2><div class="card"><p>Not recorded yet.</p></div></section>'
+    tokens = numbers.get("tokens_per_closed")
+    items = (
+        ("Tokens per closed story", f"{tokens:,}" if tokens is not None else "not recorded"),
+        ("Handovers", numbers.get("handovers", 0)),
+        ("Threads typed into", numbers.get("threads", 0)),
+        ("Open stories", numbers.get("open", 0)),
+    )
+    rows = "".join(f"<li>{esc(label)}: <b>{esc(value)}</b></li>" for label, value in items)
+    return f'<section id="numbers"><h2>Revamp numbers</h2><div class="card"><p>Last seven days.</p><ul>{rows}</ul></div></section>'
+
+
 def render(data: dict, tokens: dict | None = None) -> str:
     """The whole page. `tokens` (the owner's own, #995) override the defaults one key at a time."""
     style = STYLE
@@ -202,7 +218,7 @@ def render(data: dict, tokens: dict | None = None) -> str:
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         f'<title>OliverCode City</title><link rel="stylesheet" href="{FONTS_URL}"><style>{style}</style></head><body id="page-top">'
         f'<nav aria-label="Sections">{nav}</nav><main><h1>OliverCode City</h1>'
-        f"{banner(data.get('run'), data.get('last_landed'), interactive_count(repos))}{org_chart(repos, data.get('run'))}{stories(repos)}{landed(data.get('landed', []))}</main>"
+        f"{banner(data.get('run'), data.get('last_landed'), interactive_count(repos))}{org_chart(repos, data.get('run'))}{stories(repos)}{numbers_block(data.get('numbers'))}{landed(data.get('landed', []))}</main>"
         '<a class="top" href="#page-top" aria-label="Back to top">&#8593;</a></body></html>'
     )
 
