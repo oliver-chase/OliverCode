@@ -50,6 +50,12 @@ class TestRunCli(unittest.TestCase):
         self.assertEqual({"mcpServers": {}}, json.loads(argv[argv.index("--mcp-config") + 1]))
         self.assertEqual("Read,Edit,Write,Bash,Grep,Glob", argv[argv.index("--allowedTools") + 1])
 
+    def test_the_built_in_tool_set_is_narrowed_and_skills_are_disabled(self):
+        run, _ = self.call()
+        argv = run.call_args_list[0][0][0]
+        self.assertIn("--disable-slash-commands", argv)
+        self.assertEqual("Read,Edit,Write,Bash,Grep,Glob", argv[argv.index("--tools") + 1])
+
     def test_every_token_kind_and_the_cost_come_back(self):
         _, out = self.call()
         self.assertEqual({"input": 3, "output": 4, "cache_read": 100, "cache_write": 50}, out["usage"])

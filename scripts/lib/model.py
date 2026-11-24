@@ -64,17 +64,20 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
     `stop` is the CLI's own stop reason: its `terminal_reason` ('max_turns' when the turn cap ended the session), else its result subtype, and '' when it gave none (#877).
     `stderr` is the last STDERR_TAIL characters of what the CLI wrote to stderr.
     `project_only` runs the session with the project's settings and OliverCode's own hooks, with the owner's ~/.claude settings left out (#911). None reads PROJECT_ENV, which is project-only unless it is "0" (#1016), and
-    `settings` names which setup ran: 'project' or 'current'. The installed OliverCode hooks run on every tool the call uses, because Claude Code loads them from ~/.claude."""
+    `settings` names which setup ran: 'project' or 'current'. The installed OliverCode hooks run on every tool the call uses, because Claude Code loads them from ~/.claude.
+    `--tools` narrows the built-in set the CLI makes available, not only what `--allowedTools` pre-approves, so a call never carries the agent listing or the deferred-tool listing for a tool it cannot use (#1146).
+    `--disable-slash-commands` drops the skill listing, because a headless call never runs one by name."""
     if not available():
         raise ModelError("The claude command is not on PATH. Install Claude Code and sign in with `claude`.")
     if project_only is None:
         project_only = os.environ.get(PROJECT_ENV) != "0"
     argv = ["claude", "-p", prompt, "--output-format", "json", "--max-turns", str(max_turns)]
     argv += ["--strict-mcp-config", "--mcp-config", EMPTY_MCP]
+    argv += ["--disable-slash-commands"]
     if project_only:
         argv += ["--setting-sources", "project,local", "--settings", project_settings()]
     if allowed_tools:
-        argv += ["--allowedTools", allowed_tools]
+        argv += ["--tools", allowed_tools, "--allowedTools", allowed_tools]
     if system:
         argv += ["--append-system-prompt", system]
     if model:
