@@ -2,7 +2,7 @@
 `olivercode board groom [--config FILE | --all | --force]` calls no model; a repo unchanged since the last run costs no GraphQL call.
 
 Beyond drift it sets a blank Priority and Size from the story body, moves an unblocked Backlog story that has both to
-Ready, closes an exact duplicate (same title and Files area) as a duplicate of the older story, and queues one owner line for each weaker pair and each story whose criteria already appear in the repo (#1100). It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). `maintain --fix` runs it, the
+Ready, closes an exact duplicate (same title and Files area) as a duplicate of the older story (#1100), links each other duplicate pair that shares a Files area with a comment on each story naming the one to keep (#1089), and queues one owner line for each weaker pair and each story whose criteria already appear in the repo (#1100). It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). `maintain --fix` runs it, the
 SessionStart hook starts it in the background when the last success is over 24 hours old, and `health` fails after 48.
 
 A story imported from a file (a `Source:` line naming one) carries a copied Priority, so groom labels it
@@ -270,6 +270,36 @@ def pair_numbers(pairs):
     return {int(n) for pair in pairs for n in re.match(r"#(\d+) and #(\d+) share", pair).groups()}
 
 
+def pair_of(line):
+    """The two story numbers a duplicate line names, lower first."""
+    return tuple(sorted(int(n) for n in re.match(r"#(\d+) and #(\d+) share", line).groups()))
+
+
+def linked_pair(line, mine):
+    """True when both stories of the pair already carry their duplicate comment (#1089)."""
+    a, b = pair_of(line)
+    done = mine.get("linked", {}).get(f"{a}-{b}", [])
+    return a in done and b in done
+
+
+def link_duplicates(slug, pairs, stories, mine, run=gh):
+    """One comment on each story of a duplicate pair whose Files areas also overlap, naming the other story and the lower-numbered one to keep (#1089).
+    mine["linked"] holds the numbers each pair has commented on, so a story that is already done is never commented again."""
+    from lib import intake
+    linked = mine.setdefault("linked", {})
+    for line in pairs:
+        a, b = pair_of(line)
+        if a not in stories or b not in stories or not intake.overlaps(intake.files_area(stories[a].get("body") or ""), intake.files_area(stories[b].get("body") or "")):
+            continue
+        done = linked.setdefault(f"{a}-{b}", [])
+        for n, other in ((a, b), (b, a)):
+            if n in done:
+                continue
+            text = f"Possible duplicate of #{other}: the titles and Files areas match. Keep #{a} and close #{b}."
+            if run(["api", "-X", "POST", f"repos/{slug}/issues/{n}/comments", "-f", f"body={text}"]) is not None:
+                done.append(n)
+
+
 def last_ok(state=None, slugs=None):
     """The oldest success time across the boards (all of `slugs`, else every repo in the state), or None when one never succeeded."""
     state = load_state() if state is None else state
@@ -354,6 +384,8 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if flagged and json.dumps(flagged) != mine.get("split"):
             cmd_owner.note("groom", f"{name}: {len(flagged)} story(ies) need a rewrite before dispatch: " + "; ".join(flagged)[:600])
         mine["split"] = json.dumps(flagged)
+        link_duplicates(slug, pairs, stories, mine, run)
+        pairs = [p for p in pairs if not linked_pair(p, mine)]  # a linked pair already has its comments, so the owner is not asked again (#1089)
         if pairs and json.dumps(pairs) != mine.get("dups"):
             cmd_owner.note("groom", f"{name}: {len(pairs)} possible duplicate pair(s): " + "; ".join(pairs)[:600])
         mine["dups"] = json.dumps(pairs)

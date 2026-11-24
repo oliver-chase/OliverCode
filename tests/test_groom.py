@@ -71,6 +71,47 @@ class TestGroomNames(unittest.TestCase):
         self.assertEqual(self.groom("## Dispatch planning\n\nRun `olivercode dispatch`.\n"), [])
 
 
+class TestDuplicatesAreLinked(unittest.TestCase):
+    """#1089: a duplicate pair whose Files areas overlap gets one comment on each story naming the one to keep, and the owner is not asked for it."""
+
+    def setUp(self):
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
+        patch.start()
+        self.addCleanup(patch.stop)
+        repo = temp_dir(self)
+        (repo / "docs").mkdir()
+        self.config = repo / "docs" / "backlog-config.json"
+        self.config.write_text(json.dumps({"repoOwner": "o", "repoName": "r"}))
+        titles = {1: "Add the duplicate link to groom", 2: "Add the duplicate link to groom now"}  # identical titles are exact duplicates, closed by #1100
+        self.items = [{"content": {"number": n, "title": titles[n]}, "status": "Backlog", "priority": "P1", "size": "S"} for n in (1, 2)]
+        self.stories = {n: {"number": n, "title": titles[n], "body": "Files area: scripts/lib/a.py\n", "labels": []} for n in (1, 2)}
+
+    def groom(self, run):
+        with mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), \
+                mock.patch.object(cmd_groom, "fingerprint", return_value="fp"), mock.patch("check_board_hygiene.load_items", return_value=self.items), \
+                mock.patch("board_rest.repo_issues", return_value=[]), mock.patch.object(cmd_groom, "open_stories", return_value=self.stories), \
+                mock.patch("batch_project.main"), mock.patch.object(cmd_groom.cmd_owner, "note") as note:
+            return cmd_groom.groom_board("R", self.config, True, 1.0, run=run), note
+
+    def test_a_pair_is_linked_once_and_the_owner_is_never_asked_for_it(self):
+        run = mock.Mock(return_value="")
+        ok, note = self.groom(run)
+        self.assertTrue(ok)
+        self.assertEqual([c.args[0][3] for c in run.call_args_list], ["repos/o/r/issues/1/comments", "repos/o/r/issues/2/comments"])
+        self.assertTrue(all("Keep #1 and close #2" in c.args[0][-1] for c in run.call_args_list))
+        self.assertFalse(any("possible duplicate" in c.args[1] for c in note.call_args_list))
+        again = mock.Mock(return_value="")
+        self.groom(again)
+        again.assert_not_called()
+
+    def test_a_pair_without_a_shared_files_area_is_not_linked_and_still_goes_to_the_owner(self):
+        self.stories[2]["body"] = "Files area: scripts/lib/b.py\n"
+        run = mock.Mock(return_value="")
+        _, note = self.groom(run)
+        run.assert_not_called()
+        self.assertTrue(any("possible duplicate" in c.args[1] for c in note.call_args_list))
+
+
 class TestGroomFields(unittest.TestCase):
     def card(self, number, status="Backlog", **fields):
         return {"content": {"number": number, "title": f"t{number}"}, "status": status, **fields}
