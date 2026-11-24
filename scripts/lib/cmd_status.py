@@ -95,15 +95,35 @@ def runner_alive() -> bool:
         return False
 
 
-def held_numbers(now: float) -> set[int]:
+def held_numbers(now: float, slug: str = "") -> set[int]:
     """The story numbers that a live claim or an open owner-queue step holds back from Ready. A claim names its story in its key, and a policy stop names
-    its story in its step (#1058)."""
-    held = {int(key.rsplit("#", 1)[-1]) for key in live_claims(now) if key.rsplit("#", 1)[-1].isdigit()}
+    its story in its step (#1058). With `slug`, only that repo's claims count, since another repo's story with the same number holds nothing here (#1095)."""
+    held = {int(key.rsplit("#", 1)[-1]) for key in live_claims(now) if key.rsplit("#", 1)[-1].isdigit() and (not slug or key.rpartition("#")[0] == slug)}
     try:
         steps = [i for i in cmd_owner.items() if i["status"] == "open"]
     except (OSError, ValueError, KeyError):
         steps = []
     return held | {int(n) for i in steps for n in re.findall(r"Story #(\d+)", str(i.get("step", "")))}
+
+
+def closed_claims(claims: dict, slug: str, rows: list[dict], runner=issue_count.gh_list) -> set[str]:
+    """The claim keys whose story is closed. This repo's come from ROWS, the issues updated in the last week, and another repo's from one REST read each (#1095)."""
+    done = set()
+    for key in claims:
+        repo, _, n = key.rpartition("#")
+        if not n.isdigit():
+            continue
+        if repo == slug:
+            if any(r.get("number") == int(n) and r.get("state") == "closed" for r in rows):
+                done.add(key)
+            continue
+        try:
+            read = runner([f"repos/{repo}/issues/{n}", "--jq", ".state"])
+        except (OSError, subprocess.SubprocessError):
+            continue  # an unreadable repo leaves its claim shown as building
+        if read.returncode == 0 and read.stdout.strip() == "closed":
+            done.add(key)
+    return done
 
 
 def _number(line: str) -> int | None:
@@ -215,6 +235,7 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
     lines, warnings = [], []
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
+        repo = key.rpartition("#")[0].rsplit("/", 1)[-1]
         rows = [r for r in log if r.get("story") == f"story-{n}"]
         progress = float(mine.get("at", 0))
         if holder and n.isdigit() and int(n) in (holder.get("building") or []):
@@ -232,7 +253,7 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
             title = f", {_text(issue.get('title'), 60)}" if issue.get("title") else ""
             phase = phase_of(this_run(rows, began))
             spent = max(0, int((now - began) // 60))
-            lines.append(f"Building #{n}{title}: started {datetime.fromtimestamp(began):%H:%M}, {spent} minutes ago, round {current_round(rows, began, limit)} of {limit}, "
+            lines.append(f"Building {repo} #{n}{title}: started {datetime.fromtimestamp(began):%H:%M}, {spent} minutes ago, round {current_round(rows, began, limit)} of {limit}, "
                          f"in {phase}, {estimate(log if history is None else history, size, now, spent)}." + quiet_note(rows, began, now, (commits or {}).get(n)))
     if not lines:
         lines.append("The runner is running and no story is building." if alive else
@@ -266,12 +287,15 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     log = run_log()
     from lib import gated
     holder = run_lock.active(slug, stamp) if slug else {}
-    ready = next_ready(digest_path(), held_numbers(stamp))
+    ready = next_ready(digest_path(), held_numbers(stamp, slug))
     claims = live_claims(stamp)
+    closed = closed_claims(claims, slug, rows)
+    stale = [f"Stale claim: {key.rpartition('#')[0]} #{key.rpartition('#')[2]} is closed, so it is not building. Delete its entry in {claims_path()}." for key in sorted(closed)]
+    claims = {k: v for k, v in claims.items() if k not in closed}
     issues = {str(i.get("number")): i for i in (open_issues.fetch(slug) or [])} if slug and claims else {}
     commits = {n: t for n in (key.rsplit("#", 1)[-1] for key in claims) if (t := last_commit(slug, n))}
     return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, claims, log, runner_alive(), open_now, ready,
-                                                                           (landed(rows) or [None])[0], holder, issues, commits, build_history(rows, log))
+                                                                           (landed(rows) or [None])[0], holder, issues, commits, build_history(rows, log)) + stale
 
 
 def last_commit(slug: str, n: str) -> float | None:

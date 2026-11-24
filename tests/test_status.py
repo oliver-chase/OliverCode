@@ -209,7 +209,25 @@ class TestDigest(unittest.TestCase):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 600}}
         log = [{"story": "story-7", "round": 2, "at": "2026-11-21T23:58:00Z"}]
         lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "P0 #9 First", {"number": 4, "title": "Done"})
-        self.assertEqual([f"Building #7: started {datetime.fromtimestamp(NOW.timestamp() - 600).strftime('%H:%M')}, 10 minutes ago, round 2 of 2, in validation and the fresh reader, no estimate yet.", "Last landed: #4 Done. Next Ready: P0 #9 First."], lines)
+        self.assertEqual([f"Building r #7: started {datetime.fromtimestamp(NOW.timestamp() - 600).strftime('%H:%M')}, 10 minutes ago, round 2 of 2, in validation and the fresh reader, no estimate yet.", "Last landed: #4 Done. Next Ready: P0 #9 First."], lines)
+
+    def test_builders_from_two_repos_each_name_their_repo_and_a_closed_story_is_dropped(self):
+        """#1095: a claim's repo shows on its line, a claim for another repo's number holds nothing here, and a closed story is stale, not building."""
+        claims = {"o/OliverCode#1031": {"agent": "drain", "at": NOW.timestamp() - 60}, "o/digioperator#824": {"agent": "drain", "at": NOW.timestamp() - 60}}
+        lines = cmd_status.activity(NOW.timestamp(), claims, [], True, 5, "", None)
+        self.assertTrue(lines[0].startswith("Building OliverCode #1031"))
+        self.assertTrue(lines[1].startswith("Building digioperator #824"))
+        rows = [{"number": 824, "state": "closed"}]
+        gone = SimpleNamespace(returncode=0, stdout="open\n")
+        self.assertEqual({"o/OliverCode#824"}, cmd_status.closed_claims({"o/OliverCode#824": {}, "o/digioperator#824": {}}, "o/OliverCode", rows, lambda a: gone))
+        with mock.patch.object(cmd_status, "live_claims", return_value={"o/digioperator#824": {}}), mock.patch.object(cmd_status.cmd_owner, "items", return_value=[]):
+            self.assertEqual(set(), cmd_status.held_numbers(NOW.timestamp(), "o/OliverCode"))
+
+    def test_a_failed_read_of_another_repos_story_leaves_its_claim_building(self):
+        """#1095: a gh timeout or a missing gh binary must not crash status."""
+        def broken(args):
+            raise OSError("no gh")
+        self.assertEqual(set(), cmd_status.closed_claims({"o/other#5": {}}, "o/OliverCode", [], broken))
 
     def test_minutes_count_from_the_claims_start_and_the_round_skips_rows_without_one(self):
         """#1093: a claim renewed every minute kept reading 0 or -1 minutes, and a row with no round printed round 0."""
@@ -230,7 +248,7 @@ class TestDigest(unittest.TestCase):
         log = [{"story": "story-7", "round": 2, "at": "2026-11-22T00:05:00Z"}]
         issues = {"7": {"number": 7, "title": "Small one", "body": "Size: S"}}
         line = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None, None, issues)[0]
-        self.assertIn("Building #7, Small one: started", line)
+        self.assertIn("Building r #7, Small one: started", line)
         self.assertIn("round 3 of 3, in validation and the fresh reader", line)
 
     def test_minutes_count_from_the_start_when_the_claim_was_rewritten_a_minute_ago(self):
