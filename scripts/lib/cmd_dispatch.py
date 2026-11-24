@@ -167,7 +167,8 @@ def _local_claim(slug: str, n: int, now: float, write: str = "", clear: bool = F
             return ""
         if write:
             claims = {k: v for k, v in claims.items() if now - float(v.get("at", 0)) < limit}
-            claims[key] = {"agent": write, "at": now}
+            since = float((claims.get(key) or {}).get("since") or now)  # a renewal moves "at" and keeps when the claim began (#1093)
+            claims[key] = {"agent": write, "since": since, "at": now}
             failure_log.write_private(path, json.dumps(claims))
             return ""
     mine = claims.get(key) or {}

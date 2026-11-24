@@ -155,7 +155,9 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
         elif (now - progress) / 60 > STALL_MINUTES:
             warnings.append(stall_line(n, mine, int((now - progress) // 60), holder))
         else:
-            lines.append(f"Building #{n} for {int((now - float(mine.get('at', 0))) // 60)} minutes on round {rows[-1].get('round', 0) if rows else 0}.")
+            began = float(mine.get("since") or mine.get("at", 0))  # the claim's start, which a renewal keeps (#1093)
+            round_ = next((r["round"] for r in reversed(rows) if isinstance(r.get("round"), int)), 0)  # a row with no round says nothing (#1093)
+            lines.append(f"Building #{n} for {max(0, int((now - began) // 60))} minutes on round {round_}.")
     if not lines:
         lines.append("The runner is running and no story is building." if alive else
                      f"Runner idle: no story is building and {open_now} stories are open. Start it with `olivercode drain REPO`.")

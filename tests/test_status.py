@@ -203,6 +203,13 @@ class TestDigest(unittest.TestCase):
         lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "P0 #9 First", {"number": 4, "title": "Done"})
         self.assertEqual(["Building #7 for 10 minutes on round 2.", "Last landed: #4 Done. Next Ready: P0 #9 First."], lines)
 
+    def test_minutes_count_from_the_claims_start_and_the_round_skips_rows_without_one(self):
+        """#1093: a claim renewed every minute kept reading 0 or -1 minutes, and a row with no round printed round 0."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 26 * 60, "at": NOW.timestamp() + 5}}
+        log = [{"story": "story-7", "round": 2}, {"story": "story-7"}]
+        lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)
+        self.assertEqual("Building #7 for 26 minutes on round 2.", lines[0])
+
     def test_an_idle_runner_says_so_and_names_the_command_that_starts_it(self):
         lines = cmd_status.activity(NOW.timestamp(), {}, [], False, 3, "", None)
         self.assertEqual(["Runner idle: no story is building and 3 stories are open. Start it with `olivercode drain REPO`.",

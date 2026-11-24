@@ -164,6 +164,18 @@ class TestDispatch(DispatchCase):
         self.assertIn("other-session", out)
 
 
+class TestClaimStart(DispatchCase):
+    def test_a_renewed_claim_keeps_its_start(self):
+        """#1093: renewal moves the claim's time and never its start."""
+        cmd_dispatch._local_claim("o/r", 5, 1000.0, write="drain")
+        cmd_dispatch._local_claim("o/r", 5, 1600.0, write="drain")
+        entry = json.loads((self.home / "dispatch-claims.json").read_text())["o/r#5"]
+        self.assertEqual((1000.0, 1600.0), (entry["since"], entry["at"]))
+        cmd_dispatch._local_claim("o/r", 5, 1700.0, clear=True)
+        cmd_dispatch._local_claim("o/r", 5, 1800.0, write="drain")
+        self.assertEqual(1800.0, json.loads((self.home / "dispatch-claims.json").read_text())["o/r#5"]["since"])
+
+
 class TestForkOrigin(DispatchCase):
     def with_origin(self, url):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
