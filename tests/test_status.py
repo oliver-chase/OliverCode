@@ -209,14 +209,70 @@ class TestDigest(unittest.TestCase):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 600}}
         log = [{"story": "story-7", "round": 2, "at": "2026-11-21T23:58:00Z"}]
         lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "P0 #9 First", {"number": 4, "title": "Done"})
-        self.assertEqual(["Building #7 for 10 minutes on round 2.", "Last landed: #4 Done. Next Ready: P0 #9 First."], lines)
+        self.assertEqual([f"Building #7: started {datetime.fromtimestamp(NOW.timestamp() - 600).strftime('%H:%M')}, 10 minutes ago, round 2 of 2, in validation and the fresh reader, no estimate yet.", "Last landed: #4 Done. Next Ready: P0 #9 First."], lines)
 
     def test_minutes_count_from_the_claims_start_and_the_round_skips_rows_without_one(self):
         """#1093: a claim renewed every minute kept reading 0 or -1 minutes, and a row with no round printed round 0."""
         claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 26 * 60, "at": NOW.timestamp() + 5}}
-        log = [{"story": "story-7", "round": 2}, {"story": "story-7"}]
+        log = [{"story": "story-7", "round": 1}, {"story": "story-7"}]
         lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)
-        self.assertEqual("Building #7 for 26 minutes on round 2.", lines[0])
+        self.assertIn("26 minutes ago, round 2 of 2,", lines[0])
+
+    def test_a_new_story_is_round_1_and_an_earlier_run_does_not_set_the_round(self):
+        """#1086: no finished round reads round 1, and rows logged before this claim began are a previous run's."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 60, "at": NOW.timestamp()}}
+        old = [{"story": "story-7", "round": 2, "at": "2026-11-21T20:00:00Z"}]
+        self.assertIn("1 minutes ago, round 1 of 2,", cmd_status.activity(NOW.timestamp(), claims, old, True, 5, "", None)[0])
+
+    def test_a_small_story_shows_its_third_round_and_its_title(self):
+        """#1086: a small story gets 3 rounds, so its third round reads round 3 of 3, with the story's title."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 600, "at": NOW.timestamp()}}
+        log = [{"story": "story-7", "round": 2, "at": "2026-11-22T00:05:00Z"}]
+        issues = {"7": {"number": 7, "title": "Small one", "body": "Size: S"}}
+        line = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None, None, issues)[0]
+        self.assertIn("Building #7, Small one: started", line)
+        self.assertIn("round 3 of 3, in validation and the fresh reader", line)
+
+    def test_minutes_count_from_the_start_when_the_claim_was_rewritten_a_minute_ago(self):
+        """#1086: a claim posted again keeps its start, so 42 minutes of building read 42 minutes."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 42 * 60, "at": NOW.timestamp() - 60}}
+        log = []
+        self.assertIn("42 minutes ago, round 1 of 2,", cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)[0])
+
+    def test_the_line_names_the_phase_this_run_is_in(self):
+        """#1086: a finished round of this run means validation and the reader, a passing review means landing, and an earlier run's rows say nothing."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 600, "at": NOW.timestamp()}}
+        old = {"story": "story-7", "review": "pass", "at": "2026-11-21T20:00:00Z"}
+        rnd = {"story": "story-7", "round": 1, "at": "2026-11-21T23:55:00Z"}
+        review = {"story": "story-7", "review": "pass", "at": "2026-11-21T23:58:00Z"}
+        for log, phase in (([old], "the builder session"), ([old, rnd], "validation and the fresh reader"), ([old, rnd, review], "landing")):
+            self.assertIn(f"in {phase},", cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)[0])
+
+    def test_three_landed_stories_of_its_size_give_an_estimated_finish(self):
+        """#1086: the median build minutes of landed stories of the same size, less the minutes spent, set the finish; fewer than 3 give none."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 600, "at": NOW.timestamp()}}
+        issues = {"7": {"number": 7, "title": "Small one", "body": "Size: S"}}
+        landed_rows = [{"story": f"story-{n}", "built_minutes": m, "size": "S"} for n, m in ((1, 20), (2, 40), (3, 100))]
+        other = [{"story": "story-4", "built_minutes": 5, "size": "M"}]
+        finish = datetime.fromtimestamp(NOW.timestamp() + 30 * 60).strftime("%H:%M")
+        line = cmd_status.activity(NOW.timestamp(), claims, landed_rows + other, True, 5, "", None, None, issues)[0]
+        self.assertIn(f"estimated finish {finish}.", line)
+        line = cmd_status.activity(NOW.timestamp(), claims, landed_rows[:2] + other, True, 5, "", None, None, issues)[0]
+        self.assertIn("no estimate yet.", line)
+
+    def test_a_story_whose_log_and_commits_have_not_moved_says_so(self):
+        """#1086: 45 minutes in with nothing new for 20 minutes, the line says so with the last thing it did, and a newer commit counts as a move."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 45 * 60, "at": NOW.timestamp()}}
+        log = [{"story": "story-7", "round": 1, "stop": "end_turn", "at": "2026-11-21T23:40:00Z"}]
+        line = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)[0]
+        self.assertIn("No progress for 20 minutes: the last thing it did was ending round 1 at", line)
+        moved = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None, None, None, {"7": NOW.timestamp() - 120})[0]
+        self.assertNotIn("No progress", moved)
+
+    def test_build_history_spans_each_landed_story_log_rows(self):
+        log = [{"story": "story-3", "at": "2026-11-21T10:00:00Z"}, {"story": "story-3", "at": "2026-11-21T10:30:00Z"}]
+        rows = [{"number": 3, "closed_at": "2026-11-21T10:31:00Z", "body": "Size: S"}, {"number": 4, "body": "Size: S"}]
+        self.assertEqual([{"size": "S", "built_minutes": 30.0}], cmd_status.build_history(rows, log))
 
     def test_an_idle_runner_says_so_and_names_the_command_that_starts_it(self):
         lines = cmd_status.activity(NOW.timestamp(), {}, [], False, 3, "", None)
@@ -249,7 +305,7 @@ class TestDigest(unittest.TestCase):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 2400}}
         holder = {"pid": 4242, "who": "drain r", "building": [7], "beat": NOW.timestamp() - 60}
         lines = cmd_status.activity(NOW.timestamp(), claims, [], True, 1, "", None, holder)
-        self.assertTrue(lines[0].startswith("Building #7 for 40 minutes"))
+        self.assertIn("40 minutes ago", lines[0])
         self.assertFalse(any("stalled" in line for line in lines))
 
     def test_a_long_round_whose_holder_is_not_building_it_is_stalled(self):
