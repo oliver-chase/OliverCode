@@ -315,7 +315,12 @@ def _write_targets(name: str, rest: list[str]) -> list[str]:
             targets.append(w[3:])
         i += 1
     words = [w for w in rest if not w.startswith("-") and not REDIRECT.match(w) and not w.startswith(">")]
-    if name in WRITERS_ALL or (name == "sed" and any(w.startswith("-i") or w == "--in-place" for w in rest)):
+    if name == "sed" and any(w.startswith("-i") or w == "--in-place" for w in rest):
+        # The script is the first plain word, or the value of -e or -f, and is not a file the command writes.
+        scripted = any(w in ("-e", "-f", "--expression", "--file") or w.startswith(("--expression=", "--file=")) for w in rest)
+        values = {rest[j + 1] for j, w in enumerate(rest[:-1]) if w in ("-e", "-f", "--expression", "--file")}
+        targets += [w for w in (words if scripted else words[1:]) if w not in values]
+    elif name in WRITERS_ALL:
         targets += words
     elif name in WRITERS_LAST and words:
         targets.append(words[-1])
