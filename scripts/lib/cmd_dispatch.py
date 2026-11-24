@@ -99,8 +99,10 @@ def file_excerpts(body: str, repo) -> str:
 
 
 def gh(args: list[str]):
-    """Run `gh`, refusing first while the shared GitHub hold is on."""
-    why = gh_budget.refusal()
+    """Run `gh`, refusing first while the shared GitHub hold is on for what it spends: a REST `gh api` call still runs
+    under a GraphQL-only hold."""
+    rest = args[:1] == ["api"] and "graphql" not in args[1:2]
+    why = gh_budget.refusal("rest" if rest else "graphql")
     if why:
         return subprocess.CompletedProcess(args, 1, "", why)
     return subprocess.run(["gh", *args], capture_output=True, text=True)

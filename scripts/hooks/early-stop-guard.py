@@ -34,17 +34,11 @@ ASKS_USER_RE = re.compile(
     re.IGNORECASE,
 )
 QUOTED_RE = re.compile(r"```.*?```|`[^`\n]*`|\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d|^>.*$", re.DOTALL | re.MULTILINE)
-# A closing message that hands the owner a step ("you need to run", "please open") must say what the agent
-# tried first: a command, an error text or a tool name in the same message (#550).
+# A closing message that hands the owner a step ("you need to run", "please open") must follow a tool call that ran it
+# and was refused (#550, #622).
 OWNER_STEP_RE = re.compile(
     r"\b(you(?:'ll| will)? (?:need|have|must|should) to|please (?:run|open|click|install|add|set|paste|enter|log|sign|go|copy|restart|check|create)|"
     r"(?:run|paste|copy) (?:this|the following|these)|you (?:can|could) (?:run|open|click|install|paste))",
-    re.IGNORECASE,
-)
-ATTEMPT_RE = re.compile(
-    r"(`[^`\n]+`|```|\b(?:error|errno|exit(?:ed)? (?:code|status)?|denied|refused|failed|failure|traceback|timed out|blocked|"
-    r"unauthorized|forbidden|not found|permission|returned)\b|\bI (?:tried|ran|attempted|called|used)\b|\bmcp__\w+|"
-    r"\b(?:Bash|gh|git|curl|npm|pip|brew)\s+\w+)",
     re.IGNORECASE,
 )
 # Words in a tool result that show the call was refused or failed (#622). Text the agent wrote never counts.
@@ -224,15 +218,15 @@ def _written_owner_lists(transcript_path: Path) -> str:
     return "\n".join(found)
 
 
-def _handoff_without_attempt(text: str, transcript_path: Path | None = None) -> bool:
+def _handoff_without_attempt(text: str, transcript_path: Path) -> bool:
     """True when `text` hands the owner a step and no tool call in this session ran it and was refused.
 
     Refusal words in the text do not count: a step copied from an older list carries them with no attempt behind it (#622)."""
     if not OWNER_STEP_RE.search(text):
         return False
-    refused = _refused_calls(transcript_path) if transcript_path else None
+    refused = _refused_calls(transcript_path)
     if refused is None:
-        return not ATTEMPT_RE.search(text) and transcript_path is None
+        return False
     commands = [c.strip() for c in COMMAND_RE.findall(text)]
     return not any(c in call for c in commands for call in refused) if commands else not refused
 

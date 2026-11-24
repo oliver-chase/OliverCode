@@ -242,9 +242,9 @@ def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
         _check_shape(current)
     except (OSError, ValueError):
         current = {}
-    present = {h.get("command") for groups in (current.get("hooks") or {}).values()
+    present = {(g.get("matcher"), h.get("command")) for groups in (current.get("hooks") or {}).values()
                for g in groups for h in g.get("hooks", []) if isinstance(h, dict)}
-    return [script for _, _, script in MANAGED if _command(script, hooks_dir) not in present]
+    return [script for _, matcher, script in MANAGED if (matcher, _command(script, hooks_dir)) not in present]
 
 
 def install(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> str:

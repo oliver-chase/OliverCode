@@ -58,7 +58,7 @@ def fingerprint(slug, root, run=gh):
     return f"{newest}|{hashlib.sha1(heads.encode()).hexdigest()[:12]}" if newest else ""
 
 
-SECURITY = re.compile(r"secret|credential|leak|vulnerab|security|data loss|lose data|lost data", re.I)
+SECURITY = re.compile(r"secret|credential|leaked|leak(?:s|ing)? (?:a |the |an )?(?:key|token|secret|password|credential)|vulnerab|security|data loss|lose data|lost data", re.I)
 DEFECT = re.compile(r"\b(bug|broken|fails?|failing|crash|regress\w*|wrong)\b", re.I)
 BLOCKED = re.compile(r"blocked by|depends on #|needs a decision|waiting on", re.I)
 HELD_LABELS = {"owner-action", "blocked"}

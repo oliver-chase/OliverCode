@@ -31,7 +31,7 @@ import repo_gates  # noqa: E402
 RULE_LINKS = ("CLAUDE.md", "VOICE.md", "DESIGN.md")
 
 
-def notes(cwd: Path, claude_dir: Path, session_id: str = "") -> list[str]:
+def notes(cwd: Path, claude_dir: Path) -> list[str]:
     out = []
     for name in RULE_LINKS:
         link = claude_dir / name
@@ -173,7 +173,7 @@ def main() -> int:
     except json.JSONDecodeError:
         data = {}
     cwd = Path(data.get("cwd") or ".")
-    found = notes(cwd, Path.home() / ".claude", str(data.get("session_id") or ""))
+    found = notes(cwd, Path.home() / ".claude")
     parts = (["OliverCode session check: " + " ".join(found)] if found else []) + status_line(cwd)
     if parts:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}))

@@ -114,5 +114,14 @@ class TestHealth(HomeCase):
         self.assertEqual([], self.line(self.health()))
 
 
+class TestShellFiles(HomeCase):
+    def test_no_startup_file_for_a_shell_the_machine_lacks(self):
+        with mock.patch.object(queue_shim.shutil, "which", lambda name: None if name == "zsh" else "/bin/" + name):
+            self.install()
+            self.assertFalse((self.home / ".zshenv").exists())
+            self.assertTrue((self.home / ".bashrc").exists())
+            self.assertIsNone(queue_shim.launcher_problem(REPO_ROOT))
+
+
 if __name__ == "__main__":
     unittest.main()
