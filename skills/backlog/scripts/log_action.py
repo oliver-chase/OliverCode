@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "lib"))
 
 import repo_name_guard  # noqa: E402
+from lib import intake  # noqa: E402
 
 ROLES = ("builder", "claim")
 CLAIM_HOURS = 2
@@ -59,6 +60,30 @@ def commit_names_story(commit, story, root=None):
     if not re.search(rf"#{story}(?!\d)", done.stdout):
         return f"commit {commit} does not name #{story} in its message, so it is not this story's commit"
     return None
+
+
+BATCH = re.compile(r"batch session with #(\d+)")
+
+
+def batch_names(commit, story, repo, runner=None, root=None):
+    """None when story N's comments say "batch session with #M" and `commit` names (#M) and changed a file in N's Files area, else False.
+    A batched build lands under the other story's number, so that commit is the builder's commit for N too (#1084)."""
+    runner = runner or gh_api
+    git = ["git"] + (["-C", str(root)] if root else [])
+    notes = runner(["--paginate", "--slurp", f"repos/{repo}/issues/{story}/comments"])
+    body = runner([f"repos/{repo}/issues/{story}", "--jq", ".body"])
+    shown = subprocess.run(git + ["show", "--name-only", "--format=%B%x00", commit], capture_output=True, text=True)
+    if notes.returncode or body.returncode or shown.returncode:
+        return False
+    try:
+        pages = json.loads(notes.stdout or "[]")
+    except ValueError:
+        return False
+    texts = [c.get("body") or "" for page in pages for c in (page if isinstance(page, list) else [page]) if isinstance(c, dict)]
+    message, _, names = shown.stdout.partition("\0")
+    area = intake.files_area(body.stdout)
+    partners = {m for t in texts for m in BATCH.findall(t)}
+    return None if any(f"(#{m})" in message for m in partners) and intake.overlaps(names.split(), area) else False
 
 
 def build_comment(agent, role, commit, files, result):
@@ -161,7 +186,7 @@ def parse_args(argv):
 
 def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_author, pushed=commit_pushed, names=None, names_story=commit_names_story):
     args = parse_args(argv)
-    problems = []
+    problems, unnamed = [], None
     plain = args.check_claim or args.role == "claim"
     if not plain and not HASH.match(args.commit):
         problems.append(f"--commit {args.commit!r} is not a commit hash (7 to 40 hex characters)")
@@ -170,9 +195,7 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_autho
         if reason:
             problems.append(reason)
         elif args.story is not None:
-            reason = names_story(args.commit, args.story)
-            if reason:
-                problems.append(reason)
+            unnamed = names_story(args.commit, args.story)
     if not plain and args.files < 0:
         problems.append("--files cannot be negative")
     agent = args.agent
@@ -198,6 +221,8 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_autho
                 problems.append(f"cannot read the repo from {args.config}: {exc}")
     if repo and not REPO.match(repo):
         problems.append(f"repo {repo!r} is not OWNER/NAME")
+    if unnamed and repo and REPO.match(repo) and batch_names(args.commit, args.story, repo, runner) is not None:
+        problems.append(unnamed)  # a commit that names another story counts only when a batch session built both (#1084)
     if problems:
         for line in problems:
             print(f"log_action: {line}", file=err)
