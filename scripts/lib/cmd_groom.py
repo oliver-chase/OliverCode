@@ -401,6 +401,7 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if names and json.dumps(names) != mine.get("names"):
             cmd_owner.note("groom", f"{name}: " + name_drift.summary(names)[:700])
         mine["names"] = json.dumps(names)
+        mine["impact"] = {str(n): v for n, v in impact(stories).items()}  # what each story unblocks and shares files with (#1090)
         if fixes:
             with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
                 json.dump({"issues": fixes}, f)
@@ -430,6 +431,23 @@ def related_to(body, stories):
     from lib import intake
     mine = intake.files_area(body)
     return sorted(n for n, s in stories.items() if intake.overlaps(mine, intake.files_area(s.get("body") or "")))
+
+
+BLOCKED_BY = re.compile(r"^Blocked by:(.*)$", re.M | re.I)
+
+
+def impact(stories):
+    """{number: {"unblocks": open stories naming it in their Blocked by line, "shares": open stories sharing a file with it}} (#1090). No model call."""
+    from lib import intake
+    blockers = {n: {int(x) for line in BLOCKED_BY.findall(s.get("body") or "") for x in re.findall(r"#(\d+)", line)} for n, s in stories.items()}
+    return {n: {"unblocks": sum(n in b for m, b in blockers.items() if m != n),
+                "shares": related_to(s.get("body") or "", {m: t for m, t in stories.items() if m != n})}
+            for n, s in sorted(stories.items())}
+
+
+def unblocks_of(slug, number):
+    """The recorded count of stories this one unblocks, read from the groom record with no model call, 0 when none is recorded."""
+    return int(((load_state().get(slug) or {}).get("impact") or {}).get(str(number), {}).get("unblocks", 0))
 
 
 def tracked(root):

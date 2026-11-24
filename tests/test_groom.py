@@ -243,6 +243,32 @@ class TestGroomRunsTheSweepsChecks(unittest.TestCase):
         check.assert_not_called()
 
 
+class TestGroomImpact(unittest.TestCase):
+    def stories(self):
+        body = lambda blocked, files: f"Blocked by: {blocked}.\nFiles area: {files}"
+        return {1: {"body": body("none", "a.py")}, 2: {"body": body("#1", "b.py")}, 3: {"body": body("#1, #2", "a.py")}}
+
+    def test_a_story_that_frees_others_is_counted(self):
+        found = cmd_groom.impact(self.stories())
+        self.assertEqual(found[1]["unblocks"], 2)
+        self.assertEqual(found[2]["unblocks"], 1)
+        self.assertEqual(found[3]["unblocks"], 0)
+
+    def test_shared_files_are_counted_both_ways(self):
+        found = cmd_groom.impact(self.stories())
+        self.assertEqual(found[1]["shares"], [3])
+        self.assertEqual(found[3]["shares"], [1])
+        self.assertEqual(found[2]["shares"], [])
+
+    def test_the_drain_reads_the_count_without_a_model(self):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            cmd_groom._state().parent.mkdir(parents=True, exist_ok=True)
+            cmd_groom._state().write_text(json.dumps({"o/r": {"impact": {"1": {"unblocks": 2, "shares": []}}}}))
+            self.assertEqual(cmd_groom.unblocks_of("o/r", 1), 2)
+            self.assertEqual(cmd_groom.unblocks_of("o/r", 9), 0)
+
+
 class TestGroomScheduling(unittest.TestCase):
     def test_maintain_fix_grooms_every_board_and_a_check_only_run_does_not(self):
         from lib import maintain
