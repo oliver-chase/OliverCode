@@ -330,7 +330,11 @@ def command_worktree(argv: list[str]) -> int:
     from lib import cmd_land, placement
     usage = "Usage: olivercode worktree add N | olivercode worktree fix [PATH]"
     if len(argv) == 2 and argv[0] == "add" and argv[1].isdigit():
-        repo = Path(subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True).stdout.strip() or ".git").parent
+        found = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True).stdout.strip()
+        if not found:
+            print(f"Error: {Path.cwd()} is not inside a git repo. `cd` into the repo that holds story {argv[1]}, then run `olivercode worktree add {argv[1]}`.")
+            return 1
+        repo = Path(found).parent
         wt = placement.config().worktrees / f"{repo.name}-{argv[1]}"
         problems = cmd_land.add_worktree(repo, wt, argv[1])
     elif argv[:1] == ["fix"] and len(argv) <= 2:

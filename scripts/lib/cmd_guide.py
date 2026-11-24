@@ -160,11 +160,15 @@ def explain(oc_root: Path, name: str) -> list[str]:
         if skill == key:
             out.append(f"Skill: {skill}\n  {text}\n  Lives in skills/{skill}/SKILL.md")
     gates = oc_root / "docs" / "GATES.md"
-    if gates.is_file():
-        for row in re.findall(r"(?m)^\| ([^|]+?) \| ([^|]+?) \|", gates.read_text(encoding="utf-8")):
-            if row[0].lower() == key:
-                out.append(f"Gate: {row[0]}\n  Blocks: {row[1]}\n  Lives in docs/GATES.md, and its script in core/hooks/gates/")
-                break
+    try:
+        table = gates.read_text(encoding="utf-8") if gates.is_file() else ""
+    except (OSError, UnicodeDecodeError) as exc:
+        out.append(f"Gate table unread: {gates} could not be read ({exc}). Run `olivercode update` to restore it.")
+        table = ""
+    for row in re.findall(r"(?m)^\| ([^|]+?) \| ([^|]+?) \|", table):
+        if row[0].lower() == key:
+            out.append(f"Gate: {row[0]}\n  Blocks: {row[1]}\n  Lives in docs/GATES.md, and its script in core/hooks/gates/")
+            break
     for cand in (f"{key}.py", f"{key.replace('-', '_')}.py", f"{key.replace('-', '_')}_guard.py", f"{key}-guard.py"):
         hook = oc_root / "scripts" / "hooks" / cand
         if hook.is_file() and ("guard" in cand or "guard" in _doc_first(hook).lower() or key.endswith("guard")):
@@ -183,6 +187,19 @@ def status_steps(oc_root: Path) -> list[str]:
     ]
 
 
+def _fleet_step(oc_root: Path) -> str:
+    """The first step, read from the registry: done with its count once repos are registered, else the command and why it is still to run.
+    shortcut: health is named, never run, since it spends gh calls and minutes; run it here when it gains a quick offline mode."""
+    from lib import repo_profiles
+    try:
+        profiles, path = repo_profiles.load_repo_profiles(oc_root)
+    except (OSError, ValueError) as exc:
+        return f"olivercode discover --root <folder holding your repos> --register    no fleet yet ({exc})"
+    if profiles:
+        return f"Done: {len(profiles)} repo(s) registered in {path}. Run discover again to add more"
+    return f"olivercode discover --root <folder holding your repos> --register    {path} names no repo yet"
+
+
 def command_guide(oc_root: Path, name: str | None = None) -> int:
     if name:
         found = explain(oc_root, name)
@@ -198,7 +215,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
         print(f"  {sentence}")
     print(f"  {THREAD_LINE}")
     print("\nFirst steps, in order")
-    print("  1. olivercode discover --root <folder holding your repos> --register    add your repos to the fleet")
+    print(f"  1. {_fleet_step(oc_root)}")
     print("  2. olivercode health                                                   check this machine")
     print("  3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO")
     print("\nUsing it well")

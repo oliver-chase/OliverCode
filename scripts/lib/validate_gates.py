@@ -156,10 +156,17 @@ def main(argv: list[str]) -> int:
     gates: list[tuple[str, str]] = []
     it = iter(argv)
     for arg in it:
-        if arg == "--timeout":
-            timeout = float(next(it))
-        elif arg == "--max-gates":
-            max_gates = int(next(it))
+        if arg in ("--timeout", "--max-gates"):
+            value = next(it, None)
+            try:
+                number = float(value) if arg == "--timeout" else int(value)
+            except (TypeError, ValueError):
+                print(f"Error: {arg} needs a number, such as `{arg} {'600' if arg == '--timeout' else '4'}`. Usage:\n{__doc__.strip()}")
+                return 2
+            if arg == "--timeout":
+                timeout = number
+            else:
+                max_gates = number
         elif "=" in arg:
             name, command = arg.split("=", 1)
             gates.append((name, command))

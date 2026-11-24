@@ -33,9 +33,13 @@ def command_commit_check(argv: list[str]) -> int:
     if hook is None:
         print("Error: no commit-msg hook found. Run `olivercode sync-hooks` first.")
         return 1
-    given = Path(draft).expanduser()
+    try:
+        given = Path(draft).expanduser()
+        is_file = len(argv) == 1 and given.is_file()
+    except OSError:  # a one-line message over 255 characters is no file name
+        is_file = False
     with tempfile.TemporaryDirectory(prefix="olivercode-commit-check-") as tmp:
-        if len(argv) == 1 and given.is_file():
+        if is_file:
             message = given
         else:
             message = Path(tmp) / "COMMIT_EDITMSG"

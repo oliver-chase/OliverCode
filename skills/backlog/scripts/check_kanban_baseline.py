@@ -10,6 +10,20 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "lib"))
+import gh_budget  # noqa: E402
+
+
+def scope_hint(text):
+    """The one command that fixes a `gh` failure the token causes, or an empty string for any other failure."""
+    low = (text or "").lower()
+    if "scope" in low or "read:project" in low or "insufficient" in low:
+        return " Run `gh auth refresh -s project,repo`, then run this again."
+    if "auth login" in low or "not logged" in low or "bad credentials" in low or "http 401" in low:
+        return " Run `gh auth login`, then run this again."
+    return ""
+
+
 BASELINE_PATH = Path(__file__).resolve().parents[3] / "shared" / "kanban-baseline.json"
 SINGLE_SELECT = "ProjectV2SingleSelectField"
 NOT_VISIBLE = ("A board's built-in workflows, such as one that moves an item when a pull request merges, "
@@ -26,7 +40,7 @@ def read_fields_from_gh(config):
          "--owner", config["projectOwner"], "--format", "json", "--limit", "100"],
         capture_output=True, text=True)
     if result.returncode != 0:
-        sys.exit(f"gh project field-list failed: {result.stderr.strip()}")
+        sys.exit(f"gh project field-list failed: {result.stderr.strip()}.{scope_hint(result.stderr) or ' Run `gh auth status` to check the login.'}")
     return json.loads(result.stdout)
 
 

@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 import board_mirror  # noqa: E402
 import gh_budget  # noqa: E402
+from check_kanban_baseline import scope_hint  # noqa: E402
 
 CHUNK = 15
 
@@ -87,7 +88,7 @@ def request(runner, query, write=True):
             break
     if gh_budget.is_limit(last):
         gh_budget.note_limit(who="batch_project")
-    raise RuntimeError(last)
+    raise RuntimeError(last + scope_hint(last))
 
 
 def discovery(cfg, issues, runner):

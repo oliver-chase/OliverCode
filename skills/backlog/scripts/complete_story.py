@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 import board_mirror  # noqa: E402
 import gh_budget  # noqa: E402
+from check_kanban_baseline import scope_hint  # noqa: E402
 import repo_name_guard  # noqa: E402
 from lib import rename_check  # noqa: E402
 from lib import claude_settings  # noqa: E402
@@ -182,8 +183,18 @@ RUN_OUTPUT = re.compile(r"^\s*Run output:\s*\S|^\s*Run output:\s*\n\s*\S", re.M)
 def call(runner, args):
     done = runner(args)
     if done.returncode != 0:
-        raise RuntimeError((done.stderr or "gh api failed").strip())
+        why = (done.stderr or "gh api failed").strip()
+        raise RuntimeError(why + scope_hint(why))
     return done.stdout
+
+
+def _already_posted(runner, repo, story, evidence):
+    """True when the story already holds a comment with exactly this evidence."""
+    try:
+        done = runner([f"repos/{repo}/issues/{story}/comments?per_page=100", "--paginate", "--jq", ".[].body | @json"])
+        return done.returncode == 0 and evidence.strip() in {json.loads(line).strip() for line in done.stdout.splitlines() if line.strip()}
+    except (OSError, ValueError):
+        return False
 
 
 def item_id(cfg, story, runner):
@@ -275,6 +286,8 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
     ]
     for i, (label, call_args) in enumerate(steps):
         try:
+            if i == 0 and _already_posted(runner, repo, args.story, evidence):
+                continue  # an earlier run posted it before it failed later, so a rerun adds no second copy
             call(runner, call_args)
         except (RuntimeError, ValueError) as exc:
             landed = ", ".join(s for s, _ in steps[:i]) or "nothing"

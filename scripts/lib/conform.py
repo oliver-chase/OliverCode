@@ -130,7 +130,10 @@ def hooks(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant
 def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant: str = "", **_) -> Row:
     """A declared variant or a private repo runs a different pre-commit, and the hooks row checks that file."""
     manifest = oc_root / "shared" / "project-bootstrap-manifest.json"
-    entries = json.loads(manifest.read_text()).get("templatedFiles", [])
+    try:
+        entries = json.loads(manifest.read_text()).get("templatedFiles", [])
+    except (OSError, ValueError, AttributeError) as exc:
+        return _fail("managed-files", f"{manifest} could not be read ({exc})", "olivercode update, which restores the manifest")
     drifted = []
     for entry in entries:
         if entry.get("mode") != "strict" or (entry["target"] == ".githooks/pre-commit" and (private or variant)):

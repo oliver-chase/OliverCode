@@ -38,7 +38,7 @@ FINISHED_STATUS_KEYS = {"complete", "done"}
 def run_gh(args):
     result = subprocess.run(["gh"] + args, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"gh {' '.join(args)} failed: {result.stderr.strip()}", file=sys.stderr)
+        print(f"gh {' '.join(args)} failed: {result.stderr.strip()}.{kanban.scope_hint(result.stderr) or ' Run `gh auth status` to check the login.'}", file=sys.stderr)
         sys.exit(1)
     return result.stdout
 

@@ -98,8 +98,13 @@ def registries_with_profiles(fleet_root: Path, reading: Path) -> list[Path]:
 def load_repo_profiles(repo_root):
     """Return (profiles: dict, source_path: Path)."""
     path = registry_file(repo_root)
-    with open(path) as f:
-        data = json.load(f)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(exc.errno, f"{path} is missing. Run `olivercode discover --register` to create it") from exc
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(f"{path} is not valid JSON ({exc.msg} at line {exc.lineno}). Fix that line, then run the command again", exc.doc, exc.pos) from exc
     return data.get("profiles", {}), path
 
 

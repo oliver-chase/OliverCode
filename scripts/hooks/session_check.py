@@ -31,6 +31,11 @@ import repo_gates  # noqa: E402
 RULE_LINKS = ("CLAUDE.md", "VOICE.md", "DESIGN.md")
 
 
+def _failed(what: str, exc: Exception) -> str:
+    """The session note for a check that raised: a SessionStart hook shows only its JSON, never stderr, so the owner reads the cause and the command that shows it."""
+    return f"The {what} check failed ({type(exc).__name__}: {exc}), so this session skipped it. Run `olivercode health` to see the cause."
+
+
 def notes(cwd: Path, claude_dir: Path) -> list[str]:
     out = []
     for name in RULE_LINKS:
@@ -101,8 +106,7 @@ def digest_notes(cwd: Path) -> list[str]:
         from lib import cmd_status, repo_state
         done = cmd_status.write_digest(repo_state.origin(root), out=lambda _text: None)
     except Exception as exc:  # noqa: BLE001 -- a digest bug never blocks a session
-        print(f"session_check: status digest failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return []
+        return [_failed("status digest", exc)]
     return done[2] if done else []
 
 
@@ -119,8 +123,7 @@ def run_notes(cwd: Path) -> list[str]:
         slug = repo_state.origin(root)
         rec = run_lock.active(slug) if slug else {}
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
-        print(f"session_check: run lock check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return []
+        return [_failed("run lock check", exc)]
     if not rec:
         return []
     building = ", ".join(f"#{n}" for n in rec.get("building") or [])
@@ -135,8 +138,7 @@ def placement_notes() -> list[str]:
         from lib import placement
         stray = placement.findings()
     except Exception as exc:  # noqa: BLE001 -- a placement bug never blocks a session
-        print(f"session_check: placement check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return []
+        return [_failed("placement check", exc)]
     if not stray:
         return []
     names = ", ".join(f"{f.path.name} ({f.kind})" for f in stray[:5]) + (f" and {len(stray) - 5} more" if len(stray) > 5 else "")
@@ -151,8 +153,7 @@ def checkout_notes() -> list[str]:
         from lib import main_checkout, maintain
         ahead = main_checkout.ahead_refusal(maintain.OC_ROOT) or main_checkout.stale_refusal(maintain.OC_ROOT)  # names the commits an ahead checkout holds, with the command that moves them (#785)
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
-        print(f"session_check: checkout fast-forward failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return []
+        return [_failed("checkout fast-forward", exc)]
     return [ahead] if ahead else []
 
 
@@ -162,8 +163,7 @@ def gh_notes() -> list[str]:
         import gh_budget
         why = gh_budget.refusal()
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
-        print(f"session_check: rate-limit note failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return []
+        return [_failed("rate-limit note", exc)]
     return [why] if why else []
 
 

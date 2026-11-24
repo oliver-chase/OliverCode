@@ -34,6 +34,14 @@ fi
 # warning and never counts. `olivercode commit-check` sets OLIVERCODE_COMMIT_CHECK to run these checks on a draft: it changes nothing and queues nothing (#881).
 BLOCK_COUNT=0
 block() { BLOCK_COUNT=$((BLOCK_COUNT + 1)); }
+# An early exit for a merge or a first commit still refuses when a check above it already blocked.
+exempt_exit() {
+  if [ "$BLOCK_COUNT" -gt 0 ]; then
+    echo "[commit-msg] $BLOCK_COUNT blocking finding$([ "$BLOCK_COUNT" -eq 1 ] || echo s). Fix all of them, then commit again."
+    exit 1
+  fi
+  exit 0
+}
 # REPO-NAME-1. The framework's own commits never name the owner's other repos. The names come from the local
 # registry through scripts/lib/repo_name_guard.py, which only the framework's checkout holds, so every other repo skips this check.
 GUARD_TOP="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -45,7 +53,7 @@ if [ -n "$GUARD_TOP" ] && [ -f "$GUARD_TOP/scripts/lib/repo_name_guard.py" ] && 
   rm -f "$GUARD_FILE"
   if [ "$GUARD_RC" -ne 0 ]; then
     echo "[commit-msg] BLOCKED: the message names another repo. Write \"another repo\" instead."
-    exit 1
+    block
   fi
 fi
 # sed quits at the first non-blank line, so a long message can close the pipe before printf finishes.
@@ -97,10 +105,10 @@ case "$SUBJECT" in
 esac
 if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
     && [ -z "$(staged_code)" ]; then
-  exit 0
+  exempt_exit
 fi
 if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
-  exit 0
+  exempt_exit
 fi
 
 # VOICE-1. A repo that ships docs/VOICE.md opts in to voice enforcement; every other repo skips it. A commit message follows docs/VOICE.md: no bullet that ends in a period and no contrast

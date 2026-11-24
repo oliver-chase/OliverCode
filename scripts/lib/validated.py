@@ -117,7 +117,11 @@ def check(root: Path, sha: str) -> int:
 
 def command(argv: list[str]) -> int:
     """`olivercode validated snapshot | record [TREE]` (in the current repo) or `olivercode validated check SHA`."""
-    root = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel"))
+    try:
+        root = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel"))
+    except (subprocess.CalledProcessError, OSError):
+        print(f"Error: {Path.cwd()} is not inside a git repo. Run `olivercode validated` from a repo's folder.")
+        return 1
     if argv == ["snapshot"]:
         print(working_tree(root))
         return 0

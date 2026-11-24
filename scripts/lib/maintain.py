@@ -41,6 +41,7 @@ class Problem:
     text: str
     fixable: bool = False
     fixed: bool = False
+    failed: bool = False  # the check itself did not run, so the owner fixes its cause and has no decision to make
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -376,7 +377,7 @@ def check_groom(fix: bool) -> list[Problem]:
     from lib import cmd_groom
     if cmd_groom.command_groom(["--all"]) == 0:
         return []
-    return [Problem("groom", "a board did not groom; the reason is in the owner queue and `~/.olivercode/groom-state.json`", fixable=False)]
+    return [Problem("groom", "a board did not groom; the reason is printed above and in `~/.olivercode/groom-state.json`", failed=True)]
 
 
 def check_queues(fix: bool) -> list[Problem]:
@@ -387,19 +388,20 @@ def check_queues(fix: bool) -> list[Problem]:
     try:
         denials.close_resolved()
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        return [Problem("queues", f"the owner queue was not processed: {error}", fixable=False)]
+        return [Problem("queues", f"the owner queue was not processed: {error}", failed=True)]
     return []
 
 
 def check_outsiders(fix: bool) -> list[Problem]:
     """Queues each issue or pull request by an author outside `allowedAuthors` for the owner once (#826)."""
     from lib import cmd_sweep, outsiders
+    skipped: list[str] = []
     try:
-        cfgs = [json.loads(p.read_text()) for _, p in cmd_sweep.boards()] if fix else []
+        cfgs = [json.loads(p.read_text()) for _, p in cmd_sweep.boards(skipped)] if fix else []
         outsiders.check([(c["repoName"], f"{c['repoOwner']}/{c['repoName']}") for c in cfgs])
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        return [Problem("outsiders", f"the outsider check did not run: {error}", fixable=False)]
-    return []
+        skipped.append(f"the outsider check did not run: {error}")
+    return [Problem("outsiders", line, failed=True) for line in skipped]
 
 
 def suite_record(code: int, out: str) -> dict:
@@ -484,7 +486,7 @@ def check_failure_candidates(fix: bool) -> list[Problem]:
     try:
         file_failure_candidates(failure_gaps())
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        return [Problem("candidates", f"the failing checks were not filed as candidates: {error}", fixable=False)]
+        return [Problem("candidates", f"the failing checks were not filed as candidates: {error}", failed=True)]
     return []
 
 
@@ -589,9 +591,11 @@ def report(problems: list[Problem], fix: bool) -> int:
             state = "FIXED"
         elif p.fixable and not fix:
             state = "FIXABLE (run with --fix)"
+        elif p.failed:
+            state = "CHECK FAILED"
         else:
             state = "NEEDS A DECISION" if not p.fixable else "NOT FIXED"
-        lines.append(f"  [{state}] {p.step}: {p.text}")
+        lines.append(f"  [{state}] {p.step}: {p.text}" + (". Fix that cause, then run `olivercode maintain --fix`" if p.failed and not p.text.rstrip().endswith("`") else ""))
         if state == "NEEDS A DECISION":
             _queue_decision(p)
         if not p.fixed:

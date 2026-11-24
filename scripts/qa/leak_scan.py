@@ -118,6 +118,9 @@ def main(argv: list[str]) -> int:
         for h in hits:
             print(f"  {h}")
         return 1 if hits else 0
+    if not (repo / ".git").exists():
+        print(f"Error: {repo} is not a git repo. Run `python3 scripts/qa/leak_scan.py PATH` with the path of a repo's folder.")
+        return 2
     result = scan(repo)
     print(report(result))
     return 1 if result["files"] else 0

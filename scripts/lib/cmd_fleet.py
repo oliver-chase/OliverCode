@@ -95,10 +95,12 @@ def _local_fix(oc_root: Path, repo: Path, kinds: set[str], private: bool, varian
             else:
                 _install_hook_pair(repo, templates, private_repo=private)
             _queue_block(oc_root, repo.name, repo)
-        if "managed-files" in kinds:
-            subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), "bootstrap", str(repo)], capture_output=True, text=True)
-        if "permission-policy" in kinds:
-            subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), "policy", "init", str(repo)], capture_output=True, text=True)
+        for kind, args in (("managed-files", ["bootstrap", str(repo)]), ("permission-policy", ["policy", "init", str(repo)])):
+            if kind in kinds:
+                done = subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), *args], capture_output=True, text=True)
+                if done.returncode:
+                    lines = (done.stderr or done.stdout).strip().splitlines()
+                    raise RuntimeError(f"`olivercode {' '.join(args)}` failed" + (f": {lines[-1]}" if lines else ""))
     return tuple(touches), apply
 
 
@@ -106,6 +108,7 @@ def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None,
     """`conform --fix` (#778): per repo, run each local fix, commit them together, set GitHub settings the owner owns, queue the owner steps, then check again."""
     print("\nFixing")
     print("=" * 40)
+    skipped: list[tuple[str, str, str]] = []
     for (name, path, private, variant), rows in zip(repos, results):
         failing = [r for r in rows if r.status == "fail"]
         local = {r.requirement for r in failing if _conform.fix_kind(r) == "local"}
@@ -114,9 +117,17 @@ def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None,
             continue
         if local:
             touches, apply = _local_fix(oc_root, path, local, private, variant)
-            result = commit_after(path, apply, f"Bring the repo in line with the OliverCode contract ({story})",
-                                  "Fixes: " + ", ".join(sorted(local)) + " (olivercode conform --fix).", touches)
-            print(f"  [{'FIX' if result.startswith('committed') else 'SKIP'}] {name}: {result}")
+            try:
+                result = commit_after(path, apply, f"Bring the repo in line with the OliverCode contract ({story})",
+                                      "Fixes: " + ", ".join(sorted(local)) + " (olivercode conform --fix).", touches)
+            except (RuntimeError, OSError, ValueError) as exc:
+                result = f"not committed, a fix failed: {exc}"
+            if not result.startswith("committed"):
+                next_step = _skip_fix(result, path, story)
+                skipped.append((name, result, next_step))
+                print(f"  [SKIP] {name}: {result}\n         Fix: {next_step}")
+            else:
+                print(f"  [FIX] {name}: {result}")
         slug = _conform.repo_slug(path)
         owned = bool(((settings or {}).get(f"{slug[0]}/{slug[1]}".lower()) or {}).get("viewerCanAdminister")) if slug else False
         for row in (r for r in failing if _conform.fix_kind(r) != "local"):
@@ -132,7 +143,25 @@ def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None,
     again, _ = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)
     left = sum(_conform.render(name, rows) for (name, _, _, _), rows in zip(repos, again))
     print(f"\nAfter --fix: {left} requirement(s) still fail")
+    for name, result, next_step in skipped:
+        print(f"  Skipped {name}: {result.removeprefix('not committed, ')}. Fix: {next_step}")
     return left
+
+
+def _skip_fix(result: str, repo: Path, story: str) -> str:
+    """The one command that clears a skipped repair, from the reason `commit_after` gave."""
+    rerun = f"then run `olivercode conform --fix --story {story} {repo}`"
+    if "uncommitted changes" in result:
+        return f"commit or stash those files in {repo} (`git -C {repo} status`), {rerun}"
+    if "nothing to commit" in result:
+        return f"run `git -C {repo} status` to see why the fix changed no file, {rerun}"
+    if "no commits" in result:
+        return f"make the first commit in {repo}, {rerun}"
+    if "gates refused" in result:
+        return f"read the refusal above, change what it names, {rerun}"
+    if "a fix failed" in result:
+        return f"run the failing command by hand to see its output, {rerun}"
+    return f"run `git -C {repo} status` to see what is in the way, {rerun}"
 
 
 def command_backlog_setup(argv: list[str]) -> int:
