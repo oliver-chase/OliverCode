@@ -16,6 +16,8 @@ REPO="$(jq -r '.repoOwner' "$CONFIG")/$(jq -r '.repoName' "$CONFIG")"
 
 ## Create + add + set (queue fields, then one batch)
 
+Filing a story goes through `olivercode board file BODY_FILE --title TITLE --config CONFIG` (#1107), which runs the format check first and creates nothing on a failed check. The commands below are what it runs, for a case it does not cover.
+
 ```bash
 number=$(gh api -X POST "repos/$REPO/issues" -f title="<title>" -F body=@BODY_FILE --jq .number)
 jq -n --argjson n "$number" '{issues: [{number: $n, fields: {status: "Backlog", priority: "P2", size: "S", workType: "Story"}}]}' |
