@@ -26,6 +26,7 @@ LOG_DIR: Path | None = None  # None means failure_log.home() / "land", which bel
 TRIES = 4
 BUDGET = 600  # seconds a land keeps retrying after TRIES clean rebases while main keeps moving (#784)
 PAUSE = 5
+LAND_AS = "OLIVERCODE_LAND_AS"  # the agent of the run that started this land, set by the drain and dispatch (#1106)
 USAGE = "Usage: olivercode land WORKTREE STORY"
 CUT_LOCK = "version-cut.lock"
 TEST_FILE = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|[._](test|spec)\.\w+$")
@@ -426,6 +427,22 @@ def _claim(lock: Path) -> int | None:
     return _holder(lock) or -1
 
 
+def _wait_for_claim(wt: Path, story: str) -> None:
+    """Hold a landing while a live run other than the caller holds the story's claim, naming the commit held (#1106). The drain and dispatch land
+    their own builds with LAND_AS set to their agent, which is the holder, so a run never waits on itself. A claim lapses when its run stops renewing it."""
+    from lib import cmd_dispatch  # dispatch imports the drain, which runs this command, so the import waits
+    slug, told, me = _story_slug(wt), False, os.environ.get(LAND_AS, "")
+    while slug and story.isdigit():
+        held = cmd_dispatch._local_claim(slug, int(story), time.time())
+        if not held or (me and held == f"held by {me}"):
+            return
+        if not told:
+            sha = _git(wt, "rev-parse", "--short", "HEAD").stdout.strip()
+            print(f"Story #{story} is {held}, so commit {sha} in {wt} waits for that run to finish.", flush=True)
+            told = True
+        time.sleep(PAUSE)
+
+
 def command_land(argv: list[str]) -> int:
     if len(argv) != 2 or argv[0].startswith("-") or not argv[1].lstrip("#").isdigit() or not (Path(argv[0]) / ".git").exists():
         print(USAGE)
@@ -435,6 +452,7 @@ def command_land(argv: list[str]) -> int:
     folder.mkdir(parents=True, exist_ok=True)
     while cut_running(folder):  # a land waits until a running version cut finishes (#789)
         time.sleep(PAUSE)
+    _wait_for_claim(wt, story)
     key = f"{_repo_name(wt)}-{story}"
     path = folder / f"land-{key}.log"
     lock = folder / f"land-{key}.lock"

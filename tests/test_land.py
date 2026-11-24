@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +13,7 @@ from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 session_check = load_script("scripts/hooks/session_check.py", "session_check_land")
-from lib import cmd_land, maintain, validated  # noqa: E402
+from lib import cmd_drain, cmd_land, maintain, validated  # noqa: E402
 
 REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
 
@@ -101,6 +102,27 @@ class TestLandResumes(Base):
         self.assertEqual(1, code)
         self.assertIn("already running", out)
         self.assertIn("land-main-9.log", out)
+
+    def test_a_land_waits_while_another_run_holds_the_story_and_names_its_commit(self):
+        held = iter(["held by drain", "held by drain", ""])
+        with mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.object(cmd_land, "PAUSE", 0), \
+                mock.patch.dict(os.environ, {cmd_land.LAND_AS: "dispatch"}), mock.patch("lib.cmd_dispatch._local_claim", side_effect=lambda *a, **k: next(held)):
+            code, out = self.land()
+        self.assertIn("is held by drain, so commit", out)
+        self.assertIn(str(self.wt), out)
+
+    def test_the_holder_lands_its_own_story_without_waiting(self):
+        for agent in ("drain", "dispatch"):
+            with self.subTest(agent=agent), mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.dict(os.environ, {cmd_land.LAND_AS: agent}), \
+                    mock.patch("lib.cmd_dispatch._local_claim", return_value=f"held by {agent}"), mock.patch.object(cmd_land.time, "sleep", side_effect=AssertionError("waited")):
+                code, out = self.land()
+            self.assertNotIn("waits for that run", out)
+
+    def test_the_drain_and_dispatch_tell_the_land_their_agent(self):
+        io = cmd_drain.Io(self.wt, "o/r", "dispatch")
+        with mock.patch.object(cmd_drain.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+            io.land(self.wt, 9)
+        self.assertEqual(run.call_args.kwargs["env"][cmd_land.LAND_AS], "dispatch")
 
     def test_a_second_claim_fails_while_the_first_holds_and_succeeds_after_release_or_when_the_holder_is_gone(self):
         lock = self.root / "claim.lock"

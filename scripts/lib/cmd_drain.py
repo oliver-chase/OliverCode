@@ -273,7 +273,8 @@ class Io:
         return any(note.startswith("Not built: commit " + sha[:12]) for note in self.notes(n))
 
     def land(self, worktree: Path, n: int) -> tuple[bool, str]:
-        out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
+        out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True,
+                             env={**os.environ, cmd_land.LAND_AS: self.agent})  # the land skips the wait on a claim this run holds (#1106)
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
     def comment(self, n: int, body: str) -> None:

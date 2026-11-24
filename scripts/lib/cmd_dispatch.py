@@ -243,6 +243,8 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
         return _refuse(f"story #{n}'s Files area names the folder {wide[0]}, which would hold every other story back. Rewrite it with the files it changes.")
     agent = sid or "dispatch"
     worktree = placement_config().worktrees / f"{repo.name}-{n}"
+    if claim := live_claim(runner, slug, n, story, clock()):  # before the run lock, so a refused build joins no queue and writes nothing (#1106)
+        return _refuse(f"story #{n} is {claim}, built in {worktree}. Take the next open story.")
     if dry:
         refused = _start_checks(runner, slug, n, story, clock, busy)
         if refused:
