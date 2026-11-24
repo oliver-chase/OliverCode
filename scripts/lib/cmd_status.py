@@ -286,9 +286,9 @@ def last_commit(slug: str, n: str) -> float | None:
 
 
 def no_origin(folder: Path) -> str:
-    """The error for a folder that is not a repo with a GitHub origin, and where to go next."""
+    """The error for a folder that is not a repo with a GitHub origin, and where to go next. It names the OliverCode checkout by path (#1094)."""
     return (f"Error: {folder} is not a repo with a GitHub origin. cd into a repo with a GitHub origin, "
-            "such as the OliverCode checkout or a registered fleet repo.")
+            f"such as the OliverCode checkout at {OC_ROOT} or a registered fleet repo.")
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
