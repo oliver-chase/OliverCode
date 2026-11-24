@@ -5,6 +5,8 @@ their work. For each board with a backlog config (the boards `olivercode board s
 repo's issues through REST, which spends no GraphQL points, then queues two kinds of change through `batch_project.py`:
 a card whose issue is closed moves to Status Complete, and an open issue with no card is added with Status Backlog.
 `batch_project.py` queues the writes while GraphQL is on hold and applies them in aliased mutations after the reset.
+After each sweep the job runs `board groom` for that board, which skips a repo unchanged since its last groom, so a filed or landed
+story is groomed within thirty minutes (#1092).
 `--schedule` installs a launchd job that runs the sweep every thirty minutes, and `--unschedule` removes it.
 """
 
@@ -111,28 +113,57 @@ def apply(config_path: Path, payload: dict) -> int:
         board_mirror.invalidate()  # the sweep queued or applied a change, so the next sweep reads the board live rather than from the copy (#1020)
 
 
-def run(board_list=cmd_sweep.boards, reader=read, applier=apply, dry_run: bool = False, out=print) -> int:
-    """Sweep every board. Returns 1 when a board could not be read or a write failed."""
+def groom(name: str, path: Path, out=print) -> int:
+    """Grooms the board through `board groom` after each sync, so a filed or landed story gets its Priority, Size and order before the drain picks.
+    Groom's own fingerprint decides whether the repo changed, and an unchanged repo costs no GraphQL call. Returns 1 and names the cause when
+    grooming did not run (#1092)."""
+    from lib import cmd_groom  # noqa: PLC0415 (groom loads the sweep's neighbours, so it is imported here)
+    held = gh_budget.refusal() or gh_budget.points_refusal()
+    if held:
+        out(f"{name}: grooming waits, {held.split('. ')[0]}")
+        return 0
+    try:
+        if cmd_groom.groom_board(name, path):
+            return 0
+    except (OSError, ValueError, KeyError) as exc:  # groom_board reads the config before its own guard, so a missing or bad file lands here
+        out(f"{name}: grooming did not run ({exc})")
+        return 1
+    config = json.loads(path.read_text(encoding="utf-8"))
+    slug = f"{config['repoOwner']}/{config['repoName']}"
+    cause = (cmd_groom.load_state().get(slug) or {}).get("failed") or "the board could not be groomed"
+    out(f"{name}: grooming did not run ({' '.join(cause.split())[:200]})")
+    return 1
+
+
+def sweep_board(name: str, path: Path, reader, applier, dry_run: bool, out) -> int:
+    """Sweep one board. Returns 1 when the board could not be read or a write failed."""
+    try:
+        config, items, issues = reader(path)
+    except (RuntimeError, OSError, ValueError, KeyError, SystemExit) as exc:
+        out(f"{name}: the sweep did not run ({str(exc).splitlines()[0][:120] if str(exc) else 'the board could not be read'})")
+        return 1
+    close, add = plan(items, issues, config)
+    if not close and not add:
+        out(f"{name}: in step")
+        return 0
+    text = f"{name}: {len(close)} closed card(s) to Complete, {len(add)} open issue(s) to add"
+    if dry_run:
+        out(text + " (dry run, nothing written)")
+        return 0
+    held = gh_budget.refusal()
+    code = applier(path, request(config, close, add))
+    out(text + (f", queued until the GraphQL reset ({held.split('. ')[0]})" if held and not code else "") + ("" if not code else ", a write failed and stays queued"))
+    return int(bool(code))
+
+
+def run(board_list=cmd_sweep.boards, reader=read, applier=apply, dry_run: bool = False, out=print, grooming=groom) -> int:
+    """Sweep every board, then groom it so the drain reads groomed cards (#1092). A dry run writes nothing, so it does not groom.
+    Returns 1 when a board could not be read, a write failed or grooming did not run."""
     failed = 0
     for name, path in board_list():
-        try:
-            config, items, issues = reader(path)
-        except (RuntimeError, OSError, ValueError, KeyError, SystemExit) as exc:
-            out(f"{name}: the sweep did not run ({str(exc).splitlines()[0][:120] if str(exc) else 'the board could not be read'})")
-            failed = 1
-            continue
-        close, add = plan(items, issues, config)
-        if not close and not add:
-            out(f"{name}: in step")
-            continue
-        text = f"{name}: {len(close)} closed card(s) to Complete, {len(add)} open issue(s) to add"
-        if dry_run:
-            out(text + " (dry run, nothing written)")
-            continue
-        held = gh_budget.refusal()
-        code = applier(path, request(config, close, add))
-        out(text + (f", queued until the GraphQL reset ({held.split('. ')[0]})" if held and not code else "") + ("" if not code else ", a write failed and stays queued"))
-        failed = failed or int(bool(code))
+        failed = max(failed, sweep_board(name, path, reader, applier, dry_run, out))
+        if not dry_run:
+            failed = max(failed, grooming(name, path, out))
     return failed
 
 
