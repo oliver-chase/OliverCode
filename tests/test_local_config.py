@@ -65,3 +65,18 @@ class LocalConfig(unittest.TestCase):
     def test_repo_paths_expand_a_tilde(self):
         self.write({"repoPaths": {"alpha": "~/work/alpha"}})
         self.assertEqual(local_config.repo_paths(), {"alpha": Path.home() / "work" / "alpha"})
+
+    def test_default_registry_links_to_the_configured_one_and_repeats(self):
+        home = temp_dir(self)
+        registry = home / "fleet" / "repo-profiles.json"
+        registry.parent.mkdir()
+        registry.write_text('{"profiles": {"a": {}}}')
+        stale = home / "shared.json"
+        stale.write_text("{}")
+        default = home / ".olivercode" / "fleet" / "repo-profiles.json"
+        default.parent.mkdir(parents=True)
+        default.symlink_to(stale)
+        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
+            self.assertTrue(local_config.link_default_registry(registry))
+            self.assertEqual(default.resolve(), registry.resolve())
+            self.assertEqual(local_config.link_default_registry(registry), "")

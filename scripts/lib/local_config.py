@@ -77,6 +77,25 @@ def fleet_registry_path() -> Path:
     return Path(value).expanduser()
 
 
+def link_default_registry(registry: Path) -> str:
+    """Makes the default registry path a link to registry, so the default and the configured path read one file (#1083).
+    A stale link is replaced and a link already right is kept, so a repeat run never raises FileExistsError. A real file
+    at the default path is the owner's and stays. Returns what it did, or "" when nothing changed."""
+    default = Path(DEFAULT_FLEET_REGISTRY).expanduser()
+    registry = Path(registry).expanduser()
+    if default == registry or not registry.is_file():
+        return ""
+    if default.is_symlink():
+        if default.resolve() == registry.resolve():
+            return ""
+        default.unlink()
+    elif default.exists():
+        return f"{default} is a file of its own, so it was not linked to {registry}"
+    default.parent.mkdir(parents=True, exist_ok=True)
+    default.symlink_to(registry)
+    return f"Linked {default} to {registry}"
+
+
 def skills_root() -> Path | None:
     """The personal skills folder that health checks."""
     return _path(os.environ.get("OLIVERCODE_SKILLS_ROOT") or load_local().get("skillsRoot"))
