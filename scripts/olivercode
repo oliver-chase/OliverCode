@@ -54,7 +54,6 @@ from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
 from lib.cmd_initfleet import command_init_fleet  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
 from lib.cmd_owner import command_owner  # noqa: E402
-from lib.cmd_rule import command_rule  # noqa: E402
 from lib.decisions import command_decisions  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
 from lib.validated import command as command_validated  # noqa: E402
@@ -154,8 +153,6 @@ def main() -> int:
         return command_init_fleet(argv)
     if cmd == "owner":
         return command_owner(argv)
-    if cmd == "rule":
-        return command_rule(argv)
     if cmd == "lesson":
         return command_lesson(argv)
     if cmd == "story":

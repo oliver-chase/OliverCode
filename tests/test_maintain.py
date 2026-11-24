@@ -147,20 +147,6 @@ class TestBranches(Base):
         self.assertIn("done", git(repo, "branch", "--format=%(refname:short)").stdout.split())
 
 
-class TestIcloud(Base):
-    def test_evicted_git_files_are_downloaded(self):
-        repo = self.root / "app"
-        scratch_repo(repo)
-        state = {"left": [repo / ".git" / "HEAD"]}
-        def fake_dataless(_repo):
-            return list(state["left"])
-        def fake_download(paths, seconds=0):
-            state["left"] = []
-            return len(paths)
-        with mock.patch.object(maintain, "dataless_files", fake_dataless), mock.patch.object(maintain.hygiene, "download", fake_download):
-            self.assertTrue(maintain.check_icloud(self.cfg, True)[0].fixed)
-
-
 class TestCopies(Base):
     def make(self):
         repo = self.root / "app"

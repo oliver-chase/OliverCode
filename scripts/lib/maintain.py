@@ -1,8 +1,8 @@
 """`olivercode maintain`: check this machine's harness and repair what is safe to repair.
 
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
-a dangling activation link, prunes a worktree whose folder is gone, deletes merged local branches, downloads git files that iCloud evicted
-from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live (#997): a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
+a dangling activation link, prunes a worktree whose folder is gone, deletes merged local branches,
+moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live (#997): a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
 that drifted, a repo inside a synced folder, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
 With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scripts/run-tests.sh and records the commit, exit code and test count for `olivercode health` (#977).
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
@@ -32,7 +32,6 @@ from lib import local_config
 from lib.local_config import OC_ROOT, claude_dir
 
 LABEL = "com.olivercode.maintain"
-DOWNLOAD_SECONDS = 60
 
 
 @dataclass
@@ -54,12 +53,6 @@ def _repos(cfg: placement.Config) -> list[Path]:
     return [p for p in sorted(cfg.root.iterdir())
             if not p.name.startswith("_") and ((p / ".git").is_dir() or (p / hygiene.NOSYNC).is_dir())
             and not repo_state.skipped(p.name, p)]
-
-
-def dataless_files(repo: Path) -> list[Path]:
-    """Files in the repo's .git that iCloud evicted: they read as empty until downloaded, and git hangs on them."""
-    ran = subprocess.run(["find", str((repo / ".git").resolve()), "-type", "f", "-flags", "+dataless"], capture_output=True, text=True)
-    return [Path(line) for line in ran.stdout.splitlines() if line]
 
 
 def check_links(fix: bool, install=None) -> list[Problem]:
@@ -142,19 +135,6 @@ def check_branches(cfg: placement.Config, fix: bool, now: float | None = None) -
                 stale.append(name)
         if stale:
             found.append(Problem("branches", f"{repo.name}: {len(stale)} unmerged branch(es) older than {STALE_BRANCH_HOURS} hours with no worktree: {', '.join(sorted(stale)[:4])}"))
-    return found
-
-
-def check_icloud(cfg: placement.Config, fix: bool) -> list[Problem]:
-    """Evicted .git files make git hang. Reading them downloads them."""
-    found = []
-    for repo in _repos(cfg):
-        if not (files := dataless_files(repo)):
-            continue
-        found.append(problem := Problem("icloud", f"{repo.name}: {len(files)} git file(s) evicted by iCloud", fixable=True))
-        if fix:
-            hygiene.download(files, DOWNLOAD_SECONDS)
-            problem.fixed = not dataless_files(repo)
     return found
 
 
@@ -565,7 +545,7 @@ def check_state(fix: bool, home: Path | None = None, limits: dict | None = None)
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
     fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's registry
     cfg = cfg or placement.config()
-    problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
+    problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_copies(cfg, fix),
                 *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_candidates(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()

@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 
 from lib import launchd
-from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
 from lib.local_config import setting
 from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, link_default_registry, load_local, local_path, save_local, voice_file
@@ -449,10 +448,6 @@ def command_install(oc_root: Path) -> int:
     checkout moved, is replaced in place. `uninstall` restores the backup. Install records
     the links it wrote in ~/.claude/.olivercode-install.json so uninstall need not guess.
     """
-    live = _live_copy.problem(oc_root)
-    if live:
-        print(f"  [FAIL] {live}")
-        return 1
     from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, gh_problem
     if sys.version_info[:2] < MIN_PYTHON:
         print(f"  [FAIL] Python is {sys.version_info[0]}.{sys.version_info[1]} and OliverCode needs {MIN_PYTHON_TEXT} or newer: {PYTHON_FIX}")
@@ -546,10 +541,6 @@ def command_install(oc_root: Path) -> int:
         print(f"  [REMOVED] links to skills this checkout no longer has: {', '.join(retired)}")
     from lib import failure_log  # the hooks log blocked commits only where this folder exists
     failure_log.home().mkdir(parents=True, exist_ok=True)
-    # A release that moves a state file moves the user's copy once, with a backup (#762).
-    from lib import state_migrations
-    for line in state_migrations.run(oc_root):
-        print(f"  [MIGRATED] {line}")
     expected = {k: oc_root / rel for k, rel in RULE_LINKS.items()}
     expected.update({f"skills/{name}": source for name, source in wanted.items()})
     _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, src in expected.items()

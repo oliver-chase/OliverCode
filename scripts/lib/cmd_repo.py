@@ -368,14 +368,11 @@ def command_policy(argv: list[str]) -> int:
 
 
 def command_gh_limit(argv: list[str]) -> int:
-    """`olivercode gh-limit [clear|report]`: the shared GitHub rate-limit hold and what each session spent."""
+    """`olivercode gh-limit [clear]`: the shared GitHub rate-limit hold."""
     from lib import gh_budget
     if argv == ["clear"]:
         gh_budget.clear()
         print("GitHub hold cleared.")
-        return 0
-    if argv == ["report"]:
-        print(gh_budget.report())
         return 0
     if argv[:1] == ["queue"] and argv[1:2] in (["--"], []) and argv[2:3] == ["gh"]:
         print(f"Queued. {gh_budget.enqueue(argv[2:])} gh command(s) wait for the GraphQL reset.")
@@ -390,7 +387,7 @@ def command_gh_limit(argv: list[str]) -> int:
         from lib import cmd_ghreplay
         return cmd_ghreplay.schedule(argv == ["--schedule"])
     if argv:
-        print("Usage: olivercode gh-limit [clear|report|replay|--schedule|--unschedule|queue -- gh ...]")
+        print("Usage: olivercode gh-limit [clear|replay|--schedule|--unschedule|queue -- gh ...]")
         return 1
     why = gh_budget.refusal()
     print(why or "No GitHub rate-limit hold is on.")

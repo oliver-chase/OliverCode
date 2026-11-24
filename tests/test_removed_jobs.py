@@ -67,6 +67,14 @@ class TestRemovedJobs(unittest.TestCase):
         for command in ("olivercode retro", "olivercode cutlist", "olivercode usage", "olivercode eval"):
             self.assertNotIn(command, listing)
 
+    def test_the_rule_command_is_gone(self):
+        """cmd_rule had no caller: 0 runs in commands.log (#1054's evidence), so the command and its module are gone (#1124)."""
+        done = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "rule", "check", "--repo", "."], capture_output=True, text=True)
+        self.assertNotEqual(0, done.returncode)
+        listing = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True).stdout
+        self.assertNotIn("olivercode rule", listing)
+        self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_rule.py").exists())
+
     def test_a_second_run_finds_nothing_to_remove(self):
         self.assertEqual([], cmd_install.retire_removed_jobs(self.home, run=mock.Mock()))
 

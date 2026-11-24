@@ -379,7 +379,6 @@ def points_refusal(fetch=None, now: float | None = None) -> str:
 COST_LOG = "gh-cost.jsonl"
 COST_KEEP = 86400
 GRAPHQL_HOURLY = 5000
-REST_HOURLY = 5000
 
 
 def _read_rows(now: float, window: int) -> list[dict]:
@@ -463,27 +462,6 @@ def share_refusal(session: str, now: float | None = None) -> str:
         return ""
     return (f"This session has spent {mine} GraphQL points this hour, over its share of {share} among {len(sessions)} "
             "active sessions, so it holds. See docs/RULES.md, Execution.")
-
-
-def report(now: float | None = None) -> str:
-    """GraphQL points and REST requests spent in the last hour, each on its own line, then by session and by command."""
-    rows = _read_rows(now or time.time(), 3600)
-    if not rows:
-        return "No gh calls were costed in the last hour."
-    graphql = sum(r.get("points", 0) for r in rows)
-    rest = sum(r.get("rest", 0) for r in rows)
-    out = [f"{len(rows)} gh calls were costed in the last hour.",
-           f"GraphQL: {graphql} of the {GRAPHQL_HOURLY:,} hourly points, shared by gh project, gh issue and gh api graphql",
-           f"REST: {rest} of the {REST_HOURLY:,} hourly requests, used by gh api repos/..."]
-    for title, key in (("By session", "session"), ("By command", "cmd")):
-        totals: dict[str, list[int]] = {}
-        for r in rows:
-            pair = totals.setdefault(r[key], [0, 0])
-            pair[0] += r.get("points", 0)
-            pair[1] += r.get("rest", 0)
-        out.append(f"{title} (GraphQL points, REST requests):")
-        out += [f"  {g:5d}  {q:5d}  {name[:60]}" for name, (g, q) in sorted(totals.items(), key=lambda kv: (-kv[1][0], -kv[1][1]))[:8]]
-    return "\n".join(out)
 
 
 def is_limit(text: str) -> bool:

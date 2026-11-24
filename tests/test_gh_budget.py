@@ -228,24 +228,6 @@ class TestCostLog(Isolated):
         self.assertEqual([(r["session"], r["points"]) for r in rows], [("s1", 50)])
         self.assertIn("item-list", rows[0]["cmd"])
 
-    def test_the_report_names_the_session_and_command_that_spent_most(self):
-        for n, (key, session, cmd, spent) in enumerate((("a", "s1", "gh project item-list 15", 60), ("b", "s2", "gh issue list", 5))):
-            gh_budget.note_before(key, fetch=self.points(4000), now=100 + 2 * n)
-            gh_budget.note_after(key, session, cmd, fetch=self.points(4000 - spent), now=101 + 2 * n)
-        text = gh_budget.report(now=110)
-        self.assertLess(text.index("s1"), text.index("s2"))
-        self.assertIn("GraphQL: 65 of the 5,000 hourly points", text)
-
-    def test_the_report_shows_rest_and_graphql_use_on_separate_lines(self):
-        gh_budget.note_before("a", fetch=self.points(4000, rest=4900), now=100)
-        gh_budget.note_after("a", "s1", "gh project item-list 15", fetch=self.points(3950, rest=4900), now=101)
-        gh_budget.note_before("b", fetch=self.points(3950, rest=4900), now=102)
-        gh_budget.note_after("b", "s2", "gh api repos/o/r/issues/5", fetch=self.points(3950, rest=4897), now=103)
-        lines = gh_budget.report(now=110).splitlines()
-        self.assertIn("GraphQL: 50 of the 5,000 hourly points", next(l for l in lines if l.startswith("GraphQL:")))
-        self.assertIn("REST: 3 of the 5,000 hourly requests", next(l for l in lines if l.startswith("REST:")))
-        self.assertTrue(any(l.split()[:3] == ["0", "3", "s2"] for l in lines), lines)
-
     def test_a_session_over_its_share_is_held_while_others_are_active(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             for n, (key, session, spent) in enumerate((("a", "busy", 3000), ("b", "quiet", 10))):
@@ -268,11 +250,6 @@ class TestCostLog(Isolated):
         lines = (gh_budget.home() / gh_budget.COST_LOG).read_text().splitlines()
         self.assertEqual(1, len(lines))
         self.assertIn("gh new", lines[0])
-
-    def test_old_calls_do_not_count(self):
-        gh_budget.note_before("a", fetch=self.points(5000), now=100)
-        gh_budget.note_after("a", "s1", "gh x", fetch=self.points(4000), now=101)
-        self.assertEqual("No gh calls were costed in the last hour.", gh_budget.report(now=101 + 4000))
 
 
 class TestPointsReading(Isolated):

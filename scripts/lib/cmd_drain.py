@@ -67,7 +67,7 @@ _COST_LOCK = threading.Lock()
 
 
 def costed(session: str, command: str, call):
-    """Run call() and log what it spent under the session, so `olivercode gh-limit report` lists the drain's own calls (#1114)."""
+    """Run call() and log what it spent under the session, so the cost log can tell the drain's own calls apart (#1114)."""
     key = uuid.uuid4().hex
     with _COST_LOCK:  # the drain's worker threads log together, and the pending file is read and written whole
         gh_budget.note_before(key)

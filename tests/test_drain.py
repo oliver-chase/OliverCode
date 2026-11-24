@@ -819,13 +819,14 @@ class OncePerPassCase(unittest.TestCase):
                 io.claimed(story), io.blockers(story)
         self.assertEqual(2, len(calls))
 
-    def test_the_drain_calls_are_listed_in_the_gh_limit_report(self):
+    def test_the_drain_calls_are_logged_under_their_own_session_key(self):
         home = temp_dir(self)
         readings = iter([{"remaining": 4000, "reset": 0}, {"remaining": 3990, "reset": 0}])
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home), "OLIVERCODE_GH_POINTS_FLOOR": "0"}), \
                 mock.patch.object(cmd_drain.gh_budget, "points_reading", side_effect=lambda *a, **k: next(readings)):
             self.assertEqual("ok", cmd_drain.costed("drain:o/r", "gh api repos/o/r/issues", lambda: "ok"))
-            self.assertIn("drain:o/r", cmd_drain.gh_budget.report())
+            rows = cmd_drain.gh_budget._read_rows(time.time(), 3600)
+            self.assertIn("drain:o/r", [r["session"] for r in rows])
 
 
 if __name__ == "__main__":
