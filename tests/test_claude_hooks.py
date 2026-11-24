@@ -480,3 +480,26 @@ class StatusHint(unittest.TestCase):
         self.assertEqual((0, ""), (other.returncode, other.stdout))
         bad = subprocess.run([sys.executable, script], input="not json", capture_output=True, text=True, env=env)
         self.assertEqual(0, bad.returncode)
+
+
+class DesignHookTest(unittest.TestCase):
+    hook = load_script("scripts/hooks/design_hook.py")
+
+    def test_entry_is_managed_for_edits(self):
+        self.assertIn(("PostToolUse", "Edit|Write|MultiEdit", "design_hook.py"), claude_settings.MANAGED)
+
+    def test_reports_floor_tells_only_and_at_most_ten(self):
+        tmp = temp_dir(self, "olivercode-designhook-")
+        page = tmp / "p.html"
+        page.write_text("<p class='eyebrow'>x</p>\n" + "<p>Lorem ipsum</p>\n" * 15)
+        text = self.hook.report(str(page))
+        self.assertEqual(text.count("placeholder-copy"), 10)
+        self.assertNotIn("eyebrow", text)
+        page.write_text("<h1>Fine</h1>")
+        self.assertEqual(self.hook.report(str(page)), "")
+
+    def test_a_bad_payload_lets_the_edit_stand(self):
+        run = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/hooks/design_hook.py")], input="not json",
+                             capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0)
+        self.assertIn("design_hook: skipped", run.stderr)

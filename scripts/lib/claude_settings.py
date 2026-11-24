@@ -30,6 +30,7 @@ MANAGED = (
     ("SessionStart", "startup", "session_check.py"),
     ("PreToolUse", "Bash|Edit|Write|MultiEdit|Agent|Task", "pretool_guard.py"),
     ("PostToolUse", "Bash", "gh_watch.py"),
+    ("PostToolUse", "Edit|Write|MultiEdit", "design_hook.py"),
     ("Stop", None, "early-stop-guard.py"),
     ("Stop", None, "wip_save.py"),
     ("UserPromptSubmit", None, "lesson_capture.py"),
