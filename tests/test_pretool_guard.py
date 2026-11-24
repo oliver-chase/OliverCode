@@ -100,6 +100,32 @@ class TestDispatch(unittest.TestCase):
             self.assertEqual((0, ""), (ran.returncode, ran.stdout), stdin)
 
 
+class TestOnlyTheRunnerValidates(unittest.TestCase):
+    """#1085: a headless builder's full validation is refused; its own tests, one gate and an owner session still run."""
+
+    def run_as(self, command, headless):
+        env = {"OLIVERCODE_HEADLESS": "1"} if headless else {}
+        with quiet_guards(), mock.patch.dict("os.environ", env, clear=False):
+            if not headless:
+                __import__("os").environ.pop("OLIVERCODE_HEADLESS", None)
+            return run_main({**BASH, "tool_input": {"command": command}})
+
+    def test_a_builder_is_refused_the_full_validation(self):
+        for command in ("bash scripts/validate.sh", "cd /w && bash scripts/validate.sh --tree", "npm run check", "npm run validate", "./scripts/land.sh"):
+            out = self.run_as(command, headless=True)
+            self.assertEqual("deny", (out or {}).get("permissionDecision"), command)
+            self.assertIn("the runner validates", out["permissionDecisionReason"])
+
+    def test_a_builder_may_run_its_own_tests_and_one_gate(self):
+        for command in ("python3 -m unittest test_drain", "pytest tests/test_a.py", "bash scripts/validate.sh --gate smoke", "echo bash scripts/validate.sh"):
+            out = self.run_as(command, headless=True)
+            self.assertNotEqual("deny", (out or {}).get("permissionDecision"), command)
+
+    def test_an_owner_session_still_validates(self):
+        out = self.run_as("bash scripts/validate.sh", headless=False)
+        self.assertNotEqual("deny", (out or {}).get("permissionDecision"))
+
+
 class TestRegistration(unittest.TestCase):
     def test_one_entry_replaces_the_four_pre_tool_guards(self):
         # One process per Bash, Edit or Write call. The start-session guard matches only its own tool.
