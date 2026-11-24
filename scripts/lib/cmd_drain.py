@@ -205,12 +205,26 @@ class Io:
         ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--format=%s"], capture_output=True, text=True)
         return ran.returncode == 0 and any(f"(#{n})" in line for line in ran.stdout.splitlines())
 
+    def notes(self, n: int) -> list[str]:
+        """The comment bodies on story N, read over REST. [] when the read failed."""
+        done = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments"])
+        try:
+            notes = json.loads(done.stdout) if done.returncode == 0 else []
+        except ValueError:
+            notes = []
+        return [str(note.get("body") or "") for note in notes if isinstance(note, dict)]
+
     def landed_lead(self, issue: dict) -> tuple[str, str] | None:
-        """(sha, subject) of the newest commit on origin's default branch that names another story and changed a file in this story's Files area.
-        It answers only for a story with no commit of its own, whose close was refused for want of one, so a mate left by a batched build is
-        recognized and is not built again (#988)."""
+        """(sha, subject) of the newest commit on origin's default branch that names the story this one was built with in a batch session
+        ("batch session with #M" in its comments) and changed a file in this story's Files area. It answers only for a story with no commit of
+        its own, whose close was refused for want of one, so a mate left by a batched build is recognized and is not built again (#988, #1084).
+        A commit that merely touched a shared file is not a lead."""
         n, area = issue["number"], intake.files_area(issue.get("body") or "")
-        if not area:
+        if not area or not issue.get("comments"):
+            return None
+        notes = self.notes(n)
+        mates = {m for note in notes for m in re.findall(r"batch session with #(\d+)", note)}
+        if not mates or not any(f"no commit for (#{n})" in note for note in notes):
             return None
         branch = self.branch()
         ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--name-only", "--format=COMMIT%x09%H%x09%s"],
@@ -226,16 +240,11 @@ class Io:
                 rows[-1][2].add(line.strip())
         if any(f"(#{n})" in subject for _, subject, _ in rows):
             return None
-        lead = next(((sha, subject) for sha, subject, files in rows if intake.overlaps(sorted(files), area) and re.search(r"\(#\d+\)", subject)), None)
-        if lead is None or not issue.get("comments"):
-            return None
-        done = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments"])
-        try:
-            notes = json.loads(done.stdout) if done.returncode == 0 else []
-        except ValueError:
-            notes = []
-        refused = any(f"no commit for (#{n})" in str(note.get("body") or "") for note in notes if isinstance(note, dict))
-        return lead if refused else None
+        return next(((sha, subject) for sha, subject, files in rows if any(f"(#{m})" in subject for m in mates) and intake.overlaps(sorted(files), area)), None)
+
+    def told(self, n: int, sha: str) -> bool:
+        """True when a "Not built" comment on story N already names the commit, so drain says it once (#1084)."""
+        return any(note.startswith("Not built: commit " + sha[:12]) for note in self.notes(n))
 
     def land(self, worktree: Path, n: int) -> tuple[bool, str]:
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
@@ -419,7 +428,8 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n, tokens, note, blocks = issue["number"], 0, "", 0
     lead = io.landed_lead(issue)
     if lead:  # the work landed under another story, so a fresh build would repeat it on main; the owner decides (#988)
-        io.comment(n, f"Not built: commit {lead[0][:12]} ({lead[1]}) on the default branch changed this story's files, so its work most likely landed under that story. The owner decides whether this story closes.")
+        if not io.told(n, lead[0]):
+            io.comment(n, f"Not built: commit {lead[0][:12]} ({lead[1]}) is the batch session commit that changed this story's files, so its work most likely landed under that story. The owner decides whether this story closes.")
         return False, 0
     if not io.pending(n) and io.landed(io.repo, n):  # its commit is on the default branch and no unlanded work waits in its worktree, so it closes through the script and no builder starts (#1011)
         closed, reason = io.close_by_script(io.repo, n, "already on the default branch")

@@ -24,6 +24,9 @@ def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
     return {"number": n, "title": title or f"Story {n}", "body": body, "labels": [{"name": l} for l in labels], "comments": 0, "status": status, "size": size}
 
 
+BATCH = {"body": "Built in a batch session with #976"}
+
+
 class FakeIo:
     def __init__(self, issues, cap=2, builds=None, land_ok=True, tokens=10, stops=None):
         self.agent, self.moved, self.released, self.already, self.kept, self.on_main = "drain", [], [], False, [], set()
@@ -37,6 +40,7 @@ class FakeIo:
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
 
     def landed_lead(self, i): return self.leads.get(i["number"])
+    def told(self, n, sha): return (n, sha) in getattr(self, "toldof", set())
 
     def blockers(self, i):
         """The blockers of a story that are still open, as GitHub's dependency link would name them."""
@@ -544,14 +548,14 @@ class TestRealIo(unittest.TestCase):
         """#988: the lead commit is named, and the mate's work is not built again."""
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
         mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
-        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}, BATCH]
         lead = self.mate_io(refused).landed_lead(mate)
         self.assertEqual("Fix the thing (#976)", lead[1])
         self.assertEqual(git(self.repo, "rev-parse", "HEAD").stdout.strip(), lead[0])
 
     def test_a_story_is_built_as_before_without_a_refused_close_an_overlapping_file_or_a_comment(self):
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
-        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}, BATCH]
         mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
         self.assertIsNone(self.mate_io([]).landed_lead(mate))
         self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_land.py"), "comments": 1}))
@@ -560,8 +564,27 @@ class TestRealIo(unittest.TestCase):
     def test_a_story_with_its_own_commit_on_main_is_not_a_mate(self):
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the story (#974)")
-        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}, BATCH]
         self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}))
+
+    def test_a_coincidental_touch_is_no_lead_and_the_batch_commit_is_named_over_a_newer_touch(self):
+        """#1084: with no batch comment a touched file blocks nothing, and with one the batch commit is named, not the newest touch."""
+        refused = {"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}
+        mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
+        self.commit_file("scripts/lib/cmd_drain.py", "Batch work (#976)")
+        batch = git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        self.commit_file("scripts/lib/cmd_drain.py", "Later touch (#999)")
+        self.assertIsNone(self.mate_io([refused]).landed_lead(mate))
+        self.assertEqual(batch, self.mate_io([refused, BATCH]).landed_lead(mate)[0])
+
+    def test_a_commit_already_named_in_a_not_built_comment_gets_no_second_comment(self):
+        io = self.mate_io([{"body": "Not built: commit abcdef123456 (x) is the batch session commit"}])
+        self.assertTrue(io.told(974, "abcdef1234567890"))
+        self.assertFalse(io.told(974, "0123456789abcdef"))
+        fake = FakeIo([issue(974)])
+        fake.leads[974], fake.toldof = ("abcdef1234567890", "x (#976)"), {(974, "abcdef1234567890")}
+        self.assertEqual((False, 0), cmd_drain._work_story(fake, issue(974), state()))
+        self.assertEqual([], fake.comments)
 
     def test_head_that_names_the_story_and_sits_on_the_default_branch_is_landed(self):
         git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
