@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -121,9 +122,17 @@ class TestLandResumes(Base):
         self.assertIn("stays held by drain after 5 minutes", out)
 
     def test_the_holder_lands_its_own_story_without_waiting(self):
+        class NoWaitClock:
+            """cmd_land's clock, whose sleep fails. The global time.sleep stays real, since a subprocess poll under load calls it (#1106)."""
+            def __getattr__(self, name):
+                return getattr(time, name)
+
+            def sleep(self, _):
+                raise AssertionError("waited")
+
         for agent in ("drain", "dispatch"):
             with self.subTest(agent=agent), mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.dict(os.environ, {cmd_land.LAND_AS: agent}), \
-                    mock.patch("lib.cmd_dispatch._local_claim", return_value=f"held by {agent}"), mock.patch.object(cmd_land.time, "sleep", side_effect=AssertionError("waited")):
+                    mock.patch("lib.cmd_dispatch._local_claim", return_value=f"held by {agent}"), mock.patch.object(cmd_land, "time", NoWaitClock()):
                 code, out = self.land()
             self.assertNotIn("waits for that run", out)
 
