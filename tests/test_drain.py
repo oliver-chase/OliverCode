@@ -745,5 +745,56 @@ class CloseByScript(unittest.TestCase):
         self.assertEqual(1, io.started.count(1))
 
 
+class OncePerPassCase(unittest.TestCase):
+    def test_the_board_is_read_again_after_the_wait_for_a_free_builder(self):
+        io = FakeIo([issue(1)], cap=[0, 0, 1])
+        reads, sleeps = [], []
+        listed = io.list_open
+        io.list_open = lambda: (reads.append(1), listed())[1]
+        cmd_drain.drain(io, state(), sleep=sleeps.append, say=lambda t: None)
+        self.assertEqual([300], sleeps)
+        self.assertEqual([1], io.started)
+        self.assertEqual(3, len(reads))  # the start, after the wait, after the story finished
+
+    def test_a_board_read_drops_the_kept_blockers_but_not_the_comments(self):
+        io = cmd_drain.Io(Path("/repo"), "o/r", runner=lambda args: mock.Mock(returncode=0, stdout="[]", stderr=""))
+        io.memo.get("blockers", {"number": 5}, lambda: [3])
+        io.memo.get("comments", {"number": 5}, lambda: ["c"])
+        with mock.patch.object(cmd_drain, "fetch_open", return_value=[]), mock.patch.object(cmd_drain, "costed", side_effect=lambda s, c, call: call()), mock.patch.object(io, "board_cards", return_value={}):
+            io.list_open()
+        self.assertEqual([4], io.memo.get("blockers", {"number": 5}, lambda: [4]))
+        self.assertEqual(["c"], io.memo.get("comments", {"number": 5}, lambda: ["new"]))
+
+    def test_the_board_is_read_at_the_start_and_again_only_after_a_story_finishes(self):
+        io = FakeIo([issue(1), issue(2)], cap=1)
+        reads = []
+        listed = io.list_open
+        io.list_open = lambda: (reads.append(1), listed())[1]
+        drain_io = io
+        cmd_drain.drain(drain_io, state(), sleep=lambda s: None, say=lambda t: None)
+        self.assertEqual([1, 2], io.started)
+        self.assertEqual(3, len(reads))  # the start, then once after each story finished
+
+    def test_io_reads_an_unchanged_story_comments_and_blockers_once(self):
+        calls = []
+        def runner(args):
+            calls.append(args[1])
+            return mock.Mock(returncode=0, stdout="[]", stderr="")
+        io = cmd_drain.Io(Path("/repo"), "o/r", runner=runner)
+        story = {"number": 5, "updated_at": "t", "comments": 1, "issue_dependencies_summary": {"blocked_by": 1}}
+        with mock.patch.object(cmd_drain.cmd_dispatch, "live_claim", return_value=""):
+            for _ in range(3):
+                io.claimed(story), io.blockers(story)
+        self.assertEqual(2, len(calls))
+
+    def test_the_drain_calls_are_listed_in_the_gh_limit_report(self):
+        home = temp_dir(self)
+        readings = iter([{"remaining": 4000, "reset": 0}, {"remaining": 3990, "reset": 0}])
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home), "OLIVERCODE_GH_POINTS_FLOOR": "0"}), \
+                mock.patch.object(cmd_drain.gh_budget, "points_reading", side_effect=lambda *a, **k: next(readings)):
+            self.assertEqual("ok", cmd_drain.costed("drain:o/r", "gh api repos/o/r/issues", lambda: "ok"))
+            self.assertIn("drain:o/r", cmd_drain.gh_budget.report())
+
+
 if __name__ == "__main__":
     unittest.main()

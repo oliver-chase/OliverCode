@@ -16,12 +16,13 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, owner_decisions, policy, run_lock
-from lib.open_issues import fetch as fetch_open, owner_gated, rank
+from lib.open_issues import Memo, fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
 from lib.placement import config as placement_config
@@ -59,6 +60,21 @@ def new_state() -> dict:
     return {"closed": [], "blocked": [], "sessions": 0, "tokens": 0, "restarts": {}}
 
 
+_COST_LOCK = threading.Lock()
+
+
+def costed(session: str, command: str, call):
+    """Run call() and log what it spent under the session, so `olivercode gh-limit report` lists the drain's own calls (#1114)."""
+    key = uuid.uuid4().hex
+    with _COST_LOCK:  # the drain's worker threads log together, and the pending file is read and written whole
+        gh_budget.note_before(key)
+    try:
+        return call()
+    finally:
+        with _COST_LOCK:
+            gh_budget.note_after(key, session, command)
+
+
 class Io:
     """Every outside effect of a drain. Tests replace the methods; the defaults use REST, git, the headless loop and `olivercode land`."""
 
@@ -66,11 +82,14 @@ class Io:
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
+        self.memo = Memo()  # the pass's comment and blocker reads, each kept until the story changes (#1114)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
-        """`gh` through the runner a caller injected, else the shared one that honors the GitHub hold."""
-        return (self.runner or cmd_dispatch.gh)(args)
+        """`gh` through the runner a caller injected, else the shared one that honors the GitHub hold, with its cost logged under this run (#1114)."""
+        if self.runner:
+            return self.runner(args)
+        return costed(f"drain:{self.slug}", "gh " + " ".join(args), lambda: cmd_dispatch.gh(args))
 
     def branch(self) -> str:
         """The repo's default branch, which every ancestry and count check reads (#877)."""
@@ -82,7 +101,8 @@ class Io:
 
     def list_open(self) -> list[dict] | None:
         """The open stories, each with its board Status and Size attached, or None when either read fails (#1014)."""
-        issues = fetch_open(self.slug)
+        self.memo.forget("blockers")  # a landing may have closed a blocker; a story's comments are kept until it changes
+        issues = costed(f"drain:{self.slug}", f"gh api repos/{self.slug}/issues", lambda: fetch_open(self.slug))
         if issues is None:
             return None
         cards = self.board_cards()
@@ -108,25 +128,31 @@ class Io:
         with none costs no call. A read that fails holds nothing back (#1064)."""
         if not (issue.get("issue_dependencies_summary") or {}).get("blocked_by"):
             return []
+        return self.memo.get("blockers", issue, lambda: self._blockers(issue)) or []
+
+    def _blockers(self, issue: dict) -> list[int] | None:
         done = self.gh(["api", f"repos/{self.slug}/issues/{issue['number']}/dependencies/blocked_by"])
         try:
-            rows = json.loads(done.stdout) if done.returncode == 0 else []
+            rows = json.loads(done.stdout) if done.returncode == 0 else None
         except ValueError:
-            rows = []
+            rows = None
+        if rows is None:
+            return None
         return sorted(r["number"] for r in rows if isinstance(r, dict) and r.get("state") == "open" and "number" in r)
 
     def claimed(self, issue: dict) -> bool:
         """True when another session holds a live claim."""
         n, now = issue["number"], time.time()
-        rows: list = []
-        if issue.get("comments"):
-            done = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments"])
-            try:
-                rows = json.loads(done.stdout) if done.returncode == 0 else []
-            except ValueError:
-                rows = []
+        rows = (self.memo.get("comments", issue, lambda: self._comments(issue)) or []) if issue.get("comments") else []
         story = {"comments": rows}
         return bool(cmd_dispatch.live_claim(self.gh, self.slug, n, story, now))
+
+    def _comments(self, issue: dict) -> list | None:
+        done = self.gh(["api", f"repos/{self.slug}/issues/{issue['number']}/comments"])
+        try:
+            return json.loads(done.stdout) if done.returncode == 0 else None
+        except ValueError:
+            return None
 
     def limit(self) -> int:
         """The most builders this run may hold: --parallel N, else the machine-wide limit (#1055)."""
@@ -518,9 +544,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
     waits, reported = 0, set()
     stopped = False
+    issues = None  # read once, and again only after a story lands or fails (#1114)
     try:
         while True:
-            issues = io.list_open()
+            issues = issues if issues is not None else io.list_open()
             if issues is None:
                 say("Drain stopped: the open stories were not read.")
                 return 1
@@ -552,6 +579,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
                     waits += 1
                     sleep(300)
+                    issues = None  # other runs may have landed or closed stories while this one waited
                     continue
                 if todo and not started and io.capacity() == 0:
                     say(f"Stopping after {FULL_WAITS * 5} minutes: every builder is held by {', '.join(io.holders()) or 'another run'}.")
@@ -571,6 +599,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         except Exception:
                             pass
                 state["tokens"] += used
+                issues = None
                 (state["closed"] if closed else state["blocked"]).append(issue["number"])
             io.beat([i["number"] for i in running.values()])
     except BaseException:  # Ctrl-C or SIGTERM (#1076): the stories in flight go back to Ready and their claims go, then the stop goes on
