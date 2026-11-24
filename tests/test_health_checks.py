@@ -460,3 +460,51 @@ class TestGhVersion(unittest.TestCase):
         self.assertIsNone(cli.gh_problem(mock.Mock(return_value=mock.Mock(stdout="gh version 2.60.0 (x)"))))
         self.assertIsNone(cli.gh_problem(mock.Mock(side_effect=FileNotFoundError)))
 
+
+class ParkedStories(unittest.TestCase):
+    """#1132: a story the drain parked on the turn limit twice must have a thin story naming it as parent, or health fails."""
+
+    @staticmethod
+    def fake(search_out, stories=None, stories_fail=False):
+        def run(args):
+            if args[:3] == ["api", "-X", "GET"] and args[3] == "search/issues":
+                return search_out
+            if stories_fail:
+                return None
+            return "\n".join(json.dumps(s) for s in (stories or []))
+        return run
+
+    def test_no_boards_is_a_skip(self):
+        self.assertEqual(quiet(health._check_parked_stories, [])[0], (1, 0, 0))
+
+    def test_no_parked_stories_passes(self):
+        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake(""))
+        self.assertEqual(result, (1, 0, 0))
+        self.assertIn("[OK]", out)
+
+    def test_a_failed_search_warns(self):
+        result, out = quiet(health._check_parked_stories, ["o/r"], lambda args: None)
+        self.assertEqual(result, (0, 0, 1))
+        self.assertIn("[WARN]", out)
+
+    def test_a_parked_story_with_no_split_fails_naming_the_fix(self):
+        stories = [{"number": 5, "title": "Big thing", "body": "", "id": 1, "labels": []}]
+        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake("5", stories))
+        self.assertEqual(result, (0, 1, 0))
+        self.assertIn("[FAIL]", out)
+        self.assertIn("o/r#5", out)
+        self.assertIn("Split from #5", out)
+
+    def test_a_parked_story_with_a_split_filed_passes(self):
+        stories = [
+            {"number": 5, "title": "Big thing", "body": "", "id": 1, "labels": []},
+            {"number": 6, "title": "Split #5 part 1", "body": "Split from #5", "id": 2, "labels": []},
+        ]
+        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake("5", stories))
+        self.assertEqual(result, (1, 0, 0))
+
+    def test_a_failed_story_read_warns(self):
+        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake("5", stories_fail=True))
+        self.assertEqual(result, (0, 0, 1))
+        self.assertIn("[WARN]", out)
+

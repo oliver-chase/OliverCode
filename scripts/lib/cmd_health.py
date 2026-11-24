@@ -303,6 +303,10 @@ def command_health(fleet_root: Path | None = None) -> int:
     else:
         t.ok(f"every board was groomed within {cmd_groom.STALE_HOURS} hours")
 
+    from lib.health_checks import _check_parked_stories
+    cmd_groom.put_gh_on_path()
+    t.add(*_check_parked_stories(slugs))
+
     # Repos to check for remote reachability and oversized files: the private repos,
     # this framework repo, and every fleet repo that exists on disk.
     topo_repos: list[tuple[str, Path]] = [(n, p) for n, p in _private_repos().items() if (p / ".git").exists() and not _repo_state.skipped(n, p)]

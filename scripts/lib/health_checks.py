@@ -476,6 +476,58 @@ def _check_fleet_repo(dest: Path | None = None) -> tuple[int, int, int]:
     return 1, 0, 0
 
 
+PARKED_QUERY = 'is:issue is:open "Parked:" in:comments'
+
+
+def _parked_numbers(slug: str, run) -> list[int] | None:
+    """Open story numbers with a comment starting `Parked:`, the drain's turn-limit park (#1123), from one search call so no per-issue
+    comment read is spent. None when the search fails."""
+    raw = run(["api", "-X", "GET", "search/issues", "-f", f"q=repo:{slug} {PARKED_QUERY}", "--jq", ".items[].number"])
+    return [int(x) for x in raw.split()] if raw is not None else None
+
+
+def _check_parked_stories(slugs: list[str], run=None) -> tuple[int, int, int]:
+    """A story the drain parked on the turn limit twice (#1123) must have a thin story naming it as parent (a body with `Split from #N`),
+    so it never sits forgotten in Backlog instead of being split (#1132). A board with no board to check is a skip; a failed search or
+    story read on one board only warns, since a parked story on another board is still worth reporting.
+    """
+    from lib import cmd_groom
+    run = run or cmd_groom.gh
+    print("\nParked stories:")
+    if not slugs:
+        print("  [OK] no board to check")
+        return 1, 0, 0
+    passed = failed = skipped = 0
+    for slug in slugs:
+        parked = _parked_numbers(slug, run)
+        if parked is None:
+            print(f"  [WARN] {slug}: could not search for parked stories")
+            skipped += 1
+            continue
+        if not parked:
+            passed += 1
+            continue
+        try:
+            stories = cmd_groom.open_stories(slug, run)
+        except RuntimeError as exc:
+            print(f"  [WARN] {slug}: could not read open stories ({exc})")
+            skipped += 1
+            continue
+        split = {int(n) for s in stories.values() for n in re.findall(r"Split from #(\d+)", s.get("body") or "")}
+        unsplit = [n for n in parked if n not in split]
+        if not unsplit:
+            passed += 1
+            continue
+        for n in sorted(unsplit):
+            title = (stories.get(n) or {}).get("title") or ""
+            print(f"  [FAIL] {slug}#{n} ({title}): parked on the turn limit and names no split. File a thin story under its epic "
+                  f"naming `Split from #{n}`, sized XS, S or M, then return #{n} to Ready")
+        failed += len(unsplit)
+    if passed and not failed and not skipped:
+        print(f"  [OK] every parked story on {len(slugs)} board(s) has a thin story naming it as parent")
+    return passed, failed, skipped
+
+
 def _check_python() -> tuple[int, int, int]:
     """The `python3` a shell finds must meet MIN_PYTHON (lib/cli.py).
 

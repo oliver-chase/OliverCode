@@ -152,6 +152,21 @@ def file_splits(slug, config, stories, big, epic=1, file=None, queued=None):
     return filed
 
 
+def comment_oversized(slug, big_ready, stories, mine, run=gh):
+    """One comment on each Ready oversized story saying its move to Backlog and that it must be split, posted once per story (#1132)."""
+    done = mine.setdefault("big_commented", [])
+    commented = []
+    for n in sorted(big_ready):
+        if n in done:
+            continue
+        text = (f"Moved to Backlog: Size {size_of(stories[n])} is too large for one builder session, so it never reaches the runner. "
+                "Split it into thin stories under its epic, then return it to Ready.")
+        if say(slug, n, text, run):
+            done.append(n)
+            commented.append(n)
+    return commented
+
+
 def epic_priority(story, stories, carded):
     """The Priority of the story's epic when the story states none (#1099): the epic's card, else the line in its body."""
     import board_grooming
@@ -554,8 +569,11 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
             cmd_owner.note("groom", f"{name}: {len(overlaps)} story(ies) overlap code or docs: " + "; ".join(overlaps)[:600])
         mine["overlaps"] = json.dumps(overlaps)
         big = oversized(items, stories)
-        if filed := file_splits(slug, config, stories, {n for n in big if (carded_status(items, n) == "Ready")}, int(cfg.get("epic") or 1), queued=_queued):
+        big_ready = {n for n in big if (carded_status(items, n) == "Ready")}
+        if filed := file_splits(slug, config, stories, big_ready, int(cfg.get("epic") or 1), queued=_queued):
             cmd_owner.note("groom", f"{name}: {len(filed)} oversized story(ies) moved to Backlog, one split story filed for each: " + ", ".join(f"#{n}" for n in filed))
+        if commented := comment_oversized(slug, big_ready, stories, mine, run):
+            cmd_owner.note("groom", f"{name}: told {len(commented)} oversized story(ies) on the issue that they must be split: " + ", ".join(f"#{n}" for n in commented))
         hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big | set(reopened)  # flagged stories stay in Backlog until the owner acts (#1014, #1104)
         epics = board_grooming.epic_moves(items, check_board_hygiene.epic_summaries(items, cfg, "Complete", _read_or_raise(run)), "Complete")
         moved = [m for m in epics if m[1] != "Complete" or _close_epic(slug, m[0], run)]  # an epic moves with its stories (#1105)

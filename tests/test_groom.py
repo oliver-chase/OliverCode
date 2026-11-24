@@ -185,6 +185,20 @@ class TestGroomFields(unittest.TestCase):
         again = cmd_groom.file_splits("o/r", "c", {**stories, 9: {"title": "Split #1 into smaller stories", "body": ""}}, found, file=lambda *a: filed.append(a))
         self.assertEqual(again, [])
 
+    def test_a_ready_oversized_story_gets_one_comment_saying_it_must_be_split(self):
+        """#1132: the card moves to Backlog (covered above) and a comment on the story itself says it must be split, once per story."""
+        big = "Files area: " + ", ".join(f"f{i}.py" for i in range(9)) + "\n" + "".join(f"  Scenario: s{i}\n" for i in range(4))
+        stories = {1: {"title": "Big", "body": big}}
+        mine = {}
+        calls = []
+        commented = cmd_groom.comment_oversized("o/r", {1}, stories, mine, run=lambda a: calls.append(a) or "ok")
+        self.assertEqual([1], commented)
+        self.assertEqual("repos/o/r/issues/1/comments", calls[0][1])
+        self.assertIn("Split it into thin stories", calls[0][-1])
+        again = mock.Mock(return_value="ok")
+        self.assertEqual([], cmd_groom.comment_oversized("o/r", {1}, stories, mine, run=again))
+        again.assert_not_called()
+
     def test_a_failed_read_of_the_open_stories_raises_so_groom_records_no_ok(self):
         with self.assertRaises(RuntimeError):
             cmd_groom.open_stories("o/r", run=lambda args: None)
