@@ -88,6 +88,7 @@ class FakeIo:
         return True, ""
     def release(self, n): self.released.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
+    def backlog(self, n): self.parked = getattr(self, "parked", []) + [n]
     def landed(self, wt, n): return self.already or (n in self.on_main)
     def policy_stop(self, n, wt): return self.stops.get(n)
     def queue_owner(self, n, stop): self.owner.append((n, stop))
@@ -384,6 +385,29 @@ class DrainCase(unittest.TestCase):
         io.ghost_land = True
         self.run_drain(io)
         self.assertEqual((io.closed, io.moved, io.kept), ([], [], [1]))
+
+    def test_a_story_that_stops_on_the_turn_limit_twice_is_parked_and_the_next_story_builds(self):
+        spent = {"done": False, "reason": "max_turns", "budget": True}
+        io = FakeIo([issue(1, "Priority: P0"), issue(2)], cap=1, builds={1: [dict(spent) for _ in range(4)]})
+        _, _, st = self.run_drain(io)
+        self.assertEqual(io.started.count(1), 2)  # no third restart
+        self.assertEqual(io.parked, [1])
+        self.assertEqual((io.closed, io.kept), ([2], []))
+        self.assertIn(1, io.released)
+        self.assertTrue(any(n == 1 and body.startswith("Parked:") for n, body in io.comments))
+
+    def test_a_turn_limit_stop_followed_by_another_failure_is_not_parked(self):
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "x", "budget": True}, {"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "x", "budget": True}, {"done": False, "reason": "y"}]})
+        self.run_drain(io)
+        self.assertEqual(io.started.count(1), 4)
+        self.assertFalse(getattr(io, "parked", []))
+
+    def test_a_story_of_size_l_or_xl_is_skipped_and_named(self):
+        for size in ("L", "XL"):
+            reason = cmd_drain.skip_reason(issue(1, size=size))
+            self.assertIn(f"Size {size}", reason)
+            self.assertIn("split", reason)
+        self.assertEqual(cmd_drain.skip_reason(issue(1, size="M")), "")
 
     def test_a_blocked_story_stays_open_and_returns_to_ready(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1 in round 1."} for _ in range(4)]})
