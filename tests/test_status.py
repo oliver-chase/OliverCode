@@ -115,15 +115,15 @@ class TestStatusLayout(unittest.TestCase):
     """#1117: status opens with the figures, then sections set off by blank lines, one line for each building story, and no story line over 80 columns."""
 
     def test_minutes_count_from_the_claims_start_and_a_renewal_does_not_reset_them(self):
-        """#1093: a claim renewed every minute kept reading 0 or -1 minutes."""
+        """#1093: a claim renewed every minute kept reading 0 or -1 minutes (#1122)."""
         claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 26 * 60, "at": NOW.timestamp() + 5}}
         log = [{"story": "story-7", "round": 1}, {"story": "story-7"}]
-        self.assertEqual("r #7 · Building · 26 min", cmd_status.state_lines(NOW.timestamp(), claims, log, {}, None, [], 1, "", [], "o/r")[0])
+        self.assertEqual("r #7 · Building · claimed 26m, activity 26m, 1 round", cmd_status.state_lines(NOW.timestamp(), claims, log, {}, None, [], 1, "", [], "o/r")[0])
 
     def test_minutes_count_from_the_start_when_the_claim_was_rewritten_a_minute_ago(self):
-        """#1086: a claim posted again keeps its start, so 42 minutes of building read 42 minutes."""
+        """#1086: a claim posted again keeps its start, so 42 minutes of building read 42 minutes (#1122)."""
         claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 42 * 60, "at": NOW.timestamp() - 60}}
-        self.assertEqual("r #7 · Building · 42 min", cmd_status.state_lines(NOW.timestamp(), claims, [], {}, None, [], 1, "", [], "o/r")[0])
+        self.assertEqual("r #7 · Building · claimed 42m, activity 42m, 0 rounds", cmd_status.state_lines(NOW.timestamp(), claims, [], {}, None, [], 1, "", [], "o/r")[0])
 
     def test_three_building_stories_print_one_line_each_under_blank_separated_sections_in_80_columns(self):
         claims = {f"o/OliverCode#{n}": {"agent": "drain", "since": NOW.timestamp() - 42 * 60, "at": NOW.timestamp()} for n in (1105, 1107, 996)}
@@ -143,8 +143,8 @@ class TestStatusLayout(unittest.TestCase):
         self.assertTrue(lines[0].startswith("o/OliverCode: 3 open."))
         self.assertEqual("", lines[1])
         self.assertEqual("", lines[lines.index("Building:") - 1])
-        self.assertIn("OliverCode #1105 · S · Landing · 10 min", lines)
-        self.assertIn("OliverCode #1107 · M · Building · 42 min", lines)
+        self.assertIn("OliverCode #1105 · S · Landing · claimed 42m, activity 10m, 0 rounds", lines)
+        self.assertIn("OliverCode #1107 · M · Building · claimed 42m, activity 42m, 0 rounds", lines)
         story_lines = [line for line in lines if " · " in line]
         self.assertEqual(3, len(story_lines))
         self.assertTrue(all(len(line) <= 80 for line in story_lines))
@@ -253,7 +253,7 @@ class TestDigest(unittest.TestCase):
         t = NOW.timestamp()
         claims = {"o/r#7": {"agent": "drain", "at": t - 600}}
         lines = cmd_status.state_lines(t, claims, [], {}, None, [], 1, "", [], "o/r", cmd_status.story_notes(t, claims, [], False, None, None))
-        self.assertEqual("r #7 · Building · 10 min", lines[0])
+        self.assertEqual("r #7 · Building · claimed 10m, activity 10m, 0 rounds", lines[0])
         self.assertTrue(lines[1].startswith("  Warning: #7 holds a claim by drain but no drain or dispatch process is running."))
 
     def test_a_story_whose_log_and_commits_have_not_moved_says_so(self):
@@ -310,22 +310,22 @@ class TestDigest(unittest.TestCase):
 
 
     def test_each_building_story_names_its_repo_size_state_minutes_and_what_holds_it(self):
-        """#1112: a story waiting for validation names the slot's holder, and each other state reads from the run log, the holds and the queue."""
+        """#1112: a story waiting for validation names the slot's holder, and each other state reads from the run log, the holds and the queue (#1122)."""
         t = NOW.timestamp()
         done = {"story": "story-1083", "round": 1, "at": "2026-11-21T23:56:00Z"}
         claims = {"o/OliverCode#1083": {"at": t - 900}}
         issues = {"1083": {"body": "Size: M"}}
         line = lambda **kw: cmd_status.state_lines(t, claims, kw.get("log", [done]), issues, kw.get("holder"), kw.get("slots", ["OliverCode-1084"]), 1,
                                                    kw.get("github", ""), kw.get("elsewhere", []), "o/OliverCode")
-        self.assertEqual(["OliverCode #1083 · M · Waiting for validation · 4 min · held by OliverCode #1084"], line())
-        self.assertEqual(["OliverCode #1083 · M · Reviewing · 4 min"], line(slots=["OliverCode-1083"]))
-        self.assertEqual(["OliverCode #1083 · M · Landing · 4 min"], line(log=[{**done, "review": "pass"}]))
-        self.assertEqual(["OliverCode #1083 · M · Building · 15 min"], line(log=[], slots=[]))
-        self.assertEqual(["OliverCode #1083 · M · Waiting for GitHub · 15 min · the GraphQL rate limit"], line(log=[], github="held"))
-        self.assertEqual(["OliverCode #1083 · M · Waiting for another repo · 15 min · digioperator holds it"],
+        self.assertEqual(["OliverCode #1083 · M · Waiting for validation · claimed 15m, activity 4m, 1 round · held by OliverCode #1084"], line())
+        self.assertEqual(["OliverCode #1083 · M · Validating · claimed 15m, activity 4m, 1 round"], line(slots=["OliverCode-1083"]))
+        self.assertEqual(["OliverCode #1083 · M · Landing · claimed 15m, activity 4m, 1 round"], line(log=[{**done, "review": "pass"}]))
+        self.assertEqual(["OliverCode #1083 · M · Building · claimed 15m, activity 15m, 0 rounds"], line(log=[], slots=[]))
+        self.assertEqual(["OliverCode #1083 · M · Waiting for GitHub · claimed 15m, activity 15m, 0 rounds · the GraphQL rate limit"], line(log=[], github="held"))
+        self.assertEqual(["OliverCode #1083 · M · Waiting for another repo · claimed 15m, activity 15m, 0 rounds · digioperator holds it"],
                          line(log=[], holder={"building": [5]}, elsewhere=["o/digioperator"]))
         both = {**claims, "o/digioperator#824": {"at": t - 900}}
-        self.assertEqual(["OliverCode #1083 · M · Building · 15 min", "digioperator #824 · Building · 15 min"],
+        self.assertEqual(["OliverCode #1083 · M · Building · claimed 15m, activity 15m, 0 rounds", "digioperator #824 · Building · claimed 15m, activity 15m, 0 rounds"],
                          cmd_status.state_lines(t, both, [], issues, {"building": [1083]}, [], 1, "", ["o/digioperator"], "o/OliverCode"))
 
     def test_status_names_a_graphql_hold_as_waiting_for_github(self):
@@ -337,10 +337,10 @@ class TestDigest(unittest.TestCase):
         self.assertEqual("held", lines.call_args.args[7])
 
     def test_builders_from_two_repos_each_name_their_repo_and_a_closed_story_is_dropped(self):
-        """#1095: a claim's repo shows on its line, a claim for another repo's number holds nothing here, and a closed story is stale, not building."""
+        """#1095: a claim's repo shows on its line, a claim for another repo's number holds nothing here, and a closed story is stale, not building (#1122)."""
         claims = {"o/OliverCode#1031": {"agent": "drain", "at": NOW.timestamp() - 60}, "o/digioperator#824": {"agent": "drain", "at": NOW.timestamp() - 60}}
         lines = cmd_status.state_lines(NOW.timestamp(), claims, [], {}, None, [], 1, "", [], "o/OliverCode")
-        self.assertEqual(["OliverCode #1031 · Building · 1 min", "digioperator #824 · Building · 1 min"], lines)
+        self.assertEqual(["OliverCode #1031 · Building · claimed 1m, activity 1m, 0 rounds", "digioperator #824 · Building · claimed 1m, activity 1m, 0 rounds"], lines)
         rows = [{"number": 824, "state": "closed"}]
         gone = SimpleNamespace(returncode=0, stdout="open\n")
         self.assertEqual({"o/OliverCode#824"}, cmd_status.closed_claims({"o/OliverCode#824": {}, "o/digioperator#824": {}}, "o/OliverCode", rows, lambda a: gone))

@@ -174,6 +174,16 @@ def this_run(rows: list[dict], began: float) -> list[dict]:
     return [r for r in rows if _stamp(r, began) >= began]
 
 
+def round_count(rows: list[dict]) -> int:
+    """The number of distinct round entries logged for a story, representing builder invocations (#1122)."""
+    return len([r for r in rows if isinstance(r.get("round"), int)])
+
+
+def turn_limit_hits(rows: list[dict]) -> int:
+    """The number of times a story stopped on the turn limit, counting restarts (#1122)."""
+    return sum(1 for r in rows if r.get("stop") == "turn_limit")
+
+
 
 
 
@@ -199,21 +209,30 @@ def quiet_note(rows: list[dict], began: float, now: float, committed: float | No
     return f"Warning: No progress for {quiet} minutes: the last thing it did was {what} at {datetime.fromtimestamp(at):%H:%M}." if quiet >= QUIET_MINUTES else ""
 
 
+def turn_limit_warning(n: str, hits: int) -> str:
+    """A warning when a story has hit the turn limit multiple times, so it keeps restarting (#1122)."""
+    plural = "s" if hits != 1 else ""
+    return f"Warning: #{n} has hit the turn limit {hits} time{plural}. The claim keeps restarting. Delete its entry in {claims_path()} to release it."
+
+
 def story_notes(now: float, claims: dict, log: list[dict], alive: bool, holder: dict | None, commits: dict[str, float] | None) -> dict[str, str]:
-    """The warning under each building story, by story number: a claim with no live runner, a claim with no progress for STALL_MINUTES (#987, #1020), or a
-    claim whose log and worktree commits have not moved for QUIET_MINUTES (#1086). `holder` is the live run that holds the repo, if any (#1076)."""
+    """The warning under each building story, by story number: a claim with no live runner, a claim with no progress for STALL_MINUTES (#987, #1020), a claim
+    whose round hit the turn limit twice (#1122), or a claim whose log and worktree commits have not moved for QUIET_MINUTES (#1086). `holder` is the live run that holds the repo, if any (#1076)."""
     notes = {}
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
         progress = float(mine.get("at", 0))
         if holder and n.isdigit() and int(n) in (holder.get("building") or []):
             progress = max(progress, float(holder.get("beat", 0)))  # the live runner beats while it builds the story (#1020)
+        story_log = [r for r in log if r.get("story") == f"story-{n}"]
         if not alive:
             notes[n] = (f"Warning: #{n} holds a claim by {mine.get('agent')} but no drain or dispatch process is running. The claim expires by itself "
                         f"after {log_action.CLAIM_HOURS} hours, or delete its entry in {claims_path()} to release it now.")
         elif (now - progress) / 60 > STALL_MINUTES:
             notes[n] = stall_line(n, mine, int((now - progress) // 60), holder)
-        elif quiet := quiet_note([r for r in log if r.get("story") == f"story-{n}"], float(mine.get("since") or mine.get("at", 0)), now, (commits or {}).get(n)):
+        elif (hits := turn_limit_hits(story_log)) >= 2:
+            notes[n] = turn_limit_warning(n, hits)
+        elif quiet := quiet_note(story_log, float(mine.get("since") or mine.get("at", 0)), now, (commits or {}).get(n)):
             notes[n] = quiet
     return notes
 
@@ -311,8 +330,7 @@ def validation_slots() -> tuple[list[str], int]:
 def story_state(repo: str, n: str, rows: list[dict], began: float, holder: dict | None, slots: list[str], slot_total: int, github: str, elsewhere: list[str],
                 own: bool = False) -> tuple[str, str]:
     """The state a building story is in and what holds it, '' when nothing does (#1112). A story is in the validation queue when its round ended and its worktree
-    holds no slot while every slot is held. Only a claim of this repo, `own`, is read against this repo's lock, since another repo's claim is that repo's own build.
-    shortcut: validation and the fresh reader both read as Reviewing, upgrade when the loop logs its phases."""
+    holds a slot. Only a claim of this repo, `own`, is read against this repo's lock, since another repo's claim is that repo's own build (#1122)."""
     mine = this_run(rows, began)
     last = mine[-1] if mine else {}
     if own and n.isdigit() and holder and int(n) not in (holder.get("building") or []) and elsewhere and not mine:
@@ -322,6 +340,8 @@ def story_state(repo: str, n: str, rows: list[dict], began: float, holder: dict 
     if last.get("review") == "pass":
         return "Landing", ""
     if isinstance(last.get("round"), int):
+        if f"{repo}-{n}" in slots:
+            return "Validating", ""
         if f"{repo}-{n}" not in slots and slots and len(slots) >= slot_total:
             return "Waiting for validation", f"held by {_slot_name(slots[0])}"
         return "Reviewing", ""
@@ -330,8 +350,8 @@ def story_state(repo: str, n: str, rows: list[dict], began: float, holder: dict 
 
 def state_lines(now: float, claims: dict, log: list[dict], issues: dict[str, dict], holder: dict | None, slots: list[str], slot_total: int, github: str, elsewhere: list[str],
                 slug: str = "", notes: dict[str, str] | None = None) -> list[str]:
-    """One line for each building story: 'OliverCode #1083 · M · Waiting for validation · 4 min · held by OliverCode #1084' (#1112). Its warning from
-    NOTES, when it has one, sits on an indented line under it."""
+    """One line for each building story showing claimed time, activity time, and round count: 'OliverCode #1083 · M · Waiting for validation · claimed 9m, activity 2m, 1 round · held by OliverCode #1084' (#1122).
+    Its warning from NOTES, when it has one, sits on an indented line under it."""
     lines = []
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
@@ -341,7 +361,12 @@ def state_lines(now: float, claims: dict, log: list[dict], issues: dict[str, dic
         state, held = story_state(repo, n, rows, began, holder, slots, slot_total, github, elsewhere, key.rpartition("#")[0] == slug)
         since = max([began] + [_stamp(r, began) for r in this_run(rows, began)])
         size = cmd_groom.size_of(issues[n]) if n in issues else ""
-        lines.append(" · ".join([f"{repo} #{n}"] + ([size] if size else []) + [state, f"{max(0, int((now - since) // 60))} min"] + ([held] if held else [])))
+        claimed_min = max(0, int((now - began) // 60))
+        activity_min = max(0, int((now - since) // 60))
+        rounds = round_count(rows)
+        round_word = "round" if rounds == 1 else "rounds"
+        time_summary = f"claimed {claimed_min}m, activity {activity_min}m, {rounds} {round_word}"
+        lines.append(" · ".join([f"{repo} #{n}"] + ([size] if size else []) + [state, time_summary] + ([held] if held else [])))
         if (notes or {}).get(n):
             lines.append(f"  {notes[n]}")
     return lines
