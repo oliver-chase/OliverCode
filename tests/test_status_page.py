@@ -1,10 +1,14 @@
 """#1001: City page. The banner, the org chart, the open stories, the landed list, the nav and the REST-only read."""
 
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
+import time
 import unittest
+from pathlib import Path
 
 from _support import REPO_ROOT
 
@@ -99,6 +103,67 @@ class ReadCase(unittest.TestCase):
         self.assertNotIn("graphql", " ".join(run.calls[0]))
         self.assertIsNone(status_page.refresh_issues("o/a", {}, fake([], 1)))
         self.assertIn("<pre>", status_page.body_html("o/a", "x", lambda a: subprocess.CompletedProcess(a, 1, "", "")))
+
+
+class ThreadCase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.projects = Path(self.tmp.name) / "projects"
+        self.repo = Path(self.tmp.name) / "work" / "repo-a"
+        self.folder = status_page.project_dir(self.repo, self.projects)
+        self.folder.mkdir(parents=True)
+        self.now = time.time()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, name, rows, age):
+        path = self.folder / name
+        path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        stamp = self.now - age
+        os.utime(path, (stamp, stamp))
+
+    def gather(self):
+        return status_page.threads({self.repo: "repo-a"}, self.now, self.projects)["repo-a"]
+
+    def test_active_thread_has_title_age_and_tokens(self):
+        started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.now - 600))
+        self.write("audit.jsonl", [{"type": "user", "timestamp": started, "message": {"role": "user", "content": "Audit   the repo"}}], age=60)
+        found = self.gather()
+        self.assertEqual(len(found["active"]), 1)
+        thread = found["active"][0]
+        self.assertEqual(thread["title"], "Audit the repo")
+        self.assertEqual(thread["minutes"], 10)
+        self.assertGreater(thread["tokens"], 0)
+        self.assertEqual(found["recent"], [])
+
+    def test_idle_thread_moves_to_recent_with_last_activity(self):
+        self.write("plan.jsonl", [{"type": "summary", "summary": "Strategy plan"}], age=3600)
+        found = self.gather()
+        self.assertEqual(found["active"], [])
+        self.assertEqual(found["recent"][0]["title"], "Strategy plan")
+        self.assertIn(":", found["recent"][0]["last_activity"])
+
+    def test_headless_builder_is_not_a_thread(self):
+        self.write("builder.jsonl", [{"type": "user", "entrypoint": "sdk-cli", "message": {"content": "Build #7"}}], age=60)
+        found = self.gather()
+        self.assertEqual(found["active"] + found["recent"], [])
+
+    def test_unknown_folder_and_no_transcripts(self):
+        self.assertEqual(status_page.threads({Path(self.tmp.name) / "elsewhere": "x"}, self.now, self.projects), {"x": {"active": [], "recent": []}})
+
+    def test_count_and_card_show_threads(self):
+        self.write("a.jsonl", [{"type": "user", "message": {"content": "<b>Audit</b>"}}], age=60)
+        repo = {"name": "repo-a", "slug": "o/a", "issues": [], "threads": self.gather()}
+        page = status_page.render({"repos": [repo], "run": None})
+        self.assertIn("0 headless builders and 1 interactive thread active", page)
+        self.assertIn("Interactive, active for", page)
+        self.assertIn("&lt;b&gt;Audit&lt;/b&gt;", page)
+        self.assertNotIn("<b>Audit</b>", page)
+
+    def test_banner_counts_builders_and_threads(self):
+        self.assertIn("2 headless builders and 1 interactive thread active", status_page.banner({"builders": 2, "plan": []}, None, 1))
+        self.assertIn("1 headless builder and 0 interactive threads", status_page.banner({"builders": 1, "plan": []}, None, 0))
 
 
 if __name__ == "__main__":

@@ -4,8 +4,9 @@
 30-minute rewrite and fetches only the issues whose updated time changed since the last read. It spends no GraphQL.
 
 The data is a dict: `run` (None when idle, else repo, title, models, builders, finish, plan, building), `last_landed`, `repos` (name, slug,
-description, pushed, activity, issues) and `landed` (number, title, repo, landed_at, commit, model). An issue carries number, title, priority,
-status, body_html, updated_at and building.
+description, pushed, activity, issues, threads) and `landed` (number, title, repo, landed_at, commit, model). An issue carries number, title, priority,
+status, body_html, updated_at and building. `threads` (#1003) is `{"active": [...], "recent": [...]}` from `threads(folders, now)`: each thread has
+title, minutes, tokens, mtime and last_activity.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ import html
 import json
 import re
 import subprocess
+from datetime import datetime
+from pathlib import Path
 
 DEFAULT_TOKENS = {
     "field": "#FFFFFF",
@@ -96,10 +99,16 @@ def anchor(slug: str, number=None) -> str:
     return f"{base}-{number}" if number is not None else base
 
 
-def banner(run, last_landed) -> str:
+def plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def banner(run, last_landed, interactive: int = 0) -> str:
+    """`interactive` is the count of active interactive threads across all repos (#1003), shown beside the headless builders."""
     if not run:
         tail = f" Last landed: #{esc(last_landed['number'])} {esc(last_landed['title'])}." if last_landed else ""
-        return f'<section id="building"><h2>Building now</h2><div class="card"><span class="marker"></span>The runner is idle.{tail}</div></section>'
+        count = f"{plural(0, 'headless builder')} and {plural(interactive, 'interactive thread')} active across all repos."
+        return f'<section id="building"><h2>Building now</h2><div class="card"><span class="marker"></span>The runner is idle.{tail}<p>{count}</p></div></section>'
     building = run.get("building", [])
     plan = "".join(
         f'<li class="mono">{"<span class=marker></span><b>" if n in building else ""}#{esc(n)}{"</b>" if n in building else ""}</li>' for n in run.get("plan", [])
@@ -109,10 +118,32 @@ def banner(run, last_landed) -> str:
         f"<li>Models: {esc(', '.join(run.get('models', [])))}</li><li>Builders: {esc(run.get('builders'))}</li>"
         f"<li>Estimated finish: {esc(run.get('finish') or 'not yet estimated')}</li>"
     )
+    count = f"{plural(run.get('builders') or 0, 'headless builder')} and {plural(interactive, 'interactive thread')} active across all repos."
     return (
-        f'<section id="building"><h2>Building now</h2><div class="card live"><p><span class="marker pulse"></span><b>Live</b></p>'
+        f'<section id="building"><h2>Building now</h2><div class="card live"><p><span class="marker pulse"></span><b>Live</b></p><p>{count}</p>'
         f"<ul>{facts}</ul><hr><h3 class=\"sub\">Planned in order</h3><ol>{plan}</ol></div></section>"
     )
+
+
+def thread_block(repo) -> str:
+    """The repo's Claude threads inside its card (#1003): active ones marked interactive with their age and context size, then the idle ones."""
+    found = repo.get("threads") or {}
+    active = "".join(
+        f'<li><span class="marker" aria-hidden="true"></span>{esc(t["title"])}<ul><li>Interactive, active for {esc(t["minutes"])} min</li>'
+        f'<li>About {esc(t["tokens"])} tokens of context</li></ul></li>'
+        for t in found.get("active", [])
+    )
+    recent = "".join(
+        f'<li>{esc(t["title"])}<ul><li>Idle, last activity {esc(t["last_activity"])}</li></ul></li>' for t in found.get("recent", [])
+    )
+    if not active and not recent:
+        return ""
+    heading = '<li class="sub" style="list-style:none">Recent</li>' if recent else ""
+    return f'<hr><h3 class="sub">Threads</h3><ul>{active}{heading}{recent}</ul>'
+
+
+def interactive_count(repos) -> int:
+    return sum(len((repo.get("threads") or {}).get("active", [])) for repo in repos)
 
 
 def org_chart(repos, run) -> str:
@@ -125,7 +156,7 @@ def org_chart(repos, run) -> str:
             f'<details class="card{" live" if live else ""}"><summary><span>{esc(repo["name"])}</span>'
             f'<span class="mono">{len(repo.get("issues", []))} open</span></summary><hr><ul>'
             f"<li>{esc(repo.get('description') or 'No description')}</li><li>Last update: {esc(repo.get('pushed'))}</li>"
-            f"<li>Last activity: {esc(repo.get('activity'))}</li></ul>"
+            f"<li>Last activity: {esc(repo.get('activity'))}</li></ul>{thread_block(repo)}"
             f'<a class="jump" href="#{anchor(repo["slug"])}">Open stories</a></details>'
         )
     return (
@@ -171,7 +202,7 @@ def render(data: dict, tokens: dict | None = None) -> str:
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         f'<title>OliverCode City</title><link rel="stylesheet" href="{FONTS_URL}"><style>{style}</style></head><body id="page-top">'
         f'<nav aria-label="Sections">{nav}</nav><main><h1>OliverCode City</h1>'
-        f"{banner(data.get('run'), data.get('last_landed'))}{org_chart(repos, data.get('run'))}{stories(repos)}{landed(data.get('landed', []))}</main>"
+        f"{banner(data.get('run'), data.get('last_landed'), interactive_count(repos))}{org_chart(repos, data.get('run'))}{stories(repos)}{landed(data.get('landed', []))}</main>"
         '<a class="top" href="#page-top" aria-label="Back to top">&#8593;</a></body></html>'
     )
 
@@ -209,3 +240,77 @@ def body_html(slug: str, text: str, runner=None) -> str:
     """An issue body rendered by GitHub's own markdown endpoint (REST), or the escaped text when the read fails."""
     done = gh(["-X", "POST", "markdown", "-f", f"text={text}", "-f", "mode=gfm", "-f", f"context={slug}"], runner)
     return done.stdout if done.returncode == 0 and done.stdout else f"<pre>{esc(text)}</pre>"
+
+
+ACTIVE_SECONDS = 30 * 60  # a transcript changed within this long is an active thread (#1003)
+HEADLESS = "sdk-cli"  # the entrypoint a runner's builder session writes, so its transcript is a builder, not a thread
+TOKEN_BYTES = 4  # shortcut: transcript bytes / 4 estimates context tokens, no tokenizer call, upgrade when City shows exact counts
+
+
+def project_dir(folder: Path, projects: Path) -> Path:
+    """Where Claude Code keeps a working folder's transcripts: its absolute path with every non-alphanumeric character as a dash."""
+    return projects / re.sub(r"[^A-Za-z0-9]", "-", str(folder))
+
+
+def _first_lines(path: Path, limit: int = 20) -> list[dict]:
+    rows = []
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        for _, line in zip(range(limit), fh):
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                continue
+    return rows
+
+
+def _title(rows: list[dict]) -> str:
+    """The transcript's summary line when it has one, else the first request, shortened to one line."""
+    for row in rows:
+        if row.get("type") == "summary" and row.get("summary"):
+            return " ".join(str(row["summary"]).split())[:80]
+    for row in rows:
+        if row.get("type") != "user":
+            continue
+        content = (row.get("message") or {}).get("content")
+        text = content if isinstance(content, str) else " ".join(b.get("text", "") for b in content or [] if isinstance(b, dict))
+        if text.strip():
+            return " ".join(text.split())[:80]
+    return "Untitled thread"
+
+
+def _started(rows: list[dict], fallback: float) -> float:
+    for row in rows:
+        try:
+            return datetime.fromisoformat(str(row["timestamp"]).replace("Z", "+00:00")).timestamp()
+        except (KeyError, TypeError, ValueError):
+            continue
+    return fallback
+
+
+def threads(folders: dict, now: float, projects: Path | None = None, recent_limit: int = 5) -> dict:
+    """Per repo name, the interactive Claude threads whose working folder is that repo (#1003). `folders` maps a repo folder to the repo's name.
+    `active` holds the transcripts changed within ACTIVE_SECONDS, `recent` the newest idle ones (up to `recent_limit`). A runner's headless builder
+    is skipped. It reads transcript file times and their first lines only, with no model call."""
+    projects = projects or Path.home() / ".claude" / "projects"
+    out = {}
+    for folder, name in folders.items():
+        active, recent = [], []
+        for path in project_dir(Path(folder), projects).glob("*.jsonl"):
+            try:
+                info = path.stat()
+                rows = _first_lines(path)
+            except OSError:
+                continue
+            if any(row.get("entrypoint") == HEADLESS for row in rows):
+                continue
+            item = {
+                "title": _title(rows),
+                "minutes": max(0, int((now - _started(rows, info.st_mtime)) // 60)),
+                "tokens": -(-info.st_size // TOKEN_BYTES),
+                "mtime": info.st_mtime,
+                "last_activity": datetime.fromtimestamp(info.st_mtime).strftime("%Y-%m-%d %H:%M"),
+            }
+            (active if now - info.st_mtime <= ACTIVE_SECONDS else recent).append(item)
+        recent.sort(key=lambda t: t["mtime"], reverse=True)
+        out[name] = {"active": active, "recent": recent[:recent_limit]}
+    return out
