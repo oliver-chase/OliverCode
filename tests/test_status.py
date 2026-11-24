@@ -111,6 +111,46 @@ class TestStatus(unittest.TestCase):
         self.assertEqual([{"created_at": "a"}], cmd_status.recent("o/r", NOW, runner=lambda args: Done()))
 
 
+class TestStatusLayout(unittest.TestCase):
+    """#1117: status opens with the figures, then sections set off by blank lines, one line for each building story, and no story line over 80 columns."""
+
+    def test_minutes_count_from_the_claims_start_and_a_renewal_does_not_reset_them(self):
+        """#1093: a claim renewed every minute kept reading 0 or -1 minutes."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 26 * 60, "at": NOW.timestamp() + 5}}
+        log = [{"story": "story-7", "round": 1}, {"story": "story-7"}]
+        self.assertEqual("r #7 · Building · 26 min", cmd_status.state_lines(NOW.timestamp(), claims, log, {}, None, [], 1, "", [], "o/r")[0])
+
+    def test_minutes_count_from_the_start_when_the_claim_was_rewritten_a_minute_ago(self):
+        """#1086: a claim posted again keeps its start, so 42 minutes of building read 42 minutes."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 42 * 60, "at": NOW.timestamp() - 60}}
+        self.assertEqual("r #7 · Building · 42 min", cmd_status.state_lines(NOW.timestamp(), claims, [], {}, None, [], 1, "", [], "o/r")[0])
+
+    def test_three_building_stories_print_one_line_each_under_blank_separated_sections_in_80_columns(self):
+        claims = {f"o/OliverCode#{n}": {"agent": "drain", "since": NOW.timestamp() - 42 * 60, "at": NOW.timestamp()} for n in (1105, 1107, 996)}
+        log = [{"story": "story-1105", "review": "pass", "at": "2026-11-21T23:50:00Z"}]
+        issues = [{"number": 1105, "body": "Size: S"}, {"number": 1107, "body": "Size: M"}, {"number": 996, "body": "Size: M"}]
+        out = io.StringIO()
+        with mock.patch.object(cmd_status, "run_log", return_value=log), mock.patch.object(cmd_status, "live_claims", return_value=claims), \
+                mock.patch.object(cmd_status, "runner_alive", return_value=True), mock.patch.object(cmd_status.run_lock, "active", return_value=None), \
+                mock.patch.object(cmd_status.run_lock, "holders_elsewhere", return_value=[]), mock.patch.object(cmd_status, "next_ready", return_value=""), \
+                mock.patch.object(cmd_status, "held_numbers", return_value=set()), mock.patch.object(cmd_status, "closed_claims", return_value=set()), \
+                mock.patch.object(cmd_status.open_issues, "fetch", return_value=issues), mock.patch.object(cmd_status, "last_commit", return_value=None), \
+                mock.patch.object(cmd_status, "validation_slots", return_value=([], 1)), mock.patch.object(cmd_status.gh_budget, "refusal", return_value=""), \
+                mock.patch.object(cmd_status.local_config, "builder_note", return_value=""), mock.patch("lib.gated.savings_lines", return_value=[]):
+            cmd_status.run("o/OliverCode", count=lambda s, state: 3, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
+                           waiting=lambda: [], cands=lambda: "", numbers=lambda: {"tokens_per_closed": None, "handovers": 0, "threads": 0, "open": 3})
+        lines = out.getvalue().splitlines()
+        self.assertTrue(lines[0].startswith("o/OliverCode: 3 open."))
+        self.assertEqual("", lines[1])
+        self.assertEqual("", lines[lines.index("Building:") - 1])
+        self.assertIn("OliverCode #1105 · S · Landing · 10 min", lines)
+        self.assertIn("OliverCode #1107 · M · Building · 42 min", lines)
+        story_lines = [line for line in lines if " · " in line]
+        self.assertEqual(3, len(story_lines))
+        self.assertTrue(all(len(line) <= 80 for line in story_lines))
+        self.assertEqual(1, sum("#1105" in line for line in lines))
+
+
 def decision(n: int, words: str = "Option A") -> dict:
     return {"created": "2026-11-22T10:00:00+00:00", "decision": f"D{n}", "thread": "T1", "words": words, "options": ["A", "B"], "choice": "A", "by": "SID"}
 
@@ -209,11 +249,65 @@ class TestDigest(unittest.TestCase):
         self.assertIn("were not read", out.getvalue())
         self.assertFalse(target.exists())
 
-    def test_a_building_story_is_one_line_with_its_time_round_last_landing_and_next_ready(self):
-        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 600}}
-        log = [{"story": "story-7", "round": 2, "at": "2026-11-21T23:58:00Z"}]
-        lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "P0 #9 First", {"number": 4, "title": "Done"})
-        self.assertEqual([f"Building r #7: started {datetime.fromtimestamp(NOW.timestamp() - 600).strftime('%H:%M')}, 10 minutes ago, round 2 of 2, in validation and the fresh reader, no estimate yet.", "Last landed: #4 Done. Next Ready: P0 #9 First."], lines)
+    def test_a_building_story_is_one_line_and_its_warning_sits_on_an_indented_line_under_it(self):
+        t = NOW.timestamp()
+        claims = {"o/r#7": {"agent": "drain", "at": t - 600}}
+        lines = cmd_status.state_lines(t, claims, [], {}, None, [], 1, "", [], "o/r", cmd_status.story_notes(t, claims, [], False, None, None))
+        self.assertEqual("r #7 · Building · 10 min", lines[0])
+        self.assertTrue(lines[1].startswith("  Warning: #7 holds a claim by drain but no drain or dispatch process is running."))
+
+    def test_a_story_whose_log_and_commits_have_not_moved_says_so(self):
+        """#1086: 45 minutes in with nothing new for 20 minutes, the warning says so with the last thing it did, and a newer commit counts as a move."""
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 45 * 60, "at": NOW.timestamp()}}
+        log = [{"story": "story-7", "round": 1, "stop": "end_turn", "at": "2026-11-21T23:40:00Z"}]
+        self.assertIn("Warning: No progress for 20 minutes: the last thing it did was ending round 1 at", cmd_status.story_notes(NOW.timestamp(), claims, log, True, None, None)["7"])
+        self.assertEqual({}, cmd_status.story_notes(NOW.timestamp(), claims, log, True, None, {"7": NOW.timestamp() - 120}))
+
+    def test_an_idle_runner_says_so_and_names_the_command_that_starts_it(self):
+        self.assertEqual("Runner idle: no story is building and 3 stories are open. Start it with `olivercode drain REPO`.", cmd_status.idle_line(False, 3))
+        self.assertEqual(["Last landed: none in the last 7 days."], cmd_status.last_lines(False, None, "", [], None))
+
+    def test_a_stalled_builder_is_warned_with_the_command_that_resumes_it(self):
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 3600}}
+        log = [{"story": "story-7", "round": 1, "at": "2026-11-21T22:00:00Z"}]
+        note = cmd_status.story_notes(NOW.timestamp(), claims, log, True, None, None)["7"]
+        self.assertIn("the runner has stalled on #7", note)
+        self.assertIn("olivercode dispatch 7", note)
+
+    def test_a_stalled_claim_while_a_run_holds_the_repo_names_the_kill_that_releases_it_and_never_dispatch(self):
+        """#1076: dispatch would only join the holding run's queue, so the warning names that run's kill instead."""
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 3600}}
+        log = [{"story": "story-7", "round": 1, "at": "2026-11-21T22:00:00Z"}]
+        note = cmd_status.story_notes(NOW.timestamp(), claims, log, True, {"pid": 4242, "who": "drain r"}, None)["7"]
+        self.assertIn("#7 holds a claim by drain with no progress for 60 minutes", note)
+        self.assertIn("`kill 4242`", note)
+        self.assertNotIn("dispatch", note)
+
+    def test_a_last_run_that_stopped_badly_names_no_dispatch_while_a_run_holds_the_repo(self):
+        log = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}]
+        lines = cmd_status.last_lines(True, None, "", log, {"pid": 4242, "who": "drain r"})
+        self.assertEqual("  Warning: the last run on story-5 stopped with max_turns.", lines[-1])
+
+    def test_a_long_round_whose_runner_beat_a_minute_ago_is_not_stalled(self):
+        """#1020: a claim 40 minutes old is building, not stalled, when the live holder is building it and its heartbeat is a minute old."""
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 2400}}
+        holder = {"pid": 4242, "who": "drain r", "building": [7], "beat": NOW.timestamp() - 60}
+        self.assertNotIn("stalled", cmd_status.story_notes(NOW.timestamp(), claims, [], True, holder, None).get("7", ""))
+
+    def test_a_long_round_whose_holder_is_not_building_it_is_stalled(self):
+        """#1020: a live holder that is building another story does not keep a stalled claim from warning."""
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 2400}}
+        holder = {"pid": 4242, "who": "drain r", "building": [8], "beat": NOW.timestamp() - 60}
+        self.assertTrue(cmd_status.story_notes(NOW.timestamp(), claims, [], True, holder, None)["7"].startswith("Warning: #7 holds a claim"))
+
+    def test_a_claim_without_a_live_runner_names_the_stale_claim_and_its_release(self):
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
+        self.assertIn("#7 holds a claim by drain but no drain or dispatch process is running", cmd_status.story_notes(NOW.timestamp(), claims, [], False, None, None)["7"])
+
+    def test_a_last_run_that_did_not_stop_cleanly_is_warned_with_its_stop_reason(self):
+        log = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}]
+        self.assertIn("the last run on story-5 stopped with max_turns", cmd_status.last_lines(False, None, "", log, None)[-1])
+
 
     def test_each_building_story_names_its_repo_size_state_minutes_and_what_holds_it(self):
         """#1112: a story waiting for validation names the slot's holder, and each other state reads from the run log, the holds and the queue."""
@@ -223,12 +317,12 @@ class TestDigest(unittest.TestCase):
         issues = {"1083": {"body": "Size: M"}}
         line = lambda **kw: cmd_status.state_lines(t, claims, kw.get("log", [done]), issues, kw.get("holder"), kw.get("slots", ["OliverCode-1084"]), 1,
                                                    kw.get("github", ""), kw.get("elsewhere", []), "o/OliverCode")
-        self.assertEqual(["OliverCode #1083 · M · Waiting for validation · 4 min · slot held by OliverCode #1084"], line())
+        self.assertEqual(["OliverCode #1083 · M · Waiting for validation · 4 min · held by OliverCode #1084"], line())
         self.assertEqual(["OliverCode #1083 · M · Reviewing · 4 min"], line(slots=["OliverCode-1083"]))
         self.assertEqual(["OliverCode #1083 · M · Landing · 4 min"], line(log=[{**done, "review": "pass"}]))
         self.assertEqual(["OliverCode #1083 · M · Building · 15 min"], line(log=[], slots=[]))
         self.assertEqual(["OliverCode #1083 · M · Waiting for GitHub · 15 min · the GraphQL rate limit"], line(log=[], github="held"))
-        self.assertEqual(["OliverCode #1083 · M · Waiting for another repo · 15 min · digioperator holds the machine"],
+        self.assertEqual(["OliverCode #1083 · M · Waiting for another repo · 15 min · digioperator holds it"],
                          line(log=[], holder={"building": [5]}, elsewhere=["o/digioperator"]))
         both = {**claims, "o/digioperator#824": {"at": t - 900}}
         self.assertEqual(["OliverCode #1083 · M · Building · 15 min", "digioperator #824 · Building · 15 min"],
@@ -245,9 +339,8 @@ class TestDigest(unittest.TestCase):
     def test_builders_from_two_repos_each_name_their_repo_and_a_closed_story_is_dropped(self):
         """#1095: a claim's repo shows on its line, a claim for another repo's number holds nothing here, and a closed story is stale, not building."""
         claims = {"o/OliverCode#1031": {"agent": "drain", "at": NOW.timestamp() - 60}, "o/digioperator#824": {"agent": "drain", "at": NOW.timestamp() - 60}}
-        lines = cmd_status.activity(NOW.timestamp(), claims, [], True, 5, "", None)
-        self.assertTrue(lines[0].startswith("Building OliverCode #1031"))
-        self.assertTrue(lines[1].startswith("Building digioperator #824"))
+        lines = cmd_status.state_lines(NOW.timestamp(), claims, [], {}, None, [], 1, "", [], "o/OliverCode")
+        self.assertEqual(["OliverCode #1031 · Building · 1 min", "digioperator #824 · Building · 1 min"], lines)
         rows = [{"number": 824, "state": "closed"}]
         gone = SimpleNamespace(returncode=0, stdout="open\n")
         self.assertEqual({"o/OliverCode#824"}, cmd_status.closed_claims({"o/OliverCode#824": {}, "o/digioperator#824": {}}, "o/OliverCode", rows, lambda a: gone))
@@ -260,119 +353,21 @@ class TestDigest(unittest.TestCase):
             raise OSError("no gh")
         self.assertEqual(set(), cmd_status.closed_claims({"o/other#5": {}}, "o/OliverCode", [], broken))
 
-    def test_minutes_count_from_the_claims_start_and_the_round_skips_rows_without_one(self):
-        """#1093: a claim renewed every minute kept reading 0 or -1 minutes, and a row with no round printed round 0."""
-        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 26 * 60, "at": NOW.timestamp() + 5}}
-        log = [{"story": "story-7", "round": 1}, {"story": "story-7"}]
-        lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)
-        self.assertIn("26 minutes ago, round 2 of 2,", lines[0])
 
-    def test_a_new_story_is_round_1_and_an_earlier_run_does_not_set_the_round(self):
-        """#1086: no finished round reads round 1, and rows logged before this claim began are a previous run's."""
-        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 60, "at": NOW.timestamp()}}
-        old = [{"story": "story-7", "round": 2, "at": "2026-11-21T20:00:00Z"}]
-        self.assertIn("1 minutes ago, round 1 of 2,", cmd_status.activity(NOW.timestamp(), claims, old, True, 5, "", None)[0])
 
-    def test_a_small_story_shows_its_third_round_and_its_title(self):
-        """#1086: a small story gets 3 rounds, so its third round reads round 3 of 3, with the story's title."""
-        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 600, "at": NOW.timestamp()}}
-        log = [{"story": "story-7", "round": 2, "at": "2026-11-22T00:05:00Z"}]
-        issues = {"7": {"number": 7, "title": "Small one", "body": "Size: S"}}
-        line = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None, None, issues)[0]
-        self.assertIn("Building r #7, Small one: started", line)
-        self.assertIn("round 3 of 3, in validation and the fresh reader", line)
 
-    def test_minutes_count_from_the_start_when_the_claim_was_rewritten_a_minute_ago(self):
-        """#1086: a claim posted again keeps its start, so 42 minutes of building read 42 minutes."""
-        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 42 * 60, "at": NOW.timestamp() - 60}}
-        log = []
-        self.assertIn("42 minutes ago, round 1 of 2,", cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)[0])
 
-    def test_the_line_names_the_phase_this_run_is_in(self):
-        """#1086: a finished round of this run means validation and the reader, a passing review means landing, and an earlier run's rows say nothing."""
-        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 600, "at": NOW.timestamp()}}
-        old = {"story": "story-7", "review": "pass", "at": "2026-11-21T20:00:00Z"}
-        rnd = {"story": "story-7", "round": 1, "at": "2026-11-21T23:55:00Z"}
-        review = {"story": "story-7", "review": "pass", "at": "2026-11-21T23:58:00Z"}
-        for log, phase in (([old], "the builder session"), ([old, rnd], "validation and the fresh reader"), ([old, rnd, review], "landing")):
-            self.assertIn(f"in {phase},", cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)[0])
 
-    def test_three_landed_stories_of_its_size_give_an_estimated_finish(self):
-        """#1086: the median build minutes of landed stories of the same size, less the minutes spent, set the finish; fewer than 3 give none."""
-        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 600, "at": NOW.timestamp()}}
-        issues = {"7": {"number": 7, "title": "Small one", "body": "Size: S"}}
-        landed_rows = [{"story": f"story-{n}", "built_minutes": m, "size": "S"} for n, m in ((1, 20), (2, 40), (3, 100))]
-        other = [{"story": "story-4", "built_minutes": 5, "size": "M"}]
-        finish = datetime.fromtimestamp(NOW.timestamp() + 30 * 60).strftime("%H:%M")
-        line = cmd_status.activity(NOW.timestamp(), claims, landed_rows + other, True, 5, "", None, None, issues)[0]
-        self.assertIn(f"estimated finish {finish}.", line)
-        line = cmd_status.activity(NOW.timestamp(), claims, landed_rows[:2] + other, True, 5, "", None, None, issues)[0]
-        self.assertIn("no estimate yet.", line)
 
-    def test_a_story_whose_log_and_commits_have_not_moved_says_so(self):
-        """#1086: 45 minutes in with nothing new for 20 minutes, the line says so with the last thing it did, and a newer commit counts as a move."""
-        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 45 * 60, "at": NOW.timestamp()}}
-        log = [{"story": "story-7", "round": 1, "stop": "end_turn", "at": "2026-11-21T23:40:00Z"}]
-        line = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None)[0]
-        self.assertIn("No progress for 20 minutes: the last thing it did was ending round 1 at", line)
-        moved = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "", None, None, None, {"7": NOW.timestamp() - 120})[0]
-        self.assertNotIn("No progress", moved)
 
-    def test_build_history_spans_each_landed_story_log_rows(self):
-        log = [{"story": "story-3", "at": "2026-11-21T10:00:00Z"}, {"story": "story-3", "at": "2026-11-21T10:30:00Z"}]
-        rows = [{"number": 3, "closed_at": "2026-11-21T10:31:00Z", "body": "Size: S"}, {"number": 4, "body": "Size: S"}]
-        self.assertEqual([{"size": "S", "built_minutes": 30.0}], cmd_status.build_history(rows, log))
 
-    def test_an_idle_runner_says_so_and_names_the_command_that_starts_it(self):
-        lines = cmd_status.activity(NOW.timestamp(), {}, [], False, 3, "", None)
-        self.assertEqual(["Runner idle: no story is building and 3 stories are open. Start it with `olivercode drain REPO`.",
-                          "Last landed: none in the last 7 days."], lines)
 
-    def test_a_stalled_builder_is_warned_with_the_command_that_resumes_it(self):
-        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 3600}}
-        log = [{"story": "story-7", "round": 1, "at": "2026-11-21T22:00:00Z"}]
-        lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 1, "", None)
-        self.assertIn("the runner has stalled on #7", lines[-1])
-        self.assertIn("olivercode dispatch 7", lines[-1])
 
-    def test_a_stalled_claim_while_a_run_holds_the_repo_names_the_kill_that_releases_it_and_never_dispatch(self):
-        """#1076: dispatch would only join the holding run's queue, so the warning names that run's kill instead."""
-        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 3600}}
-        log = [{"story": "story-7", "round": 1, "at": "2026-11-21T22:00:00Z"}]
-        lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 1, "", None, {"pid": 4242, "who": "drain r"})
-        self.assertIn("#7 holds a claim by drain with no progress for 60 minutes", lines[-1])
-        self.assertIn("`kill 4242`", lines[-1])
-        self.assertNotIn("dispatch", lines[-1])
 
-    def test_a_last_run_that_stopped_badly_names_no_dispatch_while_a_run_holds_the_repo(self):
-        log = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}]
-        lines = cmd_status.activity(NOW.timestamp(), {}, log, True, 2, "", None, {"pid": 4242, "who": "drain r"})
-        self.assertEqual("Warning: the last run on story-5 stopped with max_turns.", lines[-1])
 
-    def test_a_long_round_whose_runner_beat_a_minute_ago_is_not_stalled(self):
-        """#1020: a claim 40 minutes old is building, not stalled, when the live holder is building it and its heartbeat is a minute old."""
-        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 2400}}
-        holder = {"pid": 4242, "who": "drain r", "building": [7], "beat": NOW.timestamp() - 60}
-        lines = cmd_status.activity(NOW.timestamp(), claims, [], True, 1, "", None, holder)
-        self.assertIn("40 minutes ago", lines[0])
-        self.assertFalse(any("stalled" in line for line in lines))
 
-    def test_a_long_round_whose_holder_is_not_building_it_is_stalled(self):
-        """#1020: a live holder that is building another story does not keep a stalled claim from warning."""
-        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 2400}}
-        holder = {"pid": 4242, "who": "drain r", "building": [8], "beat": NOW.timestamp() - 60}
-        lines = cmd_status.activity(NOW.timestamp(), claims, [], True, 1, "", None, holder)
-        self.assertTrue(any(line.startswith("Warning: #7 holds a claim") for line in lines))
 
-    def test_a_claim_without_a_live_runner_names_the_stale_claim_and_its_release(self):
-        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
-        lines = cmd_status.activity(NOW.timestamp(), claims, [], False, 1, "", None)
-        self.assertIn("#7 holds a claim by drain but no drain or dispatch process is running", lines[-1])
 
-    def test_a_last_run_that_did_not_stop_cleanly_is_warned_with_its_stop_reason(self):
-        log = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}]
-        lines = cmd_status.activity(NOW.timestamp(), {}, log, False, 2, "", None)
-        self.assertIn("the last run on story-5 stopped with max_turns", lines[-1])
 
     def test_the_run_log_skips_lines_that_are_not_objects(self):
         log = Path(self.tmp.name) / "run-log.jsonl"

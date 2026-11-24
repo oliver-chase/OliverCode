@@ -15,13 +15,12 @@ from __future__ import annotations
 
 import json
 import re
-import statistics
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import agent_loop, candidates, cmd_groom, cmd_owner, intake, failure_log, gh_budget, local_config, open_issues, relay, repo_state, run_lock, status_page, validate_queue, status_report
+from lib import candidates, cmd_groom, cmd_owner, failure_log, gh_budget, local_config, open_issues, relay, repo_state, run_lock, status_page, validate_queue, status_report
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -32,7 +31,6 @@ DAYS = 7
 STALL_MINUTES = run_lock.STALL_MINUTES  # a building story whose progress has not moved for this long is reported as stalled (#987, #1020)
 CLEAN_STOPS = ("", "end_turn", "completed")  # the stop reasons that end a round without trouble
 QUIET_MINUTES = 20  # a building story whose log and commits have not moved for this long says so on its line (#1086)
-ESTIMATE_LANDED = 3  # the landed stories of a size it takes before the building line estimates a finish (#1086)
 DIGEST_TOKENS = 1500
 DIGEST_TTL = 600  # seconds a written digest serves a new session, so a session that starts soon after another makes no GitHub call (#1017)
 BOARD_RE = re.compile(r"^Board: (\S+): (\d+) open\.", re.MULTILINE)  # the repo and open count the digest's board line states
@@ -176,39 +174,12 @@ def this_run(rows: list[dict], began: float) -> list[dict]:
     return [r for r in rows if _stamp(r, began) >= began]
 
 
-def current_round(rows: list[dict], began: float, limit: int) -> int:
-    """The round a story is in: one past the newest finished round of this run (#1086). A row with no round says nothing."""
-    done = max((r["round"] for r in this_run(rows, began) if isinstance(r.get("round"), int)), default=0)
-    return min(done + 1, limit)  # an owed fix session past the limit still shows as the last round
 
 
-def estimate(log: list[dict], size: str, now: float, spent: float) -> str:
-    """The estimated finish: now plus the median build minutes of the landed stories of SIZE less the minutes SPENT, once ESTIMATE_LANDED have landed (#1086)."""
-    built = sorted(r["built_minutes"] for r in log if r.get("size") == size and isinstance(r.get("built_minutes"), (int, float)))
-    if not size or len(built) < ESTIMATE_LANDED:
-        return "no estimate yet"
-    median = statistics.median(built)
-    return f"estimated finish {datetime.fromtimestamp(now + max(0, median - spent) * 60):%H:%M}"
 
 
-def phase_of(rows: list[dict]) -> str:
-    """The phase the newest row of this run puts the story in. A finished round means validation and the fresh reader come next, and a passing review means landing.
-    shortcut: the log has no row at a phase's start, so a fix session after a failed validation reads as validation until its round ends, upgrade when the loop logs its phases."""
-    last = rows[-1] if rows else {}
-    if last.get("review") == "pass":
-        return "landing"
-    return "validation and the fresh reader" if isinstance(last.get("round"), int) else "the builder session"
 
 
-def build_history(rows: list[dict], log: list[dict]) -> list[dict]:
-    """One row for each landed story of ROWS with its size and the minutes between its first and last run-log row, which estimate reads (#1086).
-    shortcut: a story built over several runs counts the gap between them, upgrade when the drain records the minutes a build took."""
-    spans = {}
-    for r in log:
-        if r.get("story") and r.get("at"):
-            spans.setdefault(r["story"], []).append(_stamp(r, 0))
-    return [{"size": cmd_groom.size_of(r), "built_minutes": (max(t) - min(t)) / 60}
-            for r in rows if r.get("closed_at") and (t := spans.get(f"story-{r.get('number')}"))]
 
 
 def _did(row: dict) -> str:
@@ -221,56 +192,48 @@ def _did(row: dict) -> str:
 
 
 def quiet_note(rows: list[dict], began: float, now: float, committed: float | None) -> str:
-    """' No progress for M minutes: ...' when neither this run's log nor its worktree's commits have moved for QUIET_MINUTES, else '' (#1086)."""
+    """'Warning: No progress for M minutes: ...' when neither this run's log nor its worktree's commits have moved for QUIET_MINUTES, else '' (#1086)."""
     moves = [(_stamp(r, began), _did(r)) for r in this_run(rows, began)] + ([(committed, "a commit")] if committed and committed >= began else [])
     at, what = max(moves, key=lambda m: m[0], default=(began, "starting the builder session"))
     quiet = int((now - at) // 60)
-    return f" No progress for {quiet} minutes: the last thing it did was {what} at {datetime.fromtimestamp(at):%H:%M}." if quiet >= QUIET_MINUTES else ""
+    return f"Warning: No progress for {quiet} minutes: the last thing it did was {what} at {datetime.fromtimestamp(at):%H:%M}." if quiet >= QUIET_MINUTES else ""
 
 
-def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, landed_row: dict | None, holder: dict | None = None,
-             issues: dict[str, dict] | None = None, commits: dict[str, float] | None = None, history: list[dict] | None = None) -> list[str]:
-    """The live status lines: one line for each story building (its minutes, its round), or the idle or running line, then the last landing and the next
-    Ready story, then a warning for a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). A builder's progress is the newer of
-    its claim's time and the live holder's heartbeat, when the holder is building it (#1020). `holder` is the live run that holds the repo, if any (#1076).
-    It reads only what it is given. `issues` maps a story number to its open issue, for its title and the rounds its size gets, and `commits` maps it to
-    the time of its worktree's newest commit (#1086)."""
-    lines, warnings = [], []
+def story_notes(now: float, claims: dict, log: list[dict], alive: bool, holder: dict | None, commits: dict[str, float] | None) -> dict[str, str]:
+    """The warning under each building story, by story number: a claim with no live runner, a claim with no progress for STALL_MINUTES (#987, #1020), or a
+    claim whose log and worktree commits have not moved for QUIET_MINUTES (#1086). `holder` is the live run that holds the repo, if any (#1076)."""
+    notes = {}
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
-        repo = key.rpartition("#")[0].rsplit("/", 1)[-1]
-        rows = [r for r in log if r.get("story") == f"story-{n}"]
         progress = float(mine.get("at", 0))
         if holder and n.isdigit() and int(n) in (holder.get("building") or []):
             progress = max(progress, float(holder.get("beat", 0)))  # the live runner beats while it builds the story (#1020)
         if not alive:
-            warnings.append(f"Warning: #{n} holds a claim by {mine.get('agent')} but no drain or dispatch process is running. The claim expires by itself "
-                            f"after {log_action.CLAIM_HOURS} hours, or delete its entry in {claims_path()} to release it now.")
+            notes[n] = (f"Warning: #{n} holds a claim by {mine.get('agent')} but no drain or dispatch process is running. The claim expires by itself "
+                        f"after {log_action.CLAIM_HOURS} hours, or delete its entry in {claims_path()} to release it now.")
         elif (now - progress) / 60 > STALL_MINUTES:
-            warnings.append(stall_line(n, mine, int((now - progress) // 60), holder))
-        else:
-            began = float(mine.get("since") or mine.get("at", 0))  # the claim's start, which a renewal keeps (#1093)
-            issue = (issues or {}).get(n) or {}
-            size = cmd_groom.size_of(issue) if issue else ""
-            limit = agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0)  # the same size rule the drain builds by
-            title = f", {_text(issue.get('title'), 60)}" if issue.get("title") else ""
-            phase = phase_of(this_run(rows, began))
-            spent = max(0, int((now - began) // 60))
-            lines.append(f"Building {repo} #{n}{title}: started {datetime.fromtimestamp(began):%H:%M}, {spent} minutes ago, round {current_round(rows, began, limit)} of {limit}, "
-                         f"in {phase}, {estimate(log if history is None else history, size, now, spent)}." + quiet_note(rows, began, now, (commits or {}).get(n)))
-    if not lines:
-        lines.append("The runner is running and no story is building." if alive else
-                     f"Runner idle: no story is building and {open_now} stories are open. Start it with `olivercode drain REPO`.")
-    if landed_row:
-        last = f"Last landed: #{landed_row.get('number')} {_text(landed_row.get('title'), 90)}."
-    else:
-        last = f"Last landed: none in the last {DAYS} days."
-    lines.append(last + (f" Next Ready: {ready}." if ready else ""))
+            notes[n] = stall_line(n, mine, int((now - progress) // 60), holder)
+        elif quiet := quiet_note([r for r in log if r.get("story") == f"story-{n}"], float(mine.get("since") or mine.get("at", 0)), now, (commits or {}).get(n)):
+            notes[n] = quiet
+    return notes
+
+def idle_line(alive: bool, open_now: int) -> str:
+    """The line the Building section prints when no story is building (#987)."""
+    if alive:
+        return "The runner is running and no story is building."
+    return f"Runner idle: no story is building and {open_now} stories are open. Start it with `olivercode drain REPO`."
+
+def last_lines(alive: bool, landed_row: dict | None, ready: str, log: list[dict], holder: dict | None) -> list[str]:
+    """The Last landed section: the newest landing, the next Ready story, then an indented warning when the last run did not stop cleanly (#987)."""
+    lines = [f"Last landed: #{landed_row.get('number')} {_text(landed_row.get('title'), 60)}." if landed_row else f"Last landed: none in the last {DAYS} days."]
+    if ready:
+        lines.append(f"Next Ready: {ready}.")
     if log and log[-1].get("stop", "") not in CLEAN_STOPS:
         story = str(log[-1].get("story", ""))
         resume = "" if holder else f" Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`."
-        warnings.append(f"Warning: the last run on {story} stopped with {log[-1].get('stop')}.{resume}")
-    return lines + warnings
+        lines.append(f"  Warning: the last run on {story} stopped with {log[-1].get('stop')}.{resume}")
+    return lines
+
 
 
 def tokens_per_closed(rows: list[dict], log: list[dict]) -> tuple[int, int] | None:
@@ -353,21 +316,22 @@ def story_state(repo: str, n: str, rows: list[dict], began: float, holder: dict 
     mine = this_run(rows, began)
     last = mine[-1] if mine else {}
     if own and n.isdigit() and holder and int(n) not in (holder.get("building") or []) and elsewhere and not mine:
-        return "Waiting for another repo", f"{elsewhere[0].rsplit('/', 1)[-1]} holds the machine"
+        return "Waiting for another repo", f"{elsewhere[0].rsplit('/', 1)[-1]} holds it"
     if github:
         return "Waiting for GitHub", "the GraphQL rate limit"
     if last.get("review") == "pass":
         return "Landing", ""
     if isinstance(last.get("round"), int):
         if f"{repo}-{n}" not in slots and slots and len(slots) >= slot_total:
-            return "Waiting for validation", f"slot held by {_slot_name(slots[0])}"
+            return "Waiting for validation", f"held by {_slot_name(slots[0])}"
         return "Reviewing", ""
     return "Building", ""
 
 
 def state_lines(now: float, claims: dict, log: list[dict], issues: dict[str, dict], holder: dict | None, slots: list[str], slot_total: int, github: str, elsewhere: list[str],
-                slug: str = "") -> list[str]:
-    """One line for each building story: 'OliverCode #1083 · M · Waiting for validation · 4 min · slot held by OliverCode #1084' (#1112)."""
+                slug: str = "", notes: dict[str, str] | None = None) -> list[str]:
+    """One line for each building story: 'OliverCode #1083 · M · Waiting for validation · 4 min · held by OliverCode #1084' (#1112). Its warning from
+    NOTES, when it has one, sits on an indented line under it."""
     lines = []
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
@@ -378,15 +342,19 @@ def state_lines(now: float, claims: dict, log: list[dict], issues: dict[str, dic
         since = max([began] + [_stamp(r, began) for r in this_run(rows, began)])
         size = cmd_groom.size_of(issues[n]) if n in issues else ""
         lines.append(" · ".join([f"{repo} #{n}"] + ([size] if size else []) + [state, f"{max(0, int((now - since) // 60))} min"] + ([held] if held else [])))
+        if (notes or {}).get(n):
+            lines.append(f"  {notes[n]}")
     return lines
 
 
 def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -> list[str]:
-    """The status lines for this machine right now, read from the claims, the run log, the process table, the run lock and the digest."""
+    """The status lines for this machine right now, read from the claims, the run log, the process table, the run lock and the digest. The figures come
+    first, then the Building section and the Last landed section, each set off by a blank line."""
     stamp = now.timestamp()
     log = run_log()
     from lib import gated
     holder = run_lock.active(slug, stamp) if slug else {}
+    alive = runner_alive()
     ready = next_ready(digest_path(), held_numbers(stamp, slug))
     claims = live_claims(stamp)
     closed = closed_claims(claims, slug, rows)
@@ -396,9 +364,10 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     commits = {n: t for n in (key.rsplit("#", 1)[-1] for key in claims) if (t := last_commit(slug, n))}
     slots, slot_total = validation_slots()
     # run() stops before this on a REST hold, so the hold a story can wait on here is GraphQL's, which the runner's board calls spend
-    states = state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [], slug) if runner_alive() else []
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + states + activity(stamp, claims, log, runner_alive(), open_now, ready,
-                                                                           (landed(rows) or [None])[0], holder, issues, commits, build_history(rows, log)) + stale
+    states = state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [],
+                         slug, story_notes(stamp, claims, log, alive, holder, commits))
+    building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + stale
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + building + [""] + last_lines(alive, (landed(rows) or [None])[0], ready, log, holder)
 
 
 def last_commit(slug: str, n: str) -> float | None:
@@ -434,22 +403,27 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
         out(f"Error: the issues of {slug} were not read.")
         return 1
     out(f"{slug}: " + summary(open_now, rows, now))
+    out("")
     out(numbers_line((numbers or (lambda: four_numbers(now, open_now, rows, run_log(), folder or Path.cwd())))()))
     for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
         out(line)
     steps = (waiting or (lambda: waiting_lines(slug)))()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
     if steps:
+        out("")
         out("Waits on the owner:")
         for line in steps:
             out(line)
     line = (cands or candidate_line)()
     if line:
+        out("")
         out("Candidates:")
         out(line)
     if note := local_config.builder_note():
+        out("")
         out(note)
     held = run_lock.active(slug, now.timestamp())
     if held:
+        out("")
         out("Run: " + run_lock.describe(held, now.timestamp()))
     return 0
 
