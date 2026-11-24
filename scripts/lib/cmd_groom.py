@@ -335,6 +335,21 @@ def reopen_unproven(slug, found, run=gh):
     return reopened
 
 
+def _read_or_raise(run):
+    """A reader that raises on a failed read, so groom records a failure instead of treating a missing answer as none (#1105)."""
+    def read(args):
+        out = run(args)
+        if out is None:
+            raise RuntimeError("could not read the sub-issues of the epics")
+        return out
+    return read
+
+
+def _close_epic(slug, number, run=gh):
+    """Closes an epic whose sub-issues are all closed, so its Complete card and its open issue do not disagree (#853, #1105). False when the close fails."""
+    return run(["api", "-X", "PATCH", f"repos/{slug}/issues/{number}", "-f", "state=closed", "-f", "state_reason=completed"]) is not None
+
+
 CRITERION = re.compile(r"^\s*(?:Then|And)\s+(.{30,})$", re.M)
 
 
@@ -487,6 +502,7 @@ def area_fixes(items, stories, options):
 
 def groom_board(name: str, config: Path, force=False, now=None, run=gh):
     import batch_project
+    import board_grooming
     import board_rest
     import check_board_hygiene
     now = time.time() if now is None else now
@@ -541,8 +557,12 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if filed := file_splits(slug, config, stories, {n for n in big if (carded_status(items, n) == "Ready")}, int(cfg.get("epic") or 1), queued=_queued):
             cmd_owner.note("groom", f"{name}: {len(filed)} oversized story(ies) moved to Backlog, one split story filed for each: " + ", ".join(f"#{n}" for n in filed))
         hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big | set(reopened)  # flagged stories stay in Backlog until the owner acts (#1014, #1104)
-        fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
-                                for n, k in check_board_hygiene.status_drift(items, states, slug)], hold, big)
+        epics = board_grooming.epic_moves(items, check_board_hygiene.epic_summaries(items, cfg, "Complete", _read_or_raise(run)), "Complete")
+        moved = [m for m in epics if m[1] != "Complete" or _close_epic(slug, m[0], run)]  # an epic moves with its stories (#1105)
+        moved_numbers = {n for n, _, _ in moved}
+        drift = [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
+                 for n, k in check_board_hygiene.status_drift(items, states, slug) if n not in moved_numbers]
+        fixes = filled(items, stories, drift + [{"number": n, "fields": {"status": s}} for n, s, _ in moved], hold, big)
         for n, area in area_fixes(items, stories, (cfg.get("fields", {}).get("area") or {}).get("options", {})).items():
             fix = next((f for f in fixes if f["number"] == n), None)
             if fix is None:
@@ -586,6 +606,10 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
                 f.flush()
                 batch_project.main(["--config", str(config), "--input", f.name])
             cmd_owner.note("groom", f"{name}: groom fixed {len(fixes)} card(s) that had drifted, were missing or lacked Priority, Size or Ready")
+        for n, _, text in moved:  # a comment says why the epic moved, once its card has (#1105)
+            run(["api", "-X", "POST", f"repos/{slug}/issues/{n}/comments", "-f", f"body={text}"])
+        if moved:
+            cmd_owner.note("groom", f"{name}: epic(s) moved with their stories: " + ", ".join(f"#{n} to {s}" for n, s, _ in moved))
         mine.update(ok=now, fp=fingerprint(slug, root, run), failed="")
         close_failure(slug)
         return True

@@ -120,3 +120,25 @@ def themes(stories, minimum=3):
             return found
         found.append((pair, sorted(counts[pair])))
         left -= counts[pair]
+
+
+def epic_moves(items, summaries, finished):
+    """(number, status, comment) for each open epic whose Status its sub-issues say is wrong: all closed moves it to
+    `finished`, some closed moves a waiting epic to In Progress, and a Ready epic with none closed moves to Backlog,
+    since an epic is never built directly (#1105). `summaries` maps number to (total, completed)."""
+    moves = []
+    for i in items:
+        number = i.get("content", {}).get("number")
+        if field(i, "work type") != "Epic" or i.get("status") == finished or number not in summaries:
+            continue
+        total, completed = summaries[number]
+        status = i.get("status")
+        if total and completed == total:
+            moves.append((number, finished, f"All {total} sub-issues are closed, so this epic is {finished}."))
+        elif completed and status in WAITING_STATUSES:
+            moves.append((number, "In Progress", f"{completed} of {total} sub-issues are closed, so this epic is "
+                          "In Progress. An epic is not built directly; its stories are."))
+        elif status == "Ready":
+            moves.append((number, "Backlog", "An epic is not built directly; its stories are. "
+                          "This epic moves to Backlog and stays there until its stories are in progress."))
+    return moves

@@ -161,6 +161,19 @@ class Grooming(unittest.TestCase):
         found["work Type"] = work
         return found
 
+    def test_an_epic_moves_with_its_stories(self):
+        epics = [self.titled(n, s, "e", "Epic") for n, s in
+                 ((10, "Ready"), (11, "Ready"), (12, "Backlog"), (13, "In Progress"), (14, "Ready"), (15, "Complete"))]
+        moves = {n: (status, text) for n, status, text in bh.epic_moves(
+            epics, {10: (0, 0), 11: (4, 1), 12: (3, 3), 13: (4, 0), 14: (2, 2), 15: (2, 2)}, "Complete")}
+        self.assertEqual({10, 11, 12, 14}, set(moves), "13 has no closed story and no move; 15 is already Complete")
+        self.assertEqual("Backlog", moves[10][0])
+        self.assertIn("not built directly", moves[10][1])
+        self.assertEqual("In Progress", moves[11][0])
+        self.assertIn("1 of 4 sub-issues are closed", moves[11][1])
+        self.assertEqual("Complete", moves[12][0])
+        self.assertEqual("Complete", moves[14][0], "a Ready epic whose sub-issues are all closed completes, not Backlog")
+
     def test_built_work_lagging_epics_and_overlapping_titles_are_flagged(self):
         builder = [{"body": "Agent action\n- Agent: b\n- Role: builder\n- Result: built"}]
         found = bh.built_not_moved([item(1, "Ready"), item(2, "QA"), item(3, "Backlog")],

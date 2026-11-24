@@ -25,7 +25,7 @@ import board_rest  # noqa: E402
 import gh_budget  # noqa: E402
 import complete_story as cs  # noqa: E402
 from log_action import gh_api  # noqa: E402
-from board_grooming import WAITING_STATUSES, built_not_moved, epic_rollup, field, overlapping_titles  # noqa: E402
+from board_grooming import WAITING_STATUSES, built_not_moved, epic_moves, epic_rollup, field, overlapping_titles  # noqa: E402
 
 ITEM_LIMIT = 2000
 
@@ -200,6 +200,8 @@ def unproven_closes(items, config, finished="Complete", runner=gh_api):
         if i.get("status") != finished or not number or number < start:
             continue
         if (c.get("repository") or own).lower() != own.lower():
+            continue
+        if field(i, "work type") == "Epic":  # groom closes an epic once its stories close, with no evidence of its own (#1105)
             continue
         try:
             if closed_as_not_planned(own, number, runner):
