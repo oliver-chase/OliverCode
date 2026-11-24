@@ -92,6 +92,14 @@ class TestStatus(unittest.TestCase):
     def test_no_origin_exits_one(self):
         self.assertEqual(1, self.status(1, [], slug=None)[0])
 
+    def test_no_origin_names_the_folder_and_where_to_go(self):
+        out = io.StringIO()
+        code = cmd_status.run(None, out=lambda t: out.write(t + "\n"), folder=Path("/x/notes"))
+        self.assertEqual(1, code)
+        self.assertIn("/x/notes is not a repo with a GitHub origin", out.getvalue())
+        self.assertIn("cd into a repo with a GitHub origin", out.getvalue())
+        self.assertIn("OliverCode checkout", out.getvalue())
+
     def test_recent_leaves_out_pull_requests(self):
         class Done:
             returncode = 0

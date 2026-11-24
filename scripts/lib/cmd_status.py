@@ -195,10 +195,16 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
                                                                            (landed(rows) or [None])[0], holder)
 
 
+def no_origin(folder: Path) -> str:
+    """The error for a folder that is not a repo with a GitHub origin, and where to go next."""
+    return (f"Error: {folder} is not a repo with a GitHub origin. cd into a repo with a GitHub origin, "
+            "such as the OliverCode checkout or a registered fleet repo.")
+
+
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
-        waiting=None, cands=None) -> int:
+        waiting=None, cands=None, folder: Path | None = None) -> int:
     if not slug:
-        out("Error: this repo has no GitHub origin.")
+        out(no_origin(folder or Path.cwd()))
         return 1
     held = gh_budget.refusal("rest")
     if held:
@@ -406,4 +412,4 @@ def command_status(argv: list[str]) -> int:
         print(USAGE)
         return 1
     slug = repo_state.origin(root)
-    return digest(slug) if writes else run(slug)
+    return digest(slug) if writes else run(slug, folder=root)
