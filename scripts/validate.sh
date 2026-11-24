@@ -11,10 +11,17 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PRECOMMIT="${REPO_ROOT}/.githooks/pre-commit"
 
 run_precommit() {
+  # "$@": files changed against origin's default branch, from a round check (#1142). Given files, the hook
+  # scans only those; empty for a full run, which scans the whole tree, as `olivercode land` always runs it.
   if [[ -x "$PRECOMMIT" ]]; then
-    echo "=== validate: running pre-commit gates over the whole tree ==="
-    # The hook reads staged files by default, so on a clean tree it would scan nothing.
-    OLIVERCODE_SCAN_TREE=1 bash "$PRECOMMIT"
+    if [[ $# -gt 0 ]]; then
+      echo "=== validate: running pre-commit gates over the changed files ==="
+      OLIVERCODE_SCAN_FILES="$(printf '%s\n' "$@")" bash "$PRECOMMIT"
+    else
+      echo "=== validate: running pre-commit gates over the whole tree ==="
+      # The hook reads staged files by default, so on a clean tree it would scan nothing.
+      OLIVERCODE_SCAN_TREE=1 bash "$PRECOMMIT"
+    fi
     echo "=== validate: pre-commit passed ==="
   else
     echo "=== validate: pre-commit hook not found at $PRECOMMIT ==="
@@ -127,6 +134,9 @@ run_queue_bypass() {
 }
 
 run_smoke_tests() {
+  # "$@": files changed against origin's default branch, which narrows this gate to the modules that cover them (a round
+  # check, #1142); empty for a full run, which every module gets, as `olivercode land` always runs it.
+  #
   # Skipped when tests/ does not exist. Tests read the one tracked shared/repo-profiles.json, so they pass identically everywhere.
   #
   # Python-only by design. A `node --test <dir>/*.mjs` block with no .mjs test present
@@ -136,7 +146,11 @@ run_smoke_tests() {
   [[ -d "${REPO_ROOT}/tests" ]] || return 0
   echo "=== validate: running smoke tests ==="
   # Each test module runs in its own process, several at a time (scripts/lib/smoke_runner.py), with failures replayed in full.
-  python3 "${SCRIPT_DIR}/lib/smoke_runner.py" "$REPO_ROOT" || exit 1
+  if [[ $# -gt 0 ]]; then
+    python3 "${SCRIPT_DIR}/lib/smoke_runner.py" "$REPO_ROOT" --changed "$@" || exit 1
+  else
+    python3 "${SCRIPT_DIR}/lib/smoke_runner.py" "$REPO_ROOT" || exit 1
+  fi
   echo "=== validate: smoke tests passed ==="
 }
 
@@ -144,8 +158,10 @@ run_smoke_tests() {
 GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)
 
 run_gate() {
-  case "$1" in
-    precommit) run_precommit ;;
+  local name="$1"
+  shift
+  case "$name" in
+    precommit) run_precommit "$@" ;;
     fleet) run_consistency ;;
     bloat) run_bloat_check || exit 1 ;;
     quality) run_code_quality || exit 1 ;;
@@ -153,9 +169,9 @@ run_gate() {
     docs) run_docs_check ;;
     limits) run_limits_check ;;
     bypass) run_queue_bypass ;;
-    smoke) run_smoke_tests ;;
+    smoke) run_smoke_tests "$@" ;;
     hookstate) run_hook_state ;;
-    *) echo "validate: no gate named '$1'" >&2; exit 2 ;;
+    *) echo "validate: no gate named '$name'" >&2; exit 2 ;;
   esac
 }
 
@@ -166,6 +182,20 @@ run_gates() {
   local args=() gate
   for gate in "${GATES[@]}"; do
     args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate")")
+  done
+  python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
+}
+
+run_round_gates() {
+  # "$@": files changed against origin's default branch. The runner's cheap per-round check (#1142): the same gates as a full
+  # run, but precommit and smoke narrow to these changed files instead of the whole tree/suite. `olivercode land` still
+  # calls run_gates, in full.
+  local args=() gate
+  for gate in "${GATES[@]}"; do
+    case "$gate" in
+      precommit|smoke) args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate" "$@")") ;;
+      *) args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate")") ;;
+    esac
   done
   python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
 }
@@ -186,13 +216,22 @@ main() {
       echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: cores);"
       echo "                         OLIVERCODE_VALIDATE_JOBS sets the smoke test parallelism"
       echo "  --tree                 Same as no args (the pre-commit gates always scan every tracked file)"
+      echo "  --round FILE...        The runner's per-round check (#1142): the same gates, but precommit scans only"
+      echo "                         these changed files and smoke narrows to the test modules that cover them, or the"
+      echo "                         full suite when none do"
       echo "  --check-consistency    Run the fleet name check only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
       echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
       echo "  --help                 Show this help"
       ;;
     --gate)
-      run_gate "${2:-}"
+      shift
+      run_gate "$@"
+      ;;
+    --round)
+      shift
+      run_build_hooks
+      run_round_gates "$@"
       ;;
     --check-consistency)
       run_build_hooks

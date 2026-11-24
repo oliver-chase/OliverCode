@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """The smoke tests of validate.sh: every tests/test_*.py module and every skills/*/scripts/test_*.py module, each in its own process (#757).
 
-    smoke_runner.py [REPO_ROOT]
+    smoke_runner.py [REPO_ROOT] [--changed FILE...]
+
+--changed narrows the run to the runner's per-round check (#1142): given the files a builder round changed, it runs only the
+test modules whose source imports or names one of them, and prints which it chose. When none do, or --changed is absent, every
+module runs, which is what `olivercode land` gets.
 
 Each module runs as `python3 -m unittest -b MODULE` from its own folder, several at a time (OLIVERCODE_VALIDATE_JOBS, default the
 machine's core count), largest file first so the slowest modules start first. -b buffers a module's output and this runner replays
@@ -112,11 +116,34 @@ def modules(root: Path) -> list[tuple[str, Path, str]]:
     return sorted(found, key=lambda m: -(m[1] / f"{m[2]}.py").stat().st_size)
 
 
-def run(root: Path, out=sys.stdout) -> int:
+def changed_stems(files: list[str]) -> set[str]:
+    """The module name of each changed .py file, the only files a test module could import or name."""
+    return {Path(f).stem for f in files if f.endswith(".py")}
+
+
+def affected(mods: list[tuple[str, Path, str]], stems: set[str]) -> list[tuple[str, Path, str]]:
+    """The test modules a changed stem names directly (its own module), plus any whose source imports or mentions one, by a
+    whole-word match. Empty when `stems` is empty, which tells `run` to fall back to the full suite."""
+    if not stems:
+        return []
+    named = [m for m in mods if m[2] in stems]
+    pattern = re.compile(r"\b(" + "|".join(re.escape(s) for s in stems) + r")\b")
+    searched = [m for m in mods if m not in named and pattern.search((m[1] / f"{m[2]}.py").read_text(encoding="utf-8", errors="replace"))]
+    return named + searched
+
+
+def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
     mods = modules(root)
     if not mods:
         print("  Ran 0 tests across 0 modules, all passed", file=out)
         return 0
+    if changed is not None:
+        selected = affected(mods, changed_stems(changed))
+        if selected:
+            print(f"  Round check: {len(selected)} of {len(mods)} modules cover the changed files: {', '.join(n for n, _, _ in selected)}", file=out)
+            mods = selected
+        else:
+            print("  Round check: no test module covers the changed files, running the full suite", file=out)
     with tempfile.TemporaryDirectory(prefix="olivercode-smoke-") as tmp:
         log_dir = Path(tmp)
         units = plan(mods, load_timings(), jobs())
@@ -154,8 +181,13 @@ def run(root: Path, out=sys.stdout) -> int:
 
 
 def main(argv: list[str]) -> int:
-    root = Path(argv[0]) if argv else Path(__file__).resolve().parents[2]
-    return run(root)
+    args = list(argv)
+    changed = None
+    if "--changed" in args:
+        i = args.index("--changed")
+        changed, args = args[i + 1:], args[:i]
+    root = Path(args[0]) if args else Path(__file__).resolve().parents[2]
+    return run(root, changed=changed)
 
 
 if __name__ == "__main__":

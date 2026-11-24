@@ -210,6 +210,25 @@ class SmokeRunner(unittest.TestCase):
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": "3"}):
             self.assertEqual(3, smoke_runner.jobs())
 
+    def test_changed_files_select_only_the_modules_that_cover_them(self):
+        """#1142: a round check narrows to the modules that import or name a changed file, and names which it picked."""
+        root = self.make("pass")
+        (root / "tests" / "test_b.py").write_text(
+            "import unittest\n\n\ndef helper():\n    return 'cmd_land'\n\n\nclass T(unittest.TestCase):\n    def test_y(self):\n        pass\n",
+            encoding="utf-8")
+        out = io.StringIO()
+        self.assertEqual(0, smoke_runner.run(root, out, changed=["scripts/lib/cmd_land.py"]))
+        text = out.getvalue()
+        self.assertIn("1 of 2 modules cover the changed files: test_b", text)
+        self.assertIn("Ran 1 tests across 1 modules, all passed", text)
+
+    def test_no_module_covering_the_changed_files_runs_the_full_suite(self):
+        """#1142: a changed file no test module names falls back to the whole suite."""
+        out = io.StringIO()
+        self.assertEqual(0, smoke_runner.run(self.make("pass"), out, changed=["docs/NOTES.md"]))
+        self.assertIn("running the full suite", out.getvalue())
+        self.assertIn("Ran 1 tests across 1 modules, all passed", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

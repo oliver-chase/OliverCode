@@ -164,6 +164,25 @@ class TestTreeScan(GateHarness):
         self.assertIn("secret pattern", result.stdout)
 
 
+class TestScanFiles(GateHarness):
+    """A round check (#1142) passes OLIVERCODE_SCAN_FILES to scan only those files, not the whole tree."""
+
+    def setUp(self):
+        super().setUp()
+        self.stage("config.py", 'KEY = "sk-' + "d" * 32 + '"\n')
+        self.stage("notes.txt", "Plain notes.\n")
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "x")
+
+    def test_scan_files_finds_a_secret_in_a_named_file(self):
+        result = self.run_hook(OLIVERCODE_SCAN_FILES="config.py\n")
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("secret pattern", result.stdout)
+
+    def test_scan_files_ignores_a_committed_secret_not_named(self):
+        result = self.run_hook(OLIVERCODE_SCAN_FILES="notes.txt\n")
+        self.assertEqual(0, result.returncode)
+
+
 class TestLinkedWorktree(unittest.TestCase):
     """A commit from a linked worktree runs every gate. Git sets GIT_DIR for a hook there,
     and `git -C .githooks rev-parse --show-toplevel` then answers with the .githooks folder,
