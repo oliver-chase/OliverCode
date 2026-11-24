@@ -240,6 +240,10 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
             missing_src.append(entry["source"])
             continue
         exists = dst.exists()
+        if dst_rel == ".github/CODEOWNERS" and "<your-github-owner>" not in fills:
+            print(f"  [SKIP     ] {dst_rel}   (no origin remote names an owner)")
+            kept += 1
+            continue
         if mode == "offered" and (exists or not first_run):
             kept += 1
             continue
@@ -274,7 +278,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     else:
         print("\nNext: run `olivercode sync-hooks`, which installs the hooks and sets core.hooksPath.")
         if not target_origin:
-            print("The repo has no origin remote, so .github/CODEOWNERS still names <your-github-owner>.")
+            print("The repo has no origin remote, so .github/CODEOWNERS was not written. Add it by hand with the owner line.")
     return 1 if missing_src else 0
 
 

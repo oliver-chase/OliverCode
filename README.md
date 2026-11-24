@@ -67,7 +67,7 @@ Each ticket gets a cook who starts fresh and leaves when the plate goes out, whi
 ## Using it well
 
 - Work in one thread per topic, and start a fresh one when it grows long
-- Never ask a thread for status, open the status page or run `olivercode status`
+- Never ask a thread for status. Run `olivercode status` instead
 - Say what you want once and let the runner build it
 - Keep a story small and name its files
 - Never start a builder in a chat: `olivercode dispatch N` builds a board story without one

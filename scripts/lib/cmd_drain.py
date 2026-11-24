@@ -522,7 +522,7 @@ def resolve_repo(name: str) -> Path | None:
 
 
 def status_page() -> str:
-    """The page the run lock names for watching a run: the status digest until the status page lands (#990)."""
+    """The page the run lock names for watching a run: the status digest."""
     try:
         from lib import cmd_status
         return str(cmd_status.digest_path())

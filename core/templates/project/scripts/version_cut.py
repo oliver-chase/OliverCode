@@ -25,6 +25,7 @@ LEVELS = ("PATCH", "MINOR", "MAJOR")
 FIRST = (1, 0, 0)
 CUT_SUBJECT = "Cut version"
 STORY = re.compile(r"\(#(\d+)[^)]*\)\s*$")
+STORY_LINE = re.compile(r"^Story:\s*#?(\d+)\s*$", re.M)
 HEADER = re.compile(r"^## (\d+)\.(\d+)\.(\d+) - (\d{4}-\d{2}-\d{2})\s*$", re.M)
 FENCE = re.compile(r"```cut-rules\n(.*?)```", re.S)
 TITLE = "# Changelog\n\nEach section is one day of activity, cut by `olivercode version-cut` from the rules in `docs/VERSIONING.md`.\n"
@@ -69,8 +70,9 @@ def commits_since_cut(root: Path, ref: str = "main") -> list[dict]:
     return commits
 
 
-def story_of(subject: str) -> str:
-    match = STORY.search(subject)
+def story_of(commit: dict) -> str:
+    """The story a commit files under: the (#N) at the end of its subject, else a `Story: #N` line in its body."""
+    match = STORY.search(commit["subject"]) or STORY_LINE.search(commit["body"])
     return f"#{match.group(1)}" if match else ""
 
 
@@ -136,14 +138,14 @@ def section(version: tuple[int, int, int], day: str, level: str, commits: list[d
         lines += [f"Breaking: {len(majors)} change{'s' if len(majors) != 1 else ''} removed or renamed something a user or fleet repo relies on.", ""]
     groups: dict[str, list[dict]] = {}
     for c in commits:
-        groups.setdefault(story_of(c["subject"]) or "No story", []).append(c)
+        groups.setdefault(story_of(c) or "No story", []).append(c)
     for story, items in sorted(groups.items(), key=lambda kv: (kv[0] == "No story", int(kv[0][1:]) if kv[0] != "No story" else 0)):
         lines.append(f"### {story}")
         lines += [f"- {STORY.sub('', c['subject']).strip()} ({c['sha'][:7]})" for c in items]
         lines.append("")
     if level == "MAJOR":
         lines += ["### Upgrade notes"]
-        lines += [f"- {story_of(c['subject']) or c['sha'][:7]}: {upgrade_note(c)}" for c in majors]
+        lines += [f"- {story_of(c) or c['sha'][:7]}: {upgrade_note(c)}" for c in majors]
         lines.append("")
     return "\n".join(lines)
 

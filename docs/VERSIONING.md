@@ -7,7 +7,7 @@ OliverCode has one version, MAJOR.MINOR.PATCH, held in `VERSION` and described i
 `olivercode version-cut` (a launchd job runs it nightly, and `--schedule` installs the job) reads every commit that reached main since the previous cut and does one of two things:
 
 - No commit since the previous cut makes no new version
-- Any other run sets `VERSION` to the next number and writes that version's `CHANGELOG.md` section, headed with its date and grouped by story
+- Any other run sets `VERSION` to the next number and writes that version's `CHANGELOG.md` section, headed with its date and grouped under each story its commits file under. A commit files under the `(#N)` at the end of its subject, or under the `Story: #N` line in its body when the subject has none. A commit with neither lands under "No story"
 
 Each number counts up on its own and never rolls over, so 1.9.0 is followed by 1.10.0. A MAJOR bump zeroes MINOR and PATCH, and a MINOR bump zeroes PATCH. The first cut set 1.0.0, because OliverCode is in daily use.
 
@@ -23,7 +23,7 @@ The cut picks the highest level any commit since the previous cut reaches.
 | MINOR | Added a command, skill, gate or file the reader uses | A story adds `olivercode drain` or a new skill under `skills/` |
 | PATCH | Only fixed or trimmed something that already existed | A story makes `olivercode land` retry a push, or shortens a message |
 
-A change that would move MAJOR is held to the next cut, which batches every breaking change since the previous cut into one MAJOR. The CHANGELOG section names the reason for the MAJOR and holds an upgrade note for each breaking story, taken from the `Upgrade:` line in the commit body when it has one.
+A cut does not hold a breaking change for a later cut. Every commit since the previous cut is read in the same run, so one MAJOR covers all of them. The CHANGELOG section states the reason for the MAJOR and holds an upgrade note for each breaking commit, taken from the `Upgrade:` line in the commit body when it has one.
 
 ## The rules the cut reads
 
@@ -45,4 +45,4 @@ The block below is the only rule list. The cut reads it as JSON, so an edit here
 
 `olivercode health` keeps printing how many commits a checkout is behind upstream, and the `stable` tag still marks the last commit the owner confirmed. `VERSION` tells a reader which release a checkout holds, and `CHANGELOG.md` tells them what changed and what to do about a MAJOR.
 
-The cut and its docs check ship to fleet repos as managed files (`version_cut.py` and `docs_check.py` in `core/templates/project/scripts/`), so a fleet repo runs the same rules from its own `docs/VERSIONING.md`.
+The cut runs from the OliverCode engine, which reads `version_cut.py` from `core/templates/project/scripts/`. Fleet repos do not get the cut or the docs check, because both are engine-only tools. The version a checkout holds is the one in the engine's `VERSION`.

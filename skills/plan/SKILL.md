@@ -55,5 +55,5 @@ What we're trying to accomplish.
 2. User approves → execute step by step
 3. Mark steps done as completed
 4. If a step reveals new info, append a finding, don't rewrite the plan
-5. After a yes on a multi-phase plan, execute every phase without stopping to report, commit after each story, and stop only for an owner-only step. A separate QA agent reviews each phase before its issues close, and the builder never grades its own work
+5. After a yes on a multi-phase plan, execute every phase without stopping to report, commit after each story, and stop only for an owner-only step. A fresh Sonnet reader (#1015) reads each story's commit before it lands, and the builder never grades its own work. A separate QA pass runs only when the owner asks for it
 6. A structural change that touches more than a few files first states the target in five lines (where each fact lives once, how a skill reaches it, what ships as one unit, what is verified and what is guessed), gets a yes, then runs as one scripted, re-runnable migration on a clean main

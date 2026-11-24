@@ -48,7 +48,7 @@ Working rules that hold in every session:
 - `gh_watch.py` (`PostToolUse`) records a GitHub rate limit seen in command output, and `owner_decision_capture.py` (`UserPromptSubmit`) keeps each owner message that names a story for that story's builder, and `error_paste.py` (`UserPromptSubmit`) prints nothing to the session, and file a pasted error as a story, and `status_hint.py` (`UserPromptSubmit`) answers a status question from the status digest with no tool call
 - `early-stop-guard.py` and `wip_save.py` (`Stop`) send a turn back to work when it promises work it did not do, and snapshot uncommitted work into `refs/wip/` at most every 10 minutes (`olivercode wip list|restore`)
 
-The owner works in one thread. `olivercode dispatch N --run` and `olivercode drain REPO` build each story in one fresh headless session, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
+The owner works in one thread. `olivercode dispatch N` and `olivercode drain REPO` build each story in one fresh headless session, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
 
 ### Prepared owner steps
 
@@ -85,7 +85,7 @@ Every repo separates the public tracked surface (code, documents, templates, val
 
 OliverCode is the shared orchestration framework: standards (`docs/RULES.md`), skills (`skills/`), project templates (`core/templates/project/`), shared manifests (`shared/`), documents (`docs/`), a thin launcher (`scripts/olivercode`) and the commit hooks (`.githooks/`). A clone works standalone. Product repos live at `<fleet-root>/*`, and product-specific documents and workflows stay in each project repo. Per-machine state lives in `runtime/control-plane/`, which is gitignored and never pushed, and OliverCode holds no logs, telemetry, handoff data or project credentials.
 
-`~/.claude/` is local and per machine. `olivercode install` writes only the `CLAUDE.md`, `VOICE.md` and `DESIGN.md` links, a link per skill, its hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, and a `.pre-olivercode` backup of anything it replaced.
+`~/.claude/` is local and per machine. `olivercode install` writes only the `CLAUDE.md`, `VOICE.md` and `DESIGN.md` links, a link per skill, its hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, a PATH block in `~/.zshenv`, `~/.bashrc` and the login profile, and a `.pre-olivercode` backup of anything it replaced.
 
 ## Skill placement
 

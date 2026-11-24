@@ -51,7 +51,6 @@ class StoryFormat(unittest.TestCase):
         for example in examples:
             self.assertEqual([], sf.check_body(example, blocker=True, line_numbers=True))
         skill = (HERE.parent / "SKILL.md").read_text(encoding="utf-8")
-        delegating = (HERE.parent / "references" / "delegating-a-backlog.md").read_text(encoding="utf-8")
         self.assertNotRegex(skill, r"(?i)pull request|\bweekly\b|ask where a config|Which dimension should I check")
 
     def test_a_story_without_gherkin_is_rejected_with_a_fix(self):

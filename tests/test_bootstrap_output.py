@@ -113,6 +113,7 @@ class TestOfferedFiles(unittest.TestCase):
     def setUp(self):
         self.repo = temp_dir(self, "olivercode-offered-")
         scratch_repo(self.repo)
+        subprocess.run(["git", "-C", str(self.repo), "remote", "add", "origin", "https://github.com/jane-doe/shop.git"], check=True)
 
     def bootstrap(self):
         return subprocess.run([sys.executable, str(LAUNCHER), "bootstrap", str(self.repo)], env=git_env(), capture_output=True, text=True)
@@ -123,6 +124,12 @@ class TestOfferedFiles(unittest.TestCase):
         shutil.rmtree(self.repo / ".github")
         self.bootstrap()
         self.assertFalse((self.repo / ".github").exists())
+
+    def test_without_an_origin_no_codeowners_with_a_placeholder_is_written(self):
+        subprocess.run(["git", "-C", str(self.repo), "remote", "remove", "origin"], check=True)
+        out = self.bootstrap().stdout
+        self.assertFalse((self.repo / ".github" / "CODEOWNERS").exists())
+        self.assertIn("was not written", out)
 
     @unittest.skipUnless(shutil.which("node"), "node is not installed")
     def test_the_structure_contract_script_passes_in_a_repo_without_github(self):

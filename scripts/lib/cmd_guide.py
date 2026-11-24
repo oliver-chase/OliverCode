@@ -23,7 +23,7 @@ THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode
 # The habits that keep OliverCode cheap, printed after the first steps by the guide and the first install's introduction, one line each (#991).
 USING_IT_WELL = (
     "Work in one thread per topic, and start a fresh one when it grows long.",
-    "Never ask a thread for status, open the status page or run `olivercode status`.",
+    "Never ask a thread for status. Run `olivercode status` instead.",
     "Say what you want once and let the runner build it.",
     "Keep a story small and name its files.",
     "Never start a builder in a chat: `olivercode dispatch N` builds a board story without one.",

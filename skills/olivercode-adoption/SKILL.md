@@ -1,19 +1,15 @@
 ---
 name: olivercode-adoption
-description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set up OliverCode', 'onboard my repos', 'point my CLAUDE.md files at OliverCode'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
+description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set up OliverCode', 'onboard my repos', 'point my CLAUDE.md files at OliverCode'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points, and keeps what it cannot classify."
 ---
 
 # OliverCode adoption
 
-Drive the whole setup so the user does not have to read the documentation first. You read it.
-They answer questions. `$OC/docs/SETUP.md` is the reference contract — consult it when you
-need detail, but do not make the user read it.
+Drive the whole setup so the user does not have to read the documentation first. You read it. They answer questions. `$OC/docs/SETUP.md` is the reference contract, so consult it when you need detail, but do not make the user read it.
 
 ## The rule that governs everything here
 
-**Optimize, do not amputate.** You are pointing existing rules at a shared home and keeping
-them. A rule you cannot classify is a rule you keep and flag. Never delete a user's config
-because it looks redundant — redundancy is their call.
+**Optimize and keep.** You point existing rules at a shared home and keep them. A rule you cannot classify stays where it is and gets flagged. Never delete a user's config because it looks redundant: redundancy is their call.
 
 `install` backs up what it replaces. Keep each backup until the user confirms the result.
 
@@ -22,11 +18,11 @@ because it looks redundant — redundancy is their call.
 ```bash
 OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
 [ -f "$OC/docs/RULES.md" ] || OC="$(git -C "$(dirname "$(readlink -f ~/.claude/skills/olivercode-adoption/SKILL.md 2>/dev/null)" 2>/dev/null)" rev-parse --show-toplevel 2>/dev/null)"
-[ -f "$OC/docs/RULES.md" ] || echo "Cannot find the OliverCode checkout. Ask the user where it is and set OC to that folder."
+[ -f "$OC/docs/RULES.md" ] || { echo "Cannot find the OliverCode checkout. Ask the user where it is and set OC to that folder."; exit 1; }
 bash "$OC/scripts/qa/rehearse-install.sh"
 ```
 
-If it fails, stop and report the fork as broken. Everything below assumes a sound checkout.
+Run it from inside the OliverCode checkout. If it fails, stop and report the fork as broken. Everything below assumes a sound checkout.
 
 After install, point the user to "How work runs" in README.md and do not restate it. Then run `olivercode guide` and show the user its output, which says in plain sentences what each command, gate, job and skill does.
 
@@ -43,8 +39,7 @@ The whole adoption. Most setups tangle all three in one file.
 Present as a table with your proposed bucket per item. Get agreement before moving anything.
 
 **2. Which repos are in the fleet?**
-`discover` lists what exists. Only the user knows which repos are live, which they retired, and
-which they do not want governed. Do not register a repo they did not confirm.
+`discover` lists what exists. Only the user knows which repos are live, which they retired, and which they do not want governed. Do not register a repo they did not confirm.
 
 ## What you discover and the user confirms
 
@@ -63,7 +58,7 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 - **Step 6, enforcement.** Tell the user plainly when hook enforcement fails open (`docs/GATES.md`), and point at `docs/SETUP.md` ("Troubleshooting")
 - **Step 6c, board sync.** A new board needs no web toggles. Filing a story adds its card, and closing it sets Status to Complete. Run `olivercode board sync --schedule` so the sweep keeps every board in step with its issues. On Linux it prints the crontab line to add and exits 1, because launchd needs macOS
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
-- **Step 3b, sleep.** Apply the sleep line `olivercode health` prints, because a Mac that sleeps stops every session while the owner is away. Name the System Settings path or the `caffeinate -dimsu` command it gives
+- **Keep the machine awake** (`docs/SETUP.md`, "Keep the machine awake"). Apply the sleep line `olivercode health` prints, because a Mac that sleeps stops every session while the owner is away. Name the System Settings path or the `caffeinate -dimsu` command it gives
 - **Step 8, reconcile.** Ask before deleting any backup
 
 ## Output

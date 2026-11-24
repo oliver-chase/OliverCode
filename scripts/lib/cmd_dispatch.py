@@ -128,8 +128,6 @@ def _parse(argv: list[str]):
             sid, i = argv[i + 1], i + 2
         elif argv[i] == "--dry-run":
             dry, i = True, i + 1
-        elif argv[i] == "--run":  # dispatch always builds headless now; the flag is accepted so older instructions that still name it work
-            i += 1
         elif argv[i].startswith("--"):
             return None
         else:
