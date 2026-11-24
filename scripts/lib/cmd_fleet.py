@@ -53,7 +53,12 @@ def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None,
         if not repos:
             fleet_message = NO_FLEET[0].upper() + NO_FLEET[1:]
             if private:
-                print(f"  [FAIL] the fleet registry is empty in {registry_file(oc_root)}, so no repo was checked. {fleet_message}")
+                reading = registry_file(oc_root)
+                elsewhere = repo_profiles.registries_with_profiles(fleet_root or oc_root.parent, reading)
+                if elsewhere:
+                    fleet_message = (f"Profiles are in {', '.join(map(str, elsewhere))}. Copy them into {reading}, "
+                                     "or name that file with `fleetRegistry` in olivercode.local.json")
+                print(f"  [FAIL] the fleet registry is empty in {reading}, so no repo was checked. {fleet_message}")
                 return 1
             print(f"  [SKIP] no fleet registered in {registry_file(oc_root)}. {fleet_message}")
     results, settings = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)

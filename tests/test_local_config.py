@@ -80,3 +80,36 @@ class LocalConfig(unittest.TestCase):
             self.assertTrue(local_config.link_default_registry(registry))
             self.assertEqual(default.resolve(), registry.resolve())
             self.assertEqual(local_config.link_default_registry(registry), "")
+
+    def test_default_registry_link_is_not_made_where_none_exists(self):
+        home = temp_dir(self)
+        registry = home / "repo-profiles.json"
+        registry.write_text("{}")
+        default = home / ".olivercode" / "fleet" / "repo-profiles.json"
+        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
+            self.assertEqual(local_config.link_default_registry(registry), "")
+        self.assertFalse(default.parent.exists())
+
+    def test_default_registry_link_keeps_a_target_with_profiles_when_the_registry_has_none(self):
+        home = temp_dir(self)
+        registry = home / "repo-profiles.json"
+        registry.write_text("{}")
+        shared = home / "shared.json"
+        shared.write_text('{"profiles": {"a": {}}}')
+        default = home / "default.json"
+        default.symlink_to(shared)
+        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
+            note = local_config.link_default_registry(registry)
+        self.assertIn("not repointed", note)
+        self.assertEqual(default.resolve(), shared.resolve())
+
+    def test_default_registry_real_file_stays_and_says_so(self):
+        home = temp_dir(self)
+        registry = home / "repo-profiles.json"
+        registry.write_text('{"profiles": {"a": {}}}')
+        default = home / "default.json"
+        default.write_text("{}")
+        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
+            note = local_config.link_default_registry(registry)
+        self.assertIn("not linked", note)
+        self.assertFalse(default.is_symlink())
