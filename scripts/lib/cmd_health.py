@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 from lib import claude_settings as _claude_settings
@@ -16,6 +17,7 @@ from lib.health_checks import (
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 from lib.local_config import private_repos as _private_repos
 from lib.local_config import skills_root as _skills_root
+from lib import local_config as _local_config
 from lib import repo_state as _repo_state
 from lib.repo_profiles import iter_fleet as _iter_fleet
 from lib.repo_profiles import load_repo_profiles
@@ -74,6 +76,61 @@ class _HealthTally:
             return (f"HEALTHY — {self.passed} checks passed, {self.skipped} skipped for "
                     f"missing context (see WARN above); nothing failed")
         return f"HEALTHY — {self.passed} checks passed"
+
+
+# A registered repo's folder, GitHub and registry names agree, or the owner has said which to keep (#1034).
+# The answer is kept in `repoNames` in olivercode.local.json, keyed by registry name with the two names it was given for.
+
+NAME_CHOICES = ("folder", "github")
+
+
+def repo_names_mismatches(profiles: dict, fleet_root: Path) -> list[tuple[str, str, str]]:
+    """(registry name, folder name, GitHub name) for each cloned repo whose three names are not one."""
+    out = []
+    for name, _profile, path in _iter_fleet(profiles, fleet_root, skip_archived=False):
+        slug = _repo_state.origin(path) if (path / ".git").exists() else None
+        if not slug:
+            continue
+        github = slug.split("/", 1)[1]
+        if len({name.lower(), path.name.lower(), github.lower()}) > 1:
+            out.append((name, path.name, github))
+    return out
+
+
+def repo_names_answered(name: str, folder: str, github: str) -> str | None:
+    """The kept side ("folder" or "github") the owner chose for exactly these names, else None."""
+    saved = _local_config.load_local().get("repoNames", {}).get(name)
+    if isinstance(saved, dict) and saved.get("folder") == folder and saved.get("github") == github and saved.get("keep") in NAME_CHOICES:
+        return saved["keep"]
+    return None
+
+
+def repo_names_record(name: str, folder: str, github: str, keep: str) -> None:
+    kept = dict(_local_config.load_local().get("repoNames", {}))
+    kept[name] = {"folder": folder, "github": github, "keep": keep}
+    _local_config.save_local({"repoNames": kept})
+
+
+def repo_names_check(profiles: dict, fleet_root: Path, ask=input, interactive: bool | None = None, out=print) -> tuple[int, int, int]:
+    """Show both names of each unanswered mismatch and ask which to keep. Returns (passed, failed, skipped); a question left open is a warning, not a failure."""
+    interactive = sys.stdin.isatty() if interactive is None else interactive
+    found = repo_names_mismatches(profiles, fleet_root)
+    open_ones = [m for m in found if not repo_names_answered(*m)]
+    unresolved = 0
+    for name, folder, github in open_ones:
+        out(f"  [WARN] {name}: the folder is '{folder}' and the GitHub repo is '{github}'")
+        if not interactive:
+            out("         Run `olivercode health` or `olivercode conform` in a terminal to say which to keep")
+            unresolved += 1
+            continue
+        reply = ""
+        while reply not in NAME_CHOICES:
+            reply = ask("         Keep which name? (folder/github): ").strip().lower()
+        repo_names_record(name, folder, github, reply)
+        out(f"         recorded: keep the {reply} name")
+    if not found:
+        out("  [OK] every registered repo's folder, GitHub and registry names agree")
+    return (len(found) - unresolved if found else 1), 0, unresolved
 
 
 def command_health(fleet_root: Path | None = None) -> int:
@@ -256,6 +313,8 @@ def command_health(fleet_root: Path | None = None) -> int:
             topo_repos.append((name, repo_path))
 
     t.add(*_check_fleet_locations(_profiles, fleet_root or OC_ROOT.parent))
+    print("\nRepo names:")
+    t.add(*repo_names_check(_profiles, fleet_root or OC_ROOT.parent))
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
 
