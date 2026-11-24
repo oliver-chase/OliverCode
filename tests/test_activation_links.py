@@ -13,6 +13,7 @@ class TestActivationLinks(unittest.TestCase):
 
     def test_broken_rules_link_fails_and_prints_the_fix(self):
         claude = temp_dir(self)
+        (claude / "olivercode").symlink_to(claude)
         (claude / "CLAUDE.md").symlink_to(claude / "gone" / "CLAUDE.md")
         (result, text) = self.run_check(claude)
         self.assertEqual(result[1], 1)
@@ -23,15 +24,27 @@ class TestActivationLinks(unittest.TestCase):
         claude = temp_dir(self)
         target = claude / "real.md"
         target.write_text("x")
+        (claude / "olivercode").symlink_to(target)
         (claude / "CLAUDE.md").symlink_to(target)
         (claude / "VOICE.md").symlink_to(target)
         (result, _) = self.run_check(claude)
-        self.assertEqual(result, (2, 0, 0))
+        self.assertEqual(result, (3, 0, 0))
+
+    def test_a_missing_checkout_link_fails_and_names_the_install_command(self):
+        claude = temp_dir(self)
+        target = claude / "real.md"
+        target.write_text("x")
+        (claude / "CLAUDE.md").symlink_to(target)
+        (result, text) = self.run_check(claude)
+        self.assertEqual(result, (1, 1, 0))
+        self.assertIn("olivercode", text)
+        self.assertIn("`olivercode install`", text)
 
     def test_broken_skill_link_fails(self):
         claude = temp_dir(self)
         target = claude / "real.md"
         target.write_text("x")
+        (claude / "olivercode").symlink_to(target)
         (claude / "CLAUDE.md").symlink_to(target)
         (claude / "skills").mkdir()
         (claude / "skills" / "audit").symlink_to(claude / "nowhere")

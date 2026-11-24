@@ -383,5 +383,10 @@ class CityStep(unittest.TestCase):
         self.assertIn("olivercode status publish", out)
 
 
+class CheckoutLink(unittest.TestCase):
+    def test_install_links_the_checkout_root_at_the_documented_path(self):
+        self.assertEqual(Path("."), cmd_install.RULE_LINKS["olivercode"])
+
+
 if __name__ == "__main__":
     unittest.main()

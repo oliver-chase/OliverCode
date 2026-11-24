@@ -196,20 +196,26 @@ def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
 
 
 def _check_activation_links(claude_dir: Path) -> tuple[int, int, int]:
-    """Every activation link in ~/.claude must resolve: CLAUDE.md, VOICE.md and each skill link.
+    """Every activation link in ~/.claude must resolve: the checkout link ~/.claude/olivercode, CLAUDE.md, VOICE.md and each skill link.
 
     A link that points at a moved or deleted checkout loads nothing and says nothing, so the
     session runs without the rules. Install re-points them, so each failure prints that command.
+    A missing checkout link fails too, since the documented path then does not resolve (#1082).
     A machine where install never ran has no links, which is a skip.
     """
     passed = failed = 0
-    links = [claude_dir / "CLAUDE.md", claude_dir / "VOICE.md", claude_dir / "DESIGN.md"]
+    checkout = claude_dir / "olivercode"
+    links = [checkout, claude_dir / "CLAUDE.md", claude_dir / "VOICE.md", claude_dir / "DESIGN.md"]
     skills = claude_dir / "skills"
     if skills.is_dir():
         links += sorted(p for p in skills.iterdir() if p.is_symlink())
-    if not any(p.is_symlink() for p in links[:2]):
+    if not any(p.is_symlink() for p in links[:3]):
         print("  [WARN] no activation links in ~/.claude, so install has not run here")
         return 0, 0, 1
+    if not os.path.lexists(checkout):
+        failed += 1
+        print(f"  [FAIL] {checkout} is missing, so the documented path ~/.claude/olivercode does not resolve. "
+              f"Run `olivercode install` from the OliverCode checkout to create it")
     for link in links:
         if not link.is_symlink():
             continue
