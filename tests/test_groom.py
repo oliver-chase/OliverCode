@@ -99,6 +99,22 @@ class TestGroomFields(unittest.TestCase):
     def test_both_stories_of_a_duplicate_pair_are_held(self):
         self.assertEqual({12, 34}, cmd_groom.pair_numbers(["#12 and #34 share add, thing: possible duplicate or superseded pair, close one or link them"]))
 
+    def test_only_an_exact_duplicate_is_closed_and_never_deleted(self):
+        body = lambda f: f"Files area: {f}\n"
+        stories = {1: {"title": "Do the thing", "body": body("a.py")}, 2: {"title": "do  the thing", "body": body("a.py")},
+                   3: {"title": "Do the thing", "body": body("b.py")}, 4: {"title": "Do the thing", "body": ""}}
+        self.assertEqual([(2, 1, ["a.py"])], cmd_groom.exact_duplicates(stories))
+        calls = []
+        self.assertEqual([2], cmd_groom.close_duplicates("o/r", stories, run=lambda a: calls.append(a) or "ok"))
+        self.assertIn("#1", calls[0][-1])
+        self.assertIn("a.py", calls[0][-1])
+        self.assertNotIn("DELETE", [c for call in calls for c in call])
+        self.assertIn("state=closed", calls[1])
+
+    def test_a_story_whose_comment_fails_stays_open(self):
+        stories = {1: {"title": "T", "body": "Files area: a.py\n"}, 2: {"title": "T", "body": "Files area: a.py\n"}}
+        self.assertEqual([], cmd_groom.close_duplicates("o/r", stories, run=lambda a: None))
+
     def test_a_card_that_is_missing_is_added_with_its_fields_in_one_fix(self):
         got = cmd_groom.filled([], {7: {"title": "bug: it fails", "body": "x" * 1500}}, drift([], {7: "OPEN"}))
         self.assertEqual(got, [{"number": 7, "fields": {"status": "Ready", "priority": "P1", "size": "M"}}])

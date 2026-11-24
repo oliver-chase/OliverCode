@@ -2,7 +2,7 @@
 `olivercode board groom [--config FILE | --all | --force]` calls no model; a repo unchanged since the last run costs no GraphQL call.
 
 Beyond drift it sets a blank Priority and Size from the story body, moves an unblocked Backlog story that has both to
-Ready, and queues one owner line for each pair of open stories that look like duplicates. It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). `maintain --fix` runs it, the
+Ready, closes an exact duplicate (same title and Files area) as a duplicate of the older story, and queues one owner line for each weaker pair and each story whose criteria already appear in the repo (#1100). It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). `maintain --fix` runs it, the
 SessionStart hook starts it in the background when the last success is over 24 hours old, and `health` fails after 48.
 
 A story imported from a file (a `Source:` line naming one) carries a copied Priority, so groom labels it
@@ -215,6 +215,56 @@ def duplicates(items):
     return board_grooming.overlapping_titles(items, {"Backlog", "Ready", "In Progress"})
 
 
+def exact_duplicates(stories):
+    """[(newer, older, shared files)] for open stories with the same title, ignoring case and spacing, and the same non-empty Files area (#1100).
+    Every weaker match stays a line for the owner. Each newer story pairs with the oldest story it copies."""
+    from lib import intake
+    seen, found = {}, []
+    for n, s in sorted(stories.items()):
+        files = sorted(set(intake.files_area(s.get("body") or "")))
+        key = (" ".join((s.get("title") or "").lower().split()), tuple(files))
+        if files and key in seen:
+            found.append((n, seen[key], files))
+        elif files:
+            seen[key] = n
+    return found
+
+
+def close_duplicates(slug, stories, run=gh):
+    """Closes each exact duplicate as a duplicate of the older story, with a comment that names it, the shared files and the reopen command.
+    The issue is closed, never deleted. Returns the numbers closed; a story whose comment or close fails stays open."""
+    closed = []
+    for newer, older, files in exact_duplicates(stories):
+        note = (f"Closed as an exact duplicate of #{older}: same title and the same files ({', '.join(files)}). "
+                f"To reopen: `gh api -X PATCH repos/{slug}/issues/{newer} -f state=open`")
+        if run(["api", f"repos/{slug}/issues/{newer}/comments", "-f", f"body={note}"]) is None:
+            continue
+        if run(["api", "-X", "PATCH", f"repos/{slug}/issues/{newer}", "-f", "state=closed", "-f", "state_reason=duplicate"]) is not None:
+            closed.append(newer)
+    return closed
+
+
+CRITERION = re.compile(r"^\s*(?:Then|And)\s+(.{30,})$", re.M)
+
+
+def code_overlaps(stories, root):
+    """One line per story whose Then or And criterion text is already a line on main, naming the file and line (#1100). A story with Creates
+    lines is skipped, since it says the work is new. Returns [] when git cannot search main."""
+    from lib import intake
+    lines = []
+    for n, s in sorted(stories.items()):
+        body = s.get("body") or ""
+        block = re.search(r"```gherkin(.*?)```", body, re.S)
+        wanted = [m.strip() for m in CRITERION.findall(block.group(1))] if block else []
+        if not wanted or intake.creates(body):
+            continue
+        ran = maintain._git(root, "grep", "-n", "-F", "-i", "-m", "1", *[a for w in wanted for a in ("-e", w)], "main", "--", ":!*.json")
+        hit = ran.stdout.splitlines()[0] if ran.returncode == 0 and ran.stdout else ""
+        if m := re.match(r"main:([^:]+):(\d+):", hit):
+            lines.append(f"#{n} criteria already appear at {m.group(1)}:{m.group(2)}: check whether the story is still needed")
+    return lines
+
+
 def pair_numbers(pairs):
     """The story numbers named in each duplicate line, so both stories of a pair stay in Backlog (#1014)."""
     return {int(n) for pair in pairs for n in re.match(r"#(\d+) and #(\d+) share", pair).groups()}
@@ -286,7 +336,16 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         from lib import intake
         found = intake.plan(list(stories.values()))
         flagged = [f"#{n} names no files area, rewrite it" for n in found["rewrite"]] + [f"#{n} {why}" for n, why in found["waits"].items()]
-        pairs = duplicates(items)
+        closed = close_duplicates(slug, stories, run)
+        for n in closed:
+            stories.pop(n, None)
+        if closed:
+            cmd_owner.note("groom", f"{name}: closed {len(closed)} exact duplicate(s) as duplicates, reopen any with the command in its comment: " + ", ".join(f"#{n}" for n in closed))
+        pairs = [p for p in duplicates(items) if not set(map(int, re.findall(r"#(\d+)", p.split(" share")[0]))) & set(closed)]
+        overlaps = code_overlaps(stories, root)
+        if overlaps and json.dumps(overlaps) != mine.get("overlaps"):
+            cmd_owner.note("groom", f"{name}: {len(overlaps)} story(ies) overlap code or docs: " + "; ".join(overlaps)[:600])
+        mine["overlaps"] = json.dumps(overlaps)
         hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs)  # flagged stories stay in Backlog until the owner acts (#1014)
         fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
                                 for n, k in check_board_hygiene.status_drift(items, states, slug)], hold)
