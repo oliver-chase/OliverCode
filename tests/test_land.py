@@ -489,14 +489,26 @@ OR_TRUE_LINE = "make " + "|" + "| true"
 class TestLandStaysInStory(Base):
     """A landing refuses a commit that changes a file outside its story's Files area, or that weakens a test (#1073)."""
 
-    def test_the_test_of_a_listed_file_is_inside_the_area_and_another_files_test_is_not(self):
-        """#1078: the test the rules require is never refused; a test of an unlisted file still is."""
+    def test_every_test_file_is_inside_the_area_and_an_unlisted_code_file_is_not(self):
+        """The rules ask for a test with every change, and a module's test often has another name (cmd_status.py is tested in
+        test_status.py) or covers a neighbour, so a test file never counts as scope creep. The weakened-test check still guards it."""
         from lib import intake
-        area = ["scripts/lib/maintain.py", "skills/audit/scripts/check_report.py", "scripts/hooks/early-stop-guard.py"]
-        for path in ("tests/test_maintain.py", "skills/audit/scripts/test_check_report.py", "tests/test_early_stop_guard.py", "scripts/lib/maintain.py"):
+        area = ["scripts/lib/cmd_status.py", "skills/audit/scripts/check_report.py", "scripts/hooks/early-stop-guard.py"]
+        for path in ("tests/test_status.py", "tests/test_limits.py", "skills/audit/scripts/test_check_report.py",
+                     "skills/backlog/scripts/test_board_hygiene.py", "tests/test_early_stop_guard.py", "scripts/lib/cmd_status.py"):
             self.assertTrue(intake.in_area(path, area), path)
-        for path in ("tests/test_limits.py", "scripts/lib/cmd_health.py", "tests/maintain.py"):
+        for path in ("scripts/lib/cmd_health.py", "tests/maintain.py", "skills/backlog/SKILL.md"):
             self.assertFalse(intake.in_area(path, area), path)
+
+    def test_a_commit_that_adds_a_test_of_another_name_lands(self):
+        self.body = "Files area: b.txt"
+        (self.wt / "tests").mkdir()
+        (self.wt / "tests" / "test_other.py").write_text("import unittest\n")
+        git(self.wt, "add", "."); git(self.wt, "commit", "-q", "-m", "Test b (#9)")
+        code, out = self.land()
+        self.assertEqual(0, code, out)
+        self.assertIn("RESULT pushed", out)
+        self.comment.assert_not_called()
 
     def test_a_commit_outside_the_files_area_is_refused_and_named_on_the_story(self):
         self.body = "Files area: a.txt"

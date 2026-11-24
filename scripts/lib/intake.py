@@ -224,15 +224,11 @@ def overlaps(a: list[str], b: list[str]) -> bool:
 
 
 def in_area(path: str, area: list[str]) -> bool:
-    """True when the path is inside the area, or is the test of a file the area lists: test_NAME.py for NAME.py or NAME.sh, a hyphen read as an
-    underscore. The rules ask for a test with every change, so the test of a listed file never counts as scope creep (#1078)."""
-    if overlaps([path], area):
-        return True
+    """True when the path is inside the area or is any test file (test_*.py). The rules ask for a test with every change, and a module's test
+    often has another name (cmd_status.py is tested in test_status.py) or covers a neighbour, so refusing it threw away finished builds.
+    The landing's weakened-test check still guards every test file (#1073, #1078)."""
     name = Path(path).name
-    if not name.startswith("test_"):
-        return False
-    stem = Path(name[len("test_"):]).stem
-    return any(Path(a).stem.replace("-", "_") == stem for a in area if not a.endswith("/"))
+    return overlaps([path], area) or (name.startswith("test_") and name.endswith(".py"))
 
 
 def long_wait(body: str, today: datetime.date | None = None) -> str:
