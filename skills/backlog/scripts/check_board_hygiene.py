@@ -4,7 +4,7 @@
 
 Usage:
     check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension
-    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, close-gate, groom
+    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, close-gate, board-reopens, groom
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
     check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
@@ -15,6 +15,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -274,6 +275,42 @@ def check_grooming(items, config, finished, open_statuses, runner=run_gh):
             + overlapping_titles(own, open_statuses))
 
 
+REOPEN_WINDOW = 10  # seconds between a reopen and the board Status change by the same actor that caused it
+EVENT_PAGES = 5  # shortcut: reads the newest 500 repo events only; page further if a sweep runs less than daily
+
+
+def from_status_change(reopen, events):
+    """True when a board Status change by the reopen's actor on the same issue sits within REOPEN_WINDOW seconds."""
+    when = datetime.fromisoformat(reopen["created_at"].replace("Z", "+00:00"))
+    for e in events:
+        if (e.get("event") == "project_v2_item_status_changed" and e.get("issue", {}).get("number") == reopen["issue"]["number"]
+                and (e.get("actor") or {}).get("login") == (reopen.get("actor") or {}).get("login")
+                and abs((datetime.fromisoformat(e["created_at"].replace("Z", "+00:00")) - when).total_seconds()) <= REOPEN_WINDOW):
+            return True
+    return False
+
+
+def check_board_reopens(config, read=run_gh_soft):
+    """Open issues whose last reopen came from a board Status change, with the date. One REST read per page."""
+    own = f"{config['repoOwner']}/{config['repoName']}"
+    events = []
+    for page in range(1, EVENT_PAGES + 1):
+        out = read(["api", f"repos/{own}/issues/events?per_page=100&page={page}"])
+        if out is None:
+            return ["the repo's issue events were not read, so reopens were not checked"]
+        rows = json.loads(out or "[]")
+        events.extend(rows)
+        if len(rows) < 100:
+            break
+    last = {}
+    for e in events:  # newest first, so the first reopen seen per issue is its last
+        if e.get("event") == "reopened" and e.get("issue"):
+            last.setdefault(e["issue"]["number"], e)
+    return [f"#{n} \"{e['issue'].get('title', '')[:50]}\": reopened by a board Status change on {e['created_at'][:10]}"
+            for n, e in sorted(last.items())
+            if e["issue"].get("state") == "open" and from_status_change(e, events)]
+
+
 def placeholder_values(config):
     """True when the config still holds the example's placeholder values."""
     text = json.dumps(config)
@@ -326,7 +363,7 @@ def load_config(path):
     return config
 
 
-DIMENSIONS = ["fields", "drift", "duplicates", "groom", "close-gate"]
+DIMENSIONS = ["fields", "drift", "duplicates", "groom", "close-gate", "board-reopens"]
 
 
 def wanted(selected, name):
@@ -372,6 +409,8 @@ def main():
         checks.append(("duplicate-cards", lambda: check_duplicate_cards(items)))
     if wanted(args.dimension, "close-gate"):
         checks.append(("close-gate", lambda: check_close_gate(items, config, finished)))
+    if wanted(args.dimension, "board-reopens"):
+        checks.append(("board-reopens", lambda: check_board_reopens(config)))
     if wanted(args.dimension, "groom"):
         checks.append(("groom", lambda: check_grooming(items, config, finished, open_statuses)))
 

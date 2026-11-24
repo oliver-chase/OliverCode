@@ -40,6 +40,7 @@ class DimensionScoping(unittest.TestCase):
             mock.patch.object(bh, "check_duplicate_cards", spy("duplicates")),
             mock.patch.object(bh, "check_close_gate", spy("close-gate")),
             mock.patch.object(bh, "check_grooming", spy("groom")),
+            mock.patch.object(bh, "check_board_reopens", spy("board-reopens")),
             mock.patch("sys.argv", ["check_board_hygiene.py", "--config", "x.json", *flags]),
         ]
         with contextlib.ExitStack() as stack, redirect_stdout(io.StringIO()):
@@ -49,7 +50,7 @@ class DimensionScoping(unittest.TestCase):
         return calls
 
     def test_no_flag_runs_every_dimension(self):
-        self.assertEqual({"fields", "drift", "duplicates", "close-gate", "groom"},
+        self.assertEqual({"fields", "drift", "duplicates", "close-gate", "board-reopens", "groom"},
                          set(self.run_main()))
 
     def test_one_dimension_runs_alone(self):
