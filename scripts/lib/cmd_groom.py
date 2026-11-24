@@ -152,6 +152,19 @@ def file_splits(slug, config, stories, big, epic=1, file=None, queued=None):
     return filed
 
 
+def epic_priority(story, stories, carded):
+    """The Priority of the story's epic when the story states none (#1099): the epic's card, else the line in its body."""
+    import board_grooming
+    n = board_grooming.epic_of(story.get("body") or "")
+    if n is None or STATED.search(story.get("body") or ""):
+        return None
+    epic = (carded.get(n) or {}).get("priority")
+    if epic:
+        return epic
+    m = re.search(r"Priority:\s*(P[012])\b", (stories.get(n) or {}).get("body") or "")
+    return m.group(1) if m else None
+
+
 def filled(items, stories, fixes, hold=frozenset(), split=frozenset()):
     """Merge into `fixes` a Priority and Size for each open story that lacks one and a move to Ready for each unblocked Backlog story that `hold` does not name,
     so a flagged story waits in Backlog for the owner (#1014). A Ready story in `split` moves to Backlog (#1091)."""
@@ -162,7 +175,7 @@ def filled(items, stories, fixes, hold=frozenset(), split=frozenset()):
         card = carded.get(number, {})
         want = {}
         if not card.get("priority"):
-            want["priority"] = priority_of(story)
+            want["priority"] = epic_priority(story, stories, carded) or priority_of(story)
         if not card.get("size"):
             want["size"] = size_of(story)
         status = by.get(number, {}).get("fields", {}).get("status") or card.get("status") or "Backlog"
@@ -258,6 +271,11 @@ def review_imported(slug, stories, mine, epic=1, run=gh, file=None, queued=None)
 def carded_status(items, number):
     """The board status of the card for this story number, or ""."""
     return next((i.get("status") or "" for i in items if (i.get("content") or {}).get("number") == number), "")
+
+
+def board_grooming_field(item, name):
+    import board_grooming
+    return board_grooming.field(item, name)
 
 
 def duplicates(items):
@@ -510,6 +528,11 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if closed:
             cmd_owner.note("groom", f"{name}: closed {len(closed)} exact duplicate(s) as duplicates, reopen any with the command in its comment: " + ", ".join(f"#{n}" for n in closed))
         pairs = [p for p in duplicates(items) if not set(map(int, re.findall(r"#(\d+)", p.split(" share")[0]))) & set(closed)]
+        card_epics = {(i.get("content") or {}).get("number") for i in items if str(board_grooming_field(i, "work type") or "").lower() == "epic"}
+        linked, found_themes = assign_epics(slug, stories, mine, card_epics, run, str(config))
+        if linked:
+            cmd_owner.note("groom", f"{name}: linked {len(linked)} story(ies) to an epic, undo any with the command in its comment: " + ", ".join(f"#{n}" for n in linked))
+        propose_epics(name, found_themes, stories, slug)
         overlaps = code_overlaps(stories, root)
         if overlaps and json.dumps(overlaps) != mine.get("overlaps"):
             cmd_owner.note("groom", f"{name}: {len(overlaps)} story(ies) overlap code or docs: " + "; ".join(overlaps)[:600])
@@ -575,6 +598,80 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
             latest = load_state()
             latest[slug] = mine
             failure_log.write_private(_state(), json.dumps(latest, indent=1))
+
+
+def say(slug, number, text, run=gh):
+    return run(["api", f"repos/{slug}/issues/{number}/comments", "-f", f"body={text}"]) is not None
+
+
+def assign_epics(slug, stories, mine, epic_numbers=frozenset(), run=gh, config=""):
+    """Sets the Epic line of each unlinked story that matches an open epic (#1099) and comments the epic, the match and the undo command.
+    A story with no match gets one comment saying so. Epics are never assigned. An Epic line the owner removed from a story groom linked
+    is remembered, so the story is not linked to that epic again. Returns (stories newly linked, themes for stories no epic holds)."""
+    import board_grooming
+    from lib import intake
+    assigned, declined, none = mine.setdefault("epics", {}), mine.setdefault("epic_declined", {}), mine.setdefault("epic_none", [])
+    for n, e in list(assigned.items()):
+        if int(n) in stories and board_grooming.epic_of(stories[int(n)].get("body")) is None:
+            assigned.pop(n)
+            declined.setdefault(n, []).append(e)  # the Epic line is gone: the owner undid it
+        elif int(n) not in stories:
+            assigned.pop(n)  # the story is closed
+    epics = {n: s for n, s in stories.items() if n in epic_numbers or board_grooming.is_epic(s)}
+    free = {n: s for n, s in stories.items() if n not in epics and board_grooming.epic_of(s.get("body")) is None}
+    linked, unmatched = [], {}
+    for n, story in sorted(free.items()):
+        hit = board_grooming.match_epic(story, epics, intake.files_area, declined.get(str(n), []))
+        if hit is None:
+            unmatched[n] = story
+            if epics and n not in none and say(slug, n, "Groom found no epic that matches above the threshold, so this story keeps no Epic line.", run):
+                none.append(n)
+            continue
+        epic, why = hit
+        body = story.get("body") or ""
+        body = (re.sub(r"^(Priority:)", f"Epic: #{epic}\n\\1", body, count=1, flags=re.M) if re.search(r"^Priority:", body, re.M)
+                else body.rstrip("\n") + f"\nEpic: #{epic}\n")
+        if run(["api", "-X", "PATCH", f"repos/{slug}/issues/{n}", "-f", f"body={body}"]) is None:
+            continue
+        story["body"] = body
+        assigned[str(n)] = epic
+        linked.append(n)
+        say(slug, n, f"Groom set the Epic line to #{epic}: {why}. To undo: `olivercode board groom --undo {n} --config {config}`, or delete the Epic line.", run)
+    return linked, board_grooming.themes(unmatched)
+
+
+def undo_epic(slug, number, config, run=gh):
+    """Removes the Epic line from the story and records the epic, so grooming links it there again only with a new reason (#1099)."""
+    import board_grooming
+    raw = run(["api", f"repos/{slug}/issues/{number}", "--jq", ".body"])
+    if raw is None:
+        raise RuntimeError(f"could not read #{number}")
+    epic = board_grooming.epic_of(raw)
+    if epic is None:
+        return False
+    if run(["api", "-X", "PATCH", f"repos/{slug}/issues/{number}", "-f", "body=" + board_grooming.EPIC_LINE.sub("", raw, count=1)]) is None:
+        raise RuntimeError(f"could not edit #{number}")
+    with failure_log.locked(_state()):
+        latest = load_state()
+        mine = latest.setdefault(slug, {})
+        mine.setdefault("epic_declined", {}).setdefault(str(number), []).append(epic)
+        mine.get("epics", {}).pop(str(number), None)
+        failure_log.write_private(_state(), json.dumps(latest, indent=1))
+    return True
+
+
+def propose_epics(name, found, stories, slug):
+    """One owner line for each theme of three or more unlinked stories, naming the stories in order. No epic is filed until the owner runs the line's command (#1099)."""
+    import shlex
+    for words, numbers in found:
+        order = sorted(numbers, key=lambda n: (priority_of(stories[n]), n))
+        refs = ", ".join(f"#{n}" for n in order)
+        title = f"Epic: {' '.join(words)}"
+        body = f"Work type: Epic\n\nStories in order: {refs}\n"
+        command = f"olivercode story outbox add --repo {slug} --title {shlex.quote(title)} --body {shlex.quote(body)}"
+        cmd_owner.add_once("groom", f"epic:{','.join(map(str, order))}",
+                           f"{name}: approve a new epic on \"{' '.join(words)}\" holding {refs} in that order",
+                           command=command, error="no open epic holds these stories; none is filed until you run this command")
 
 
 RELATED = re.compile(r"^Related:.*$", re.M)
@@ -711,9 +808,23 @@ def command_fit(argv):
     return 0
 
 
+def command_undo(argv):
+    """`olivercode board groom --undo N --config FILE` (#1099): removes the Epic line groom set on story N."""
+    if len(argv) != 4 or argv[0] != "--undo" or argv[2] != "--config" or not argv[1].isdigit():
+        print("Usage: olivercode board groom --undo N --config FILE")
+        return 1
+    cfg = json.loads(Path(argv[3]).read_text(encoding="utf-8"))
+    put_gh_on_path()
+    done = undo_epic(f"{cfg['repoOwner']}/{cfg['repoName']}", int(argv[1]), argv[3])
+    print(f"#{argv[1]} has no Epic line" if done else f"#{argv[1]} has no Epic line to remove")
+    return 0
+
+
 def command_groom(argv):
     if argv[:1] == ["--fit"]:
         return command_fit(argv)
+    if argv[:1] == ["--undo"]:
+        return command_undo(argv)
     force, args = "--force" in argv, [a for a in argv if a != "--force"]
     chosen = boards() if args == ["--all"] else [(Path(args[1]).parent.parent.name, Path(args[1]))] if len(args) == 2 and args[0] == "--config" else []
     if not chosen:
