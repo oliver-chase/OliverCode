@@ -50,4 +50,15 @@ def fetch(slug: str) -> list[dict] | None:
 
 
 def rank(issue: dict) -> tuple:
-    return (priority(issue) or "P9", issue.get("number", 0))
+    """Order higher urgency first, then stories that unblock the most work.
+
+    GitHub includes dependency counts in issue responses when available. Older
+    responses and tests omit them, so a missing count is safely treated as zero.
+    """
+    summary = issue.get("issue_dependencies_summary") or {}
+    unblocks = summary.get("total_blocking", summary.get("blocking", issue.get("unblocks", 0)))
+    try:
+        unblocks = int(unblocks or 0)
+    except (TypeError, ValueError):
+        unblocks = 0
+    return (priority(issue) or "P9", -unblocks, issue.get("number", 0))

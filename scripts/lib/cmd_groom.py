@@ -59,7 +59,7 @@ def fingerprint(slug, root, run=gh):
 
 
 SECURITY = re.compile(r"secret|credential|leak|vulnerab|security|data loss|lose data|lost data", re.I)
-DEFECT = re.compile(r"\b(bug|broken|fails?|failing|crash|regress\w*|wrong)\b", re.I)
+DEFECT = re.compile(r"\b(bug|broken|fails?|failing|fix(?:es|ing)?|crash|regress\w*|wrong)\b", re.I)
 BLOCKED = re.compile(r"blocked by|depends on #|needs a decision|waiting on", re.I)
 HELD_LABELS = {"owner-action", "blocked"}
 SIZES = ((500, "XS"), (1000, "S"), (2000, "M"), (4000, "L"))
@@ -76,11 +76,26 @@ def open_stories(slug, run=gh):
 
 
 def priority_of(story):
-    """The Priority line the story states, else P0 for security and data loss, P1 for a defect, P2 for the rest."""
-    text = f"{story.get('title') or ''}\n{story.get('body') or ''}"
+    """The stated Priority, else the level suggested by the written scale."""
     if m := re.search(r"Priority:\s*(P[012])\b", story.get("body") or ""):
         return m.group(1)
+    return suggested_priority(story)
+
+
+def suggested_priority(story):
+    """The level the title and body suggest, without changing the story's line."""
+    text = f"{story.get('title') or ''}\n{story.get('body') or ''}"
     return "P0" if SECURITY.search(text) else "P1" if DEFECT.search(text) else "P2"
+
+
+def priority_mismatches(stories):
+    """Return reports for stated priorities that disagree with the written scale."""
+    found = []
+    for number, story in sorted(stories.items()):
+        stated = re.search(r"Priority:\s*(P[012])\b", story.get("body") or "")
+        if stated and stated.group(1) != suggested_priority(story):
+            found.append(f"#{number} states {stated.group(1)} but the scale suggests {suggested_priority(story)}")
+    return found
 
 
 def size_of(story):
@@ -284,6 +299,10 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if renames and json.dumps(renames) != mine.get("renames"):
             cmd_owner.note("groom", f"{name}: {len(renames)} rename story(ies) name no old name: " + "; ".join(renames)[:600])
         mine["renames"] = json.dumps(renames)
+        mismatches = priority_mismatches(stories)
+        if mismatches and json.dumps(mismatches) != mine.get("priority_mismatches"):
+            cmd_owner.note("groom", f"{name}: priority mismatch(es), no changes made: " + "; ".join(mismatches)[:600])
+        mine["priority_mismatches"] = json.dumps(mismatches)
         names = name_drift.drift(root)  # a command, job label or file name matches its README heading (#840)
         if names and json.dumps(names) != mine.get("names"):
             cmd_owner.note("groom", f"{name}: " + name_drift.summary(names)[:700])
