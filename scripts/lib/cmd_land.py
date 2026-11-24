@@ -26,6 +26,7 @@ LOG_DIR: Path | None = None  # None means failure_log.home() / "land", which bel
 TRIES = 4
 BUDGET = 600  # seconds a land keeps retrying after TRIES clean rebases while main keeps moving (#784)
 PAUSE = 5
+CLAIM_WAIT = 300  # seconds a landing waits on another run's claim before it stops (#1116)
 LAND_AS = "OLIVERCODE_LAND_AS"  # the agent of the run that started this land, set by the drain and dispatch (#1106)
 USAGE = "Usage: olivercode land WORKTREE STORY"
 CUT_LOCK = "version-cut.lock"
@@ -426,20 +427,25 @@ def _claim(lock: Path) -> int | None:
     return _holder(lock) or -1
 
 
-def _wait_for_claim(wt: Path, story: str) -> None:
+def _wait_for_claim(wt: Path, story: str) -> bool:
     """Hold a landing while a live run other than the caller holds the story's claim, naming the commit held (#1106). The drain and dispatch land
-    their own builds with LAND_AS set to their agent, which is the holder, so a run never waits on itself. A claim lapses when its run stops renewing it."""
+    their own builds with LAND_AS set to their agent, which is the holder, so a run never waits on itself. A claim lapses when its run stops renewing it. After five minutes the wait stops and returns False, so a landing never sits on its own run's claim (#1116)."""
     from lib import cmd_dispatch  # dispatch imports the drain, which runs this command, so the import waits
     slug, told, me = _story_slug(wt), False, os.environ.get(LAND_AS, "")
-    while slug and story.isdigit():
+    deadline = time.monotonic() + CLAIM_WAIT
+    while slug and story.isdigit() and time.monotonic() < deadline:
         held = cmd_dispatch._local_claim(slug, int(story), time.time())
         if not held or (me and held == f"held by {me}"):
-            return
+            return True
         if not told:
             sha = _git(wt, "rev-parse", "--short", "HEAD").stdout.strip()
             print(f"Story #{story} is {held}, so commit {sha} in {wt} waits for that run to finish.", flush=True)
             told = True
         time.sleep(PAUSE)
+    if not (slug and story.isdigit()):
+        return True
+    print(f"Story #{story} stays {held} after {CLAIM_WAIT // 60} minutes, so the landing of {wt} stops. The story goes back to Ready and its worktree stays.", flush=True)
+    return False
 
 
 def command_land(argv: list[str]) -> int:
@@ -451,7 +457,8 @@ def command_land(argv: list[str]) -> int:
     folder.mkdir(parents=True, exist_ok=True)
     while cut_running(folder):  # a land waits until a running version cut finishes (#789)
         time.sleep(PAUSE)
-    _wait_for_claim(wt, story)
+    if not _wait_for_claim(wt, story):
+        return 1
     key = f"{_repo_name(wt)}-{story}"
     path = folder / f"land-{key}.log"
     lock = folder / f"land-{key}.lock"

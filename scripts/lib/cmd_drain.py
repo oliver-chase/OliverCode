@@ -84,6 +84,19 @@ class Io:
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.memo = Memo()  # the pass's comment and blocker reads, each kept until the story changes (#1114)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
+        self.code_at = self._code_head()  # the runner code this run started on, so a landing that changes it is seen (#1116)
+
+    def _code_head(self) -> str:
+        done = subprocess.run(["git", "-C", str(OC_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
+        return done.stdout.strip() if done.returncode == 0 else ""
+
+    def runner_changed(self) -> int | None:
+        """The number of the story whose landing changed the runner's scripts since this run started, or None (#1116)."""
+        if not self.code_at:
+            return None
+        done = subprocess.run(["git", "-C", str(OC_ROOT), "log", f"{self.code_at}..HEAD", "--format=%s", "--", "scripts"], capture_output=True, text=True)
+        found = re.findall(r"\(#(\d+)\)", done.stdout) if done.returncode == 0 else []
+        return int(found[0]) if found else None
 
     def gh(self, args: list[str]):
         """`gh` through the runner a caller injected, else the shared one that honors the GitHub hold, with its cost logged under this run (#1114)."""
@@ -567,7 +580,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     continue
                 todo.append(issue)
             started = False
-            for issue in todo:  # stories that share a file build together; the landing's rebase onto the default branch is the guard (#1080)
+            for issue in ([] if state.get("restart") else todo):  # stories that share a file build together; the landing's rebase onto the default branch is the guard (#1080)
                 if len(running) >= io.capacity():
                     break
                 if io.claimed(issue):
@@ -577,6 +590,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 started = True
             io.beat([i["number"] for i in running.values()])
             if not running:
+                if state.get("restart"):
+                    break
                 if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
                     waits += 1
                     sleep(300)
@@ -602,6 +617,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 state["tokens"] += used
                 issues = None
                 (state["closed"] if closed else state["blocked"]).append(issue["number"])
+                if closed and not state.get("restart") and (moved := getattr(io, "runner_changed", lambda: None)()):
+                    state["restart"] = moved  # no story starts on old code; the run ends when those in flight finish (#1116)
             io.beat([i["number"] for i in running.values()])
     except BaseException:  # Ctrl-C or SIGTERM (#1076): the stories in flight go back to Ready and their claims go, then the stop goes on
         stopped = True
@@ -610,6 +627,9 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         raise
     finally:
         pool.shutdown(wait=not stopped)
+    if state.get("restart"):
+        say(f"Drain restarting on the new code: #{state['restart']} changed the runner.")
+        return 0
     say(f"Drain done: {len(state['closed'])} stories closed, {len(state['blocked'])} blocked, {state['sessions']} sessions, {state['tokens']:,} tokens.")
     return 0
 
@@ -661,7 +681,7 @@ def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) 
     return True
 
 
-def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit) -> int:
+def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit, restart=os.execv) -> int:
     """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055). One run holds a repo at a time (#992)."""
     args, parallel, rest = list(argv), None, []
     while args:
@@ -685,14 +705,14 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
     on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
     previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
-    code = 0
+    code, state = 0, {}
     try:
         if not take_run(io, slug, f"drain {repo.name}"):
             return 0
         state = new_state()
         with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
             code = drain(io, state, sleep=sleep)
-            while code == 0 and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
+            while code == 0 and not state.get("restart") and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
                 code = drain(io, state, sleep=sleep)
     except KeyboardInterrupt:  # drain has released its claims and said so; the lock goes in the finally below (#1076)
         code = 130
@@ -700,6 +720,9 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         run_lock.release(slug, pid)
         if on_main:
             signal.signal(signal.SIGTERM, previous)
+    if code == 0 and state.get("restart"):  # the lock is released above, so the new process takes the run (#1116)
+        sys.stdout.flush()
+        restart(sys.executable, [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "drain", *argv])
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)
         sys.stdout.flush()
         sys.stderr.flush()

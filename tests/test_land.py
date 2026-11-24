@@ -111,6 +111,15 @@ class TestLandResumes(Base):
         self.assertIn("is held by drain, so commit", out)
         self.assertIn(str(self.wt), out)
 
+    def test_a_land_stops_after_five_minutes_on_a_claim_and_names_the_run(self):
+        ticks = iter(range(0, 10000, 200))
+        with mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.object(cmd_land, "PAUSE", 0), \
+                mock.patch.dict(os.environ, {cmd_land.LAND_AS: ""}), mock.patch("lib.cmd_dispatch._local_claim", return_value="held by drain"), \
+                mock.patch.object(cmd_land.time, "monotonic", side_effect=lambda: next(ticks)):
+            code, out = self.land()
+        self.assertEqual(1, code)
+        self.assertIn("stays held by drain after 5 minutes", out)
+
     def test_the_holder_lands_its_own_story_without_waiting(self):
         for agent in ("drain", "dispatch"):
             with self.subTest(agent=agent), mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.dict(os.environ, {cmd_land.LAND_AS: agent}), \
