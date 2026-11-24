@@ -82,6 +82,19 @@ def load_local_profiles(repo_root: Path) -> dict:
         return {}
 
 
+def registries_with_profiles(fleet_root: Path, reading: Path) -> list[Path]:
+    """Other <repo>/olivercode/repo-profiles.json files beside fleet_root's repos that hold profiles, so an empty registry
+    can name where the profiles are (#1083). The file being read is left out."""
+    found = []
+    for path in sorted(Path(fleet_root).glob(f"*/{REGISTRY_DIR}/{REGISTRY_NAME}")):
+        try:
+            if path.resolve() != Path(reading).resolve() and json.loads(path.read_text()).get("profiles"):
+                found.append(path)
+        except (OSError, ValueError, AttributeError):
+            continue
+    return found
+
+
 def load_repo_profiles(repo_root):
     """Return (profiles: dict, source_path: Path)."""
     path = registry_file(repo_root)

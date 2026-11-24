@@ -82,3 +82,15 @@ class IterFleet(RepoProfilesBase):
 
     def test_an_empty_registry_yields_nothing(self):
         self.assertEqual([], list(repo_profiles.iter_fleet({}, Path("/fleet"))))
+
+
+class RegistriesWithProfiles(unittest.TestCase):
+    def test_an_empty_registry_names_a_sibling_registry_that_holds_profiles(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, root)
+        for name, body in (("suite", '{"profiles": {"a": {}}}'), ("bare", '{"profiles": {}}'), ("broken", "{")):
+            (root / name / "olivercode").mkdir(parents=True)
+            (root / name / "olivercode" / "repo-profiles.json").write_text(body)
+        reading = root / "fleet" / "repo-profiles.json"
+        self.assertEqual([root / "suite" / "olivercode" / "repo-profiles.json"], repo_profiles.registries_with_profiles(root, reading))
+        self.assertEqual([], repo_profiles.registries_with_profiles(root, root / "suite" / "olivercode" / "repo-profiles.json"))

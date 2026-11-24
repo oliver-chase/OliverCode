@@ -307,6 +307,21 @@ class FleetStep(unittest.TestCase):
         self.assertEqual(1, out.count("Fleet repo:"))
         self.assertEqual(1, _commits(self.fleet))
 
+    def test_a_repeat_install_links_a_stale_default_registry_and_does_not_collide(self):
+        cmd_initfleet.scaffold_local(self.fleet)
+        cmd_initfleet.make_local_repo(self.fleet)
+        self.home.mkdir(parents=True, exist_ok=True)
+        stale = self.home / "stale.json"
+        stale.write_text("{}")
+        default = self.home / ".olivercode" / "fleet" / "repo-profiles.json"
+        default.parent.mkdir(parents=True)
+        default.symlink_to(stale)
+        self.config.write_text(json.dumps({"fleetRegistry": str(self.fleet / "repo-profiles.json")}))
+        for _ in range(2):
+            error, _ = quiet(cmd_install.fleet_step, self.checkout)
+            self.assertEqual("", error)
+            self.assertEqual((self.fleet / "repo-profiles.json").resolve(), default.resolve())
+
     def test_a_github_copy_is_cloned_on_yes_and_no_repo_is_created(self):
         with mock.patch("lib.cmd_initfleet.github_login", return_value=("me", "")), \
                 mock.patch("lib.cmd_initfleet.github_repo_kind", return_value=("fleet", "")), \

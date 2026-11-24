@@ -14,7 +14,7 @@ from pathlib import Path
 from lib import launchd
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, load_local, local_path, save_local, voice_file
+from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, link_default_registry, load_local, local_path, save_local, voice_file
 
 from lib import claude_settings as _claude_settings
 from lib import cmd_guide
@@ -309,6 +309,11 @@ def fleet_step(oc_root: Path, ask=None) -> str:
     configured = load_local().get("fleetRegistry")
     if configured is None or Path(configured).expanduser().resolve().parent in merged:
         _set_fleet_registry(dest / REGISTRY)
+    if str(local_path()) != os.devnull:
+        registry = Path(load_local().get("fleetRegistry") or dest / REGISTRY).expanduser()
+        note = link_default_registry(registry)
+        if note:
+            print(note)
     return ""
 
 

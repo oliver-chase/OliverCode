@@ -77,6 +77,38 @@ def fleet_registry_path() -> Path:
     return Path(value).expanduser()
 
 
+def _profile_count(path: Path) -> int:
+    """How many profiles the registry file at path holds, 0 when it is missing or unreadable."""
+    try:
+        return len(json.loads(Path(path).read_text()).get("profiles", {}))
+    except (OSError, ValueError, AttributeError):
+        return 0
+
+
+def link_default_registry(registry: Path) -> str:
+    """Makes the default registry path a link to registry, so the default and the configured path read one file (#1083).
+    Only a link already at the default path is repointed, so no folder is made under it. A stale link is replaced and a
+    link already right is kept, so a repeat run never raises FileExistsError. A real file at the default path is the
+    owner's and stays, as does a link whose target holds profiles when registry holds none, so a repoint never hides the
+    owner's profiles. Returns what it did, or "" when nothing changed."""
+    default = Path(DEFAULT_FLEET_REGISTRY).expanduser()
+    registry = Path(registry).expanduser()
+    if default == registry or not registry.is_file():
+        return ""
+    if default.is_symlink():
+        if default.resolve() == registry.resolve():
+            return ""
+        if _profile_count(default) and not _profile_count(registry):
+            return f"{default} links to {default.resolve()}, which holds profiles that {registry} lacks, so it was not repointed"
+        default.unlink()
+    elif default.exists():
+        return f"{default} is a file of its own, so it was not linked to {registry}"
+    else:
+        return ""
+    default.symlink_to(registry)
+    return f"Linked {default} to {registry}"
+
+
 def skills_root() -> Path | None:
     """The personal skills folder that health checks."""
     return _path(os.environ.get("OLIVERCODE_SKILLS_ROOT") or load_local().get("skillsRoot"))
