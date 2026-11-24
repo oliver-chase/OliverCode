@@ -63,6 +63,12 @@ class TestIntake(unittest.TestCase):
         self.assertTrue(bad)
         self.assertIn("did not run", line)
 
+    def test_plan_starts_the_story_that_unblocks_more_first(self):
+        def story(n, blocking=0):
+            return {"number": n, "title": "t", "body": "Priority: P1.\nFiles area: a.py", "labels": [],
+                    "issue_dependencies_summary": {"total_blocking": blocking}}
+        self.assertEqual([[2, 1]], intake.plan([story(1), story(2, 2)])["groups"])
+
 
 class TestPrevention(unittest.TestCase):
     """Repeated blockers: 3 entries file one story, an open story gets a comment, 2 entries file nothing."""

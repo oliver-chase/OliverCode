@@ -7,6 +7,7 @@ from unittest import mock
 from _support import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from lib import cmd_groom  # noqa: E402
 from lib import open_issues as page  # noqa: E402
 
 
@@ -33,6 +34,22 @@ class TestOpenIssues(unittest.TestCase):
     def test_rank_orders_by_priority_then_number(self):
         found = sorted([issue(3, body="Priority: P2"), issue(2, body="Priority: P0"), issue(1)], key=page.rank)
         self.assertEqual([2, 3, 1], [i["number"] for i in found])
+
+    def test_rank_prefers_the_story_that_unblocks_more_work(self):
+        found = sorted([
+            {**issue(3, body="Priority: P1"), "issue_dependencies_summary": {"total_blocking": 1}},
+            {**issue(2, body="Priority: P1"), "issue_dependencies_summary": {"total_blocking": 2}},
+            issue(1, body="Priority: P1"),
+        ], key=page.rank)
+        self.assertEqual([2, 3, 1], [i["number"] for i in found])
+
+    def test_priority_mismatch_is_reported_without_rewriting_the_story(self):
+        stories = {7: {"title": "The runner fails", "body": "Priority: P2. Size: S."}}
+        self.assertEqual(["#7 states P2 but the scale suggests P1"], cmd_groom.priority_mismatches(stories))
+        self.assertEqual("Priority: P2. Size: S.", stories[7]["body"])
+
+    def test_priority_above_the_scale_is_not_a_mismatch(self):
+        self.assertEqual([], cmd_groom.priority_mismatches({8: {"title": "Tidy", "body": "Priority: P0."}}))
 
     def test_fetch_skips_pull_requests_and_honours_a_hold(self):
         out = '[[{"number":1,"title":"a"},{"number":2,"pull_request":{}}]]'

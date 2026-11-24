@@ -69,18 +69,36 @@ FRESH_HOURS, STALE_HOURS = 24, 48
 def open_stories(slug, run=gh):
     """{number: {title, body, labels}} of the repo's open issues."""
     raw = run(["api", f"repos/{slug}/issues?state=open&per_page=100", "--paginate", "--jq",
-               '.[] | select(has("pull_request") | not) | {number, title, body, labels: [.labels[].name]}'])
+               '.[] | select(has("pull_request") | not) | {number, title, body, labels: [.labels[].name], issue_dependencies_summary}'])
     if raw is None:
         raise RuntimeError(f"could not read the open issues of {slug}")
     return {o["number"]: o for o in (json.loads(l) for l in raw.splitlines() if l.strip())}
 
 
 def priority_of(story):
-    """The Priority line the story states, else P0 for security and data loss, P1 for a defect, P2 for the rest."""
-    text = f"{story.get('title') or ''}\n{story.get('body') or ''}"
+    """The stated Priority, else the level suggested by the written scale."""
     if m := re.search(r"Priority:\s*(P[012])\b", story.get("body") or ""):
         return m.group(1)
+    return suggested_priority(story)
+
+
+def suggested_priority(story):
+    """The level the title and body suggest, without changing the story's line."""
+    text = f"{story.get('title') or ''}\n{story.get('body') or ''}"
     return "P0" if SECURITY.search(text) else "P1" if DEFECT.search(text) else "P2"
+
+
+def priority_mismatches(stories):
+    """Report stated priorities lower than the written scale suggests."""
+    found = []
+    for number, story in sorted(stories.items()):
+        # shortcut: the board's Ready state is not read here, so held and blocked stories are skipped, upgrade when Ready is available
+        if HELD_LABELS & set(story.get("labels") or []) or BLOCKED.search(story.get("body") or ""):
+            continue
+        stated = re.search(r"Priority:\s*(P[012])\b", story.get("body") or "")
+        if stated and stated.group(1) > suggested_priority(story):
+            found.append(f"#{number} states {stated.group(1)} but the scale suggests {suggested_priority(story)}")
+    return found
 
 
 def size_of(story):
@@ -284,6 +302,10 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if renames and json.dumps(renames) != mine.get("renames"):
             cmd_owner.note("groom", f"{name}: {len(renames)} rename story(ies) name no old name: " + "; ".join(renames)[:600])
         mine["renames"] = json.dumps(renames)
+        mismatches = priority_mismatches(stories)
+        if mismatches and json.dumps(mismatches) != mine.get("priority_mismatches"):
+            cmd_owner.note("groom", f"{name}: priority mismatch(es), no changes made: " + "; ".join(mismatches)[:600])
+        mine["priority_mismatches"] = json.dumps(mismatches)
         names = name_drift.drift(root)  # a command, job label or file name matches its README heading (#840)
         if names and json.dumps(names) != mine.get("names"):
             cmd_owner.note("groom", f"{name}: " + name_drift.summary(names)[:700])
