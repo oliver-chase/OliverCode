@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import policy  # noqa: E402
+from lib import policy_parse  # noqa: E402
 
 # The one list of validation commands that wait in the queue.
 # The rewrite names the launcher by absolute path, because `olivercode` is on PATH only where the owner linked it.
@@ -66,8 +66,8 @@ def _already_queued(command: str) -> bool:
     """True when a command of the line is `olivercode queue run`, alone or behind python3. The words "queue run" in a comment,
     an echo or a commit message are data. A line that does not parse is left alone."""
     try:
-        for words in policy.lex(command):
-            words = policy.unwrap(words)[1]
+        for words in policy_parse.lex(command):
+            words = policy_parse.unwrap(words)[1]
             for i, word in enumerate(words[:2]):
                 if os.path.basename(word) == "olivercode" and words[i + 1:i + 3] == ["queue", "run"]:
                     return True
@@ -88,7 +88,7 @@ def headless_refusal(command: str) -> str:
     if os.environ.get("OLIVERCODE_HEADLESS") != "1":
         return ""
     try:
-        simple = [policy.unwrap(words)[1] for words in policy.lex(command)]
+        simple = [policy_parse.unwrap(words)[1] for words in policy_parse.lex(command)]
     except ValueError:
         return ""
     for words in simple:

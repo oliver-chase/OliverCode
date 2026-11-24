@@ -16,7 +16,7 @@ from unittest import mock
 from _support import REPO_ROOT, git, load_script, scratch_repo, quiet, temp_dir
 
 health = load_script("scripts/lib/health_checks.py", "health_checks")
-from lib import health_topology  # noqa: E402
+from lib import health_env, health_topology  # noqa: E402
 
 
 class HealthBase(unittest.TestCase):
@@ -216,22 +216,22 @@ class TestFleetLocations(unittest.TestCase):
 
 class PythonVersion(unittest.TestCase):
     def check(self, version):
-        with mock.patch.object(health.shutil, "which", return_value="/x/python3"), \
-                mock.patch.object(health, "python_version", return_value=version):
+        with mock.patch.object(health_env.shutil, "which", return_value="/x/python3"), \
+                mock.patch.object(health_env, "python_version", return_value=version):
             return quiet(health._check_python)
 
     def test_an_old_python_fails_naming_found_minimum_and_fix(self):
         (result, out) = self.check((3, 9))
         self.assertEqual(result, (0, 1, 0))
         self.assertIn("3.9", out)
-        self.assertIn(f"{health.MIN_PYTHON[0]}.{health.MIN_PYTHON[1]}", out)
+        self.assertIn(f"{health_env.MIN_PYTHON[0]}.{health_env.MIN_PYTHON[1]}", out)
         self.assertIn("brew install python@", out)
 
     def test_the_minimum_passes(self):
-        self.assertEqual(self.check(health.MIN_PYTHON)[0], (1, 0, 0))
+        self.assertEqual(self.check(health_env.MIN_PYTHON)[0], (1, 0, 0))
 
     def test_a_missing_python_fails(self):
-        with mock.patch.object(health.shutil, "which", return_value=None):
+        with mock.patch.object(health_env.shutil, "which", return_value=None):
             result, out = quiet(health._check_python)
         self.assertEqual(result, (0, 1, 0))
         self.assertIn("brew install", out)

@@ -11,7 +11,7 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_initfleet, cmd_install, health_checks  # noqa: E402
+from lib import cmd_initfleet, cmd_install, health_checks, health_env  # noqa: E402
 
 IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.invalid", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}
 
@@ -97,7 +97,7 @@ class BoardStep(unittest.TestCase):
 
     def gh(self, code, scopes="'project', 'repo'"):
         stderr = f"Token scopes: {scopes}" if code == 0 else "not logged in"
-        return mock.patch.object(health_checks, "_gh_auth_status", return_value=subprocess.CompletedProcess(["gh"], code, "", stderr))
+        return mock.patch.object(health_env, "_gh_auth_status", return_value=subprocess.CompletedProcess(["gh"], code, "", stderr))
 
     def test_a_signed_out_gh_stops_the_board_step_before_any_repo(self):
         repo = temp_dir(self) / "widget"

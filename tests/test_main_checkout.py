@@ -39,10 +39,10 @@ class TestMainCheckout(Base):
                 self.assertEqual("", why(command), command)
 
     def test_sed_in_place_writes_its_files_and_not_its_script(self):
-        from lib import policy
+        from lib import policy, policy_parse
         for command, expected in (("sed -i s/a/b/ f.txt", ["f.txt"]), ("sed -i.bak s/a/b/ f.txt g.txt", ["f.txt", "g.txt"]),
                                   ("sed -i -e s/a/b/ f.txt", ["f.txt"]), ("sed s/a/b/ f.txt", [])):
-            found = [t for words in policy.lex_uncommented(command) for t in policy._write_targets(*policy._head(words))]
+            found = [t for words in policy_parse.lex_uncommented(command) for t in policy._write_targets(*policy_parse._head(words))]
             self.assertEqual(expected, found, command)
 
     def test_an_edit_or_commit_in_a_fleet_main_checkout_is_refused_and_names_the_fix(self):

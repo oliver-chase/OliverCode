@@ -38,10 +38,10 @@ def _only_pointers(path: str, text: str) -> bool:
 def _shell_targets(command: str) -> list[str]:
     """The memory paths a parsed shell command writes: redirect, tee, cp, mv and `sed -i` targets."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from lib import policy
+    from lib import policy, policy_parse
     found = []
-    for words in policy.lex_uncommented(command):
-        name, rest = policy._head(words)
+    for words in policy_parse.lex_uncommented(command):
+        name, rest = policy_parse._head(words)
         found += [t for t in policy._write_targets(name, rest) if MEMORY_PATH.search(t.replace("\\", "/"))]
     return found
 

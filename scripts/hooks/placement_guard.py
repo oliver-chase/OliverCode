@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
-from lib import placement, policy  # noqa: E402
+from lib import placement, policy_parse  # noqa: E402
 
 
 def reason(command: str, cwd: Path) -> str:
@@ -25,7 +25,7 @@ def reason(command: str, cwd: Path) -> str:
     if not (clone or create):
         return ""
     try:
-        for words in policy.lex(command):
+        for words in policy_parse.lex(command):
             why = (placement.violation(words, cwd) if clone else "") or (placement.repo_create_violation(words, cwd) if create else "")
             if why:
                 return why

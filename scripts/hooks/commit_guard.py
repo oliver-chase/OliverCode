@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import repo_gates  # noqa: E402
-from lib import policy  # noqa: E402
+from lib import policy_parse  # noqa: E402
 
 # The whole command is tokenized once, so a separator inside a quoted message stays part of
 # that message; splitting on the raw text first dropped any commit whose message held a
@@ -51,7 +51,7 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
     exported: list[str] = []  # `export NAME=value` reaches every later command in the line
     hooks_path_changed = False  # an earlier `git config core.hooksPath ...` reaches every later commit
     try:
-        segments = list(policy.lex(command))
+        segments = list(policy_parse.lex(command))
     except ValueError:
         return found
     if depth > 200:
@@ -60,14 +60,14 @@ def _commits(command: str, cwd: Path, aliases_in: dict | None = None, depth: int
         # A shell function definition wraps its body: `f() { git commit -n; }; f`.
         while words and (words[0] in ("{", "}") or words[0].endswith("()")):
             words = words[1:]
-        env, words = policy.unwrap(words)  # past `env`, `sudo`, `nice -n 5`, `timeout 9` and the like
+        env, words = policy_parse.unwrap(words)  # past `env`, `sudo`, `nice -n 5`, `timeout 9` and the like
         if words and words[0] == "export":
-            exported += [w for w in words[1:] if policy.ASSIGNMENT.match(w)]
+            exported += [w for w in words[1:] if policy_parse.ASSIGNMENT.match(w)]
             continue
         if len(words) >= 2 and words[0] == "cd":
             here = (here / Path(words[1]).expanduser()).resolve()
             continue
-        if words and Path(words[0]).name in policy.SHELLS:
+        if words and Path(words[0]).name in policy_parse.SHELLS:
             # `bash -c "git commit ..."` hides the commit inside a string; read that string as a command line.
             flags = [k for k, w in enumerate(words[1:], 1) if w.startswith("-") and not w.startswith("--") and "c" in w]
             if flags and flags[0] + 1 < len(words):
