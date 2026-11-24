@@ -24,7 +24,7 @@ bash "$OC/scripts/qa/rehearse-install.sh"
 
 Run it from inside the OliverCode checkout. If it fails, stop and report the fork as broken. Everything below assumes a sound checkout.
 
-After install, point the user to "How work runs" in README.md and do not restate it. Then run `olivercode guide` and show the user its output, which says in plain sentences what each command, gate, job and skill does.
+After install, point the user to "How work runs" in README.md and do not restate it. Then run `olivercode guide` and show the user its output, which says in plain sentences what each command, gate, job and skill does. Then ask "Want a walkthrough of how it all works?" and start "The walkthrough" below on a yes.
 
 ## The two decisions only a human can make
 
@@ -64,6 +64,36 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 ## Output
 
 Report what moved (from where, to where, verified at the destination), what stayed and why, what you could not classify with the question they need to answer, the quoted enforcement probe, and where the backups are.
+
+## The walkthrough
+
+When the user asks to be walked through OliverCode, or after adoption when they say yes to "Want a walkthrough of how it all works?", teach it one part at a time. Run `olivercode guide NAME` for a part before you explain it, so your words match the checkout. Keep each part to a few sentences in plain language, and stop after each one with "Shall I continue to <next part>?" Never explain two parts in one turn.
+
+For every automation, say three things in this order:
+1. **What you do.** The one thing the user says or runs, or "nothing" when it runs alone
+2. **What the harness does.** What runs, when it starts, and whether it spends a model turn
+3. **How to check it is running.** The command whose output proves it, and what that output looks like when the part is healthy
+
+Keep a list of the parts covered as you go. These are all the parts, in teaching order:
+
+1. **Stories and the runner.** You say what you want and it becomes a story on the board. `olivercode dispatch N` or `olivercode drain REPO` builds it in a fresh session in its own worktree, then validates, lands and closes it. Check with `olivercode status`
+2. **City and the phone.** You open the pinned City artifact. `olivercode status publish` refreshes it. Check that it opens on the phone
+3. **Commit gates.** The hook blocks secrets, personal data, owner identifiers and version files on every commit. You change nothing. Check with `olivercode conform`, and read `docs/GATES.md` for the list
+4. **Commit-message gate.** It requires a story reference and a test with code. Check a draft with `olivercode commit-check`
+5. **Commit guard.** It refuses `--no-verify` and hook overrides inside Claude Code
+6. **Validation queue.** `bash scripts/validate.sh` takes a turn in a shared queue so validations never pile up. Check with `olivercode queue`
+7. **Board sweep job** (`olivercode board sync --schedule`). It moves closed stories to Complete and adds cards for open ones
+8. **Fleet sync job** (`olivercode fleet-sync --schedule`). It brings each repo level with its remote
+9. **Maintain job** (`olivercode maintain --schedule`). It repairs what is safe to repair on the machine
+10. **GitHub limit job** (`olivercode gh-limit --schedule`). It lifts the shared rate-limit hold when GitHub has room
+11. **Version cut job** (`olivercode version-cut --schedule`). It cuts a version from what landed on main
+12. **Framework CI workflow** (`.github/workflows/framework-ci.yml`). It runs health, validation and the install rehearsal on push and pull request, and is paused while GitHub Actions billing is blocked
+13. **Skills.** Say the phrase and the skill loads: `audit`, `backlog`, `diagnosing-bugs`, `plan` and `skill-creation`. The `audit` skill runs only when the user names it
+14. **Owner steps, decisions and lessons.** `olivercode owner` keeps the steps only the user can take, `olivercode decisions` keeps their decisions in their words, and `olivercode lesson` records a mistake with the rule that prevents it
+
+The scheduled jobs start no model. Check any of them with `launchctl list | grep olivercode` on a Mac, and expect one line per installed job.
+
+When the user asks what is left, list every part above that you have not yet covered, each with its one-line purpose, and offer the next one. Check the list against `olivercode guide` first, so a command, gate, job or skill added since this file was written is named too. When every part is covered, say so and point the user to `olivercode guide` for anything later.
 
 ## City on the desktop and the phone
 
