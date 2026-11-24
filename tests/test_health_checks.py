@@ -6,12 +6,14 @@ degrade to a skip when that context is missing, and must fail only on a real pro
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import git, load_script, scratch_repo, quiet, temp_dir
+from _support import REPO_ROOT, git, load_script, scratch_repo, quiet, temp_dir
 
 health = load_script("scripts/lib/health_checks.py", "health_checks")
 from lib import health_topology  # noqa: E402
@@ -401,6 +403,47 @@ class StaleWorktreeHook(HealthBase):
         git(plain, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.assertEqual("", health.stale_hook(plain))
         self.assertEqual("", health.stale_hook(self.wt, base="origin/nothing"))
+
+class StaleBuiltHook(HealthBase):
+    """#902: a rebase moves a worktree's gate sources but not its built hooks, which are untracked, so the hook still runs the gate main changed."""
+
+    def setUp(self):
+        super().setUp()
+        self.repo = scratch_repo(self.root / "app", branch="main")
+        shutil.copytree(REPO_ROOT / "core" / "hooks", self.repo / "core" / "hooks")
+        (self.repo / "scripts").mkdir()
+        shutil.copy(REPO_ROOT / "scripts" / "build-hooks.py", self.repo / "scripts" / "build-hooks.py")
+        (self.repo / "core" / "templates" / "project").mkdir(parents=True)
+        (self.repo / "core" / "templates" / "project" / ".gitkeep").write_text("")
+        (self.repo / ".githooks").mkdir()
+        for hook in ("pre-commit", "pre-push", "commit-msg"):
+            os.symlink(f"../core/templates/project/{hook}", self.repo / ".githooks" / hook)
+        (self.repo / ".gitignore").write_text("/core/templates/project/pre-commit\n/core/templates/project/pre-commit-private\n"
+                                              "/core/templates/project/pre-push\n/core/templates/project/commit-msg\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "Base (#1)")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.wt = self.root / "app-1"
+        git(self.repo, "worktree", "add", "-q", str(self.wt), "-b", "story/1")
+        self.build(self.wt)
+        gate = self.repo / "core" / "hooks" / "gates" / "repo-local.sh"
+        gate.write_text(gate.read_text() + "\n# main drops this check (#619)\n")
+        git(self.repo, "commit", "-qam", "Change a gate (#619)")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        git(self.wt, "rebase", "-q", "origin/main")  # the worktree now has main's sources and the old build
+
+    @staticmethod
+    def build(wt):
+        subprocess.run([sys.executable, str(wt / "scripts" / "build-hooks.py")], check=True, capture_output=True)
+
+    def test_a_rebased_worktree_with_an_old_build_is_stale_and_names_the_hook(self):
+        why = health.stale_hook(self.wt)
+        self.assertIn("core/templates/project/pre-commit", why)
+
+    def test_a_worktree_rebuilt_after_its_rebase_is_current(self):
+        self.build(self.wt)
+        self.assertEqual("", health.stale_hook(self.wt))
+
 
 class TestGhVersion(unittest.TestCase):
     def test_an_old_gh_fails_naming_the_version_and_a_command(self):

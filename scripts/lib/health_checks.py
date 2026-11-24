@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -263,11 +264,34 @@ GATE_SOURCES = (".githooks", "core/hooks", "scripts/build-hooks.py", "core/templ
                 "core/templates/project/pre-push", "core/templates/project/commit-msg")
 
 
+def _built_hook_stale(path: Path) -> str:
+    """The built hook that differs from a fresh build of this worktree's own gate sources, or "" when they match (#902).
+    The built hooks are untracked, so a rebase moves the sources and leaves the old build in place, which git history cannot see."""
+    builder = path / "scripts" / "build-hooks.py"
+    if not builder.is_file() or not (path / "core" / "hooks").is_dir():
+        return ""
+    with tempfile.TemporaryDirectory() as tmp:
+        fresh = Path(tmp)
+        (fresh / "scripts").mkdir()
+        shutil.copy(builder, fresh / "scripts" / "build-hooks.py")
+        shutil.copytree(path / "core" / "hooks", fresh / "core" / "hooks")
+        (fresh / "core" / "templates" / "project").mkdir(parents=True)
+        if subprocess.run([sys.executable, str(fresh / "scripts" / "build-hooks.py")], capture_output=True).returncode:
+            return ""
+        for built in sorted((fresh / "core" / "templates" / "project").iterdir()):
+            here = path / "core" / "templates" / "project" / built.name
+            if not here.is_file() or here.read_bytes() != built.read_bytes():
+                return f"core/templates/project/{built.name}"
+    return ""
+
+
 def stale_hook(path: Path, base: str = "origin/main") -> str:
     """Why a worktree's commit hooks predate `base`, or "" when they are current or the worktree has no gates (#902)."""
     from lib import repo_gates
     if not repo_gates.has_gates(path):
         return ""
+    if built := _built_hook_stale(path):
+        return f"{built} was built before this worktree's gate sources changed"
     fork = subprocess.run(["git", "-C", str(path), "merge-base", "HEAD", base], capture_output=True, text=True)
     if fork.returncode or not fork.stdout.strip():
         return ""

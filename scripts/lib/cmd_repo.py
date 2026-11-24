@@ -302,7 +302,10 @@ def rebuild_stale_hooks(apply: bool) -> list[str]:
     from lib import cmd_land, health_checks, placement
     lines = []
     for wt in placement.worktrees():
-        if wt.dirty or wt.merged or not health_checks.stale_hook(wt.path):
+        if wt.merged or not health_checks.stale_hook(wt.path):
+            continue
+        if wt.dirty:
+            lines.append(f"KEEP   {wt.path} (its hooks are stale; uncommitted changes keep it here, so commit or discard them, then run clean)")
             continue
         if not apply:
             lines.append(f"REBUILD {wt.path} (its hooks predate origin/main; run with --apply to rebase it and rebuild them)")
