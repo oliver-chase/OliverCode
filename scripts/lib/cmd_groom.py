@@ -2,7 +2,7 @@
 `olivercode board groom [--config FILE | --all | --force]` calls no model; a repo unchanged since the last run costs no GraphQL call.
 
 Beyond drift it sets a blank Priority and Size from the story body, moves an unblocked Backlog story that has both to
-Ready, closes an exact duplicate (same title and Files area) as a duplicate of the older story (#1100), links each other duplicate pair that shares a Files area with a comment on each story naming the one to keep (#1089), and queues one owner line for each weaker pair and each story whose criteria already appear in the repo (#1100). It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). `maintain --fix` runs it, the
+Ready, closes an exact duplicate (same title and Files area) as a duplicate of the older story (#1100), links each other duplicate pair that shares a Files area with a comment on each story naming the one to keep (#1089), and queues one owner line for each weaker pair and each story whose criteria already appear in the repo (#1100). It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). It reopens each story at or above `closeGateFromIssue` that was closed without complete_story.py's evidence, moves it to Backlog and asks the owner whether to run complete_story.py on it (#1104). `maintain --fix` runs it, the
 SessionStart hook starts it in the background when the last success is over 24 hours old, and `health` fails after 48.
 
 A story imported from a file (a `Source:` line naming one) carries a copied Priority, so groom labels it
@@ -294,6 +294,29 @@ def close_duplicates(slug, stories, run=gh):
     return closed
 
 
+def as_process(run):
+    """The groom's `gh` (stdout, or None on failure) as the CompletedProcess the close-gate read takes, with `api` added (#1104)."""
+    def runner(args):
+        out = run(["api", *args])
+        return subprocess.CompletedProcess(args, 0 if out is not None else 1, out or "", "" if out is not None else "gh api failed")
+    return runner
+
+
+def reopen_unproven(slug, found, run=gh):
+    """Reopens each closed story that complete_story.py never closed (#1104), with a comment naming the missing evidence. `found` is the
+    (number, title) pairs from check_board_hygiene.unproven_closes. Returns the numbers reopened; one whose comment or reopen fails stays closed."""
+    reopened = []
+    for number, _ in found:
+        note = ("Reopened: this story was closed without complete_story.py, so no comment ends with `Closed by complete_story.py.` "
+                "The missing evidence is that comment's run output and Live line. "
+                f"To close it with its evidence, run `complete_story.py --story {number} --config CONFIG --evidence TEXT`.")
+        if run(["api", f"repos/{slug}/issues/{number}/comments", "-f", f"body={note}"]) is None:
+            continue
+        if run(["api", "-X", "PATCH", f"repos/{slug}/issues/{number}", "-f", "state=open"]) is not None:
+            reopened.append(number)
+    return reopened
+
+
 CRITERION = re.compile(r"^\s*(?:Then|And)\s+(.{30,})$", re.M)
 
 
@@ -412,6 +435,13 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
             raise RuntimeError(f"could not read the issues of {slug}")
         states = {i["number"]: i["state"] for i in issues}
         items = check_board_hygiene.load_items(cfg)
+        closed_cards = [i for i in items if states.get((i.get("content") or {}).get("number")) == "CLOSED"]
+        reopened = reopen_unproven(slug, check_board_hygiene.unproven_closes(closed_cards, cfg, runner=as_process(run)), run)
+        for n in reopened:
+            states[n] = "OPEN"  # the drift rule below then moves its card to Backlog, and hold keeps it out of Ready
+        if reopened:
+            cmd_owner.note("groom", f"{name}: reopened {len(reopened)} story(ies) closed without complete_story.py evidence, now in Backlog: "
+                           + ", ".join(f"#{n}" for n in reopened) + ". Run complete_story.py on them?")
         stories = open_stories(slug, run)
         from lib import intake
         found = intake.plan(list(stories.values()))
@@ -429,7 +459,7 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         big = oversized(items, stories)
         if filed := file_splits(slug, config, stories, {n for n in big if (carded_status(items, n) == "Ready")}, int(cfg.get("epic") or 1), queued=_queued):
             cmd_owner.note("groom", f"{name}: {len(filed)} oversized story(ies) moved to Backlog, one split story filed for each: " + ", ".join(f"#{n}" for n in filed))
-        hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big  # flagged stories stay in Backlog until the owner acts (#1014)
+        hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big | set(reopened)  # flagged stories stay in Backlog until the owner acts (#1014, #1104)
         fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
                                 for n, k in check_board_hygiene.status_drift(items, states, slug)], hold, big)
         if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run, queued=_queued):

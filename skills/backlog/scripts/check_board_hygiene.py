@@ -181,19 +181,19 @@ def closed_as_not_planned(repo, number, runner):
     return result.stdout.strip() == "not_planned"
 
 
-def check_close_gate(items, config, finished="Complete", runner=gh_api):
-    """Every finished item of the config's own repo numbered at or above `closeGateFromIssue` has a comment
-    holding the line complete_story.py ends its evidence with. A story closed through the REST API, `gh issue close`
-    or the web has none, and skipped the QA, live and hook or job checks (#836). An issue closed as not planned is a
-    duplicate whose findings moved to a surviving story, so it is skipped (#1074). A null or absent key switches the
-    dimension off, and a failed read exits so a cut-short read can never pass as clean."""
+def unproven_closes(items, config, finished="Complete", runner=gh_api):
+    """[(number, title)] for each finished item of the config's own repo numbered at or above `closeGateFromIssue` that
+    has no comment holding the line complete_story.py ends its evidence with. A story closed through the REST API,
+    `gh issue close` or the web has none, and skipped the QA, live and hook or job checks (#836). An issue closed as not
+    planned is a duplicate whose findings moved to a surviving story, so it is skipped (#1074). A null or absent key
+    switches the check off, and a failed read exits so a cut-short read can never pass as clean."""
     start = config.get("closeGateFromIssue")
     if start is None:
         return []
     if isinstance(start, bool) or not isinstance(start, int):
         sys.exit(f"closeGateFromIssue must be an issue number or null, not {start!r}")
     own = f"{config['repoOwner']}/{config['repoName']}"
-    problems = []
+    found = []
     for i in items:
         c = i.get("content", {})
         number = c.get("number")
@@ -208,9 +208,15 @@ def check_close_gate(items, config, finished="Complete", runner=gh_api):
         except (RuntimeError, ValueError) as exc:
             sys.exit(f"cannot read #{number} to check how it closed: {exc}")
         if not cs.closed_by_script(data):
-            problems.append(f"#{number} \"{c.get('title', '')[:50]}\": closed without complete_story.py. "
-                            f"Fix: reopen #{number} and run complete_story.py --story {number} --config CONFIG --evidence TEXT")
-    return problems
+            found.append((number, c.get("title", "")))
+    return found
+
+
+def check_close_gate(items, config, finished="Complete", runner=gh_api):
+    """The sweep's close-gate finding for each story `unproven_closes` names (#836, #1074), with the fix to run."""
+    return [f"#{number} \"{title[:50]}\": closed without complete_story.py. "
+            f"Fix: reopen #{number} and run complete_story.py --story {number} --config CONFIG --evidence TEXT"
+            for number, title in unproven_closes(items, config, finished, runner)]
 
 
 EPIC_CHUNK = 25
