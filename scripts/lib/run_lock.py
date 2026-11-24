@@ -93,6 +93,14 @@ def building_elsewhere(slug: str, now: float | None = None, alive=None) -> int:
     return total
 
 
+def holders_elsewhere(slug: str, now: float | None = None, alive=None) -> list[str]:
+    """The repos whose live runs are building stories, named for the line that ends a drain waiting on a full machine (#1111)."""
+    now = time.time() if now is None else now
+    own = path(slug).name
+    return [r.name[:-5].replace("__", "/") for r in sorted(path(slug).parent.glob("*.json"))
+            if r.name != own and (rec := _read(r)) and not dead_reason(rec, now, alive) and rec.get("building")]
+
+
 def acquire(slug: str, who: str, now: float, page: str = "", want: list[int] | None = None, pid: int | None = None, alive=None) -> tuple[dict, dict, str]:
     """Take the repo's lock. Returns (held, taken, why): `held` is the live holder's record when another run holds it, and then `want` is appended to its queue
     and nothing is taken. `taken` and `why` describe a dead holder this call replaced, else ({}, '')."""

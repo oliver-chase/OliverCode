@@ -394,6 +394,7 @@ class TestLoop(unittest.TestCase):
             self.assertIn(tool, seen["allowed_tools"])
         self.assertNotIn("Edit", seen["allowed_tools"])
         self.assertNotIn("make no tool call", seen["system"] + seen["prompt"])
+        self.assertIn("not a finding", seen["prompt"])
 
     def test_a_routine_story_does_not_start_a_second_model_session_after_validation(self):
         run = Scripted(reply("built"))

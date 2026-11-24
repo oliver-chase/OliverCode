@@ -136,6 +136,10 @@ class Io:
         """Builders this run may hold now: --parallel N, else the machine limit less what other repos' runs are building."""
         return self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
 
+    def holders(self) -> list[str]:
+        """The other repos whose runs hold the builders (#1111)."""
+        return run_lock.holders_elsewhere(self.slug)
+
     def beat(self, building: list[int]) -> None:
         """Tell the repo's run lock which stories are building now (#992)."""
         run_lock.beat(self.slug, os.getpid(), time.time(), building)
@@ -526,6 +530,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     waits += 1
                     sleep(300)
                     continue
+                if todo and not started and io.capacity() == 0:
+                    say(f"Stopping after {FULL_WAITS * 5} minutes: every builder is held by {', '.join(io.holders()) or 'another run'}.")
                 break
             finished, _ = wait(running, return_when=FIRST_COMPLETED)
             for fut in finished:

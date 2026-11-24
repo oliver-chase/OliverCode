@@ -51,3 +51,16 @@ class CommitBlockCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FullMachineCase(unittest.TestCase):
+    def test_a_drain_waits_at_most_twenty_minutes_then_stops_naming_the_holder(self):
+        class Full(FakeIo):
+            def holders(self): return ["o/other"]
+        io = Full([issue(1)])
+        io.cap = 0
+        sleeps, lines = [], []
+        cmd_drain.drain(io, state(), sleep=sleeps.append, say=lines.append)
+        self.assertEqual(20 * 60, sum(sleeps))
+        self.assertEqual([], io.started)
+        self.assertTrue(any("o/other" in line and "20 minutes" in line for line in lines))
