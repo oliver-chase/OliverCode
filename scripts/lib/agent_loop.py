@@ -339,7 +339,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 continue
             break
         if reply["code"] != 0:
-            return {"done": False, "reason": exit_reason(reply, n, resumed), "rounds": n, "tokens": tokens, "summary": summary}
+            return {"done": False, "reason": exit_reason(reply, n, resumed), "rounds": n, "tokens": tokens, "summary": summary,
+                    **({"budget": True} if reply.get("stop") == "max_turns" else {})}  # every turn spent, so the drain leaves a handoff (#1113)
         if not checked:
             return {"done": False, "reason": f"The model finished, but nothing checked the result. {NO_VALIDATION}", "fatal": True,
                     "rounds": n, "tokens": tokens, "summary": summary}

@@ -460,6 +460,24 @@ class TestRealIo(unittest.TestCase):
                 self.io.build(issue(7, f"Do it.\nSize: {size}", labels=labels), Path("/wt/7"), "")
             self.assertEqual((model_name, rounds), (run_loop.call_args.kwargs["model_name"], run_loop.call_args.kwargs["rounds"]), size)
 
+    def test_the_turn_budget_follows_the_story_size(self):
+        for size, turns in (("XS", 15), ("S", 15), ("M", 30), ("L", 30)):
+            with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
+                self.io.build(issue(7, f"Do it.\nSize: {size}"), Path("/wt/7"), "")
+            self.assertEqual(turns, run_loop.call_args.kwargs["max_turns"], size)
+
+    def test_a_spent_budget_leaves_a_handoff_comment_and_the_next_round_starts_from_it(self):
+        spent = {"done": False, "budget": True, "reason": "claude exited 1, stop reason max_turns", "summary": "Wrote the parser; tests are left."}
+        notes = []
+        io = FakeIo([issue(1)], builds={1: [spent]})
+        build = io.build
+        io.build = lambda i, wt, note: notes.append(note) or build(i, wt, note)
+        _, out, st = DrainCase.run_drain(self, io)
+        self.assertEqual(io.closed, [1])
+        self.assertIn("Budget reached: the builder used every turn", io.comments[0][1])
+        self.assertIn("Left: Wrote the parser; tests are left.", io.comments[0][1])
+        self.assertIn("Left: Wrote the parser", notes[1])
+
     def test_the_brief_carries_the_resume_note_and_names_no_other_story(self):
         lead = issue(7, "Do it.\nSize: XS")
         self.io.resumed[7] = "Earlier partial work is present on branch story/7."

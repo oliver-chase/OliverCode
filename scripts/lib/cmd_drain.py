@@ -163,7 +163,7 @@ class Io:
         files = intake.files_area(issue.get("body") or "")
         review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
-        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
+        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, max_turns=intake.turns(size),
                                    rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
@@ -372,6 +372,16 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         io.release(n)
 
 
+def budget_handoff(worktree: Path, out: dict) -> str:
+    """What a builder that used every turn left: the commits and changed files on its branch (done) and its last words (left), so the next round resumes from them (#1113)."""
+    def git(*args):
+        done = subprocess.run(["git", "-C", str(worktree), *args], capture_output=True, text=True)
+        return done.stdout.strip() if done.returncode == 0 else ""
+    commits, changed = git("log", "--format=%h %s", "@{upstream}..HEAD") or git("log", "-5", "--format=%h %s"), git("status", "--short")
+    return (f"Done: {commits or 'no commits yet'}" + (f"\nUncommitted: {changed}" if changed else "")
+            + f"\nLeft: {(out.get('summary') or '').strip()[:600] or 'finish the story and commit it'}")
+
+
 def held_comment(worktree: Path, finding: str) -> str:
     """The one comment a held story gets: that nothing was pushed, where the branch is kept, and the finding itself (#975)."""
     return f"Held by the fresh reader, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.\n\nFinding:\n{finding[:2000]}"
@@ -463,6 +473,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
                 return False, tokens
             if closed:
                 return True, tokens
+        elif out.get("budget"):  # a spent budget leaves a handoff on the story, and the next round starts from it (#1113)
+            note = budget_handoff(worktree, out)
+            io.comment(n, f"Budget reached: the builder used every turn, and the next round resumes from this handoff.\n{note}")
         else:
             note = out["reason"]
         stop = io.policy_stop(n, worktree)

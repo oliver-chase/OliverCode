@@ -123,6 +123,7 @@ class TestExitOne(unittest.TestCase):
         self.assertEqual(2, len(run.prompts))
         self.assertIn("stop reason max_turns after one resume", out["reason"])
         self.assertIn("stderr: boom", out["reason"])
+        self.assertTrue(out["budget"])  # every turn was spent, so the drain leaves a handoff (#1113)
 
     def test_a_timeout_resumes_the_session_the_run_started(self):
         run = Scripted(model.ModelTimeout("claude -p ran past 900 seconds and was stopped.", "sid-9"), reply("committed", session_id="sid-9"), reply("PASS"))

@@ -190,6 +190,12 @@ WAIT_DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 WAIT_SPAN = re.compile(r"\b(\d+)[- ]days?\s+(?:of\s+)?(?:data|window|wait)|\bwait\w*\s+(?:for\s+)?(\d+)\s+days?\b", re.I)
 WAIT_DAYS = 14
 SMALL = ("XS", "S")
+SMALL_TURNS, FULL_TURNS = 15, 30  # a builder's turn budget by story size (#1113)
+
+
+def turns(size: str) -> int:
+    """The turns a builder gets: the small budget for an XS or S story, the full budget for any other (#1113)."""
+    return SMALL_TURNS if size in SMALL else FULL_TURNS
 
 
 def _listed(line: re.Pattern, body: str) -> list[str]:
