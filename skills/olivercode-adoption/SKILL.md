@@ -65,6 +65,15 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 
 Report what moved (from where, to where, verified at the destination), what stayed and why, what you could not classify with the question they need to answer, the quoted enforcement probe, and where the backups are.
 
+## City on the desktop and the phone
+
+Install prints the City step. In the Claude desktop app, do it. In a terminal with no desktop app, install has printed the local page path and `olivercode status publish`, so say nothing more.
+
+1. Read `cityArtifact` in `olivercode.local.json`. When it holds a URL, reuse it, make no second artifact, and go to step 3.
+2. Publish `~/.olivercode/status.html` with the Artifact tool as the artifact titled OliverCode City, set `cityArtifact` in `olivercode.local.json` to its URL, pin it in the sidebar and open it.
+3. Walk the user through the phone steps from `olivercode guide`, naming each once: install the Claude app, sign in to the same account, open the pinned City artifact, and turn on Remote Control for desktop sessions. Ask "Turn Remote Control on for every desktop session?" and set the default only on a yes. Remote Control is a setting the user approves in the desktop app.
+4. Ask the user to confirm City opened on the phone, and set `cityOnPhone` in `olivercode.local.json` to true on a yes, or false on a no.
+
 ## Closing lines
 
 As the last step, run `olivercode guide status` and show the user its output. It gives the steps to follow a run from a terminal, which cost no model turn, so the user never has to ask a thread for status.

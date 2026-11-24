@@ -14,6 +14,7 @@ from pathlib import Path
 from lib import launchd
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
+from lib.local_config import setting
 from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, link_default_registry, load_local, local_path, save_local, voice_file
 
 from lib import claude_settings as _claude_settings
@@ -58,6 +59,32 @@ Using it well
 """ + "\n".join(f"  {habit}" for habit in cmd_guide.USING_IT_WELL) + """
 
 Run `olivercode guide` for the full overview."""
+
+
+def desktop_app() -> bool:
+    """True when this session runs in the Claude desktop app, the only place install can publish and pin City (#999)."""
+    # shortcut: assumes the desktop app sets CLAUDE_CODE_ENTRYPOINT=claude-desktop, unverified here; correct the value if the app reports another.
+    return os.environ.get("CLAUDE_CODE_ENTRYPOINT") == "claude-desktop"
+
+
+def city_step(desktop: bool | None = None) -> str:
+    """Install's City step (#999). In the desktop app it names the saved City URL, which a second install reuses with no second artifact, or says the
+    adoption skill publishes City next, then names each phone step once until the user has confirmed City on the phone (`cityOnPhone`). Outside the
+    desktop app it prints the local page path and the command that publishes City, and says why pinning and Remote Control are skipped."""
+    from lib import failure_log
+    desktop = desktop_app() if desktop is None else desktop
+    if not desktop:
+        print(f"City: the local page is {failure_log.home() / 'status.html'}. Publish it with `{cmd_guide.CITY_PUBLISH}`.")
+        print("  Pinning City and Remote Control are skipped, because they need the Claude desktop app.")
+        return ""
+    url = cmd_guide.city_url()
+    print(f"City: {url} (saved as cityArtifact, so no second artifact is made)" if url else
+          "City: not published yet. The olivercode-adoption skill publishes the status page as the OliverCode City artifact, saves its URL as cityArtifact, pins it and opens it.")
+    if not setting("cityOnPhone"):
+        print("Phone: follow these steps, then confirm City opened on the phone")
+        for n, step in enumerate(cmd_guide.PHONE_STEPS, 1):
+            print(f"  {n}. {step}")
+    return url
 
 
 def closing_lines(oc_root: Path) -> str:
@@ -589,6 +616,7 @@ def command_install(oc_root: Path) -> int:
         board_step(registered_repos())
     else:
         print("Board step skipped here. Run `olivercode install` in your own terminal, or `olivercode backlog-setup DIR --apply` for each repo.")
+    city_step()
     print(closing_lines(oc_root))
     if first_install:
         print()

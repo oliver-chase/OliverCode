@@ -343,5 +343,45 @@ class FleetStep(unittest.TestCase):
         self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
 
 
+class CityStep(unittest.TestCase):
+    """Install sets up City on the desktop and the phone, and the guide repeats it (#999)."""
+
+    def setUp(self):
+        self.config = temp_dir(self) / "olivercode.local.json"
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(self.config), "CLAUDE_CODE_ENTRYPOINT": "claude-desktop"})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_a_first_desktop_install_says_the_skill_publishes_city_and_names_each_phone_step_once(self):
+        from lib import cmd_guide
+        _, out = quiet(cmd_install.city_step)
+        self.assertIn("publishes the status page as the OliverCode City artifact", out)
+        for step in cmd_guide.PHONE_STEPS:
+            self.assertEqual(1, out.count(step))
+
+    def test_a_second_install_reuses_the_saved_url_and_stops_once_the_phone_is_confirmed(self):
+        self.config.write_text(json.dumps({"cityArtifact": "https://claude.ai/artifact/abc", "cityOnPhone": True}))
+        url, out = quiet(cmd_install.city_step)
+        self.assertEqual("https://claude.ai/artifact/abc", url)
+        self.assertIn("no second artifact", out)
+        self.assertNotIn("Phone:", out)
+
+    def test_outside_the_desktop_app_it_prints_the_page_path_and_the_publish_command_and_skips_the_rest(self):
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
+            _, out = quiet(cmd_install.city_step)
+        self.assertIn("status.html", out)
+        self.assertIn("`olivercode status publish`", out)
+        self.assertIn("skipped", out)
+        self.assertNotIn("Install the Claude app", out)
+
+    def test_the_guide_names_the_url_the_phone_steps_and_the_republish_command(self):
+        from lib import cmd_guide
+        self.config.write_text(json.dumps({"cityArtifact": "https://claude.ai/artifact/abc"}))
+        _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
+        self.assertIn("https://claude.ai/artifact/abc", out)
+        self.assertIn("Open the pinned OliverCode City artifact.", out)
+        self.assertIn("olivercode status publish", out)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,30 @@ USING_IT_WELL = (
     "A long thread costs more on every message, because all of it is re-read.",
 )
 
+# City, the status page published as an artifact, and how it reaches the phone (#999). Install, the adoption skill and the guide print the same lines.
+# shortcut: `status publish` and status.html come from #990, which lands first; until then the command is only named, not run.
+CITY_PUBLISH = "olivercode status publish"
+PHONE_STEPS = (
+    "Install the Claude app on your phone.",
+    "Sign in to the same account as the desktop app.",
+    "Open the pinned OliverCode City artifact.",
+    "Turn on Remote Control for desktop sessions in the desktop app's settings, so you can steer Claude Code from the phone.",
+)
+
+
+def city_url() -> str:
+    """The saved City artifact URL, or "" before City is published."""
+    from lib.local_config import setting
+    return str(setting("cityArtifact") or "")
+
+
+def city_lines() -> list[str]:
+    """What the guide says about City: its URL, the phone steps and the command that republishes it (#999)."""
+    url = city_url()
+    return [f"City: {url or 'not published yet; the olivercode-adoption skill publishes it from the Claude desktop app'}",
+            *[f"  {n}. {step}" for n, step in enumerate(PHONE_STEPS, 1)],
+            f"Republish City with `{CITY_PUBLISH}`."]
+
 
 # The README "Commands" table: each job and the commands under it, each with one plain line. tests/test_guide.py holds the README to the same rows.
 GROUPS = (
@@ -180,6 +204,9 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     print("\nUsing it well")
     for habit in USING_IT_WELL:
         print(f"  {habit}")
+    print("\nCity, on the desktop and the phone")
+    for line in city_lines():
+        print(f"  {line}")
     print("\nCommands, by the job they do (olivercode guide NAME says more about one)")
     for job, cmds in GROUPS:
         print(f"\n{job}")
