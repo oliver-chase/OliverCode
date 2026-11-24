@@ -83,7 +83,7 @@ class TestGuideByJob(unittest.TestCase):
 
     def test_a_name_says_what_a_command_gate_guard_job_or_skill_does_and_where_it_lives(self):
         for name, wants in (("land", ("Command:", "scripts/lib/cmd_land.py")), ("pii", ("Gate: PII", "docs/GATES.md")),
-                            ("commit_guard", ("Guard:", "scripts/hooks/commit_guard.py")), ("board-sweep", ("Scheduled job:", "board sync --schedule")), ("sync", ("Scheduled job:", "board sync --schedule")),
+                            ("commit_guard", ("Guard:", "scripts/hooks/commit_guard.py")), ("board-sweep", ("Scheduled job:", "board sync --schedule")),
                             ("audit", ("Skill: audit", "skills/audit/SKILL.md")), ("board groom", ("Command: olivercode board", "cmd_board.py"))):
             code, text = quiet(cmd_guide.command_guide, REPO_ROOT, name)
             self.assertEqual(0, code, name)

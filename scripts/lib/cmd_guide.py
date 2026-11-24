@@ -93,7 +93,6 @@ GROUPS = (
 )
 JOBS = {"board-sweep": "board sync", "fleet-sync": "fleet-sync", "maintain": "maintain",
         "gh-limit": "gh-limit", "version-cut": "version-cut"}  # the scheduled jobs and the command that installs each, as the README names them
-JOB_NAMES = {"sync": "board-sweep", "board sync": "board-sweep", "board-sync": "board-sweep"}  # the job's command names, so the command and its launchd label are one thing to the owner (#1034)
 
 
 def skill_triggers(oc_root: Path) -> list[tuple[str, str]]:
@@ -125,15 +124,14 @@ def _doc_first(path: Path) -> str:
 def explain(oc_root: Path, name: str) -> list[str]:
     """What NAME is and where it lives, for each command, gate, guard, job or skill that carries it. Empty when none does."""
     key = name.lower().removeprefix("olivercode ").strip()
-    job = JOB_NAMES.get(key, key)
     out: list[str] = []
     for cmd, desc in COMMANDS:
         words = cmd.split()
         if words[1] == key.split()[0]:
             out.append(f"Command: {cmd}\n  {desc}\n  Lives in {_lives(oc_root, words[1])}")
             break
-    if job in JOBS:
-        out.append(f"Scheduled job: `olivercode {JOBS[job]} --schedule` installs it through launchd and `--unschedule` removes it. It starts no model.")
+    if key in JOBS:
+        out.append(f"Scheduled job: `olivercode {JOBS[key]} --schedule` installs it through launchd and `--unschedule` removes it. It starts no model.")
     for skill, text in skill_triggers(oc_root):
         if skill == key:
             out.append(f"Skill: {skill}\n  {text}\n  Lives in skills/{skill}/SKILL.md")
