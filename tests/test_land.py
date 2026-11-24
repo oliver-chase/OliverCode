@@ -532,18 +532,19 @@ class TestLandStaysInStory(Base):
         self.assertIn("RESULT pushed", out)
         self.comment.assert_not_called()
 
-    def test_a_commit_outside_the_files_area_is_refused_and_named_on_the_story(self):
+    def test_a_commit_outside_the_files_area_lands_and_is_named_on_the_story(self):
+        """A refusal made each restart repeat the same edit and burned the story's restarts, so validation and the reader judge the change and
+        the story records the extra files."""
         self.body = "Files area: a.txt"
-        before = git(self.root / "origin.git", "rev-parse", "main").stdout
         code, out = self.land()
-        self.assertEqual(1, code)
-        self.assertIn("RESULT outside-area", out)
+        self.assertEqual(0, code, out)
+        self.assertIn("RESULT pushed", out)
         self.assertIn("b.txt", (self.root / "logs" / "land-main-9.log").read_text())
         self.comment.assert_called_once()
         text = self.comment.call_args.args[2]
         self.assertIn("b.txt", text)
-        self.assertIn("Widen the Files area", text)
-        self.assertEqual(before, git(self.root / "origin.git", "rev-parse", "main").stdout, "nothing reached main")
+        self.assertIn("outside the Files area", text)
+        self.assertEqual("b", git(self.root / "origin.git", "show", "main:b.txt").stdout, "the commit reached main")
 
     def test_a_commit_inside_its_files_area_lands_and_gets_no_comment(self):
         self.body = "Files area: b.txt, scripts/"
