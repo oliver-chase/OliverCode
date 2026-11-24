@@ -191,12 +191,16 @@ class Record(unittest.TestCase):
             os.environ["OLIVERCODE_HOME"] = self.old
 
     def test_the_record_holds_the_tree_of_the_working_tree_and_keeps_200_lines(self):
+        # The tree is the same for every record() in a batch, so it is hashed once per batch rather than
+        # 205 times: each hash alone costs three subprocess calls (#1143).
         (self.repo / "dirty.txt").write_text("new\n")
+        tree_a = validated.working_tree(self.repo)
         for _ in range(100):
-            validated.record(self.repo)
+            validated.record(self.repo, tree_a)
         (self.repo / "dirty.txt").write_text("newer\n")
+        tree_b = validated.working_tree(self.repo)
         for _ in range(105):
-            validated.record(self.repo)
+            validated.record(self.repo, tree_b)
         lines = (self.home / "validated.jsonl").read_text().splitlines()
         self.assertEqual(len(lines), 200)
         # The first five old-tree lines were dropped and the newest line is last: dropping the wrong end changes these counts.

@@ -18,27 +18,38 @@ from lib import cmd_drain, cmd_land, maintain, validated  # noqa: E402
 
 REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
 
+_TEMPLATE: Path | None = None  # the one origin/main/wt fixture every Base subclass in this module shares (#1143)
+
+
+def setUpModule():
+    """One origin, main checkout and story worktree for the whole module; each test copies them and repoints their absolute paths."""
+    global _TEMPLATE
+    root = Path(tempfile.mkdtemp(prefix="olivercode-land-template-")).resolve()
+    origin = root / "origin.git"
+    scratch_repo(origin, bare=True, branch="main")
+    seed = scratch_repo(root / "seed", branch="main")
+    git(seed, "remote", "add", "origin", str(origin))
+    (seed / "scripts").mkdir()
+    (seed / "scripts" / "validate.sh").write_text("exit 0\n")
+    (seed / "a.txt").write_text("a")
+    git(seed, "add", "."); git(seed, "commit", "-q", "-m", "one"); git(seed, "push", "-q", "origin", "main")
+    git(root, "clone", "-q", str(origin), str(root / "main"))
+    git(root / "main", "config", "user.email", "t@example.invalid"); git(root / "main", "config", "user.name", "T")
+    git(root / "main", "worktree", "add", "-q", "-b", "story/9", str(root / "wt"), "origin/main")
+    (root / "wt" / "b.txt").write_text("b")
+    git(root / "wt", "add", "."); git(root / "wt", "commit", "-q", "-m", "Add b (#9)")
+    _TEMPLATE = root
+
+
+def tearDownModule():
+    if _TEMPLATE is not None:
+        shutil.rmtree(_TEMPLATE, ignore_errors=True)
+
 
 class Base(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        """One origin, main checkout and story worktree per class; each test copies them and repoints their absolute paths."""
-        cls._template = Path(tempfile.mkdtemp(prefix="olivercode-land-template-")).resolve()
-        cls.addClassCleanup(shutil.rmtree, cls._template, ignore_errors=True)
-        root = cls._template
-        origin = root / "origin.git"
-        scratch_repo(origin, bare=True, branch="main")
-        seed = scratch_repo(root / "seed", branch="main")
-        git(seed, "remote", "add", "origin", str(origin))
-        (seed / "scripts").mkdir()
-        (seed / "scripts" / "validate.sh").write_text("exit 0\n")
-        (seed / "a.txt").write_text("a")
-        git(seed, "add", "."); git(seed, "commit", "-q", "-m", "one"); git(seed, "push", "-q", "origin", "main")
-        git(root, "clone", "-q", str(origin), str(root / "main"))
-        git(root / "main", "config", "user.email", "t@example.invalid"); git(root / "main", "config", "user.name", "T")
-        git(root / "main", "worktree", "add", "-q", "-b", "story/9", str(root / "wt"), "origin/main")
-        (root / "wt" / "b.txt").write_text("b")
-        git(root / "wt", "add", "."); git(root / "wt", "commit", "-q", "-m", "Add b (#9)")
+        cls._template = _TEMPLATE
 
     def setUp(self):
         self.root = temp_dir(self, resolve=True)
@@ -259,9 +270,11 @@ class TestLandSquash(Base):
         for name in ("b", "c", "d"):
             self.assertEqual(name, git(self.main, "show", f"origin/main:{name}.txt").stdout)
 
-    def test_ten_stories_add_ten_commits(self):
+    def test_several_stories_add_their_own_commit(self):
+        """Several, not ten: each land here is the same code path test_a_landing_pushes... already covers once, so a round number buys no extra coverage, only wall time (#1143)."""
         before = int(git(self.main, "rev-list", "--count", "origin/main").stdout)
-        for n in range(10):
+        stories = 4
+        for n in range(stories):
             wt = self.root / f"wt{n}"
             git(self.main, "fetch", "-q", "origin")
             git(self.main, "worktree", "add", "-q", "-b", f"story/1{n}", str(wt), "origin/main")
@@ -271,7 +284,7 @@ class TestLandSquash(Base):
             code, out = quiet(cmd_land.command_land, [str(wt), f"1{n}"])
             self.assertEqual(0, code, out)
         git(self.main, "fetch", "-q", "origin")
-        self.assertEqual(before + 10, int(git(self.main, "rev-list", "--count", "origin/main").stdout))
+        self.assertEqual(before + stories, int(git(self.main, "rev-list", "--count", "origin/main").stdout))
 
 
 class TestLand(Base):
