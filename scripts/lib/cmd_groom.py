@@ -69,7 +69,7 @@ FRESH_HOURS, STALE_HOURS = 24, 48
 def open_stories(slug, run=gh):
     """{number: {title, body, labels}} of the repo's open issues."""
     raw = run(["api", f"repos/{slug}/issues?state=open&per_page=100", "--paginate", "--jq",
-               '.[] | select(has("pull_request") | not) | {number, title, body, labels: [.labels[].name], issue_dependencies_summary}'])
+               '.[] | select(has("pull_request") | not) | {id, number, title, body, labels: [.labels[].name], issue_dependencies_summary}'])
     if raw is None:
         raise RuntimeError(f"could not read the open issues of {slug}")
     return {o["number"]: o for o in (json.loads(l) for l in raw.splitlines() if l.strip())}
@@ -454,6 +454,8 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if names and json.dumps(names) != mine.get("names"):
             cmd_owner.note("groom", f"{name}: " + name_drift.summary(names)[:700])
         mine["names"] = json.dumps(names)
+        if synced := sync_blockers(slug, stories, run):  # each Blocked by line matches a dependency link, both ways (#1103)
+            cmd_owner.note("groom", f"{name}: Blocked by lines and dependency links synced on " + ", ".join(f"#{n}" for n in synced))
         mine["impact"] = {str(n): v for n, v in impact(stories).items()}  # what each story unblocks and shares files with (#1090)
         if fixes:
             with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
@@ -496,6 +498,57 @@ def impact(stories):
     return {n: {"unblocks": sum(n in b for m, b in blockers.items() if m != n),
                 "shares": related_to(s.get("body") or "", {m: t for m, t in stories.items() if m != n})}
             for n, s in sorted(stories.items())}
+
+
+def named_blockers(body):
+    """The story numbers a body's Blocked by lines name."""
+    return {int(x) for line in BLOCKED_BY.findall(body or "") for x in re.findall(r"#(\d+)", line)}
+
+
+def with_blocker(body, n):
+    """The body with `Blocked by: #n` added to its Blocked by line, or as a new line when it has none."""
+    body = body or ""
+    if m := BLOCKED_BY.search(body):
+        kept = re.findall(r"#\d+", m.group(1))
+        line = "Blocked by: " + ", ".join(kept + [f"#{n}"]) + "."
+        return body[:m.start()] + line + body[m.end():]
+    return body.rstrip("\n") + f"\nBlocked by: #{n}.\n"
+
+
+def sync_blockers(slug, stories, run=gh):
+    """Make each story's Blocked by line and its GitHub dependency links agree, both ways (#1103). A named open blocker with no link gets the link and a
+    comment, a link to an open story the body does not name adds the name to the body, and a link to a closed story is removed. Returns the numbers changed."""
+    changed = []
+    for n, story in sorted(stories.items()):
+        named = named_blockers(story.get("body")) - {n}
+        if not named and not (story.get("issue_dependencies_summary") or {}).get("total_blocked_by"):
+            continue
+        raw = run(["api", f"repos/{slug}/issues/{n}/dependencies/blocked_by"])
+        try:
+            rows = json.loads(raw) if raw is not None else None
+        except ValueError:
+            rows = None
+        if not isinstance(rows, list):
+            continue
+        linked = {r["number"]: r for r in rows if isinstance(r, dict) and "number" in r}
+        for b, row in sorted(linked.items()):
+            if row.get("state") != "open" and "id" in row:
+                if run(["api", "-X", "DELETE", f"repos/{slug}/issues/{n}/dependencies/blocked_by/{row['id']}"]) is not None:
+                    changed.append(n)
+        for b in sorted(named - set(linked)):
+            if b not in stories or "id" not in stories[b]:
+                continue  # a closed or unread blocker needs no link
+            if run(["api", "-X", "POST", f"repos/{slug}/issues/{n}/dependencies/blocked_by", "-F", f"issue_id={stories[b]['id']}"]) is not None:
+                run(["api", "-X", "POST", f"repos/{slug}/issues/{n}/comments", "-f", f"body=Groom added the dependency link: blocked by #{b}, named in the Blocked by line."])
+                changed.append(n)
+        for b, row in sorted(linked.items()):
+            if row.get("state") == "open" and b not in named:
+                body = with_blocker(story.get("body"), b)
+                if run(["api", "-X", "PATCH", f"repos/{slug}/issues/{n}", "-f", f"body={body}"]) is not None:
+                    story["body"] = body
+                    named.add(b)
+                    changed.append(n)
+    return sorted(set(changed))
 
 
 def unblocks_of(slug, number):
