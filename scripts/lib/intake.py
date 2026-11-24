@@ -262,11 +262,11 @@ def models(story: dict, session: str = "") -> tuple[str, str, str]:
 def plan(issues: list[dict], today: datetime.date | None = None) -> dict:
     """{"groups": [[numbers in order]], "rewrite": [numbers with no files area], "waits": {number: flag}, "models": {number: (builder, QA)}}.
     Stories that share a file sit in one group in priority order, and different groups run in parallel."""
-    from lib import cmd_groom
+    from lib import cmd_groom, open_issues
     todo = [i for i in issues if "work type: epic" not in (i.get("body") or "").lower() and "epic" not in {
         (l.get("name") if isinstance(l, dict) else l or "").lower() for l in i.get("labels") or []}]
     areas = {i["number"]: files_area(i.get("body") or "") for i in todo}
-    rank = {i["number"]: (cmd_groom.priority_of(i), i["number"]) for i in todo}
+    rank = {i["number"]: (cmd_groom.priority_of(i), open_issues.rank(i)[1], i["number"]) for i in todo}
     groups: list[list[int]] = []
     for n in sorted((n for n in areas if areas[n]), key=rank.get):
         hit = [g for g in groups if any(overlaps(areas[n], areas[m]) for m in g)]

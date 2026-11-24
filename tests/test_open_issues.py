@@ -44,9 +44,12 @@ class TestOpenIssues(unittest.TestCase):
         self.assertEqual([2, 3, 1], [i["number"] for i in found])
 
     def test_priority_mismatch_is_reported_without_rewriting_the_story(self):
-        stories = {7: {"title": "Fix the runner defect", "body": "Priority: P2. Size: S."}}
+        stories = {7: {"title": "The runner fails", "body": "Priority: P2. Size: S."}}
         self.assertEqual(["#7 states P2 but the scale suggests P1"], cmd_groom.priority_mismatches(stories))
         self.assertEqual("Priority: P2. Size: S.", stories[7]["body"])
+
+    def test_priority_above_the_scale_is_not_a_mismatch(self):
+        self.assertEqual([], cmd_groom.priority_mismatches({8: {"title": "Tidy", "body": "Priority: P0."}}))
 
     def test_fetch_skips_pull_requests_and_honours_a_hold(self):
         out = '[[{"number":1,"title":"a"},{"number":2,"pull_request":{}}]]'

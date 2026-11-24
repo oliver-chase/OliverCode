@@ -59,7 +59,7 @@ def fingerprint(slug, root, run=gh):
 
 
 SECURITY = re.compile(r"secret|credential|leak|vulnerab|security|data loss|lose data|lost data", re.I)
-DEFECT = re.compile(r"\b(bug|broken|fails?|failing|fix(?:es|ing)?|crash|regress\w*|wrong)\b", re.I)
+DEFECT = re.compile(r"\b(bug|broken|fails?|failing|crash|regress\w*|wrong)\b", re.I)
 BLOCKED = re.compile(r"blocked by|depends on #|needs a decision|waiting on", re.I)
 HELD_LABELS = {"owner-action", "blocked"}
 SIZES = ((500, "XS"), (1000, "S"), (2000, "M"), (4000, "L"))
@@ -69,7 +69,7 @@ FRESH_HOURS, STALE_HOURS = 24, 48
 def open_stories(slug, run=gh):
     """{number: {title, body, labels}} of the repo's open issues."""
     raw = run(["api", f"repos/{slug}/issues?state=open&per_page=100", "--paginate", "--jq",
-               '.[] | select(has("pull_request") | not) | {number, title, body, labels: [.labels[].name]}'])
+               '.[] | select(has("pull_request") | not) | {number, title, body, labels: [.labels[].name], issue_dependencies_summary}'])
     if raw is None:
         raise RuntimeError(f"could not read the open issues of {slug}")
     return {o["number"]: o for o in (json.loads(l) for l in raw.splitlines() if l.strip())}
@@ -89,11 +89,14 @@ def suggested_priority(story):
 
 
 def priority_mismatches(stories):
-    """Return reports for stated priorities that disagree with the written scale."""
+    """Report stated priorities lower than the written scale suggests."""
     found = []
     for number, story in sorted(stories.items()):
+        # shortcut: the board's Ready state is not read here, so held and blocked stories are skipped, upgrade when Ready is available
+        if HELD_LABELS & set(story.get("labels") or []) or BLOCKED.search(story.get("body") or ""):
+            continue
         stated = re.search(r"Priority:\s*(P[012])\b", story.get("body") or "")
-        if stated and stated.group(1) != suggested_priority(story):
+        if stated and stated.group(1) > suggested_priority(story):
             found.append(f"#{number} states {stated.group(1)} but the scale suggests {suggested_priority(story)}")
     return found
 
