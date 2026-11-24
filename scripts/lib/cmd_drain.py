@@ -83,6 +83,7 @@ class Io:
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.memo = Memo()  # the pass's comment and blocker reads, each kept until the story changes (#1114)
+        self.said_limit = ""  # the limit note the drain output last gave (#1108)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
         self.code_at = self._code_head()  # the runner code this run started on, so a landing that changes it is seen (#1116)
 
@@ -168,12 +169,18 @@ class Io:
             return None
 
     def limit(self) -> int:
-        """The most builders this run may hold: --parallel N, else the machine-wide limit (#1055)."""
-        return self.parallel or local_config.max_builders()
+        """The most builders this run may hold, which sizes its pool: --parallel N, else maxBuilders, else the machine's ceiling the scaled limit stays under (#1108)."""
+        return self.parallel or local_config.saved_builders() or local_config.builder_ceiling()
 
     def capacity(self) -> int:
         """Builders this run may hold now: --parallel N, else the machine limit less what other repos' runs are building."""
         return self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
+
+    def limit_note(self) -> str:
+        """The reason the machine limit last moved, or "" when it is unchanged since this was last asked or --parallel fixes it (#1108)."""
+        note = "" if self.parallel else local_config.builder_note()
+        said, self.said_limit = self.said_limit, note
+        return note if note != said else ""
 
     def holders(self) -> list[str]:
         """The other repos whose runs hold the builders (#1111)."""
@@ -579,6 +586,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
                     continue
                 todo.append(issue)
+            if note := io.limit_note():
+                say(note)
             started = False
             for issue in ([] if state.get("restart") else todo):  # stories that share a file build together; the landing's rebase onto the default branch is the guard (#1080)
                 if len(running) >= io.capacity():

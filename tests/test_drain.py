@@ -53,6 +53,7 @@ class FakeIo:
     def capacity(self):
         return self.cap.pop(0) if isinstance(self.cap, list) and len(self.cap) > 1 else (self.cap[0] if isinstance(self.cap, list) else self.cap)
     def limit(self): return 4
+    def limit_note(self): return ""
     def claim(self, n): pass
     def beat(self, building): self.beats = getattr(self, "beats", []) + [list(building)]
     def worktree(self, n): return Path(f"/wt/{n}")
@@ -210,6 +211,13 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], io.kept)
         self.assertEqual([1], st["blocked"])
         self.assertIn("Fix the thing (#976)", io.comments[0][1])
+
+    def test_the_drain_names_why_the_limit_moved_once(self):
+        """#1108: the reason the machine limit moved is said when it changes, not on every pass; --parallel says nothing."""
+        io = cmd_drain.Io(Path("/nonexistent"), "o/r")
+        with mock.patch.object(cmd_drain.local_config, "builder_note", side_effect=["Builder limit 2: load 37 on 8 cores.", "Builder limit 2: load 37 on 8 cores.", "Builder limit 1: swap."]):
+            self.assertEqual(["Builder limit 2: load 37 on 8 cores.", "", "Builder limit 1: swap."], [io.limit_note() for _ in range(3)])
+        self.assertEqual("", cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=2).limit_note())
 
     def test_the_default_drain_fills_the_machine_limit_and_parallel_overrides_it(self):
         """#1055: with no flag a drain runs up to maxBuilders less what other repos build; --parallel N wins; a bad N is refused."""
