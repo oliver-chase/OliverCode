@@ -65,7 +65,9 @@ class Schedules(unittest.TestCase):
         self.task("paused", "Check the inbox.")
         self.task("manual", "Check the inbox.")
         crons = {"polls": ("0 */2 * * *", True), "gated": ("0 */2 * * *", True), "paused": ("0 * * * *", False)}
-        found = [f for f in self.check(crons=crons) if "gate" in f.text]
+        everything = self.check(crons=crons)
+        self.assertEqual([f.task for f in everything if f.task in ("gated", "paused", "manual")], [])
+        found = [f for f in everything if "gate" in f.text]
         self.assertEqual([(f.level, f.task) for f in found], [("FAIL", "polls")])
         self.assertIn("olivercode gated --job polls CHECK -- ", found[0].text)
         self.assertIn("12 times a day", found[0].text)
