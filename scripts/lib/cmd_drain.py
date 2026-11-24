@@ -30,7 +30,7 @@ sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))  # the board
 
 USAGE = "Usage: olivercode drain REPO [--parallel N]"
 RESTARTS = 3
-FULL_WAITS = 12  # five-minute waits for another repo's run to free a builder before a full machine ends the drain (#1055)
+FULL_WAITS = 4  # twenty minutes of five-minute waits for another repo's run to free a builder (#1055)
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
 
 
@@ -156,9 +156,11 @@ class Io:
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), owner_decisions.brief_section(n)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
         builder, _reader, why = intake.models(issue, f"story-{n}")
+        files = intake.files_area(issue.get("body") or "")
+        review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0))
+                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""

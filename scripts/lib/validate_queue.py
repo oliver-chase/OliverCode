@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 
 HARD_CAP_SECONDS = 4 * 60 * 60  # a slot older than this is reaped even when its holder lives: no validation takes hours
-WAIT_SECONDS = 60 * 60
+WAIT_SECONDS = 10 * 60  # a blocked validation must report and proceed within ten minutes, not make the drain look hung for an hour
 RENDER_NICE = "10"
 
 # One row per queue: its folder, the variable that sets its slot count, that count by default, the variable a child sees

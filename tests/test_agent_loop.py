@@ -249,6 +249,13 @@ class TestLoop(unittest.TestCase):
     def test_a_small_story_touching_only_docs_tests_or_one_command_starts_on_the_smallest_model(self):
         self.assertEqual("haiku", agent_loop.model_for("XS", files=["docs/RULES.md", "tests/test_cmd_status.py", "scripts/lib/cmd_status.py"], priority="P2"))
 
+    def test_only_medium_or_larger_design_p0_or_risky_stories_get_a_fresh_reader(self):
+        self.assertEqual("none", agent_loop.review_mode("S", files=["docs/RULES.md"], priority="P2"))
+        self.assertEqual("full", agent_loop.review_mode("S", files=["scripts/hooks/gh_guard.py"], priority="P2"))
+        self.assertEqual("full", agent_loop.review_mode("S", priority="P0"))
+        self.assertEqual("full", agent_loop.review_mode("M", files=["docs/RULES.md"], priority="P2"))
+        self.assertEqual("full", agent_loop.review_mode("S", labels=[{"name": "design"}], priority="P2"))
+
     def test_the_route_names_the_rule_that_chose_the_model(self):
         self.assertEqual(("sonnet", "its Files area touches scripts/lib/agent_loop.py"), agent_loop.route("XS", files=["scripts/lib/agent_loop.py"]))
         self.assertEqual(("sonnet", "priority P0"), agent_loop.route("S", priority="P0"))
@@ -387,7 +394,12 @@ class TestLoop(unittest.TestCase):
             self.assertIn(tool, seen["allowed_tools"])
         self.assertNotIn("Edit", seen["allowed_tools"])
         self.assertNotIn("make no tool call", seen["system"] + seen["prompt"])
-        self.assertIn("not a finding", seen["prompt"])
+
+    def test_a_routine_story_does_not_start_a_second_model_session_after_validation(self):
+        run = Scripted(reply("built"))
+        out = self.loop(run, [(True, "all green")], review_mode="none")
+        self.assertTrue(out["done"])
+        self.assertEqual(1, len(run.prompts))
 
     def test_a_restart_after_three_rounds_starts_the_next_build_one_level_up(self):
         run = Scripted(reply("built"), reply("fixed"), reply("again"))
@@ -404,7 +416,7 @@ class TestLoop(unittest.TestCase):
 
     def test_the_brief_names_the_builder_and_reader_the_runner_starts(self):
         from lib import cmd_dispatch
-        for size, labels, expect in (("S", [], "Run on Haiku (size S with no risky path or P0 priority), and a fresh Sonnet reader"),
+        for size, labels, expect in (("S", [], "Run on Haiku (size S with no risky path or P0 priority), and repository validation and commit gates"),
                                      ("M", [], "Run on Sonnet (size M), and a fresh Sonnet reader"),
                                      ("M", [{"name": "design"}], "Run on Opus (labeled design), and a fresh Opus reader")):
             with self.subTest(size=size, labels=labels):

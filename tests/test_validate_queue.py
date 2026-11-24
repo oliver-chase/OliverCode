@@ -90,6 +90,7 @@ class QueueRobustnessTest(unittest.TestCase):
     def test_the_wait_and_the_hard_cap_are_fixed_and_no_variable_changes_them(self):
         """#1072: nothing sets these, so they are constants."""
         self.assertFalse(hasattr(validate_queue, "wait_seconds") or hasattr(validate_queue, "hard_cap_seconds"))
+        self.assertEqual(10 * 60, validate_queue.WAIT_SECONDS)
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_HARD_CAP": "1"}):
             folder = validate_queue.slots_dir()
             folder.mkdir(parents=True, exist_ok=True)
