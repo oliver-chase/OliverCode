@@ -158,7 +158,32 @@ class TestGroomFields(unittest.TestCase):
 
     def test_a_card_that_is_missing_is_added_with_its_fields_in_one_fix(self):
         got = cmd_groom.filled([], {7: {"title": "bug: it fails", "body": "x" * 1500}}, drift([], {7: "OPEN"}))
-        self.assertEqual(got, [{"number": 7, "fields": {"status": "Ready", "priority": "P1", "size": "M"}}])
+        self.assertEqual(got, [{"number": 7, "fields": {"status": "Ready", "priority": "P1", "size": "XS"}}])
+
+    def test_size_comes_from_files_and_scenarios_not_body_length(self):
+        files = "Files area: a.py, b.py, c.py, d.py, e.py, f.py\n"
+        scenarios = "".join(f"  Scenario: s{i}\n" for i in range(4))
+        self.assertEqual(cmd_groom.size_of({"body": files + scenarios}), "L")
+        self.assertEqual(cmd_groom.size_of({"body": "x" * 9000}), "XS")
+        self.assertEqual(cmd_groom.size_of({"body": files + scenarios + "Size: S"}), "S")
+
+    def test_a_ready_oversized_story_moves_to_backlog_and_one_split_story_is_filed(self):
+        big = "Files area: " + ", ".join(f"f{i}.py" for i in range(9)) + "\n" + "".join(f"  Scenario: s{i}\n" for i in range(4))
+        small = "Files area: a.py\n  Scenario: one\n"
+        items = [self.card(1, "Ready"), self.card(2, "Ready"), self.card(3, "Ready")]
+        stories = {1: {"title": "Big", "body": big}, 2: {"title": "Small", "body": small}, 3: {"title": "Parted", "body": big},
+                   4: {"title": "Part", "body": "Split from #3\n"}}
+        found = cmd_groom.oversized(items, stories)
+        self.assertEqual(found, {1})
+        filed = []
+        got = cmd_groom.file_splits("o/r", "docs/backlog-config.json", stories, found, file=lambda *a: filed.append(a))
+        self.assertEqual(got, [1])
+        self.assertIn("olivercode board groom --config docs/backlog-config.json", filed[0][2])
+        fixes = {f["number"]: f["fields"] for f in cmd_groom.filled(items, stories, [], hold=found, split=found)}
+        self.assertEqual(fixes[1]["status"], "Backlog")
+        self.assertNotIn("status", fixes[2])
+        again = cmd_groom.file_splits("o/r", "c", {**stories, 9: {"title": "Split #1 into smaller stories", "body": ""}}, found, file=lambda *a: filed.append(a))
+        self.assertEqual(again, [])
 
     def test_a_failed_read_of_the_open_stories_raises_so_groom_records_no_ok(self):
         with self.assertRaises(RuntimeError):

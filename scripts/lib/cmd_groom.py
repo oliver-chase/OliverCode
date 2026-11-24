@@ -62,7 +62,7 @@ SECURITY = re.compile(r"secret|credential|leaked|leak(?:s|ing)? (?:a |the |an )?
 DEFECT = re.compile(r"\b(bug|broken|fails?|failing|crash|regress\w*|wrong)\b", re.I)
 BLOCKED = re.compile(r"blocked by|depends on #|needs a decision|waiting on", re.I)
 HELD_LABELS = {"owner-action", "blocked"}
-SIZES = ((500, "XS"), (1000, "S"), (2000, "M"), (4000, "L"))
+SIZES = ((3, "XS"), (5, "S"), (8, "M"), (12, "L"))  # files plus scenarios, up to each limit (#1091)
 FRESH_HOURS, STALE_HOURS = 24, 48
 
 
@@ -102,16 +102,59 @@ def priority_mismatches(stories):
 
 
 def size_of(story):
-    """The Size line the story states, else one by the length of its body."""
+    """The Size line the story states, else one from the files it names (Files area and Creates) plus its scenarios, never the length of its body (#1091)."""
+    from lib import intake
     body = story.get("body") or ""
     if m := re.search(r"Size:\s*(XS|S|M|L|XL)\b", body):
         return m.group(1)
-    return next((name for limit, name in SIZES if len(body) < limit), "XL")
+    count = len(set(intake.files_area(body)) | set(intake.creates(body))) + len(re.findall(r"^\s*Scenario(?: Outline)?:", body, re.M))
+    return next((name for limit, name in SIZES if count <= limit), "XL")
 
 
-def filled(items, stories, fixes, hold=frozenset()):
+SPLIT_TITLE = "Split #{n} into smaller stories"
+SPLIT_BODY = """**As the owner**, I want #{n} split into smaller stories, so that no builder session starts a story it cannot finish.
+
+```gherkin
+Feature: Split an oversized story
+  Scenario: Main case
+    Given #{n} is judged {size} from its Files area and scenarios and waits in Backlog
+    When its parts are filed, each naming `Split from #{n}` and sized XS, S or M
+    Then `{command}` leaves #{n} alone and the parts build in its place
+```
+
+Epic: #{epic}
+Priority: P1. Size: S. Work type: Story.
+
+Existing coverage checked: groom found #{n} oversized and held it in Backlog until its parts exist.
+"""
+
+
+def oversized(items, stories):
+    """Numbers of open stories judged L or XL that are not epics and have no part filed yet (a story naming `Split from #N`), so they wait in Backlog (#1091)."""
+    import board_grooming
+    carded = {(i.get("content") or {}).get("number"): i for i in items}
+    epic = lambda n, s: str(board_grooming.field(carded.get(n, {}), "work type") or "").lower() == "epic"  # noqa: E731
+    parts = {int(n) for s in stories.values() if not (s.get("title") or "").startswith("Split #") for n in re.findall(r"Split from #(\d+)", s.get("body") or "")}
+    return {n for n, s in stories.items() if size_of(s) in ("L", "XL") and not epic(n, s) and n not in parts}
+
+
+def file_splits(slug, config, stories, big, epic=1, file=None, queued=None):
+    """File one audit story, with the groom command that re-checks it, for each oversized story that has none open or queued. Returns the numbers filed."""
+    from lib import intake
+    file = file or intake.candidate
+    filed = []
+    for n in sorted(big):
+        title = SPLIT_TITLE.format(n=n)
+        if any(s.get("title") == title for s in stories.values()) or (queued and queued(slug, title)):
+            continue
+        file(slug, title, SPLIT_BODY.format(n=n, size=size_of(stories[n]), epic=epic, command=f"olivercode board groom --config {config}"))
+        filed.append(n)
+    return filed
+
+
+def filled(items, stories, fixes, hold=frozenset(), split=frozenset()):
     """Merge into `fixes` a Priority and Size for each open story that lacks one and a move to Ready for each unblocked Backlog story that `hold` does not name,
-    so a flagged story waits in Backlog for the owner (#1014)."""
+    so a flagged story waits in Backlog for the owner (#1014). A Ready story in `split` moves to Backlog (#1091)."""
     import board_grooming
     by = {f["number"]: f for f in fixes}
     carded = {(i.get("content") or {}).get("number"): i for i in items}
@@ -127,6 +170,8 @@ def filled(items, stories, fixes, hold=frozenset()):
         held = HELD_LABELS & set(story.get("labels") or []) or BLOCKED.search(story.get("body") or "")
         if status == "Backlog" and not epic and not held and number not in hold:
             want["status"] = "Ready"
+        elif status == "Ready" and number in split:
+            want["status"] = "Backlog"
         if want:
             by.setdefault(number, {"number": number, "fields": {}})["fields"].update(want)
     return sorted(by.values(), key=lambda f: f["number"])
@@ -208,6 +253,11 @@ def review_imported(slug, stories, mine, epic=1, run=gh, file=None, queued=None)
         mine["rerank"] = {"numbers": todo, "seen": False}
         lines.append(f"one rerank candidate added for {len(todo)}")
     return "; ".join(lines)
+
+
+def carded_status(items, number):
+    """The board status of the card for this story number, or ""."""
+    return next((i.get("status") or "" for i in items if (i.get("content") or {}).get("number") == number), "")
 
 
 def duplicates(items):
@@ -376,9 +426,12 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if overlaps and json.dumps(overlaps) != mine.get("overlaps"):
             cmd_owner.note("groom", f"{name}: {len(overlaps)} story(ies) overlap code or docs: " + "; ".join(overlaps)[:600])
         mine["overlaps"] = json.dumps(overlaps)
-        hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs)  # flagged stories stay in Backlog until the owner acts (#1014)
+        big = oversized(items, stories)
+        if filed := file_splits(slug, config, stories, {n for n in big if (carded_status(items, n) == "Ready")}, int(cfg.get("epic") or 1), queued=_queued):
+            cmd_owner.note("groom", f"{name}: {len(filed)} oversized story(ies) moved to Backlog, one split story filed for each: " + ", ".join(f"#{n}" for n in filed))
+        hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big  # flagged stories stay in Backlog until the owner acts (#1014)
         fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
-                                for n, k in check_board_hygiene.status_drift(items, states, slug)], hold)
+                                for n, k in check_board_hygiene.status_drift(items, states, slug)], hold, big)
         if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run, queued=_queued):
             cmd_owner.note("groom", f"{name}: {line}")
         if flagged and json.dumps(flagged) != mine.get("split"):
