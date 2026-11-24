@@ -510,3 +510,37 @@ class TestRepairOldPlists(unittest.TestCase):
         run = mock.Mock()
         self.assertEqual([], cmd_install.repair_job_plists(self.home, run))
         run.assert_not_called()
+
+
+class TestGroomEpicLinksAndArea(unittest.TestCase):
+    """#1109: a story becomes a sub-issue of the epic its Epic line names, and a story with no Area gets one from its Files area."""
+
+    def items(self):
+        return [{"content": {"number": 10, "title": "e"}, "status": "Backlog", "work Type": "Epic"},
+                {"content": {"number": 11, "title": "s"}, "status": "Backlog", "work Type": "Story"},
+                {"content": {"number": 12, "title": "s2"}, "status": "Backlog", "work Type": "Story", "area": "backlog"},
+                {"content": {"number": 13, "title": "s3"}, "status": "Backlog", "work Type": "Story"}]
+
+    def stories(self, epic=10):
+        body = lambda f: f"Epic: #{epic}\nFiles area: {f}"
+        return {11: {"id": 111, "body": body("scripts/lib/cmd_groom.py, tests/test_groom.py")},
+                12: {"id": 112, "body": body("scripts/lib/cmd_groom.py, tests/test_groom.py")},
+                13: {"id": 113, "body": body("scripts/lib/cmd_groom.py, skills/audit/x.py")}}
+
+    def test_an_unlinked_story_is_linked_and_a_linked_one_is_left(self):
+        calls = []
+        def run(args):
+            calls.append(args)
+            return "12" if "-X" not in args else ""
+        linked, wrong = cmd_groom.link_epics("o/r", self.stories(), self.items(), run)
+        self.assertEqual((linked, wrong), ([11, 13], {}))
+        self.assertIn("sub_issue_id=111", [a for c in calls for a in c])
+
+    def test_an_epic_line_naming_a_story_links_nothing(self):
+        calls = []
+        linked, wrong = cmd_groom.link_epics("o/r", self.stories(11), self.items(), lambda a: calls.append(a) or "")
+        self.assertEqual((linked, wrong, calls), ([], {12: 11, 13: 11}, []))
+
+    def test_area_comes_from_the_board_and_a_spread_is_fleet_wide(self):
+        options = {"backlog": 1, "audit": 2, "fleet-wide": 3}
+        self.assertEqual(cmd_groom.area_fixes(self.items(), self.stories(), options), {11: "backlog", 13: "fleet-wide"})

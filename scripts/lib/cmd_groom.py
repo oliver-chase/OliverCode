@@ -409,6 +409,64 @@ def close_failure(slug):
             cmd_owner.close(i["id"])
 
 
+EPIC_LINE = re.compile(r"^Epic:\s*#(\d+)", re.M)
+
+
+def link_epics(slug, stories, items, run=gh):
+    """Link each open story as a sub-issue of the epic its `Epic:` line names, so an epic shows complete only when every story under it has closed (#1109).
+    Returns (linked numbers, {number: epic} whose Epic line points at something that is not an Epic). A failed read or write leaves the story for the next groom."""
+    import board_grooming
+    kinds = {(i.get("content") or {}).get("number"): str(board_grooming.field(i, "work type") or "").lower() for i in items}
+    subs, linked, wrong = {}, [], {}
+    for n, story in sorted(stories.items()):
+        m = EPIC_LINE.search(story.get("body") or "")
+        if not m or int(m.group(1)) == n or "id" not in story:
+            continue
+        epic = int(m.group(1))
+        if kinds.get(epic) != "epic":
+            wrong[n] = epic
+            continue
+        if epic not in subs:
+            raw = run(["api", f"repos/{slug}/issues/{epic}/sub_issues", "--paginate", "--jq", ".[].number"])
+            subs[epic] = None if raw is None else {int(x) for x in raw.split()}
+        if subs[epic] is None or n in subs[epic]:
+            continue
+        if run(["api", "-X", "POST", f"repos/{slug}/issues/{epic}/sub_issues", "-F", f"sub_issue_id={story['id']}"]) is not None:
+            subs[epic].add(n)
+            linked.append(n)
+    return linked, wrong
+
+
+def area_fixes(items, stories, options):
+    """{number: Area} for each open story whose card has no Area, from the Area the board gives each file of its Files area (#1109). A file takes the most common
+    Area among the cards that list it, else the skill folder it sits in. One Area for all files gives that Area, several give "fleet-wide", none known gives nothing."""
+    import board_grooming
+    from collections import Counter
+    from lib import intake
+    carded = {(i.get("content") or {}).get("number"): i for i in items}
+    seen = {}
+    for n, card in carded.items():
+        a = board_grooming.field(card, "area")
+        for f in intake.files_area((stories.get(n) or {}).get("body") or "") if a else []:
+            seen.setdefault(f, Counter())[a] += 1
+
+    def area_of(path):
+        if seen.get(path):
+            return seen[path].most_common(1)[0][0]
+        m = re.match(r"skills/([^/]+)/", path)
+        return m.group(1) if m and m.group(1) in options else None
+
+    found = {}
+    for n, story in sorted(stories.items()):
+        card = carded.get(n)
+        if card is None or board_grooming.field(card, "area") or str(board_grooming.field(card, "work type") or "").lower() == "epic":
+            continue
+        areas = {area_of(f) for f in intake.files_area(story.get("body") or "")}
+        if areas and None not in areas:
+            found[n] = areas.pop() if len(areas) == 1 else "fleet-wide"
+    return found
+
+
 def groom_board(name: str, config: Path, force=False, now=None, run=gh):
     import batch_project
     import board_rest
@@ -462,6 +520,18 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big | set(reopened)  # flagged stories stay in Backlog until the owner acts (#1014, #1104)
         fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
                                 for n, k in check_board_hygiene.status_drift(items, states, slug)], hold, big)
+        for n, area in area_fixes(items, stories, (cfg.get("fields", {}).get("area") or {}).get("options", {})).items():
+            fix = next((f for f in fixes if f["number"] == n), None)
+            if fix is None:
+                fixes.append(fix := {"number": n, "fields": {}})
+            fix["fields"]["area"] = area
+        linked, wrong = link_epics(slug, stories, items, run)
+        if linked:
+            cmd_owner.note("groom", f"{name}: linked " + ", ".join(f"#{n}" for n in linked) + " as sub-issues of the epic each names")
+        wrongs = [f"#{n} Epic line points at #{e}, which is a story" for n, e in wrong.items()]
+        if wrongs and json.dumps(wrongs) != mine.get("wrong_epics"):
+            cmd_owner.note("groom", f"{name}: " + "; ".join(wrongs)[:600])
+        mine["wrong_epics"] = json.dumps(wrongs)
         if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run, queued=_queued):
             cmd_owner.note("groom", f"{name}: {line}")
         if flagged and json.dumps(flagged) != mine.get("split"):
