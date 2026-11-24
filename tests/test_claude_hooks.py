@@ -312,6 +312,12 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertEqual(claude_settings.without(settings),
                          {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine]}]}})
 
+    def test_the_automode_text_names_no_deleted_layer(self):
+        """#906: sessions are told about the owner thread and the runner, never a manager, lead or handover."""
+        text = " ".join(part for pair in claude_settings.automode_rules().values() for part in pair).lower()
+        for word in ("manager", "lead", "handover", "replacement"):
+            self.assertNotIn(word, text)
+
     def test_install_removes_the_retired_manager_entries_from_any_checkout(self):
         retired = [{"type": "command", "command": f'python3 "/old/checkout/scripts/hooks/{n}"'} for n in claude_settings.RETIRED]
         mine = {"type": "command", "command": "~/mine.sh"}

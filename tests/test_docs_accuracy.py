@@ -39,6 +39,20 @@ class TestDocsAccuracy(unittest.TestCase):
         help_text = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True).stdout
         self.assertEqual([], sorted(w for w in listed if f"olivercode {w}" not in help_text))
 
+    def test_every_command_in_help_is_in_the_readme_table(self):
+        """#906: a command the launcher prints must have a row in the README table, so a reader can find it."""
+        help_text = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True).stdout
+        commands = set(re.findall(r"olivercode ([a-z][a-z-]*)", help_text))
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertEqual([], sorted(c for c in commands if f"`olivercode {c}" not in readme))
+
+    def test_the_audit_ledger_lists_only_tracked_files(self):
+        """#906: docs/AUDITED.txt names files that exist in the repo, so a deleted file leaves no stale audit line."""
+        tracked = set(subprocess.run(["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.splitlines())
+        paths = [line.split()[1] for line in (REPO_ROOT / "docs" / "AUDITED.txt").read_text(encoding="utf-8").splitlines()
+                 if len(line.split()) == 2 and len(line.split()[0]) == 40]
+        self.assertEqual([], [p for p in paths if p not in tracked])
+
     def test_the_plain_terms_table_sits_after_how_work_runs_and_each_part_it_names_exists(self):
         """#974: the kitchen table in the README names one real file per part, so a reader can find each part it describes."""
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
