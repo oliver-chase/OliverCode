@@ -6,6 +6,9 @@ landed per day and the date the count reaches zero at that pace. A flat or risin
 `olivercode status digest [--root DIR]` writes the same board figures with the open stories in priority order, the last five landed, what waits on the owner,
 the latest decisions and the run-log rows to `status-digest.md` in the OliverCode home, at most DIGEST_TOKENS tokens. A new owner thread starts from that file
 alone (#892). The session-start hook refreshes it once it is older than DIGEST_TTL and prints one line with the open count (#985, #1017). It calls no model.
+
+`olivercode status page` rewrites the local status page from the last run state with no model call, and `olivercode status publish [--probe]` publishes that
+page to the City artifact URL on the smallest model and prints whether the Artifact tool worked headless, with the tokens and cost of the call (#990).
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import agent_loop, candidates, cmd_groom, cmd_owner, intake, failure_log, gh_budget, local_config, open_issues, relay, repo_state, run_lock, status_page, validate_queue
+from lib import agent_loop, candidates, cmd_groom, cmd_owner, intake, failure_log, gh_budget, local_config, open_issues, relay, repo_state, run_lock, status_page, validate_queue, status_report
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -37,7 +40,7 @@ DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four
 OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
 DIGEST_ITEMS = 5  # the latest decisions and the latest run-log rows the digest keeps before it trims to the limit
 OWNER_GATED = " (owner gated)"  # the digest's mark on a story that waits on the owner, so Next Ready skips it (#1020)
-USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR]"
+USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR] | olivercode status page | olivercode status publish [--probe]"
 
 
 def recent(slug: str, since: datetime, runner=issue_count.gh_list) -> list[dict] | None:
@@ -619,7 +622,37 @@ def digest(slug: str | None, out=print, **kw) -> int:
     return 0
 
 
+def page(out=print) -> int:
+    """Rewrite the status page from the saved run state, with no model call, and print its path."""
+    state, log, now = status_report.load_state(), run_log(), datetime.now().timestamp()
+    found = log + status_report.outside_landings(log, now)  # the commits that landed outside the runner show too (#996)
+    failure_log.write_atomic(status_report.page_path(), status_report.render(state, found, now, published=status_report._last_publish(log)))
+    out(f"Status page written to {status_report.page_path()}.")
+    return 0
+
+
+def publish(argv: list[str], out=print, run=None) -> int:
+    """Publish the page to City once and say whether the Artifact tool works headless, with the tokens and cost of the call (#990)."""
+    if argv not in ([], ["--probe"]):
+        out(USAGE)
+        return 1
+    page(out=lambda _text: None)
+    found = status_report.publish(run=run, probe=argv == ["--probe"])
+    if not found["ok"]:
+        out(f"The Artifact tool did not publish headless: {found['detail']}. The local page at {status_report.page_path()} still works, and the step is in `olivercode owner list`.")
+        return 1
+    cost = "not recorded" if found["cost_usd"] is None else f"${found['cost_usd']:.4f}"
+    out(f"The Artifact tool works headless. One publish cost {found['tokens']:,} tokens and {cost}.")
+    return 0
+
+
 def command_status(argv: list[str]) -> int:
+    if "--open" in argv:  # the page covers this machine, so it opens from any folder and needs no GitHub origin (#996)
+        return status_report.open_page()
+    if argv[:1] == ["page"] and len(argv) == 1:
+        return page()
+    if argv[:1] == ["publish"]:
+        return publish(argv[1:])
     root = Path.cwd()
     writes = argv[:1] == ["digest"]
     argv = argv[1:] if writes else argv

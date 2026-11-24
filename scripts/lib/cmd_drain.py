@@ -21,7 +21,7 @@ from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, owner_decisions, policy, run_lock
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, owner_decisions, policy, run_lock, status_report
 from lib.open_issues import Memo, fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -32,6 +32,7 @@ sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))  # the board
 USAGE = "Usage: olivercode drain REPO [--parallel N]"
 RESTARTS = 3
 FULL_WAITS = 4  # twenty minutes of five-minute waits for another repo's run to free a builder (#1055)
+REWRITE_SECONDS = status_report.REWRITE_MINUTES * 60  # a running drain rewrites the status page at least this often (#990)
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
 
 
@@ -78,8 +79,9 @@ def costed(session: str, command: str, call):
 class Io:
     """Every outside effect of a drain. Tests replace the methods; the defaults use REST, git, the headless loop and `olivercode land`."""
 
-    def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int | None = None):
+    def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int | None = None, origin: str = ""):
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
+        self.origin = origin or f"olivercode drain {repo.name}"  # the command or thread that started the run, shown beside each landing on the status page (#990)
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.memo = Memo()  # the pass's comment and blocker reads, each kept until the story changes (#1114)
@@ -172,6 +174,14 @@ class Io:
         """The most builders this run may hold, which sizes its pool: --parallel N, else maxBuilders, else the machine's ceiling the scaled limit stays under (#1108)."""
         return self.parallel or local_config.saved_builders() or local_config.builder_ceiling()
 
+    def event(self, kind: str, issue: dict | None = None, queue=(), waiting=()) -> str:
+        """Rewrite the status page for a run event and publish it to City on the smallest model (#990). A failure here never stops a run."""
+        model_name = agent_loop.model_for(cmd_groom.size_of(issue), issue.get("labels")) if issue and kind == "start" else ""
+        try:
+            return status_report.record(self.slug, kind, issue, origin=self.origin, builders=self.limit(), queue=queue, waiting=waiting, model_name=model_name)
+        except Exception:  # the page never stops a run
+            return ""
+
     def capacity(self) -> int:
         """Builders this run may hold now: --parallel N, else the machine limit less what other repos' runs are building."""
         return self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
@@ -210,7 +220,7 @@ class Io:
         review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, max_turns=intake.turns(size),
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review)
+                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.slug)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
@@ -402,6 +412,12 @@ def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
     return True, why
 
 
+def _event(io, kind: str, issue: dict | None = None, **info) -> str:
+    """Tell the io a run event happened, when it keeps a status page. A test's fake io has no `event`, so nothing happens there."""
+    hook = getattr(io, "event", None)
+    return hook(kind, issue, **info) if hook else ""
+
+
 def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit. Each builder takes one story, so no commit carries two stories' work (#988)."""
     n = issue["number"]
@@ -409,11 +425,14 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         closed, used = _work_story(io, issue, state)
         if not closed:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
+        _event(io, "land" if closed else "held", issue)
         return closed, used
     except CloseRefused:  # a landed story whose close the gate refused stays where it is, with the gate's message on it (#1011)
+        _event(io, "held", issue)
         return False, 0
     except CommitBlocked as blocked:  # the same gate blocked each restart, so the story waits in Backlog for the owner (#1096)
         io.backlog(n)
+        _event(io, "held", issue)
         return False, blocked.tokens
     finally:
         io.release(n)
@@ -563,7 +582,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     the claims of the stories it was building and returns to Ready without waiting for their builders (#1076)."""
     running: dict = {}
     pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
-    waits, reported = 0, set()
+    waits, reported, begun = 0, set(), False
     stopped = False
     issues = None  # read once, and again only after a story lands or fails (#1114)
     try:
@@ -588,6 +607,12 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 todo.append(issue)
             if note := io.limit_note():
                 say(note)
+            waiting = [i for i in issues if owner_gated(i) and not is_epic(i)]
+            if not begun and todo:
+                begun = True
+                message = _event(io, "begin", queue=todo, waiting=waiting)
+                if message:
+                    say(message)
             started = False
             for issue in ([] if state.get("restart") else todo):  # stories that share a file build together; the landing's rebase onto the default branch is the guard (#1080)
                 if len(running) >= io.capacity():
@@ -595,6 +620,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if io.claimed(issue):
                     continue
                 io.claim(issue["number"])
+                _event(io, "start", issue, queue=[t for t in todo if t is not issue and t not in running.values()], waiting=waiting)
                 running[pool.submit(work_story, io, issue, state)] = issue
                 started = True
             io.beat([i["number"] for i in running.values()])
@@ -609,7 +635,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if todo and not started and io.capacity() == 0:
                     say(f"Stopping after {FULL_WAITS * 5} minutes: every builder is held by {', '.join(io.holders()) or 'another run'}.")
                 break
-            finished, _ = wait(running, return_when=FIRST_COMPLETED)
+            finished, _ = wait(running, timeout=REWRITE_SECONDS, return_when=FIRST_COMPLETED)
+            if not finished:
+                _event(io, "tick")  # nothing landed in the interval, so the page still gets its rewrite (#990)
+                continue
             for fut in finished:
                 issue = running.pop(fut)
                 try:
@@ -636,6 +665,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         raise
     finally:
         pool.shutdown(wait=not stopped)
+        if begun:
+            _event(io, "end")
     if state.get("restart"):
         say(f"Drain restarting on the new code: #{state['restart']} changed the runner.")
         return 0
@@ -712,6 +743,8 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     cfg = backlog_config(repo)
     slug = cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)
     io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
+    if hasattr(io, "origin"):
+        io.origin = " ".join(["olivercode drain", *argv])
     on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
     previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
     code, state = 0, {}

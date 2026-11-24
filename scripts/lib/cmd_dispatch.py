@@ -252,15 +252,24 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
         print(f"Dry run: story #{n} would build headless in {worktree}, claimed as {agent}. No claim posted.")
         return 0
     from lib import cmd_drain  # drain imports this module, so the import waits until a builder runs
-    io = io or cmd_drain.Io(Path(repo), slug, agent, runner)
+    io = io or cmd_drain.Io(Path(repo), slug, agent, runner, origin=f"thread {sid}" if sid else f"olivercode dispatch {n}")
     pid = os.getpid()
     if not cmd_drain.take_run(io, slug, f"dispatch {n}" + (f" from {sid}" if sid else ""), [n]):  # one run per repo: a second thread's story joins the running queue (#992)
         return 0
+    started = False
     try:
-        with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
+        with run_lock.Heartbeat(slug, pid, also=_beat_and_tick(io, cmd_drain)):
             refused = _start_checks(runner, slug, n, story, clock, busy)
             if refused:
                 return refused
+            started = True
+            try:
+                waiting = [i for i in io.list_open() if cmd_drain.owner_gated(i) and not cmd_drain.is_epic(i)]
+            except Exception:  # what waits on the owner is a courtesy, so a failed read leaves it empty
+                waiting = []
+            begun = cmd_drain._event(io, "begin", queue=[story], waiting=waiting)
+            if begun:
+                print(begun)
             code = _build(io, cmd_drain, story, n, worktree)
             while True:
                 queued = run_lock.release(slug, pid)  # stories other threads queued meanwhile run next, in priority order
@@ -272,7 +281,23 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
                         _build(io, cmd_drain, nxt, nxt["number"], placement_config().worktrees / f"{repo.name}-{nxt['number']}")
             return code
     finally:
+        if started:
+            cmd_drain._event(io, "end")
         run_lock.release(slug, pid)
+
+
+def _beat_and_tick(io, cmd_drain):
+    """The heartbeat's per-beat work: renew the claims and, once REWRITE_SECONDS have passed since the last rewrite, tick the status page (#990)."""
+    last = [time.time()]
+
+    def beat() -> None:
+        refresh = getattr(io, "refresh_claims", None)
+        if refresh:
+            refresh()
+        if time.time() - last[0] >= cmd_drain.REWRITE_SECONDS:
+            last[0] = time.time()
+            cmd_drain._event(io, "tick")
+    return beat
 
 
 def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> int:
@@ -289,6 +314,7 @@ def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> i
 def _build(io, cmd_drain, story: dict, n: int, worktree) -> int:
     io.claim(n)
     io.beat([n])
+    cmd_drain._event(io, "start", story)
     closed, _used = cmd_drain.work_story(io, story, cmd_drain.new_state())
     print(f"Story #{n} {'landed and closed' if closed else 'stayed open and is back on Ready; the reason is in its comment'}. Branch story/{n} in {worktree}.")
     return 0 if closed else 1

@@ -87,6 +87,19 @@ def city_step(desktop: bool | None = None) -> str:
     return url
 
 
+def status_page_line() -> str:
+    """Write the status page when none exists, so a first install has one, and say where it is. `olivercode status --open` opens it (#996)."""
+    from lib import status_report
+    path = status_report.page_path()
+    if path.exists():
+        return f"  [ALREADY] status page at {path}"
+    try:
+        status_report.write_empty()
+    except OSError as exc:
+        return f"  [WARN] the status page could not be written to {path} ({exc}); `olivercode status --open` writes it"
+    return f"  [WRITTEN] status page at {path}; `olivercode status --open` opens it"
+
+
 def closing_lines(oc_root: Path) -> str:
     """Install's last lines on every install: the status steps from `olivercode guide status` and a pointer to the adoption skill (#1059)."""
     steps = "\n".join(f"  {step}" for step in cmd_guide.status_steps(oc_root))
@@ -617,6 +630,7 @@ def command_install(oc_root: Path) -> int:
     else:
         print("Board step skipped here. Run `olivercode install` in your own terminal, or `olivercode backlog-setup DIR --apply` for each repo.")
     city_step()
+    print(status_page_line())
     print(closing_lines(oc_root))
     if first_install:
         print()

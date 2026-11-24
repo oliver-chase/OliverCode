@@ -207,7 +207,7 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
 
 
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
-           max_turns: int = READER_TURNS, attempts: int = 2) -> dict:
+           max_turns: int = READER_TURNS, attempts: int = 2, repo: str = "") -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
@@ -223,7 +223,7 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
                 verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
-                log_round(f"{session}-review", 1, model_name, reply)
+                log_round(f"{session}-review", 1, model_name, reply, repo=repo)
                 log_review(session, verdict, text)
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
                 return {"verdict": verdict, "text": text}
@@ -263,9 +263,9 @@ def start_size(session_id: str, projects: Path | None = None) -> int | None:
     return None
 
 
-def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "") -> None:
+def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "", repo: str = "") -> None:
     """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost, stop reason and write time, and on a session's first round the tokens it started with (#878, #987).
-    A log that cannot be written never stops a loop."""
+    `repo` names the repo the story belongs to, so the status page can total each repo's spend (#990). A log that cannot be written never stops a loop."""
     usage = reply.get("usage") or {}
     row = {"story": story, "round": n, "model": model_name, "input": usage.get("input", 0), "output": usage.get("output", 0),
            "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0), "cost_usd": reply.get("cost_usd"),
@@ -276,6 +276,13 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
         row["start_tokens"] = start_tokens
     if why:
         row["route"] = why  # the rule that chose the model the build started on (#1026)
+    if repo:
+        row["repo"] = repo
+    append_log(row)
+
+
+def append_log(row: dict) -> None:
+    """Append one JSON line to the run log. A log that cannot be written never stops a loop."""
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
@@ -296,15 +303,15 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print, why: str = "", review_mode: str = "full") -> dict:
+             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
     finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
     `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode)
+    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode, repo)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full") -> dict:
+def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full", repo="") -> dict:
     run, check = run or model.run_cli, check or validate
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
@@ -318,7 +325,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             try:
                 reply = run(prompt, cwd, max_turns=max_turns, session=session, system=SYSTEM, model=model_name, resume=claude_session)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
-                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed}, why=why)
+                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed}, why=why, repo=repo)
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
@@ -330,7 +337,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             reply = {**reply, "resumed": resumed}
             tokens += reply["tokens"]
             claude_session = reply["session_id"] or claude_session
-            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why)
+            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why, repo=repo)
             summary = reply["text"]
             say(f"Round {n}: {summary.strip()[:300]}")
             if reply["code"] != 0 and reply.get("stop") in RESUMABLE and not resumed and claude_session:
@@ -353,7 +360,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 return {"done": True, "reason": "The repo's validation passes; routine story review is covered by validation and commit gates.",
                         "rounds": n, "tokens": tokens, "summary": summary}
             verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
-                             max_turns=READER_TURNS, attempts=2)
+                             max_turns=READER_TURNS, attempts=2, repo=repo)
             if verdict["verdict"] == "none":  # the reader gave no verdict twice, so the story is held for a retry and nothing lands (#1015)
                 return {"done": False, "held": verdict["text"], "reason": f"The fresh reader gave no verdict, so nothing is pushed: {verdict['text'][:300]}",
                         "rounds": n, "tokens": tokens, "summary": summary}

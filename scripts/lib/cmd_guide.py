@@ -72,6 +72,8 @@ GROUPS = (
         ("health", "Check that this machine is set up correctly"),
         ("status", "Show how many stories are open and how fast they close"),
         ("status digest", "Write the one-page summary a new thread starts from"),
+        ("status page", "Rewrite the local status page the runner keeps current, which shows what is building, what landed each day and what waits on you"),
+        ("status publish", "Publish the status page to City on the smallest model, and with --probe say whether that works headless"),
         ("conform", "Check repos against the shared standard"),
         ("maintain", "Repair what is safe to repair on this machine"),
         ("limits", "Check the size of the repo against its ceiling"),

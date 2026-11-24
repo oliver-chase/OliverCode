@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,8 +15,11 @@ from unittest import mock
 from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from lib import agent_loop, cmd_drain, status_report  # noqa: E402
+from _support import quiet  # noqa: E402
+from test_drain import FakeIo, issue as drain_issue, state as drain_state  # noqa: E402
 from lib import cmd_boardsweep as sweep  # noqa: E402
-from lib import cmd_fleetsync, cmd_groom, cmd_owner, cmd_status, status_page  # noqa: E402
+from lib import cmd_fleetsync, cmd_groom, cmd_install, cmd_owner, cmd_status, status_page  # noqa: E402
 
 NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
 
@@ -389,6 +393,300 @@ class TestDigest(unittest.TestCase):
             self.assertEqual([], cmd_status.run_log())
 
 
+DAY = 86400.0
+T0 = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc).timestamp()
+
+
+def stamp(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class TestStatusPage(unittest.TestCase):
+    """#990: the page the runner rewrites with no model call, and the one small-model call that publishes it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": self.tmp.name})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.published = []
+
+    def record(self, kind, issue=None, now=T0, **kw):
+        return status_report.record("o/r", kind, issue, now=now, publisher=lambda **k: self.published.append(kind), **kw)
+
+    def page(self):
+        return status_report.page_path().read_text(encoding="utf-8")
+
+    def story(self, n, title="Story"):
+        return {"number": n, "title": f"{title} {n}", "labels": []}
+
+    def landed_log(self, n, minutes=20.0, at=T0 - 3600, origin="olivercode drain r", repo="o/r"):
+        return [{"story": f"story-{n}", "round": 1, "model": "haiku", "input": 1000, "output": 500, "cost_usd": 0.25, "repo": repo, "at": stamp(at - 600)},
+                {"story": f"story-{n}", "repo": repo, "landed": True, "title": f"Landed {n}", "origin": origin, "model": "haiku", "minutes": minutes, "at": stamp(at)}]
+
+    def test_a_run_begins_with_the_estimate_the_builders_the_path_and_the_refresh_interval(self):
+        log = self.landed_log(1, minutes=20.0)
+        with mock.patch.object(status_report, "_log", return_value=log):
+            message = self.record("begin", origin="olivercode drain r", builders=2, queue=[self.story(5), self.story(6), self.story(7), self.story(8)], log=log)
+        self.assertIn("about 40 minutes for 4 stories", message)
+        self.assertIn("2 builders running", message)
+        self.assertIn(str(status_report.page_path()), message)
+        self.assertIn(f"reloads every {status_report.REFRESH_SECONDS} seconds", message)
+        self.assertIn('title this thread "r, 4 building" in the same turn', message)
+
+    def test_a_page_written_for_a_publish_carries_the_publish_time_and_a_tick_keeps_the_last(self):
+        with mock.patch.object(status_report, "_log", return_value=[]), mock.patch.object(status_report, "load_local", return_value={"cityArtifact": "u"}):
+            self.record("start", self.story(5), now=T0, log=[])
+            self.assertIn(f'data-published="{T0:.0f}"', self.page())
+            self.record("tick", now=T0 + 3600, log=[{"story": "city-publish", "at": stamp(T0)}])  # the publish logs its own row, which a tick reads
+            self.assertIn(f'data-published="{T0:.0f}"', self.page())
+
+    def test_a_dispatch_refused_before_it_starts_fires_no_end_event(self):
+        from lib import cmd_dispatch
+        events = []
+        io = SimpleNamespace(event=lambda kind, issue=None, **k: events.append(kind) or "")
+        with mock.patch.object(cmd_dispatch, "_start_checks", return_value=1), mock.patch.object(cmd_drain, "take_run", return_value=True), \
+                mock.patch.object(cmd_dispatch.run_lock, "Heartbeat"), mock.patch.object(cmd_dispatch.run_lock, "release", return_value=[]), \
+                mock.patch.object(cmd_dispatch, "read_story", return_value=({"number": 5, "title": "S", "state": "OPEN", "labels": []}, "")):
+            try:
+                cmd_dispatch.command_dispatch(["5"], runner=lambda *a, **k: "", io=io, repo=Path(self.tmp.name))
+            except Exception:
+                pass
+        self.assertNotIn("end", events)
+
+    def test_a_run_with_no_landed_story_says_there_is_no_estimate_yet(self):
+        with mock.patch.object(status_report, "_log", return_value=[]):
+            message = self.record("begin", origin="o", queue=[self.story(5)], log=[])
+        self.assertIn("Estimate: none yet", message)
+
+    def test_the_page_shows_what_is_building_the_queue_and_what_waits_on_the_owner(self):
+        with mock.patch.object(status_report, "_log", return_value=[]), mock.patch.object(status_report, "_owner_steps", return_value=[{"id": 3, "step": "Pin the City tab"}]):
+            self.record("begin", origin="olivercode drain r", builders=2, queue=[self.story(5), self.story(6)], waiting=[self.story(9, "Owner gated")], log=[])
+            self.record("start", self.story(5), now=T0 + 60, model_name="sonnet", queue=[self.story(6)], waiting=[self.story(9, "Owner gated")], log=[])
+            text = self.page()
+        self.assertIn("1 of 2 builders running", text)
+        self.assertIn("#5 Story 5", text)
+        self.assertIn("sonnet", text)
+        self.assertIn("#6 Story 6", text)
+        self.assertIn("#9 Owner gated 9", text)
+        self.assertIn("Pin the City tab", text)
+        self.assertIn('http-equiv="refresh"', text)
+        self.assertNotIn("<img", text)
+
+    def test_a_landing_is_logged_with_its_origin_and_shows_under_its_day_with_tokens_and_cost(self):
+        rows = []
+        with mock.patch.object(status_report, "_log", side_effect=lambda: list(rows)):
+            self.record("begin", origin="thread SID1", queue=[self.story(5)])
+            self.record("start", self.story(5), now=T0 + 10, model_name="haiku")
+            agent_loop.append_log({"story": "story-5", "round": 1, "model": "haiku", "input": 4000, "output": 1000, "cost_usd": 0.5, "repo": "o/r", "at": stamp(T0 + 5)})
+            self.record("land", self.story(5), now=T0 + 20 * 60 + 10)
+            rows.extend(cmd_status.run_log())
+            self.record("tick", now=T0 + 21 * 60)
+        text = self.page()
+        landing = [r for r in rows if r.get("landed")][0]
+        self.assertEqual(("thread SID1", 20.0), (landing["origin"], landing["minutes"]))
+        for want in ("#5 Story 5", "thread SID1", "5,000", "$0.50", "1 landed"):
+            self.assertIn(want, text)
+
+    def test_the_page_lists_seven_days_with_a_total_for_each_and_leaves_out_older_landings(self):
+        log = self.landed_log(1, at=T0 - 60) + self.landed_log(2, at=T0 - 3 * DAY) + self.landed_log(3, at=T0 - 9 * DAY)
+        text = status_report.render({"o/r": self._entry()}, log, T0)
+        self.assertEqual(7, text.count("<h4>"))
+        self.assertIn("Landed 1", text)
+        self.assertIn("Landed 2", text)
+        self.assertNotIn("Landed 3", text)
+        self.assertIn("nothing landed", text)
+
+    def test_a_repo_filter_keeps_another_repos_landings_off_the_page(self):
+        log = self.landed_log(1, at=T0 - 60, repo="o/other")
+        self.assertNotIn("Landed 1", status_report.render({"o/r": self._entry()}, log, T0))
+
+    def _entry(self, **kw):
+        return {"origin": "x", "builders": 1, "started": T0, "estimate_min": 30, "active": True, "building": {}, "queue": [], "held": [], "waiting": [], **kw}
+
+    def test_the_clock_runs_in_the_page_and_a_stale_publish_is_warned_in_the_browser(self):
+        entry = self._entry(building={"5": {"n": 5, "title": "T", "at": T0 - 600, "model": "haiku"}})
+        text = status_report.render({"o/r": entry}, [], T0, published=T0 - 3600)
+        self.assertIn(f'data-since="{T0 - 600:.0f}"', text)
+        self.assertIn(f'data-left="{T0 + 1800:.0f}"', text)
+        self.assertIn(f'data-published="{T0 - 3600:.0f}"', text)
+        self.assertIn('data-active="1"', text)
+        self.assertIn("Warning: this is older than", text)
+
+    def test_the_page_follows_the_designs_colors_from_the_owners_design_file(self):
+        own = Path(self.tmp.name) / "mine.md"
+        own.write_text(":root { --bg: #fafaf0; --accent: #aa0000; }", encoding="utf-8")
+        with mock.patch.object(status_report, "load_local", return_value={"designFile": str(own)}):
+            tokens = status_report.design_tokens()
+        self.assertEqual(("#fafaf0", "#aa0000", "#000000"), (tokens["bg"], tokens["accent"], tokens["text"]))
+        self.assertEqual("#ffffff", status_report.design_tokens()["bg"])
+
+    def test_a_tick_rewrites_the_page_and_publishes_nothing_while_an_event_publishes(self):
+        with mock.patch.object(status_report, "_log", return_value=[]):
+            self.record("begin", origin="o", queue=[self.story(5)], log=[])
+            self.record("tick", now=T0 + 1800, log=[])
+            self.record("end", now=T0 + 3600, log=[])
+        self.assertEqual(["begin", "end"], self.published)
+        self.assertIn("The run has ended", self.page())
+
+    def test_a_held_story_shows_as_held_and_is_not_logged_as_landed(self):
+        rows = []
+        with mock.patch.object(status_report, "_log", side_effect=lambda: list(rows)):
+            self.record("begin", origin="o", queue=[self.story(5)])
+            self.record("start", self.story(5), now=T0 + 1)
+            self.record("held", self.story(5), now=T0 + 60)
+        self.assertEqual([], [r for r in cmd_status.run_log() if r.get("landed")])
+        self.assertIn("#5 Story 5", self.page())
+        self.assertIn("No story is building", self.page())
+
+    def test_publish_does_nothing_without_a_city_url(self):
+        with mock.patch.object(status_report, "load_local", return_value={}):
+            self.assertFalse(status_report.publish()["ok"])
+        self.assertEqual([], cmd_status.run_log())
+
+    def test_a_publish_runs_on_the_smallest_model_and_logs_its_tokens_and_cost(self):
+        calls = []
+
+        def run(prompt, cwd, **kw):
+            calls.append((prompt, kw))
+            return {"code": 0, "text": "done", "usage": {"input": 900, "output": 40}, "cost_usd": 0.003}
+        with mock.patch.object(status_report, "load_local", return_value={"cityArtifact": "https://claude.ai/artifact/abc"}):
+            found = status_report.publish(run=run)
+        self.assertTrue(found["ok"])
+        self.assertEqual("haiku", calls[0][1]["model"])
+        self.assertIn("https://claude.ai/artifact/abc", calls[0][0])
+        row = cmd_status.run_log()[-1]
+        self.assertEqual(("city-publish", 900, 40, 0.003), (row["story"], row["input"], row["output"], row["cost_usd"]))
+        text = status_report.render({}, cmd_status.run_log(), datetime.now().timestamp())
+        self.assertIn("940 tokens", text)
+
+    def test_a_publish_that_fails_headless_is_recorded_stops_further_calls_and_queues_the_finding(self):
+        calls = []
+
+        def run(prompt, cwd, **kw):
+            calls.append(1)
+            return {"code": 1, "text": "Artifact tool is not available", "usage": {}, "cost_usd": None}
+        with mock.patch.object(status_report, "load_local", return_value={"cityArtifact": "https://claude.ai/artifact/abc"}), \
+                mock.patch.object(status_report.cmd_owner, "add") as add:
+            first = status_report.publish(run=run)
+            second = status_report.publish(run=run)
+            probe = status_report.publish(run=run, probe=True)
+        self.assertFalse(first["ok"])
+        self.assertIn("earlier publish failed", second["detail"])
+        self.assertEqual(2, len(calls))
+        self.assertFalse(probe["ok"])
+        self.assertIn("Artifact tool is not available", add.call_args.kwargs["error"])
+
+    def test_the_publish_command_reports_whether_the_tool_works_with_tokens_and_cost(self):
+        out = []
+        ok = lambda prompt, cwd, **kw: {"code": 0, "text": "done", "usage": {"input": 800, "output": 20}, "cost_usd": 0.002}  # noqa: E731
+        with mock.patch.object(status_report, "load_local", return_value={"cityArtifact": "u"}):
+            self.assertEqual(0, cmd_status.publish(["--probe"], out=out.append, run=ok))
+        self.assertIn("works headless. One publish cost 820 tokens and $0.0020", out[0])
+        self.assertEqual(1, cmd_status.publish(["--nope"], out=out.append))
+
+    def test_concurrent_events_each_keep_their_change_to_the_run_state(self):
+        with mock.patch.object(status_report, "_log", return_value=[]):
+            self.record("begin", origin="olivercode drain r", queue=[])
+            threads = [threading.Thread(target=self.record, args=("start", self.story(n)), kwargs={"now": T0 + n}) for n in range(1, 13)]
+            [t.start() for t in threads]
+            [t.join() for t in threads]
+        self.assertEqual(12, len(status_report.load_state()["o/r"]["building"]))
+
+    def test_a_publisher_that_raises_never_stops_the_event(self):
+        def boom(**kw):
+            raise TimeoutError("slow")
+        with mock.patch.object(status_report, "_log", return_value=[]):
+            status_report.record("o/r", "start", self.story(5), now=T0, publisher=boom)
+        self.assertIn("#5 Story 5", self.page())
+
+    def test_a_refused_close_fires_the_held_event(self):
+        events = []
+
+        class Io(FakeIo):
+            def event(self, kind, issue=None, **info):
+                events.append(kind)
+                return ""
+        io = Io([drain_issue(1)], cap=1)
+        with mock.patch.object(cmd_drain, "_work_story", side_effect=cmd_drain.CloseRefused("no")):
+            cmd_drain.work_story(io, drain_issue(1), drain_state())
+        self.assertEqual(["held"], events)
+
+    def test_a_story_blocked_by_a_commit_gate_fires_the_held_event(self):
+        events = []
+
+        class Io(FakeIo):
+            def event(self, kind, issue=None, **info):
+                events.append(kind)
+                return ""
+        io = Io([drain_issue(1)], cap=1)
+        io.backlog = lambda n: None
+        with mock.patch.object(cmd_drain, "_work_story", side_effect=cmd_drain.CommitBlocked(0)):
+            cmd_drain.work_story(io, drain_issue(1), drain_state())
+        self.assertEqual(["held"], events)
+
+    def test_a_plain_publish_is_not_a_probe(self):
+        seen = []
+        with mock.patch.object(status_report, "publish", side_effect=lambda **k: seen.append(k["probe"]) or {"ok": True, "tokens": 1, "cost_usd": None}), \
+                mock.patch.object(cmd_status, "page"):
+            quiet(cmd_status.publish, [])
+            quiet(cmd_status.publish, ["--probe"])
+        self.assertEqual([False, True], seen)
+
+
+class TestDrainStatusEvents(unittest.TestCase):
+    def test_a_drain_reports_begin_start_land_and_end_and_a_quiet_wait_rewrites_the_page(self):
+        events = []
+
+        class Io(FakeIo):
+            def event(self, kind, issue=None, **info):
+                events.append((kind, issue["number"] if issue else None))
+                return "THREAD MESSAGE" if kind == "begin" else ""
+        io = Io([drain_issue(1), drain_issue(2)], cap=1)
+        _, out = quiet(cmd_drain.drain, io, drain_state(), sleep=lambda s: None)
+        self.assertEqual([("begin", None), ("start", 1), ("land", 1), ("start", 2), ("land", 2), ("end", None)], events)
+        self.assertIn("THREAD MESSAGE", out)
+
+    def test_a_story_that_does_not_land_is_reported_held(self):
+        events = []
+
+        class Io(FakeIo):
+            def event(self, kind, issue=None, **info):
+                events.append(kind)
+                return ""
+        io = Io([drain_issue(1)], cap=1, land_ok=False)
+        quiet(cmd_drain.drain, io, drain_state(), sleep=lambda s: None)
+        self.assertIn("held", events)
+        self.assertNotIn("land", events)
+
+    def test_a_drain_with_a_long_build_ticks_at_the_rewrite_interval(self):
+        events = []
+        release = threading.Event()
+
+        class Io(FakeIo):
+            def build(self, i, wt, note):
+                release.wait(5)
+                return super().build(i, wt, note)
+
+            def event(self, kind, issue=None, **info):
+                events.append(kind)
+                if kind == "tick":
+                    release.set()
+                return ""
+        with mock.patch.object(cmd_drain, "REWRITE_SECONDS", 0.05):
+            quiet(cmd_drain.drain, Io([drain_issue(1)], cap=1), drain_state(), sleep=lambda s: None)
+        self.assertIn("tick", events)
+
+    def test_io_event_passes_the_builder_limit_when_parallel_is_unset(self):
+        seen = {}
+        real = cmd_drain.Io(Path("/tmp/repo"), "o/r")
+        with mock.patch.object(status_report, "record", lambda *a, **kw: seen.update(kw) or ""), \
+                mock.patch.object(cmd_drain.local_config, "saved_builders", return_value=3):
+            real.event("begin")
+        self.assertEqual(3, seen["builders"])
+
+
 BOARD = {"repoOwner": "o", "repoName": "r", "fields": {"status": {"options": {"Backlog": "1", "Complete": "2"}}}}
 
 
@@ -563,6 +861,92 @@ class RevampNumbersCase(unittest.TestCase):
         numbers = cmd_status.four_numbers(NOW, 2, [], [], self.repo, self.projects, self.handovers)
         self.assertIsNone(numbers["tokens_per_closed"])
         self.assertIn("tokens per closed story not recorded", cmd_status.numbers_line(numbers))
+
+
+class TestDispatchTick(unittest.TestCase):
+    def test_a_dispatch_beat_ticks_the_page_only_after_the_rewrite_interval(self):
+        from lib import cmd_dispatch
+        events = []
+        fake = SimpleNamespace(refresh_claims=lambda: events.append("claims"), event=lambda kind, issue=None, **kw: events.append(kind) or "")
+        beat = cmd_dispatch._beat_and_tick(fake, cmd_drain)
+        beat()
+        self.assertEqual(["claims"], events)
+        with mock.patch("lib.cmd_dispatch.time.time", return_value=__import__("time").time() + cmd_drain.REWRITE_SECONDS + 1):
+            beat()
+        self.assertEqual(["claims", "claims", "tick"], events)
+
+
+class TestOutsideLandings(unittest.TestCase):
+    """#996: a commit that lands on a repo's main without the runner shows on the page, and a quiet page reads only git."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": self.tmp.name})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def closed(self, n, title="Seven", at=T0 - 600):
+        return [{"number": n, "title": title, "closed_at": stamp(at)}]
+
+    def test_a_commit_that_lands_outside_the_runner_shows_under_its_day_with_outside_the_runner_for_model_and_cost(self):
+        with mock.patch.object(status_report, "main_commits", return_value=[(7, T0 - 600)]):
+            found = status_report.outside_landings([], T0, repos=[("o/r", Path("/x"))], closed=lambda slug, since: self.closed(7))
+        text = status_report.render({}, found, T0)
+        self.assertEqual(["story-7"], [r["story"] for r in found])
+        self.assertIn("#7 Seven", text)
+        self.assertEqual(2, text.count("outside the runner"))
+        self.assertIn("1 landed", text)
+
+    def test_a_story_the_run_log_already_holds_is_not_read_from_github(self):
+        log = [{"story": "story-7", "repo": "o/r", "round": 1, "at": stamp(T0 - 700)}]
+        closed = mock.Mock(return_value=self.closed(7))
+        with mock.patch.object(status_report, "main_commits", return_value=[(7, T0 - 600)]):
+            found = status_report.outside_landings(log, T0, repos=[("o/r", Path("/x"))], closed=closed)
+        self.assertEqual([], found)
+        closed.assert_not_called()
+
+    def test_a_repo_with_no_commit_on_main_reads_no_issue_list(self):
+        closed = mock.Mock(return_value=[])
+        with mock.patch.object(status_report, "main_commits", return_value=[]):
+            self.assertEqual([], status_report.outside_landings([], T0, repos=[("o/r", Path("/x"))], closed=closed))
+        closed.assert_not_called()
+
+    def test_a_commit_whose_story_is_still_open_is_not_shown(self):
+        with mock.patch.object(status_report, "main_commits", return_value=[(7, T0 - 600)]):
+            found = status_report.outside_landings([], T0, repos=[("o/r", Path("/x"))], closed=lambda slug, since: [])
+        self.assertEqual([], found)
+
+    def test_main_commits_reads_origin_main_and_keeps_the_last_story_each_commit_names(self):
+        done = mock.Mock(returncode=0, stdout=f"{int(T0)} Fix the thing (#7)\n{int(T0) - 5} Plain commit\n{int(T0) - 9} Two (#3) (#4)\n")
+        with mock.patch.object(status_report.subprocess, "run", return_value=done) as run:
+            found = status_report.main_commits(Path("/x"), datetime.fromtimestamp(T0, timezone.utc))
+        self.assertIn("origin/main", run.call_args[0][0])
+        self.assertEqual([(7, T0), (4, T0 - 9)], found)
+
+    def test_a_repo_without_origin_main_reads_as_no_commits(self):
+        with mock.patch.object(status_report.subprocess, "run", return_value=mock.Mock(returncode=128, stdout="")):
+            self.assertEqual([], status_report.main_commits(Path("/x"), datetime.fromtimestamp(T0, timezone.utc)))
+
+    def test_the_page_header_names_this_machine_and_the_last_rewrite(self):
+        with mock.patch.object(status_report.platform, "node", return_value="test-machine"):
+            text = status_report.render({}, [], T0)
+        self.assertIn("This machine: test-machine.", text)
+        self.assertIn("Last rewritten", text)
+
+    def test_a_first_install_writes_an_empty_page_and_names_its_path(self):
+        line = cmd_install.status_page_line()
+        text = status_report.page_path().read_text(encoding="utf-8")
+        self.assertIn(str(status_report.page_path()), line)
+        self.assertIn("No run has started on this machine yet.", text)
+        self.assertIn("[ALREADY]", cmd_install.status_page_line())
+
+    def test_status_open_writes_a_missing_page_and_opens_it_from_any_folder(self):
+        with mock.patch.object(status_report.subprocess, "run") as run, mock.patch("sys.stdout", new_callable=io.StringIO):
+            code = cmd_status.command_status(["--open"])
+        self.assertEqual(0, code)
+        self.assertTrue(status_report.page_path().exists())
+        self.assertEqual(str(status_report.page_path()), run.call_args[0][0][-1])
 
 
 if __name__ == "__main__":
