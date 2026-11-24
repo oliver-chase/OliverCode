@@ -164,6 +164,15 @@ class Io:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
         return policy_stop_in(worktree.name, self.built_at.get(n, ""))
 
+    def commit_block(self, n: int, worktree: Path) -> dict | None:
+        """The commit-msg gate block that answered story/N's builder in this run, or None (#1096)."""
+        return commit_block_in(worktree.name, self.built_at.get(n, ""))
+
+    def backlog(self, n: int) -> None:
+        """Put story N's card back to Backlog, for a story whose builder the same gate blocked on every restart (#1096)."""
+        cfg = backlog_config(self.repo)
+        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "Backlog"}}]}]))
+
     def queue_owner(self, n: int, stop: dict) -> None:
         """One open owner-queue line for a story a policy ask stopped. A story already waiting on the owner gets no second line (#1058)."""
         key = f"policy-stop:{self.slug}#{n}"
@@ -341,6 +350,9 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         return closed, used
     except CloseRefused:  # a landed story whose close the gate refused stays where it is, with the gate's message on it (#1011)
         return False, 0
+    except CommitBlocked as blocked:  # the same gate blocked each restart, so the story waits in Backlog for the owner (#1096)
+        io.backlog(n)
+        return False, blocked.tokens
     finally:
         io.release(n)
 
@@ -368,6 +380,26 @@ def policy_stop_in(repo: str, start: str) -> dict | None:
     return {"rule": asks[-1][len("ask "):], "gate": gate, "finding": finding, "file": named.group(0) if named else ""}
 
 
+def commit_block_in(repo: str, start: str) -> dict | None:
+    """The newest commit-msg gate block of `repo` since `start`, as {'gate', 'reason'} with the gate's message verbatim, or None. The hook logs
+    a block under its own name and the message starts with the gate's [commit-msg] tag (#1096)."""
+    if not start:
+        return None
+    rows = [reason for _, _, _, reason in failure_log.since(repo, start) if reason.startswith("[commit-msg] BLOCKED")]
+    return {"gate": "commit-msg", "reason": rows[-1]} if rows else None
+
+
+class CommitBlocked(Exception):
+    """The commit-msg gate blocked every round of a story's builder, so it goes back to Backlog (#1096)."""
+    def __init__(self, tokens: int):
+        self.tokens = tokens
+
+
+def commit_block_note(block: dict) -> str:
+    """What the next round's brief says about the last block: the gate's reason verbatim and the ask to rewrite the message (#1096)."""
+    return f"the {block['gate']} gate blocked the commit: {block['reason']}\nRewrite the commit message to pass that gate, then commit again."
+
+
 def policy_stop_comment(stop: dict) -> str:
     """The one comment a policy-stopped story gets: the rule and gate, the last finding, the file it named and the one next action (#1058)."""
     return (f"Stopped by the policy, so drain starts no restart: {stop['rule']} answered this builder's commit with ask, and a headless session cannot answer it.\n"
@@ -378,7 +410,7 @@ def policy_stop_comment(stop: dict) -> str:
 
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
-    n, tokens, note = issue["number"], 0, ""
+    n, tokens, note, blocks = issue["number"], 0, "", 0
     lead = io.landed_lead(issue)
     if lead:  # the work landed under another story, so a fresh build would repeat it on main; the owner decides (#988)
         io.comment(n, f"Not built: commit {lead[0][:12]} ({lead[1]}) on the default branch changed this story's files, so its work most likely landed under that story. The owner decides whether this story closes.")
@@ -422,6 +454,14 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             io.comment(n, policy_stop_comment(stop))
             io.queue_owner(n, stop)
             return False, tokens
+        block = getattr(io, "commit_block", lambda *_: None)(n, worktree)  # shortcut: fakes without the method read as no block, drop when every Io has it
+        if block:  # the next round is told why the commit was blocked and asked to rewrite the message (#1096)
+            note, blocks = commit_block_note(block), blocks + 1
+        else:
+            blocks = 0
+    if blocks > RESTARTS:
+        io.comment(n, f"Drain blocked: the {block['gate']} gate blocked the builder's commit on all {RESTARTS + 1} rounds, so the story is back in Backlog and its claim is released. Reason: {block['reason']}")
+        raise CommitBlocked(tokens)
     io.comment(n, f"Drain blocked after {RESTARTS} restarts of the builder on {worktree}. Last reason: {note}")
     return False, tokens
 
