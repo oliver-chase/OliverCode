@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import agent_loop, candidates, cmd_groom, cmd_owner, intake, failure_log, gh_budget, open_issues, relay, repo_state, run_lock
+from lib import agent_loop, candidates, cmd_groom, cmd_owner, intake, failure_log, gh_budget, open_issues, relay, repo_state, run_lock, validate_queue
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -281,6 +281,57 @@ def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
     return f"Tokens per closed story: {sum(counted) // len(counted):,} across {len(counted)} stories closed in the last {DAYS} days."
 
 
+def _slot_name(label: str) -> str:
+    """'OliverCode #1084' for a validation slot labelled by its worktree folder 'OliverCode-1084', else the label as written."""
+    found = re.fullmatch(r"(.+)-(\d+)", label)
+    return f"{found.group(1)} #{found.group(2)}" if found else label or "another run"
+
+
+def validation_slots() -> tuple[list[str], int]:
+    """The labels of the validation slots held now and the slot count, read without reaping or waiting (#1112)."""
+    try:
+        held = [(validate_queue._read(p) or {}).get("label", "") for p in sorted(validate_queue.slots_dir().glob("slot-*.json"))]
+        return held, validate_queue.slot_count()
+    except OSError:
+        return [], 1
+
+
+def story_state(repo: str, n: str, rows: list[dict], began: float, holder: dict | None, slots: list[str], slot_total: int, github: str, elsewhere: list[str],
+                own: bool = False) -> tuple[str, str]:
+    """The state a building story is in and what holds it, '' when nothing does (#1112). A story is in the validation queue when its round ended and its worktree
+    holds no slot while every slot is held. Only a claim of this repo, `own`, is read against this repo's lock, since another repo's claim is that repo's own build.
+    shortcut: validation and the fresh reader both read as Reviewing, upgrade when the loop logs its phases."""
+    mine = this_run(rows, began)
+    last = mine[-1] if mine else {}
+    if own and n.isdigit() and holder and int(n) not in (holder.get("building") or []) and elsewhere and not mine:
+        return "Waiting for another repo", f"{elsewhere[0].rsplit('/', 1)[-1]} holds the machine"
+    if github:
+        return "Waiting for GitHub", "the GraphQL rate limit"
+    if last.get("review") == "pass":
+        return "Landing", ""
+    if isinstance(last.get("round"), int):
+        if f"{repo}-{n}" not in slots and slots and len(slots) >= slot_total:
+            return "Waiting for validation", f"slot held by {_slot_name(slots[0])}"
+        return "Reviewing", ""
+    return "Building", ""
+
+
+def state_lines(now: float, claims: dict, log: list[dict], issues: dict[str, dict], holder: dict | None, slots: list[str], slot_total: int, github: str, elsewhere: list[str],
+                slug: str = "") -> list[str]:
+    """One line for each building story: 'OliverCode #1083 · M · Waiting for validation · 4 min · slot held by OliverCode #1084' (#1112)."""
+    lines = []
+    for key, mine in sorted(claims.items()):
+        n = key.rsplit("#", 1)[-1]
+        repo = key.rpartition("#")[0].rsplit("/", 1)[-1]
+        rows = [r for r in log if r.get("story") == f"story-{n}"]
+        began = float(mine.get("since") or mine.get("at", 0))
+        state, held = story_state(repo, n, rows, began, holder, slots, slot_total, github, elsewhere, key.rpartition("#")[0] == slug)
+        since = max([began] + [_stamp(r, began) for r in this_run(rows, began)])
+        size = cmd_groom.size_of(issues[n]) if n in issues else ""
+        lines.append(" · ".join([f"{repo} #{n}"] + ([size] if size else []) + [state, f"{max(0, int((now - since) // 60))} min"] + ([held] if held else [])))
+    return lines
+
+
 def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -> list[str]:
     """The status lines for this machine right now, read from the claims, the run log, the process table, the run lock and the digest."""
     stamp = now.timestamp()
@@ -294,7 +345,10 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     claims = {k: v for k, v in claims.items() if k not in closed}
     issues = {str(i.get("number")): i for i in (open_issues.fetch(slug) or [])} if slug and claims else {}
     commits = {n: t for n in (key.rsplit("#", 1)[-1] for key in claims) if (t := last_commit(slug, n))}
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, claims, log, runner_alive(), open_now, ready,
+    slots, slot_total = validation_slots()
+    # run() stops before this on a REST hold, so the hold a story can wait on here is GraphQL's, which the runner's board calls spend
+    states = state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [], slug) if runner_alive() else []
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + states + activity(stamp, claims, log, runner_alive(), open_now, ready,
                                                                            (landed(rows) or [None])[0], holder, issues, commits, build_history(rows, log)) + stale
 
 

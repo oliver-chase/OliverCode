@@ -211,6 +211,33 @@ class TestDigest(unittest.TestCase):
         lines = cmd_status.activity(NOW.timestamp(), claims, log, True, 5, "P0 #9 First", {"number": 4, "title": "Done"})
         self.assertEqual([f"Building r #7: started {datetime.fromtimestamp(NOW.timestamp() - 600).strftime('%H:%M')}, 10 minutes ago, round 2 of 2, in validation and the fresh reader, no estimate yet.", "Last landed: #4 Done. Next Ready: P0 #9 First."], lines)
 
+    def test_each_building_story_names_its_repo_size_state_minutes_and_what_holds_it(self):
+        """#1112: a story waiting for validation names the slot's holder, and each other state reads from the run log, the holds and the queue."""
+        t = NOW.timestamp()
+        done = {"story": "story-1083", "round": 1, "at": "2026-11-21T23:56:00Z"}
+        claims = {"o/OliverCode#1083": {"at": t - 900}}
+        issues = {"1083": {"body": "Size: M"}}
+        line = lambda **kw: cmd_status.state_lines(t, claims, kw.get("log", [done]), issues, kw.get("holder"), kw.get("slots", ["OliverCode-1084"]), 1,
+                                                   kw.get("github", ""), kw.get("elsewhere", []), "o/OliverCode")
+        self.assertEqual(["OliverCode #1083 · M · Waiting for validation · 4 min · slot held by OliverCode #1084"], line())
+        self.assertEqual(["OliverCode #1083 · M · Reviewing · 4 min"], line(slots=["OliverCode-1083"]))
+        self.assertEqual(["OliverCode #1083 · M · Landing · 4 min"], line(log=[{**done, "review": "pass"}]))
+        self.assertEqual(["OliverCode #1083 · M · Building · 15 min"], line(log=[], slots=[]))
+        self.assertEqual(["OliverCode #1083 · M · Waiting for GitHub · 15 min · the GraphQL rate limit"], line(log=[], github="held"))
+        self.assertEqual(["OliverCode #1083 · M · Waiting for another repo · 15 min · digioperator holds the machine"],
+                         line(log=[], holder={"building": [5]}, elsewhere=["o/digioperator"]))
+        both = {**claims, "o/digioperator#824": {"at": t - 900}}
+        self.assertEqual(["OliverCode #1083 · M · Building · 15 min", "digioperator #824 · Building · 15 min"],
+                         cmd_status.state_lines(t, both, [], issues, {"building": [1083]}, [], 1, "", ["o/digioperator"], "o/OliverCode"))
+
+    def test_status_names_a_graphql_hold_as_waiting_for_github(self):
+        """#1112: run() stops on a REST hold, so the live lines read GraphQL's hold, the one the runner's board calls wait on."""
+        with mock.patch.object(cmd_status, "runner_alive", return_value=True), mock.patch.object(cmd_status.gh_budget, "refusal", side_effect=lambda r="": "held" if r == "graphql" else ""), \
+                mock.patch.object(cmd_status, "state_lines", return_value=[]) as lines, mock.patch.object(cmd_status, "live_claims", return_value={}), \
+                mock.patch.object(cmd_status, "run_log", return_value=[]):
+            cmd_status.live_lines(NOW, 0, [], "")
+        self.assertEqual("held", lines.call_args.args[7])
+
     def test_builders_from_two_repos_each_name_their_repo_and_a_closed_story_is_dropped(self):
         """#1095: a claim's repo shows on its line, a claim for another repo's number holds nothing here, and a closed story is stale, not building."""
         claims = {"o/OliverCode#1031": {"agent": "drain", "at": NOW.timestamp() - 60}, "o/digioperator#824": {"agent": "drain", "at": NOW.timestamp() - 60}}
