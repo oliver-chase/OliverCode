@@ -105,16 +105,43 @@ class QueueRobustnessTest(unittest.TestCase):
         validate_queue.release(slot)
         self.assertFalse(slot.exists())
 
-    def test_the_slot_count_comes_from_the_cores_unless_the_variable_sets_it(self):
-        for cores, expected in ((1, 1), (3, 1), (8, 1), (16, 2), (64, 8)):
+    def write_runs(self, loads):
+        validate_queue.runs_log().parent.mkdir(parents=True, exist_ok=True)
+        validate_queue.runs_log().write_text("".join(json.dumps({"at": 0, "wait": 0, "run": 1, "load": x}) + "\n" for x in loads))
+
+    def test_the_slot_count_follows_cores_and_recent_load_unless_the_variable_sets_it(self):
+        for name in ("OLIVERCODE_VALIDATE_SLOTS",):
+            os.environ.pop(name, None)
+        self.write_runs([3.0] * 10)
+        for cores, expected in ((1, 1), (8, 1), (11, 1), (12, 2), (64, 2)):
             with mock.patch("os.cpu_count", return_value=cores):
                 self.assertEqual(expected, validate_queue.slot_count(), cores)
-        with mock.patch("os.cpu_count", return_value=64), mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "3"}):
-            self.assertEqual(3, validate_queue.slot_count())
         with mock.patch("os.cpu_count", return_value=None):
             self.assertEqual(1, validate_queue.slot_count())
+        with mock.patch("os.cpu_count", return_value=16):
+            self.write_runs([3.0] * 9)  # too few runs to know
+            self.assertEqual(1, validate_queue.slot_count())
+            self.write_runs([3.0] * 9 + [16.0])  # one run reached the core count
+            self.assertEqual(1, validate_queue.slot_count())
+            self.write_runs([40.0] + [3.0] * 10)  # only the last ten count
+            self.assertEqual(2, validate_queue.slot_count())
+
+    def test_the_variable_sets_the_slot_count_whatever_the_machine(self):
+        self.write_runs([3.0] * 10)
+        with mock.patch("os.cpu_count", return_value=64), mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "1"}):
+            self.assertEqual(1, validate_queue.slot_count())
+
+    def test_a_validation_logs_its_wait_run_time_and_load(self):
+        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "1"}):
+            for name in ("OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT"):
+                os.environ.pop(name, None)
+            self.assertEqual(0, validate_queue.run(["true"], poll=0.05))
+        rows = validate_queue.recent_runs()
+        self.assertEqual(1, len(rows))
+        self.assertEqual({"at", "wait", "run", "load"}, set(rows[0]))
 
     def test_a_bad_slot_count_falls_back_to_the_machine_default_and_says_so(self):
+        self.write_runs([3.0] * 10)
         with mock.patch("os.cpu_count", return_value=16), mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "lots"}):
             count, err = self.stderr_of(validate_queue.slot_count)
         self.assertEqual(2, count)

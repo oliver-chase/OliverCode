@@ -17,8 +17,9 @@ the queue never blocks validation. A damaged or old state file is repaired with 
 A second queue holds ffmpeg and render commands to one at a time under ~/.olivercode/render-slots, and `run --render` runs
 the command under `nice -n 10`.
 
-OLIVERCODE_VALIDATE_SLOTS sets N (default: an eighth of this machine's cores, at least 1, measured on #776). The render queue is
-one slot. OLIVERCODE_HOME moves the state folder.
+OLIVERCODE_VALIDATE_SLOTS sets N whatever the machine. Without it N is 1, or 2 on a machine with at least 12 cores whose last
+ten validations kept load below its core count. Each validation appends its queue wait, run time and load average to
+validate-runs.jsonl beside the slot folders. The render queue is one slot. OLIVERCODE_HOME moves the state folder.
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ from pathlib import Path
 HARD_CAP_SECONDS = 4 * 60 * 60  # a slot older than this is reaped even when its holder lives: no validation takes hours
 WAIT_SECONDS = 10 * 60  # a blocked validation must report and proceed within ten minutes, not make the drain look hung for an hour
 RENDER_NICE = "10"
+CAPABLE_CORES = 12  # a machine with at least this many cores may run two validations when its recent load allows
+RECENT_RUNS = 10  # how many logged validations the slot count looks at
 
 # One row per queue: its folder, the variable that sets its slot count, that count by default, the variable a child sees
 # while it holds a slot, and the name shown to the owner.
@@ -65,11 +68,47 @@ def cores() -> int:
     return os.cpu_count() or 1
 
 
+def runs_log() -> Path:
+    return slots_dir().with_name("validate-runs.jsonl")
+
+
+def log_run(wait: float, run_time: float) -> None:
+    """Append one validation's queue wait, run time and the machine's load average to the run log. Never raises."""
+    try:
+        row = {"at": time.time(), "wait": round(wait, 1), "run": round(run_time, 1), "load": round(os.getloadavg()[0], 2)}
+        with runs_log().open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row) + "\n")
+    except (OSError, AttributeError):
+        pass
+
+
+def recent_runs(n: int = RECENT_RUNS) -> list[dict]:
+    try:
+        lines = runs_log().read_text(encoding="utf-8").splitlines()[-n:]
+    except OSError:
+        return []
+    rows = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
 def default_slots(queue: str = "validate") -> int:
-    """The slot count with no override: an eighth of this machine's cores for validation (at least 1), one for render.
-    #776 timed full runs on 8 cores under a load of 44 to 104: one slot was no slower than two, and a second run only adds load."""
+    """The slot count with no override: one for render. For validation, two when the machine has at least 12 cores and the
+    last ten validations each kept load below the core count, otherwise one (#776 timed 8 cores under load 44 to 104: a second run only adds load)."""
     fixed = QUEUES[queue]["default"]
-    return fixed if fixed else max(1, cores() // 8)
+    if fixed:
+        return fixed
+    if cores() < CAPABLE_CORES:
+        return 1
+    rows = recent_runs()
+    ok = len(rows) >= RECENT_RUNS and all(isinstance(r.get("load"), (int, float)) and r["load"] < cores() for r in rows)
+    return 2 if ok else 1
 
 
 def slot_count(queue: str = "validate") -> int:
@@ -83,7 +122,7 @@ def slot_count(queue: str = "validate") -> int:
             raise ValueError
         return n
     except ValueError:
-        _note(f"queue: {q['count_env']}={raw!r} is not a whole number of 1 or more, using {default_slots(queue)} (an eighth of {cores()} cores)")
+        _note(f"queue: {q['count_env']}={raw!r} is not a whole number of 1 or more, using {default_slots(queue)} (from {cores()} cores and recent load)")
         return default_slots(queue)
 
 
@@ -225,6 +264,7 @@ def run(command: list[str], queue: str = "validate", poll: float = 2.0) -> int:
     """Run `command` holding a slot, with stdio inherited, and return its exit code. Any queue error runs it unqueued.
     A command already inside a held slot of the same queue runs in it. A render command runs under `nice -n 10`."""
     slot = None
+    queued_at = time.time()
     try:
         if not _inside_slot(queue):
             slot = acquire(os.getpid(), Path.cwd().name, poll=poll, say=lambda m: print(m, file=sys.stderr), queue=queue)
@@ -235,11 +275,14 @@ def run(command: list[str], queue: str = "validate", poll: float = 2.0) -> int:
         env = dict(os.environ) if _inside_slot(queue) else \
             {**os.environ, QUEUES[queue]["slot_env"]: held, **({q: held} if (q := QUEUES[queue].get("alias_env")) else {})}
         argv = ["nice", "-n", RENDER_NICE, *command] if queue == "render" else command
+        started = time.time()
         try:
             code = subprocess.run(argv, env=env).returncode
         except FileNotFoundError:
             print(f"queue run: command not found: {command[0]}", file=sys.stderr)
             return 127
+        if queue == "validate":
+            log_run(started - queued_at, time.time() - started)
         return 128 - code if code < 0 else code
     finally:
         if slot:
