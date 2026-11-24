@@ -194,15 +194,26 @@ def _write(state: dict, log: list[dict], now: float, published: float | None = N
     except (OSError, ValueError, KeyError):  # the read of outside commits is best effort, so the run's own rows still show
         found = log
     try:
-        failure_log.write_atomic(page_path(), render(state, found, now, published=_last_publish(log) if published is None else published))
+        failure_log.write_atomic(page_path(), render(state, found, now, published=_last_publish(log) if published is None else published, panel=_panel(now)))
     except OSError:
         pass
 
 
 def write_empty(now: float | None = None) -> Path:
-    """Write the page with no run yet, so a first install or `olivercode status --open` has a page to show (#996). Returns its path."""
+    """Write the page with no run yet, so a first install or `olivercode status --open` has a page to show (#996). No panel: a fresh install
+    must not spend a live GitHub read before the owner has even registered a repo (#1097)."""
     failure_log.write_atomic(page_path(), render({}, [], now or time.time()))
     return page_path()
+
+
+def _panel(now: float) -> str:
+    """The terminal panel from City's own module (#1097), behind a lazy import since that module imports this one too. Best effort, like
+    `publish`: a page must still write without it."""
+    try:
+        from lib import city
+        return city.panel_html(now)
+    except Exception:
+        return ""
 
 
 def open_page(run=None, out=print) -> int:
@@ -357,8 +368,8 @@ SCRIPT = """<script>
 </script>"""
 
 
-def render(state: dict, log: list[dict], now: float, published: float = 0.0) -> str:
-    """The whole page as one HTML string. It reads only its arguments."""
+def render(state: dict, log: list[dict], now: float, published: float = 0.0, panel: str = "") -> str:
+    """The whole page as one HTML string. It reads only its arguments. `panel` is City's terminal panel (#1097), already rendered HTML."""
     light, dark = design_tokens(), {**DARK_TOKENS}
     vars_ = lambda t: "".join(f"--{k}: {v}; " for k, v in t.items())  # noqa: E731
     state = {k: v for k, v in state.items() if isinstance(v, dict)}  # the `_publish` key holds a word, not a repo
@@ -380,7 +391,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0) -> 
             "th { font-weight: 500; color: var(--muted); }"
             "@media (max-width: 640px) { thead { display: none; } tr, td { display: block; } tr { padding: 8px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; }"
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
-            f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{STALE_MINUTES}"><main>'
+            f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{STALE_MINUTES}"><main>{panel}'
             f"<h1>OliverCode status</h1><p class=\"muted\">This machine: {html.escape(platform.node())}. Last rewritten {datetime.fromtimestamp(now):%A %d %B %H:%M}. {html.escape(spend)}</p>"
             f'<p id="published" class="warn"></p>{body}<h2>Waits on you, in any repo</h2>{owner}{SCRIPT}</main></body></html>')
 

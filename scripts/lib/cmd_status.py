@@ -598,9 +598,11 @@ def digest(slug: str | None, out=print, **kw) -> int:
 
 def page(out=print) -> int:
     """Rewrite the status page from the saved run state, with no model call, and print its path."""
+    from lib import city  # lazy: city imports this module too (#1097)
     state, log, now = status_report.load_state(), run_log(), datetime.now().timestamp()
     found = log + status_report.outside_landings(log, now)  # the commits that landed outside the runner show too (#996)
-    failure_log.write_atomic(status_report.page_path(), status_report.render(state, found, now, published=status_report._last_publish(log)))
+    page_text = status_report.render(state, found, now, published=status_report._last_publish(log), panel=city.panel_html(now))
+    failure_log.write_atomic(status_report.page_path(), page_text)
     out(f"Status page written to {status_report.page_path()}.")
     return 0
 

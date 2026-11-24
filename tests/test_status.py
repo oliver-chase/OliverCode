@@ -936,6 +936,13 @@ class TestOutsideLandings(unittest.TestCase):
         self.assertIn("No run has started on this machine yet.", text)
         self.assertIn("[ALREADY]", cmd_install.status_page_line())
 
+    def test_a_first_install_spends_no_live_github_read_on_citys_panel(self):
+        """write_empty must not run City's panel: a fresh install has no repo registered yet to read (#1097)."""
+        with mock.patch.object(status_report.subprocess, "run") as run:
+            cmd_install.status_page_line()
+        run.assert_not_called()
+        self.assertNotIn("oc-term", status_report.page_path().read_text(encoding="utf-8"))
+
     def test_status_open_writes_a_missing_page_and_opens_it_from_any_folder(self):
         with mock.patch.object(status_report.subprocess, "run") as run, mock.patch("sys.stdout", new_callable=io.StringIO):
             code = cmd_status.command_status(["--open"])
