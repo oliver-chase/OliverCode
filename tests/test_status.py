@@ -687,9 +687,9 @@ class TestDrainStatusEvents(unittest.TestCase):
         seen = {}
         real = cmd_drain.Io(Path("/tmp/repo"), "o/r")
         with mock.patch.object(status_report, "record", lambda *a, **kw: seen.update(kw) or ""), \
-                mock.patch.object(cmd_drain.local_config, "max_builders", return_value=3):
+                mock.patch.object(cmd_drain.local_config, "builder_ceiling", return_value=3):
             real.event("begin")
-        self.assertEqual(5, seen["builders"])
+        self.assertEqual(3, seen["builders"])
 
 
 BOARD = {"repoOwner": "o", "repoName": "r", "fields": {"status": {"options": {"Backlog": "1", "Complete": "2"}}}}
@@ -860,7 +860,7 @@ class RevampNumbersCase(unittest.TestCase):
                            live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "", folder=self.repo,
                            numbers=lambda: cmd_status.four_numbers(NOW, 3, rows, [{"story": "story-4", "input": 10, "output": 5}], self.repo,
                                                                     self.projects, self.handovers))
-        self.assertIn("Revamp numbers, last 7 days: tokens per closed story 15, handovers 0, threads typed into 0, open stories 3.", out.getvalue())
+        self.assertIn("Revamp numbers, last 7 days: tokens per closed story 15, average cost per closed story not recorded, handovers 0, threads typed into 0, open stories 3.", out.getvalue())
 
     def test_no_closed_story_says_the_tokens_are_not_recorded(self):
         numbers = cmd_status.four_numbers(NOW, 2, [], [], self.repo, self.projects, self.handovers)
