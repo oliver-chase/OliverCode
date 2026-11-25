@@ -32,6 +32,18 @@ class TestRunCli(unittest.TestCase):
         _, out = self.call()
         self.assertEqual(("ok", "abc", 57, 0), (out["text"], out["session_id"], out["tokens"], out["code"]))
 
+    def test_cli_call_writes_durable_start_and_end_session_records(self):
+        _, out = self.call()
+        rows = [json.loads(line) for line in (self.home / "model-sessions.jsonl").read_text().splitlines()]
+        self.assertEqual(["session_start", "session_end"], [row["event"] for row in rows])
+        self.assertTrue(rows[0]["session_id"])
+        self.assertEqual(rows[0]["session_id"], rows[1]["session_id"])
+        self.assertEqual("", rows[0]["model"])
+        self.assertIn("started_at", out)
+        self.assertIn("duration_s", out)
+        self.assertEqual(1, out["session_cap"])
+        self.assertEqual(0.0123, rows[1]["cost_usd"])
+
     def test_no_api_key_is_read_or_passed(self):
         run, _ = self.call()
         self.assertNotIn("api", " ".join(run.call_args_list[0][0][0]).lower())
