@@ -19,6 +19,7 @@ except ImportError:  # loaded bare, with scripts/lib on the path
     from failure_log import home
 
 FILE = "owner-decisions.jsonl"
+LEGACY_CLEANUP_MARKER = "owner-decisions.legacy-cleaned-v1"
 _STORY = re.compile(r"(?<![\w&/])#(\d{1,6})\b")
 MAX_CHARS = 4000  # the most of one message an entry keeps
 MAX_ROWS = 1000  # the newest lines the file keeps; older decisions are dropped (#1046)
@@ -61,12 +62,13 @@ def _trim(path: Path) -> None:
 def cleanup_legacy() -> int:
     """Remove only unmistakable old runner prompts from the owner ledger; preserve all other rows."""
     path = home() / FILE
+    marker = home() / LEGACY_CLEANUP_MARKER
     removed = 0
     try:
         with failure_log.locked(path):
-            if not path.is_file():
+            if marker.exists():
                 return 0
-            lines = path.read_text(encoding="utf-8").splitlines()
+            lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
             kept = []
             for line in lines:
                 try:
@@ -81,6 +83,7 @@ def cleanup_legacy() -> int:
                     kept.append(line)
             if removed:
                 failure_log.write_private(path, "\n".join(kept) + ("\n" if kept else ""))
+            failure_log.write_private(marker, "done\n")
     except OSError:
         return 0
     return removed
