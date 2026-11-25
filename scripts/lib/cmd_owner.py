@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import failure_log
+from lib import failure_log, local_config
 from lib.cli import flags as _flags
 
 USAGE = """Usage:
@@ -109,6 +110,18 @@ def _held(lines: list[dict], session: str, step: str) -> dict | None:
     return next((i for i in latest.values() if i.get("status") == "open" and i.get("session") == session and i.get("step") == step), None)
 
 
+def _notify(text: str) -> None:
+    """One macOS notification for a new step when the notifications setting is on. Never raises, never waits long."""
+    try:
+        if sys.platform != "darwin" or local_config.setting("notifications") is not True:
+            return
+        body = _brief(text, 120).replace("\\", "\\\\").replace('"', '\\"')
+        subprocess.run(["osascript", "-e", f'display notification "{body}" with title "OliverCode"'],
+                       capture_output=True, timeout=5, check=False)
+    except Exception:
+        pass
+
+
 def add(session: str, step: str, command: str = "", error: str = "", tab: str = "", after: str = "", check: str = "",
         extra: dict | None = None) -> dict:
     """Queue one step. Refused unless it carries the command tried and its error, is a decision, or is prepared to its final screen
@@ -137,6 +150,8 @@ def add(session: str, step: str, command: str = "", error: str = "", tab: str = 
             item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
                     "command": command, "error": error, "status": "open", **(extra or {})}
         _append(item)
+    if session == "drain":  # only a stopped story's new step reaches the owner's desktop; upkeep and repeats stay quiet (#1215)
+        _notify(item["step"])
     return item
 
 

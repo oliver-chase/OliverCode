@@ -143,5 +143,44 @@ class TestPreparedOwnerSteps(unittest.TestCase):
             self.assertNotIn("Resume:", closed)
 
 
+class TestOwnerNotification(unittest.TestCase):
+    def raise_step(self, session="drain", step="Story 7 needs your answer", platform="darwin", on=True, times=1):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(cmd_owner.sys, "platform", platform), \
+                mock.patch.object(cmd_owner.local_config, "setting", return_value=on), \
+                mock.patch.object(cmd_owner.subprocess, "run") as run:
+            for _ in range(times):
+                cmd_owner.add(session, step, "ls", "refused")
+            return run, cmd_owner.listing(cmd_owner.items())
+
+    def test_a_new_drain_step_sends_one_notification_with_its_text(self):
+        run, _ = self.raise_step()
+        run.assert_called_once()
+        argv = run.call_args.args[0]
+        self.assertEqual("osascript", argv[0])
+        self.assertIn("Story 7 needs your answer", argv[2])
+
+    def test_the_same_step_raised_again_sends_no_second_notification(self):
+        run, _ = self.raise_step(times=2)
+        self.assertEqual(1, run.call_count)
+
+    def test_housekeeping_steps_send_nothing_and_still_list(self):
+        for session in ("conform", "maintain", "groom"):
+            run, listed = self.raise_step(session=session)
+            run.assert_not_called()
+            self.assertIn("Story 7 needs your answer", listed)
+
+    def test_setting_off_or_not_a_mac_sends_nothing_and_still_lists(self):
+        for kwargs in ({"on": False}, {"platform": "linux"}):
+            run, listed = self.raise_step(**kwargs)
+            run.assert_not_called()
+            self.assertIn("Story 7 needs your answer", listed)
+
+    def test_the_only_process_started_is_osascript(self):
+        run, _ = self.raise_step(step='Quote "this" \\ path')
+        self.assertEqual({"osascript"}, {c.args[0][0] for c in run.call_args_list})
+        self.assertIn('\\"this\\" \\\\ path', run.call_args.args[0][2])
+
+
 if __name__ == "__main__":
     unittest.main()
