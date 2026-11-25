@@ -4,7 +4,7 @@
   "allowOutside": [],
   "auditMode": "gated",
   "cityArtifact": "https://claude.ai/artifact/your-city-artifact-id",
-  "maxBuilders": 4,
+  "maxBuilders": 5,
   "fleetRegistry": "~/.olivercode/fleet/repo-profiles.json",
   "privateRepos": {
     "notes": "~/path/to/a-private-repo"
