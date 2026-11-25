@@ -345,6 +345,13 @@ class FleetStep(unittest.TestCase):
         self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
 
 
+class FirstRunIntroduction(unittest.TestCase):
+    def test_the_first_run_text_asks_for_no_folder_path(self):
+        """#1196: the owner is never told to substitute a path into a command."""
+        self.assertNotIn("<", cmd_install.INTRODUCTION)
+        self.assertIn('Say "Set up OliverCode"', cmd_install.INTRODUCTION)
+
+
 class CityStep(unittest.TestCase):
     """Install sets up City on the desktop and the phone, and the guide repeats it (#999)."""
 

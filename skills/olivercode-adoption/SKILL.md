@@ -5,7 +5,7 @@ description: "Use when adopting OliverCode into a machine the user forked or clo
 
 # OliverCode adoption
 
-Drive the whole setup so the user does not have to read the documentation first. You read it. They answer questions. `$OC/docs/SETUP.md` is the reference contract, so consult it when you need detail, but do not make the user read it.
+Drive the whole setup so the user does not have to read the documentation first. You read it. They answer questions, in their terms: say projects, folders and what a change does, never repo, fleet, registry or root, and do the navigation yourself, so the owner is never asked for a path or to run `cd`. `$OC/docs/SETUP.md` is the reference contract, so consult it when you need detail, but do not make the user read it.
 
 ## The rule that governs everything here
 
@@ -18,7 +18,7 @@ Drive the whole setup so the user does not have to read the documentation first.
 ```bash
 OC="$(dirname "$(readlink ~/.claude/CLAUDE.md 2>/dev/null)" 2>/dev/null)"
 [ -f "$OC/docs/RULES.md" ] || OC="$(git -C "$(dirname "$(readlink -f ~/.claude/skills/olivercode-adoption/SKILL.md 2>/dev/null)" 2>/dev/null)" rev-parse --show-toplevel 2>/dev/null)"
-[ -f "$OC/docs/RULES.md" ] || { echo "Cannot find the OliverCode checkout. Ask the user where it is and set OC to that folder."; exit 1; }
+[ -f "$OC/docs/RULES.md" ] || { echo "Cannot find the OliverCode folder. Ask the user in plain words where they saved or downloaded it, confirm the folder, then set OC to it."; exit 1; }
 bash "$OC/scripts/qa/rehearse-install.sh"
 ```
 
@@ -50,7 +50,7 @@ Present as a table with your proposed bucket per item. Get agreement before movi
 
 Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It holds every command. At each step, an agent also does this:
 
-- **Step 1, inventory.** Pass every root the user's code lives under to `discover`. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. A repo under `~/Documents`, `~/Desktop` or a cloud-sync folder can move to `~/Developer/Repos` by a fresh clone plus its untracked files, because sync services evict working files when the disk fills. Offer that move for each such repo and let the user keep it where it is. Make a move only on the user's yes, and leave the original in place until they confirm the new clone. Install nothing unasked
+- **Step 1, inventory.** Find the folders holding the user's projects yourself: try `~/Developer`, `~/Projects`, `~/Documents`, `~/Desktop` and the folders recent Claude sessions used, confirm the list by asking where they keep what they have built or worked on with Claude, run `discover` on each, and show the projects by name with a recommendation each. Then tell the user two things they rarely know. A rules file named `AGENTS.md` or `.cursorrules` never auto-loads in Claude Code. A real directory in `~/.claude/skills/` has no backup anywhere. A repo under `~/Documents`, `~/Desktop` or a cloud-sync folder can move to `~/Developer/Repos` by a fresh clone plus its untracked files, because sync services evict working files when the disk fills. Offer that move for each such repo and let the user keep it where it is. Make a move only on the user's yes, and leave the original in place until they confirm the new clone. Install nothing unasked
 - **Step 2, install.** Run `olivercode install --show-allow` first and show the user the proposed allow rules with the one line each says it permits. Ask once: "Add these rules to your allow list?" On a yes, install writes them, and on a no, run install and tell the user that `olivercode health` will fail until they are added. Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
 - **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
@@ -106,4 +106,4 @@ Install prints the City step. In the Claude desktop app, do it. In a terminal wi
 
 ## Closing lines
 
-As the last step, run `olivercode guide status` and show the user its output. It gives the steps to follow a run from a terminal, which cost no model turn, so the user never has to ask a thread for status.
+As the last step, tell the user how to begin: open the project in Claude and say the outcome in their own words, with no command to run. Then run `olivercode guide status` and show its output, the steps to follow a run from a terminal at no model cost.

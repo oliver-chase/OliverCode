@@ -214,10 +214,10 @@ def _fleet_step(oc_root: Path) -> str:
     try:
         profiles, path = repo_profiles.load_repo_profiles(oc_root)
     except (OSError, ValueError) as exc:
-        return f"olivercode discover --root <folder holding your repos> --register    no fleet yet ({exc})"
+        return f'Say "Set up OliverCode" in Claude to connect your projects. None are connected yet ({exc})'
     if profiles:
-        return f"Done: {len(profiles)} repo(s) registered in {path}. Run discover again to add more"
-    return f"olivercode discover --root <folder holding your repos> --register    {path} names no repo yet"
+        return f'Done: {len(profiles)} project(s) connected in {path}. Say "Set up OliverCode" again to add more'
+    return f'Say "Set up OliverCode" in Claude to connect your projects. {path} names none yet'
 
 
 def command_guide(oc_root: Path, name: str | None = None) -> int:

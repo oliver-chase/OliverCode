@@ -52,7 +52,7 @@ INTRODUCTION = """How OliverCode works
   The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost.
 
 First steps, in order
-  1. Register your repos: olivercode discover --root <folder holding your repos> --register
+  1. Say "Set up OliverCode" in Claude: it finds your project folders, shows what it found and asks which to connect.
   2. Check this machine: olivercode health
   3. For queued execution today: create or choose a repo story, then run `olivercode dispatch N` or `olivercode drain REPO`.
 
@@ -641,7 +641,7 @@ def command_install(oc_root: Path) -> int:
     if untouched:
         print(f"  [KEPT] {len(untouched)} entr(y/ies) not managed by this checkout, left as-is: "
               f"{', '.join(untouched)}")
-        print("         `olivercode discover --root <dir>` classifies them.")
+        print("         Say 'Set up OliverCode' and Claude classifies them.")
 
     print()
     if backups:

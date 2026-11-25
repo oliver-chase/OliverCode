@@ -181,7 +181,8 @@ class TestInstall(HomeCase):
             self.assertIn(phrase.lower(), intro.lower())
         steps = [line.strip() for line in intro.splitlines() if line.strip()[:2] in ("1.", "2.", "3.")]
         self.assertEqual(len(steps), 3)
-        self.assertIn("discover", steps[0])
+        self.assertIn("Set up OliverCode", steps[0])  # the owner is never told to run discover with a folder path (#1196)
+        self.assertNotIn("<", steps[0])
         self.assertIn("health", steps[1])
         self.assertIn("story", steps[2])
 
