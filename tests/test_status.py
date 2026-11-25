@@ -71,12 +71,22 @@ class TestStatus(unittest.TestCase):
         _, text = self.status(5, [issue("2026-10-01", "2026-10-02")])
         self.assertIn("0 closed and 0 opened", text)
 
-    def test_the_tokens_per_closed_story_average_the_run_log_of_the_stories_that_closed(self):
+    def test_tokens_per_closed_story_include_cache_review_and_cost(self):
         rows = [dict(issue("2026-11-01", "2026-11-20"), number=4), dict(issue("2026-11-01", "2026-11-21"), number=5), dict(issue("2026-11-01"), number=6)]
-        log = [{"story": "story-4", "input": 600, "output": 400}, {"story": "story-4", "input": 1000, "output": 0},
-               {"story": "story-5", "input": 1000, "output": 0}, {"story": "story-6", "input": 9000, "output": 0}]
-        self.assertEqual("Tokens per closed story: 1,500 across 2 stories closed in the last 7 days.", cmd_status.tokens_per_story(rows, log))
+        log = [
+            {"story": "story-4", "input": 600, "output": 400, "cache_read": 1000, "cache_write": 100, "cost_usd": 1.25},
+            {"story": "story-4-review", "input": 100, "output": 50, "cache_read": 200, "cache_write": 50, "cost_usd": 0.25},
+            {"story": "story-5", "input": 500, "output": 100, "cache_read": 300, "cache_write": 100, "cost_usd": 1.00},
+            {"story": "story-6", "input": 9000, "output": 0, "cost_usd": 9.00},
+        ]
+        self.assertEqual("Tokens per closed story: 1,750 across 2 stories closed in the last 7 days, average cost $1.25.", cmd_status.tokens_per_story(rows, log))
         self.assertIn("not recorded", cmd_status.tokens_per_story(rows, []))
+
+    def test_status_page_numbers_show_average_cost_per_closed_story(self):
+        html = status_page.numbers_block({"tokens_per_closed": 1234, "cost_per_closed": 2.5, "handovers": 1, "threads": 2, "open": 3})
+        self.assertIn("Tokens per closed story", html)
+        self.assertIn("Average cost per closed story", html)
+        self.assertIn("$2.50", html)
 
     def test_status_prints_the_open_count_the_rate_the_tokens_and_the_zero_date(self):
         rows = [dict(issue("2026-11-01", "2026-11-20"), number=n) for n in range(1, 15)] + [issue("2026-11-20")] * 7

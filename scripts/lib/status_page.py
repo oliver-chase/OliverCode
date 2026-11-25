@@ -197,8 +197,10 @@ def numbers_block(numbers: dict | None) -> str:
     if not numbers:
         return '<section id="numbers"><h2>Revamp numbers</h2><div class="card"><p>Not recorded yet.</p></div></section>'
     tokens = numbers.get("tokens_per_closed")
+    cost = numbers.get("cost_per_closed")
     items = (
         ("Tokens per closed story", f"{tokens:,}" if tokens is not None else "not recorded"),
+        ("Average cost per closed story", f"${cost:.2f}" if cost is not None else "not recorded"),
         ("Handovers", numbers.get("handovers", 0)),
         ("Threads typed into", numbers.get("threads", 0)),
         ("Open stories", numbers.get("open", 0)),
