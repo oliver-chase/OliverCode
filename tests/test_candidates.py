@@ -19,6 +19,14 @@ def origin_as_github() -> dict:
     return {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "remote.origin.url", "GIT_CONFIG_VALUE_0": "https://github.com/acme/widget.git"}
 
 
+def github_checkout(case) -> str:
+    """A throwaway checkout whose origin is a GitHub URL. The hooks read origin from the cwd they are given, and an injected origin loses to the one a clean clone already has."""
+    path = temp_dir(case)
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(["git", "-C", str(path), "remote", "add", "origin", "https://github.com/acme/widget.git"], check=True)
+    return str(path)
+
+
 class Runner:
     def __init__(self):
         self.calls = []
@@ -123,7 +131,7 @@ class TestNoDirectFiling(unittest.TestCase):
     def test_a_pasted_error_adds_a_candidate_and_creates_no_issue(self):
         sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
         import error_paste
-        text = error_paste.file_story("```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad\n```\n", "s", str(REPO_ROOT))
+        text = error_paste.file_story("```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad\n```\n", "s", github_checkout(self))
         self.assertIn("candidate", text)
         self.assertEqual(["Fix: ValueError: bad"], [i["title"] for i in candidates.items()])
         self.assertEqual(0, story_outbox.count())
@@ -190,9 +198,10 @@ class TestScheduledEntryPoints(unittest.TestCase):
 
     def test_the_hooks_create_no_issue(self):
         hooks = REPO_ROOT / "scripts" / "hooks"
+        checkout = github_checkout(self)
         for n in range(50):
             prompt = f"```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad {n}\n```\n"
-            subprocess.run([sys.executable, str(hooks / "error_paste.py")], input=json.dumps({"prompt": prompt, "session_id": "s", "cwd": str(REPO_ROOT)}),
+            subprocess.run([sys.executable, str(hooks / "error_paste.py")], input=json.dumps({"prompt": prompt, "session_id": "s", "cwd": checkout}),
                            capture_output=True, text=True, env=self.env, check=True)
             subprocess.run([sys.executable, str(hooks / "lesson_capture.py")], input=json.dumps({"prompt": "no, that is wrong, stop doing that", "session_id": "s"}),
                            capture_output=True, text=True, env=self.env, check=True)

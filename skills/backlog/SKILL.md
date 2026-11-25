@@ -21,7 +21,7 @@ Verify it with `python3 scripts/check_board_hygiene.py --config CONFIG --verify-
 
 Run `python3 scripts/check_board_hygiene.py --config CONFIG --verify-baseline`. It compares the Project's fields with `shared/kanban-baseline.json` (`docs/RULES.md`, "The backlog"), prints each difference with its fix and never edits a board. `references/project-fields.md` ("Baseline check") has the offline option and the repair path.
 
-## Save every ask
+## Track delegated outcomes
 
 Track substantial delegated outcomes, not every implementation step. Create or extend one story when work needs independent ownership, sequencing, acceptance criteria or later follow-up. Group related changes under one outcome; do not create separate stories for subtasks that one session can safely complete together. Small safe fixes, documentation touch-ups and implementation details inside the current ask can be handled inline with the repo's focused validation and a commit. Keep the owner-visible backlog for work that genuinely needs prioritization or follow-through. The rule lives in `docs/RULES.md` ("The backlog") and the body format in `references/story-template.md`.
 
@@ -36,7 +36,7 @@ Track substantial delegated outcomes, not every implementation step. Create or e
 
 ## Work an item
 
-Take items one at a time. Before building, run `git fetch origin main` and list the branches and commits that name the story, since another session may have built it. Read the story in full and check it against the current code, tests and docs, since it may describe a state that has moved. On a conflict, show the owner the differences and wait for a decision. A match goes ahead. When the code has moved, rewrite the story with accurate Gherkin criteria, file prerequisite or follow-on stories through "Save every ask", and confirm before building.
+Take items one at a time. Before building, run `git fetch origin main` and list the branches and commits that name the story, since another session may have built it. Read the story in full and check it against the current code, tests and docs, since it may describe a state that has moved. On a conflict, show the owner the differences and wait for a decision. A match goes ahead. When the code has moved, rewrite the story with accurate Gherkin criteria, file prerequisite or follow-on stories through "Track delegated outcomes", and confirm before building.
 
 Run `log_action.py --config CONFIG --story N --check-claim` and skip a story "claimed by" another session. Before editing, set it In Progress and replace `--check-claim` with `--agent SESSION --role claim`.
 
@@ -48,7 +48,7 @@ After each commit or finished piece of work, run `python3 scripts/log_action.py 
 
 ## File a story or epic
 
-1. **Search first** as in "Save every ask" and extend an existing open item with a comment. Record what you searched and found on the story's `Existing coverage checked:` line.
+1. **Search first** as in "Track delegated outcomes" and extend an existing open item with a comment. Record what you searched and found on the story's `Existing coverage checked:` line.
 2. **Classify the work.** File substantial delegated outcomes that need independent ownership, sequencing, acceptance criteria or later follow-through. Extend an existing story when it already owns the outcome. Keep small safe fixes, documentation touch-ups and implementation subtasks inside the current ask; a quick fix the session finds on its own is also handled inline. Real new scope is filed before it is built. A repo's own quick-wins convention wins.
 3. **Answer the fit check in the body.** Adding to what exists is the default, so the body names what it extends (a new file states why no home fits), whether it is core or an add-on, what it replaces and its effect on size and always-loaded tokens, and whether it passes `$OC/skills/audit/references/lenses.md`.
 4. **Check its fit, then create it and add it to the board.** Save the body to a file and run `olivercode board groom --fit BODY_FILE --title TITLE --config CONFIG` (#1004). It adds one `Related:` line to the body for each open story whose Files area shares a file or folder with this one, and it prints each Files area path that is not on main and that no `Creates:` line names. Fix a printed path, or add a `Creates:` line for a new file, and file the story either way. It calls no model. Then file it with `olivercode board file BODY_FILE --title TITLE --config CONFIG [--status Ready]` (#1107). It runs the format check and files nothing when any part is missing, printing each one; on a complete body it creates the issue and sets Status, Priority, Size and Work type in one batch. Status defaults to Backlog. A hold queues the field batch, which coalesces requests and accepts work during a hold
