@@ -1,0 +1,52 @@
+"""Live progress from the parallel smoke-test runner."""
+
+import io
+import subprocess
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+from _support import REPO_ROOT
+
+import sys
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from lib import smoke_runner  # noqa: E402
+
+
+class TestSmokeProgress(unittest.TestCase):
+    def test_each_unit_reports_start_and_completion_while_the_run_is_in_progress(self):
+        output = io.StringIO()
+        unit = ("test_example", "test_example", Path("/repo/tests"), [])
+        with mock.patch.object(smoke_runner, "modules", return_value=[("test_example", Path("/repo/tests"), "test_example")]), \\
+             mock.patch.object(smoke_runner, "plan", return_value=[unit]), \\
+             mock.patch.object(smoke_runner, "load_timings", return_value={}), \\
+             mock.patch.object(smoke_runner, "jobs", return_value=1), \\
+             mock.patch.object(smoke_runner, "save_timings"), \\
+             mock.patch.object(smoke_runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+            code = smoke_runner.run(Path("/repo"), out=output)
+
+        self.assertEqual(0, code)
+        lines = output.getvalue().splitlines()
+        self.assertTrue(any("Smoke progress: starting 1 test unit" in line for line in lines))
+        self.assertTrue(any("[RUN ] test_example" in line for line in lines))
+        self.assertTrue(any("[ OK ] test_example (" in line for line in lines))
+        self.assertTrue(any("all passed" in line for line in lines))
+
+    def test_a_test_process_that_cannot_start_is_reported_as_a_failure(self):
+        output = io.StringIO()
+        unit = ("test_example", "test_example", Path("/repo/tests"), [])
+        with mock.patch.object(smoke_runner, "modules", return_value=[("test_example", Path("/repo/tests"), "test_example")]), \\
+             mock.patch.object(smoke_runner, "plan", return_value=[unit]), \\
+             mock.patch.object(smoke_runner, "load_timings", return_value={}), \\
+             mock.patch.object(smoke_runner, "jobs", return_value=1), \\
+             mock.patch.object(smoke_runner.subprocess, "run", side_effect=OSError("cannot execute")):
+            code = smoke_runner.run(Path("/repo"), out=output)
+
+        self.assertEqual(1, code)
+        self.assertIn("[FAIL] test_example", output.getvalue())
+        self.assertIn("Could not start test module: cannot execute", output.getvalue())
+
+
+if __name__ == "__main__":
+    unittest.main()
