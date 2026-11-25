@@ -103,6 +103,30 @@ class DrainCase(unittest.TestCase):
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
         return code, out, st
 
+    def test_api_errors_back_off_exponentially_without_consuming_builder_restarts(self):
+        errors = [{"done": False, "api_error": True, "api_error_cause": "529 overloaded_error", "reason": "API error", "tokens": 0} for _ in range(2)]
+        io = FakeIo([issue(1)], cap=1, builds={1: errors + [{"done": True, "reason": "ok", "tokens": 1}]})
+        sleeps = []
+        with mock.patch.object(cmd_drain.time, "sleep", side_effect=sleeps.append):
+            code, out, st = self.run_drain(io)
+        self.assertEqual(0, code)
+        self.assertEqual([60, 120], sleeps)
+        self.assertEqual([1], io.closed)
+        self.assertEqual(3, st["sessions"])
+        self.assertEqual(0, st["api_error_streak"])
+
+    def test_five_consecutive_api_errors_stop_the_drain_with_the_cause(self):
+        errors = [{"done": False, "api_error": True, "api_error_cause": "529 overloaded_error", "reason": "API error", "tokens": 0} for _ in range(5)]
+        io = FakeIo([issue(1)], cap=1, builds={1: errors})
+        sleeps = []
+        with mock.patch.object(cmd_drain.time, "sleep", side_effect=sleeps.append):
+            code, out, st = self.run_drain(io)
+        self.assertEqual(1, code)
+        self.assertEqual([60, 120, 240, 480], sleeps)
+        self.assertIn("five consecutive API errors", out)
+        self.assertIn("529 overloaded_error", out)
+        self.assertEqual("529 overloaded_error", st["api_error_stop"])
+
     def test_orders_p0_first_and_skips_epics_claimed_and_owner_gated(self):
         io = FakeIo([issue(1, "Priority: P2"), issue(2, "Priority: P0"), issue(3, "Work type: Epic"), issue(4, labels=["owner-gate"]), issue(5), issue(6, "Priority: P1")], cap=1)
         io.claims.add(5)
