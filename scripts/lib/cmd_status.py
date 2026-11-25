@@ -252,7 +252,8 @@ def last_lines(alive: bool, landed_row: dict | None, ready: str, log: list[dict]
     if log and log[-1].get("stop", "") not in CLEAN_STOPS:
         story = str(log[-1].get("story", ""))
         resume = "" if holder else f" Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`."
-        lines.append(f"  Warning: the last run on {story} stopped with {log[-1].get('stop')}.{resume}")
+        cause = f": {str(log[-1].get('stderr_tail'))[:180]}" if log[-1].get("stop") == "api_error" and log[-1].get("stderr_tail") else ""
+        lines.append(f"  Warning: the last run on {story} stopped with {log[-1].get('stop')}{cause}.{resume}")
     return lines
 
 
