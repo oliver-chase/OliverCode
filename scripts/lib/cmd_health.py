@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import statistics
 import sys
 from pathlib import Path
 
@@ -258,6 +259,18 @@ def command_health(fleet_root: Path | None = None) -> int:
         t.ok("every governed repo has a permission policy")
     within, text = context_budget.report(OC_ROOT)
     t.ok(text.splitlines()[0]) if within else t.fail(text.splitlines()[0])
+
+    # Desktop transcript usage is separate from headless builder usage. This
+    # reports the measured first-call prompt, not an estimate from file sizes.
+    from lib import usage_sessions
+    starts = usage_sessions.recent_chat_starts(days=7)
+    if starts:
+        median_start = int(statistics.median(tokens for _path, tokens in starts))
+        largest = ", ".join(f"{path.stem} ({tokens:,})" for path, tokens in starts[:3])
+        t.ok(f"{len(starts)} desktop chats measured in 7 days; median initial context {median_start:,} tokens")
+        print(f"  [INFO] largest initial contexts: {largest}")
+    else:
+        t.warn("no desktop chat start measurements in the last 7 days")
 
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
