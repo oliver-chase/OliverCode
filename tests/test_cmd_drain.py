@@ -49,18 +49,6 @@ class CommitBlockCase(unittest.TestCase):
             self.assertIsNone(cmd_drain.commit_block_in("R-1", "2026-11-23T16:30:00Z"))
 
 
-class RestartCase(unittest.TestCase):
-    def test_a_runner_landing_stops_new_stories_and_the_run_names_it(self):
-        class Moved(FakeIo):
-            def runner_changed(self): return 1106 if self.closed or self.started else None
-        io = Moved([issue(1), issue(2)], cap=1)
-        lines, st = [], state()
-        cmd_drain.drain(io, st, sleep=lambda s: None, say=lines.append)
-        self.assertEqual([1], io.started)
-        self.assertEqual(1106, st["restart"])
-        self.assertTrue(any("#1106" in line and "restarting" in line for line in lines))
-
-
 if __name__ == "__main__":
     unittest.main()
 

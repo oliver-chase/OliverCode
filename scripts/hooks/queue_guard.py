@@ -76,31 +76,6 @@ def _already_queued(command: str) -> bool:
     return False
 
 
-# The full validation and landing entry points. A headless builder never starts one: the runner validates and lands after its commit (#1085).
-RUNNER_SCRIPTS = ("scripts/validate.sh", "scripts/land.sh")
-RUNNER_NPM = ("validate", "check")
-RUNNER_ONLY_REASON = ("A builder does not run the repo's full validation: the runner validates and lands after you commit, and the machine has one "
-                      "validation slot. Run the tests your change touches, or one gate with `bash scripts/validate.sh --gate NAME`, then commit and stop.")
-
-
-def headless_refusal(command: str) -> str:
-    """The refusal for a headless builder that starts the full validation or a landing, or "" for any other command or session (#1085)."""
-    if os.environ.get("OLIVERCODE_HEADLESS") != "1":
-        return ""
-    try:
-        simple = [policy_parse.unwrap(words)[1] for words in policy_parse.lex(command)]
-    except ValueError:
-        return ""
-    for words in simple:
-        words = words[1:] if words[:1] in (["bash"], ["sh"]) else words
-        if not words or "--gate" in words:
-            continue
-        script = words[0].lstrip("./") if words[0].startswith(("./", "scripts/")) else ""
-        if any(script.endswith(name) for name in RUNNER_SCRIPTS) or (words[:2] == ["npm", "run"] and words[2:3] and words[2] in RUNNER_NPM):
-            return RUNNER_ONLY_REASON
-    return ""
-
-
 def rewrite(command: str) -> str | None:
     if "\n" in command.strip() or _already_queued(command):
         return None

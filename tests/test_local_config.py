@@ -26,53 +26,17 @@ class LocalConfig(unittest.TestCase):
     def write(self, data):
         self.file.write_text(json.dumps(data))
 
-    def test_the_ceiling_is_half_the_cores_or_the_memory_less_4(self):
+    def test_the_builder_limit_follows_cores_and_memory_unless_the_owner_sets_it(self):
         """#1055: half the cores or the memory in GB less 4, whichever is smaller, and never below 1."""
-        self.assertEqual(4, local_config.builder_ceiling(cores=8, mem_gb=8))
-        self.assertEqual(8, local_config.builder_ceiling(cores=16, mem_gb=32))
-        self.assertEqual(1, local_config.builder_ceiling(cores=2, mem_gb=4))
-
-    def test_the_limit_steps_down_when_overloaded_and_up_when_there_is_room(self):
-        """#1108: load above the cores or swap drops it by one, never below 1; light load with free memory raises it by one, never above the ceiling."""
-        busy = {"load": 37.0, "cores": 8, "free_gb": 0.2, "swap_gb": 0.0}
-        self.assertEqual((2, "load 37 on 8 cores"), local_config.scale(3, busy, 4))
-        self.assertEqual(1, local_config.scale(1, busy, 4)[0])
-        self.assertIn("swap", local_config.scale(3, {**busy, "load": 1.0, "swap_gb": 2.0}, 4)[1])
-        idle = {"load": 1.0, "cores": 8, "free_gb": 3.0, "swap_gb": 0.0}
-        self.assertEqual(4, local_config.scale(3, idle, 4)[0])
-        self.assertIn("load 1 on 8 cores", local_config.scale(3, idle, 4)[1])
-        self.assertEqual((4, ""), local_config.scale(4, idle, 4))
-        self.assertEqual((3, ""), local_config.scale(3, {**idle, "load": 5.0}, 4))
-        self.assertEqual((3, ""), local_config.scale(3, {**idle, "free_gb": 0.5}, 4))
-
-    def test_the_limit_starts_at_3_moves_once_a_minute_and_names_why(self):
-        home = temp_dir(self)
-        busy = {"load": 37.0, "cores": 8, "free_gb": 0.2, "swap_gb": 0.0}
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(local_config, "measure", return_value=busy), \
-                mock.patch.object(local_config, "builder_ceiling", return_value=4):
-            self.assertEqual(2, local_config.scaled_builders(now=1000))  # the first call starts at 3 and steps down
-            self.assertEqual(2, local_config.scaled_builders(now=1010))  # within a minute it holds
-            self.assertEqual(1, local_config.scaled_builders(now=1100))
-            self.assertEqual("Builder limit 1: load 37 on 8 cores.", local_config.builder_note())
-
-    def test_the_limit_never_passes_a_ceiling_below_the_baseline(self):
-        """#1108: on a machine whose ceiling is 2, the baseline of 3 is held to 2 even when there is room."""
-        home = temp_dir(self)
-        idle = {"load": 1.0, "cores": 4, "free_gb": 3.0, "swap_gb": 0.0}
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(local_config, "measure", return_value=idle), \
-                mock.patch.object(local_config, "builder_ceiling", return_value=2):
-            self.assertEqual(2, local_config.scaled_builders(now=1000))
-            self.assertEqual(2, local_config.scaled_builders(now=1100))
-
-    def test_a_saved_maxbuilders_is_the_limit_and_nothing_scales_it(self):
-        with mock.patch.object(local_config, "scaled_builders", return_value=3):
-            self.assertEqual(3, local_config.max_builders())
+        self.assertEqual(4, local_config.default_builders(cores=8, mem_gb=8))
+        self.assertEqual(8, local_config.default_builders(cores=16, mem_gb=32))
+        self.assertEqual(1, local_config.default_builders(cores=2, mem_gb=4))
+        with mock.patch.object(local_config, "default_builders", return_value=4):
             self.write({"maxBuilders": 6})
             self.assertEqual(6, local_config.max_builders())
-            self.assertEqual("", local_config.builder_note())
             for bad in (0, -2, "four", True, 2.5):
                 self.write({"maxBuilders": bad})
-                self.assertEqual(3, local_config.max_builders(), bad)
+                self.assertEqual(4, local_config.max_builders(), bad)
 
     def test_unset_means_this_machine_has_none(self):
         self.assertEqual(local_config.private_repos(), {})

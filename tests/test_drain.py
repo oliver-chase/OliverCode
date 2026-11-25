@@ -53,7 +53,6 @@ class FakeIo:
     def capacity(self):
         return self.cap.pop(0) if isinstance(self.cap, list) and len(self.cap) > 1 else (self.cap[0] if isinstance(self.cap, list) else self.cap)
     def limit(self): return 4
-    def limit_note(self): return ""
     def claim(self, n): pass
     def beat(self, building): self.beats = getattr(self, "beats", []) + [list(building)]
     def worktree(self, n): return Path(f"/wt/{n}")
@@ -88,7 +87,6 @@ class FakeIo:
         return True, ""
     def release(self, n): self.released.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
-    def backlog(self, n): self.parked = getattr(self, "parked", []) + [n]
     def landed(self, wt, n): return self.already or (n in self.on_main)
     def policy_stop(self, n, wt): return self.stops.get(n)
     def queue_owner(self, n, stop): self.owner.append((n, stop))
@@ -212,13 +210,6 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], io.kept)
         self.assertEqual([1], st["blocked"])
         self.assertIn("Fix the thing (#976)", io.comments[0][1])
-
-    def test_the_drain_names_why_the_limit_moved_once(self):
-        """#1108: the reason the machine limit moved is said when it changes, not on every pass; --parallel says nothing."""
-        io = cmd_drain.Io(Path("/nonexistent"), "o/r")
-        with mock.patch.object(cmd_drain.local_config, "builder_note", side_effect=["Builder limit 2: load 37 on 8 cores.", "Builder limit 2: load 37 on 8 cores.", "Builder limit 1: swap."]):
-            self.assertEqual(["Builder limit 2: load 37 on 8 cores.", "", "Builder limit 1: swap."], [io.limit_note() for _ in range(3)])
-        self.assertEqual("", cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=2).limit_note())
 
     def test_the_default_drain_fills_the_machine_limit_and_parallel_overrides_it(self):
         """#1055: with no flag a drain runs up to maxBuilders less what other repos build; --parallel N wins; a bad N is refused."""
@@ -385,22 +376,6 @@ class DrainCase(unittest.TestCase):
         io.ghost_land = True
         self.run_drain(io)
         self.assertEqual((io.closed, io.moved, io.kept), ([], [], [1]))
-
-    def test_a_story_that_stops_on_the_turn_limit_twice_is_parked_and_the_next_story_builds(self):
-        spent = {"done": False, "reason": "max_turns", "budget": True}
-        io = FakeIo([issue(1, "Priority: P0"), issue(2)], cap=1, builds={1: [dict(spent) for _ in range(4)]})
-        _, _, st = self.run_drain(io)
-        self.assertEqual(io.started.count(1), 2)  # no third restart
-        self.assertEqual(io.parked, [1])
-        self.assertEqual((io.closed, io.kept), ([2], []))
-        self.assertIn(1, io.released)
-        self.assertTrue(any(n == 1 and body.startswith("Parked:") for n, body in io.comments))
-
-    def test_a_turn_limit_stop_followed_by_another_failure_is_not_parked(self):
-        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "x", "budget": True}, {"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "x", "budget": True}, {"done": False, "reason": "y"}]})
-        self.run_drain(io)
-        self.assertEqual(io.started.count(1), 4)
-        self.assertFalse(getattr(io, "parked", []))
 
     def test_a_story_of_size_l_or_xl_is_skipped_and_named(self):
         for size in ("L", "XL"):

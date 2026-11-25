@@ -307,7 +307,7 @@ def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> i
         return _refuse(f"story #{n} is {claim}. Take the next open story.")
     held, limit = (busy or run_lock.building_elsewhere)(slug), local_config.max_builders()
     if held >= limit:
-        return _refuse(f"other runs are building {held} stories, which is this machine's limit of {limit} (maxBuilders in olivercode.local.json).{" " + note if (note := local_config.builder_note()) else ""} Ask again when one lands.")
+        return _refuse(f"other runs are building {held} stories, which is this machine's limit of {limit} (maxBuilders in olivercode.local.json). Ask again when one lands.")
     return 0
 
 

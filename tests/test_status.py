@@ -136,7 +136,7 @@ class TestStatusLayout(unittest.TestCase):
                 mock.patch.object(cmd_status, "held_numbers", return_value=set()), mock.patch.object(cmd_status, "closed_claims", return_value=set()), \
                 mock.patch.object(cmd_status.open_issues, "fetch", return_value=issues), mock.patch.object(cmd_status, "last_commit", return_value=None), \
                 mock.patch.object(cmd_status, "validation_slots", return_value=([], 1)), mock.patch.object(cmd_status.gh_budget, "refusal", return_value=""), \
-                mock.patch.object(cmd_status.local_config, "builder_note", return_value=""), mock.patch("lib.gated.savings_lines", return_value=[]):
+                mock.patch("lib.gated.savings_lines", return_value=[]):
             cmd_status.run("o/OliverCode", count=lambda s, state: 3, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                            waiting=lambda: [], cands=lambda: "", numbers=lambda: {"tokens_per_closed": None, "handovers": 0, "threads": 0, "open": 3})
         lines = out.getvalue().splitlines()
@@ -677,7 +677,7 @@ class TestDrainStatusEvents(unittest.TestCase):
         seen = {}
         real = cmd_drain.Io(Path("/tmp/repo"), "o/r")
         with mock.patch.object(status_report, "record", lambda *a, **kw: seen.update(kw) or ""), \
-                mock.patch.object(cmd_drain.local_config, "saved_builders", return_value=3):
+                mock.patch.object(cmd_drain.local_config, "max_builders", return_value=3):
             real.event("begin")
         self.assertEqual(3, seen["builders"])
 

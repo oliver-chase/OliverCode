@@ -20,7 +20,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import candidates, cmd_groom, cmd_owner, failure_log, gh_budget, local_config, open_issues, relay, repo_state, run_lock, status_page, validate_queue, status_report
+from lib import candidates, cmd_groom, cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock, status_page, validate_queue, status_report
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -443,9 +443,6 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
         out("")
         out("Candidates:")
         out(line)
-    if note := local_config.builder_note():
-        out("")
-        out(note)
     held = run_lock.active(slug, now.timestamp())
     if held:
         out("")
