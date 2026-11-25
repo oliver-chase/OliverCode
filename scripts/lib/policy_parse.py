@@ -99,11 +99,6 @@ def _shell_heredoc_bodies(command: str):
             yield rest.rsplit("\n", 1)[0]
 
 
-def _simple_commands(command: str, depth: int = 0):
-    for _env, name, rest in _commands_with_env(command, depth):
-        yield name, rest
-
-
 def _commands_with_env(command: str, depth: int = 0):
     """(environment assignments, command name, words after it) for each simple command, nested shell bodies included."""
     try:

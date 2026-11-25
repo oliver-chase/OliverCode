@@ -609,10 +609,6 @@ def plist() -> dict:
     }
 
 
-def _agent_path() -> Path:
-    return launchd.plist_path(LABEL)
-
-
 def schedule(on: bool) -> int:
     return launchd.schedule(on, LABEL, plist, "daily maintenance job",
                             "`olivercode maintain --fix` runs daily at 06:30. Remove it with `olivercode maintain --unschedule`.")

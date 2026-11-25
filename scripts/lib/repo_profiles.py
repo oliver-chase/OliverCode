@@ -74,14 +74,6 @@ def registry_gap(repo_root: Path) -> str:
             "Name the repo that holds it under privateRepos in olivercode.local.json")
 
 
-def load_local_profiles(repo_root: Path) -> dict:
-    """The profiles in the registry this checkout reads, or {} when it is missing or unreadable."""
-    try:
-        return json.loads(registry_file(repo_root).read_text()).get("profiles", {})
-    except (OSError, ValueError):
-        return {}
-
-
 def registries_with_profiles(fleet_root: Path, reading: Path) -> list[Path]:
     """Other <repo>/olivercode/repo-profiles.json files beside fleet_root's repos that hold profiles, so an empty registry
     can name where the profiles are (#1083). The file being read is left out."""

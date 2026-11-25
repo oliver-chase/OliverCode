@@ -11,7 +11,7 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import candidates, failure_log, gh_budget, intake, lesson_cover, story_outbox  # noqa: E402
+from lib import candidates, failure_log, gh_budget, intake, story_outbox  # noqa: E402
 
 
 def origin_as_github() -> dict:
@@ -102,8 +102,7 @@ class TestNoDirectFiling(unittest.TestCase):
         cfg = home / "local.json"
         cfg.write_text("{}")
         env = {"OLIVERCODE_HOME": str(home), "OLIVERCODE_LOCAL_CONFIG": str(cfg), "OLIVERCODE_FAILURE_LOG": str(home / "failures.log")}
-        for p in (mock.patch.dict(os.environ, env), mock.patch.object(gh_budget, "refusal", return_value=""),
-                  mock.patch.object(lesson_cover, "own_backlog", return_value=True)):
+        for p in (mock.patch.dict(os.environ, env), mock.patch.object(gh_budget, "refusal", return_value="")):
             p.start()
             self.addCleanup(p.stop)
 
