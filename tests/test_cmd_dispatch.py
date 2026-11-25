@@ -10,7 +10,7 @@ from _support import REPO_ROOT
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 import gh_budget  # noqa: E402
-from lib import cmd_dispatch  # noqa: E402
+from lib import cmd_dispatch, intake  # noqa: E402
 
 
 class TestHold(unittest.TestCase):
@@ -22,6 +22,15 @@ class TestHold(unittest.TestCase):
             self.assertEqual(1, cmd_dispatch.gh(["issue", "view", "1"]).returncode)
             self.assertEqual(1, cmd_dispatch.gh(["api", "graphql", "-f", "query=x"]).returncode)
         self.assertEqual(1, ran.call_count)
+
+
+class TestParallelDispatch(unittest.TestCase):
+    def test_stories_with_overlapping_files_do_not_run_in_parallel(self):
+        story1 = {"number": 1, "body": "Files area: scripts/lib/cmd_dispatch.py"}
+        story2 = {"number": 2, "body": "Files area: scripts/lib/cmd_dispatch.py"}
+        story3 = {"number": 3, "body": "Files area: tests/test_cmd_dispatch.py"}
+        self.assertTrue(intake.overlaps(intake.files_area(story1["body"]), intake.files_area(story2["body"])))
+        self.assertFalse(intake.overlaps(intake.files_area(story1["body"]), intake.files_area(story3["body"])))
 
 
 if __name__ == "__main__":

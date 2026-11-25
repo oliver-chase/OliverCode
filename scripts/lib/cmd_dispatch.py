@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 from lib import agent_loop, backlog_setup, failure_log, intake, gh_budget, local_config, open_issues, run_lock
@@ -271,14 +272,40 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
             if begun:
                 print(begun)
             code = _build(io, cmd_drain, story, n, worktree)
-            while True:
-                queued = run_lock.release(slug, pid)  # stories other threads queued meanwhile run next, in priority order
-                if not queued:
-                    break
-                stories = [st for st, why in (read_story(runner, slug, q) for q in queued) if not why and st.get("state", "").upper() == "OPEN"]
-                for nxt in sorted(stories, key=open_issues.rank):
-                    if not live_claim(runner, slug, nxt["number"], nxt, clock()):
-                        _build(io, cmd_drain, nxt, nxt["number"], placement_config().worktrees / f"{repo.name}-{nxt['number']}")
+            pool = None
+            running: dict = {}
+            try:
+                while True:
+                    queued = run_lock.release(slug, pid)  # stories other threads queued meanwhile run next, in priority order
+                    if not queued and not running:
+                        break
+                    if queued:
+                        if not pool:
+                            limit = getattr(io, "limit", lambda: 5)()
+                            pool = ThreadPoolExecutor(max_workers=max(1, limit))
+                        stories = [st for st, why in (read_story(runner, slug, q) for q in queued) if not why and st.get("state", "").upper() == "OPEN"]
+                        for nxt in sorted(stories, key=open_issues.rank):
+                            capacity = getattr(io, "capacity", lambda: 5)()
+                            if len(running) >= capacity:
+                                break
+                            if not live_claim(runner, slug, nxt["number"], nxt, clock()):
+                                nxt_area = intake.files_area(nxt.get("body") or "")
+                                if any(intake.overlaps(nxt_area, intake.files_area(r.get("body") or "")) for r in running.values()):
+                                    continue
+                                running[pool.submit(cmd_drain.work_story, io, nxt, cmd_drain.new_state())] = nxt
+                    if running:
+                        finished, _ = wait(running, timeout=cmd_drain.REWRITE_SECONDS, return_when=FIRST_COMPLETED)
+                        for fut in finished:
+                            issue = running.pop(fut)
+                            try:
+                                closed, _used = fut.result()
+                                nxt_n = issue["number"]
+                                print(f"Story #{nxt_n} {'landed and closed' if closed else 'stayed open and is back on Ready; the reason is in its comment'}. Branch story/{nxt_n} in {placement_config().worktrees / f'{repo.name}-{nxt_n}'}.")
+                            except Exception:
+                                pass
+            finally:
+                if pool:
+                    pool.shutdown(wait=True)
             return code
     finally:
         if started:
