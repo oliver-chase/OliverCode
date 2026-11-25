@@ -125,8 +125,8 @@ class DrainCase(unittest.TestCase):
 
     def test_a_story_over_its_spend_ceiling_is_parked_before_another_builder_starts(self):
         io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "validation failed", "tokens": 10}]})
-        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.01]), \\
-                mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
+        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.01]):
+            with mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
                 closed, used = cmd_drain.work_story(io, issue(1), state())
         self.assertFalse(closed)
         self.assertEqual([1], io.started)
@@ -141,8 +141,8 @@ class DrainCase(unittest.TestCase):
             {"done": False, "reason": "validation failed", "tokens": 10},
             {"done": True, "reason": "ok", "tokens": 10},
         ]})
-        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 5.99]), \\
-                mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
+        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 5.99]):
+            with mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
                 closed, _ = cmd_drain.work_story(io, issue(1), state())
         self.assertTrue(closed)
         self.assertEqual([1, 1], io.started)
