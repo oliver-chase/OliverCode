@@ -57,11 +57,11 @@ def repeats(lesson: dict, since: str, rows=None) -> bool:
 
 
 def verified(lesson: dict, today: date | None = None, rows=None) -> bool:
-    """A covered lesson with a cover date at least thirty days back and no repeat in the failure log since."""
+    """A lesson whose linked story has an implementation record at least thirty days old, with no later recurrence."""
     try:
-        since = date.fromisoformat(lesson["covered_on"])
+        since = date.fromisoformat(lesson["implemented_on"])
     except (KeyError, TypeError, ValueError):
         return False
-    if not lesson.get("covered_by") or (today or date.today()) - since < timedelta(days=VERIFY_DAYS):
+    if not lesson.get("covered_by") or not lesson.get("implemented_by") or (today or date.today()) - since < timedelta(days=VERIFY_DAYS):
         return False
     return not repeats(lesson, since.isoformat(), rows)
