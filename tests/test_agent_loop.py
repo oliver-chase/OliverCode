@@ -384,9 +384,19 @@ class TestLoop(unittest.TestCase):
         out = self.loop(run, [(True, "")])
         self.assertEqual((True, 2), (out["done"], len(run.prompts)))
 
-    def test_only_a_reply_whose_first_word_is_pass_passes(self):
-        for text, verdict in (("PASS", "pass"), ("PASS, the diff does what the story says.", "pass"), ("PASSING concerns", "findings"),
-                              ("Passing is not a verdict", "findings"), ("scripts/a.py: wrong", "findings")):
+    def test_reader_verdict_accepts_explicit_final_line_and_legacy_pass(self):
+        cases = (
+            ("PASS", "pass"),
+            ("PASS, the diff does what the story says.", "pass"),
+            ("All checks line up\\nVERDICT: PASS", "pass"),
+            ("Confirmed\\nVERDICT: PASS", "pass"),
+            ("scripts/a.py: wrong\\nVERDICT: FINDINGS", "findings"),
+            ("PASSING concerns", "findings"),
+            ("Passing is not a verdict", "findings"),
+            ("scripts/a.py: wrong", "findings"),
+            ("VERDICT: MAYBE", "findings"),
+        )
+        for text, verdict in cases:
             with self.subTest(text=text):
                 out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
                 self.assertEqual(verdict, out["verdict"])

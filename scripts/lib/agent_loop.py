@@ -225,7 +225,7 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
 
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
            max_turns: int = READER_TURNS, attempts: int = 2, repo: str = "") -> dict:
-    """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
+    """One fresh headless reader on the diff, the story and the test output (#891). Accepts an explicit final-line VERDICT: PASS/FINDINGS, plus the historical first-line PASS form (#1153).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
@@ -239,7 +239,14 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
         else:
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
-                verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
+                # Accept the documented machine-readable verdict on the final line. Keep
+                # the historical first-line PASS form for existing reader prompts.
+                final_line = text.splitlines()[-1].strip() if text.splitlines() else ""
+                explicit = re.fullmatch(r"VERDICT:\s*(PASS|FINDINGS)", final_line, re.I)
+                if explicit:
+                    verdict = "pass" if explicit.group(1).upper() == "PASS" else "findings"
+                else:
+                    verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
                 log_round(f"{session}-review", 1, model_name, reply, repo=repo)
                 log_review(session, verdict, text)
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
