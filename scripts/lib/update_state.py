@@ -83,8 +83,10 @@ def problem(root: Path) -> tuple[str, str] | None:
         return ("a rebase is in progress", f"git -C {q} rebase --abort")
     if _git_path(root, "MERGE_HEAD").exists():
         return ("a merge is in progress", f"git -C {q} merge --abort")
-    if _git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
-        return ("the checkout has uncommitted changes to tracked files",
+    changed = [line[3:] for line in _git(root, "status", "--porcelain", "--untracked-files=no").stdout.splitlines() if line.strip()]
+    if changed:  # a tracked file is shipped framework, so name each one: a changed core file is a divergence, not personal state (#1197)
+        shown = ", ".join(changed[:8]) + (f" and {len(changed) - 8} more" if len(changed) > 8 else "")
+        return (f"{len(changed)} tracked framework file(s) differ from the release: {shown}",
                 f"git -C {q} stash push -m 'before olivercode update'")
     if _git(root, "rev-parse", "--abbrev-ref", "@{u}").returncode != 0:
         return ("this branch has no upstream to pull from", f"git -C {q} branch --set-upstream-to=origin/main")

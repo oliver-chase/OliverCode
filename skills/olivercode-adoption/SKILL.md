@@ -9,7 +9,7 @@ Drive the whole setup so the user does not have to read the documentation first.
 
 ## The rule that governs everything here
 
-**Optimize and keep.** You point existing rules at a shared home and keep them. A rule you cannot classify stays where it is and gets flagged. Never delete a user's config because it looks redundant: redundancy is their call.
+**Optimize and keep the owner's files.** You point existing rules at a shared home and keep them. A rule you cannot classify stays where it is and gets flagged. Never delete a user's config because it looks redundant: redundancy is their call. The shipped framework is the baseline and is never curated: use a setting or a skill override for a different behavior, and propose a core change only when neither can.
 
 `install` backs up what it replaces. Keep each backup until the user confirms the result.
 
