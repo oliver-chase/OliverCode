@@ -23,6 +23,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import tempfile
 import time
 from pathlib import Path
@@ -76,17 +77,32 @@ def _kill(proc: subprocess.Popen) -> None:
             continue
 
 
-def _start(command: str, log: Path, env: dict) -> subprocess.Popen:
-    fh = open(log, "w", encoding="utf-8")
-    try:
-        return subprocess.Popen(["bash", "-c", command], stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env,
-                                start_new_session=True)
-    finally:
-        fh.close()
+LIVE_OUTPUT = ("  Smoke progress:", "  [RUN ]", "  [ OK ]", "  [FAIL]")
 
 
 def _say(err, line: str) -> None:
     print(line, file=err, flush=True)
+
+
+def _capture(proc: subprocess.Popen, log: Path, err) -> None:
+    """Persist all gate output, but stream smoke-unit progress as it arrives."""
+    try:
+        with log.open("w", encoding="utf-8") as fh:
+            for line in proc.stdout:
+                fh.write(line)
+                fh.flush()
+                if line.startswith(LIVE_OUTPUT):
+                    _say(err, line.rstrip("\n"))
+    finally:
+        proc.stdout.close()
+
+
+def _start(command: str, log: Path, env: dict, err) -> tuple[subprocess.Popen, threading.Thread]:
+    proc = subprocess.Popen(["bash", "-c", command], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                            env=env, text=True, bufsize=1, start_new_session=True)
+    reader = threading.Thread(target=_capture, args=(proc, log, err), daemon=True)
+    reader.start()
+    return proc, reader
 
 
 def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sys.stdout,
@@ -103,31 +119,38 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sy
     with tempfile.TemporaryDirectory(prefix="olivercode-gates-") as tmp:
         logs = {name: Path(tmp) / f"{i}-{name}.log" for i, (name, _) in enumerate(gates)}
         commands = dict(gates)
-        waiting, procs, started = [name for name, _ in gates], {}, {}
+        waiting, procs, readers, started = [name for name, _ in gates], {}, {}, {}
         deadline = time.monotonic() + timeout
         try:
             while (waiting or procs) and time.monotonic() < deadline:
                 for name in [n for n, p in procs.items() if p.poll() is not None]:
                     codes[name] = procs.pop(name).returncode
+                    readers.pop(name).join()
                     took[name] = took.get(name, 0.0) + time.monotonic() - started[name]
                     word = "passed" if codes[name] == 0 else f"failed (exit {codes[name]})"
                     _say(err, f"{PROGRESS}'{name}' {word} in {took[name]:.0f}s ===")
                 while waiting and len(procs) < max_gates:
                     name = waiting.pop(0)
-                    procs[name], started[name] = _start(commands[name], logs[name], env), time.monotonic()
+                    procs[name], readers[name] = _start(commands[name], logs[name], env, err)
+                    started[name] = time.monotonic()
                     _say(err, f"{PROGRESS}'{name}' started ({len(procs)} running, {len(waiting)} waiting) ===")
                 if procs:
                     time.sleep(0.1)
         except BaseException:  # Ctrl-C or a crash leaves no gate running
             for proc in procs.values():
                 _kill(proc)
+            for reader in readers.values():
+                reader.join()
             raise
         now = time.monotonic()
         for name in [n for n, p in procs.items() if p.poll() is not None]:  # a gate that exited just before the deadline has its real exit code
             codes[name] = procs.pop(name).returncode
+            readers.pop(name).join()
             took[name] = took.get(name, 0.0) + now - started[name]
         for proc in procs.values():
             _kill(proc)
+        for reader in readers.values():
+            reader.join()
         stalled = list(procs) + waiting
         load, cores = _load(), os.cpu_count() or 1
         for name in procs:
@@ -139,7 +162,9 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sy
             _say(err, f"=== validate: never started before the budget: {', '.join(waiting)} ===")
         for name, _ in gates:
             if logs[name].exists():  # a gate the budget never reached has no log
-                out.write(logs[name].read_text(encoding="utf-8", errors="replace"))
+                for line in logs[name].read_text(encoding="utf-8", errors="replace").splitlines(keepends=True):
+                    if not line.startswith(LIVE_OUTPUT):
+                        out.write(line)
             if name in stalled:
                 print(f"=== validate: stalled gate '{name}': no result within the {timeout:.0f}s budget ===", file=out)
     print(f"validate: gates took {time.monotonic() - run_began:.0f}s in all, at most {max_gates} at once, load {_load():.1f} "
