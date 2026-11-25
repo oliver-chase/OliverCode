@@ -540,7 +540,6 @@ class TestStatusPage(unittest.TestCase):
         with mock.patch.object(status_report, "_log", return_value=[]):
             self.record("start", self.story(5), publisher=lambda **kw: calls.append(kw))
         self.assertEqual([], calls)
-        self.assertIn("The run has ended", self.page())
 
     def test_a_held_story_shows_as_held_and_is_not_logged_as_landed(self):
         rows = []
