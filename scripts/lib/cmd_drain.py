@@ -760,7 +760,9 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     if hasattr(io, "origin"):
         io.origin = " ".join(["olivercode drain", *argv])
     on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
-    previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
+    # A terminal closing its tab sends SIGHUP; treat it like SIGTERM so
+    # in-flight claims and the run lock are released through the same path.
+    previous = {sig: signal.signal(sig, _stop_on_term) for sig in (signal.SIGTERM, signal.SIGHUP)} if on_main else {}
     code, state = 0, {}
     try:
         if not take_run(io, slug, f"drain {repo.name}"):
@@ -775,7 +777,8 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     finally:
         run_lock.release(slug, pid)
         if on_main:
-            signal.signal(signal.SIGTERM, previous)
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
     if code == 0 and state.get("restart"):
         sys.stdout.flush()
         restart(sys.executable, [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "drain", *argv])

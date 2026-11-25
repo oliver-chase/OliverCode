@@ -730,6 +730,22 @@ class StoppedRun(unittest.TestCase):
         self.assertFalse(run_lock.path("o/r").exists())
         self.assertEqual(previous, signal.getsignal(signal.SIGTERM))
 
+    def test_sighup_releases_the_run_lock_and_restores_the_handler(self):
+        """#1141: closing the terminal tab follows the same cleanup path as SIGTERM."""
+        def stopped(io, st, sleep=None):
+            os.kill(os.getpid(), signal.SIGHUP)
+            time.sleep(5)
+            return 0
+
+        previous = signal.getsignal(signal.SIGHUP)
+        ended = []
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
+                mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", side_effect=stopped):
+            code, _ = quiet(cmd_drain.command_drain, ["r"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
+        self.assertEqual([130], ended)
+        self.assertFalse(run_lock.path("o/r").exists())
+        self.assertEqual(previous, signal.getsignal(signal.SIGHUP))
+
     def test_a_new_run_releases_the_local_claims_no_live_run_holds_and_leaves_other_repos_alone(self):
         """#1076: a claim a stopped run left behind is released when the next run takes the lock, so the story is eligible in its normal order."""
         now = time.time()
