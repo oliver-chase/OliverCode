@@ -25,6 +25,7 @@ import board_mirror  # noqa: E402
 import gh_budget  # noqa: E402
 from check_kanban_baseline import scope_hint  # noqa: E402
 import repo_name_guard  # noqa: E402
+import lessons  # noqa: E402
 from lib import rename_check  # noqa: E402
 from lib import claude_settings  # noqa: E402
 from lib import main_checkout  # noqa: E402
@@ -329,6 +330,14 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
             queued = "GraphQL hit its limit"
     if queued:
         gh_budget.enqueue(["gh", "api", *move])
+    if commits:
+        try:
+            marked = lessons.mark_implemented(f"#{args.story}", ", ".join(commits), root)
+            if marked:
+                print(f"Marked {marked} linked lesson(s) implemented by {', '.join(c[:10] for c in commits)}.", file=out)
+        except (OSError, ValueError) as exc:
+            print(f"Warning: the story closed, but its linked lesson log could not be updated: {exc}", file=err)
+    if queued:
         print(f"#{args.story} is commented and closed; its Complete status is queued for the GraphQL reset", file=out)
         return 0
     print(f"#{args.story} is Complete, commented and closed", file=out)
