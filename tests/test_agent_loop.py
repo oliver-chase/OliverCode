@@ -214,6 +214,27 @@ class TestRunLogUsage(unittest.TestCase):
     def rows(self):  # the builder's rounds only, since the reader writes its own rows
         return [r for r in (json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()) if "round" in r and not r["story"].endswith("-review")]
 
+    def test_api_errors_are_not_rounds_and_backoff_resets_after_a_non_error_attempt(self):
+        agent_loop.log_round("story-7", 1, "haiku", {"stop": "api_error", "text": "overloaded", "usage": {}})
+        row = json.loads((self.home / "run-log.jsonl").read_text().splitlines()[-1])
+        self.assertIsNone(row["round"])
+        self.assertEqual("overloaded", row["error"])
+        self.assertEqual(60, agent_loop.api_error_backoff("story-7"))
+        agent_loop.log_round("story-7", 2, "haiku", {"stop": "api_error", "text": "overloaded", "usage": {}})
+        self.assertEqual(120, agent_loop.api_error_backoff("story-7"))
+        self.assertEqual("haiku", agent_loop.restart_model("story-7", "haiku"))
+        agent_loop.log_round("story-7", 3, "haiku", {"stop": "completed", "usage": {}})
+        self.assertEqual(0, agent_loop.api_error_backoff("story-7"))
+
+    def test_api_error_stops_loop_and_waits_before_retry(self):
+        agent_loop.log_round("story-7", 1, "haiku", {"stop": "api_error", "text": "overloaded", "usage": {}})
+        failed = {**reply(), "code": 1, "stop": "api_error", "text": "overloaded"}
+        with mock.patch.object(agent_loop.time, "sleep") as sleep:
+            out = agent_loop.run_loop("do it", self.repo, "story-7", run=Scripted(failed), check=lambda cwd: (True, ""), say=lambda line: None)
+        sleep.assert_called_once_with(60)
+        self.assertTrue(out["api_error"])
+        self.assertEqual(0, out["rounds"])
+
     def test_the_first_round_logs_the_first_call_size_and_never_the_session_total(self):
         said = []
         usage = {"input": 3, "output": 4, "cache_read": 0, "cache_write": 99_000}
