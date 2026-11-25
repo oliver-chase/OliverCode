@@ -511,6 +511,8 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
             io.comment(n, held_comment(worktree, out["held"]))
             return False, tokens
+        if out.get("api_error"):  # service failures are not builder rounds and must not burn the story's restart budget (#1147)
+            return False, tokens
         if out.get("fatal"):  # a reason a restart cannot fix blocks the story and starts no new session (#1012)
             io.comment(n, f"Drain blocked: {out['reason']}")
             return False, tokens

@@ -216,7 +216,6 @@ class TestRunLogUsage(unittest.TestCase):
 
     def test_api_errors_do_not_count_as_rounds_or_escalate_and_backoff_doubles(self):
         agent_loop.log_round("story-7", 1, "haiku", {"stop": "api_error", "text": "overloaded", "usage": {}})
-        self.assertEqual(0, agent_loop.api_error_backoff("story-7") // 60 - 0)  # first retry waits one minute
         self.assertEqual(60, agent_loop.api_error_backoff("story-7"))
         agent_loop.log_round("story-7", 2, "haiku", {"stop": "api_error", "text": "overloaded", "usage": {}})
         self.assertEqual(120, agent_loop.api_error_backoff("story-7"))
