@@ -51,21 +51,21 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 
 | In the kitchen | In OliverCode | What it does |
 |---|---|---|
-| You tell the front desk what you want | Your one thread | Turns each request into a written ticket |
-| The ticket rail | The board, one per repo | Each story says what done means and which files it touches |
-| The expediter, who calls tickets one at a time | The runner, a script with no model | Picks the next story, sets up a clean station and picks the cook |
-| A line cook with a clean station | The builder, one fresh headless session | Cooks one ticket and stops, carrying nothing over from the last one |
-| A junior cook for toast, a senior for the tasting menu | Model by story size | A smaller model for small stories and a larger one for the rest |
-| The pass, where every plate is checked | Validation | Runs every gate and test, and a failed plate goes back with only the failure noted |
-| A second cook tastes the complicated dishes | The reviewer | A fresh reader checks medium and larger changes against the ticket |
-| The plate goes out and the ticket is spiked | Land and close | One commit on main, the test output attached and the story closed by script |
+| You tell the front desk what outcome you want | Owner-facing front door | Captures the outcome, context and priority; ordinary conversations stay interactive |
+| The ticket rail | Durable work queue | Tracks delegated work, acceptance criteria, scope and real dependencies |
+| The expediter | Autonomous orchestrator | Understands, plans, routes, prioritizes and coordinates work; chooses the execution path |
+| A cook with a clean station | Isolated Claude Code session | Implements bounded work in its own environment; sessions can be coordinated or parallelized when useful |
+| The right cook for the job | Workflow and model selection | Chooses a suitable execution strategy based on task scope, complexity and risk |
+| The pass, where every plate is checked | Risk-proportional quality checks | Runs the checks the change warrants; failures can be diagnosed, repaired and revalidated |
+| A second cook tastes when needed | Review | Adds independent review when risk or complexity justifies it |
+| The plate goes out and the ticket is closed | Safe delivery | Integrates verified work, records evidence, cleans up and reports the outcome |
 | The health code posted on the wall | Commit gates | No secrets, no personal data, and every change tied to a ticket |
-| The manager who stops a cook from doing something dangerous | Tool guards | Refuse unsafe commands, unsafe pushes and overspending GitHub |
+| The safety lead | Safety and policy controls | Prevents unsafe actions, data loss, unapproved operations and runaway work |
 | The suggestion box | The candidates list | Automatic checks drop ideas in, and nothing becomes a ticket until you pick it |
-| The nightly close-down checklist | Scheduled jobs | Health, maintenance and board grooming, with no model |
+| The operations checklist | Background maintenance | Keeps the system healthy; optional automation must not obstruct ordinary work |
 | The recipe binder every cook follows | Rules, voice and design files | Loaded into every session |
 | The training manuals | Skills | How to audit, file a story, plan and diagnose a bug |
-| The franchise inspection | Fleet checks | Checks every one of your repos against the same standard |
+| Shared operating standards | Repository and fleet configuration | Applies consistent safeguards while allowing repo-specific workflows and validation |
 | The incident log | Lessons and decisions | What went wrong, and what you decided |
 
 Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
