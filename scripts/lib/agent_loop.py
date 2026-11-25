@@ -227,8 +227,8 @@ def reader_for(builder: str) -> str:
 
 REVIEW_BRIEF = ("You are a fresh reader. You get the story, the diff and the test output below, and you may read and search the worktree. Check that the diff does what the "
                 "story's scenarios say and breaks nothing. When the diff alone cannot settle a point, such as whether a helper it calls exists, open the file and check: a "
-                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. Answer PASS on the first line "
-                "when it does. Otherwise list each finding on its own line with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
+                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. List each finding on its own line with the file and what is "
+                "wrong, then end your reply with a final line of VERDICT: PASS or VERDICT: FINDINGS.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
 FIX_BRIEF = ("You are a new session, not the story's builder. A fresh reader checked the story's commit and reports the findings below. Fix every finding "
@@ -242,7 +242,8 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
 
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
            max_turns: int = READER_TURNS, attempts: int = 2, repo: str = "") -> dict:
-    """One fresh headless reader on the diff, the story and the test output (#891). Accepts an explicit final-line VERDICT: PASS/FINDINGS, plus the historical first-line PASS form (#1153).
+    """One fresh headless reader on the diff, the story and the test output (#891). Accepts an explicit final-line VERDICT: PASS/FINDINGS, a bare PASS as the
+    reply's last line, plus the historical first-line PASS form (#1153, #1213).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
@@ -256,12 +257,14 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
         else:
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
-                # Accept the documented machine-readable verdict on the final line. Keep
-                # the historical first-line PASS form for existing reader prompts.
+                # Accept the documented machine-readable verdict on the final line, a bare
+                # PASS as that final line, or the historical first-line PASS form.
                 final_line = text.splitlines()[-1].strip() if text.splitlines() else ""
                 explicit = re.fullmatch(r"VERDICT:\s*(PASS|FINDINGS)", final_line, re.I)
                 if explicit:
                     verdict = "pass" if explicit.group(1).upper() == "PASS" else "findings"
+                elif re.fullmatch(r"PASS", final_line, re.I):
+                    verdict = "pass"
                 else:
                     verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
                 log_round(f"{session}-review", 1, model_name, reply, repo=repo)

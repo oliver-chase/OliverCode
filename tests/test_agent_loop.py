@@ -416,6 +416,7 @@ class TestLoop(unittest.TestCase):
             ("PASS, the diff does what the story says.", "pass"),
             ("All checks line up\nVERDICT: PASS", "pass"),
             ("Confirmed\nVERDICT: PASS", "pass"),
+            ("The diff does what the story says.\nIt breaks nothing.\nPASS", "pass"),
             ("scripts/a.py: wrong\nVERDICT: FINDINGS", "findings"),
             ("PASSING concerns", "findings"),
             ("Passing is not a verdict", "findings"),
@@ -426,6 +427,10 @@ class TestLoop(unittest.TestCase):
             with self.subTest(text=text):
                 out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
                 self.assertEqual(verdict, out["verdict"])
+
+    def test_the_brief_asks_for_a_final_verdict_line_and_names_no_other_form(self):
+        self.assertIn("VERDICT: PASS or VERDICT: FINDINGS", agent_loop.REVIEW_BRIEF)
+        self.assertNotIn("first line", agent_loop.REVIEW_BRIEF)
 
     def test_a_reader_that_fails_once_is_asked_again_and_its_pass_lands_the_story(self):
         run = Scripted(reply("built"), model.ModelError("no reader"), reply("PASS"))
