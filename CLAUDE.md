@@ -18,6 +18,6 @@ It applies to every reply and file, and skill messages and drafted documents go 
 - Before committing, run the repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `olivercode conform` finds stopped hooks, and `~/.claude/olivercode/docs/GATES.md` lists the gates
 - Interactive Claude Code is first-class for strategy, exploration, planning, debugging and ordinary coding. Do not turn a normal chat into a backlog story or headless run. Use the backlog/runner when the owner explicitly delegates, asks for durable tracking, or unattended execution is genuinely useful. See `docs/RULES.md` ("Execution")
-- A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`. Asked to build one in a desktop chat, offer that command instead
+- Keep ordinary interactive Claude Code work interactive. Use `olivercode dispatch N` or `olivercode drain REPO` only when the owner explicitly delegates bounded unattended work or requests durable backlog tracking
 - Every terminal command given to the owner starts with `cd` to the exact checkout that owns it (OliverCode: `cd ~/.claude/olivercode`); put the command on the next line and never imply a repo command works from an arbitrary folder
 - Board config: `docs/backlog-config.json` names this repo's GitHub Project. A `docs/backlog-config.local.json` overrides it when present
