@@ -241,30 +241,29 @@ class LiveCheck(unittest.TestCase):
         self.assertIn("branch olivercode-local", reason)
         self.assertIsNone(proof)
 
-    def test_a_missing_installed_checkout_refuses_the_close(self):
-        reason, _ = cs.live_check(["a" * 40], None, self.oc)
-        self.assertIn("$OC", reason)
 
-    def test_no_installed_checkout_still_closes_a_story_that_changes_no_hook_or_job_and_says_the_live_check_did_not_run(self):
-        """#1186: only a hook entry or a launchd job stays inactive until the installed checkout runs it, so other stories close on their commits."""
+    def test_no_installed_checkout_closes_a_story_and_says_the_live_check_did_not_run(self):
+        """#1186: the gates apply while OliverCode is installed, so a story closes on its commits and run output without it."""
         c = self.commit("docs/a.md", "x")
         reason, proof = cs.live_check([c], None, self.oc)
         self.assertIsNone(reason)
         self.assertTrue(proof.startswith("Live: not checked."))
         self.assertIn("no hook entry and no launchd job", proof)
 
-    def test_no_installed_checkout_refuses_a_hook_story_and_names_the_hook(self):
+    def test_no_installed_checkout_closes_a_hook_story_and_names_the_hook_as_not_verified(self):
+        """#1186: with OliverCode not installed there is no session for a hook to be live in, so the close goes ahead and says so."""
         c = self.commit("scripts/hooks/wip_save.py", "x")
         reason, proof = cs.live_check([c], None, self.oc)
-        self.assertIn("wip_save.py", reason)
-        self.assertIn("$OC", reason)
-        self.assertIsNone(proof)
+        self.assertIsNone(reason)
+        self.assertIn("Live: not checked", proof)
+        self.assertIn("wip_save.py, which were not verified live", proof)
 
-    def test_no_installed_checkout_refuses_a_job_story_and_names_the_label(self):
+    def test_no_installed_checkout_closes_a_job_story_and_names_the_label_as_not_verified(self):
         c = self.commit("scripts/lib/cmd_job.py", 'LABEL = "com.olivercode.demo-job"\n'
                         'def schedule(on):\n    return launchd.schedule(on, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n')
-        reason, _ = cs.live_check([c], None, self.oc)
-        self.assertIn("com.olivercode.demo-job", reason)
+        reason, proof = cs.live_check([c], None, self.oc, loaded=lambda label: self.fail("nothing is loaded without an install"))
+        self.assertIsNone(reason)
+        self.assertIn("com.olivercode.demo-job, which were not verified live", proof)
 
     def test_no_installed_checkout_ignores_a_job_a_test_builds(self):
         c = self.commit("tests/test_job.py", 'launchd.job("com.olivercode.fixture", ["x"], "x.out")\n')

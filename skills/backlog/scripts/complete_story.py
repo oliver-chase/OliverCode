@@ -173,18 +173,16 @@ def _live_targets(src, commits):
 
 
 def _unlinked_live_check(commits, root):
-    """(reason, proof) when no installed checkout is linked (#1186). The close does not need one unless a commit changes a hook entry or
-    a launchd job, since only those stay inactive until the installed checkout runs them. The proof says the live check did not run, so a
-    skipped check is never shown as passed. A commit this checkout cannot read is refused, since nothing says what it changed."""
-    refusal = "the installed OliverCode checkout ($OC) was not found; run `olivercode install` from it"
-    if not commits or any(_git(root, "cat-file", "-e", f"{c}^{{commit}}").returncode != 0 for c in commits):
-        return refusal, None
-    hooks, labels = _live_targets(root, commits)
-    if hooks or labels:
-        names = ", ".join(sorted(hooks) + sorted(labels))
-        return f"{refusal}; these commits change {names}, which must be live before the story closes", None
-    return None, ("Live: not checked. No installed OliverCode checkout is linked on the machine that closed this story, "
-                  "and the commits change no hook entry and no launchd job.")
+    """(reason, proof) when no installed checkout is linked (#1186). OliverCode governs a Claude Code session only while it is installed, so a
+    machine without it has nothing a hook entry or a launchd job could be live in, and the close does not wait on one. The proof says the live
+    check did not run, and names the hooks and jobs the commits change, so a skipped check is never shown as passed."""
+    try:
+        hooks, labels = _live_targets(root, commits)
+    except OSError:
+        hooks, labels = set(), set()
+    changed = sorted(hooks) + sorted(labels)
+    detail = f"the commits change {', '.join(changed)}, which were not verified live" if changed else "the commits change no hook entry and no launchd job"
+    return None, f"Live: not checked. No installed OliverCode checkout is linked on the machine that closed this story, and {detail}."
 
 
 def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings=None):
@@ -192,7 +190,7 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
 
     An installed checkout that is behind is updated once with `olivercode update`, then checked again. Proof names the
     installed commit, plus each hook entry or launchd job label the commits touch that is confirmed active. With no installed
-    checkout, the close goes ahead only when the commits change no hook entry and no job (#1186)."""
+    checkout, the close goes ahead and its Live line says the check did not run (#1186)."""
     if oc is None or not is_olivercode(oc):
         return _unlinked_live_check(commits, root)
     ahead = main_checkout.ahead_refusal(Path(oc)) or main_checkout.stale_refusal(Path(oc))  # an ahead checkout is refused before any update runs, so nothing changes (#785)
