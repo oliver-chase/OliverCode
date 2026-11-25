@@ -53,13 +53,13 @@ def _validate_once(wt: Path, log, say=print) -> bool:
     except OSError as exc:
         log.write(f"validate: {exc}\n")
         return False
-    # Explicitly close the pipe after draining it; otherwise repeated land validations
-    # leak file descriptors and emit ResourceWarnings (#1035).
-    with proc.stdout:
+    try:
         for line in proc.stdout:
             log.write(line)
             if line.startswith(PROGRESS):
                 say(line.rstrip("\n"), flush=True)
+    finally:
+        proc.stdout.close()
     return proc.wait() == 0
 
 
