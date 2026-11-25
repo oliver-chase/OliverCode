@@ -89,6 +89,58 @@ def live_claims(now: float) -> dict:
     return {key: mine for key, mine in held.items() if isinstance(mine, dict) and now - float(mine.get("at", 0)) < limit}
 
 
+def in_progress(now: float) -> set[str]:
+    """The 'owner/repo#N' keys of stories In Progress on a board copy under ten minutes old. It reads the shared local copy and fetches nothing (#1188)."""
+    from lib import board_mirror
+    found = set()
+    for path in gh_budget.home().glob("board-*.json"):
+        try:
+            if now - path.stat().st_mtime >= board_mirror.FRESH_SECONDS:
+                continue
+            items = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for item in items if isinstance(items, list) else []:
+            content = (item or {}).get("content") or {}
+            if item.get("status") == "In Progress" and content.get("number") and content.get("repository"):
+                found.add(f"{content['repository']}#{content['number']}")
+    return found
+
+
+def github_claims(keys, runner=None) -> dict[str, tuple[str, str]]:
+    """{story key: (session, time)} for each story whose GitHub claim comment is live, one REST read per key (#1188). An unreadable story is left out."""
+    runner = runner or log_action.gh_api
+    held = {}
+    for key in sorted(keys):
+        repo, _, n = key.rpartition("#")
+        try:
+            said = log_action.claim_status(repo, int(n), runner)
+        except (RuntimeError, ValueError, OSError):
+            continue
+        if match := re.match(r"claimed by (.+) at (\S+)$", said):
+            held[key] = (match.group(1), match.group(2))
+    return held
+
+
+def claim_lines(now: float, local: dict, remote: dict) -> list[str]:
+    """One line for each live claim, local or on GitHub: the story, who holds it and for how long. A story the runner holds in the local file and a different session
+    holds on GitHub is flagged as a possible duplicate (#1188)."""
+    lines = []
+    for key in sorted(set(local) | set(remote)):
+        repo, _, n = key.rpartition("#")
+        mine, theirs = local.get(key), remote.get(key)
+        if mine:
+            began, holder = float(mine.get("since") or mine.get("at", 0)), str(mine.get("agent") or "unnamed")
+        else:
+            stamp = log_action._parse_time(theirs[1])
+            began, holder = (stamp.timestamp() if stamp else now), theirs[0]
+        line = f"{repo.rsplit('/', 1)[-1]} #{n} · held by {holder} · {max(0, int((now - began) // 60))}m"
+        if mine and theirs and theirs[0] != holder:
+            line += f" · possible duplicate: {theirs[0]} also holds it on GitHub"
+        lines.append(line)
+    return lines
+
+
 def runner_alive() -> bool:
     """True when a drain or dispatch process runs on this machine, read from the process table. No model call (#987)."""
     try:
@@ -410,6 +462,8 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     states = state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [],
                          slug, story_notes(stamp, claims, log, alive, holder, commits))
     building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + ([note] if (note := local_config.builder_note()) else []) + stale  # why the builder limit moved (#1158)
+    held = claim_lines(stamp, claims, github_claims(in_progress(stamp)))  # every live claim, with its holder (#1188)
+    building += ["", "Claims:"] + held if held else []
     return [tokens_per_story(rows, log)] + gated.savings_lines() + building + [""] + last_lines(alive, (landed(rows) or [None])[0], ready, log, holder)
 
 

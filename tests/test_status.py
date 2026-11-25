@@ -3,6 +3,8 @@
 import io
 import json
 import os
+import subprocess
+import shutil
 import sys
 import tempfile
 import threading
@@ -164,10 +166,13 @@ class TestStatusLayout(unittest.TestCase):
         self.assertIn("Builder limit 3: load 12 on 8 cores.", lines)  # #1158: status says why the limit dropped
         self.assertIn("OliverCode #1105 · S · Landing · claimed 42m, activity 10m, 0 rounds", lines)
         self.assertIn("OliverCode #1107 · M · Building · claimed 42m, activity 42m, 0 rounds", lines)
-        story_lines = [line for line in lines if " · " in line]
+        claims_at = lines.index("Claims:")  # #1188: every live claim is listed again, with its holder, under its own heading
+        building = lines[lines.index("Building:"):claims_at]
+        story_lines = [line for line in building if " · " in line]
         self.assertEqual(3, len(story_lines))
         self.assertTrue(all(len(line) <= 80 for line in story_lines))
-        self.assertEqual(1, sum("#1105" in line for line in lines))
+        self.assertEqual(1, sum("#1105" in line for line in building))
+        self.assertEqual(3, len([line for line in lines[claims_at:] if "held by" in line]))
 
 
 def decision(n: int, words: str = "Option A") -> dict:
@@ -1029,6 +1034,55 @@ class TestSpendPanel(unittest.TestCase):
         with mock.patch.object(status_report.subprocess, "run", side_effect=AssertionError("a process started")), \
                 mock.patch.object(status_report.model, "run_cli", side_effect=AssertionError("a model call"), create=True):
             self.assertIn("Spend by day", status_report._spend_panel(self.log(), self.NOW))
+
+
+class TestClaimLines(unittest.TestCase):
+    """Status lists every live claim with its holder and age, and flags a story two holders claim (#1188)."""
+
+    def comments(self, session, when):
+        body = f"Claim\n- Session: {session}\n- Time: {when}"
+        return subprocess.CompletedProcess([], 0, json.dumps({"body": body}) + "\n", "")
+
+    def test_each_live_claim_names_the_story_the_holder_and_how_long_it_has_been_held(self):
+        now = 10_000.0
+        local = {"o/OliverCode#7": {"agent": "drain", "since": now - 600, "at": now - 30}}
+        self.assertEqual(["OliverCode #7 · held by drain · 10m"], cmd_status.claim_lines(now, local, {}))
+
+    def test_a_claim_only_on_github_is_listed_with_its_session(self):
+        now = time.time()
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 300))
+        self.assertEqual(["widget #9 · held by thread-a · 5m"], cmd_status.claim_lines(now, {}, {"o/widget#9": ("thread-a", stamp)}))
+
+    def test_a_story_the_runner_and_a_thread_both_hold_is_flagged_and_one_holder_is_not(self):
+        now = time.time()
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 60))
+        local = {"o/r#7": {"agent": "drain", "since": now - 600, "at": now}, "o/r#8": {"agent": "drain", "since": now - 600, "at": now}}
+        remote = {"o/r#7": ("thread-a", stamp), "o/r#8": ("drain", stamp)}
+        lines = cmd_status.claim_lines(now, local, remote)
+        self.assertIn("possible duplicate: thread-a also holds it on GitHub", lines[0])
+        self.assertNotIn("duplicate", lines[1], "the runner's own claim comment is the same holder")
+
+    def test_github_claims_make_one_rest_read_per_story_and_skip_a_story_with_no_live_claim(self):
+        now = time.time()
+        calls = []
+        def runner(args):
+            calls.append(args[0])
+            return self.comments("thread-a", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 120))) if args[0].endswith("/5/comments?per_page=100") else subprocess.CompletedProcess([], 0, "", "")
+        held = cmd_status.github_claims({"o/r#5", "o/r#6"}, runner)
+        self.assertEqual({"o/r#5"}, set(held))
+        self.assertEqual("thread-a", held["o/r#5"][0])
+        self.assertEqual(2, len(calls), "one read for each In Progress story and nothing else")
+
+    def test_in_progress_reads_only_a_fresh_board_copy_and_fetches_nothing(self):
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, True)
+        items = [{"status": "In Progress", "content": {"number": 4, "repository": "o/r"}}, {"status": "Ready", "content": {"number": 5, "repository": "o/r"}}]
+        (home / "board-o-1.json").write_text(json.dumps(items))
+        stale = home / "board-o-2.json"
+        stale.write_text(json.dumps([{"status": "In Progress", "content": {"number": 9, "repository": "o/r"}}]))
+        os.utime(stale, (time.time() - 3600, time.time() - 3600))
+        with mock.patch.object(cmd_status.gh_budget, "home", return_value=home), mock.patch.object(cmd_status.subprocess, "run", side_effect=AssertionError("fetched")):
+            self.assertEqual({"o/r#4"}, cmd_status.in_progress(time.time()))
 
 
 if __name__ == "__main__":
