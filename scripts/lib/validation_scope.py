@@ -47,4 +47,5 @@ def round_gates(files: list[str]) -> list[str]:
 
 
 if __name__ == "__main__":
-    print("\\n".join(round_gates(sys.argv[1:])))
+    for gate in round_gates(sys.argv[1:]):
+        print(gate)
