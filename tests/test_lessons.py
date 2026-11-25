@@ -52,6 +52,12 @@ class TestLessons(Isolated):
         self.assertEqual(json.loads(self.lines()[0])["scope"], "structure")
         self.assertEqual(lessons.path(), self.home / "structure-lessons.jsonl")
 
+    def test_readding_the_same_lesson_on_the_same_day_does_not_duplicate_it(self):
+        first = lessons.add("same", "reason", "rule", repo=self.repo)
+        second = lessons.add("same", "reason", "rule", repo=self.repo)
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(1, len(self.lines(self.repo)))
+
     def test_cover_sets_covered_by_and_keeps_the_other_lines(self):
         first = lessons.add("a", "b", "c", repo=self.repo)
         second = lessons.add("d", "e", "f", repo=self.repo)
