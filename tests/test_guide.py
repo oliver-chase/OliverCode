@@ -52,6 +52,14 @@ class TestHowWorkRunsMatches(unittest.TestCase):
         for sentence in cmd_guide.HOW_WORK_RUNS:
             self.assertIn(sentence, text)
 
+    def test_readme_preserves_the_owner_to_outcome_architecture_diagrams(self):
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("## Target architecture: owner to outcome", readme)
+        self.assertGreaterEqual(readme.count("```mermaid"), 2)
+        _, guide = quiet(cmd_guide.command_guide, REPO_ROOT)
+        for layer in cmd_guide.ARCHITECTURE:
+            self.assertIn(layer, guide)
+
     def test_the_readme_section_says_the_same_things_in_the_same_order(self):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         section = readme.split("## How work runs", 1)[1].split("\n## ", 1)[0]
