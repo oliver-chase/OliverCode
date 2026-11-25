@@ -440,11 +440,11 @@ class TestStatusPage(unittest.TestCase):
         self.assertIn(f"reloads every {status_report.REFRESH_SECONDS} seconds", message)
         self.assertIn('title this thread "r, 4 building" in the same turn', message)
 
-    def test_a_page_written_for_a_publish_carries_the_publish_time_and_a_tick_keeps_the_last(self):
+    def test_runner_events_do_not_claim_an_artifact_was_published(self):
         with mock.patch.object(status_report, "_log", return_value=[]), mock.patch.object(status_report, "load_local", return_value={"cityArtifact": "u"}):
             self.record("start", self.story(5), now=T0, log=[])
-            self.assertIn(f'data-published="{T0:.0f}"', self.page())
-            self.record("tick", now=T0 + 3600, log=[{"story": "city-publish", "at": stamp(T0)}])  # the publish logs its own row, which a tick reads
+            self.assertIn('data-published="0"', self.page())
+            self.record("tick", now=T0 + 3600, log=[{"story": "city-publish", "at": stamp(T0)}])
             self.assertIn(f'data-published="{T0:.0f}"', self.page())
 
     def test_a_dispatch_refused_before_it_starts_fires_no_end_event(self):
