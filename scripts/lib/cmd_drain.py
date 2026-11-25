@@ -546,15 +546,12 @@ def story_spend(n: int, repo: str = "") -> float:
                 repo_name = Path(repo).name
                 if repo and row.get("repo") and row.get("repo") != repo_name and not row.get("repo", "").startswith(repo_name + "-"):
                     continue
-                sid = str(row.get("session_id") or "")
-                if sid:
-                    session_ids.add(sid)
                 cost = row.get("cost_usd")
                 if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
                     total += float(cost)
     except OSError:
         pass
-    # Keep older rows that predate session IDs. New session rows are counted above to avoid double-counting.
+    # Only pre-telemetry rows without session IDs are counted here; new sessions use the log above.
     path = failure_log.home() / "run-log.jsonl"
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
@@ -570,7 +567,7 @@ def story_spend(n: int, repo: str = "") -> float:
                     continue
                 if repo and row.get("repo") and row.get("repo") != repo:
                     continue
-                if row.get("session_id") and row.get("session_id") in session_ids:
+                if row.get("session_id"):
                     continue
                 cost = row.get("cost_usd")
                 if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
