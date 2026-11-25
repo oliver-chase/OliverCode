@@ -35,6 +35,8 @@ QA runs when the owner asks for it, as a separate pass by a separate reader that
 
 Working rules that hold in every session:
 
+- Every terminal command given to the owner starts with `cd` to the exact checkout that owns it; put the command on the next line. Do not imply repo-scoped commands work from an arbitrary folder.
+
 - A broken, failing or slow system gets the `diagnosing-bugs` loop before any code changes
 - A comment says what defect the code prevents or why it has this shape, and stays only when the code cannot say it
 - Gate and lint findings get one pass: fix every finding, then re-run once
