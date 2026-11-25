@@ -12,8 +12,13 @@ from pathlib import PurePosixPath
 
 def round_gates(files: list[str]) -> list[str]:
     """Return ordered round gates. Precommit always runs; code tests run only for code changes."""
+    order = ["precommit", "fleet", "bloat", "quality", "refs", "docs", "limits", "bypass", "smoke", "hookstate"]
+    if not files:
+        return order  # An unavailable/empty diff must fail safe to the full set, not silently skip tests.
     gates = ["precommit"]
     paths = [PurePosixPath(name) for name in files if name and not name.startswith("/")]
+    if not paths:
+        return order
     names = [p.as_posix() for p in paths]
     code = any(p.suffix in {".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"} for p in paths)
     docs = any(name.startswith(("docs/", "README", "CHANGELOG")) for name in names)
