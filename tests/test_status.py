@@ -35,6 +35,11 @@ class TestStatus(unittest.TestCase):
                               live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "")
         return code, out.getvalue()
 
+    def test_status_warning_names_the_last_api_error_cause(self):
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp(), "at": NOW.timestamp()}}
+        notes = cmd_status.story_notes(NOW.timestamp(), claims, [{"story": "story-7", "stop": "api_error", "error": "rate limit exceeded"}], True, None, {})
+        self.assertIn("rate limit exceeded", notes["7"])
+
     def test_status_names_a_story_a_policy_stop_left_waiting_on_the_owner(self):
         step = "Story #1012 waits on you: triggers.gateFailures stopped its builder at the Owner identifiers gate, so drain did not restart it."
         out = io.StringIO()

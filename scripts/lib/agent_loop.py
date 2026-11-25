@@ -289,6 +289,10 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "stop": reply.get("stop", ""), "stderr_tail": reply.get("stderr", ""), "resumed": bool(reply.get("resumed")),
            "settings": reply.get("settings", ""),  # which setup ran, so the two start sizes can be compared (#911)
            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
+    if reply.get("stop") == "api_error":
+        cause = str(reply.get("text") or reply.get("stderr") or "").strip()
+        if cause:
+            row["error"] = cause[:300]
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:

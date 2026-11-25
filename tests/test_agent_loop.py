@@ -214,6 +214,14 @@ class TestRunLogUsage(unittest.TestCase):
     def rows(self):  # the builder's rounds only, since the reader writes its own rows
         return [r for r in (json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()) if "round" in r and not r["story"].endswith("-review")]
 
+    def test_api_error_cause_is_saved_from_the_cli_result(self):
+        agent_loop.log_round("story-7", 1, "sonnet", {"stop": "api_error", "text": "rate limit exceeded", "stderr": "", "usage": {}})
+        row = json.loads((self.home / "run-log.jsonl").read_text().splitlines()[-1])
+        self.assertEqual("rate limit exceeded", row["error"])
+        agent_loop.log_round("story-8", 1, "sonnet", {"stop": "api_error", "text": "x" * 400, "stderr": "", "usage": {}})
+        row = json.loads((self.home / "run-log.jsonl").read_text().splitlines()[-1])
+        self.assertEqual(300, len(row["error"]))
+
     def test_the_first_round_logs_the_first_call_size_and_never_the_session_total(self):
         said = []
         usage = {"input": 3, "output": 4, "cache_read": 0, "cache_write": 99_000}
