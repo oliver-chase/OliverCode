@@ -45,18 +45,18 @@ class LocalConfig(unittest.TestCase):
         self.assertEqual((3, ""), local_config.scale(3, {**idle, "load": 5.0}, 4))
         self.assertEqual((3, ""), local_config.scale(3, {**idle, "free_gb": 0.5}, 4))
 
-    def test_the_limit_starts_at_3_moves_once_a_minute_and_names_why(self):
+    def test_the_limit_starts_at_5_moves_once_a_minute_and_names_why(self):
         home = temp_dir(self)
         busy = {"load": 37.0, "cores": 8, "free_gb": 0.2, "swap_gb": 0.0}
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(local_config, "measure", return_value=busy), \
                 mock.patch.object(local_config, "builder_ceiling", return_value=4):
-            self.assertEqual(2, local_config.scaled_builders(now=1000))  # the first call starts at 3 and steps down
-            self.assertEqual(2, local_config.scaled_builders(now=1010))  # within a minute it holds
-            self.assertEqual(1, local_config.scaled_builders(now=1100))
-            self.assertEqual("Builder limit 1: load 37 on 8 cores.", local_config.builder_note())
+            self.assertEqual(3, local_config.scaled_builders(now=1000))  # baseline 5 is capped at 4 then steps down
+            self.assertEqual(3, local_config.scaled_builders(now=1010))  # within a minute it holds
+            self.assertEqual(2, local_config.scaled_builders(now=1100))
+            self.assertEqual("Builder limit 2: load 37 on 8 cores.", local_config.builder_note())
 
     def test_the_limit_never_passes_a_ceiling_below_the_baseline(self):
-        """#1108: on a machine whose ceiling is 2, the baseline of 3 is held to 2 even when there is room."""
+        """#1108: on a machine whose ceiling is 2, the baseline of 5 is held to 2 even when there is room."""
         home = temp_dir(self)
         idle = {"load": 1.0, "cores": 4, "free_gb": 3.0, "swap_gb": 0.0}
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(local_config, "measure", return_value=idle), \
