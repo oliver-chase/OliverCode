@@ -27,7 +27,7 @@ class TestModelGuard(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         return guard.reason(data)
 
-    def test_a_skill_that_names_haiku_for_readers_is_refused_and_the_skill_text_names_sonnet(self):
+    def test_a_skill_uses_sonnet_for_optional_independent_readers_not_haiku(self):
         self.assertIn("Sonnet", self.check("haiku"))
         text = (REPO_ROOT / "skills" / "audit" / "SKILL.md").read_text().lower()
         self.assertNotIn("haiku", text)
