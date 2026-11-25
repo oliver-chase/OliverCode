@@ -13,7 +13,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from lib import claude_settings
+from lib import claude_settings, session_guard
 
 TIMEOUT = 900
 ALLOWED_TOOLS = "Read,Edit,Write,Bash,Grep,Glob"
@@ -89,28 +89,39 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
         known = str(uuid.uuid4())  # a session id we chose, so a run that times out can still be resumed
         argv += ["--session-id", known]
     env = {**os.environ, HEADLESS_ENV: "1"}
+    lease = session_guard.acquire(session, model, cwd, known, resumed=bool(resume))
     try:
-        ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
-    except subprocess.TimeoutExpired as exc:
-        raise ModelTimeout(f"claude -p ran past {timeout} seconds and was stopped.", known) from exc
-    out = {"code": ran.returncode, "text": ran.stdout, "tokens": 0, "session_id": "", "stop": "", "stderr": (ran.stderr or "").strip()[-STDERR_TAIL:],
-           "usage": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}, "cost_usd": None,
-           "settings": "project" if project_only else "current", "is_error": False}
-    try:
-        data = json.loads(ran.stdout)
-        out["text"] = str(data.get("result") or "")
-        out["session_id"] = str(data.get("session_id") or "")
-        out["stop"] = str(data.get("terminal_reason") or data.get("subtype") or "")
-        out["is_error"] = bool(data.get("is_error"))
-        if not out["text"] and data.get("errors"):
-            out["text"] = "; ".join(str(e) for e in data["errors"])
-        usage = data.get("usage") or {}
-        ints = {k: v for k, v in usage.items() if isinstance(v, int) and k.endswith("tokens")}
-        out["tokens"] = sum(v for k, v in ints.items() if "cache_read" not in k)
-        out["usage"] = {"input": ints.get("input_tokens", 0), "output": ints.get("output_tokens", 0),
-                        "cache_read": ints.get("cache_read_input_tokens", 0), "cache_write": ints.get("cache_creation_input_tokens", 0)}
-        cost = data.get("total_cost_usd")
-        out["cost_usd"] = float(cost) if isinstance(cost, (int, float)) else None
-    except (ValueError, AttributeError):
-        pass
-    return out
+        try:
+            ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+        except subprocess.TimeoutExpired as exc:
+            lease.finish({"stop_reason": "timeout", "exit_code": None})
+            raise ModelTimeout(f"claude -p ran past {timeout} seconds and was stopped.", known) from exc
+        out = {"code": ran.returncode, "text": ran.stdout, "tokens": 0, "session_id": "", "stop": "", "stderr": (ran.stderr or "").strip()[-STDERR_TAIL:],
+               "usage": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}, "cost_usd": None,
+               "settings": "project" if project_only else "current", "is_error": False}
+        try:
+            data = json.loads(ran.stdout)
+            out["text"] = str(data.get("result") or "")
+            out["session_id"] = str(data.get("session_id") or "")
+            out["stop"] = str(data.get("terminal_reason") or data.get("subtype") or "")
+            out["is_error"] = bool(data.get("is_error"))
+            if not out["text"] and data.get("errors"):
+                out["text"] = "; ".join(str(e) for e in data["errors"])
+            usage = data.get("usage") or {}
+            ints = {k: v for k, v in usage.items() if isinstance(v, int) and k.endswith("tokens")}
+            out["tokens"] = sum(v for k, v in ints.items() if "cache_read" not in k)
+            out["usage"] = {"input": ints.get("input_tokens", 0), "output": ints.get("output_tokens", 0),
+                            "cache_read": ints.get("cache_read_input_tokens", 0), "cache_write": ints.get("cache_creation_input_tokens", 0)}
+            cost = data.get("total_cost_usd")
+            out["cost_usd"] = float(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None
+        except (ValueError, AttributeError):
+            pass
+        out.update({"started_at": lease.metadata["started_at"], "duration_s": round(time.time() - lease.started_epoch, 3),
+                    "slot": lease.metadata["slot"], "session_cap": lease.metadata["cap"],
+                    "active_sessions": lease.metadata["active_sessions"]})
+        lease.finish({"stop_reason": out["stop"] or ("exit_code" if out["code"] else "completed"),
+                      "exit_code": out["code"], "usage": out["usage"], "tokens": out["tokens"],
+                      "cost_usd": out["cost_usd"], "resumed": bool(resume)})
+        return out
+    finally:
+        lease.release()
