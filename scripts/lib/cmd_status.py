@@ -530,38 +530,38 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
         out(f"Error: the issues of {slug} were not read.")
         return 1
     steps = (waiting or (lambda: waiting_lines(slug)))()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
-    out(f"STATUS  {slug}")
+    out(f"Status for {slug}")
     out("")
-    out("NEEDS YOU")
+    out("Needs you")
     if steps:
         more = re.fullmatch(r"- and (\d+) more", steps[-1])
         total = len(steps) - 1 + int(more.group(1)) if more else len(steps)
-        out(f"  {total} thing{'s' if total != 1 else ''} wait{'' if total != 1 else 's'} on you. The first few:")
+        out(f"  {total} thing{'s' if total != 1 else ''} wait{'' if total != 1 else 's'} on you.")
         for line in steps:
             out("  " + line)
-        out("  See all of them, grouped: olivercode owner list")
+        out("  Next: run `olivercode owner list` to see them all, grouped.")
     else:
         out("  Nothing needs you right now.")
     out("")
-    out("HAPPENING NOW")
+    out("Happening now")
     for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
         out(f"  {line}" if line and not line.startswith(" ") else line)
     held = run_lock.active(slug, now.timestamp())
     if held:
         out("  Run: " + run_lock.describe(held, now.timestamp()))
     out("")
-    out("THE LAST 7 DAYS")
+    out("The last 7 days")
     out("  " + summary(open_now, rows, now))
     out("  " + numbers_line((numbers or (lambda: four_numbers(now, open_now, rows, run_log(), folder or Path.cwd())))()))
     line = (cands or candidate_line)()
     if line:
         out("")
-        out("IDEAS WAITING FOR YOUR OK")
+        out("Ideas waiting on you")
         out("  " + line.lstrip("- "))
     gap = (city or city_gap)()
     if gap:
         out("")
-        out("SETUP")
+        out("Setup")
         out('  City is not set up in Claude Desktop. Open it and say "Set up OliverCode City", or "Skip OliverCode City".')
     return 0
 

@@ -240,10 +240,10 @@ def listing(open_items: list[dict]) -> str:
         who = item.get("session") or "other"
         groups.setdefault(titles.get(who, f"From {who}"), []).append(item)
     rank = {title: min([order[w] for w, t in TITLES if t == title] or [99]) for title in groups}
-    out = [f"WAITING ON YOU: {len(open_items)}", "", "To see the full detail of one: olivercode owner show NUMBER", "To clear one once it is handled: olivercode owner done NUMBER", ""]
+    out = [f"{len(open_items)} thing{'s' if len(open_items) != 1 else ''} waiting on you", "", "Next: `olivercode owner show NUMBER` gives the detail of one, and `olivercode owner done NUMBER` clears it once it is handled.", ""]
     for title in sorted(groups, key=lambda t: (rank[t], t)):
         rows = groups[title]
-        out.append(f"{title.upper()} ({len(rows)})")
+        out.append(f"{title} ({len(rows)})")
         for i in rows:
             repeat = f"  (raised {i['repeats']} times)" if int(i.get("repeats", 1)) > 1 else ""
             out.append(_show(i) if i.get("tab") else f"  #{i['id']:<4} {_brief(i['step'])}{repeat}")

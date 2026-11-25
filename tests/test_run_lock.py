@@ -168,7 +168,7 @@ class TestNotices(LockCase):
         lines = []
         with mock.patch.object(run_lock, "dead_reason", return_value=""):
             cmd_status.run("o/r", count=lambda s, st: 1, fetch=lambda s, since: [], out=lines.append, live=lambda *a: [])
-        self.assertTrue(any(l.startswith("Run: drain r") for l in lines))
+        self.assertTrue(any(l.strip().startswith("Run: drain r") for l in lines))
 
 
 if __name__ == "__main__":

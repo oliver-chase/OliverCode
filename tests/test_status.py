@@ -43,7 +43,7 @@ class TestStatus(unittest.TestCase):
         out = io.StringIO()
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                        live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"], cands=lambda: "")
-        self.assertIn("NEEDS YOU\n  1 thing waits on you. The first few:\n  - #7 " + step, out.getvalue())
+        self.assertIn("Needs you\n  1 thing waits on you.\n  - #7 " + step, out.getvalue())
 
     def test_status_names_the_candidates_waiting(self):
         out = io.StringIO()
@@ -160,7 +160,7 @@ class TestStatusLayout(unittest.TestCase):
             cmd_status.run("o/OliverCode", count=lambda s, state: 3, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                            waiting=lambda: [], cands=lambda: "", numbers=lambda: {"tokens_per_closed": None, "handovers": 0, "threads": 0, "open": 3})
         lines = out.getvalue().splitlines()
-        self.assertEqual(["STATUS  o/OliverCode", "", "NEEDS YOU", "  Nothing needs you right now.", "", "HAPPENING NOW"], lines[:6])
+        self.assertEqual(["Status for o/OliverCode", "", "Needs you", "  Nothing needs you right now.", "", "Happening now"], lines[:6])
         lines = [l.strip() for l in lines]  # the sections indent their lines under a heading
         self.assertEqual("", lines[lines.index("Building:") - 1])
         self.assertIn("Builder limit 3: load 12 on 8 cores.", lines)  # #1158: status says why the limit dropped

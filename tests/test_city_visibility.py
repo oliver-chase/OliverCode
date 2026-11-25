@@ -40,7 +40,7 @@ class CityVisible(unittest.TestCase):
         self.config({})
         out = []
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=out.append)
-        lines = [line for line in out if line.startswith("City:")]
+        lines = [line for line in out if line.strip().startswith("City is not set up")]
         self.assertEqual(1, len(lines), out)
         self.assertNotIn("phone", lines[0].lower())
 
