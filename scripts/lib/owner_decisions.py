@@ -25,6 +25,10 @@ MAX_ROWS = 1000  # the newest lines the file keeps; older decisions are dropped 
 BRIEF_ENTRIES = 5  # the most owner messages one brief shows (#1046)
 BRIEF_CHARS = 800  # the most characters one brief section holds, heading included (#1046)
 
+# These exact leading phrases identify legacy runner-generated prompts recorded before
+# headless sessions were excluded. Keep the filter narrow: ambiguous rows are owner data.
+LEGACY_RUNNER_PREFIXES = ("You are a fresh reader", "Builder brief for story")
+
 
 def stories(prompt: str) -> list[int]:
     """The story numbers a prompt names, in the order it names them, once each."""
@@ -54,9 +58,38 @@ def _trim(path: Path) -> None:
         failure_log.write_private(path, "\n".join(lines[-MAX_ROWS:]) + "\n")
 
 
+def cleanup_legacy() -> int:
+    """Remove only unmistakable old runner prompts from the owner ledger; preserve all other rows."""
+    path = home() / FILE
+    removed = 0
+    try:
+        with failure_log.locked(path):
+            if not path.is_file():
+                return 0
+            lines = path.read_text(encoding="utf-8").splitlines()
+            kept = []
+            for line in lines:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    kept.append(line)
+                    continue
+                text = row.get("text", "") if isinstance(row, dict) else ""
+                if isinstance(text, str) and text.lstrip().startswith(LEGACY_RUNNER_PREFIXES):
+                    removed += 1
+                else:
+                    kept.append(line)
+            if removed:
+                failure_log.write_private(path, "\\n".join(kept) + ("\\n" if kept else ""))
+    except OSError:
+        return 0
+    return removed
+
+
 def entries(n: int) -> list[dict]:
     """The recorded entries for story N, oldest first."""
     found = []
+    cleanup_legacy()
     try:
         lines = (home() / FILE).read_text(encoding="utf-8").splitlines()
     except OSError:
