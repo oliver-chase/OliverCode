@@ -327,6 +327,13 @@ class TestLoop(unittest.TestCase):
         self.assertEqual("full", agent_loop.review_mode("M", files=["docs/RULES.md"], priority="P2"))
         self.assertEqual("full", agent_loop.review_mode("S", labels=[{"name": "design"}], priority="P2"))
 
+    def test_a_small_story_on_a_claim_lock_dispatch_queue_or_gate_selection_file_keeps_the_full_lane(self):
+        for path in ("scripts/lib/validate_queue.py", "scripts/lib/run_lock.py", "scripts/lib/cmd_dispatch.py", "scripts/lib/failure_log.py",
+                     "scripts/lib/smoke_runner.py", "scripts/lib/validate_gates.py", "scripts/validate.sh"):
+            with self.subTest(path=path):
+                self.assertEqual("full", agent_loop.review_mode("XS", files=[path], priority="P2"))
+        self.assertEqual("sonnet", agent_loop.model_for("S", files=["scripts/lib/validate_queue.py"], priority="P2"))
+
     def test_the_route_names_the_rule_that_chose_the_model(self):
         self.assertEqual(("sonnet", "its Files area touches scripts/lib/agent_loop.py"), agent_loop.route("XS", files=["scripts/lib/agent_loop.py"]))
         self.assertEqual(("sonnet", "priority P0"), agent_loop.route("S", priority="P0"))

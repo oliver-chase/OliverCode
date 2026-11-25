@@ -43,7 +43,10 @@ DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment 
 LADDER = ("haiku", "sonnet", "opus")
 RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round starts its next build one level up (#1015)
 READER = "sonnet"  # the least capable model that reads a commit: no story is read by anything weaker (#1015)
-RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py")  # landing, claims, gates and the loop itself (#1026)
+RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py",  # landing, claims, gates and the loop itself (#1026)
+               "cmd_dispatch.py", "run_lock.py", "failure_log.py",  # dispatch, locks and run persistence (#1191)
+               "validate_queue.py", "queue_shim.py", "queue_bypass.py", "validated.py", "gated.py",  # the validation queue and its record
+               "smoke_runner.py", "validate_gates.py", "validate.sh")  # which checks run
 RISKY_DIRS = ("core/hooks", "scripts/hooks")
 SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
