@@ -247,7 +247,7 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
     prompt = REVIEW_BRIEF.format(task=task, diff=branch_diff(cwd), tail=tail)
-    failure = ""
+    failure, exit_code = "", None
     for attempt in range(1, attempts + 1):
         try:
             reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=max_turns, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
@@ -269,16 +269,21 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
                 return {"verdict": verdict, "text": text}
             failure = f"claude exited {reply['code']}." if reply.get("code", 0) != 0 else "The reader replied with nothing."
+            err_tail = (reply.get("stderr") or "").strip()
+            if err_tail:
+                failure += f" stderr: {err_tail[-300:]}"  # the cause of a reader's failure, which the log did not keep (#1204)
+            exit_code = reply.get("code", 0)
         say(f"Review: no verdict on attempt {attempt}. {failure}")
-    log_review(session, "none", failure)
+    log_review(session, "none", failure, exit_code)
     return {"verdict": "none", "text": failure}
 
 
-def log_review(story: str, verdict: str, text: str) -> None:
-    """Append the reader's pass or findings for a story to the run log. A log that cannot be written never stops a loop."""
+def log_review(story: str, verdict: str, text: str, exit_code: int | None = None) -> None:
+    """Append the reader's pass or findings for a story to the run log, with the exit code of a reader that gave no verdict (#1204). A log that cannot be written never stops a loop."""
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000]}) + "\n")
+            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000],
+                                 **({"exit_code": exit_code} if exit_code is not None else {})}) + "\n")
     except OSError:
         pass
 

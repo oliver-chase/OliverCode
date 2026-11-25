@@ -18,9 +18,10 @@ NOW = 1_700_000_000.0
 
 class FakeIo:
     def __init__(self, slug="o/r"):
-        self.slug, self.released, self.drained = slug, [], 0
+        self.slug, self.released, self.drained, self.readied = slug, [], 0, []
 
     def release(self, n): self.released.append(n)
+    def ready(self, n): self.readied.append(n)
 
 
 class LockCase(unittest.TestCase):
@@ -113,8 +114,22 @@ class TestTakeRun(LockCase):
         io = FakeIo()
         started, out = self.take(io, "drain r", pid=222)
         self.assertEqual((True, [42]), (started, io.released))
+        self.assertEqual([42], io.readied)  # #1201: the dead run's card returns to Ready
         self.assertIn("Took over the run lock", out)
         self.assertIn("resumes from the board", out)
+
+    def test_a_dead_runs_claim_is_free_at_once_and_a_live_runs_is_not(self):
+        """#1201: live_claim reads the run lock, so a killed run's claim is free before the two hours pass."""
+        from lib import cmd_dispatch
+        self.take(FakeIo(), "drain r", pid=111)
+        run_lock.beat("o/r", 111, NOW, [42])
+        cmd_dispatch._local_claim("o/r", 42, NOW, write="drain")
+        cmd_dispatch._local_claim("o/r", 43, NOW, write="drain")
+        with mock.patch.object(run_lock, "pid_alive", lambda p: True):
+            self.assertIn("held by drain", cmd_dispatch.live_claim(None, "o/r", 42, {}, NOW))
+        with mock.patch.object(run_lock, "pid_alive", lambda p: False):
+            self.assertEqual("", cmd_dispatch.live_claim(None, "o/r", 42, {}, NOW))
+            self.assertIn("held by drain", cmd_dispatch.live_claim(None, "o/r", 43, {}, NOW))  # not a story the dead run was building: the two-hour rule decides
 
     def test_a_drain_that_finds_a_live_run_builds_nothing(self):
         built = []

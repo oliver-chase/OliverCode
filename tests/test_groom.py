@@ -533,3 +533,16 @@ class TestGroomEpicLinksAndArea(unittest.TestCase):
     def test_area_comes_from_the_board_and_a_spread_is_fleet_wide(self):
         options = {"backlog": 1, "audit": 2, "fleet-wide": 3}
         self.assertEqual(cmd_groom.area_fixes(self.items(), self.stories(), options), {11: "backlog", 13: "fleet-wide"})
+
+
+class TestFinishCloses(unittest.TestCase):
+    def test_a_half_done_close_is_closed_with_no_second_comment_and_a_failed_close_is_not_counted(self):
+        """#1202"""
+        calls = []
+
+        def run(args):
+            calls.append(args)
+            return None if "repos/o/r/issues/8/comments" in args or args[-3] == "repos/o/r/issues/8" else ""
+
+        self.assertEqual([7], cmd_groom.finish_closes("o/r", [7, 8], run))
+        self.assertTrue(all(c[:3] == ["api", "-X", "PATCH"] and c[-1] == "state=closed" for c in calls))

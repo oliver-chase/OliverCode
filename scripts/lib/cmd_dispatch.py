@@ -185,7 +185,10 @@ def _local_claim(slug: str, n: int, now: float, write: str = "", clear: bool = F
 
 
 def live_claim(runner, slug: str, n: int, story: dict, now: float) -> str:
-    """'claimed by NAME ...' for a claim another session holds, else ''. A claim expires after CLAIM_HOURS."""
+    """'claimed by NAME ...' for a claim another session holds, else ''. A claim expires after CLAIM_HOURS, or at once when the run lock
+    records a dead run that was building the story (#1201)."""
+    if n in run_lock.dead_building(slug, now):
+        return ""
     return _claimant(story, now) or _local_claim(slug, n, now)
 
 

@@ -347,6 +347,11 @@ def as_process(run):
     return runner
 
 
+def finish_closes(slug, numbers, run=gh):
+    """Closes each open story whose complete_story.py died after its closing comment (#1202), with no second comment. Returns the numbers closed."""
+    return [n for n in numbers if run(["api", "-X", "PATCH", f"repos/{slug}/issues/{n}", "-f", "state=closed"]) is not None]
+
+
 def reopen_unproven(slug, found, run=gh):
     """Reopens each closed story that complete_story.py never closed (#1104), with a comment naming the missing evidence. `found` is the
     (number, title) pairs from check_board_hygiene.unproven_closes. Returns the numbers reopened; one whose comment or reopen fails stays closed."""
@@ -663,6 +668,8 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         states = {i["number"]: i["state"] for i in issues}
         items = check_board_hygiene.load_items(cfg)
         closed_cards = [i for i in items if states.get((i.get("content") or {}).get("number")) == "CLOSED"]
+        for n in finish_closes(slug, check_board_hygiene.half_closes(items, states, slug, as_process(run)), run):
+            states[n] = "CLOSED"  # the drift rule below moves its card to Complete
         reopened = reopen_unproven(slug, check_board_hygiene.unproven_closes(closed_cards, cfg, runner=as_process(run)), run)
         for n in reopened:
             states[n] = "OPEN"  # the drift rule below then moves its card to Backlog, and hold keeps it out of Ready

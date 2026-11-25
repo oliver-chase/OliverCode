@@ -215,6 +215,25 @@ def unproven_closes(items, config, finished="Complete", runner=gh_api):
     return found
 
 
+def half_closes(items, states, repo, runner=gh_api):
+    """[number] of each OPEN story whose card is In Progress and whose last comment ends with the line complete_story.py closes with (#1202).
+    complete_story.py died after that comment and before the close, so the sweep finishes the close. A comment that only quotes the line
+    is not its last line, and a story with no such comment is left alone. A failed read exits, so a cut-short read never closes a story."""
+    found = []
+    for i in items:
+        c = i.get("content") or {}
+        number = c.get("number")
+        if not number or states.get(number) != "OPEN" or i.get("status") != "In Progress" or (c.get("repository") or repo) != repo:
+            continue
+        result = runner(["--paginate", "--slurp", f"repos/{repo}/issues/{number}/comments"])
+        if result.returncode != 0:
+            sys.exit(f"cannot read #{number} to check for a half-done close: {(result.stderr or 'gh api failed').strip()}")
+        bodies = cs.flatten(json.loads(result.stdout or "[]"))
+        if bodies and bodies[-1].rstrip().splitlines()[-1:] == [cs.CLOSE_MARKER]:
+            found.append(number)
+    return found
+
+
 def check_close_gate(items, config, finished="Complete", runner=gh_api):
     """The sweep's close-gate finding for each story `unproven_closes` names (#836, #1074), with the fix to run."""
     return [f"#{number} \"{title[:50]}\": closed without complete_story.py. "

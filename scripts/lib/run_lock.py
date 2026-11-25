@@ -75,6 +75,12 @@ def dead_reason(rec: dict, now: float, alive=None) -> str:
     return ""
 
 
+def dead_building(slug: str, now: float | None = None, alive=None) -> list[int]:
+    """The stories a recorded run was building when it died (#1201), or [] when it is live or no run is recorded."""
+    rec = _read(path(slug))
+    return [] if not rec or not dead_reason(rec, time.time() if now is None else now, alive) else list(rec.get("building") or [])
+
+
 def active(slug: str, now: float | None = None, alive=None) -> dict:
     """The live run's record for a repo, or {} when none holds it. It reads and changes nothing."""
     rec = _read(path(slug))

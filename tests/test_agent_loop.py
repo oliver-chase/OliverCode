@@ -16,8 +16,8 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import agent_loop, cmd_run, model  # noqa: E402
 
 
-def reply(text="done", code=0, tokens=10, session_id="c1"):
-    return {"code": code, "text": text, "tokens": tokens, "session_id": session_id}
+def reply(text="done", code=0, tokens=10, session_id="c1", stderr=""):
+    return {"code": code, "text": text, "tokens": tokens, "session_id": session_id, **({"stderr": stderr} if stderr else {})}
 
 
 class Scripted:
@@ -438,6 +438,16 @@ class TestLoop(unittest.TestCase):
         self.assertEqual((False, 3), (out["done"], len(run.prompts)))
         self.assertIn("nothing is pushed", out["reason"])
         self.assertEqual("claude exited 1.", out["held"])
+
+    def test_a_failed_reader_leaves_its_exit_code_and_stderr_in_the_run_log(self):
+        """#1204: the log row keeps the exit code and the end of stderr, and the story is still held."""
+        run = Scripted(reply("built"), reply("", code=2, stderr="auth expired"), reply("", code=2, stderr="auth expired"))
+        out = self.loop(run, [(True, "")])
+        self.assertFalse(out["done"])
+        rows = [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
+        row = [r for r in rows if r.get("review") == "none"][-1]
+        self.assertEqual(2, row["exit_code"])
+        self.assertIn("stderr: auth expired", row["findings"])
 
     def test_a_diff_over_the_limit_is_cut_and_the_marker_names_each_file_the_reader_did_not_see(self):
         full = ("diff --git a/scripts/a.py b/scripts/a.py\n+ok\n" "diff --git a/scripts/b.py b/scripts/b.py\n+" + "y" * agent_loop.DIFF_LIMIT + "\n"

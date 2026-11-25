@@ -353,6 +353,11 @@ class Io:
         cfg = backlog_config(self.repo)
         cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "Ready"}}]}]))
 
+    def ready(self, n: int) -> None:
+        """Put the card of a story a dead run left In Progress back to Ready (#1201)."""
+        cfg = backlog_config(self.repo)
+        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "Ready"}}]}]))
+
     def refresh_claims(self, now: float | None = None) -> None:
         """While this run is alive, renew each claim it holds: the local claim every call, and the claim comment once a quarter of the
         claim window has passed. A run that dies stops renewing, so its claim expires (#1033)."""
@@ -769,6 +774,8 @@ def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) 
         say(f"Released the claims no run holds: {', '.join(f'#{n}' for n in stale)}.")
     for n in stale:
         io.release(n)
+    for n in taken.get("building") or []:  # only a story the dead run was building goes back to Ready (#1201)
+        io.ready(n)
     return True
 
 

@@ -30,6 +30,7 @@ BATCH = {"body": "Built in a batch session with #976"}
 class FakeIo:
     def __init__(self, issues, cap=2, builds=None, land_ok=True, tokens=10, stops=None):
         self.agent, self.moved, self.released, self.already, self.kept, self.on_main = "drain", [], [], False, [], set()
+        self.readied = []
         self.ghost_land = False
         self.refuse_close = ""
         self.slug, self.issues, self.cap, self.builds, self.land_ok, self.tokens = "o/r", list(issues), cap, builds or {}, land_ok, tokens
@@ -88,6 +89,7 @@ class FakeIo:
         self.moved.append(n)
         return True, ""
     def release(self, n): self.released.append(n)
+    def ready(self, n): self.readied.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
     def backlog(self, n): self.parked = getattr(self, "parked", []) + [n]
     def landed(self, wt, n): return self.already or (n in self.on_main)
@@ -528,7 +530,7 @@ class TestRealIo(unittest.TestCase):
             self.assertEqual((model_name, rounds), (run_loop.call_args.kwargs["model_name"], run_loop.call_args.kwargs["rounds"]), size)
 
     def test_the_turn_budget_follows_the_story_size(self):
-        for size, turns in (("XS", 30), ("S", 30), ("M", 30), ("L", 30)):
+        for size, turns in (("XS", 40), ("S", 40), ("M", 60), ("L", 60)):
             with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
                 self.io.build(issue(7, f"Do it.\nSize: {size}"), Path("/wt/7"), "")
             self.assertEqual(turns, run_loop.call_args.kwargs["max_turns"], size)

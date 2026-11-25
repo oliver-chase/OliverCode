@@ -100,6 +100,14 @@ def items() -> list[dict]:
 _SECRET = re.compile(r"\b(?:\d[ -]?){13,19}\b|(?<![A-Za-z])(?:password|passwd|passcode|pwd|secret|token|api[_-]?key|otp|code|cvv)\s*[=:]\s*\S", re.IGNORECASE)
 
 
+def _held(lines: list[dict], session: str, step: str) -> dict | None:
+    """The open item for the same session and step text, merged across its lines, or None."""
+    latest: dict[int, dict] = {}
+    for line in lines:
+        latest[line["id"]] = {**latest.get(line["id"], {}), **line}
+    return next((i for i in latest.values() if i.get("status") == "open" and i.get("session") == session and i.get("step") == step), None)
+
+
 def add(session: str, step: str, command: str = "", error: str = "", tab: str = "", after: str = "", check: str = "",
         extra: dict | None = None) -> dict:
     """Queue one step. Refused unless it carries the command tried and its error, is a decision, or is prepared to its final screen
@@ -115,7 +123,12 @@ def add(session: str, step: str, command: str = "", error: str = "", tab: str = 
     if not tab.strip() and bool(command.strip()) != bool(error.strip()):
         raise ValueError("a step carries the command tried and its error together")
     with failure_log.locked(path()):  # the next id and the append are one step, so two writers never share an id
-        nxt = max((i["id"] for i in _lines()), default=0) + 1
+        every = _lines()
+        held = _held(every, session, step)
+        if held is not None:  # the same ask again counts the repeat and queues nothing new (#1205)
+            _append({"id": held["id"], "repeats": int(held.get("repeats", 1)) + 1, "status": "open"})
+            return {**held, "repeats": int(held.get("repeats", 1)) + 1}
+        nxt = max((i["id"] for i in every), default=0) + 1
         if tab.strip():
             item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
                     "command": "", "error": "", "tab": tab, "after": after, "check": check, "status": "open"}

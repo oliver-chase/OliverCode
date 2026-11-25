@@ -56,6 +56,20 @@ class TestOwnerQueue(unittest.TestCase):
         self.assertIn("set_pinned for x9 with pinned=false", out)
 
 
+class TestQuietQueue(unittest.TestCase):
+    def test_the_same_ask_is_held_once_and_counts_its_repeats(self):
+        """#1205: a repeat keeps one open step and counts it; an info line is not an open step; a done step can be raised again."""
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
+            first = cmd_owner.add("conform", "repo: hooks needs the owner", command="fix", error="stopped")
+            again = cmd_owner.add("conform", "repo: hooks needs the owner", command="fix", error="stopped")
+            cmd_owner.note("groom", "an info line")
+            self.assertEqual(first["id"], again["id"])
+            open_items = [i for i in cmd_owner.items() if i["status"] == "open"]
+            self.assertEqual((1, 2), (len(open_items), open_items[0]["repeats"]))
+            cmd_owner.close(first["id"])
+            self.assertNotEqual(first["id"], cmd_owner.add("conform", "repo: hooks needs the owner", command="fix", error="stopped")["id"])
+
+
 class TestPreparedOwnerSteps(unittest.TestCase):
     def run_cmd(self, *argv):
         buf = io.StringIO()

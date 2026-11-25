@@ -142,6 +142,8 @@ def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None,
     print("=" * 40)
     again, _ = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)
     left = sum(_conform.render(name, rows) for (name, _, _, _), rows in zip(repos, again))
+    cleared = {f"{name}: {row.requirement} needs the owner" for (name, _, _, _), rows in zip(repos, again) for row in rows if row.status == "pass"}
+    _owner.close_where(lambda i: i.get("session") == "conform" and i["step"] in cleared, "the check passes now")  # a cleared ask leaves the queue (#1205)
     print(f"\nAfter --fix: {left} requirement(s) still fail")
     for name, result, next_step in skipped:
         print(f"  Skipped {name}: {result.removeprefix('not committed, ')}. Fix: {next_step}")

@@ -114,5 +114,12 @@ class TestPrevention(unittest.TestCase):
         self.assertEqual(2, len(self.comments))
 
 
+class TestTurnBudget(unittest.TestCase):
+    def test_budget_grows_with_story_size(self):
+        """#1203: a small story gets 40 turns and a larger one 60, so fewer rounds end on the cap and restart."""
+        self.assertEqual((40, 40), (intake.turns("S"), intake.turns("XS")))
+        self.assertEqual((60, 60), (intake.turns("M"), intake.turns("L")))
+
+
 if __name__ == "__main__":
     unittest.main()

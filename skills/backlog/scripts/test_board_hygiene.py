@@ -327,6 +327,27 @@ class CloseGateDimension(unittest.TestCase):
             bh.check_close_gate([], dict(self.CFG, closeGateFromIssue="50"))
 
 
+class HalfDoneClose(unittest.TestCase):
+    """#1202: an open In Progress story whose last comment is the closing line is a close that died; anything else is left alone."""
+    MARK = "Evidence.\n\nClosed by complete_story.py."
+
+    def found(self, comments, status="In Progress", state="OPEN"):
+        run = CloseGateDimension.runner({61: comments})
+        return bh.half_closes([item(61, status)], {61: state}, "o/r", run)
+
+    def test_the_closing_line_as_the_last_comment_is_a_half_done_close(self):
+        self.assertEqual([61], self.found([{"body": "claimed"}, {"body": self.MARK}]))
+
+    def test_no_closing_comment_or_a_mere_quote_of_it_is_left_alone(self):
+        self.assertEqual([], self.found([{"body": "claimed"}]))
+        self.assertEqual([], self.found([{"body": "It ends with Closed by complete_story.py. in the middle of the text"}]))
+        self.assertEqual([], self.found([{"body": self.MARK}, {"body": "later note"}]))
+
+    def test_only_an_open_in_progress_card_counts(self):
+        self.assertEqual([], self.found([{"body": self.MARK}], status="Ready"))
+        self.assertEqual([], self.found([{"body": self.MARK}], state="CLOSED"))
+
+
 class ImportIsolation(unittest.TestCase):
     def test_no_test_module_reads_the_live_config_at_import(self):
         here = Path(__file__).resolve().parent
