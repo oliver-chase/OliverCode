@@ -38,4 +38,7 @@ Give each reader this brief, one reader per batch from `audit_ledger.py --batche
 
 ## Filing
 
+Track only substantive, independently actionable follow-up. Search existing issues first and extend one when it already owns the outcome. Group related work into a small number of issues. Do not file cosmetic observations, speculative recommendations, or every item in a Simplify list. Small safe fixes belong in the current change when the owner asked for fixes; otherwise report them without manufacturing backlog work. Each new issue needs evidence, an outcome, acceptance criteria and a clear reason it cannot simply be handled now.
+## Filing
+
 Build a ledger first: one row per finding and per "Simplify" item, each with its issue number, before the report goes out. The epic states `Size target: at most N lines` and the order of the stories. One epic named for the result, such as "Every job has one home". One story per boundary that can land on its own: a security fix, a set of deletions, one merge of skills, the docs, the voice, the tests. Order them so deletions land before the docs and voice work that would otherwise rewrite text about to go.
