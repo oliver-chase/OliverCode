@@ -130,6 +130,7 @@ class ParallelGates(unittest.TestCase):
     def test_validate_sh_lists_each_gate_once_and_runs_one_by_name(self):
         text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
         self.assertIn("GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)", text)
+        self.assertIn("for gate in precommit bypass smoke; do", text)
         import subprocess
         done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--gate", "nonesuch"], capture_output=True, text=True)
         self.assertEqual(2, done.returncode)
