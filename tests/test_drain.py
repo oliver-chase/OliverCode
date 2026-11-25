@@ -35,6 +35,7 @@ class FakeIo:
         self.slug, self.issues, self.cap, self.builds, self.land_ok, self.tokens = "o/r", list(issues), cap, builds or {}, land_ok, tokens
         self.stops, self.owner = stops or {}, []  # story number -> the policy stop its builder hit; the owner-queue lines written
         self.closed, self.comments, self.started, self.claims, self.lock = [], [], [], set(), threading.Lock()
+        self.cleaned = []
         self.active, self.peak_overlap = set(), []
         self.deps = {}  # story number -> the numbers of the stories that block it (#1064)
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
@@ -79,6 +80,7 @@ class FakeIo:
             self.on_main.add(n)
         return self.land_ok, "RESULT pushed abc1234" if self.land_ok else "RESULT validate-failed"
     def comment(self, n, body): self.comments.append((n, body))
+    def cleanup_landed(self, n): self.cleaned.append(n); return []
     def close_by_script(self, wt, n, why):
         if self.refuse_close:
             return False, self.refuse_close
@@ -361,6 +363,7 @@ class DrainCase(unittest.TestCase):
         io.land = lambda wt, n: self.fail("land ran for a story that was already on the default branch")
         self.run_drain(io)
         self.assertEqual(([], [1], [1]), (io.started, io.closed, io.moved))
+        self.assertEqual([1], io.cleaned, "closing a story already on main must reconcile its worktree and branches")
 
     def test_a_refused_close_of_a_landed_story_leaves_the_card_where_it_is(self):
         io = FakeIo([issue(1)])
