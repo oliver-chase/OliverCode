@@ -82,7 +82,7 @@ class CompleteStory(unittest.TestCase):
         with unittest.mock.patch.object(cs.lessons, "mark_implemented", return_value=2) as mark:
             code, text, _ = self.run_it("builder-only.json")
         self.assertEqual(0, code)
-        mark.assert_called_once_with("#54", "abc123", unittest.mock.ANY)
+        mark.assert_called_once_with("#54", "abc1234", unittest.mock.ANY)
         self.assertIn("Marked 2 linked lesson(s) implemented", text)
 
     def test_the_evidence_comment_ends_with_the_close_mark_the_sweep_reads(self):
