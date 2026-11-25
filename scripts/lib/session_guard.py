@@ -100,7 +100,7 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
             metadata = {"event": "session_start", "session": session, "session_id": session_id,
                         "model": model or "", "repo": Path(cwd).name, "started_at": _stamp(),
                         "slot": n, "cap": cap, "active_sessions": _active(slot_dir, cap),
-                        "reason_started": "runner model call", "resumed": bool(resumed)}
+                        "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
             if not _write(metadata):
                 fcntl.flock(fd, fcntl.LOCK_UN)
                 os.close(fd)
