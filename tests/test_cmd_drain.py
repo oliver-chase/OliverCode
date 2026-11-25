@@ -22,6 +22,20 @@ class BlockingIo(FakeIo):
 
 
 class CommitBlockCase(unittest.TestCase):
+    def test_drain_stops_after_five_consecutive_api_errors_and_names_the_last_cause(self):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            from lib import agent_loop
+            for n in range(5):
+                agent_loop.log_round(f"story-{n+1}", 1, "sonnet", {"stop": "api_error", "text": "service overloaded", "usage": {}})
+            io = FakeIo([issue(99)])
+            said = []
+            result = cmd_drain.drain(io, state(), sleep=lambda _: None, say=said.append)
+            self.assertEqual(0, result)
+            self.assertEqual([], io.started)
+            self.assertTrue(any("five consecutive API errors" in line and "service overloaded" in line for line in said))
+
+
     def test_the_same_commit_msg_block_on_every_round_returns_the_story_to_backlog(self):
         block = {"gate": "commit-msg", "reason": "[commit-msg] BLOCKED: the commit message names no story."}
         io = BlockingIo([issue(1)], builds={1: [{"done": False, "reason": "commit refused"} for _ in range(4)]})

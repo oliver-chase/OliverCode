@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,6 +26,8 @@ CONTINUE = "Your session stopped before you finished ({why}). Continue from wher
 TAIL_LINES = 60
 DIFF_LIMIT = 40_000
 VALIDATE_TIMEOUT = 3600
+API_ERROR_BASE_SECONDS = 60
+API_ERROR_MAX_SECONDS = 15 * 60
 DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment and cold review
 LADDER = ("haiku", "sonnet", "opus")
 RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round starts its next build one level up (#1015)
@@ -289,6 +292,11 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "stop": reply.get("stop", ""), "stderr_tail": reply.get("stderr", ""), "resumed": bool(reply.get("resumed")),
            "settings": reply.get("settings", ""),  # which setup ran, so the two start sizes can be compared (#911)
            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
+    if reply.get("stop") == "api_error":
+        row["round"] = None  # API failures are attempts, not builder rounds; they cannot trigger model escalation.
+        cause = str(reply.get("text") or reply.get("stderr") or "").strip()
+        if cause:
+            row["error"] = cause[:300]
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
@@ -296,6 +304,51 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
     if repo:
         row["repo"] = repo
     append_log(row)
+
+
+def api_error_streak(session: str | None = None) -> int:
+    """Consecutive API-error rows at the end of the run log, globally or for one story."""
+    try:
+        lines = (failure_log.home() / "run-log.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return 0
+    count = 0
+    for line in reversed(lines):
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        if session is not None and row.get("story") != session:
+            continue
+        if row.get("stop") != "api_error":
+            if session is None:
+                break
+            continue
+        count += 1
+    return count
+
+
+def api_error_backoff(session: str) -> int:
+    """Exponential delay after consecutive API errors for this story, capped at 15 minutes."""
+    streak = api_error_streak(session)
+    return min(API_ERROR_MAX_SECONDS, API_ERROR_BASE_SECONDS * (2 ** max(0, streak - 1))) if streak else 0
+
+
+def last_api_error_cause() -> str:
+    try:
+        lines = (failure_log.home() / "run-log.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return "cause not recorded"
+    for line in reversed(lines):
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("stop") == "api_error":
+            return str(row.get("error") or row.get("stderr_tail") or "cause not recorded")[:300]
+    return "cause not recorded"
 
 
 def append_log(row: dict) -> None:
@@ -333,6 +386,10 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
+    delay = api_error_backoff(session)
+    if delay:
+        say(f"API error backoff: waiting {delay} seconds before retrying {session}.")
+        time.sleep(delay)
     start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
     while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
         n += 1
@@ -363,6 +420,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 continue
             break
         if reply["code"] != 0:
+            if reply.get("stop") == "api_error":
+                return {"done": False, "api_error": True, "reason": exit_reason(reply, n, resumed), "rounds": n - 1, "tokens": tokens, "summary": summary}
             return {"done": False, "reason": exit_reason(reply, n, resumed), "rounds": n, "tokens": tokens, "summary": summary,
                     **({"budget": True} if reply.get("stop") == "max_turns" else {})}  # every turn spent, so the drain leaves a handoff (#1113)
         if not checked:

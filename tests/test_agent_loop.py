@@ -214,6 +214,17 @@ class TestRunLogUsage(unittest.TestCase):
     def rows(self):  # the builder's rounds only, since the reader writes its own rows
         return [r for r in (json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()) if "round" in r and not r["story"].endswith("-review")]
 
+    def test_api_errors_do_not_count_as_rounds_or_escalate_and_backoff_doubles(self):
+        agent_loop.log_round("story-7", 1, "haiku", {"stop": "api_error", "text": "overloaded", "usage": {}})
+        self.assertEqual(0, agent_loop.api_error_backoff("story-7") // 60 - 0)  # first retry waits one minute
+        self.assertEqual(60, agent_loop.api_error_backoff("story-7"))
+        agent_loop.log_round("story-7", 2, "haiku", {"stop": "api_error", "text": "overloaded", "usage": {}})
+        self.assertEqual(120, agent_loop.api_error_backoff("story-7"))
+        self.assertEqual("haiku", agent_loop.restart_model("story-7", "haiku"))
+        row = json.loads((self.home / "run-log.jsonl").read_text().splitlines()[-1])
+        self.assertIsNone(row["round"])
+        self.assertEqual("overloaded", row["error"])
+
     def test_the_first_round_logs_the_first_call_size_and_never_the_session_total(self):
         said = []
         usage = {"input": 3, "output": 4, "cache_read": 0, "cache_write": 99_000}
