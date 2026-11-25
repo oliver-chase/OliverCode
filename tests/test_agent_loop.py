@@ -202,6 +202,7 @@ class TestExitOne(unittest.TestCase):
         self.assertTrue(out["api_error"])
         self.assertEqual(0, out["rounds"])
         self.assertEqual("haiku", run.models[0])
+        self.assertEqual("haiku", agent_loop.restart_model("story-1", "haiku"))
         rows = [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
         self.assertEqual(1, len(rows))
         self.assertNotIn("round", rows[0])
