@@ -124,6 +124,17 @@ class DrainCase(unittest.TestCase):
             self.assertEqual(2.0, cmd_drain.story_spend(3, "o/r"))
             self.assertEqual(0.0, cmd_drain.story_spend(4, "o/r"))
 
+    def test_session_telemetry_cost_is_counted_once_with_legacy_rows(self):
+        home = temp_dir(self)
+        (home / "model-sessions.jsonl").write_text(
+            '{"event":"session_end","session":"story-3","session_id":"sid","repo":"r-3","cost_usd":1.0}\n',
+            encoding="utf-8")
+        (home / "run-log.jsonl").write_text(
+            '{"story":"story-3","repo":"o/r","session_id":"sid","cost_usd":1.0}\n'
+            '{"story":"story-3","repo":"o/r","cost_usd":0.5}\n', encoding="utf-8")
+        with mock.patch.object(cmd_drain.failure_log, "home", return_value=home):
+            self.assertEqual(1.5, cmd_drain.story_spend(3, "o/r"))
+
     def test_a_story_over_its_spend_ceiling_is_parked_before_another_builder_starts(self):
         io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "validation failed", "tokens": 10}]})
         with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.01]):
