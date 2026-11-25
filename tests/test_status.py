@@ -424,7 +424,8 @@ class TestStatusPage(unittest.TestCase):
         self.published = []
 
     def record(self, kind, issue=None, now=T0, **kw):
-        return status_report.record("o/r", kind, issue, now=now, publisher=lambda **k: self.published.append(kind), **kw)
+        publisher = kw.pop("publisher", lambda **k: self.published.append(kind))
+        return status_report.record("o/r", kind, issue, now=now, publisher=publisher, **kw)
 
     def page(self):
         return status_report.page_path().read_text(encoding="utf-8")
