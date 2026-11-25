@@ -22,7 +22,7 @@ THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode
 
 # The habits that keep OliverCode cheap, printed after the first steps by the guide and the first install's introduction, one line each (#991).
 USING_IT_WELL = (
-    "Work in one thread per topic, and start a fresh one when it grows long.",
+    "Keep conversations focused; start a fresh one when the context stops helping the work.",
     "Never ask a thread for status. Run `olivercode status` instead.",
     "Delegate bounded work explicitly; keep strategy and exploration interactive.",
     "Keep a story small and name its files.",
@@ -219,7 +219,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     print("\nFirst steps, in order")
     print(f"  1. {_fleet_step(oc_root)}")
     print("  2. olivercode health                                                   check this machine")
-    print("  3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO")
+    print("  3. Use Claude Code normally; when you want unattended execution, file a bounded story and delegate it with olivercode dispatch N or olivercode drain REPO")
     print("\nUsing it well")
     for habit in USING_IT_WELL:
         print(f"  {habit}")
