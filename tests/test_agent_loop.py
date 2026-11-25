@@ -209,6 +209,12 @@ class TestExitOne(unittest.TestCase):
         self.assertEqual("api_error", rows[0]["stop"])
         self.assertIn("529 overloaded_error", rows[0]["stderr_tail"])
 
+    def test_successful_work_that_mentions_an_api_status_code_is_not_an_api_failure(self):
+        run = Scripted(reply("I added handling for HTTP 429 responses"))
+        out = self.loop(run, review_mode="none")
+        self.assertTrue(out["done"])
+        self.assertNotIn("api_error", out)
+
 
 class TestRunLogUsage(unittest.TestCase):
     """#878, #909, #976: a run-log line holds the CLI's usage, cost and stop reason and the start size, which is the first call's context and never the session's total."""
