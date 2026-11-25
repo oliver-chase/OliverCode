@@ -1085,5 +1085,42 @@ class TestClaimLines(unittest.TestCase):
             self.assertEqual({"o/r#4"}, cmd_status.in_progress(time.time()))
 
 
+class TestEstimateAndLandedToday(unittest.TestCase):
+    """Status prints the estimated finish and what landed today, with no model call (#1189)."""
+    NOW = T0 + 600
+
+    def state(self, entry):
+        return mock.patch.object(cmd_status.status_report, "load_state", return_value={"o/r": entry})
+
+    def test_an_active_run_prints_the_finish_and_the_minutes_left(self):
+        entry = {"active": True, "started": T0, "estimate_min": 30}
+        with self.state(entry):
+            line = cmd_status.estimate_line("o/r", self.NOW)
+        self.assertEqual(f"Estimate: finishing near {datetime.fromtimestamp(T0 + 1800):%H:%M}, 20 minutes left.", line)
+
+    def test_a_run_past_its_estimate_says_so_and_a_run_with_none_says_why_and_an_ended_run_says_nothing(self):
+        with self.state({"active": True, "started": T0 - 7200, "estimate_min": 30}):
+            self.assertIn("past its estimate", cmd_status.estimate_line("o/r", self.NOW))
+        with self.state({"active": True, "started": T0}):
+            self.assertEqual("Estimate: none yet, because no story landed in the last 7 days to time.", cmd_status.estimate_line("o/r", self.NOW))
+        with self.state({"active": False, "started": T0, "estimate_min": 30}):
+            self.assertEqual("", cmd_status.estimate_line("o/r", self.NOW))
+        self.assertEqual("", cmd_status.estimate_line("o/other", self.NOW))
+
+    def log(self):
+        stamp = lambda seconds: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(T0 + seconds))  # noqa: E731
+        return [{"story": "story-5", "round": 1, "input": 100, "output": 50, "cost_usd": 0.25, "model": "sonnet", "at": stamp(60), "repo": "o/r"},
+                {"story": "story-5", "landed": True, "title": "Fix the thing", "at": stamp(120), "repo": "o/r"}]
+
+    def test_the_stories_landed_today_are_listed_with_their_tokens_and_cost(self):
+        lines = cmd_status.landed_today_lines("o/r", self.NOW, self.log())
+        self.assertEqual("Landed today: 1 story, 150 tokens, $0.25.", lines[0])
+        self.assertIn("#5 Fix the thing · sonnet · 150 tokens · $0.25", lines[1])
+
+    def test_nothing_prints_when_nothing_landed_today_or_in_another_repo(self):
+        self.assertEqual([], cmd_status.landed_today_lines("o/r", self.NOW + 3 * 86400, self.log()))
+        self.assertEqual([], cmd_status.landed_today_lines("o/other", self.NOW, self.log()))
+
+
 if __name__ == "__main__":
     unittest.main()

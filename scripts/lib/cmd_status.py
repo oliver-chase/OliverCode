@@ -141,6 +141,33 @@ def claim_lines(now: float, local: dict, remote: dict) -> list[str]:
     return lines
 
 
+def estimate_line(slug: str, now: float) -> str:
+    """The estimated finish of the run in progress, or the reason there is none yet, read from the run state the status page uses. '' when no run is active (#1189)."""
+    entry = status_report.load_state().get(slug)
+    if not isinstance(entry, dict) or not entry.get("active"):
+        return ""
+    if not entry.get("estimate_min"):
+        return f"Estimate: none yet, because no story landed in the last {DAYS} days to time."
+    end = float(entry["started"]) + entry["estimate_min"] * 60
+    left = int((end - now) // 60)
+    if left <= 0:
+        return f"Estimate: the run is past its estimate of {datetime.fromtimestamp(end):%H:%M}."
+    return f"Estimate: finishing near {datetime.fromtimestamp(end):%H:%M}, {left} minutes left."
+
+
+def landed_today_lines(slug: str, now: float, log: list[dict]) -> list[str]:
+    """What landed today with each story's tokens and cost from the run log, newest first, at most five lines of stories (#1189)."""
+    today = datetime.fromtimestamp(now).date()
+    rows = [r for r in status_report.history(log, slug, now, days=2) if datetime.fromtimestamp(status_report._epoch(r.get("at"))).date() == today]
+    if not rows:
+        return []
+    priced = [r["cost"] for r in rows if r["cost"] is not None]
+    lines = [f"Landed today: {len(rows)} {'story' if len(rows) == 1 else 'stories'}, {sum(r['tokens'] for r in rows):,} tokens, {status_report._money(sum(priced) if priced else None)}."]
+    for r in rows[:5]:
+        lines.append(f"  #{str(r['story']).rsplit('-', 1)[-1]} {_text(r.get('title'), 50)} · {r.get('model') or 'unknown'} · {r['tokens']:,} tokens · {status_report._money(r['cost'])}")
+    return lines + ([f"  and {len(rows) - 5} more."] if len(rows) > 5 else [])
+
+
 def runner_alive() -> bool:
     """True when a drain or dispatch process runs on this machine, read from the process table. No model call (#987)."""
     try:
@@ -462,9 +489,10 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     states = state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [],
                          slug, story_notes(stamp, claims, log, alive, holder, commits))
     building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + ([note] if (note := local_config.builder_note()) else []) + stale  # why the builder limit moved (#1158)
+    building += [line] if (line := estimate_line(slug, stamp)) else []  # when the run finishes, or why nothing says (#1189)
     held = claim_lines(stamp, claims, github_claims(in_progress(stamp)))  # every live claim, with its holder (#1188)
     building += ["", "Claims:"] + held if held else []
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + building + [""] + last_lines(alive, (landed(rows) or [None])[0], ready, log, holder)
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + building + [""] + last_lines(alive, (landed(rows) or [None])[0], ready, log, holder) + landed_today_lines(slug, stamp, log)
 
 
 def last_commit(slug: str, n: str) -> float | None:
