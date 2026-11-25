@@ -25,6 +25,7 @@ USAGE = """Usage:
   olivercode owner add --session SID --step "TEXT" (--command "CMD" --error "ERROR" | --decision)
   olivercode owner add --session SID --step "TEXT" --tab URL --after "WHAT HAPPENS AFTER SUBMIT" [--check "HOW TO VERIFY"]
   olivercode owner list
+  olivercode owner show ID
   olivercode owner done ID
   olivercode owner summary"""
 WEEK = timedelta(days=7)
@@ -215,6 +216,41 @@ def _show(item: dict) -> str:
     return f"  #{item['id']} {item['step']} ({how}; session {item['session']}, {item['created'][:10]})"
 
 
+def _brief(text: str, width: int = 100) -> str:
+    """The first line of a step, cut at a word with an ellipsis when it is longer than width (#1177)."""
+    line = (text or "").splitlines()[0].strip() if (text or "").strip() else ""
+    return line if len(line) <= width else line[:width].rsplit(" ", 1)[0] + "…"
+
+
+# Plain titles for who raised a step, in the order the owner should read them: decisions first, upkeep last (#1177).
+TITLES = (("groom", "Decisions about your boards"), ("drain", "Stories stopped and waiting for you"), ("dispatch", "Stories stopped and waiting for you"),
+          ("gh-replay", "GitHub writes that failed"), ("status-page", "City page"), ("conform", "Repos that do not match the standard"),
+          ("fleet-sync", "Repos that could not catch up with GitHub"), ("maintain", "Machine upkeep"))
+
+
+def listing(open_items: list[dict]) -> str:
+    """The open steps under plain headings, the count first, one line each (#1177). A prepared step keeps its tab and after-submit line.
+    `owner show ID` prints the command tried and its error."""
+    if not open_items:
+        return "Nothing is waiting on you."
+    order = {who: n for n, (who, _) in enumerate(TITLES)}
+    titles = dict(TITLES)
+    groups: dict[str, list[dict]] = {}
+    for item in open_items:
+        who = item.get("session") or "other"
+        groups.setdefault(titles.get(who, f"From {who}"), []).append(item)
+    rank = {title: min([order[w] for w, t in TITLES if t == title] or [99]) for title in groups}
+    out = [f"WAITING ON YOU: {len(open_items)}", "", "To see the full detail of one: olivercode owner show NUMBER", "To clear one once it is handled: olivercode owner done NUMBER", ""]
+    for title in sorted(groups, key=lambda t: (rank[t], t)):
+        rows = groups[title]
+        out.append(f"{title.upper()} ({len(rows)})")
+        for i in rows:
+            repeat = f"  (raised {i['repeats']} times)" if int(i.get("repeats", 1)) > 1 else ""
+            out.append(_show(i) if i.get("tab") else f"  #{i['id']:<4} {_brief(i['step'])}{repeat}")
+        out.append("")
+    return "\n".join(out).rstrip()
+
+
 def waiting_steps(session: str) -> str:
     """The two calls that make a session waiting on the owner easy to find: an "Owner ·" title and a pin (#649)."""
     return (f'Title: call set_session_title for {session} with "{OWNER_PREFIX}" in front of its current title.\n'
@@ -266,9 +302,12 @@ def command_owner(argv: list[str]) -> int:
         print(waiting_steps(item["session"]))
         return 0
     if sub == "list" and not rest:
-        open_items = [i for i in items() if i["status"] == "open"]
-        print("\n".join(_show(i) for i in open_items) if open_items else "Nothing waits on the owner.")
+        print(listing([i for i in items() if i["status"] == "open"]))
         return 0
+    if sub == "show" and len(rest) == 1 and rest[0].isdigit():
+        found = next((i for i in items() if i["id"] == int(rest[0])), None)
+        print(_show(found) if found else f"No owner step #{rest[0]}.")
+        return 0 if found else 1
     if sub == "done" and len(rest) == 1 and rest[0].isdigit():
         found = next((i for i in items() if i["id"] == int(rest[0]) and i["status"] == "open"), None)
         if not found:

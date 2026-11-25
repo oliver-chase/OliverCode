@@ -237,20 +237,20 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
             return 1
         print("\n\n".join(found))
         return 0
-    print("How work runs")
-    for sentence in HOW_WORK_RUNS:
-        print(f"  {sentence}")
-    print(f"  {THREAD_LINE}")
-    print("\nArchitecture, owner to outcome")
-    for layer in ARCHITECTURE:
-        print(f"  {layer}")
-    print("\nFirst steps, in order")
+    print("First steps, in order")
     print(f"  1. {_fleet_step(oc_root)}")
     print("  2. olivercode health                                                   check this machine")
     print("  3. For queued execution today: create or choose a repo story, then run olivercode dispatch N or olivercode drain REPO")
     print("\nOne example, start to finish")
     for line in EXAMPLE:
         print(f"  {line}")
+    print("\nHow work runs")
+    for sentence in HOW_WORK_RUNS:
+        print(f"  {sentence}")
+    print(f"  {THREAD_LINE}")
+    print("\nArchitecture, owner to outcome")
+    for layer in ARCHITECTURE:
+        print(f"  {layer}")
     print("\nUsing it well")
     for habit in USING_IT_WELL:
         print(f"  {habit}")

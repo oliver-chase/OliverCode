@@ -407,8 +407,8 @@ def numbers_line(numbers: dict) -> str:
     tokens = numbers["tokens_per_closed"]
     spent = f"{tokens:,}" if tokens is not None else "not recorded"
     cost = f"${numbers['cost_per_closed']:.2f}" if numbers.get("cost_per_closed") is not None else "not recorded"
-    return (f"Revamp numbers, last {DAYS} days: tokens per closed story {spent}, average cost per closed story {cost}, handovers {numbers['handovers']}, "
-            f"threads typed into {numbers['threads']}, open stories {numbers['open']}.")
+    used = f"Each finished story used about {spent} tokens and cost {cost}." if tokens is not None else "Tokens and cost per finished story: not recorded yet."
+    return f"{used} Handovers {numbers['handovers']}, threads typed into {numbers['threads']}, open stories {numbers['open']}."
 
 
 def _slot_name(label: str) -> str:
@@ -529,30 +529,40 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
     if open_now is None or rows is None:
         out(f"Error: the issues of {slug} were not read.")
         return 1
-    out(f"{slug}: " + summary(open_now, rows, now))
-    out("")
-    out(numbers_line((numbers or (lambda: four_numbers(now, open_now, rows, run_log(), folder or Path.cwd())))()))
-    for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
-        out(line)
     steps = (waiting or (lambda: waiting_lines(slug)))()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
+    out(f"STATUS  {slug}")
+    out("")
+    out("NEEDS YOU")
     if steps:
-        out("")
-        out("Waits on the owner:")
+        more = re.fullmatch(r"- and (\d+) more", steps[-1])
+        total = len(steps) - 1 + int(more.group(1)) if more else len(steps)
+        out(f"  {total} thing{'s' if total != 1 else ''} wait{'' if total != 1 else 's'} on you. The first few:")
         for line in steps:
-            out(line)
+            out("  " + line)
+        out("  See all of them, grouped: olivercode owner list")
+    else:
+        out("  Nothing needs you right now.")
+    out("")
+    out("HAPPENING NOW")
+    for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
+        out(f"  {line}" if line and not line.startswith(" ") else line)
+    held = run_lock.active(slug, now.timestamp())
+    if held:
+        out("  Run: " + run_lock.describe(held, now.timestamp()))
+    out("")
+    out("THE LAST 7 DAYS")
+    out("  " + summary(open_now, rows, now))
+    out("  " + numbers_line((numbers or (lambda: four_numbers(now, open_now, rows, run_log(), folder or Path.cwd())))()))
     line = (cands or candidate_line)()
     if line:
         out("")
-        out("Candidates:")
-        out(line)
-    held = run_lock.active(slug, now.timestamp())
-    if held:
-        out("")
-        out("Run: " + run_lock.describe(held, now.timestamp()))
+        out("IDEAS WAITING FOR YOUR OK")
+        out("  " + line.lstrip("- "))
     gap = (city or city_gap)()
     if gap:
         out("")
-        out('City: not set up in Claude Desktop. Open it and say "Set up OliverCode City", or "Skip OliverCode City".')
+        out("SETUP")
+        out('  City is not set up in Claude Desktop. Open it and say "Set up OliverCode City", or "Skip OliverCode City".')
     return 0
 
 

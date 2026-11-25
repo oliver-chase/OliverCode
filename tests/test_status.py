@@ -43,7 +43,7 @@ class TestStatus(unittest.TestCase):
         out = io.StringIO()
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                        live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"], cands=lambda: "")
-        self.assertIn("Waits on the owner:\n- #7 " + step, out.getvalue())
+        self.assertIn("NEEDS YOU\n  1 thing waits on you. The first few:\n  - #7 " + step, out.getvalue())
 
     def test_status_names_the_candidates_waiting(self):
         out = io.StringIO()
@@ -160,8 +160,8 @@ class TestStatusLayout(unittest.TestCase):
             cmd_status.run("o/OliverCode", count=lambda s, state: 3, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                            waiting=lambda: [], cands=lambda: "", numbers=lambda: {"tokens_per_closed": None, "handovers": 0, "threads": 0, "open": 3})
         lines = out.getvalue().splitlines()
-        self.assertTrue(lines[0].startswith("o/OliverCode: 3 open."))
-        self.assertEqual("", lines[1])
+        self.assertEqual(["STATUS  o/OliverCode", "", "NEEDS YOU", "  Nothing needs you right now.", "", "HAPPENING NOW"], lines[:6])
+        lines = [l.strip() for l in lines]  # the sections indent their lines under a heading
         self.assertEqual("", lines[lines.index("Building:") - 1])
         self.assertIn("Builder limit 3: load 12 on 8 cores.", lines)  # #1158: status says why the limit dropped
         self.assertIn("OliverCode #1105 · S · Landing · claimed 42m, activity 10m, 0 rounds", lines)
@@ -923,12 +923,12 @@ class RevampNumbersCase(unittest.TestCase):
                            live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "", folder=self.repo,
                            numbers=lambda: cmd_status.four_numbers(NOW, 3, rows, [{"story": "story-4", "input": 10, "output": 5}], self.repo,
                                                                     self.projects, self.handovers))
-        self.assertIn("Revamp numbers, last 7 days: tokens per closed story 15, average cost per closed story not recorded, handovers 0, threads typed into 0, open stories 3.", out.getvalue())
+        self.assertIn("Each finished story used about 15 tokens and cost not recorded. Handovers 0, threads typed into 0, open stories 3.", out.getvalue())
 
     def test_no_closed_story_says_the_tokens_are_not_recorded(self):
         numbers = cmd_status.four_numbers(NOW, 2, [], [], self.repo, self.projects, self.handovers)
         self.assertIsNone(numbers["tokens_per_closed"])
-        self.assertIn("tokens per closed story not recorded", cmd_status.numbers_line(numbers))
+        self.assertIn("Tokens and cost per finished story: not recorded yet.", cmd_status.numbers_line(numbers))
 
 
 class TestDispatchTick(unittest.TestCase):

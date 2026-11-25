@@ -44,10 +44,11 @@ class TestGuide(unittest.TestCase):
 
 
 class TestHowWorkRunsMatches(unittest.TestCase):
-    def test_the_guide_opens_with_how_work_runs_before_the_command_list(self):
+    def test_the_guide_opens_with_the_first_steps_then_how_work_runs_before_the_command_list(self):
         code, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         self.assertEqual(code, 0)
-        self.assertTrue(text.startswith("How work runs\n"))
+        self.assertTrue(text.startswith("First steps, in order\n"))  # the most useful part comes first (#1177)
+        self.assertLess(text.index("First steps, in order"), text.index("How work runs"))
         self.assertLess(text.index(cmd_guide.HOW_WORK_RUNS[-1]), text.index(cmd_guide.GROUPS[0][0]))
         for sentence in cmd_guide.HOW_WORK_RUNS:
             self.assertIn(sentence, text)
@@ -79,9 +80,9 @@ class TestGuideByJob(unittest.TestCase):
         listed = {c.split()[0] for _, cmds in cmd_guide.GROUPS for c, _ in cmds}
         self.assertEqual(set(_names()), listed)
 
-    def test_the_guide_prints_how_work_runs_then_first_steps_then_the_commands_by_job(self):
+    def test_the_guide_prints_first_steps_then_how_work_runs_then_the_commands_by_job(self):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        order = [text.index(t) for t in ("How work runs", "First steps, in order", "Install and update", "Orientation", "Skills:")]
+        order = [text.index(t) for t in ("First steps, in order", "How work runs", "Install and update", "Orientation", "Skills:")]
         self.assertEqual(order, sorted(order))
         for _, cmds in cmd_guide.GROUPS:
             for cmd, line in cmds:
