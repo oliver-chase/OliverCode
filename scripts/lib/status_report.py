@@ -1,9 +1,9 @@
 """The status page (#990): one local HTML file the runner rewrites with no model call, and the one small-model call that publishes it to City.
 
 The runner calls `record` when a story starts, lands or is held and when a run begins or ends, and `drain` calls it with a tick at least every
-REWRITE_MINUTES while it runs. `record` keeps each repo's run in `status-run.json`, rewrites `status.html` in the OliverCode home and, on an event and not on a tick,
-publishes the page to the artifact URL saved as `cityArtifact` in olivercode.local.json. The page reloads itself every REFRESH_SECONDS, and a script in it
-counts the minutes elapsed and the time left from the start and estimate written into it, so a published copy stays accurate between publishes.
+REWRITE_MINUTES while it runs. `record` keeps each repo's run in `status-run.json` and rewrites `status.html` locally with no model call. Publishing
+that page to the Claude Artifact URL saved as `cityArtifact` is an explicit owner action; it is never part of a builder lifecycle. The page reloads itself
+every REFRESH_SECONDS, and a script in it counts elapsed time from the start and estimate written into it.
 """
 
 from __future__ import annotations
@@ -170,7 +170,7 @@ def _apply(slug, kind, issue, origin, builders, queue, waiting, model_name, now,
         entry["active"], entry["building"] = False, {}
     entry["updated"] = now
     _save(state)
-    _write(state, log, now, published=now if kind != "tick" and city_url() else None)  # the copy about to be published says it is published now
+    _write(state, log, now, published=None)  # the copy about to be published says it is published now
     return thread_message(slug, entry, page_path()) if kind == "begin" else ""
 
 
