@@ -8,15 +8,13 @@ Standard library only.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import re
-from contextlib import contextmanager
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import failure_log, gh_budget, repo_name_guard
+from lib import failure_log, gh_budget, jsonl_store, repo_name_guard
 
 
 def outbox_file() -> Path:
@@ -24,18 +22,7 @@ def outbox_file() -> Path:
 
 
 def waiting() -> list[dict]:
-    p = outbox_file()
-    if not p.is_file():
-        return []
-    out = []
-    for line in p.read_text(encoding="utf-8").splitlines():
-        try:
-            item = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(item, dict) and item.get("repo") and item.get("title"):
-            out.append(item)
-    return out
+    return jsonl_store.read(outbox_file())
 
 
 def count() -> int:
@@ -43,23 +30,11 @@ def count() -> int:
 
 
 def _save(items: list[dict]) -> None:
-    p = outbox_file()
-    if not items:
-        p.unlink(missing_ok=True)
-        return
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text("".join(json.dumps(i) + "\n" for i in items), encoding="utf-8")
-    tmp.replace(p)
+    jsonl_store.save(outbox_file(), items)
 
 
-@contextmanager
 def _locked():
-    """One writer at a time, so a flush's rewrite never drops an add made while it ran."""
-    outbox_file().parent.mkdir(parents=True, exist_ok=True)
-    with outbox_file().with_suffix(".lock").open("w") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        yield
+    return jsonl_store.locked(outbox_file())
 
 
 def add(repo: str, title: str, body: str) -> dict:
