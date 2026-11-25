@@ -32,7 +32,7 @@ def api_error_cause(reply: dict) -> str:
 
 def is_api_error(reply: dict) -> bool:
     """True only when a failed CLI result identifies a provider/API failure, not a code or validation defect."""
-    return bool(reply.get("api_error") or reply.get("stop") == "api_error" or api_error_cause(reply))
+    return bool(reply.get("api_error") or reply.get("stop") == "api_error" or ((reply.get("code", 0) != 0 or reply.get("is_error")) and api_error_cause(reply)))
 
 RESUMABLE = ("max_turns", "timeout")  # stops that leave a healthy session worth one more round (#877)
 CONTINUE = "Your session stopped before you finished ({why}). Continue from where you left off, commit by explicit path and stop."
