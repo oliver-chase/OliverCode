@@ -739,7 +739,7 @@ class StoppedRun(unittest.TestCase):
 
         previous = signal.getsignal(signal.SIGHUP)
         ended = []
-        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \\
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
                 mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", side_effect=stopped):
             code, _ = quiet(cmd_drain.command_drain, ["r"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
         self.assertEqual([130], ended)
