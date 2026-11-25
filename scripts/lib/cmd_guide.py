@@ -231,7 +231,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     print("\nFirst steps, in order")
     print(f"  1. {_fleet_step(oc_root)}")
     print("  2. olivercode health                                                   check this machine")
-    print("  3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO")
+    print("  3. For queued execution today: create or choose a repo story, then run olivercode dispatch N or olivercode drain REPO")
     print("\nUsing it well")
     for habit in USING_IT_WELL:
         print(f"  {habit}")
