@@ -95,12 +95,13 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
         raise ModelTimeout(f"claude -p ran past {timeout} seconds and was stopped.", known) from exc
     out = {"code": ran.returncode, "text": ran.stdout, "tokens": 0, "session_id": "", "stop": "", "stderr": (ran.stderr or "").strip()[-STDERR_TAIL:],
            "usage": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}, "cost_usd": None,
-           "settings": "project" if project_only else "current"}
+           "settings": "project" if project_only else "current", "is_error": False}
     try:
         data = json.loads(ran.stdout)
         out["text"] = str(data.get("result") or "")
         out["session_id"] = str(data.get("session_id") or "")
         out["stop"] = str(data.get("terminal_reason") or data.get("subtype") or "")
+        out["is_error"] = bool(data.get("is_error"))
         if not out["text"] and data.get("errors"):
             out["text"] = "; ".join(str(e) for e in data["errors"])
         usage = data.get("usage") or {}
