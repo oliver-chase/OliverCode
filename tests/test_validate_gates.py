@@ -135,6 +135,23 @@ class ParallelGates(unittest.TestCase):
         done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--gate", "nonesuch"], capture_output=True, text=True)
         self.assertEqual(2, done.returncode)
 
+    def test_a_round_names_the_gates_it_ran_and_the_ones_it_left_to_the_landing(self):
+        import subprocess
+        done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--round-notice"], capture_output=True, text=True)
+        self.assertEqual(0, done.returncode)
+        self.assertIn("round check ran: precommit bypass smoke", done.stdout)
+        left = [line for line in done.stdout.splitlines() if "left out" in line][0]
+        for gate in ("fleet", "bloat", "quality", "refs", "docs", "limits", "hookstate"):
+            self.assertIn(gate, left)
+        for gate in ("precommit", "bypass", "smoke"):
+            self.assertNotIn(gate, left)
+        self.assertIn("when the story lands", left)
+
+    def test_a_full_validation_names_no_gate_as_left_out(self):
+        text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
+        full = text.split("run_gates() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertNotIn("round_notice", full)
+
 
 class QueueBypassGate(unittest.TestCase):
     def repo_with(self, files):

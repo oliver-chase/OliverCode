@@ -186,11 +186,22 @@ run_gates() {
   python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
 }
 
+round_notice() {
+  # Names the gates a round ran and the ones it left to the landing, so a green round is never read as the whole run (#1192).
+  local ran=" precommit bypass smoke " left=() gate
+  for gate in "${GATES[@]}"; do
+    [[ "$ran" == *" $gate "* ]] || left+=("$gate")
+  done
+  echo "=== validate: round check ran:${ran% } ==="
+  echo "=== validate: round check left out: ${left[*]}. They run when the story lands. ==="
+}
+
 run_round_gates() {
   # "$@": files changed against origin's default branch. A round gets only the checks that protect that change:
   # precommit scans the changed files, smoke runs the tests that cover them, and bypass preserves the validation-slot
   # trust boundary. Whole-repo hygiene/docs/fleet checks run at full validation/land, not after every builder round.
   local args=() gate
+  round_notice
   for gate in precommit bypass smoke; do
     args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate" "$@")")
   done
@@ -215,6 +226,7 @@ main() {
       echo "  --tree                 Same as no args (the pre-commit gates always scan every tracked file)"
       echo "  --round FILE...        Fast per-round check: changed-file precommit, validation-slot bypass and"
       echo "                         smoke tests covering changed files; whole-tree checks run at land/release"
+      echo "  --round-notice         Print the gates a round runs and the ones it leaves to the landing"
       echo "  --check-consistency    Run the fleet name check only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
       echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
@@ -223,6 +235,9 @@ main() {
     --gate)
       shift
       run_gate "$@"
+      ;;
+    --round-notice)
+      round_notice
       ;;
     --round)
       shift
