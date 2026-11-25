@@ -32,7 +32,7 @@ The module seconds add up to more than the wall time of the gate, because four w
 | `test_queue_shim` | 12 | Real shell and the installed wrapper | Keep the real invocation. The health calls were the other half of its time and are fixed below |
 | `test_commit_msg` | 34 | 47 real `git commit` calls through the hook | Keep. Each case is a different message rule |
 | `test_olivercode_on_path` | 12 | Four real login and interactive zsh and bash starts | Keep. Distinct PATH contracts |
-| `test_drain_canary` | 3 | One fake story through the real drain, land and close | Keep, and run it in a different tier (see Tiers and #1155) |
+| `test_drain_canary` | 3 | One fake story through the real drain, land and close | Keep. Runs at the push to the default branch (see Tiers) |
 | `test_groom`, `test_story_outbox`, `test_maintain` | 46, 12, 39 | Each ran a full `olivercode health` for a single line | Changed below |
 
 ## What changed
@@ -80,7 +80,7 @@ Every test runs somewhere, and none is dropped.
 2. **Targeted integration, for state, claims, hooks, landing and install changes.** The modules in the first three clusters that the change touches, including `test_land`, `test_drain_canary`, `test_commit_msg` and the PATH and shim probes
 3. **Full, before a push to main, on landing and for a release.** `bash scripts/validate.sh`, about 90 seconds on an idle 8-core machine
 
-`test_drain_canary` takes about 20 seconds of the full run for three tests. Its place in tier 2 and not tier 3 is open under #1155, because moving it changes what runs by default.
+`test_drain_canary` takes about 20 seconds for three tests. A full `validate.sh` run leaves it out and prints that it did, and `olivercode validated check` runs it once for each tree at the push to the default branch and records the pass (#1155). A round runs it when a changed file is one its code names.
 
 ## Not covered by this pass
 

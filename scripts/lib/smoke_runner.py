@@ -133,8 +133,16 @@ def affected(mods: list[tuple[str, Path, str]], stems: set[str]) -> list[tuple[s
     return named + searched
 
 
+PUSH_TIME = ("test_drain_canary",)  # modules a full run leaves to the push to the default branch, where `olivercode validated check` runs them once per tree (#1155)
+
+
 def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
     mods = modules(root)
+    if changed is None and os.environ.get("OLIVERCODE_CANARY") != "1":
+        skipped = [m for m in mods if m[2] in PUSH_TIME]
+        if skipped:
+            mods = [m for m in mods if m[2] not in PUSH_TIME]
+            print(f"  Not run here: {', '.join(n for n, _, _ in skipped)}. It runs at the push to the default branch; OLIVERCODE_CANARY=1 includes it in this run.", file=out)
     if not mods:
         print("  Ran 0 tests across 0 modules, all passed", file=out)
         return 0

@@ -87,7 +87,7 @@ Every repo that `sync-hooks` manages gets one pre-push hook, the same for every 
 | History rewrite | A push that would rewrite an existing remote branch. `ALLOW_FORCE_PUSH=1` allows a deliberate one |
 | Secrets | A secret in any commit the push sends, including a merge resolution and a secret added and removed again inside the range |
 | WIP subject | A push that sends a commit whose subject starts with WIP. Reword the commit after validating, or save the work with `olivercode wip` |
-| Validated on record | A push to `main` or `master` whose tree has no passing full validation under 7 days old (`olivercode validated check`). `OLIVERCODE_ALLOW_UNVALIDATED_PUSH=1` overrides it |
+| Validated on record | A push to `main` or `master` whose tree has no passing full validation under 7 days old (`olivercode validated check`). The same check then runs the drain canary (`tests/test_drain_canary.py`, about 20 seconds) once for that tree and records the pass, because a full `validate.sh` run leaves it out and says so (`OLIVERCODE_CANARY=1` includes it in a run). A repo with no canary skips it. `OLIVERCODE_ALLOW_UNVALIDATED_PUSH=1` overrides both (#1155) |
 
 The secret patterns live once in `core/hooks/secret-patterns.sh`, and `scripts/build-hooks.py` builds them into both the commit gate and the push hook. The pre-push hook also refuses a push of any branch other than the default (`ALLOW_BRANCH_PUSH=1` overrides one command).
 
