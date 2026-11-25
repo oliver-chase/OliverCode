@@ -82,6 +82,24 @@ class Lease:
         self.release()
 
 
+def _attempt(session: str) -> int:
+    """The invocation count for this session label, persisted across runner restarts."""
+    count = 0
+    path = failure_log.home() / LOG
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(row, dict) and row.get("event") == "session_start" and row.get("session") == session:
+                    count += 1
+    except OSError:
+        pass
+    return count + 1
+
+
 def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25) -> Lease:
     """Wait for and hold one shared account slot; configured maxBuilders is the hard session cap."""
     cap = max(1, local_config.max_builders())
@@ -99,7 +117,7 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
             started_epoch = time.time()
             metadata = {"event": "session_start", "session": session, "session_id": session_id,
                         "model": model or "", "repo": Path(cwd).name, "started_at": _stamp(),
-                        "slot": n, "cap": cap, "active_sessions": _active(slot_dir, cap),
+                        "slot": n, "cap": cap, "attempt": _attempt(session), "active_sessions": _active(slot_dir, cap),
                         "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
             if not _write(metadata):
                 fcntl.flock(fd, fcntl.LOCK_UN)
