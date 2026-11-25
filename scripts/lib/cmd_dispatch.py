@@ -275,7 +275,8 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
             begun = cmd_drain._event(io, "begin", queue=[story], waiting=waiting)
             if begun:
                 print(begun)
-            code = _build(io, cmd_drain, story, n, worktree)
+            run_state = cmd_drain.new_state()
+            code = _build(io, cmd_drain, story, n, worktree, run_state)
             pool = None
             running: dict = {}
             try:
@@ -296,7 +297,7 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
                                 nxt_area = intake.files_area(nxt.get("body") or "")
                                 if any(intake.overlaps(nxt_area, intake.files_area(r.get("body") or "")) for r in running.values()):
                                     continue
-                                running[pool.submit(cmd_drain.work_story, io, nxt, cmd_drain.new_state())] = nxt
+                                running[pool.submit(cmd_drain.work_story, io, nxt, run_state)] = nxt
                     if running:
                         finished, _ = wait(running, timeout=cmd_drain.REWRITE_SECONDS, return_when=FIRST_COMPLETED)
                         for fut in finished:
@@ -342,10 +343,10 @@ def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> i
     return 0
 
 
-def _build(io, cmd_drain, story: dict, n: int, worktree) -> int:
+def _build(io, cmd_drain, story: dict, n: int, worktree, state=None) -> int:
     io.claim(n)
     io.beat([n])
     cmd_drain._event(io, "start", story)
-    closed, _used = cmd_drain.work_story(io, story, cmd_drain.new_state())
+    closed, _used = cmd_drain.work_story(io, story, state if state is not None else cmd_drain.new_state())
     print(f"Story #{n} {'landed and closed' if closed else 'stayed open and is back on Ready; the reason is in its comment'}. Branch story/{n} in {worktree}.")
     return 0 if closed else 1
