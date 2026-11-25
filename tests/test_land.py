@@ -426,6 +426,7 @@ class TestCleanup(Base):
         self.assertIn("Deleted remote branch story/9", out)
 
     def test_cleanup_uses_the_story_id_to_remove_runner_branch_even_from_a_non_story_branch(self):
+        git(self.main, "push", "-q", "origin", "--delete", "story/9")
         git(self.wt, "branch", "-m", "feature/cleanup")
         git(self.wt, "push", "-q", "origin", "HEAD:refs/heads/feature/cleanup")
         git(self.wt, "push", "-q", "origin", "HEAD:refs/heads/agent/story-9")
