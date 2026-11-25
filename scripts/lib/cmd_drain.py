@@ -529,6 +529,11 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if not closed:
             io.comment(n, f"Close refused by complete_story.py: {reason}")
             raise CloseRefused(reason)
+        cleanup = getattr(io, "cleanup_landed", None)
+        if cleanup:
+            for line in cleanup(n):
+                if line.startswith("Kept ") or " stays:" in line:
+                    io.comment(n, f"Cleanup incomplete after landing: {line}")
         return True, 0
     if io.validation() is None:  # no builder starts in a repo that nothing can validate (#1012)
         io.comment(n, f"Drain blocked: {agent_loop.NO_VALIDATION}")
