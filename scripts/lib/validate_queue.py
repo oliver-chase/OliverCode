@@ -31,6 +31,11 @@ import sys
 import time
 from pathlib import Path
 
+try:
+    from lib import failure_log
+except ImportError:  # loaded bare, with scripts/lib on the path
+    import failure_log
+
 HARD_CAP_SECONDS = 4 * 60 * 60  # a slot older than this is reaped even when its holder lives: no validation takes hours
 WAIT_SECONDS = 10 * 60  # a blocked validation must report and proceed within ten minutes, not make the drain look hung for an hour
 RENDER_NICE = "10"
@@ -76,10 +81,6 @@ def log_run(wait: float, run_time: float) -> None:
     """Append one validation's queue wait, run time and the machine's load average to the run log. Never raises."""
     try:
         row = {"at": time.time(), "wait": round(wait, 1), "run": round(run_time, 1), "load": round(os.getloadavg()[0], 2)}
-        try:
-            from lib import failure_log
-        except ImportError:  # run as a script from scripts/lib
-            import failure_log
         story = failure_log.story_of()
         if story:  # a runner worktree: the run counts toward its story (#1178)
             row["story"] = story

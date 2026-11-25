@@ -468,7 +468,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'
             f"<h1>OliverCode status</h1><p class=\"muted\">This machine: {html.escape(platform.node())}. Last rewritten {datetime.fromtimestamp(now):%A %d %B %H:%M}. {html.escape(spend)}</p>"
-            f'<p id="published" class="warn"></p>{body}{_spend_panel(log, now)}<h2>Waits on you, in any repo</h2>{owner}{SCRIPT}</main></body></html>')
+            f'<p id="published" class="warn"></p><h2>Waits on you, in any repo</h2>{owner}{body}{_spend_panel(log, now)}{SCRIPT}</main></body></html>')  # what needs the owner comes first (#1209)
 
 
 def _owner_steps() -> list[dict]:

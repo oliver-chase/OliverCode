@@ -79,10 +79,9 @@ class RunLogStoryTest(unittest.TestCase):
         return [json.loads(line) for line in (self.home / "validate-runs.jsonl").read_text().splitlines()]
 
     def test_a_story_worktree_run_carries_its_story_and_another_run_does_not(self):
-        import failure_log
-        with mock.patch.object(failure_log, "story_of", return_value=1204):
+        with mock.patch.object(validate_queue.failure_log, "story_of", return_value=1204):
             validate_queue.log_run(1.0, 2.0)
-        with mock.patch.object(failure_log, "story_of", return_value=None):
+        with mock.patch.object(validate_queue.failure_log, "story_of", return_value=None):
             validate_queue.log_run(0.0, 3.0)
         first, second = self.rows()
         self.assertEqual(1204, first["story"])
@@ -155,7 +154,7 @@ class QueueRobustnessTest(unittest.TestCase):
             self.assertEqual(1, validate_queue.slot_count())
 
     def test_a_validation_logs_its_wait_run_time_and_load(self):
-        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "1"}):
+        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "1"}), mock.patch.object(validate_queue.failure_log, "story_of", return_value=None):  # the branch the test runs on must not add a story
             for name in ("OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT"):
                 os.environ.pop(name, None)
             self.assertEqual(0, validate_queue.run(["true"], poll=0.05))
