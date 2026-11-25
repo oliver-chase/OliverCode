@@ -149,6 +149,31 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1, 1], io.started)
         self.assertEqual([1], io.closed)
 
+    def test_exact_spend_ceiling_parks_before_starting_another_session(self):
+        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "validation failed", "tokens": 10}]})
+        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.0]), \
+             mock.patch.object(cmd_drain, "story_cost_unknown", return_value=False), \
+             mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
+            closed, _ = cmd_drain.work_story(io, issue(1), state())
+        self.assertFalse(closed)
+        self.assertEqual([1], io.started)
+        self.assertEqual([1], io.parked)
+        self.assertIn("reaching its $6.00 ceiling", io.comments[-1][1])
+
+    def test_unknown_cost_parks_story_before_any_new_builder(self):
+        home = temp_dir(self)
+        (home / "run-log.jsonl").write_text(
+            '{"story":"story-1","repo":"o/r","round":1,"cost_usd":null}\n', encoding="utf-8")
+        io = FakeIo([issue(1)], cap=1)
+        with mock.patch.object(cmd_drain.failure_log, "home", return_value=home), \
+             mock.patch.object(cmd_drain, "story_spend", return_value=0.0), \
+             mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
+            closed, _ = cmd_drain.work_story(io, issue(1), state())
+        self.assertFalse(closed)
+        self.assertEqual([], io.started)
+        self.assertEqual([1], io.parked)
+        self.assertIn("cost is unknown", io.comments[-1][1])
+
     def test_api_errors_back_off_exponentially_without_consuming_builder_restarts(self):
         errors = [{"done": False, "api_error": True, "api_error_cause": "529 overloaded_error", "reason": "API error", "tokens": 0} for _ in range(2)]
         io = FakeIo([issue(1)], cap=1, builds={1: errors + [{"done": True, "reason": "ok", "tokens": 1}]})
