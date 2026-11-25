@@ -196,6 +196,18 @@ class TestExitOne(unittest.TestCase):
         self.assertEqual("claude exited 1 in round 1, stop reason error_during_execution. stderr: auth expired", out["reason"])
         self.assertEqual(("error_during_execution", "auth expired"), (self.rows()[0]["stop"], self.rows()[0]["stderr_tail"]))
 
+    def test_api_error_is_logged_without_a_round_and_does_not_escalate_the_model(self):
+        run = Scripted({**reply("", code=1), "stop": "error_during_execution", "text": "API Error: 529 overloaded_error"})
+        out = self.loop(run)
+        self.assertTrue(out["api_error"])
+        self.assertEqual(0, out["rounds"])
+        self.assertEqual("haiku", run.models[0])
+        rows = [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
+        self.assertEqual(1, len(rows))
+        self.assertNotIn("round", rows[0])
+        self.assertEqual("api_error", rows[0]["stop"])
+        self.assertIn("529 overloaded_error", rows[0]["stderr_tail"])
+
 
 class TestRunLogUsage(unittest.TestCase):
     """#878, #909, #976: a run-log line holds the CLI's usage, cost and stop reason and the start size, which is the first call's context and never the session's total."""
