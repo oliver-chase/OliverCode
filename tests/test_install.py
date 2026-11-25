@@ -162,12 +162,14 @@ class WhoBuilds(unittest.TestCase):
         self.assertIn(self.RULE, " ".join(cmd_guide.HOW_WORK_RUNS))
 
     def test_the_first_steps_end_on_building_a_story_in_install_and_the_guide(self):
+        """The contract is that step 3 names queued execution and both commands that start it, not the sentence around them (#1181)."""
         from lib import cmd_guide
-        self.assertIn("3. For queued execution today: create or choose a repo story, then run `olivercode dispatch N` or `olivercode drain REPO`.", cmd_install.INTRODUCTION)
-        _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("3. For queued execution today: create or choose a repo story, then run olivercode dispatch N or olivercode drain REPO", out)
-
-
+        _, guide = quiet(cmd_guide.command_guide, REPO_ROOT)
+        for where, text in (("install introduction", cmd_install.INTRODUCTION), ("guide", guide)):
+            step = next((line for line in text.splitlines() if line.lstrip().startswith("3.")), "")
+            self.assertTrue(step, f"{where} has no step 3")
+            for needed in ("story", "olivercode dispatch", "olivercode drain"):
+                self.assertIn(needed, step.replace("`", ""), f"{where} step 3 no longer names {needed}")
 
 
 class DesignFile(unittest.TestCase):

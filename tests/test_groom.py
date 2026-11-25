@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, quiet, temp_dir
+from _support import REPO_ROOT, quiet, quiet_health, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "backlog" / "scripts"))
@@ -325,7 +325,7 @@ class TestGroomHealth(unittest.TestCase):
         config = temp_dir(self) / "backlog-config.json"
         config.write_text(json.dumps({"repoOwner": "o", "repoName": "r"}))
         with mock.patch("lib.cmd_sweep.boards", return_value=[("R", config)]), mock.patch.object(cmd_groom, "load_state", return_value=state):
-            return quiet(cmd_health.command_health)[1]
+            return quiet_health()[1]
 
     def test_health_warns_before_the_first_groom(self):
         self.assertIn("[WARN] no board has been groomed yet", self.health({}))

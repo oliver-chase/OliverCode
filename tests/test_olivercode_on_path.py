@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, load_script, quiet, temp_dir
+from _support import REPO_ROOT, load_script, quiet, quiet_health, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher_path")
 from lib import cmd_install, cmd_health, queue_shim  # noqa: E402
@@ -103,7 +103,7 @@ class TestUninstall(PathCase):
 class TestHealth(PathCase):
     def health(self):
         with mock.patch.object(cmd_health, "_claude_dir", lambda: self.home / ".claude"):
-            return quiet(cmd_health.command_health)[1]
+            return quiet_health()[1]
 
     def lines(self, out):
         return [l for l in out.splitlines() if "`olivercode`" in l]

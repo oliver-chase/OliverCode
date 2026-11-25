@@ -6,7 +6,7 @@ import sys
 import unittest
 from unittest import mock
 
-from _support import REPO_ROOT, quiet, temp_dir
+from _support import REPO_ROOT, quiet, quiet_health, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_ghreplay, gh_budget, story_outbox  # noqa: E402
@@ -152,13 +152,12 @@ class TestOutbox(unittest.TestCase):
         self.assertIn("1 story request(s) wait", report)
 
     def test_health_warns_while_requests_are_unfiled_and_passes_once_flushed(self):
-        from lib.cmd_health import command_health
         fleet = temp_dir(self)
         story_outbox.add("acme/widget", "One", "a")
-        out = quiet(command_health, fleet)[1]
+        out = quiet_health(fleet)[1]
         self.assertIn("[WARN] 1 story request(s) are unfiled", out)
         quiet(story_outbox.command_story, ["outbox", "flush"], Runner())
-        self.assertIn("[OK] no unfiled story requests", quiet(command_health, fleet)[1])
+        self.assertIn("[OK] no unfiled story requests", quiet_health(fleet)[1])
 
 
 if __name__ == "__main__":

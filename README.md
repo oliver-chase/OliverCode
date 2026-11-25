@@ -232,6 +232,7 @@ Four things differ in a fork. This repository is public. Get the code by cloning
 | [`docs/AUDIT-ACCEPTED.md`](docs/AUDIT-ACCEPTED.md) | Audit findings the owner accepted, each with its reason |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Review marker for the live GitHub Project backlog |
 | [`docs/SHARING.md`](docs/SHARING.md) | Whether the repository can be shared, and why |
+| [`docs/TEST-AUDIT.md`](docs/TEST-AUDIT.md) | The test suite by cluster, its slowest modules, what changed and the test tiers |
 | [`skills/INDEX.md`](skills/INDEX.md) | Included skill catalog |
 
 ## Status

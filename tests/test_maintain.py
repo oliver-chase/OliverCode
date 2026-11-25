@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from _maintain_case import Base
-from _support import REPO_ROOT, git, git_env, load_script, quiet, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, git_env, load_script, quiet, quiet_health, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import failure_log, health_checks, hygiene, maintain, placement  # noqa: E402
@@ -404,8 +404,18 @@ class TestStateFolder(Base):
         from lib import cmd_health
         with mock.patch.object(cmd_health, "_check_state_folder", return_value=(0, 1, 0)) as check:
             with mock.patch.object(cmd_health, "_claude_dir", lambda: self.home / ".claude"):
-                quiet(cmd_health.command_health)
+                quiet_health()
         check.assert_called_once_with()
+
+    def test_the_health_command_still_runs_the_worktree_checks_the_other_health_tests_stub(self):
+        """#1181: quiet_health stubs the two worktree checks so a test that reads one line stays fast, so one test holds that health calls them."""
+        from lib import cmd_health
+        with mock.patch.object(cmd_health, "_check_worktree_hooks", return_value=(0, 0, 0)) as hooks, \
+                mock.patch.object(cmd_health, "spent_worktree_lines", return_value=[]) as spent, \
+                mock.patch.object(cmd_health, "_claude_dir", lambda: self.home / ".claude"):
+            quiet(cmd_health.command_health)
+        hooks.assert_called_once_with()
+        spent.assert_called_once_with()
 
     def test_health_reads_its_limits_from_the_limits_file(self):
         limits = health_checks.state_limits(REPO_ROOT)
