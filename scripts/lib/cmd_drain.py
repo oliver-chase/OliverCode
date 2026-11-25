@@ -553,6 +553,32 @@ def story_spend(n: int, repo: str = "") -> float:
     return total
 
 
+def story_cost_unknown(n: int, repo: str = "") -> bool:
+    """True when a previous model call for this story has no trustworthy cost record."""
+    path = failure_log.home() / "run-log.jsonl"
+    prefix = f"story-{n}"
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("story") or "")
+                if name != prefix and not name.startswith(prefix + "-"):
+                    continue
+                if repo and row.get("repo") and row.get("repo") != repo:
+                    continue
+                if "round" in row and row.get("cost_usd") is None:
+                    return True
+                if row.get("stop") == "api_error" and row.get("cost_usd") is None:
+                    return True
+    except OSError:
+        pass
+    return gh_budget.session_guard.story_has_unknown_cost(n, repo) if hasattr(gh_budget, "session_guard") else False
+
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n, tokens, note, blocks, budget_stops = issue["number"], 0, "", 0, 0
     lead = io.landed_lead(issue)
