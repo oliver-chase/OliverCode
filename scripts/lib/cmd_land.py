@@ -330,9 +330,10 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
 
 
-def cleanup(wt: Path) -> list[str]:
-    """Delete a landed story's worktree, local branch and remote branch. Returns one line per thing removed or kept and why.
-    Nothing is removed while the worktree has uncommitted changes or a commit that is not on origin/main, and main is never touched."""
+def cleanup(wt: Path, story: str | None = None) -> list[str]:
+    """Delete a landed story's worktree and branches. Returns one line per thing removed or kept and why.
+    Nothing is removed while the worktree has uncommitted changes or a commit that is not on origin/main, and main is never touched.
+    The runner branch is keyed by the story number, so clean it even when the builder used a differently named branch."""
     branch = _git(wt, "branch", "--show-current").stdout.strip()
     common = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
     if not common or _git(wt, "merge-base", "--is-ancestor", "HEAD", f"origin/{default_branch(wt)}").returncode != 0:
@@ -350,6 +351,10 @@ def cleanup(wt: Path) -> list[str]:
         done = _git(Path(common), "push", "origin", "--delete", branch)
         lines.append(f"Deleted remote branch {branch}." if done.returncode == 0 else f"Remote branch {branch} stays: {done.stderr.strip()[:100]}")
     runner = f"agent/story-{branch.rsplit('/', 1)[-1].removeprefix('story-')}" if branch.startswith(("story/", "agent/")) else ""
+    # Branch naming is not a reliable lifecycle key: builders can land from fix/* or another scoped branch.
+    # The runner's branch is keyed by the story number, so include that exact branch too.
+    if story and story.isdigit():
+        runner = f"agent/story-{story}"
     if runner and runner != branch and _git(Path(common), "ls-remote", "--exit-code", "--heads", "origin", runner).returncode == 0:
         done = _git(Path(common), "push", "origin", "--delete", runner)  # the runner's own pushed branch (#1035)
         lines.append(f"Deleted remote branch {runner}." if done.returncode == 0 else f"Remote branch {runner} stays: {done.stderr.strip()[:100]}")
@@ -483,7 +488,7 @@ def command_land(argv: list[str]) -> int:
     if slug and str(story).isdigit():  # the runner closes the story after this, so the landing itself ends a wait on it (#1024)
         cmd_owner.clear_stories(slug, closed=lambda s, n: True, only=int(story))
     root, branch = _main_checkout(wt) or OC_ROOT, default_branch(wt)  # read before cleanup removes the worktree
-    for line in cleanup(wt):
+    for line in cleanup(wt, story):
         print(line)
     for stale in (folder / f"handover-{key}.md", folder / f"handover-{story}.md"):
         stale.unlink(missing_ok=True)  # an earlier failed land left it; the story landed, so it is stale
