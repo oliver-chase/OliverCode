@@ -21,17 +21,16 @@ def run(gates, **kw):
     return code, out.getvalue(), err.getvalue()
 
 
-    def test_round_gate_scope_is_risk_proportional_and_full_gate_list_is_unchanged(self):
-        import sys
-        sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
-        import validation_scope
-        self.assertEqual(["precommit"], validation_scope.round_gates(["README.txt"]))
-        self.assertEqual(["precommit", "quality", "smoke"], validation_scope.round_gates(["scripts/lib/thing.py", "tests/test_thing.py"]))
-        self.assertEqual(["precommit", "refs", "docs"], validation_scope.round_gates(["docs/guide.md"]))
-        self.assertEqual(["precommit", "bypass", "hookstate"], validation_scope.round_gates(["scripts/validate.sh"]))
-        self.assertIn("GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)", (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8"))
-
 class ParallelGates(unittest.TestCase):
+        def test_round_gate_scope_is_risk_proportional_and_full_gate_list_is_unchanged(self):
+            import sys
+            sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
+            import validation_scope
+            self.assertEqual(["precommit"], validation_scope.round_gates(["README.txt"]))
+            self.assertEqual(["precommit", "quality", "smoke"], validation_scope.round_gates(["scripts/lib/thing.py", "tests/test_thing.py"]))
+            self.assertEqual(["precommit", "refs", "docs"], validation_scope.round_gates(["docs/guide.md"]))
+            self.assertEqual(["precommit", "bypass", "hookstate"], validation_scope.round_gates(["scripts/validate.sh"]))
+            self.assertIn("GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)", (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8"))
     def test_output_replays_in_the_order_given_even_when_a_later_gate_finishes_first(self):
         code, out, _ = run([("slow", "sleep 0.6; echo slow-done"), ("fast", "echo fast-done")], timeout=20)
         self.assertEqual(0, code)
