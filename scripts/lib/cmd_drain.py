@@ -543,7 +543,7 @@ def story_spend(n: int, repo: str = "") -> float:
                 name = str(row.get("story") or "")
                 if name != prefix and not name.startswith(prefix + "-"):
                     continue
-                if repo and row.get("repo") and row["repo"] != repo:
+                if repo and row.get("repo") != repo:
                     continue
                 cost = row.get("cost_usd")
                 if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
