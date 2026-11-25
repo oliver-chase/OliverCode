@@ -32,6 +32,19 @@ def round_gates(files: list[str]) -> list[str]:
                 name.endswith(("repo-profiles.json", "repo-profiles.yaml")) for name in names)
     limits = any(name.endswith("LIMITS.json") or name.endswith("LIMITS.md") for name in names)
     structural = any(name in {"pyproject.toml", "package.json", "package-lock.json", "uv.lock"} for name in names)
+    # These paths govern work ownership, persistence, concurrency, recovery, or the validation
+    # contract itself. A smoke-only round is not sufficient evidence for changes here.
+    critical = any(
+        name.startswith(("scripts/lib/claims", "scripts/lib/dispatch", "scripts/lib/agent_loop",
+                         "scripts/lib/cmd_dispatch", "scripts/lib/cmd_drain", "scripts/lib/cmd_land",
+                         "scripts/lib/validate_queue", "scripts/lib/validation_scope"))
+        or name in {"scripts/validate.sh", "scripts/lib/validate_gates.py"}
+        or name.startswith(("scripts/hooks/", ".githooks/", "core/hooks/"))
+        for name in names
+    )
+
+    if critical:
+        return order  # State/ownership/recovery/validation changes retain the full gate set.
 
     if code:
         gates.extend(["smoke", "quality"])
