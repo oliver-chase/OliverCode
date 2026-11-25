@@ -115,6 +115,7 @@ class DrainCase(unittest.TestCase):
             '{"story":"story-3-fix","repo":"o/r","cost_usd":0.25}\\n'
             '{"story":"story-30","repo":"o/r","cost_usd":20}\\n'
             '{"story":"story-3","repo":"other/repo","cost_usd":10}\\n'
+            '{"story":"story-3","cost_usd":100}\\n'
             '{"story":"story-3","repo":"o/r","cost_usd":null}\\n'
             'not json\\n',
             encoding="utf-8",
