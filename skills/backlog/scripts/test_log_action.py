@@ -59,6 +59,21 @@ class LogAction(unittest.TestCase):
         self.assertEqual(2, code)
         self.assertIn("does not name #5", err.getvalue())
 
+    def test_an_unnamed_commit_posts_only_with_a_reason_and_the_entry_states_it(self):
+        """#1186: work that landed in a commit that never named its story can still be logged, and the entry says why."""
+        base = ["--repo", "o/r", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234", "--files", "1", "--result", "ok"]
+        refuse = lambda c, s: "commit abc1234 does not name #5 in its message"
+        posted = []
+        runner = lambda a: (posted.append(a), subprocess.CompletedProcess([], 0, "https://x/1", ""))[1]
+        with mock.patch.object(la, "batch_names", return_value=False):
+            code = la.main(base, runner=runner, out=io.StringIO(), err=io.StringIO(), pushed=lambda c: None, names_story=refuse)
+            self.assertEqual((2, 0), (code, len(posted)))
+            code = la.main(base + ["--unnamed-commit", " "], runner=runner, out=io.StringIO(), err=io.StringIO(), pushed=lambda c: None, names_story=refuse)
+            self.assertEqual((2, 0), (code, len(posted)))
+            code = la.main(base + ["--unnamed-commit", "the backoff landed with no story number"], runner=runner, out=io.StringIO(), err=io.StringIO(), pushed=lambda c: None, names_story=refuse)
+        self.assertEqual((0, 1), (code, len(posted)))
+        self.assertIn("Commit does not name the story: the backoff landed with no story number", " ".join(posted[0]))
+
     def test_a_batch_commit_counts_as_the_builder_commit_of_a_batched_story(self):
         """#1084: a commit naming (#M) that changed N's Files area is N's commit when N's comments say "batch session with #M"."""
         with tempfile.TemporaryDirectory() as tmp:

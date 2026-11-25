@@ -86,8 +86,8 @@ def batch_names(commit, story, repo, runner=None, root=None):
     return None if any(f"(#{m})" in message for m in partners) and intake.overlaps(names.split(), area) else False
 
 
-def build_comment(agent, role, commit, files, result):
-    """The comment text. One fact per line, so the story reads as a log."""
+def build_comment(agent, role, commit, files, result, unnamed=None):
+    """The comment text. One fact per line, so the story reads as a log. `unnamed` is the reason a commit that does not name the story is its work (#1186)."""
     return "\n".join([
         "Agent action",
         f"- Agent: {agent}",
@@ -95,7 +95,7 @@ def build_comment(agent, role, commit, files, result):
         f"- Commit: {commit}",
         f"- Files changed: {files}",
         f"- Result: {result}",
-    ])
+    ] + ([f"- Commit does not name the story: {unnamed}"] if unnamed else []))
 
 def build_claim(agent, now):
     """The claim comment: the session name and a UTC timestamp."""
@@ -168,6 +168,7 @@ def parse_args(argv):
     p.add_argument("--commit", help="the commit hash, or the hash the work ended on")
     p.add_argument("--files", type=int, help="number of files changed")
     p.add_argument("--result", help="what the action produced, in one line")
+    p.add_argument("--unnamed-commit", metavar="REASON", help="builder only: why a commit that does not name the story is its work; the reason is posted in the entry")
     p.add_argument("--agent-from-commit", action="store_true", help="builder only: agent = --commit's author")
     p.add_argument("--check-claim", action="store_true", help="print 'claimed by NAME at TIME' or 'free' for --story")
     p.add_argument("--dry-run", action="store_true", help="print the comment and post nothing")
@@ -221,7 +222,9 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_autho
                 problems.append(f"cannot read the repo from {args.config}: {exc}")
     if repo and not REPO.match(repo):
         problems.append(f"repo {repo!r} is not OWNER/NAME")
-    if unnamed and repo and REPO.match(repo) and batch_names(args.commit, args.story, repo, runner) is not None:
+    if args.unnamed_commit is not None and (args.role != "builder" or "\n" in args.unnamed_commit or not args.unnamed_commit.strip()):
+        problems.append("--unnamed-commit needs --role builder and one non-empty line saying why the commit is this story's work")
+    elif unnamed and args.unnamed_commit is None and repo and REPO.match(repo) and batch_names(args.commit, args.story, repo, runner) is not None:
         problems.append(unnamed)  # a commit that names another story counts only when a batch session built both (#1084)
     if problems:
         for line in problems:
@@ -237,7 +240,7 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, git=git_autho
     if args.role == "claim":
         body = build_claim(agent, datetime.datetime.now(datetime.timezone.utc))
     else:
-        body = build_comment(agent, args.role, args.commit, args.files, args.result)
+        body = build_comment(agent, args.role, args.commit, args.files, args.result, args.unnamed_commit if unnamed else None)
     reason = repo_name_guard.refusal(body, names) if repo_name_guard.is_olivercode(repo) else ""
     if reason:
         print(f"log_action: the comment on {repo}#{args.story} was not posted: {reason}", file=err)
