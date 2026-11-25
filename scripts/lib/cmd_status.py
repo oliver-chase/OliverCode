@@ -232,6 +232,8 @@ def story_notes(now: float, claims: dict, log: list[dict], alive: bool, holder: 
             notes[n] = stall_line(n, mine, int((now - progress) // 60), holder)
         elif (hits := turn_limit_hits(story_log)) >= 2:
             notes[n] = turn_limit_warning(n, hits)
+        elif api := next((r for r in reversed(story_log) if r.get("stop") == "api_error"), None):
+            notes[n] = f"Warning: the last Claude API call failed: {str(api.get('stderr_tail') or 'cause not recorded')[:180]}"
         elif quiet := quiet_note(story_log, float(mine.get("since") or mine.get("at", 0)), now, (commits or {}).get(n)):
             notes[n] = quiet
     return notes
