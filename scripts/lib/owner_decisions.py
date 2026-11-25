@@ -80,7 +80,7 @@ def cleanup_legacy() -> int:
                 else:
                     kept.append(line)
             if removed:
-                failure_log.write_private(path, "\\n".join(kept) + ("\\n" if kept else ""))
+                failure_log.write_private(path, "\n".join(kept) + ("\n" if kept else ""))
     except OSError:
         return 0
     return removed
