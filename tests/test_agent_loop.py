@@ -388,9 +388,9 @@ class TestLoop(unittest.TestCase):
         cases = (
             ("PASS", "pass"),
             ("PASS, the diff does what the story says.", "pass"),
-            ("All checks line up\\nVERDICT: PASS", "pass"),
-            ("Confirmed\\nVERDICT: PASS", "pass"),
-            ("scripts/a.py: wrong\\nVERDICT: FINDINGS", "findings"),
+            ("All checks line up\nVERDICT: PASS", "pass"),
+            ("Confirmed\nVERDICT: PASS", "pass"),
+            ("scripts/a.py: wrong\nVERDICT: FINDINGS", "findings"),
             ("PASSING concerns", "findings"),
             ("Passing is not a verdict", "findings"),
             ("scripts/a.py: wrong", "findings"),
