@@ -37,7 +37,13 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 ## How work runs
 
-You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive. When you explicitly delegate an outcome, OliverCode takes responsibility for moving that work forward. The request becomes durable work on the appropriate repo's board, with scope and dependencies clarified as needed. OliverCode selects and manages the execution path: isolated Claude Code sessions, useful parallel work, recovery, appropriate validation, safe integration and cleanup. Today, `olivercode dispatch N` and `olivercode drain REPO` are the explicit queue execution entry points. The owner-facing status view reports what is running, waiting, blocked, failed or complete, and what needs your decision.
+You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive.
+
+When you explicitly delegate an outcome, OliverCode takes responsibility for moving that work forward; the request becomes durable work on the appropriate repo's board, with scope and dependencies clarified as needed.
+
+OliverCode selects and manages the execution path: isolated Claude Code sessions, useful parallel work, recovery, appropriate validation, safe integration and cleanup. Today, `olivercode dispatch N` and `olivercode drain REPO` are the explicit queue execution entry points.
+
+The owner-facing status view reports what is running, waiting, blocked, failed or complete, and what needs your decision.
 
 ## How it works, in plain terms
 
