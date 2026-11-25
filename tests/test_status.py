@@ -527,12 +527,19 @@ class TestStatusPage(unittest.TestCase):
         self.assertEqual(("#fafaf0", "#aa0000", "#000000"), (tokens["bg"], tokens["accent"], tokens["text"]))
         self.assertEqual("#ffffff", status_report.design_tokens()["bg"])
 
-    def test_a_tick_rewrites_the_page_and_publishes_nothing_while_an_event_publishes(self):
+    def test_runner_events_rewrite_the_local_page_without_publishing_an_artifact(self):
         with mock.patch.object(status_report, "_log", return_value=[]):
             self.record("begin", origin="o", queue=[self.story(5)], log=[])
             self.record("tick", now=T0 + 1800, log=[])
             self.record("end", now=T0 + 3600, log=[])
-        self.assertEqual(["begin", "end"], self.published)
+        self.assertTrue(self.page())
+        self.assertEqual([], self.published)
+
+    def test_a_publisher_is_not_called_even_when_one_is_injected(self):
+        calls = []
+        with mock.patch.object(status_report, "_log", return_value=[]):
+            self.record("start", self.story(5), publisher=lambda **kw: calls.append(kw))
+        self.assertEqual([], calls)
         self.assertIn("The run has ended", self.page())
 
     def test_a_held_story_shows_as_held_and_is_not_logged_as_landed(self):
