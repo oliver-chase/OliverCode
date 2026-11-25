@@ -261,9 +261,9 @@ class SmokeRunner(unittest.TestCase):
         self.assertIn("Ran 1 tests across 1 modules, all passed", text)
 
     def test_no_module_covering_the_changed_files_runs_the_full_suite(self):
-        """#1142: a changed file no test module names falls back to the whole suite."""
+        """#1142: a changed file no test module names falls back to the whole suite. Prose is the one exception (#1168)."""
         out = io.StringIO()
-        self.assertEqual(0, smoke_runner.run(self.make("pass"), out, changed=["docs/NOTES.md"]))
+        self.assertEqual(0, smoke_runner.run(self.make("pass"), out, changed=["docs/notes.json"]))
         self.assertIn("running the full suite", out.getvalue())
         self.assertIn("Ran 1 tests across 1 modules, all passed", out.getvalue())
 

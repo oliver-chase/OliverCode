@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from _support import REPO_ROOT
+from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import smoke_runner  # noqa: E402
@@ -89,6 +89,51 @@ class TestSmokeProgress(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertIn("[FAIL] test_example", output.getvalue())
         self.assertIn("Could not start test module: cannot execute", output.getvalue())
+
+
+class TestRoundCheckForNonPythonFiles(unittest.TestCase):
+    """#1168: a round that changed only prose runs no test, unless a test or the code it imports names that file."""
+
+    def setUp(self):
+        self.root = temp_dir(self)
+        (self.root / "tests").mkdir()
+        (self.root / "scripts").mkdir()
+        (self.root / "tests" / "test_reads_guide.py").write_text("from lib import guide\n")
+        (self.root / "tests" / "test_other.py").write_text("pass\n")
+        (self.root / "scripts" / "guide.py").write_text('PATH = "docs/GUIDE.md"\n')
+        self.mods = [(n, self.root / "tests", n) for n in ("test_reads_guide", "test_other")]
+
+    def run_round(self, changed):
+        output = io.StringIO()
+        ran = []
+        with (
+            mock.patch.object(smoke_runner, "modules", return_value=self.mods),
+            mock.patch.object(smoke_runner, "plan", side_effect=lambda mods, *_: ran.append([m[2] for m in mods]) or []),
+            mock.patch.object(smoke_runner, "load_timings", return_value={}),
+            mock.patch.object(smoke_runner, "jobs", return_value=1),
+            mock.patch.object(smoke_runner, "save_timings"),
+        ):
+            code = smoke_runner.run(self.root, out=output, changed=changed)
+        return code, ran, output.getvalue()
+
+    def test_prose_that_nothing_names_runs_no_test_and_says_so(self):
+        code, ran, text = self.run_round(["docs/UNREAD.md"])
+        self.assertEqual((0, []), (code, ran))
+        self.assertIn("no test module runs", text)
+
+    def test_prose_that_code_names_runs_the_tests_that_import_that_code(self):
+        _, ran, text = self.run_round(["docs/GUIDE.md"])
+        self.assertEqual([["test_reads_guide"]], ran)
+        self.assertIn("1 of 2 modules", text)
+
+    def test_a_data_file_nothing_names_still_runs_the_full_suite(self):
+        _, ran, text = self.run_round(["shared/unread.json"])
+        self.assertEqual([["test_reads_guide", "test_other"]], ran)
+        self.assertIn("running the full suite", text)
+
+    def test_an_empty_change_list_still_runs_the_full_suite(self):
+        _, ran, _ = self.run_round([])
+        self.assertEqual([["test_reads_guide", "test_other"]], ran)
 
 
 if __name__ == "__main__":
