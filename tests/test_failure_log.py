@@ -17,6 +17,25 @@ from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noq
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 
+class TestStoryOf(unittest.TestCase):
+    """#1178: a checkout on a story/N branch names its story, so runs and gh calls made there can be counted per story."""
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="story-of-"))
+        self.addCleanup(shutil.rmtree, self.repo, True)
+        git(self.repo, "init", "-q", "-b", "main")
+        git(self.repo, "commit", "-q", "--allow-empty", "-m", "base")
+
+    def test_a_story_branch_names_its_story_and_other_branches_and_folders_do_not(self):
+        from lib import failure_log
+        self.assertIsNone(failure_log.story_of(self.repo))
+        git(self.repo, "checkout", "-q", "-b", "story/1204")
+        self.assertEqual(1204, failure_log.story_of(self.repo))
+        git(self.repo, "checkout", "-q", "-b", "story/not-a-number")
+        self.assertIsNone(failure_log.story_of(self.repo))
+        self.assertIsNone(failure_log.story_of(self.repo / "missing"))
+
+
 class TestHookWrites(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="hook-writes-"))

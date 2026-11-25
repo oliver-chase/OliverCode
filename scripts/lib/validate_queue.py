@@ -76,6 +76,13 @@ def log_run(wait: float, run_time: float) -> None:
     """Append one validation's queue wait, run time and the machine's load average to the run log. Never raises."""
     try:
         row = {"at": time.time(), "wait": round(wait, 1), "run": round(run_time, 1), "load": round(os.getloadavg()[0], 2)}
+        try:
+            from lib import failure_log
+        except ImportError:  # run as a script from scripts/lib
+            import failure_log
+        story = failure_log.story_of()
+        if story:  # a runner worktree: the run counts toward its story (#1178)
+            row["story"] = story
         with runs_log().open("a", encoding="utf-8") as f:
             f.write(json.dumps(row) + "\n")
     except (OSError, AttributeError):

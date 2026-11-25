@@ -417,7 +417,7 @@ def note_before(key: str, fetch=None, now: float | None = None) -> None:
         pass
 
 
-def note_after(key: str, session: str, command: str, fetch=None, now: float | None = None) -> None:
+def note_after(key: str, session: str, command: str, fetch=None, now: float | None = None, cwd: str | None = None) -> None:
     """Log what a finished gh call spent: the drop in GraphQL points and in REST requests since note_before. The readings come
     from the one-minute cache, so a call that finishes within a minute of its start can show no spend, and the figures are
     approximate when other agents spend at the same moment. One line per call in ~/.olivercode/gh-cost.jsonl, kept for 24 hours."""
@@ -433,6 +433,9 @@ def note_after(key: str, session: str, command: str, fetch=None, now: float | No
         points = max(0, before["remaining"] - left["remaining"])
         rest = max(0, before["rest"] - left["rest"]) if before.get("rest") is not None and left.get("rest") is not None else 0
         row = {"t": now, "session": session, "cmd": " ".join(command.split())[:60], "points": points, "rest": rest}
+        story = failure_log.story_of(cwd) if cwd else None
+        if story:  # a call made in a runner worktree counts toward its story (#1178)
+            row["story"] = story
         log = home() / COST_LOG
         kept = _read_rows(now, COST_KEEP)
         try:

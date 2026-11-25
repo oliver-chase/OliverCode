@@ -14,6 +14,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def story_of(cwd=None) -> int | None:
+    """The story number a checkout is working, read from its branch name story/N, or None. The runner's worktrees are on those branches,
+    so a validation run or a gh call made there can be counted per story (#1178)."""
+    import re
+    import subprocess
+    try:
+        ran = subprocess.run(["git", "-C", str(cwd or os.getcwd()), "branch", "--show-current"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.fullmatch(r"story/(\d+)", ran.stdout.strip()) if ran.returncode == 0 else None
+    return int(found.group(1)) if found else None
+
+
 def home() -> Path:
     """The OliverCode home. It holds the owner's words and repo names, so only its user can read it:
     the folder is made mode 700 and every file in it is tightened to 600."""

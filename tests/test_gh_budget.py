@@ -228,6 +228,15 @@ class TestCostLog(Isolated):
         self.assertEqual([(r["session"], r["points"]) for r in rows], [("s1", 50)])
         self.assertIn("item-list", rows[0]["cmd"])
 
+    def test_a_call_made_in_a_story_worktree_logs_its_story(self):
+        gh_budget.note_before("k2", fetch=self.points(4000), now=100)
+        with mock.patch.object(gh_budget.failure_log, "story_of", return_value=1204):
+            gh_budget.note_after("k2", "s1", "gh issue view 1", fetch=self.points(3990), now=101, cwd="/wt")
+        gh_budget.note_before("k3", fetch=self.points(3990), now=102)
+        gh_budget.note_after("k3", "s1", "gh issue view 2", fetch=self.points(3980), now=103)
+        rows = gh_budget._read_rows(104, 3600)
+        self.assertEqual([1204, None], [r.get("story") for r in rows])
+
     def test_a_session_over_its_share_is_held_while_others_are_active(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             for n, (key, session, spent) in enumerate((("a", "busy", 3000), ("b", "quiet", 10))):

@@ -66,6 +66,29 @@ class ValidateQueueTest(unittest.TestCase):
         self.assertFalse(os.path.exists(held), "the EXIT trap frees the slot")
 
 
+class RunLogStoryTest(unittest.TestCase):
+    """#1178: a validation run made in a story worktree is logged with its story, so time per story can be counted."""
+
+    def setUp(self):
+        self.home = temp_dir(self)
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def rows(self):
+        return [json.loads(line) for line in (self.home / "validate-runs.jsonl").read_text().splitlines()]
+
+    def test_a_story_worktree_run_carries_its_story_and_another_run_does_not(self):
+        import failure_log
+        with mock.patch.object(failure_log, "story_of", return_value=1204):
+            validate_queue.log_run(1.0, 2.0)
+        with mock.patch.object(failure_log, "story_of", return_value=None):
+            validate_queue.log_run(0.0, 3.0)
+        first, second = self.rows()
+        self.assertEqual(1204, first["story"])
+        self.assertNotIn("story", second)
+
+
 class QueueRobustnessTest(unittest.TestCase):
     """A fresh install, old or damaged state, a crashed holder and a reused pid all end with a working queue and a stderr line that names the repair (#757)."""
 
