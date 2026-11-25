@@ -25,8 +25,12 @@ def _target(vals: dict, seen: set):
 
 
 def _line(r: dict) -> str:
+    ref = r.get("covered_by")
+    tracking = f"tracked by {ref}" if ref else "not tracked"
+    implementation = (f"implemented by {r['implemented_by']} on {r['implemented_on']}"
+                      if r.get("implemented_by") and r.get("implemented_on") else "implementation pending")
     mark = ", verified" if lesson_cover.verified(r) else ""
-    return (f"{r.get('id', '?')}  {r.get('date', '?')}  covered by {r.get('covered_by') or 'nothing yet'}{mark}\n"
+    return (f"{r.get('id', '?')}  {r.get('date', '?')}  {tracking}; {implementation}{mark}\n"
             f"  what: {r.get('what', '')}\n  why: {r.get('why', '')}\n  rule: {r.get('rule', '')}")
 
 
