@@ -112,10 +112,10 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
 
 
 def story_has_unknown_cost(story: int, repo: str = "") -> bool:
-    """Fail closed when a prior story model session has no matching, priced completion."""
+    """Fail closed when any prior model invocation for this story lacks a priced completion."""
     prefix = f"story-{story}"
-    starts: dict[str, dict] = {}
-    ends: dict[str, dict] = {}
+    starts: dict[str, int] = {}
+    ends: dict[str, list[dict]] = {}
     path = failure_log.home() / LOG
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
@@ -129,19 +129,22 @@ def story_has_unknown_cost(story: int, repo: str = "") -> bool:
                 name = str(row.get("session") or "")
                 if name != prefix and not name.startswith(prefix + "-"):
                     continue
-                if repo and row.get("repo") != Path(repo).name:
+                repo_name = Path(repo).name
+                if repo and row.get("repo") and row.get("repo") != repo_name and not row.get("repo", "").startswith(repo_name + "-"):
                     continue
                 sid = str(row.get("session_id") or "")
                 if not sid:
                     continue
                 if row.get("event") == "session_start":
-                    starts[sid] = row
+                    starts[sid] = starts.get(sid, 0) + 1
                 elif row.get("event") == "session_end":
-                    ends[sid] = row
+                    ends.setdefault(sid, []).append(row)
     except OSError:
         return False
-    for sid in starts:
-        end = ends.get(sid)
-        if end is None or not isinstance(end.get("cost_usd"), (int, float)) or isinstance(end.get("cost_usd"), bool):
+    for sid, count in starts.items():
+        completions = ends.get(sid, [])
+        if len(completions) < count:
+            return True
+        if any(not isinstance(row.get("cost_usd"), (int, float)) or isinstance(row.get("cost_usd"), bool) for row in completions):
             return True
     return False
