@@ -527,10 +527,35 @@ def policy_stop_comment(stop: dict) -> str:
 
 
 def story_spend(n: int, repo: str = "") -> float:
-    """Recorded spend for one story across its builder, reader and fix sessions; missing or malformed rows count as zero (#1218)."""
-    path = failure_log.home() / "run-log.jsonl"
+    """Recorded spend for a story: session telemetry is authoritative, old run-log rows are the compatibility fallback (#1218, #1221)."""
     prefix = f"story-{n}"
-    total = 0.0
+    total, session_ids = 0.0, set()
+    sessions = failure_log.home() / session_guard.LOG
+    try:
+        with sessions.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(row, dict) or row.get("event") != "session_end":
+                    continue
+                name = str(row.get("session") or "")
+                if name != prefix and not name.startswith(prefix + "-"):
+                    continue
+                repo_name = Path(repo).name
+                if repo and row.get("repo") and row.get("repo") != repo_name and not row.get("repo", "").startswith(repo_name + "-"):
+                    continue
+                sid = str(row.get("session_id") or "")
+                if sid:
+                    session_ids.add(sid)
+                cost = row.get("cost_usd")
+                if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
+                    total += float(cost)
+    except OSError:
+        pass
+    # Keep older rows that predate session IDs. New session rows are counted above to avoid double-counting.
+    path = failure_log.home() / "run-log.jsonl"
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
             for line in fh:
@@ -543,7 +568,9 @@ def story_spend(n: int, repo: str = "") -> float:
                 name = str(row.get("story") or "")
                 if name != prefix and not name.startswith(prefix + "-"):
                     continue
-                if repo and row.get("repo") != repo:
+                if repo and row.get("repo") and row.get("repo") != repo:
+                    continue
+                if row.get("session_id") and row.get("session_id") in session_ids:
                     continue
                 cost = row.get("cost_usd")
                 if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
@@ -551,7 +578,6 @@ def story_spend(n: int, repo: str = "") -> float:
     except OSError:
         pass
     return total
-
 
 def story_cost_unknown(n: int, repo: str = "") -> bool:
     """True when a previous model call for this story has no trustworthy cost record."""
