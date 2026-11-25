@@ -232,6 +232,9 @@ def story_notes(now: float, claims: dict, log: list[dict], alive: bool, holder: 
             notes[n] = stall_line(n, mine, int((now - progress) // 60), holder)
         elif (hits := turn_limit_hits(story_log)) >= 2:
             notes[n] = turn_limit_warning(n, hits)
+        elif errors := [r for r in story_log if r.get("stop") == "api_error"]:
+            cause = str(errors[-1].get("error") or errors[-1].get("stderr_tail") or "cause not recorded")
+            notes[n] = f"Warning: #{n} last stopped on an API error: {cause[:300]}"
         elif quiet := quiet_note(story_log, float(mine.get("since") or mine.get("at", 0)), now, (commits or {}).get(n)):
             notes[n] = quiet
     return notes
