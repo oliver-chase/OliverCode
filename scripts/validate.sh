@@ -187,16 +187,22 @@ run_gates() {
 }
 
 run_round_gates() {
-  # "$@": files changed against origin's default branch. The runner's cheap per-round check (#1142): the same gates as a full
-  # run, but precommit and smoke narrow to these changed files instead of the whole tree/suite. `olivercode land` still
-  # calls run_gates, in full.
+  # Ordinary builder rounds run only gates selected for the touched paths. Landing/release
+  # still runs the complete GATES list above; skipped gates are named in the round result.
   local args=() gate
-  for gate in "${GATES[@]}"; do
+  local selected
+  mapfile -t selected < <(python3 "${SCRIPT_DIR}/lib/validation_scope.py" "$@")
+  for gate in "${selected[@]}"; do
     case "$gate" in
       precommit|smoke) args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate" "$@")") ;;
       *) args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate")") ;;
     esac
   done
+  local skipped=()
+  for gate in "${GATES[@]}"; do
+    if [[ ! " ${selected[*]} " == *" $gate "* ]]; then skipped+=("$gate"); fi
+  done
+  printf '=== validate: round gates run: %s; skipped: %s (full set remains on land/release) ===\\n' "${selected[*]}" "${skipped[*]}"
   python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
 }
 
