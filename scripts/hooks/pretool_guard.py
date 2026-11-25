@@ -4,7 +4,7 @@
 One hook parses the input once per tool call and asks each guard in turn: commit_guard (a commit that would skip the repo's gates),
 archived_guard (a commit or push in a repo GitHub archived or deleted), placement_guard (a clone or worktree outside its home), main_checkout (an edit or commit in a fleet repo's main checkout), policy_guard (the repo's policy.json) and gh_guard
 (the shared GitHub budget), reset_guard (a `git reset --hard` in a main checkout or a tree with uncommitted changes), and model_guard (a subagent on a model other than Sonnet that the owner never named). When none objects, queue_guard routes a validation command through `olivercode queue run`. A deny from any guard wins over an ask. Each guard fails open on its own bug, so
-one broken guard never disables the others and never blocks a command. The guards stay runnable on their own.
+one broken guard never disables the others and never blocks a command.
 """
 
 from __future__ import annotations

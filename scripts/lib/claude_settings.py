@@ -39,7 +39,8 @@ MANAGED = (
 )
 # Scripts cut from the repo. Install and update remove an entry that runs one, from any checkout, so a machine that
 # installed an older version never keeps a hook for a script that is about to go (#886).
-RETIRED = ("start_guard.py", "start_confirm.py", "ask_guard.py", "owner_prompt.py", "context_guard.py", "denial_watch.py", "lesson_capture.py")
+RETIRED = ("start_guard.py", "start_confirm.py", "ask_guard.py", "owner_prompt.py", "context_guard.py", "denial_watch.py", "lesson_capture.py",
+           "archived_guard.py", "placement_guard.py", "reset_guard.py")
 TIMEOUT_S = 10
 # Tools a session needs without a permission prompt: session control, the sidebar, worktree cleanup and the repo's
 # own validation. Install adds them to permissions.allow beside the owner's entries and health reports any missing.

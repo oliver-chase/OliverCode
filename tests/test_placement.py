@@ -1,4 +1,4 @@
-"""Tests for scripts/lib/placement.py, scripts/hooks/placement_guard.py and the place and clean commands."""
+"""Tests for scripts/lib/placement.py, scripts/hooks/placement_guard.py (called by pretool_guard.py) and the place and clean commands."""
 
 import json
 import os
@@ -15,7 +15,6 @@ from _support import REPO_ROOT, git, scratch_repo, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_land, placement, repo_gates  # noqa: E402
 
-GUARD = REPO_ROOT / "scripts" / "hooks" / "placement_guard.py"
 
 
 def make_config(root, watch, allow=()):
@@ -334,20 +333,6 @@ class TestViolation(unittest.TestCase):
     def test_other_git_commands_are_ignored(self):
         self.assertEqual("", self.check("git worktree list"))
         self.assertEqual("", self.check("git status"))
-
-
-class TestGuardScript(unittest.TestCase):
-    def run_guard(self, command, cwd):
-        payload = json.dumps({"tool_input": {"command": command}, "cwd": str(cwd)})
-        done = subprocess.run([sys.executable, str(GUARD)], input=payload, capture_output=True, text=True)
-        return done.returncode, done.stdout
-
-    def test_an_unrelated_command_prints_nothing(self):
-        self.assertEqual((0, ""), self.run_guard("ls -la", "/tmp"))
-
-    def test_garbage_input_fails_open(self):
-        done = subprocess.run([sys.executable, str(GUARD)], input="not json", capture_output=True, text=True)
-        self.assertEqual((0, ""), (done.returncode, done.stdout))
 
 
 class TestOtherDevice(unittest.TestCase):

@@ -45,7 +45,7 @@ Seven tests were removed, and each tested a function with no product caller. Eve
 
 | Item | Reason |
 |------|--------|
-| The standalone `main` in `archived_guard.py`, `placement_guard.py` and `reset_guard.py` | The combined `pretool_guard.py` runs the same checks, but `test_archived` asserts each script also denies alone. A machine with an older standalone hook entry would lose its guard when the entry kept running a script with no `main`. Retire these entries through `RETIRED` in `claude_settings.py` first, then remove the entry points |
+| The standalone `main` in `archived_guard.py`, `placement_guard.py` and `reset_guard.py` | Removed in #1199 after the three names joined `RETIRED` in `claude_settings.py`, so install and update drop an older standalone hook entry. The modules stay as the checks `pretool_guard.py` calls |
 | `repo_state.forget_said` | Tests use it to reset a cache. It is a test hook in a product module, so it stays until the tests carry their own reset |
 | The seven commands with one product reference (`cmd_version`, `cmd_fleetsync`, `cmd_lesson`, `cmd_board`, `cmd_commit_check`, `cmd_run`, `cmd_limits`) | Each is wired in `scripts/olivercode`, which is how a command runs |
 | Duplicate private helpers (`_git` in 14 modules, `_run`, `_read`, `_save`, `_locked`, `_write`) | They differ in what they catch or return. Merging them would change behavior and is out of scope until a caller needs one |
