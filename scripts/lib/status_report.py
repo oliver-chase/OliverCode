@@ -131,16 +131,14 @@ def thread_message(slug: str, entry: dict, path: Path) -> str:
 
 def record(slug: str, kind: str, issue: dict | None = None, *, origin: str = "", builders: int = 1, queue=(), waiting=(), model_name: str = "",
            now: float | None = None, publisher=None, log=None) -> str:
-    """Apply one runner event to SLUG's run, rewrite the page and publish it on an event. KIND is begin, start, land, held, end or tick.
+    """Apply one runner event to SLUG's run and rewrite the local page without a model call. KIND is begin, start, land, held, end or tick.
     Returns the thread message for begin and '' otherwise. A write that fails never stops a run."""
     now = now or time.time()
     with _locked():
         message = _apply(slug, kind, issue, origin, builders, queue, waiting, model_name, now, log)
-    if kind != "tick":
-        try:
-            (publisher or publish)(now=now)
-        except Exception:  # a publish that fails any way never stops a run
-            pass
+    # Runner events only write local state and HTML. Publishing a Claude Artifact starts a
+    # headless model session, so it is deliberately an explicit owner action via
+    # olivercode status publish, never part of a builder's critical path.
     return message
 
 
