@@ -60,10 +60,11 @@ def is_epic(issue: dict) -> bool:
 
 
 def new_state() -> dict:
-    return {"closed": [], "blocked": [], "sessions": 0, "tokens": 0, "restarts": {}}
+    return {"closed": [], "blocked": [], "sessions": 0, "tokens": 0, "restarts": {}, "api_error_streak": 0, "api_error_stop": ""}
 
 
 _COST_LOCK = threading.Lock()
+_API_ERROR_LOCK = threading.Lock()
 
 
 def costed(session: str, command: str, call):
@@ -530,11 +531,30 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     except RuntimeError as exc:
         io.comment(n, f"Drain blocked: the worktree was not created: {exc}")
         return False, 0
-    for attempt in range(RESTARTS + 1):
+    attempt, story_api_errors = 0, 0
+    while attempt <= RESTARTS:
         state["sessions"] += 1
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
+        if out.get("api_error"):
+            story_api_errors += 1
+            cause = str(out.get("api_error_cause") or out.get("reason") or "Unspecified API error")[:300]
+            with _API_ERROR_LOCK:
+                state["api_error_streak"] = state.get("api_error_streak", 0) + 1
+                streak = state["api_error_streak"]
+                if streak >= 5:
+                    state["api_error_stop"] = cause
+            if streak >= 5:
+                io.comment(n, f"Drain stopped after five consecutive API errors across the queue. Last cause: {cause}")
+                return False, tokens
+            delay = min(60 * (2 ** (story_api_errors - 1)), 900)
+            io.comment(n, f"Claude API error; retrying this story in {delay} seconds (attempt {story_api_errors}). Cause: {cause}")
+            time.sleep(delay)
+            continue
+        with _API_ERROR_LOCK:
+            state["api_error_streak"] = 0
+        attempt += 1
         if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
             io.comment(n, held_comment(worktree, out["held"]))
             return False, tokens
@@ -628,7 +648,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if message:
                     say(message)
             started = False
-            for issue in ([] if state.get("restart") else todo):  # no new story starts on old runner code (#1116)
+            for issue in ([] if state.get("restart") or state.get("api_error_stop") else todo):  # stop starting work after runner changes or repeated API failure
                 if len(running) >= io.capacity():
                     break
                 if io.claimed(issue):
@@ -681,6 +701,9 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         pool.shutdown(wait=not stopped)
         if begun:
             _event(io, "end")
+    if state.get("api_error_stop"):
+        say(f"Drain stopped: Claude API is failing after five consecutive errors. Last cause: {state['api_error_stop']}")
+        return 1
     if state.get("restart"):
         say(f"Drain restarting on the new code: #{state['restart']} changed the runner.")
         return 0
