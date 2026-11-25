@@ -12,10 +12,10 @@ from lib.cli import COMMANDS
 
 # How work runs, in the order the guide and the README "How work runs" section both print it (#972).
 HOW_WORK_RUNS = (
-    "You work in one thread, and you say what you want. Each request becomes a story on the repo's board.",
-    "`olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main, logs the story and closes it.",
-    "A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`.",
-    "`olivercode status` shows what is open.",
+    "Use Claude Code normally for strategy, exploration, planning, debugging and ordinary coding. Nothing becomes a backlog item automatically.",
+    "When you explicitly delegate bounded work, `olivercode dispatch N` or `olivercode drain REPO` runs it unattended in its own worktree, validates it, lands it and records the result.",
+    "Use the backlog and headless runner when you want durable tracking or unattended execution; otherwise stay in your interactive conversation.",
+    "`olivercode status` shows the runner and backlog without spending a model turn.",
 )
 
 THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost."
@@ -24,9 +24,9 @@ THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode
 USING_IT_WELL = (
     "Work in one thread per topic, and start a fresh one when it grows long.",
     "Never ask a thread for status. Run `olivercode status` instead.",
-    "Say what you want once and let the runner build it.",
+    "Delegate bounded work explicitly; keep strategy and exploration interactive.",
     "Keep a story small and name its files.",
-    "Never start a builder in a chat: `olivercode dispatch N` builds a board story without one.",
+    "Do not turn ordinary conversation into a story or headless job unless you ask.",
     "A long thread costs more on every message, because all of it is re-read.",
 )
 
