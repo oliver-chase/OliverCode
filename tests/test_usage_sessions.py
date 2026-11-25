@@ -22,6 +22,14 @@ class TestPeriodUsage(unittest.TestCase):
         ]), encoding="utf-8")
         self.assertEqual((1795600801, 120), usage_sessions.transcript_start(path))
 
+    def test_headless_builder_transcripts_are_excluded(self):
+        path = temp_dir(self) / "builder.jsonl"
+        path.write_text("".join(json.dumps(row) + "\\n" for row in [
+            {"type": "user", "entrypoint": "sdk-cli", "timestamp": "2026-11-25T10:00:00Z", "message": {"content": "build"}},
+            {"type": "assistant", "timestamp": "2026-11-25T10:00:01Z", "message": {"id": "m", "usage": {"input_tokens": 12}}},
+        ]), encoding="utf-8")
+        self.assertIsNone(usage_sessions.transcript_start(path))
+
     def test_recent_chat_starts_filters_by_first_call_timestamp(self):
         root = temp_dir(self) / "projects"
         project = root / "work"
