@@ -25,7 +25,7 @@ Every non-trivial change follows the smallest-sufficient-change method in the `l
 1. **Measure the gap.** Count what exists, run what runs and read the live code
 2. **Track deliberately.** File a board story when the owner delegates autonomous work, requests durable tracking, or the work needs cross-session coordination. Do not create a story for every interactive chat or ordinary coding exchange.
 3. **Rank by the cost of being wrong.** Silent data loss first, then a bypassable security boundary, then a loud and recoverable failure, then cost, then ergonomics
-4. **Build one spec at a time, test first.** Write the failing test, implement, then remove the guard to confirm the test goes red and restore it
+4. **Build one outcome at a time.** Add a focused regression test for non-trivial behavior, then implement. Prove the test catches the regression when practical; text-only and trivial edits do not need ceremonial tests.
 5. **Update the documents** the change affects, and read the diff for stale references
 6. **Validate** with the repo's own command and read its exit code. A failing run never counts as completion. Before the commit, run `olivercode commit-check FILE_OR_TEXT` on the draft message: it lists every blocking finding of the commit-msg gate and every voice warning at once
 7. **Commit and push** with a message that gives the why
