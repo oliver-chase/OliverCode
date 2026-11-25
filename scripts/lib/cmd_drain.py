@@ -720,6 +720,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         io.origin = " ".join(["olivercode drain", *argv])
     on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
     previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
+    previous_hup = signal.signal(signal.SIGHUP, _stop_on_term) if on_main else None
     code = 0
     try:
         if not take_run(io, slug, f"drain {repo.name}"):
@@ -735,6 +736,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         run_lock.release(slug, pid)
         if on_main:
             signal.signal(signal.SIGTERM, previous)
+            signal.signal(signal.SIGHUP, previous_hup)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)
         sys.stdout.flush()
         sys.stderr.flush()
