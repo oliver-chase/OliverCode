@@ -153,7 +153,7 @@ class BoardStep(unittest.TestCase):
 class WhoBuilds(unittest.TestCase):
     """The install text, the guide, the README, RULES.md and CLAUDE.md state one rule for who builds a board story (#1013)."""
 
-    RULE = "A chat never builds a board story by hand"
+    RULE = "Interactive work stays interactive"
 
     def test_each_doc_and_the_guide_state_the_one_rule(self):
         from lib import cmd_guide
@@ -163,9 +163,10 @@ class WhoBuilds(unittest.TestCase):
 
     def test_the_first_steps_end_on_building_a_story_in_install_and_the_guide(self):
         from lib import cmd_guide
-        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`", cmd_install.INTRODUCTION)
+        self.assertIn("3. Use Claude Code normally. When you want durable tracking or unattended execution, file a bounded story and delegate it with `olivercode dispatch N` or `olivercode drain REPO`.", cmd_install.INTRODUCTION)
         _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO", out)
+        self.assertIn("3. Use Claude Code normally.", out)
+        self.assertIn("durable tracking or unattended execution", out)
 
 
 
