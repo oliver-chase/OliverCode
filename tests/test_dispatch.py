@@ -103,6 +103,26 @@ class TestDispatch(DispatchCase):
         self.assertEqual(0, code)
         self.assertEqual(77, work.call_args.args[1]["number"])
 
+    def test_initial_and_queued_stories_share_one_dispatch_run_state(self):
+        """The initial story and queued stories share one circuit-breaker state."""
+        seen = []
+
+        def work(_io, story, state):
+            seen.append((story["number"], state))
+            if story["number"] == 77:
+                state["api_error_stop"] = "rate limit"
+            return False, 0
+
+        with mock.patch.object(cmd_drain, "work_story", side_effect=work), \
+             mock.patch.object(cmd_dispatch.run_lock, "release", side_effect=[[78], [], []]), \
+             mock.patch.object(cmd_dispatch, "read_story", side_effect=lambda _runner, _slug, number: ({**STORY, "number": number}, "")), \
+             mock.patch.object(cmd_dispatch, "live_claim", return_value=""):
+            self.run_dispatch()
+
+        self.assertEqual([77, 78], [n for n, _ in seen])
+        self.assertIs(seen[0][1], seen[1][1])
+        self.assertEqual("rate limit", seen[1][1]["api_error_stop"])
+
     def test_a_dispatch_while_another_run_holds_the_repo_joins_its_queue_and_builds_nothing(self):
         """#992: no second builder starts; the story is appended, and the holder is named."""
         from lib import run_lock
