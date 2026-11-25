@@ -20,7 +20,7 @@ The goal is the smallest complete change that solves the actual problem. Minimiz
 
 ## Before changing anything
 
-1. Read the task, relevant code and the repo's existing conventions.
+1. Read the task, relevant code and the repo's existing conventions. Build a small mental map of entrypoints, the existing capability to reuse, and the data/control flow this task touches; do not generate a separate map artifact unless it will be reused.
 2. Trace callers and downstream effects before changing a shared function, interface, schema, command or file format.
 3. Ask: **does this need to exist?** Prefer deleting the cause, using an existing capability, or not adding anything.
 4. Choose the first complete option in this order:
@@ -70,18 +70,19 @@ Before reporting completion:
 - Check for dead code, duplicate logic and stale documentation.
 - Report the result, tests/checks actually run, checks skipped or unavailable, and remaining risks in a few plain lines.
 - Do not report token savings, speedups or safety as measured unless there is a reproducible before/after measurement.
+- For code-changing tasks, end the response with one or two concise lines naming checks not run and any material remaining risk. Do not add boilerplate to ordinary conversation or text-only tasks.
 
 ## Commands
 
 Use `/lean lite|full|ultra|off` to change the current task's mode.
 
-Use `/lean review [uncommitted|staged|branch|PR]` to review a change. Read the full relevant diff and surrounding code; report only actionable findings, ordered by severity, with evidence, consequence, smallest safe fix and missing tests. Reuse the `audit` skill's Changes route for a formal review.
+Use `/lean review [uncommitted|staged|branch|PR]` to review a change. Read the full relevant diff and surrounding code, trace the affected execution path, and check correctness, security, regressions, real-world load, missing tests, slow paths, and unnecessary complexity. Report only actionable findings, ordered by severity; each finding states the current behavior, evidence, failure consequence, smallest safe fix, and missing test. Reuse the `audit` skill's Changes route for a formal review.
 
-Use `/lean audit [target]` for a repository or subsystem audit. Reuse the `audit` skill and its ledger; include over-engineering, duplicate mechanisms, unused code and complexity in the findings. Never invent findings to fill a quota.
+Use `/lean audit [target]` for a repository or subsystem audit. Map entrypoints, important data flows, expected workload and trust boundaries before reviewing. Reuse the `audit` skill and its ledger; include correctness, security, reliability, performance, over-engineering, duplicate mechanisms, unused code and complexity. Rank findings by consequence and evidence. Never invent findings to fill a quota.
 
 Use `/lean debt [word]` to inventory deferred shortcuts. Search tracked source for `shortcut:` (or the supplied marker), group by file and subsystem, and report the limit, upgrade condition and whether it is still relevant. Do not automatically create an issue for every marker; file only actionable debt that has an owner-visible consequence.
 
-Use `/lean gain [baseline]` to compare measured outcomes. Use existing run logs, validation timings and transcript telemetry where available. Report lines changed, added/deleted code, model calls, input/output/cache tokens, cost, elapsed time, validation time, retries, landed outcomes and escaped defects where measurable. Separate interactive and headless workloads. If no comparable baseline exists, say so and propose the smallest measurement; never fabricate a gain.
+Use `/lean help` for this quick reference. Use `/lean gain [baseline]` to compare measured outcomes. Use existing run logs, validation timings and transcript telemetry where available. Report lines changed, added/deleted code, model calls, input/output/cache tokens, cost, elapsed time, validation time, retries, landed outcomes and escaped defects where measurable. Separate interactive and headless workloads. If no comparable baseline exists, say so and propose the smallest measurement; never fabricate a gain.
 
 ## Source and attribution
 
