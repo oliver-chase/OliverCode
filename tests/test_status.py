@@ -923,7 +923,7 @@ class RevampNumbersCase(unittest.TestCase):
                            live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "", folder=self.repo,
                            numbers=lambda: cmd_status.four_numbers(NOW, 3, rows, [{"story": "story-4", "input": 10, "output": 5}], self.repo,
                                                                     self.projects, self.handovers))
-        self.assertIn("Each finished story used about 15 tokens and cost not recorded. Handovers 0, threads typed into 0, open stories 3.", out.getvalue())
+        self.assertIn("A finished story takes about 15 tokens and costs not recorded. Work moved to a fresh session 0 times, you typed into 0 running threads, and 3 stories are open.", out.getvalue())
 
     def test_no_closed_story_says_the_tokens_are_not_recorded(self):
         numbers = cmd_status.four_numbers(NOW, 2, [], [], self.repo, self.projects, self.handovers)

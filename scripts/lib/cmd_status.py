@@ -407,8 +407,10 @@ def numbers_line(numbers: dict) -> str:
     tokens = numbers["tokens_per_closed"]
     spent = f"{tokens:,}" if tokens is not None else "not recorded"
     cost = f"${numbers['cost_per_closed']:.2f}" if numbers.get("cost_per_closed") is not None else "not recorded"
-    used = f"Each finished story used about {spent} tokens and cost {cost}." if tokens is not None else "Tokens and cost per finished story: not recorded yet."
-    return f"{used} Handovers {numbers['handovers']}, threads typed into {numbers['threads']}, open stories {numbers['open']}."
+    big = f"{tokens / 1e6:.1f} million" if tokens is not None and tokens >= 1_000_000 else spent
+    used = f"A finished story takes about {big} tokens and costs {cost}." if tokens is not None else "Tokens and cost per finished story: not recorded yet."
+    return (f"{used} Work moved to a fresh session {numbers['handovers']} time{'s' if numbers['handovers'] != 1 else ''}, "
+            f"you typed into {numbers['threads']} running thread{'s' if numbers['threads'] != 1 else ''}, and {numbers['open']} stories are open.")
 
 
 def _slot_name(label: str) -> str:

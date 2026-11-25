@@ -56,6 +56,20 @@ class TestOwnerQueue(unittest.TestCase):
         self.assertIn("set_pinned for x9 with pinned=false", out)
 
 
+class TestReadableList(unittest.TestCase):
+    def test_steps_that_differ_only_in_a_path_become_one_line_with_their_numbers(self):
+        """#1177: stale worktrees read as one line, and an unlike step keeps its own."""
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
+            for n in (1, 2, 3):
+                cmd_owner.add("maintain", f"maintain health: /Users/x/_worktrees/OliverCode-{n} runs commit hooks older than origin/main")
+            cmd_owner.add("maintain", "maintain health: python3 is 3.9")
+            text = cmd_owner.listing([i for i in cmd_owner.items() if i["status"] == "open"])
+        self.assertIn("3 like this", text)
+        self.assertIn("(#1, #2, #3)", text)
+        self.assertIn("python3 is 3.9", text)
+        self.assertTrue(text.startswith("4 things waiting on you"))
+
+
 class TestQuietQueue(unittest.TestCase):
     def test_the_same_ask_is_held_once_and_counts_its_repeats(self):
         """#1205: a repeat keeps one open step and counts it; an info line is not an open step; a done step can be raised again."""

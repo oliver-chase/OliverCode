@@ -228,6 +228,14 @@ TITLES = (("groom", "Decisions about your boards"), ("drain", "Stories stopped a
           ("fleet-sync", "Repos that could not catch up with GitHub"), ("maintain", "Machine upkeep"))
 
 
+_PATHS = re.compile(r"(?:/[\w.~-]+){2,}|[0-9a-f]{12,}|#\d+")
+
+
+def _shape(item: dict) -> str:
+    """A step with its paths, hashes and numbers blanked and its subject word dropped, so two steps about the same thing share a key."""
+    return re.sub(r"^\w+ (?:health|suite|placement|tidy|branches|synced|docs): ", "", _PATHS.sub("…", _brief(item["step"], 400))).strip()
+
+
 def listing(open_items: list[dict]) -> str:
     """The open steps under plain headings, the count first, one line each (#1177). A prepared step keeps its tab and after-submit line.
     `owner show ID` prints the command tried and its error."""
@@ -244,7 +252,14 @@ def listing(open_items: list[dict]) -> str:
     for title in sorted(groups, key=lambda t: (rank[t], t)):
         rows = groups[title]
         out.append(f"{title} ({len(rows)})")
+        alike: dict[str, list[dict]] = {}
         for i in rows:
+            alike.setdefault(_shape(i) if not i.get("tab") else f"tab{i['id']}", []).append(i)
+        for same in alike.values():
+            i = same[0]
+            if len(same) > 1:  # steps that differ only in a path or a number are one line with their numbers (#1177)
+                out.append(f"  {len(same)} like this: {_brief(_PATHS.sub('…', i['step']), 80)} (" + ", ".join(f"#{j['id']}" for j in same) + ")")
+                continue
             repeat = f"  (raised {i['repeats']} times)" if int(i.get("repeats", 1)) > 1 else ""
             out.append(_show(i) if i.get("tab") else f"  #{i['id']:<4} {_brief(i['step'])}{repeat}")
         out.append("")
