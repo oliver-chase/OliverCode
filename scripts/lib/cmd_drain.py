@@ -529,7 +529,7 @@ def policy_stop_comment(stop: dict) -> str:
 def story_spend(n: int, repo: str = "") -> float:
     """Recorded spend for a story: session telemetry is authoritative, old run-log rows are the compatibility fallback (#1218, #1221)."""
     prefix = f"story-{n}"
-    total, session_ids = 0.0, set()
+    total = 0.0
     sessions = failure_log.home() / session_guard.LOG
     try:
         with sessions.open(encoding="utf-8", errors="replace") as fh:
