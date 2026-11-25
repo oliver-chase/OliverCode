@@ -40,11 +40,13 @@ def transcript_start(path: Path) -> tuple[float, int] | None:
     """
     first: tuple[float, str] | None = None
     largest = 0
+    headless = False
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
             for line_no, line in enumerate(fh):
                 try:
                     row = json.loads(line)
+                    headless = headless or row.get("entrypoint") == "sdk-cli"
                     message = row.get("message") or {}
                     if row.get("type") != "assistant" or not message.get("usage"):
                         continue
@@ -66,7 +68,7 @@ def transcript_start(path: Path) -> tuple[float, int] | None:
                 largest = max(largest, total)
     except OSError:
         return None
-    return (first[0], largest) if first and largest else None
+    return (first[0], largest) if first and largest and not headless else None
 
 def recent_chat_starts(projects: Path | None = None, days: int = 7, now: float | None = None) -> list[tuple[Path, int]]:
     """Desktop transcript paths and their first-call prompt sizes within the last N days."""
