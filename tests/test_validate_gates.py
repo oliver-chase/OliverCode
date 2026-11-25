@@ -31,6 +31,8 @@ class ParallelGates(unittest.TestCase):
         self.assertEqual(["precommit", "quality", "smoke"], validation_scope.round_gates(["scripts/lib/thing.py", "tests/test_thing.py"]))
         self.assertEqual(["precommit", "refs", "docs"], validation_scope.round_gates(["docs/guide.md"]))
         self.assertEqual(["precommit", "bypass", "hookstate"], validation_scope.round_gates(["scripts/validate.sh"]))
+        self.assertEqual(["precommit", "fleet", "bloat", "quality", "refs", "docs", "limits", "bypass", "smoke", "hookstate"], validation_scope.round_gates(["scripts/lib/cmd_drain.py"]))
+        self.assertEqual(["precommit", "fleet", "bloat", "quality", "refs", "docs", "limits", "bypass", "smoke", "hookstate"], validation_scope.round_gates(["scripts/lib/validate_queue.py"]))
         self.assertIn("GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)", (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8"))
 
     def test_output_replays_in_the_order_given_even_when_a_later_gate_finishes_first(self):
