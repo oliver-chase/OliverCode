@@ -225,7 +225,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     for sentence in HOW_WORK_RUNS:
         print(f"  {sentence}")
     print(f"  {THREAD_LINE}")
-    print("\\nArchitecture, owner to outcome")
+    print("\nArchitecture, owner to outcome")
     for layer in ARCHITECTURE:
         print(f"  {layer}")
     print("\nFirst steps, in order")
