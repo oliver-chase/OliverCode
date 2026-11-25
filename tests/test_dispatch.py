@@ -340,15 +340,15 @@ class TestFileExcerpts(unittest.TestCase):
         repo = self.make_repo()
         thing = repo / "scripts" / "thing.py"
         thing.write_text(
-            "def land():\\n    return 1\\n\\n"
-            "def check():\\n    return 2\\n\\n"
-            "def git():\\n    return 3\\n",
+            "def land():\n    return 1\n\n"
+            "def check():\n    return 2\n\n"
+            "def git():\n    return 3\n",
             encoding="utf-8",
         )
         git(repo, "add", "-A")
         git(repo, "commit", "-m", "add common-name functions")
         out = cmd_dispatch.file_excerpts(
-            "Please check the git status and land the change with `land()`.\\n"
+            "Please check the git status and land the change with `land()`.\n"
             "Files area: scripts/thing.py",
             repo,
         )
@@ -359,7 +359,7 @@ class TestFileExcerpts(unittest.TestCase):
     def test_backticked_bare_function_name_is_supported(self):
         repo = self.make_repo()
         out = cmd_dispatch.file_excerpts(
-            "Fix `build_thing`.\\nFiles area: scripts/thing.py",
+            "Fix `build_thing`.\nFiles area: scripts/thing.py",
             repo,
         )
         self.assertIn("def build_thing(x):", out)
