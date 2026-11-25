@@ -68,7 +68,7 @@ Git shows a commit message only to the `commit-msg` hook, so these checks are a 
 
 | Gate | What it blocks |
 |------|---------------|
-| Story reference | A commit whose message has no `#<number>`, such as `(#53)`. A `fixup!`, `squash!`, `amend!` or revert message that names an existing commit is exempt, as is a merge that stages no code and a repo's first commit. The hook blocks when it cannot read the message file |
+| Story reference | A commit whose message has no `#<number>`, such as `(#53)`. A `fixup!`, `squash!`, `amend!` or revert message that names an existing commit is exempt, as is a merge that stages no code and a repo's first commit. The hook blocks when it cannot read the message file. It runs only while OliverCode is installed, meaning `~/.claude/CLAUDE.md` links into a checkout; without that link the commit goes through and the hook prints that the check was skipped (#1187). The secret, personal-data and owner-identifier scans run whether or not OliverCode is installed |
 | Story exists | A reference to a story absent from its repo: `#N` is checked in the repo that `docs/backlog-config.json` names and `owner/repo#N` in the repo it spells out, through `gh api`. It fails open with a warning when `gh` or GitHub is unavailable, and a repo without the config skips it |
 | Test with code | A commit that changes any file outside a test path except documentation and data (such as `.md`, `.json`, `.csv`, `.html` and `LICENSE`) and changes no test, unless the message has a line `No test: <reason>` |
 | Co-author form | A `Co-Authored-By` line in any other form than `Co-Authored-By: Name <email>`, or a Claude co-author without Anthropic's noreply address. A commit with no co-author line passes |

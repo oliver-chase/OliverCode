@@ -129,7 +129,14 @@ fi
 TOKEN_END='([^[:alnum:]_]|$)'
 NUMBER='#0*[1-9][0-9]*'
 STORY_REF="(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}"
-if [ -z "${EXEMPT_STORY:-}" ] && ! printf '%s\n' "$MESSAGE" | grep -Eq "$STORY_REF"; then
+# The framework governs a Claude Code session only while it is installed, which links ~/.claude/CLAUDE.md into its checkout (#1187). Without that
+# link nothing here keeps a board, so a commit with no story number goes through and says the check was skipped.
+OC_CLAUDE_MD="${OLIVERCODE_CLAUDE_DIR:-$HOME/.claude}/CLAUDE.md"
+OC_INSTALLED=""
+if [ -L "$OC_CLAUDE_MD" ] && [ -f "$(dirname "$(readlink "$OC_CLAUDE_MD")")/scripts/olivercode" ]; then OC_INSTALLED=1; fi
+if [ -z "${EXEMPT_STORY:-}" ] && ! printf '%s\n' "$MESSAGE" | grep -Eq "$STORY_REF" && [ -z "$OC_INSTALLED" ]; then
+  echo "[commit-msg] Note: the story check was skipped because the framework is not installed on this machine."
+elif [ -z "${EXEMPT_STORY:-}" ] && ! printf '%s\n' "$MESSAGE" | grep -Eq "$STORY_REF"; then
   echo "[commit-msg] BLOCKED: the commit message names no story."
   echo "  Add the story number, for example \"Fix the sync (#53)\" or a line \"Story: #53\"."
   echo "  A revert or fixup/squash commit that names an existing commit, a merge that stages no code and a repo's first commit are exempt."

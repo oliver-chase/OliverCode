@@ -14,6 +14,16 @@ from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
 
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "commit-msg"
 
+def _installed_claude_dir() -> str:
+    """A ~/.claude whose CLAUDE.md links into an OliverCode checkout, which is what the story check reads as an install (#1187)."""
+    claude = Path(tempfile.mkdtemp(prefix="olivercode-claude-"))
+    atexit.register(shutil.rmtree, claude, ignore_errors=True)
+    (claude / "CLAUDE.md").symlink_to(REPO_ROOT / "CLAUDE.md")
+    return str(claude)
+
+
+os.environ["OLIVERCODE_CLAUDE_DIR"] = _installed_claude_dir()  # every commit-msg test runs as on an installed machine unless it says otherwise
+
 _TEMPLATE: Path | None = None  # the one scratch repo every CommitMsgCase subclass in this process shares (#1143)
 
 
@@ -57,6 +67,27 @@ class CommitMsgCase(unittest.TestCase):
         """Puts the repo in the state git is in while it commits a merge, with MERGE_HEAD set."""
         head = git(self.repo, "rev-parse", "HEAD").stdout.strip()
         (self.repo / ".git" / "MERGE_HEAD").write_text(head + "\n")
+
+
+class TestStoryCheckFollowsTheInstall(CommitMsgCase):
+    def test_a_commit_with_no_story_number_goes_through_when_OliverCode_is_not_installed(self):
+        self.first_commit()
+        with mock.patch.dict(os.environ, {"OLIVERCODE_CLAUDE_DIR": str(temp_dir(self, "olivercode-noinstall-"))}):
+            result = self.commit("Fix the sync")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("story check was skipped because the framework is not installed", result.stdout + result.stderr)
+
+    def test_a_commit_with_no_story_number_is_blocked_when_OliverCode_is_installed(self):
+        self.first_commit()
+        result = self.commit("Fix the sync")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("names no story", result.stdout + result.stderr)
+
+    def test_the_secret_scan_does_not_read_the_install(self):
+        """The workflow gate follows the install; the scan that protects secrets does not (#1187). It lives in the pre-commit gate, so this reads its source."""
+        gates = (REPO_ROOT / "core" / "hooks" / "gates" / "secrets.sh").read_text()
+        self.assertNotIn("OC_INSTALLED", gates)
+        self.assertNotIn("OLIVERCODE_CLAUDE_DIR", gates)
 
 
 class TestCommitMsg(CommitMsgCase):
