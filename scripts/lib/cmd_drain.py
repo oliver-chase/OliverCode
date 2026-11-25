@@ -704,7 +704,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         if begun:
             _event(io, "end")
     if state.get("api_error_stop"):
-        say(f"Drain stopped: Claude API is failing after five consecutive errors. Last cause: {state['api_error_stop']}")
+        say(f"Drain stopped after five consecutive API errors. Last cause: {state['api_error_stop']}")
         return 1
     if state.get("restart"):
         say(f"Drain restarting on the new code: #{state['restart']} changed the runner.")
