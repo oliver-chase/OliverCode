@@ -18,4 +18,5 @@ It applies to every reply and file, and skill messages and drafted documents go 
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `olivercode conform` finds stopped hooks, and `~/.claude/olivercode/docs/GATES.md` lists the gates
 - A request that changes files is filed as a story and built and merged unasked, per `~/.claude/olivercode/docs/RULES.md` ("The backlog"). The `audit` skill runs only when named. Read the rest of RULES.md only for OliverCode's own structure
 - A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`. Asked to build one in a desktop chat, offer that command instead
+- Every terminal command given to the owner starts with `cd` to the exact checkout that owns it (OliverCode: `cd ~/.claude/olivercode`); put the command on the next line and never imply a repo command works from an arbitrary folder
 - Board config: `docs/backlog-config.json` names this repo's GitHub Project. A `docs/backlog-config.local.json` overrides it when present
