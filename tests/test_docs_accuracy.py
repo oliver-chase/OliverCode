@@ -62,21 +62,21 @@ class TestDocsAccuracy(unittest.TestCase):
         rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in section.splitlines()
                 if line.startswith("| ") and not line.startswith("| In the kitchen")]
         parts = {
-            "Your one thread": ["skills/backlog/SKILL.md"],
-            "The board, one per repo": ["docs/backlog-config.json"],
-            "The runner, a script with no model": ["scripts/lib/cmd_drain.py"],
-            "The builder, one fresh headless session": ["scripts/lib/agent_loop.py"],
-            "Model by story size": ["scripts/lib/agent_loop.py"],
-            "Validation": ["scripts/validate.sh"],
-            "The reviewer": ["scripts/lib/agent_loop.py"],
-            "Land and close": ["scripts/lib/cmd_land.py"],
+            "Owner-facing front door": ["scripts/lib/cli.py", "scripts/lib/cmd_groom.py"],
+            "Durable work queue": ["scripts/lib/story_outbox.py"],
+            "Autonomous orchestrator": ["scripts/lib/cmd_dispatch.py", "scripts/lib/agent_loop.py"],
+            "Isolated Claude Code session": ["scripts/lib/agent_loop.py"],
+            "Workflow and model selection": ["scripts/lib/model.py"],
+            "Risk-proportional quality checks": ["scripts/validate.sh"],
+            "Review": ["scripts/lib/agent_loop.py"],
+            "Safe delivery": ["scripts/lib/cmd_land.py"],
             "Commit gates": ["docs/GATES.md"],
-            "Tool guards": ["scripts/hooks/pretool_guard.py"],
+            "Safety and policy controls": ["scripts/hooks/pretool_guard.py"],
             "The candidates list": ["scripts/lib/candidates.py"],
-            "Scheduled jobs": ["scripts/lib/schedules.py"],
+            "Background maintenance": ["scripts/lib/schedules.py"],
             "Rules, voice and design files": ["docs/RULES.md", "docs/VOICE.md", "docs/DESIGN.md"],
             "Skills": ["skills/INDEX.md"],
-            "Fleet checks": ["scripts/lib/conform.py"],
+            "Repository and fleet configuration": ["scripts/lib/local_config.py", "docs/backlog-config.json"],
             "Lessons and decisions": ["scripts/lib/cmd_lesson.py", "scripts/lib/decisions.py"],
         }
         self.assertEqual(16, len(rows))
