@@ -23,7 +23,7 @@ Run `python3 scripts/check_board_hygiene.py --config CONFIG --verify-baseline`. 
 
 ## Save every ask
 
-Every owner request that changes files becomes a story before any work starts, so nothing the owner asks for is lost or done untracked. The exception is a small change (`docs/RULES.md`, "The backlog"): it runs the repo's validation and commits with the number of the open epic whose goal fits. The rule lives in `docs/RULES.md` ("The backlog") and the body format in `references/story-template.md`.
+Track substantial delegated outcomes, not every implementation step. Create or extend one story when work needs independent ownership, sequencing, acceptance criteria or later follow-up. Group related changes under one outcome; do not create separate stories for subtasks that one session can safely complete together. Small safe fixes, documentation touch-ups and implementation details inside the current ask can be handled inline with the repo's focused validation and a commit. Keep the owner-visible backlog for work that genuinely needs prioritization or follow-through. The rule lives in `docs/RULES.md` ("The backlog") and the body format in `references/story-template.md`.
 
 1. **Search the open stories first** (command in `references/project-fields.md`). A request that duplicates an open story is added to it as a comment. Then search the closed ones for an idea the owner already rejected:
    `gh api -X GET search/issues -f q="repo:$REPO is:issue is:closed reason:\"not planned\" <topic>" --jq '.items[] | "\(.number) \(.title)"'`
