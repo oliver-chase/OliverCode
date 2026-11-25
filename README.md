@@ -66,7 +66,7 @@ Use a builder when unattended execution is useful. Keep interactive work in Clau
 
 ## Using it well
 
-- Work in one thread per topic, and start a fresh one when it grows long
+- Keep conversations focused; start a fresh one when the context stops helping the work
 - Never ask a thread for status. Run `olivercode status` instead
 - Delegate bounded work explicitly; keep strategy and exploration interactive
 - Keep a story small and name its files
