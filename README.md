@@ -37,18 +37,18 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 ## How work runs
 
-You work in one thread, and you say what you want. Each request becomes a story on the repo's board. `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main, logs the story and closes it. A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`. `olivercode status` shows what is open. You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
+Use Claude Code normally for strategy, exploration, planning, debugging and ordinary coding. Nothing becomes a backlog item automatically. When you explicitly delegate bounded work or want durable tracking, use the board and optional headless runner: `olivercode dispatch N` or `olivercode drain REPO` runs a story in its own worktree, validates it, lands it and records the result. `olivercode status` shows the runner and backlog without spending a model turn. You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
 
 ## How it works, in plain terms
 
-Think of a professional kitchen. Claude Code is a talented chef who can cook anything. OliverCode is everything around the chef that makes a kitchen run: the order tickets, the recipe standards, the pass where every plate is checked and the health inspector. You are the owner. You say what you want, and you never stand at the stove.
+Think of a professional kitchen. Claude Code is a talented chef who can cook anything. OliverCode is everything around the chef that makes a kitchen run: the order tickets, the recipe standards, the pass where every plate is checked and the health inspector. You are the owner. Sometimes you work directly with the chef; sometimes you delegate a bounded order and check the pass.
 
 | In the kitchen | In OliverCode | What it does |
 |---|---|---|
-| You tell the front desk what you want | Your one thread | Turns each request into a written ticket |
-| The ticket rail | The board, one per repo | Each story says what done means and which files it touches |
+| You talk to the chef | Interactive Claude Code | Strategy, exploration, debugging and direct coding stay conversational |
+| The ticket rail | The board, one per repo | Holds work you explicitly delegate or want tracked across sessions |
 | The expediter, who calls tickets one at a time | The runner, a script with no model | Picks the next story, sets up a clean station and picks the cook |
-| A line cook with a clean station | The builder, one fresh headless session | Cooks one ticket and stops, carrying nothing over from the last one |
+| A line cook with a clean station | Optional headless builder | Executes bounded delegated work in isolation |
 | A junior cook for toast, a senior for the tasting menu | Model by story size | A smaller model for small stories and a larger one for the rest |
 | The pass, where every plate is checked | Validation | Runs every gate and test, and a failed plate goes back with only the failure noted |
 | A second cook tastes the complicated dishes | The reviewer | A fresh reader checks medium and larger changes against the ticket |
@@ -62,15 +62,15 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 | The franchise inspection | Fleet checks | Checks every one of your repos against the same standard |
 | The incident log | Lessons and decisions | What went wrong, and what you decided |
 
-Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
+Use a builder when unattended execution is useful. Keep interactive work in Claude Code; don't pay orchestration overhead when a conversation is enough.
 
 ## Using it well
 
 - Work in one thread per topic, and start a fresh one when it grows long
 - Never ask a thread for status. Run `olivercode status` instead
-- Say what you want once and let the runner build it
+- Delegate bounded work explicitly; keep strategy and exploration interactive
 - Keep a story small and name its files
-- Never start a builder in a chat: `olivercode dispatch N` builds a board story without one
+- Do not turn ordinary conversation into a story or headless job unless you ask
 - A long thread costs more on every message, because all of it is re-read
 
 ## Dispatch planning
