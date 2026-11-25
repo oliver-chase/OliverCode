@@ -21,13 +21,12 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import agent_loop, cmd_owner, failure_log, gh_budget, model, repo_state
+from lib import agent_loop, cmd_owner, failure_log, gh_budget, model, repo_state, run_lock
 from lib.local_config import load_local
 
 REWRITE_MINUTES = 30
 REFRESH_SECONDS = 60
 DAYS = 7
-STALE_MINUTES = 30  # a published page older than this while a run is active carries a warning, the same limit the stall warning uses
 PUBLISH_MODEL = "haiku"
 DEFAULT_TOKENS = {"bg": "#ffffff", "text": "#000000", "muted": "#595959", "accent": "#1a4fd6", "line": "rgb(0 0 0 / 0.12)"}
 DARK_TOKENS = {"bg": "#0f0f10", "text": "#f2f2f2", "muted": "#a6a6a6", "accent": "#8ab4ff", "line": "rgb(255 255 255 / 0.16)"}
@@ -467,7 +466,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "th { font-weight: 500; color: var(--muted); }"
             "@media (max-width: 640px) { thead { display: none; } tr, td { display: block; } tr { padding: 8px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; }"
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
-            f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{STALE_MINUTES}"><main>{panel}'
+            f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'
             f"<h1>OliverCode status</h1><p class=\"muted\">This machine: {html.escape(platform.node())}. Last rewritten {datetime.fromtimestamp(now):%A %d %B %H:%M}. {html.escape(spend)}</p>"
             f'<p id="published" class="warn"></p>{body}{_spend_panel(log, now)}<h2>Waits on you, in any repo</h2>{owner}{SCRIPT}</main></body></html>')
 

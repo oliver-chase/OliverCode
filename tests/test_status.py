@@ -542,6 +542,40 @@ class TestStatusPage(unittest.TestCase):
         self.assertEqual(("#fafaf0", "#aa0000", "#000000"), (tokens["bg"], tokens["accent"], tokens["text"]))
         self.assertEqual("#ffffff", status_report.design_tokens()["bg"])
 
+    def test_the_rendered_page_uses_the_owners_design_colors_and_falls_back_to_the_shipped_ones(self):
+        """#1190: the tokens reach the page's own style block, not only design_tokens()."""
+        own = Path(self.tmp.name) / "mine.md"
+        own.write_text(":root { --bg: #fafaf0; --accent: #aa0000; }", encoding="utf-8")
+        with mock.patch.object(status_report, "load_local", return_value={"designFile": str(own)}):
+            styled = status_report.render({"o/r": self._entry()}, [], T0)
+        self.assertIn("--bg: #fafaf0;", styled)
+        self.assertIn("--accent: #aa0000;", styled)
+        with mock.patch.object(status_report, "load_local", return_value={}):
+            plain = status_report.render({"o/r": self._entry()}, [], T0)
+        self.assertIn(f"--bg: {status_report.DEFAULT_TOKENS['bg']};", plain)
+        self.assertNotIn("#fafaf0", plain)
+
+    def test_the_page_stacks_its_tables_on_a_phone_and_labels_every_cell(self):
+        """#1190: at 640 pixels or less a row becomes a block and each cell shows its column heading, so the label must exist on every cell."""
+        text = status_report.render({"o/r": self._entry()}, [], T0)
+        phone = text[text.index("@media (max-width: 640px)"):]
+        self.assertIn("thead { display: none; }", phone)
+        self.assertIn("tr, td { display: block; }", phone)
+        self.assertIn("attr(data-label)", phone)
+        table = status_report._table(["Story", "Model"], [["#5 A story", "sonnet"]], "none")
+        self.assertIn('<td data-label="Story">', table)
+        self.assertIn('<td data-label="Model">', table)
+        self.assertIn('name="viewport" content="width=device-width, initial-scale=1"', text)
+
+    def test_the_page_takes_its_stale_limit_from_the_one_stall_threshold(self):
+        """#1190: the page holds no copy of the number the status stall warning uses."""
+        from lib import run_lock
+        self.assertFalse(hasattr(status_report, "STALE_MINUTES"))
+        with mock.patch.object(run_lock, "STALL_MINUTES", 7):
+            text = status_report.render({"o/r": self._entry()}, [], T0)
+        self.assertIn('data-stale="7"', text)
+        self.assertEqual(run_lock.STALL_MINUTES, cmd_status.STALL_MINUTES)
+
     def test_runner_events_rewrite_the_local_page_without_publishing_an_artifact(self):
         with mock.patch.object(status_report, "_log", return_value=[]):
             self.record("begin", origin="o", queue=[self.story(5)], log=[])
