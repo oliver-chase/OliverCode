@@ -255,23 +255,36 @@ def last_lines(alive: bool, landed_row: dict | None, ready: str, log: list[dict]
 
 
 
-def tokens_per_closed(rows: list[dict], log: list[dict]) -> tuple[int, int] | None:
-    """The average tokens and the count of the stories closed in ROWS that the run log counted, or None when it counted none (#982)."""
-    spent = {}
+def tokens_per_closed(rows: list[dict], log: list[dict]) -> tuple[int, int, float | None] | None:
+    """Average all-token usage and cost per recently closed story, including review/fix sessions (#1152)."""
+    spent: dict[str, int] = {}
+    costs: dict[str, float] = {}
+    cost_seen: set[str] = set()
     for entry in log:
-        spent[str(entry.get("story"))] = spent.get(str(entry.get("story")), 0) + int(entry.get("input") or 0) + int(entry.get("output") or 0)
-    counted = [spent[f"story-{r.get('number')}"] for r in landed(rows) if spent.get(f"story-{r.get('number')}")]
+        match = re.fullmatch(r"(story-\\d+)(?:-(?:review|fix))?", str(entry.get("story") or ""))
+        if not match:
+            continue
+        key = match.group(1)
+        spent[key] = spent.get(key, 0) + sum(int(entry.get(field) or 0) for field in ("input", "output", "cache_read", "cache_write"))
+        cost = entry.get("cost_usd")
+        if isinstance(cost, (int, float)):
+            costs[key] = costs.get(key, 0.0) + float(cost)
+            cost_seen.add(key)
+    keys = [f"story-{r.get('number')}" for r in landed(rows)]
+    counted = [key for key in keys if spent.get(key) or key in cost_seen]
     if not counted:
         return None
-    return sum(counted) // len(counted), len(counted)
+    avg_cost = sum(costs.get(key, 0.0) for key in counted) / len(counted) if any(key in cost_seen for key in counted) else None
+    return sum(spent.get(key, 0) for key in counted) // len(counted), len(counted), avg_cost
 
 
 def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
-    """The tokens the runner spent per story closed in ROWS, from the run log's input and output counts for each of those stories (#982)."""
+    """All tokens and average cost per recently closed story, including review/fix sessions (#1152)."""
     found = tokens_per_closed(rows, log)
     if not found:
         return f"Tokens per closed story: not recorded for the last {DAYS} days."
-    return f"Tokens per closed story: {found[0]:,} across {found[1]} stories closed in the last {DAYS} days."
+    cost = f", average cost ${found[2]:.2f}" if found[2] is not None else ", average cost not recorded"
+    return f"Tokens per closed story: {found[0]:,} across {found[1]} stories closed in the last {DAYS} days{cost}."
 
 
 def handovers(now: datetime, folder: Path | None = None, days: int = DAYS) -> int:
@@ -300,7 +313,7 @@ def four_numbers(now: datetime, open_now: int, rows: list[dict], log: list[dict]
                  handover_dir: Path | None = None) -> dict:
     """The four revamp numbers for the last DAYS (#896): tokens per closed story (None when not recorded), handovers, threads typed into and open stories."""
     found = tokens_per_closed(rows, log)
-    return {"tokens_per_closed": found[0] if found else None, "handovers": handovers(now, handover_dir),
+    return {"tokens_per_closed": found[0] if found else None, "cost_per_closed": found[2] if found else None, "handovers": handovers(now, handover_dir),
             "threads": typed_threads(folder, now, projects), "open": open_now}
 
 
@@ -308,7 +321,8 @@ def numbers_line(numbers: dict) -> str:
     """The one line that prints the four revamp numbers (#896)."""
     tokens = numbers["tokens_per_closed"]
     spent = f"{tokens:,}" if tokens is not None else "not recorded"
-    return (f"Revamp numbers, last {DAYS} days: tokens per closed story {spent}, handovers {numbers['handovers']}, "
+    cost = f"${numbers['cost_per_closed']:.2f}" if numbers.get("cost_per_closed") is not None else "not recorded"
+    return (f"Revamp numbers, last {DAYS} days: tokens per closed story {spent}, average cost per closed story {cost}, handovers {numbers['handovers']}, "
             f"threads typed into {numbers['threads']}, open stories {numbers['open']}.")
 
 
