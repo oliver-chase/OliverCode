@@ -105,7 +105,6 @@ class TestDispatch(DispatchCase):
 
     def test_initial_and_queued_stories_share_one_dispatch_run_state(self):
         """A circuit-breaker trip in one story must stop later stories in the same dispatch run."""
-        from lib import run_lock
         seen = []
 
         def work(_io, story, state):
