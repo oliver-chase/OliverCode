@@ -326,7 +326,7 @@ class TestFileExcerpts(unittest.TestCase):
 
     def test_the_named_function_and_its_callers_are_in_the_excerpts(self):
         repo = self.make_repo()
-        out = cmd_dispatch.file_excerpts("Fix build_thing.\n\nFiles area: scripts/thing.py", repo)
+        out = cmd_dispatch.file_excerpts("Fix `build_thing`.\n\nFiles area: scripts/thing.py", repo)
         self.assertIn("def build_thing(x):", out)
         self.assertIn("scripts/user.py:3", out)
         self.assertNotIn("def other", out)
