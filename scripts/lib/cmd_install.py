@@ -46,8 +46,8 @@ INSTALL_RECORD = ".olivercode-install.json"
 # The first install's closing text: how work runs, the first steps and the habits that keep it cheap, in 20 lines at most (#972, #991).
 INTRODUCTION = """How OliverCode works
   Claude Code remains interactive for exploration, planning, debugging and work you want to do together.
-  When you explicitly delegate an outcome, OliverCode tracks it and takes responsibility for moving it forward.
-  OliverCode manages execution, recovery, validation and safe delivery; today dispatch and drain are the explicit queue entry points.
+  For unattended execution today, delegated work is represented by a repo story; you may need to create or choose it first.
+  Dispatch and drain start isolated Claude Code worktrees; OliverCode runs validation and safely lands or reports blocked work.
   The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost.
 
 First steps, in order
