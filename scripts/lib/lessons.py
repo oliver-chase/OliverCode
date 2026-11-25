@@ -130,7 +130,7 @@ def mark_implemented(ref: str, evidence: str, repo: str | Path | None = None) ->
                     found = True
                 out.append(line)
             if found:
-                failure_log.write_private(target, "\\n".join(out) + "\\n")
+                failure_log.write_private(target, "\n".join(out) + "\n")
                 changed += sum(1 for line in lines if line.strip() and _matches_covered(line, ref))
     return changed
 
