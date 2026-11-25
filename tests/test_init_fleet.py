@@ -85,6 +85,17 @@ class InitFleet(unittest.TestCase):
         self.assertFalse(any("POST" in " ".join(c) or " push " in " ".join(c) for c in calls))
         self.assertFalse(dest.exists())
 
+    def test_a_run_that_stopped_after_the_create_says_how_to_remove_the_repo_on_the_failed_step_and_on_the_rerun(self):
+        """#1035: a push that fails after the repo was created names the removal command, and the next run, which finds the repo without a registry, names it again."""
+        base = fake(calls=[])
+        failing = lambda args: (1, "remote rejected") if " push " in " ".join(args) else base(args)
+        rc, out, _ = self.run_cmd(failing)
+        self.assertEqual(1, rc)
+        self.assertIn("gh repo delete me/olivercode-fleet --yes", out)
+        rc, out, _ = self.run_cmd(fake(calls=[], github="other"))
+        self.assertEqual(1, rc)
+        self.assertIn("gh repo delete me/olivercode-fleet --yes", out)
+
     def test_a_fleet_repo_already_on_github_is_cloned_and_nothing_is_created(self):
         calls = []
         rc, out, dest = self.run_cmd(fake(calls=calls, github="fleet"))

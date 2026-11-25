@@ -440,6 +440,17 @@ class TestCleanup(Base):
         self.assertIn("Deleted remote branch feature/cleanup", out)
         self.assertIn("Deleted remote branch agent/story-9", out)
 
+    def test_a_landed_story_deletes_the_handover_an_earlier_failed_land_left(self):
+        """#1035: a handover from a failed attempt is stale once the story lands, so no file is left behind."""
+        logs = self.root / "logs"
+        logs.mkdir(exist_ok=True)
+        stale = [logs / "handover-main-9.md", logs / "handover-9.md"]
+        for path in stale:
+            path.write_text("validate-failed\n")
+        code, _ = self.land()
+        self.assertEqual(0, code)
+        self.assertEqual([], [p.name for p in stale if p.exists()])
+
     def test_a_landing_whose_branch_was_never_pushed_still_cleans_up(self):
         git(self.main, "push", "-q", "origin", "--delete", "story/9")
         code, out = self.land()
