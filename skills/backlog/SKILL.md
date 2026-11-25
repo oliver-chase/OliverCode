@@ -32,7 +32,7 @@ Track substantial delegated outcomes, not every implementation step. Create or e
 3. **Check the body** with `python3 scripts/check_story_format.py BODY_FILE` and fix every part it prints.
    In OliverCode, also run `python3 scripts/lib/repo_name_guard.py --text-file BODY_FILE` before any post: a story or comment never names the owner's other repos, and `--scan-issues` lists the issue numbers that already do.
 4. **File it** as below. A request the owner wants now goes in `Ready`, and the session starts it after filing.
-5. **A mid-task request is filed and queued.** The order changes only on "stop", "do this first" or "drop that".
+5. **A mid-task request is evaluated by outcome.** Add it to the current story when it belongs to that outcome; create or extend a separate story only when it needs independent ownership, sequencing, acceptance criteria or later follow-through. Do not create a ticket for each implementation step.
 
 ## Work an item
 
@@ -49,7 +49,7 @@ After each commit or finished piece of work, run `python3 scripts/log_action.py 
 ## File a story or epic
 
 1. **Search first** as in "Save every ask" and extend an existing open item with a comment. Record what you searched and found on the story's `Existing coverage checked:` line.
-2. **Classify the work.** An owner request is filed ("Save every ask") unless it meets that section's small-change exception. A quick fix the session finds on its own, such as a missing fallback or a stale word, is fixed inline with no Project item. Real new scope is filed before it is built. A repo's own quick-wins convention wins.
+2. **Classify the work.** File substantial delegated outcomes that need independent ownership, sequencing, acceptance criteria or later follow-through. Extend an existing story when it already owns the outcome. Keep small safe fixes, documentation touch-ups and implementation subtasks inside the current ask; a quick fix the session finds on its own is also handled inline. Real new scope is filed before it is built. A repo's own quick-wins convention wins.
 3. **Answer the fit check in the body.** Adding to what exists is the default, so the body names what it extends (a new file states why no home fits), whether it is core or an add-on, what it replaces and its effect on size and always-loaded tokens, and whether it passes `$OC/skills/audit/references/lenses.md`.
 4. **Check its fit, then create it and add it to the board.** Save the body to a file and run `olivercode board groom --fit BODY_FILE --title TITLE --config CONFIG` (#1004). It adds one `Related:` line to the body for each open story whose Files area shares a file or folder with this one, and it prints each Files area path that is not on main and that no `Creates:` line names. Fix a printed path, or add a `Creates:` line for a new file, and file the story either way. It calls no model. Then file it with `olivercode board file BODY_FILE --title TITLE --config CONFIG [--status Ready]` (#1107). It runs the format check and files nothing when any part is missing, printing each one; on a complete body it creates the issue and sets Status, Priority, Size and Work type in one batch. Status defaults to Backlog. A hold queues the field batch, which coalesces requests and accepts work during a hold
 5. **Set Status, Priority, Size and Work type every time.** Status is `Backlog` when something blocks the item or it needs a decision, and `Ready` when the next action is clear and unblocked. Priority and Size are a per-item judgment, never copied from a template or left blank.
