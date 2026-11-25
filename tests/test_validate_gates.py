@@ -33,6 +33,26 @@ class ParallelGates(unittest.TestCase):
         for word in ("a-out", "b-out", "c-out"):
             self.assertIn(word, out)
 
+    def test_smoke_unit_progress_is_forwarded_before_the_gate_finishes(self):
+        import threading
+
+        seen = threading.Event()
+        class Notifying(io.StringIO):
+            def write(self, value):
+                if "[RUN ] test_slow" in value:
+                    seen.set()
+                return super().write(value)
+
+        err = Notifying()
+        result = []
+        worker = threading.Thread(target=lambda: result.append(validate_gates.run_gates(
+            [("smoke", "printf \\\"  [RUN ] test_slow\\\\n\\\"; sleep 0.8")], timeout=5, out=io.StringIO(), err=err)))
+        worker.start()
+        self.assertTrue(seen.wait(0.5), "smoke progress should be visible before the test command exits")
+        self.assertTrue(worker.is_alive())
+        worker.join(3)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual([0], result)
     def test_gates_overlap_in_time(self):
         import time
         began = time.monotonic()
