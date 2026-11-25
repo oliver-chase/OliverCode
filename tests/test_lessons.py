@@ -66,6 +66,16 @@ class TestLessons(Isolated):
             lessons.cover("L-nope", "#1", repo=self.repo)
         self.assertEqual(first["covered_by"], None)
 
+    def test_implementation_is_recorded_without_deleting_the_lesson_and_is_idempotent(self):
+        rec = lessons.add("w", "y", "r", "#513", repo=self.repo)
+        count = lessons.mark_implemented("#513", "abc1234", self.repo)
+        self.assertEqual(1, count)
+        saved = lessons.read(self.repo)[0]
+        self.assertEqual(rec["id"], saved["id"])
+        self.assertEqual(("abc1234", date.today().isoformat()), (saved["implemented_by"], saved["implemented_on"]))
+        self.assertEqual(0, lessons.mark_implemented("#513", "abc1234", self.repo))
+        self.assertEqual(1, len(lessons.read(self.repo)))
+
     def test_uncovered_lists_only_lessons_without_covered_by(self):
         lessons.add("a", "b", "c", "#1", repo=self.repo)
         open_one = lessons.add("d", "e", "f", repo=self.repo)
