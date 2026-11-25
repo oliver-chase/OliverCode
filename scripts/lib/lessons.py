@@ -63,6 +63,16 @@ def add(what: str, why: str, rule: str, covered_by: str | None = None, repo: str
     p = path(repo)
     p.parent.mkdir(parents=True, exist_ok=True)
     with failure_log.locked(p):  # a cover rewrites the file, so an append waits for it
+        if p.is_file():
+            for line in p.read_text(encoding="utf-8").splitlines():
+                try:
+                    existing = json.loads(line) if line.strip() else None
+                except ValueError:
+                    existing = None
+                if isinstance(existing, dict) and existing.get("id") == rec["id"]:
+                    if covered_by and not existing.get("covered_by"):
+                        return _cover(p, rec["id"], covered_by)
+                    return existing
         failure_log.append_private(p, json.dumps(rec) + "\n")
     return rec
 
