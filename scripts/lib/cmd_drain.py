@@ -100,7 +100,7 @@ class Io:
         if not self.code_at:
             return None
         done = subprocess.run(["git", "-C", str(OC_ROOT), "log", f"{self.code_at}..HEAD", "--format=%s", "--", "scripts"], capture_output=True, text=True)
-        found = re.findall(r"\\(#(\\d+)\\)", done.stdout) if done.returncode == 0 else []
+        found = re.findall(r"\(#(\d+)\)", done.stdout) if done.returncode == 0 else []
         return int(found[0]) if found else None
 
     def gh(self, args: list[str]):
