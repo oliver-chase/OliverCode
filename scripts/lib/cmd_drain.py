@@ -21,7 +21,7 @@ from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, owner_decisions, policy, run_lock, status_report
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, session_guard, local_config, owner_decisions, policy, run_lock, status_report
 from lib.open_issues import Memo, fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -577,7 +577,7 @@ def story_cost_unknown(n: int, repo: str = "") -> bool:
                     return True
     except OSError:
         pass
-    return gh_budget.session_guard.story_has_unknown_cost(n, repo) if hasattr(gh_budget, "session_guard") else False
+    return session_guard.story_has_unknown_cost(n, repo)
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n, tokens, note, blocks, budget_stops = issue["number"], 0, "", 0, 0
