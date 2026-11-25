@@ -34,7 +34,7 @@ class CompleteStory(unittest.TestCase):
         self.run_it("no-builder.json")  # nothing was written, so the copy stays
         self.assertTrue(self.copy.exists())
 
-    def run_it(self, comments, items="PVTI_1", extra=None, fail=None, failtext="HTTP 422: Validation Failed", pushed=lambda commit, root=None: None, live=None, root_marker=False):
+    def run_it(self, comments, items="PVTI_1", extra=None, fail=None, failtext="HTTP 422: Validation Failed", pushed=lambda commit, root=None: None, live=None, root_marker=False, verified=(), body=BODY):
         calls = []
 
         def runner(args):
@@ -45,7 +45,7 @@ class CompleteStory(unittest.TestCase):
             if "--slurp" in args:
                 text = json.dumps([json.loads((FIX / comments).read_text())])
             elif ".body" in args:
-                text = Path(BODY).read_text()
+                text = Path(body).read_text()
             elif any("projectsV2" in a for a in args):
                 text = "\n".join(json.dumps(r) for r in (
                     [{"number": 99, "id": "PVTI_other", "repo": ""}, {"number": 54, "id": items, "repo": "https://api.github.com/repos/o/r"}]
@@ -59,7 +59,8 @@ class CompleteStory(unittest.TestCase):
         cfg.close()
         self.addCleanup(os.unlink, cfg.name)
         self.err = io.StringIO()
-        code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0"],
+        code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0",
+                        *[a for v in verified for a in ("--verified", v)]],
                        runner=runner, out=out, err=self.err, pushed=pushed, **({'live': live} if live else {}))
         out.flush()
         return code, out.buffer.getvalue().decode(), [" ".join(c) for c in calls]
@@ -78,8 +79,30 @@ class CompleteStory(unittest.TestCase):
         self.assertIn("updateProjectV2ItemFieldValue", queued)
         self.assertIn("OPT_DONE", queued)
 
+    def test_the_evidence_lists_each_scenario_with_how_it_was_verified(self):
+        code, _, calls = self.run_it("builder-only.json", verified=["Work is finished=tested: test_finish passes", "Work fails=observed: the failure message printed"])
+        self.assertEqual(code, 0)
+        joined = "\n".join(calls)
+        self.assertIn("Criteria\n- Work is finished: tested: test_finish passes\n- Work fails: observed: the failure message printed", joined.replace("-f body=", ""))
+
+    def test_a_scenario_with_no_evidence_is_listed_as_not_verified_and_the_story_still_closes(self):
+        code, _, calls = self.run_it("builder-only.json", verified=["Work is finished=tested: test_finish passes"])
+        self.assertEqual(code, 0)
+        self.assertIn("- Work fails: not verified, no evidence given", "\n".join(calls))
+
+    def test_a_story_with_no_scenarios_gets_no_criteria_section(self):
+        code, _, calls = self.run_it("builder-only.json", body=str(FIX / "story-no-gherkin.body"))
+        self.assertEqual(code, 0)
+        self.assertNotIn("Criteria", "\n".join(calls))
+
+    def test_a_verified_name_that_matches_no_scenario_refuses_the_close(self):
+        code, text, calls = self.run_it("builder-only.json", verified=["Typo scenario=tested"])
+        self.assertEqual(code, 1)
+        self.assertIn("names no scenario of the story: Typo scenario", text)
+        self.assertNotIn("state=closed", "\n".join(calls))
+
     def test_the_evidence_comment_ends_with_the_close_mark_the_sweep_reads(self):
-        code, _, calls = self.run_it("builder-only.json")
+        code, _, calls = self.run_it("builder-only.json", body=str(FIX / "story-no-gherkin.body"))
         self.assertEqual(code, 0)
         self.assertIn("3 files, validate.sh exits 0\n\nClosed by complete_story.py.", "\n".join(calls).replace("-f body=", ""))
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Close a story: check its builder entry, then move it to Complete, comment the evidence and close it.
 
-Usage: complete_story.py --story N --config CONFIG --evidence TEXT
+Usage: complete_story.py --story N --config CONFIG --evidence TEXT [--verified "SCENARIO=how it was verified"]...
 A story needs a builder entry and every builder commit on origin/main. On a refusal it prints the reason and
 changes nothing. On success it finds the story's project item through the REST items list, posts TEXT as a
 comment and closes the issue through REST, then sets Status to Complete by the config's ids (the only GraphQL
@@ -219,6 +219,22 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
     return None, "Live: " + "; ".join(proof) + "."
 
 
+SCENARIO = re.compile(r"^\s*Scenario(?: Outline)?:\s*(.+?)\s*$", re.M)
+
+
+def criteria_block(body, verified):
+    """(the Criteria section, the --verified names that match no scenario). Each Gherkin scenario of the story is listed with how it
+    was verified (tested, observed or not verifiable), and a scenario given nothing reads "not verified" so a passing run is never
+    taken for a seen outcome (#1198). A story with no scenarios gets no section."""
+    names = SCENARIO.findall(body or "")
+    if not names:
+        return "", []
+    given = {k.strip().lower(): v.strip() for k, v in verified}
+    unknown = [k for k, _ in verified if k.strip().lower() not in {n.lower() for n in names}]
+    lines = [f"- {n}: {given.get(n.lower()) or 'not verified, no evidence given'}" for n in names]
+    return "Criteria\n" + "\n".join(lines), unknown
+
+
 RUN_OUTPUT = re.compile(r"^\s*Run output:\s*\S|^\s*Run output:\s*\n\s*\S", re.M)  # the live run of the story's scenario (#836)
 
 
@@ -260,7 +276,13 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
     p.add_argument("--story", type=int, required=True)
     p.add_argument("--config", required=True)
     p.add_argument("--evidence", required=True, help="the comment: files touched and what shipped")
+    p.add_argument("--verified", action="append", default=[], metavar="SCENARIO=HOW",
+                   help="how one Gherkin scenario was verified: tested, observed or not verifiable, with the evidence")
     args = p.parse_args(argv)
+    verified = [tuple(v.split("=", 1)) for v in args.verified if "=" in v]
+    if len(verified) != len(args.verified):
+        print("complete_story: --verified takes SCENARIO=HOW", file=err)
+        return 2
     if not args.evidence.strip():
         print("complete_story: --evidence is empty; name the files touched and what shipped", file=err)
         return 2
@@ -300,6 +322,12 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
               "scenario live and add its output after a line that starts with `Run output:`", file=out)
         return 1
     evidence = args.evidence
+    block, unknown = criteria_block(body, verified)
+    if unknown:
+        print(f"complete_story: #{args.story} not completed: --verified names no scenario of the story: {', '.join(unknown)}", file=out)
+        return 1
+    if block:
+        evidence = f"{evidence}\n\n{block}"
     commits = builder_commits(flatten(data))
     if commits and is_olivercode(root):  # done means live: the installed checkout holds the work before the story closes
         reason, proof = live(commits, oc or installed_root(), root)
