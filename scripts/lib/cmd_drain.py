@@ -88,6 +88,20 @@ class Io:
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.memo = Memo()  # the pass's comment and blocker reads, each kept until the story changes (#1114)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
+        self.said_limit = ""
+        self.code_at = self._code_head()  # runner code this run started on (#1116)
+
+    def _code_head(self) -> str:
+        done = subprocess.run(["git", "-C", str(OC_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
+        return done.stdout.strip() if done.returncode == 0 else ""
+
+    def runner_changed(self) -> int | None:
+        """Story whose landing changed runner scripts since this run started, or None (#1116)."""
+        if not self.code_at:
+            return None
+        done = subprocess.run(["git", "-C", str(OC_ROOT), "log", f"{self.code_at}..HEAD", "--format=%s", "--", "scripts"], capture_output=True, text=True)
+        found = re.findall(r"\(#(\d+)\)", done.stdout) if done.returncode == 0 else []
+        return int(found[0]) if found else None
 
     def gh(self, args: list[str]):
         """`gh` through the runner a caller injected, else the shared one that honors the GitHub hold, with its cost logged under this run (#1114)."""
@@ -159,8 +173,8 @@ class Io:
             return None
 
     def limit(self) -> int:
-        """The most builders this run may hold: --parallel N, else the machine-wide limit (#1055)."""
-        return self.parallel or local_config.max_builders()
+        """Pool ceiling: --parallel N, else saved limit or machine ceiling. Capacity scales separately (#1108)."""
+        return self.parallel or local_config.saved_builders() or local_config.builder_ceiling()
 
     def event(self, kind: str, issue: dict | None = None, queue=(), waiting=()) -> str:
         """Rewrite the status page for a run event and publish it to City on the smallest model (#990). A failure here never stops a run."""
@@ -171,8 +185,14 @@ class Io:
             return ""
 
     def capacity(self) -> int:
-        """Builders this run may hold now: --parallel N, else the machine limit less what other repos' runs are building."""
+        """Builders this run may hold now: --parallel N, else scaled limit less other repos' builders."""
         return self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
+
+    def limit_note(self) -> str:
+        """The reason the adaptive machine limit last moved, once per change (#1108)."""
+        note = "" if self.parallel else local_config.builder_note()
+        said, self.said_limit = self.said_limit, note
+        return note if note != said else ""
 
     def holders(self) -> list[str]:
         """The other repos whose runs hold the builders (#1111)."""
@@ -412,7 +432,7 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     except CloseRefused:  # a landed story whose close the gate refused stays where it is, with the gate's message on it (#1011)
         _event(io, "held", issue)
         return False, 0
-    except CommitBlocked as blocked:  # the same gate blocked each restart, so the story waits in Backlog for the owner (#1096)
+    except CommitBlocked as blocked:  # the same gate blocked each restart, or the turn limit stopped it twice, so the story waits in Backlog for the owner (#1096, #1123)
         io.backlog(n)
         _event(io, "held", issue)
         return False, blocked.tokens
@@ -468,6 +488,13 @@ class CommitBlocked(Exception):
         self.tokens = tokens
 
 
+class TurnLimitParked(CommitBlocked):
+    """A builder stopped on the turn limit twice in a row, so the story is parked in Backlog (#1123)."""
+
+
+TURN_LIMIT_STOPS = 2  # consecutive stops on the turn limit after which the story is parked instead of restarted
+
+
 def commit_block_note(block: dict) -> str:
     """What the next round's brief says about the last block: the gate's reason verbatim and the ask to rewrite the message (#1096)."""
     return f"the {block['gate']} gate blocked the commit: {block['reason']}\nRewrite the commit message to pass that gate, then commit again."
@@ -483,7 +510,7 @@ def policy_stop_comment(stop: dict) -> str:
 
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
-    n, tokens, note, blocks = issue["number"], 0, "", 0
+    n, tokens, note, blocks, budget_stops = issue["number"], 0, "", 0, 0
     lead = io.landed_lead(issue)
     if lead:  # the work landed under another story, so a fresh build would repeat it on main; the owner decides (#988)
         if not io.told(n, lead[0]):
@@ -522,10 +549,15 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             if closed:
                 return True, tokens
         elif out.get("budget"):  # a spent budget leaves a handoff on the story, and the next round starts from it (#1113)
+            budget_stops += 1
             note = budget_handoff(worktree, out)
+            if budget_stops >= TURN_LIMIT_STOPS:  # the same story spent every turn twice running, so a third restart would loop; park it (#1123)
+                io.comment(n, f"Parked: the builder stopped on the turn limit {budget_stops} times in a row, so drain starts no restart, releases the claim and moves the story to Backlog.\n"
+                              f"- Next: split the story into thin stories, or rewrite it smaller, then return it to Ready.\n{note}")
+                raise TurnLimitParked(tokens)
             io.comment(n, f"Budget reached: the builder used every turn, and the next round resumes from this handoff.\n{note}")
         else:
-            note = out["reason"]
+            note, budget_stops = out["reason"], 0
         stop = io.policy_stop(n, worktree)
         if stop:  # a policy ask answers a headless builder with no one to answer it, so a restart would hit the same ask (#1058)
             io.comment(n, policy_stop_comment(stop))
@@ -587,6 +619,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
                     continue
                 todo.append(issue)
+            if note := getattr(io, "limit_note", lambda: "")():
+                say(note)
             waiting = [i for i in issues if owner_gated(i) and not is_epic(i)]
             if not begun and todo:
                 begun = True
@@ -594,7 +628,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if message:
                     say(message)
             started = False
-            for issue in todo:  # stories that share a file build together; the landing's rebase onto the default branch is the guard (#1080)
+            for issue in ([] if state.get("restart") else todo):  # no new story starts on old runner code (#1116)
                 if len(running) >= io.capacity():
                     break
                 if io.claimed(issue):
@@ -605,6 +639,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 started = True
             io.beat([i["number"] for i in running.values()])
             if not running:
+                if state.get("restart"):
+                    break
                 if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
                     waits += 1
                     sleep(300)
@@ -633,6 +669,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 state["tokens"] += used
                 issues = None
                 (state["closed"] if closed else state["blocked"]).append(issue["number"])
+                if closed and not state.get("restart") and (moved := getattr(io, "runner_changed", lambda: None)()):
+                    state["restart"] = moved
             io.beat([i["number"] for i in running.values()])
     except BaseException:  # Ctrl-C or SIGTERM (#1076): the stories in flight go back to Ready and their claims go, then the stop goes on
         stopped = True
@@ -643,6 +681,9 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         pool.shutdown(wait=not stopped)
         if begun:
             _event(io, "end")
+    if state.get("restart"):
+        say(f"Drain restarting on the new code: #{state['restart']} changed the runner.")
+        return 0
     say(f"Drain done: {len(state['closed'])} stories closed, {len(state['blocked'])} blocked, {state['sessions']} sessions, {state['tokens']:,} tokens.")
     return 0
 
@@ -694,7 +735,7 @@ def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) 
     return True
 
 
-def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit) -> int:
+def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit, restart=os.execv) -> int:
     """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055). One run holds a repo at a time (#992)."""
     args, parallel, rest = list(argv), None, []
     while args:
@@ -720,14 +761,14 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         io.origin = " ".join(["olivercode drain", *argv])
     on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
     previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
-    code = 0
+    code, state = 0, {}
     try:
         if not take_run(io, slug, f"drain {repo.name}"):
             return 0
         state = new_state()
         with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
             code = drain(io, state, sleep=sleep)
-            while code == 0 and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
+            while code == 0 and not state.get("restart") and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
                 code = drain(io, state, sleep=sleep)
     except KeyboardInterrupt:  # drain has released its claims and said so; the lock goes in the finally below (#1076)
         code = 130
@@ -735,6 +776,9 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         run_lock.release(slug, pid)
         if on_main:
             signal.signal(signal.SIGTERM, previous)
+    if code == 0 and state.get("restart"):
+        sys.stdout.flush()
+        restart(sys.executable, [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "drain", *argv])
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)
         sys.stdout.flush()
         sys.stderr.flush()

@@ -167,7 +167,7 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 - `watchRoots` and `allowOutside`: the folders `olivercode place` scans for strays, and checkouts allowed to stay elsewhere
 - `repoPaths`: a repo outside the fleet folder
 - `liveCopies`: each path a running bot reads, mapped to its agent copy. `install` and `conform` fail when OliverCode runs from a live path and name the agent copy to use
-- `maxBuilders`: how many builder sessions drain and dispatch run at once across every repo on this machine. Unset, it is half the cores or the memory in GB less 4, whichever is smaller, which is 4 on an 8-core 8 GB Mac
+- `maxBuilders`: how many builder sessions drain and dispatch run at once across every repo on this machine. Unset, it starts at 5 and moves one step a minute with the machine: down when load is above the cores or swap is at least 1 GB, up when load is under half the cores and memory is free, never below 1 or above half the cores or the memory in GB less 4. The drain and status name why it moved. A saved value is fixed
 - `auditMode`: `full` or `gated`. Unset, the audit stops at its report and filed issues, and `python3 skills/audit/scripts/audit_mode.py set full|gated` stores the opt-in to fix them too
 - `voiceFile`: the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of `docs/VOICE.md`
 - `designFile`: your own design file, which `install` links as `~/.claude/DESIGN.md` in place of `docs/DESIGN.md`. `install` keeps a `~/.claude/VOICE.md` or `DESIGN.md` you already have and prints `[KEPT]`
