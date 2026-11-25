@@ -167,7 +167,7 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
                                           stderr=subprocess.STDOUT).returncode
             except OSError as exc:
                 code = 1
-                (log_dir / f"{name}.log").write_text(f"Could not start test module: {exc}\\n", encoding="utf-8")
+                (log_dir / f"{name}.log").write_text(f"Could not start test module: {exc}\n", encoding="utf-8")
             took = time.monotonic() - began
             label = "FAIL" if code else " OK "
             progress(f"  [{label}] {name} ({took:.1f}s)")
