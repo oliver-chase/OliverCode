@@ -467,8 +467,9 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "@media (max-width: 640px) { thead { display: none; } tr, td { display: block; } tr { padding: 8px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; }"
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'
-            f"<h1>OliverCode status</h1><p class=\"muted\">This machine: {html.escape(platform.node())}. Last rewritten {datetime.fromtimestamp(now):%A %d %B %H:%M}. {html.escape(spend)}</p>"
-            f'<p id="published" class="warn"></p><h2>Waits on you, in any repo</h2>{owner}{body}{_spend_panel(log, now)}{SCRIPT}</main></body></html>')  # what needs the owner comes first (#1209)
+            f'{"" if panel else "<h1>OliverCode City</h1>"}<p id="published" class="warn"></p>'  # the dashboard leads: what needs the owner comes first (#1209, #1177)
+            f'<details style="margin-top:32px"><summary>Details by project</summary><p class="muted">This machine: {html.escape(platform.node())}. Last rewritten '
+            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. {html.escape(spend)}</p><h3>Every step waiting on you</h3>{owner}{body}{_spend_panel(log, now)}</details>{SCRIPT}</main></body></html>')
 
 
 def _owner_steps() -> list[dict]:

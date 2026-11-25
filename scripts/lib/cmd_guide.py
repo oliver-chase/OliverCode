@@ -227,8 +227,81 @@ def _fleet_step(oc_root: Path) -> str:
     return 'Say "Set up OliverCode" in Claude to connect your projects. None are connected yet'
 
 
+WHEN_TO_USE = (
+    ("Working through an idea", "Claude Code"),
+    ("Planning or debugging together", "Claude Code"),
+    ("Handing off a task", "`dispatch`"),
+    ("Running a repo's queue", "`drain`"),
+    ("Checking progress", "`status`"),
+    ("Finding decisions or blockers", "`owner list`"),
+)
+# The commands by what the owner wants to do. Every command in GROUPS appears once.
+COMMAND_SETS = (
+    ("Install and keep things up to date", "install · uninstall · update · bootstrap · sync-hooks"),
+    ("Check and maintain your setup", "health · conform · maintain · limits · place · clean"),
+    ("Build and deliver work", "run · dispatch · drain · land · wip · validated · queue · worktree"),
+    ("Manage stories and boards", "backlog-setup · board groom · board sync · story · candidates · gh-limit · gated"),
+    ("Keep track of work", "status · status digest · status page · status publish · owner · decisions"),
+    ("Manage your projects", "discover · init-fleet · fleet-sync · policy"),
+    ("Releases and documentation", "version-cut · docs-check · commit-check · guide"),
+)
+
+
+def plain_guide(oc_root: Path) -> list[str]:
+    """The guide, short enough to read in under a minute (#1177). The long parts live behind `olivercode guide city`, `guide skills` and `guide design`."""
+    from lib import repo_profiles
+    try:
+        count = len(repo_profiles.load_repo_profiles(oc_root)[0])
+    except (OSError, ValueError):
+        count = 0
+    out = ["OliverCode", "",
+           "OliverCode lets you hand Claude Code work to complete on its own. You keep working normally, and OliverCode runs delegated work, checks it and gets it across the finish line.", "",
+           "Getting started",
+           f"  {count} project{'' if count == 1 else 's'} connected." if count else '  No projects are connected yet. Say "Set up OliverCode" in Claude.',
+           "  Run `olivercode health` to check that everything is working.",
+           "  To hand off work, choose a story and run `olivercode dispatch 42`, or run `olivercode drain REPO` to work through a repo's queue.", "",
+           "How it works"]
+    out += [f"  {n}. {step}" for n, step in enumerate((
+        "Work through an idea with Claude Code.", "When you are ready to hand it off, put it on your repo's board.", "Run `olivercode dispatch 42`.",
+        "OliverCode builds it in its own workspace, runs the checks and lands it if everything passes.",
+        "Check `olivercode status` to see how it went. If something needs you, OliverCode says so."), 1)]
+    out += ["", "What to use when"] + [f"  {task:<32} {tool}" for task, tool in WHEN_TO_USE] + ["", "Commands"]
+    for title, cmds in COMMAND_SETS:
+        out += [f"  {title}", f"    {cmds}", ""]
+    out += ["Your projects, your rules",
+            "  OliverCode uses your repo's rules, validation and permissions. You stay in control of approvals, sensitive actions and anything that needs your judgment.", "",
+            "City",
+            "  City gives you a live view of work, progress and anything waiting on you. Set it up in Claude Desktop to use it there and from your phone.", "",
+            "Run `olivercode guide NAME` for a closer look at any command or skill. `guide city`, `guide skills` and `guide design` cover those topics."]
+    return out
+
+
+def _city_topic(oc_root: Path) -> list[str]:
+    url = city_url()
+    return ["OliverCode City", "", f"  {url}" if url else "  Not set up in the Claude desktop app. Open it and say \"Set up OliverCode City\" to finish, or \"Skip OliverCode City\" to stop the reminder.", "",
+            "To check in from your phone"] + [f"  {n}. {step}" for n, step in enumerate(PHONE_STEPS, 1)] + ["", f"Update City with `{CITY_PUBLISH}`."]
+
+
+def _skills_topic(oc_root: Path) -> list[str]:
+    out = ["Skills", "", "Say the phrase to Claude Code and the skill loads.", ""]
+    for skill, phrases in skill_triggers(oc_root):
+        out += [f"  {skill}", f"      {phrases}"]
+    return out
+
+
+def _design_topic(oc_root: Path) -> list[str]:
+    return ["Your design file", "", "  Set designFile in olivercode.local.json to your own path, then run `olivercode install` to link it as ~/.claude/DESIGN.md."]
+
+
+TOPICS = {"city": _city_topic, "skills": _skills_topic, "design": _design_topic}
+
+
 def command_guide(oc_root: Path, name: str | None = None) -> int:
     if name:
+        topic = name.lower().removeprefix("olivercode ").strip()
+        if topic in TOPICS:
+            print("\n".join(TOPICS[topic](oc_root)))
+            return 0
         found = explain(oc_root, name)
         if name.lower().removeprefix("olivercode ").strip() == "status":
             found.append("Status steps\n" + "\n".join(f"  {step}" for step in status_steps(oc_root)))
@@ -237,34 +310,6 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
             return 1
         print("\n\n".join(found))
         return 0
-    print("First steps, in order")
-    print(f"  1. {_fleet_step(oc_root)}")
-    print("  2. olivercode health                                                   check this machine")
-    print("  3. For queued execution today: create or choose a repo story, then run olivercode dispatch N or olivercode drain REPO")
-    print("\nOne example, start to finish")
-    for line in EXAMPLE:
-        print(f"  {line}")
-    print("\nHow work runs")
-    for sentence in HOW_WORK_RUNS:
-        print(f"  {sentence}")
-    print(f"  {THREAD_LINE}")
-    print("\nArchitecture, owner to outcome")
-    for layer in ARCHITECTURE:
-        print(f"  {layer}")
-    print("\nUsing it well")
-    for habit in USING_IT_WELL:
-        print(f"  {habit}")
-    print("\nCity, on the desktop and the phone")
-    for line in city_lines():
-        print(f"  {line}")
-    print("\nCommands, by the job they do (olivercode guide NAME says more about one)")
-    for job, cmds in GROUPS:
-        print(f"\n{job}")
-        for cmd, desc in cmds:
-            print(f"  {cmd:<16} {desc}")
-    print("\nYour design file: set designFile in olivercode.local.json to your own path, then run `olivercode install` to link it as ~/.claude/DESIGN.md")
-    print("\nSkills: say the phrase to Claude Code and the skill loads")
-    for skill, phrases in skill_triggers(oc_root):
-        print(f"  {skill}\n      {phrases}")
-    print("\nMore: README.md, docs/SETUP.md (setup and commands)")
+    for line in plain_guide(oc_root):
+        print(line)
     return 0

@@ -165,7 +165,8 @@ class WhoBuilds(unittest.TestCase):
         """The contract is that step 3 names queued execution and both commands that start it, not the sentence around them (#1181)."""
         from lib import cmd_guide
         _, guide = quiet(cmd_guide.command_guide, REPO_ROOT)
-        for where, text in (("install introduction", cmd_install.INTRODUCTION), ("guide", guide)):
+        start = next(l for l in guide.splitlines() if "To hand off work" in l)  # the guide's third getting-started line (#1177)
+        for where, text in (("install introduction", cmd_install.INTRODUCTION), ("guide", "3. " + start)):
             step = next((line for line in text.splitlines() if line.lstrip().startswith("3.")), "")
             self.assertTrue(step, f"{where} has no step 3")
             for needed in ("story", "olivercode dispatch", "olivercode drain"):
@@ -213,7 +214,7 @@ class DesignFile(unittest.TestCase):
     def test_the_guide_names_design_file_and_the_relink_command(self):
         from lib import cmd_guide
         from lib.local_config import OC_ROOT
-        _, out = quiet(cmd_guide.command_guide, OC_ROOT)
+        _, out = quiet(cmd_guide.command_guide, OC_ROOT, "design")
         line = next(l for l in out.splitlines() if "designFile" in l)
         self.assertIn("olivercode install", line)
         self.assertIn("~/.claude/DESIGN.md", line)
@@ -388,7 +389,7 @@ class CityStep(unittest.TestCase):
     def test_the_guide_names_the_url_the_phone_steps_and_the_republish_command(self):
         from lib import cmd_guide
         self.config.write_text(json.dumps({"cityArtifact": "https://claude.ai/artifact/abc"}))
-        _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
+        _, out = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
         self.assertIn("https://claude.ai/artifact/abc", out)
         self.assertIn("Open the pinned OliverCode City artifact.", out)
         self.assertIn("olivercode status publish", out)

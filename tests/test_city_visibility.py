@@ -40,9 +40,9 @@ class CityVisible(unittest.TestCase):
         self.config({})
         out = []
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=out.append)
-        lines = [line for line in out if line.strip().startswith("City is not set up")]
+        lines = [line for line in out if "Not connected to Claude Desktop" in line]
         self.assertEqual(1, len(lines), out)
-        self.assertNotIn("phone", lines[0].lower())
+        self.assertFalse([line for line in out if "phone" in line.lower()])
 
     def test_a_declined_city_is_quiet_everywhere(self):
         path = self.config({"cityDeclined": True})
@@ -51,7 +51,7 @@ class CityVisible(unittest.TestCase):
         self.assertNotIn("[WARN] City", self.health(path))
         out = []
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=out.append)
-        self.assertFalse([line for line in out if line.startswith("City:")])
+        self.assertFalse([line for line in out if "Not connected to Claude Desktop" in line])
 
     def test_a_set_up_city_clears_the_warning_and_the_guide_shows_the_url_with_the_pin_unverified(self):
         path = self.config({"cityArtifact": "https://claude.ai/artifact/abc"})

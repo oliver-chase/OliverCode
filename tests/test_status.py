@@ -35,21 +35,23 @@ class TestStatus(unittest.TestCase):
     def status(self, open_now, rows, slug="o/r"):
         out = io.StringIO()
         code = cmd_status.run(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"),
-                              live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "")
+                              steps=lambda: [], ideas=lambda: 0)
         return code, out.getvalue()
 
     def test_status_names_a_story_a_policy_stop_left_waiting_on_the_owner(self):
         step = "Story #1012 waits on you: triggers.gateFailures stopped its builder at the Owner identifiers gate, so drain did not restart it."
         out = io.StringIO()
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
-                       live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"], cands=lambda: "")
-        self.assertIn("Needs you\n  1 thing waits on you.\n  - #7 " + step, out.getvalue())
+                       steps=lambda: [{"id": 7, "step": step, "session": "drain"}], ideas=lambda: 0)
+        self.assertIn("YOUR ATTENTION\n1 thing needs you.", out.getvalue())
+        self.assertIn("olivercode owner list", out.getvalue())
 
     def test_status_names_the_candidates_waiting(self):
         out = io.StringIO()
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
-                       live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "- 3 candidate(s) wait: run `olivercode candidates` to review them.")
-        self.assertIn("3 candidate(s) wait: run `olivercode candidates`", out.getvalue())
+                       steps=lambda: [], ideas=lambda: 3)
+        self.assertIn("3 waiting for review.", out.getvalue())
+        self.assertIn("olivercode candidates", out.getvalue())
 
     def test_status_warning_names_the_last_api_error_cause(self):
         claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 60, "at": NOW.timestamp()}}
@@ -62,23 +64,23 @@ class TestStatus(unittest.TestCase):
         code, text = self.status(14, rows)
         self.assertEqual(0, code)
         self.assertIn("14 open", text)
-        self.assertIn("2.0 stories landed per day", text)
-        self.assertIn("reaches zero on 2026-12-06", text)
+        self.assertIn("14 delivered   7 added   14 open", text)
+        self.assertIn("The backlog is shrinking.", text)
+        self.assertIn("rough guess", text)  # a finish date is an estimate, never a promise
 
     def test_a_flat_count_says_the_date_is_not_reachable(self):
         rows = [issue("2026-11-20", "2026-11-21")] * 7
         code, text = self.status(5, rows)
         self.assertEqual(0, code)
-        self.assertIn("1.0 stories landed per day", text)
-        self.assertIn("not reachable at this rate", text)
+        self.assertIn("You are keeping up with new work.", text)
 
     def test_a_rising_count_says_the_date_is_not_reachable(self):
         _, text = self.status(5, [issue("2026-11-20")] * 3)
-        self.assertIn("not reachable at this rate", text)
+        self.assertIn("New work is arriving faster than it is delivered.", text)
 
     def test_issues_outside_the_window_are_not_counted(self):
         _, text = self.status(5, [issue("2026-10-01", "2026-10-02")])
-        self.assertIn("0 closed and 0 opened", text)
+        self.assertIn("0 delivered   0 added", text)
 
     def test_tokens_per_closed_story_include_cache_review_and_cost(self):
         rows = [dict(issue("2026-11-01", "2026-11-20"), number=4), dict(issue("2026-11-01", "2026-11-21"), number=5), dict(issue("2026-11-01"), number=6)]
@@ -104,7 +106,7 @@ class TestStatus(unittest.TestCase):
                 mock.patch.object(cmd_status, "live_claims", return_value={}), mock.patch.object(cmd_status, "runner_alive", return_value=False):
             cmd_status.run("o/r", count=lambda s, state: 14, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"))
         text = out.getvalue()
-        for want in ("14 open", "2.0 stories landed per day", "Tokens per closed story: 150", "reaches zero on 2026-12-06"):
+        for want in ("14 open", "14 delivered", "7 added", "150 tokens per story", "The backlog is shrinking."):
             self.assertIn(want, text)
 
     def test_a_failed_read_exits_one(self):
@@ -158,21 +160,17 @@ class TestStatusLayout(unittest.TestCase):
                 mock.patch("lib.gated.savings_lines", return_value=[]), \
                 mock.patch.object(cmd_status.local_config, "builder_note", return_value="Builder limit 3: load 12 on 8 cores."):
             cmd_status.run("o/OliverCode", count=lambda s, state: 3, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
-                           waiting=lambda: [], cands=lambda: "", numbers=lambda: {"tokens_per_closed": None, "handovers": 0, "threads": 0, "open": 3})
+                           steps=lambda: [], ideas=lambda: 0, numbers=lambda: {"tokens_per_closed": None, "handovers": 0, "threads": 0, "open": 3})
         lines = out.getvalue().splitlines()
-        self.assertEqual(["Status for o/OliverCode", "", "Needs you", "  Nothing needs you right now.", "", "Happening now"], lines[:6])
-        lines = [l.strip() for l in lines]  # the sections indent their lines under a heading
-        self.assertEqual("", lines[lines.index("Building:") - 1])
-        self.assertIn("Builder limit 3: load 12 on 8 cores.", lines)  # #1158: status says why the limit dropped
+        self.assertEqual(["OliverCode · o/OliverCode", "─" * 40, "", "YOUR ATTENTION", "Nothing needs you right now."], lines[:5])
+        lines = [l.strip() for l in lines]  # the work section indents its lines
+        self.assertTrue(any(l.startswith("Builders  3 running,") for l in lines))
+        self.assertIn("Machine   load 12 on 8 cores", lines)  # #1158: status says why the limit dropped
         self.assertIn("OliverCode #1105 · S · Landing · claimed 42m, activity 10m, 0 rounds", lines)
         self.assertIn("OliverCode #1107 · M · Building · claimed 42m, activity 42m, 0 rounds", lines)
-        claims_at = lines.index("Claims:")  # #1188: every live claim is listed again, with its holder, under its own heading
-        building = lines[lines.index("Building:"):claims_at]
-        story_lines = [line for line in building if " · " in line]
+        story_lines = [line for line in lines if " · " in line and "claimed" in line]
         self.assertEqual(3, len(story_lines))
         self.assertTrue(all(len(line) <= 80 for line in story_lines))
-        self.assertEqual(1, sum("#1105" in line for line in building))
-        self.assertEqual(3, len([line for line in lines[claims_at:] if "held by" in line]))
 
 
 def decision(n: int, words: str = "Option A") -> dict:
@@ -918,12 +916,12 @@ class RevampNumbersCase(unittest.TestCase):
         rows = [dict(issue("2026-11-01", "2026-11-20"), number=4)]
         out = io.StringIO()
         with mock.patch.object(cmd_status, "run_log", return_value=[{"story": "story-4", "input": 10, "output": 5}]), \
-                mock.patch.object(cmd_status.subprocess, "run", side_effect=AssertionError("no model call")):
+                mock.patch("lib.model.run_cli", side_effect=AssertionError("no model call")):
             cmd_status.run("o/r", count=lambda s, state: 3, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"),
-                           live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "", folder=self.repo,
+                           steps=lambda: [], ideas=lambda: 0, folder=self.repo,
                            numbers=lambda: cmd_status.four_numbers(NOW, 3, rows, [{"story": "story-4", "input": 10, "output": 5}], self.repo,
                                                                     self.projects, self.handovers))
-        self.assertIn("A finished story takes about 15 tokens and costs not recorded. Work moved to a fresh session 0 times, you typed into 0 running threads, and 3 stories are open.", out.getvalue())
+        self.assertIn("15 tokens per story", out.getvalue())
 
     def test_no_closed_story_says_the_tokens_are_not_recorded(self):
         numbers = cmd_status.four_numbers(NOW, 2, [], [], self.repo, self.projects, self.handovers)

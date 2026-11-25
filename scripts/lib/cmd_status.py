@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from lib import candidates, cmd_groom, cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock, status_page, validate_queue, status_report
-from lib import local_config
+from lib import briefing, local_config
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -473,6 +473,14 @@ def state_lines(now: float, claims: dict, log: list[dict], issues: dict[str, dic
     return lines
 
 
+def _states(stamp: float, slug: str, claims: dict, log: list[dict], issues: dict, holder: dict, alive: bool, commits: dict) -> list[str]:
+    """One line per building story, with what it is waiting on."""
+    slots, slot_total = validation_slots()
+    # run() stops before this on a REST hold, so the hold a story can wait on here is GraphQL's, which the runner's board calls spend
+    return state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [],
+                       slug, story_notes(stamp, claims, log, alive, holder, commits))
+
+
 def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -> list[str]:
     """The status lines for this machine right now, read from the claims, the run log, the process table, the run lock and the digest. The figures come
     first, then the Building section and the Last landed section, each set off by a blank line."""
@@ -488,10 +496,7 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     claims = {k: v for k, v in claims.items() if k not in closed}
     issues = {str(i.get("number")): i for i in (open_issues.fetch(slug) or [])} if slug and claims else {}
     commits = {n: t for n in (key.rsplit("#", 1)[-1] for key in claims) if (t := last_commit(slug, n))}
-    slots, slot_total = validation_slots()
-    # run() stops before this on a REST hold, so the hold a story can wait on here is GraphQL's, which the runner's board calls spend
-    states = state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [],
-                         slug, story_notes(stamp, claims, log, alive, holder, commits))
+    states = _states(stamp, slug, claims, log, issues, holder, alive, commits)
     building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + ([note] if (note := local_config.builder_note()) else []) + stale  # why the builder limit moved (#1158)
     building += [line] if (line := estimate_line(slug, stamp)) else []  # when the run finishes, or why nothing says (#1189)
     held = claim_lines(stamp, claims, github_claims(in_progress(stamp)))  # every live claim, with its holder (#1188)
@@ -516,8 +521,39 @@ def no_origin(folder: Path) -> str:
             f"such as the OliverCode checkout at {OC_ROOT} or a registered fleet repo.")
 
 
-def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
-        waiting=None, cands=None, folder: Path | None = None, numbers=None, city=None) -> int:
+def owner_steps(slug: str | None = None) -> list[dict]:
+    """The open owner steps, after the ones whose story has closed are marked done (#1024)."""
+    try:
+        if slug:
+            cmd_owner.clear_stories(slug, cmd_owner.story_closed)
+        return [i for i in cmd_owner.items() if i["status"] == "open"]
+    except (OSError, ValueError, KeyError):
+        return []
+
+
+def gather(slug: str, now: datetime, open_now: int, rows: list[dict], numbers: dict, steps: list[dict], ideas: int, city: bool) -> dict:
+    """The figures `olivercode status` and City show, read once with no model call (#1177)."""
+    stamp, log = now.timestamp(), run_log()
+    claims = live_claims(stamp)
+    claims = {k: v for k, v in claims.items() if k not in closed_claims(claims, slug, rows)}
+    note = local_config.builder_note() or ""
+    load = re.sub(r"^Builder limit \d+:\s*", "", note).rstrip(".")
+    today = datetime.fromtimestamp(stamp).date()
+    delivered = [{"story": str(r["story"]).rsplit("-", 1)[-1], "title": _text(r.get("title"), 60), "tokens": r["tokens"], "cost": r["cost"]}
+                 for r in status_report.history(log, slug, stamp, days=2) if datetime.fromtimestamp(status_report._epoch(r.get("at"))).date() == today]
+    newest = (landed(rows) or [None])[0]
+    holder = run_lock.active(slug, stamp)
+    issues = {str(i.get("number")): i for i in (open_issues.fetch(slug) or [])} if claims else {}
+    commits = {n: t for n in (key.rsplit("#", 1)[-1] for key in claims) if (t := last_commit(slug, n))}
+    lines = _states(stamp, slug, claims, log, issues, holder, runner_alive(), commits) if claims else []
+    ready = next_ready(digest_path(), held_numbers(stamp, slug))
+    return briefing.snapshot(slug=slug, now=now, open_now=open_now, rows=rows, numbers=numbers, steps=steps, today=delivered, ready=re.sub(r"^Next Ready:\s*", "", ready),
+                             runner={"building": len(claims), "allowed": local_config.max_builders(), "load": load, "run": run_lock.describe(holder, stamp) if holder else "", "lines": lines}, ideas=ideas, city=city,
+                             latest={"number": newest.get("number"), "title": _text(newest.get("title"), 70)} if newest else None)
+
+
+def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, steps=None, ideas=None,
+        folder: Path | None = None, numbers=None, city=None, brief=None) -> int:
     if not slug:
         out(no_origin(folder or Path.cwd()))
         return 1
@@ -531,41 +567,18 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
     if open_now is None or rows is None:
         out(f"Error: the issues of {slug} were not read.")
         return 1
-    steps = (waiting or (lambda: waiting_lines(slug)))()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
-    out(f"Status for {slug}")
-    out("")
-    out("Needs you")
-    if steps:
-        more = re.fullmatch(r"- and (\d+) more", steps[-1])
-        total = len(steps) - 1 + int(more.group(1)) if more else len(steps)
-        out(f"  {total} thing{'s' if total != 1 else ''} wait{'' if total != 1 else 's'} on you.")
-        for line in steps:
-            out("  " + line)
-        out("  Next: run `olivercode owner list` to see them all, grouped.")
-    else:
-        out("  Nothing needs you right now.")
-    out("")
-    out("Happening now")
-    for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
-        out(f"  {line}" if line and not line.startswith(" ") else line)
-    held = run_lock.active(slug, now.timestamp())
-    if held:
-        out("  Run: " + run_lock.describe(held, now.timestamp()))
-    out("")
-    out("The last 7 days")
-    out("  " + summary(open_now, rows, now))
-    out("  " + numbers_line((numbers or (lambda: four_numbers(now, open_now, rows, run_log(), folder or Path.cwd())))()))
-    line = (cands or candidate_line)()
-    if line:
-        out("")
-        out("Ideas waiting on you")
-        out("  " + line.lstrip("- "))
-    gap = (city or city_gap)()
-    if gap:
-        out("")
-        out("Setup")
-        out('  City is not set up in Claude Desktop. Open it and say "Set up OliverCode City", or "Skip OliverCode City".')
+    snap = (brief or gather)(slug, now, open_now, rows, (numbers or (lambda: four_numbers(now, open_now, rows, run_log(), folder or Path.cwd())))(),
+                             steps() if steps else owner_steps(slug), ideas() if ideas else _idea_count(), not (city or city_gap)())
+    for line in briefing.text(snap):
+        out(line)
     return 0
+
+
+def _idea_count() -> int:
+    try:
+        return candidates.count()
+    except (OSError, ValueError):
+        return 0
 
 
 def tokens(text: str) -> int:
