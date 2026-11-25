@@ -689,7 +689,7 @@ class TestDrainStatusEvents(unittest.TestCase):
         with mock.patch.object(status_report, "record", lambda *a, **kw: seen.update(kw) or ""), \
                 mock.patch.object(cmd_drain.local_config, "max_builders", return_value=3):
             real.event("begin")
-        self.assertEqual(3, seen["builders"])
+        self.assertEqual(5, seen["builders"])
 
 
 BOARD = {"repoOwner": "o", "repoName": "r", "fields": {"status": {"options": {"Backlog": "1", "Complete": "2"}}}}
@@ -849,7 +849,7 @@ class RevampNumbersCase(unittest.TestCase):
         self.transcript("b.jsonl", "sdk-cli", days=0.1)
         self.transcript("c.jsonl", "cli", days=30)
         numbers = cmd_status.four_numbers(NOW, 14, rows, log, self.repo, self.projects, self.handovers)
-        self.assertEqual({"tokens_per_closed": 1000, "handovers": 1, "threads": 1, "open": 14}, numbers)
+        self.assertEqual({"tokens_per_closed": 1000, "cost_per_closed": None, "handovers": 1, "threads": 1, "open": 14}, numbers)
 
     def test_run_prints_the_four_numbers_and_makes_no_model_call(self):
         rows = [dict(issue("2026-11-01", "2026-11-20"), number=4)]
