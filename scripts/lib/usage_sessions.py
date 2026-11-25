@@ -31,6 +31,59 @@ def transcript(cli_id: str, projects: Path | None = None) -> Path | None:
     return None
 
 
+
+def transcript_start(path: Path) -> tuple[float, int] | None:
+    """Return (first assistant-call timestamp, prompt tokens read) from a CLI transcript.
+
+    Claude transcripts may repeat an assistant message as its content is streamed.
+    Count that message once, using its largest observed usage. The initial prompt
+    size is input + cache creation + cache read tokens on the first assistant call.
+    """
+    first: tuple[float, str] | None = None
+    usage_by_id: dict[str, int] = {}
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line_no, line in enumerate(fh):
+                try:
+                    row = json.loads(line)
+                    message = row.get("message") or {}
+                    if row.get("type") != "assistant" or not message.get("usage"):
+                        continue
+                    stamp_text = str(row.get("timestamp") or "")[:19]
+                    stamp = calendar.timegm(time.strptime(stamp_text, "%Y-%m-%dT%H:%M:%S"))
+                    usage = message["usage"]
+                    total = sum(int(usage.get(k) or 0) for k in (
+                        "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"
+                    ))
+                    if total <= 0:
+                        continue
+                    message_id = str(message.get("id") or f"line{line_no}")
+                except (ValueError, AttributeError, TypeError, OverflowError):
+                    continue
+                if first is None:
+                    first = (stamp, message_id)
+                if message_id == first[1]:
+                    usage_by_id[message_id] = max(usage_by_id.get(message_id, 0), total)
+                    # The first assistant message is the first API call; later
+                    # messages are conversation growth, not initial context.
+                    return first[0], usage_by_id[message_id]
+    except OSError:
+        return None
+    return None
+
+
+def recent_chat_starts(projects: Path | None = None, days: int = 7, now: float | None = None) -> list[tuple[Path, int]]:
+    """Desktop transcript paths and their first-call prompt sizes within the last N days."""
+    projects = projects or claude_dir() / "projects"
+    now = time.time() if now is None else now
+    cutoff = now - max(0, days) * 86400
+    out = []
+    for path in projects.glob("*/*.jsonl") if projects.is_dir() else []:
+        measured = transcript_start(path)
+        if measured and cutoff <= measured[0] <= now:
+            out.append((path, measured[1]))
+    return sorted(out, key=lambda item: item[1], reverse=True)
+
 def period_usage(path: Path, since: float) -> tuple[int, int, int] | None:
     """(input, output, cache) tokens for calls at or after `since`, each message id once at its largest usage; None when no call carries usage (#782)."""
     seen: dict[str, tuple[int, int, int]] = {}
