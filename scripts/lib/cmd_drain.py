@@ -412,7 +412,7 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     except CloseRefused:  # a landed story whose close the gate refused stays where it is, with the gate's message on it (#1011)
         _event(io, "held", issue)
         return False, 0
-    except CommitBlocked as blocked:  # the same gate blocked each restart, so the story waits in Backlog for the owner (#1096)
+    except CommitBlocked as blocked:  # the same gate blocked each restart, or the turn limit stopped it twice, so the story waits in Backlog for the owner (#1096, #1123)
         io.backlog(n)
         _event(io, "held", issue)
         return False, blocked.tokens
@@ -468,6 +468,13 @@ class CommitBlocked(Exception):
         self.tokens = tokens
 
 
+class TurnLimitParked(CommitBlocked):
+    """A builder stopped on the turn limit twice in a row, so the story is parked in Backlog (#1123)."""
+
+
+TURN_LIMIT_STOPS = 2  # consecutive stops on the turn limit after which the story is parked instead of restarted
+
+
 def commit_block_note(block: dict) -> str:
     """What the next round's brief says about the last block: the gate's reason verbatim and the ask to rewrite the message (#1096)."""
     return f"the {block['gate']} gate blocked the commit: {block['reason']}\nRewrite the commit message to pass that gate, then commit again."
@@ -483,7 +490,7 @@ def policy_stop_comment(stop: dict) -> str:
 
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
-    n, tokens, note, blocks = issue["number"], 0, "", 0
+    n, tokens, note, blocks, budget_stops = issue["number"], 0, "", 0, 0
     lead = io.landed_lead(issue)
     if lead:  # the work landed under another story, so a fresh build would repeat it on main; the owner decides (#988)
         if not io.told(n, lead[0]):
@@ -522,10 +529,15 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             if closed:
                 return True, tokens
         elif out.get("budget"):  # a spent budget leaves a handoff on the story, and the next round starts from it (#1113)
+            budget_stops += 1
             note = budget_handoff(worktree, out)
+            if budget_stops >= TURN_LIMIT_STOPS:  # the same story spent every turn twice running, so a third restart would loop; park it (#1123)
+                io.comment(n, f"Parked: the builder stopped on the turn limit {budget_stops} times in a row, so drain starts no restart, releases the claim and moves the story to Backlog.\n"
+                              f"- Next: split the story into thin stories, or rewrite it smaller, then return it to Ready.\n{note}")
+                raise TurnLimitParked(tokens)
             io.comment(n, f"Budget reached: the builder used every turn, and the next round resumes from this handoff.\n{note}")
         else:
-            note = out["reason"]
+            note, budget_stops = out["reason"], 0
         stop = io.policy_stop(n, worktree)
         if stop:  # a policy ask answers a headless builder with no one to answer it, so a restart would hit the same ask (#1058)
             io.comment(n, policy_stop_comment(stop))
