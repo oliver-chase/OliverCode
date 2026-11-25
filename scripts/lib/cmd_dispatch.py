@@ -68,8 +68,12 @@ def _functions(path: Path, body: str) -> list[tuple[str, str]]:
     except (OSError, SyntaxError, ValueError):
         return []
     lines = text.splitlines()
-    return [(node.name, "\n".join(lines[node.lineno - 1:node.end_lineno])) for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and re.search(rf"\b{re.escape(node.name)}\b", body)]
+    # Only identifiers explicitly marked as code in the story select source.
+    # Plain English words such as "check", "run" or "git" must not pull in
+    # unrelated functions with those names.
+    named = set(re.findall(r"`([A-Za-z_]\\w*)\\s*(?:\\(\\s*\\))?`", body))
+    return [(node.name, "\\n".join(lines[node.lineno - 1:node.end_lineno])) for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in named]
 
 
 def _callers(repo: Path, name: str, skip: str) -> list[str]:
