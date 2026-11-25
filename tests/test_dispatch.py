@@ -104,7 +104,7 @@ class TestDispatch(DispatchCase):
         self.assertEqual(77, work.call_args.args[1]["number"])
 
     def test_initial_and_queued_stories_share_one_dispatch_run_state(self):
-        """A circuit-breaker trip in one story must stop later stories in the same dispatch run."""
+        """The initial story and queued stories share one circuit-breaker state."""
         seen = []
 
         def work(_io, story, state):
@@ -115,7 +115,7 @@ class TestDispatch(DispatchCase):
 
         with mock.patch.object(cmd_drain, "work_story", side_effect=work), \
              mock.patch.object(cmd_dispatch.run_lock, "release", side_effect=[[78], [], []]), \
-             mock.patch.object(cmd_dispatch, "read_story", return_value=({**STORY, "number": 78}, "")), \
+             mock.patch.object(cmd_dispatch, "read_story", side_effect=lambda _runner, _slug, number: ({**STORY, "number": number}, "")), \
              mock.patch.object(cmd_dispatch, "live_claim", return_value=""):
             self.run_dispatch()
 
