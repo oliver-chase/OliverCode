@@ -149,11 +149,11 @@ def review_mode(size: str, labels=(), files=(), priority: str = "") -> str:
     """Return the safe review lane: full for substantial or risky work, none for routine XS/S work (#1015).
 
     Every story still runs repository validation and commit gates. A fresh reader is required for medium-or-larger work,
-    design and P0 work, and changes to the runner's safety boundary. Keeping this decision here gives every runner caller
+    design work, and changes to the runner's safety boundary. Keeping this decision here gives every runner caller
     the same conservative policy.
     """
     names = {(l.get("name") if isinstance(l, dict) else l or "").lower() for l in labels or []}
-    if size not in ("XS", "S") or "design" in names or priority == "P0" or risky_paths(files):
+    if size not in ("XS", "S") or "design" in names or risky_paths(files):  # priority alone never calls a reader (#1155)
         return "full"
     return "none"
 

@@ -301,10 +301,10 @@ class TestLoop(unittest.TestCase):
     def test_a_small_story_touching_only_docs_tests_or_one_command_starts_on_the_smallest_model(self):
         self.assertEqual("haiku", agent_loop.model_for("XS", files=["docs/RULES.md", "tests/test_cmd_status.py", "scripts/lib/cmd_status.py"], priority="P2"))
 
-    def test_only_medium_or_larger_design_p0_or_risky_stories_get_a_fresh_reader(self):
+    def test_only_medium_or_larger_design_or_risky_stories_get_a_fresh_reader(self):
         self.assertEqual("none", agent_loop.review_mode("S", files=["docs/RULES.md"], priority="P2"))
         self.assertEqual("full", agent_loop.review_mode("S", files=["scripts/hooks/gh_guard.py"], priority="P2"))
-        self.assertEqual("full", agent_loop.review_mode("S", priority="P0"))
+        self.assertEqual("none", agent_loop.review_mode("S", priority="P0"))
         self.assertEqual("full", agent_loop.review_mode("M", files=["docs/RULES.md"], priority="P2"))
         self.assertEqual("full", agent_loop.review_mode("S", labels=[{"name": "design"}], priority="P2"))
 

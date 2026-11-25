@@ -493,7 +493,7 @@ class TestRealIo(unittest.TestCase):
             self.assertEqual((model_name, rounds), (run_loop.call_args.kwargs["model_name"], run_loop.call_args.kwargs["rounds"]), size)
 
     def test_the_turn_budget_follows_the_story_size(self):
-        for size, turns in (("XS", 15), ("S", 15), ("M", 30), ("L", 30)):
+        for size, turns in (("XS", 30), ("S", 30), ("M", 30), ("L", 30)):
             with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
                 self.io.build(issue(7, f"Do it.\nSize: {size}"), Path("/wt/7"), "")
             self.assertEqual(turns, run_loop.call_args.kwargs["max_turns"], size)

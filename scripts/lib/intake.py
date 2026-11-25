@@ -190,7 +190,7 @@ WAIT_DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 WAIT_SPAN = re.compile(r"\b(\d+)[- ]days?\s+(?:of\s+)?(?:data|window|wait)|\bwait\w*\s+(?:for\s+)?(\d+)\s+days?\b", re.I)
 WAIT_DAYS = 14
 SMALL = ("XS", "S")
-SMALL_TURNS, FULL_TURNS = 15, 30  # a builder's turn budget by story size (#1113)
+SMALL_TURNS, FULL_TURNS = 30, 30  # a builder's turn budget by story size (#1113); 15 for a small story stopped most rounds on the cap, so both are 30 (#1155)
 
 
 def turns(size: str) -> int:
