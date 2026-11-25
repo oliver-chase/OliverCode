@@ -90,7 +90,10 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
         known = str(uuid.uuid4())  # a session id we chose, so a run that times out can still be resumed
         argv += ["--session-id", known]
     env = {**os.environ, HEADLESS_ENV: "1"}
-    lease = session_guard.acquire(session, model, cwd, known, resumed=bool(resume))
+    try:
+        lease = session_guard.acquire(session, model, cwd, known, resumed=bool(resume))
+    except RuntimeError as exc:
+        raise ModelError(str(exc)) from exc
     try:
         try:
             ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
