@@ -78,6 +78,13 @@ class CompleteStory(unittest.TestCase):
         self.assertIn("updateProjectV2ItemFieldValue", queued)
         self.assertIn("OPT_DONE", queued)
 
+    def test_closing_a_story_marks_linked_lessons_implemented_by_its_builder_commit(self):
+        with unittest.mock.patch.object(cs.lessons, "mark_implemented", return_value=2) as mark:
+            code, text, _ = self.run_it("builder-only.json")
+        self.assertEqual(0, code)
+        mark.assert_called_once_with("#54", "abc123", unittest.mock.ANY)
+        self.assertIn("Marked 2 linked lesson(s) implemented", text)
+
     def test_the_evidence_comment_ends_with_the_close_mark_the_sweep_reads(self):
         code, _, calls = self.run_it("builder-only.json")
         self.assertEqual(code, 0)
