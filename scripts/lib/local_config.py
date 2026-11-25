@@ -26,7 +26,7 @@ LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 
 # A setting a release adds gets its default here. The saved value wins, so a default only fills a key the user never set.
-DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False, "cityDeclined": False, "notifications": True, "maxBuilders": 1}
+DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False, "cityDeclined": False, "notifications": True, "maxBuilders": 1, "maxStorySpend": 6.0}
 BACKLOG_CONFIG = "docs/backlog-config.json"
 LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
 
@@ -276,6 +276,12 @@ def saved_builders() -> int | None:
 def max_builders() -> int:
     """The machine-wide builder limit drain and dispatch share: maxBuilders in the local file as it stands, else the limit scaled by the machine."""
     return saved_builders() or scaled_builders()
+
+
+def max_story_spend() -> float:
+    """The maximum recorded Claude spend for one story, in dollars; invalid or missing values use the safe $6 default."""
+    value = setting("maxStorySpend")
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 6.0
 
 
 def _overlay(base: dict, top: dict) -> dict:
