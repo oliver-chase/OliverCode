@@ -533,6 +533,8 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         return False, 0
     attempt, story_api_errors = 0, 0
     while attempt <= RESTARTS:
+        if state.get("api_error_stop"):
+            return False, tokens
         state["sessions"] += 1
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
@@ -659,7 +661,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 started = True
             io.beat([i["number"] for i in running.values()])
             if not running:
-                if state.get("restart"):
+                if state.get("restart") or state.get("api_error_stop"):
                     break
                 if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
                     waits += 1
