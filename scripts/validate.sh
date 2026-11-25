@@ -187,15 +187,12 @@ run_gates() {
 }
 
 run_round_gates() {
-  # "$@": files changed against origin's default branch. The runner's cheap per-round check (#1142): the same gates as a full
-  # run, but precommit and smoke narrow to these changed files instead of the whole tree/suite. `olivercode land` still
-  # calls run_gates, in full.
+  # "$@": files changed against origin's default branch. A round gets only the checks that protect that change:
+  # precommit scans the changed files, smoke runs the tests that cover them, and bypass preserves the validation-slot
+  # trust boundary. Whole-repo hygiene/docs/fleet checks run at full validation/land, not after every builder round.
   local args=() gate
-  for gate in "${GATES[@]}"; do
-    case "$gate" in
-      precommit|smoke) args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate" "$@")") ;;
-      *) args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate")") ;;
-    esac
+  for gate in precommit bypass smoke; do
+    args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate" "$@")")
   done
   python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
 }
