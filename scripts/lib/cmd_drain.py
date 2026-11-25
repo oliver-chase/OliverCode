@@ -305,6 +305,13 @@ class Io:
         """True when a "Not built" comment on story N already names the commit, so drain says it once (#1084)."""
         return any(note.startswith("Not built: commit " + sha[:12]) for note in self.notes(n))
 
+    def cleanup_landed(self, n: int) -> list[str]:
+        """Reconcile the story worktree and its owned branches after its work is already on the default branch."""
+        worktree = placement_config().worktrees / f"{self.repo.name}-{n}"
+        if not worktree.exists():
+            return []
+        return cmd_land.cleanup(worktree)
+
     def land(self, worktree: Path, n: int) -> tuple[bool, str]:
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True,
                              env={**os.environ, cmd_land.LAND_AS: self.agent})  # the land skips the wait on a claim this run holds (#1106)
