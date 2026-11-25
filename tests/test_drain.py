@@ -110,14 +110,14 @@ class DrainCase(unittest.TestCase):
     def test_story_spend_sums_builder_reader_and_fix_rows_for_only_that_story_and_repo(self):
         home = temp_dir(self)
         (home / "run-log.jsonl").write_text(
-            '{"story":"story-3","repo":"o/r","cost_usd":1.25}\\n'
-            '{"story":"story-3-review","repo":"o/r","cost_usd":0.50}\\n'
-            '{"story":"story-3-fix","repo":"o/r","cost_usd":0.25}\\n'
-            '{"story":"story-30","repo":"o/r","cost_usd":20}\\n'
-            '{"story":"story-3","repo":"other/repo","cost_usd":10}\\n'
-            '{"story":"story-3","cost_usd":100}\\n'
-            '{"story":"story-3","repo":"o/r","cost_usd":null}\\n'
-            'not json\\n',
+            '{"story":"story-3","repo":"o/r","cost_usd":1.25}\n'
+            '{"story":"story-3-review","repo":"o/r","cost_usd":0.50}\n'
+            '{"story":"story-3-fix","repo":"o/r","cost_usd":0.25}\n'
+            '{"story":"story-30","repo":"o/r","cost_usd":20}\n'
+            '{"story":"story-3","repo":"other/repo","cost_usd":10}\n'
+            '{"story":"story-3","cost_usd":100}\n'
+            '{"story":"story-3","repo":"o/r","cost_usd":null}\n'
+            'not json\n',
             encoding="utf-8",
         )
         with mock.patch.object(cmd_drain.failure_log, "home", return_value=home):
