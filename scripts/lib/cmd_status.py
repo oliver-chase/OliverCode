@@ -261,7 +261,7 @@ def tokens_per_closed(rows: list[dict], log: list[dict]) -> tuple[int, int, floa
     costs: dict[str, float] = {}
     cost_seen: set[str] = set()
     for entry in log:
-        match = re.fullmatch(r"(story-\\d+)(?:-(?:review|fix))?", str(entry.get("story") or ""))
+        match = re.fullmatch(r"(story-\d+)(?:-(?:review|fix))?", str(entry.get("story") or ""))
         if not match:
             continue
         key = match.group(1)
