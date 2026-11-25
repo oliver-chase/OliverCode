@@ -149,6 +149,20 @@ class TestStatusSteps(unittest.TestCase):
         self.assertIn("olivercode-adoption", closing)
         self.assertNotIn("Run `olivercode guide` to see how work runs.", closing)
 
+    def test_the_first_step_names_no_file_path_and_the_city_line_does_not_repeat_itself(self):
+        """#1196, #1195: the owner's first step carries no registry path, and City's state reads once, not 'not set up; City is not set up'."""
+        from pathlib import Path
+        from unittest import mock
+        for found in ({}, {"a": {}}):
+            with mock.patch("lib.repo_profiles.load_repo_profiles", return_value=(found, Path("/some/shared/repo-profiles.json"))):
+                step = cmd_guide._fleet_step(REPO_ROOT)
+            self.assertNotIn("/", step)
+            self.assertIn('Say "Set up OliverCode"', step)
+        with mock.patch("lib.local_config.load_local", return_value={}):
+            line = cmd_guide.city_lines()[0]
+        self.assertTrue(line.startswith("City: not set up in the Claude desktop app."), line)
+        self.assertNotIn("City is not set up", line)
+
     def test_the_introduction_and_the_guide_say_the_thread_steers_a_run_and_status_is_free(self):
         from lib import cmd_install
         line = "The thread that started a run is the one to steer it."

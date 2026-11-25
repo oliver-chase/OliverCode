@@ -77,7 +77,7 @@ def city_lines() -> list[str]:
     """What the guide says about City: its URL, the phone steps and the command that republishes it (#999). Pin state is never read back, so it is unverified."""
     from lib.local_config import setting
     url = city_url()
-    state = f"{url} (pin state unverified)" if url else ("skipped by choice" if setting("cityDeclined") else "not set up; " + CITY_GAP)
+    state = f"{url} (pin state unverified)" if url else ("skipped by choice" if setting("cityDeclined") else CITY_GAP.removeprefix("City is "))
     return [f"City: {state}",
             *[f"  {n}. {step}" for n, step in enumerate(PHONE_STEPS, 1)],
             f"Republish City with `{CITY_PUBLISH}`."]
@@ -223,8 +223,8 @@ def _fleet_step(oc_root: Path) -> str:
     except (OSError, ValueError) as exc:
         return f'Say "Set up OliverCode" in Claude to connect your projects. None are connected yet ({exc})'
     if profiles:
-        return f'Done: {len(profiles)} project(s) connected in {path}. Say "Set up OliverCode" again to add more'
-    return f'Say "Set up OliverCode" in Claude to connect your projects. {path} names none yet'
+        return f'Done: {len(profiles)} project(s) connected. Say "Set up OliverCode" again to add more'
+    return 'Say "Set up OliverCode" in Claude to connect your projects. None are connected yet'
 
 
 def command_guide(oc_root: Path, name: str | None = None) -> int:
