@@ -322,10 +322,11 @@ def api_error_streak(session: str | None = None) -> int:
             continue
         if session is not None and row.get("story") != session:
             continue
+        # For a per-story streak, unrelated stories are ignored, but the
+        # latest row for this story must be an API error. A later success or
+        # other stop resets the streak instead of preserving historical errors.
         if row.get("stop") != "api_error":
-            if session is None:
-                break
-            continue
+            break
         count += 1
     return count
 
