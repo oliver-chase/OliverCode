@@ -39,7 +39,7 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive.
 
-For unattended execution today, delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.
+A chat never builds a board story by hand. For unattended execution today, explicitly delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.
 
 The current queue entry points, `olivercode dispatch N` and `olivercode drain REPO`, start isolated Claude Code worktrees, run validation and safely land or report blocked work.
 
