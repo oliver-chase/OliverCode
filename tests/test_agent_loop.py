@@ -223,6 +223,10 @@ class TestRunLogUsage(unittest.TestCase):
         row = json.loads((self.home / "run-log.jsonl").read_text().splitlines()[-1])
         self.assertIsNone(row["round"])
         self.assertEqual("overloaded", row["error"])
+        # A later successful/non-error attempt for this story resets the
+        # consecutive-error streak; old API failures must not keep delaying it.
+        agent_loop.log_round("story-7", 3, "haiku", {"stop": "completed", "usage": {}})
+        self.assertEqual(0, agent_loop.api_error_backoff("story-7"))
 
     def test_the_first_round_logs_the_first_call_size_and_never_the_session_total(self):
         said = []
