@@ -174,16 +174,17 @@ class TestInstall(HomeCase):
         self.assertEqual(rc, 0)
         intro = out[out.index("How OliverCode works"):].strip()
         self.assertLessEqual(len(intro.splitlines()), 20)
-        for habit in ("Work in one thread per topic", "Never start a builder in a chat"):
+        for habit in ("Keep conversations focused", "Delegate bounded work explicitly", "Do not turn ordinary conversation into a story"):
             self.assertIn(habit, intro)
-        for phrase in ("one thread", "each request becomes a story", "olivercode dispatch N",
+        for phrase in ("Nothing becomes a backlog item automatically", "olivercode dispatch N",
                        "olivercode drain REPO", "validates", "olivercode status"):
             self.assertIn(phrase.lower(), intro.lower())
         steps = [line.strip() for line in intro.splitlines() if line.strip()[:2] in ("1.", "2.", "3.")]
         self.assertEqual(len(steps), 3)
         self.assertIn("discover", steps[0])
         self.assertIn("health", steps[1])
-        self.assertIn("story", steps[2])
+        self.assertIn("Claude Code normally", steps[2])
+        self.assertIn("durable tracking or unattended execution", steps[2])
 
     def test_a_repeat_install_prints_one_line_that_points_to_the_guide(self):
         self._install()
