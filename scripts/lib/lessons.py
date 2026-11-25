@@ -123,7 +123,7 @@ def mark_implemented(ref: str, evidence: str, repo: str | Path | None = None) ->
                     item = json.loads(line) if line.strip() else None
                 except ValueError:
                     item = None
-                if isinstance(item, dict) and item.get("covered_by") == ref:
+                if isinstance(item, dict) and item.get("covered_by") == ref and not item.get("implemented_by"):
                     item["implemented_by"] = evidence.strip()
                     item["implemented_on"] = date.today().isoformat()
                     line = json.dumps(item)
