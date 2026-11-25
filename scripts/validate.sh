@@ -190,8 +190,9 @@ run_round_gates() {
   # Ordinary builder rounds run only gates selected for the touched paths. Landing/release
   # still runs the complete GATES list above; skipped gates are named in the round result.
   local args=() gate
-  local selected
-  mapfile -t selected < <(python3 "${SCRIPT_DIR}/lib/validation_scope.py" "$@")
+  local selected=()
+  # Bash 3.2 is the macOS system shell; use read rather than mapfile/readarray.
+  while IFS= read -r gate; do selected+=("$gate"); done < <(python3 "${SCRIPT_DIR}/lib/validation_scope.py" "$@")
   for gate in "${selected[@]}"; do
     case "$gate" in
       precommit|smoke) args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate" "$@")") ;;
@@ -202,7 +203,7 @@ run_round_gates() {
   for gate in "${GATES[@]}"; do
     if [[ ! " ${selected[*]} " == *" $gate "* ]]; then skipped+=("$gate"); fi
   done
-  printf '=== validate: round gates run: %s; skipped: %s (full set remains on land/release) ===\\n' "${selected[*]}" "${skipped[*]}"
+  printf '=== validate: round gates run: %s; skipped: %s (full set remains on land/release) ===\n' "${selected[*]}" "${skipped[*]}"
   python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
 }
 
