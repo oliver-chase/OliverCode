@@ -425,6 +425,21 @@ class TestCleanup(Base):
         self.assertIn("Removed worktree", out)
         self.assertIn("Deleted remote branch story/9", out)
 
+    def test_cleanup_uses_the_story_id_to_remove_runner_branch_even_from_a_non_story_branch(self):
+        git(self.main, "push", "-q", "origin", "--delete", "story/9")
+        git(self.wt, "branch", "-m", "feature/cleanup")
+        git(self.wt, "push", "-q", "origin", "HEAD:refs/heads/feature/cleanup")
+        git(self.wt, "push", "-q", "origin", "HEAD:refs/heads/agent/story-9")
+        code, out = self.land()
+        self.assertEqual(0, code, out)
+        self.assertFalse(self.wt.exists())
+        git(self.main, "fetch", "-q", "--prune", "origin")
+        remote = git(self.main, "branch", "-r").stdout
+        self.assertNotIn("origin/feature/cleanup", remote)
+        self.assertNotIn("origin/agent/story-9", remote)
+        self.assertIn("Deleted remote branch feature/cleanup", out)
+        self.assertIn("Deleted remote branch agent/story-9", out)
+
     def test_a_landing_whose_branch_was_never_pushed_still_cleans_up(self):
         git(self.main, "push", "-q", "origin", "--delete", "story/9")
         code, out = self.land()
