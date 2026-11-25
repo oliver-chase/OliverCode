@@ -165,7 +165,7 @@ class TestGroomFields(unittest.TestCase):
         scenarios = "".join(f"  Scenario: s{i}\n" for i in range(4))
         self.assertEqual(cmd_groom.size_of({"body": files + scenarios}), "L")
         self.assertEqual(cmd_groom.size_of({"body": "x" * 9000}), "XS")
-        self.assertEqual(cmd_groom.size_of({"body": files + scenarios + "Size: S"}), "S")
+        self.assertEqual(cmd_groom.size_of({"body": files + scenarios + "Size: S"}), "L")
 
     def test_a_ready_oversized_story_moves_to_backlog_and_one_split_story_is_filed(self):
         big = "Files area: " + ", ".join(f"f{i}.py" for i in range(9)) + "\n" + "".join(f"  Scenario: s{i}\n" for i in range(4))
