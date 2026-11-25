@@ -53,10 +53,13 @@ def _validate_once(wt: Path, log, say=print) -> bool:
     except OSError as exc:
         log.write(f"validate: {exc}\n")
         return False
-    for line in proc.stdout:
-        log.write(line)
-        if line.startswith(PROGRESS):
-            say(line.rstrip("\n"), flush=True)
+    try:
+        for line in proc.stdout:
+            log.write(line)
+            if line.startswith(PROGRESS):
+                say(line.rstrip("\n"), flush=True)
+    finally:
+        proc.stdout.close()
     return proc.wait() == 0
 
 
