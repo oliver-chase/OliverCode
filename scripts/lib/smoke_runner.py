@@ -25,6 +25,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -147,14 +148,29 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="olivercode-smoke-") as tmp:
         log_dir = Path(tmp)
         units = plan(mods, load_timings(), jobs())
+        output_lock = threading.Lock()
+
+        def progress(message: str) -> None:
+            # Worker threads share the gate output stream; keep each event on one line.
+            with output_lock:
+                print(message, file=out, flush=True)
+
+        progress(f"  Smoke progress: starting {len(units)} test unit(s) across {len(mods)} module(s), {jobs()} worker(s).")
 
         def one(unit):
             name, module, folder, ids = unit
             began = time.monotonic()
-            with open(log_dir / f"{name}.log", "w", encoding="utf-8") as log:
-                code = subprocess.run([sys.executable, "-m", "unittest", "-b", *(ids or [module])], cwd=folder, stdout=log,
-                                      stderr=subprocess.STDOUT).returncode
-            return name, code, time.monotonic() - began
+            progress(f"  [RUN ] {name}")
+            try:
+                with open(log_dir / f"{name}.log", "w", encoding="utf-8") as log:
+                    code = subprocess.run([sys.executable, "-m", "unittest", "-b", *(ids or [module])], cwd=folder, stdout=log,
+                                          stderr=subprocess.STDOUT).returncode
+            except OSError as exc:
+                code = 1
+                (log_dir / f"{name}.log").write_text(f"Could not start test module: {exc}\\n", encoding="utf-8")
+            took = time.monotonic() - began
+            progress(f"  [{\"FAIL\" if code else \" OK \"}] {name} ({took:.1f}s)")
+            return name, code, took
 
         with ThreadPoolExecutor(max_workers=jobs()) as pool:
             results = list(pool.map(one, units))
