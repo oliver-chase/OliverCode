@@ -365,6 +365,19 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(([], [1], [1]), (io.started, io.closed, io.moved))
         self.assertEqual([1], io.cleaned, "closing a story already on main must reconcile its worktree and branches")
 
+    def test_real_io_cleanup_uses_the_story_worktree_and_shared_land_cleanup(self):
+        from types import SimpleNamespace
+
+        worktrees = temp_dir(self)
+        worktree = worktrees / "repo-42"
+        worktree.mkdir()
+        io = cmd_drain.Io.__new__(cmd_drain.Io)
+        io.repo = Path("repo")
+        with mock.patch.object(cmd_drain, "placement_config", return_value=SimpleNamespace(worktrees=worktrees)), \
+             mock.patch.object(cmd_drain.cmd_land, "cleanup", return_value=["Removed worktree"]) as cleanup:
+            self.assertEqual(["Removed worktree"], io.cleanup_landed(42))
+        cleanup.assert_called_once_with(worktree)
+
     def test_a_refused_close_of_a_landed_story_leaves_the_card_where_it_is(self):
         io = FakeIo([issue(1)])
         io.already, io.refuse_close = True, "complete_story: #1 not completed"
