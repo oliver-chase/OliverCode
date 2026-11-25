@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from lib import candidates, cmd_groom, cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock, status_page, validate_queue, status_report
+from lib import local_config
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -408,7 +409,7 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     # run() stops before this on a REST hold, so the hold a story can wait on here is GraphQL's, which the runner's board calls spend
     states = state_lines(stamp, claims, log, issues, holder, slots, slot_total, gh_budget.refusal("graphql"), run_lock.holders_elsewhere(slug, stamp) if slug else [],
                          slug, story_notes(stamp, claims, log, alive, holder, commits))
-    building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + stale
+    building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + ([note] if (note := local_config.builder_note()) else []) + stale  # why the builder limit moved (#1158)
     return [tokens_per_story(rows, log)] + gated.savings_lines() + building + [""] + last_lines(alive, (landed(rows) or [None])[0], ready, log, holder)
 
 

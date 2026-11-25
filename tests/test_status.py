@@ -152,13 +152,15 @@ class TestStatusLayout(unittest.TestCase):
                 mock.patch.object(cmd_status, "held_numbers", return_value=set()), mock.patch.object(cmd_status, "closed_claims", return_value=set()), \
                 mock.patch.object(cmd_status.open_issues, "fetch", return_value=issues), mock.patch.object(cmd_status, "last_commit", return_value=None), \
                 mock.patch.object(cmd_status, "validation_slots", return_value=([], 1)), mock.patch.object(cmd_status.gh_budget, "refusal", return_value=""), \
-                mock.patch("lib.gated.savings_lines", return_value=[]):
+                mock.patch("lib.gated.savings_lines", return_value=[]), \
+                mock.patch.object(cmd_status.local_config, "builder_note", return_value="Builder limit 3: load 12 on 8 cores."):
             cmd_status.run("o/OliverCode", count=lambda s, state: 3, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                            waiting=lambda: [], cands=lambda: "", numbers=lambda: {"tokens_per_closed": None, "handovers": 0, "threads": 0, "open": 3})
         lines = out.getvalue().splitlines()
         self.assertTrue(lines[0].startswith("o/OliverCode: 3 open."))
         self.assertEqual("", lines[1])
         self.assertEqual("", lines[lines.index("Building:") - 1])
+        self.assertIn("Builder limit 3: load 12 on 8 cores.", lines)  # #1158: status says why the limit dropped
         self.assertIn("OliverCode #1105 · S · Landing · claimed 42m, activity 10m, 0 rounds", lines)
         self.assertIn("OliverCode #1107 · M · Building · claimed 42m, activity 42m, 0 rounds", lines)
         story_lines = [line for line in lines if " · " in line]
