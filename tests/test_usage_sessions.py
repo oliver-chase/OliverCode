@@ -14,7 +14,7 @@ NOW = 1_800_000_000.0
 class TestPeriodUsage(unittest.TestCase):
     def test_transcript_start_uses_first_assistant_call_and_deduplicates_stream_rows(self):
         path = temp_dir(self) / "chat.jsonl"
-        path.write_text("".join(json.dumps(row) + "\\n" for row in [
+        path.write_text("".join(json.dumps(row) + "\n" for row in [
             {"type": "user", "timestamp": "2026-11-25T10:00:00Z", "message": {"content": "hello"}},
             {"type": "assistant", "timestamp": "2026-11-25T10:00:01Z", "message": {"id": "first", "usage": {"input_tokens": 10, "cache_read_input_tokens": 90}}},
             {"type": "assistant", "timestamp": "2026-11-25T10:00:01Z", "message": {"id": "first", "usage": {"input_tokens": 20, "cache_read_input_tokens": 100}}},
@@ -24,7 +24,7 @@ class TestPeriodUsage(unittest.TestCase):
 
     def test_headless_builder_transcripts_are_excluded(self):
         path = temp_dir(self) / "builder.jsonl"
-        path.write_text("".join(json.dumps(row) + "\\n" for row in [
+        path.write_text("".join(json.dumps(row) + "\n" for row in [
             {"type": "user", "entrypoint": "sdk-cli", "timestamp": "2026-11-25T10:00:00Z", "message": {"content": "build"}},
             {"type": "assistant", "timestamp": "2026-11-25T10:00:01Z", "message": {"id": "m", "usage": {"input_tokens": 12}}},
         ]), encoding="utf-8")
@@ -35,7 +35,7 @@ class TestPeriodUsage(unittest.TestCase):
         project = root / "work"
         project.mkdir(parents=True)
         path = project / "recent.jsonl"
-        path.write_text(json.dumps({"type": "assistant", "timestamp": "2026-11-25T10:00:00Z", "message": {"id": "m", "usage": {"input_tokens": 12}}}) + "\\n", encoding="utf-8")
+        path.write_text(json.dumps({"type": "assistant", "timestamp": "2026-11-25T10:00:00Z", "message": {"id": "m", "usage": {"input_tokens": 12}}}) + "\n", encoding="utf-8")
         self.assertEqual([(path, 12)], usage_sessions.recent_chat_starts(root, days=7, now=1795600800))
 
     def test_a_message_logged_twice_keeps_the_largest_of_each_count_not_the_largest_row(self):
