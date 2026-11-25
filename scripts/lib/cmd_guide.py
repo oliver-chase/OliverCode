@@ -30,6 +30,13 @@ ARCHITECTURE = (
 )
 
 # The habits that keep OliverCode cheap, printed after the first steps by the guide and the first install's introduction, one line each (#991).
+EXAMPLE = (
+    "1. You tell Claude Code: \"The export button times out on large reports.\" You talk it through in chat; nothing is queued.",
+    "2. You decide to hand it over. File the story on the repo's board and note its number, say 42.",
+    "3. olivercode dispatch 42: one headless builder claims the story, builds in its own worktree, runs the repo's validation and lands the commit.",
+    "4. olivercode status shows it building, then landed. A step only you can take appears in olivercode owner list.",
+    "5. When it lands you get the commit, the checks run and the cost in the story comment. If it stops, the comment says why and the card is back on Ready.",
+)
 USING_IT_WELL = (
     "Use interactive Claude Code for thinking and collaboration; delegate explicitly when you want OliverCode to take responsibility for execution.",
     "Describe the outcome, constraints and what done looks like; OliverCode should handle the planning and task mechanics.",
@@ -241,6 +248,9 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     print(f"  1. {_fleet_step(oc_root)}")
     print("  2. olivercode health                                                   check this machine")
     print("  3. For queued execution today: create or choose a repo story, then run olivercode dispatch N or olivercode drain REPO")
+    print("\nOne example, start to finish")
+    for line in EXAMPLE:
+        print(f"  {line}")
     print("\nUsing it well")
     for habit in USING_IT_WELL:
         print(f"  {habit}")
