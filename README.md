@@ -68,7 +68,7 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 | Shared operating standards | Repository and fleet configuration | Applies consistent safeguards while allowing repo-specific workflows and validation |
 | The incident log | Lessons and decisions | What went wrong, and what you decided |
 
-Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
+A delegated task gets a bounded execution context; OliverCode remains responsible for coordinating the work, checking the result, recovering when safe, integrating it and reporting back.
 
 
 ## Target architecture: owner to outcome
@@ -132,12 +132,12 @@ These diagrams describe the target architecture; the workflow and command sectio
 
 ## Using it well
 
-- Work in one thread per topic, and start a fresh one when it grows long
-- Never ask a thread for status. Run `olivercode status` instead
-- Say what you want once and let the runner build it
-- Keep a story small and name its files
-- Never start a builder in a chat: `olivercode dispatch N` builds a board story without one
-- A long thread costs more on every message, because all of it is re-read
+- Use interactive Claude Code for thinking and collaboration; delegate explicitly when you want OliverCode to take responsibility for execution
+- Describe the outcome, constraints and what done looks like; OliverCode should handle the planning and task mechanics
+- Let OliverCode determine scope, split work and identify dependencies when doing so improves the result
+- Use `olivercode status` to see progress, blockers, completed work and decisions that need you
+- Keep owner decisions for genuine trade-offs, permissions, production actions and ambiguous requirements
+- Use the current `olivercode dispatch N` and `olivercode drain REPO` entry points for queued execution until the owner front door is fully implemented
 
 ## Dispatch planning
 
