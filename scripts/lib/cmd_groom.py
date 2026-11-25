@@ -433,6 +433,114 @@ def link_duplicates(slug, pairs, stories, mine, run=gh):
                 done.append(n)
 
 
+def _is_epic(story):
+    return bool(re.search(r"^.*Work type:\s*Epic\b", story.get("body") or "", re.M))
+
+
+def shared_file_pairs(stories, waiting):
+    """[(lower, higher, shared files)] for open Backlog or Ready stories whose Files areas share a file and where neither names the other in a Blocked by line (#1134)."""
+    from lib import intake
+    found = []
+    ready = sorted(n for n in waiting if n in stories and not _is_epic(stories[n]))
+    for i, a in enumerate(ready):
+        for b in ready[i + 1:]:
+            ba, bb = stories[a].get("body") or "", stories[b].get("body") or ""
+            shared = sorted(set(intake.files_area(ba)) & set(intake.files_area(bb)))
+            if shared and b not in named_blockers(ba) and a not in named_blockers(bb):
+                found.append((a, b, shared))
+    return found
+
+
+GIVEN = re.compile(r"^\s*Given\s+(.+?)\s*$", re.M | re.I)
+
+
+def given_lines(body):
+    """The normalised Given lines of a story's Gherkin block."""
+    block = re.search(r"```gherkin(.*?)```", body or "", re.S)
+    return frozenset(" ".join(g.lower().split()) for g in GIVEN.findall(block.group(1))) if block else frozenset()
+
+
+def same_given_pairs(stories, waiting):
+    """Duplicate-pair lines, in the form `duplicates` returns, for open stories whose Given lines match under different titles (#1134). The lower number is kept."""
+    found, seen = [], {}
+    for n in sorted(n for n in waiting if n in stories and not _is_epic(stories[n])):
+        given = given_lines(stories[n].get("body"))
+        if not given:
+            continue
+        if given in seen and (stories[n].get("title") or "").strip().lower() != (stories[seen[given]].get("title") or "").strip().lower():
+            found.append(f"#{seen[given]} and #{n} share their Given lines under different titles, keep #{seen[given]}")
+        seen.setdefault(given, n)
+    return found
+
+
+def closed_epic_refs(slug, run=gh):
+    """{closed issue number: the epic number its Epic line names}, read through one REST listing (#1134). {} when the read fails."""
+    raw = run(["api", f"repos/{slug}/issues?state=closed&per_page=100", "--paginate", "--jq",
+               '.[] | select(has("pull_request") | not) | {number, epic: ((.body // "") | capture("(?m)^Epic:\\s*#(?<e>[0-9]+)").e?)} | select(.epic != null)'])
+    refs = {}
+    for line in (raw or "").splitlines():
+        try:
+            row = json.loads(line)
+            refs[int(row["number"])] = int(row["epic"])
+        except (ValueError, KeyError, TypeError):
+            continue
+    return refs
+
+
+def split_parents(stories, closed_refs):
+    """{parent: sorted children} for open stories that are not epics and that two or more stories, open or closed, name as their Epic (#1134)."""
+    children = {}
+    for n, s in stories.items():
+        if m := EPIC_LINE.search(s.get("body") or ""):
+            children.setdefault(int(m.group(1)), set()).add(n)
+    for n, e in closed_refs.items():
+        children.setdefault(e, set()).add(n)
+    return {p: sorted(c) for p, c in children.items() if len(c) >= 2 and p in stories and not _is_epic(stories[p])}
+
+
+LINE_CLAIM = re.compile(r"`?([\w./-]+\.[A-Za-z]{1,5})`?[^\n.]{0,40}?\b(\d[\d,]*) lines\b")
+
+
+def stale_line_claims(stories, root):
+    """[(story, file, quoted, actual)] for an open story whose body says a file is at N lines when main's copy differs by more than 10 percent (#1134)."""
+    found = []
+    for n, s in sorted(stories.items()):
+        for path, quoted in LINE_CLAIM.findall(s.get("body") or ""):
+            shown = maintain._git(root, "show", f"main:{path}")
+            if shown.returncode != 0:
+                continue
+            actual, said = len(shown.stdout.splitlines()), int(quoted.replace(",", ""))
+            if said and abs(actual - said) / said > 0.10 and (n, path, said, actual) not in found:
+                found.append((n, path, said, actual))
+    return found
+
+
+def comment_story_checks(slug, stories, waiting, closed_refs, root, mine, run=gh, skip_pairs=frozenset()):
+    """One comment per story for each cross-story finding, and the parents that were split. mine["story_checks"] holds what was said, so no comment repeats (#1134).
+    Returns the parents to move to Backlog."""
+    said = mine.setdefault("story_checks", {})
+
+    def post(key, n, text):
+        if n in said.setdefault(key, []):
+            return
+        if run(["api", "-X", "POST", f"repos/{slug}/issues/{n}/comments", "-f", f"body={text}"]) is not None:
+            said[key].append(n)
+
+    for a, b, shared in shared_file_pairs(stories, waiting):
+        if (a, b) in skip_pairs:
+            continue  # a duplicate pair already has its own comments (#1089)
+        for n, other in ((a, b), (b, a)):
+            post(f"files:{a}-{b}", n, f"#{other} shares {', '.join(shared)} in its Files area and neither story names the other in a Blocked by line. "
+                 f"Add a Blocked by line to the one that goes second, or merge the two.")
+    parents = split_parents(stories, closed_refs)
+    for parent, kids in parents.items():
+        post(f"split:{parent}", parent, f"{len(kids)} stories name this one as their Epic ({', '.join('#' + str(k) for k in kids)}), so it has been split. "
+             f"It moves to Backlog. Close it, or make it an epic.")
+    for n, path, said_n, actual in stale_line_claims(stories, root):
+        post(f"lines:{path}:{said_n}", n, f"This story says {path} is at {said_n} lines. Main has {actual} now.")
+    return set(parents)
+
+
 def last_ok(state=None, slugs=None):
     """The oldest success time across the boards (all of `slugs`, else every repo in the state), or None when one never succeeded."""
     state = load_state() if state is None else state
@@ -571,6 +679,9 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if closed:
             cmd_owner.note("groom", f"{name}: closed {len(closed)} exact duplicate(s) as duplicates, reopen any with the command in its comment: " + ", ".join(f"#{n}" for n in closed))
         pairs = [p for p in duplicates(items) if not set(map(int, re.findall(r"#(\d+)", p.split(" share")[0]))) & set(closed)]
+        waiting = {n for n in stories if carded_status(items, n) in ("Backlog", "Ready")}  # cross-story checks read these (#1134)
+        pairs = pairs + [p for p in same_given_pairs(stories, waiting) if p not in pairs]
+        closed_refs = closed_epic_refs(slug, run)
         card_epics = {(i.get("content") or {}).get("number") for i in items if str(board_grooming_field(i, "work type") or "").lower() == "epic"}
         linked, found_themes = assign_epics(slug, stories, mine, card_epics, run, str(config))
         if linked:
@@ -586,7 +697,7 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
             cmd_owner.note("groom", f"{name}: {len(filed)} oversized story(ies) moved to Backlog, one split story filed for each: " + ", ".join(f"#{n}" for n in filed))
         if commented := comment_oversized(slug, big_ready, stories, mine, run):
             cmd_owner.note("groom", f"{name}: told {len(commented)} oversized story(ies) on the issue that they must be split: " + ", ".join(f"#{n}" for n in commented))
-        hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big | set(reopened)  # flagged stories stay in Backlog until the owner acts (#1014, #1104)
+        hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs) | big | set(reopened) | set(split_parents(stories, closed_refs))  # flagged stories stay in Backlog until the owner acts (#1014, #1104)
         epics = board_grooming.epic_moves(items, check_board_hygiene.epic_summaries(items, cfg, "Complete", _read_or_raise(run)), "Complete")
         moved = [m for m in epics if m[1] != "Complete" or _close_epic(slug, m[0], run)]  # an epic moves with its stories (#1105)
         moved_numbers = {n for n, _, _ in moved}
@@ -610,6 +721,8 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if flagged and json.dumps(flagged) != mine.get("split"):
             cmd_owner.note("groom", f"{name}: {len(flagged)} story(ies) need a rewrite before dispatch: " + "; ".join(flagged)[:600])
         mine["split"] = json.dumps(flagged)
+        split_done = comment_story_checks(slug, stories, waiting, closed_refs, root, mine, run, {pair_of(p) for p in pairs})
+        fixes += [{"number": n, "fields": {"status": "Backlog"}} for n in sorted(split_done) if carded_status(items, n) != "Backlog"]
         link_duplicates(slug, pairs, stories, mine, run)
         pairs = [p for p in pairs if not linked_pair(p, mine)]  # a linked pair already has its comments, so the owner is not asked again (#1089)
         if pairs and json.dumps(pairs) != mine.get("dups"):

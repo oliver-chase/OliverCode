@@ -97,18 +97,19 @@ class TestDuplicatesAreLinked(unittest.TestCase):
         run = mock.Mock(return_value="")
         ok, note = self.groom(run)
         self.assertTrue(ok)
-        self.assertEqual([c.args[0][3] for c in run.call_args_list], ["repos/o/r/issues/1/comments", "repos/o/r/issues/2/comments"])
-        self.assertTrue(all("Keep #1 and close #2" in c.args[0][-1] for c in run.call_args_list))
+        posts = [c for c in run.call_args_list if "-X" in c.args[0]]  # the closed-epic read (#1134) is a GET and is not a comment
+        self.assertEqual([c.args[0][3] for c in posts], ["repos/o/r/issues/1/comments", "repos/o/r/issues/2/comments"])
+        self.assertTrue(all("Keep #1 and close #2" in c.args[0][-1] for c in posts))
         self.assertFalse(any("possible duplicate" in c.args[1] for c in note.call_args_list))
         again = mock.Mock(return_value="")
         self.groom(again)
-        again.assert_not_called()
+        self.assertEqual([], [c for c in again.call_args_list if "-X" in c.args[0]])
 
     def test_a_pair_without_a_shared_files_area_is_not_linked_and_still_goes_to_the_owner(self):
         self.stories[2]["body"] = "Files area: scripts/lib/b.py\n"
         run = mock.Mock(return_value="")
         _, note = self.groom(run)
-        run.assert_not_called()
+        self.assertEqual([], [c for c in run.call_args_list if "-X" in c.args[0]])
         self.assertTrue(any("possible duplicate" in c.args[1] for c in note.call_args_list))
 
 
