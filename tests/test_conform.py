@@ -64,11 +64,12 @@ class TestRequirements(ConformBase):
             self.assertEqual("pass", rows[name].status, f"{name}: {rows[name].detail}")
         self.assertEqual("skip", rows["board"].status)
         self.assertEqual("skip", rows["unfinished-work-snapshot"].status, "only the engine checkout reads the machine's settings")
+        self.assertEqual("skip", rows["global-hooks-path"].status, "only the engine checkout reads the machine's global git config")
 
     def test_the_contract_keeps_the_rows_that_protect_a_repo_and_none_of_the_self_rules(self):
         names = {check.__name__.replace("_", "-") for check in conform.CHECKS}
         kept = {"ignore", "hooks", "engine-only", "fleet-private", "issues", "managed-files", "tests", "delete-on-merge", "branches", "sleep-setting", "board",
-                "validation", "permission-policy", "unfinished-work-snapshot"}
+                "validation", "permission-policy", "unfinished-work-snapshot", "global-hooks-path"}
         self.assertEqual(kept, names)
         contract = (REPO_ROOT / "docs" / "CONTRACT.md").read_text()
         for gone in ("layout", "readme", "folders", "docs", "learning", "research", "audit", "automation", "live-launcher", "dead-selftest", "queue-bypass", "features", "machines"):
@@ -141,10 +142,36 @@ class TestRequirements(ConformBase):
         (self.repo / "package.json").write_text('{"scripts": {}}')
         self.assertEqual("fail", self.rows()["validation"].status)
 
-    def test_unset_hooks_path_fails_with_the_sync_fix(self):
+    def test_unset_hooks_path_in_a_repo_with_committed_copies_fails_with_the_sync_fix(self):
+        """A repo still holding the old per-repo committed hooks (#1154) is fixed by migrating it, not by `olivercode install`."""
+        git(self.repo, "add", ".githooks")
+        git(self.repo, "commit", "-qn", "-m", "legacy per-repo hook commit")
         subprocess.run(["git", "-C", str(self.repo), "config", "--unset", "core.hooksPath"], check=True)
         row = self.rows()["hooks"]
         self.assertEqual(("fail", "olivercode sync-hooks --commit --story N"), (row.status, row.fix))
+
+    def test_a_public_repo_with_no_hook_files_relies_on_the_machines_global_default(self):
+        """No committed copies and no hooksPath of its own (#1154): the machine's global core.hooksPath covers it instead of a per-repo commit."""
+        shutil.rmtree(self.repo / ".githooks")
+        subprocess.run(["git", "-C", str(self.repo), "config", "--unset", "core.hooksPath"], check=True)
+        with mock.patch.object(conform.repo_gates, "global_hooks_problem", return_value=""):
+            row = self.rows()["hooks"]
+        self.assertEqual("pass", row.status)
+        self.assertIn("global default", row.detail)
+        with mock.patch.object(conform.repo_gates, "global_hooks_problem", return_value="the global core.hooksPath is unset, so a repo with none of its own runs no commit gates"):
+            row = self.rows()["hooks"]
+        self.assertEqual(("fail", conform.repo_gates.GLOBAL_HOOKS_FIX), (row.status, row.fix))
+
+    def test_global_hooks_path_row_checks_only_the_engine_checkout(self):
+        self.assertEqual("skip", conform.global_hooks_path(self.repo, oc_root=REPO_ROOT).status)
+        gate = self.repo / conform.ENGINE_GATE
+        gate.parent.mkdir(parents=True, exist_ok=True)
+        gate.write_text("")
+        with mock.patch.object(conform.repo_gates, "global_hooks_problem", return_value=""):
+            self.assertEqual("pass", conform.global_hooks_path(self.repo, oc_root=REPO_ROOT).status)
+        with mock.patch.object(conform.repo_gates, "global_hooks_problem", return_value="the global core.hooksPath is unset"):
+            row = conform.global_hooks_path(self.repo, oc_root=REPO_ROOT)
+            self.assertEqual(("fail", conform.repo_gates.GLOBAL_HOOKS_FIX), (row.status, row.fix))
 
     def test_a_declared_variant_passes_with_a_note_when_only_pre_commit_differs(self):
         (self.repo / ".githooks" / "pre-commit").write_text("#!/usr/bin/env bash\nexit 0\n")

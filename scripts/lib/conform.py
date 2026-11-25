@@ -122,9 +122,27 @@ def hooks(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant
         if not fatal:
             return Row("hooks", "pass", f"declared hook variant ({variant}); merge template hook fixes by hand")
         problems = fatal
+    if problems == [repo_gates.UNSET_HOOKS_PATH] and not private and not variant and not repo_gates.has_committed_hooks(repo):
+        # No per-repo hook files or hooksPath at all: a public repo with neither relies on the
+        # machine's global core.hooksPath from `olivercode install` instead of a commit (#1154).
+        problem = repo_gates.global_hooks_problem(oc_root)
+        if problem:
+            return _fail("hooks", problem, repo_gates.GLOBAL_HOOKS_FIX)
+        return Row("hooks", "pass", "no per-repo core.hooksPath; the machine's global default covers it")
     if problems:
         return _fail("hooks", "; ".join(problems), "olivercode sync-hooks --commit --story N")
     return Row("hooks", "pass")
+
+
+def global_hooks_path(repo: Path, *, oc_root: Path = OC_ROOT, **_) -> Row:
+    """Git's global core.hooksPath points at the hooks `olivercode install` builds, so a repo with
+    none of its own still runs them (#1154). Runs once, on the engine checkout."""
+    if not (repo / ENGINE_GATE).is_file():
+        return Row("global-hooks-path", "skip", "not an engine checkout")
+    problem = repo_gates.global_hooks_problem(oc_root)
+    if problem:
+        return _fail("global-hooks-path", problem, repo_gates.GLOBAL_HOOKS_FIX)
+    return Row("global-hooks-path", "pass")
 
 
 def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant: str = "", **_) -> Row:
@@ -327,7 +345,7 @@ def unfinished_work_snapshot(repo: Path, *, home: Path | None = None, **_) -> Ro
     return Row("unfinished-work-snapshot", "pass")
 
 
-CHECKS = (ignore, validation, engine_only, fleet_private, sleep_setting, board, issues, hooks, managed_files, tests, branches, delete_on_merge,
+CHECKS = (ignore, validation, engine_only, fleet_private, sleep_setting, global_hooks_path, board, issues, hooks, managed_files, tests, branches, delete_on_merge,
           permission_policy, unfinished_work_snapshot)
 
 

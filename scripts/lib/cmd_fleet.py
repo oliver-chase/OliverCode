@@ -242,6 +242,17 @@ VALIDATE_PATH = "scripts/validate.sh"  # sync also inserts the validation-queue 
 MANAGED_PATHS = tuple(f".githooks/{n}" for n in HOOK_FILES) + (VALIDATE_PATH,)
 
 
+def _migrate_to_global_hooks(repo_path: Path) -> None:
+    """Remove a public repo's committed OliverCode hook copies and its local core.hooksPath=.githooks,
+    so it relies on the machine's global default from `olivercode install` instead of a per-repo
+    commit (#1154). A local hooksPath pointing anywhere else is left alone, since sync-hooks never set it."""
+    hooks_dir = repo_path / ".githooks"
+    for name in HOOK_FILES:
+        (hooks_dir / name).unlink(missing_ok=True)
+    if _git(repo_path, "config", "--local", "--get", "core.hooksPath").stdout.strip() == ".githooks":
+        _git(repo_path, "config", "--local", "--unset", "core.hooksPath")
+
+
 def _git(repo_path: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(repo_path), *args], capture_output=True, text=True)
 
@@ -283,8 +294,10 @@ def _commit_synced(name: str, repo_path: Path, before: dict, story: str, archive
             foreign.append(rel)
         elif differs:
             changed.append(rel)
-        elif was["dirty"] and path.is_file():
-            already.append(rel)  # uncommitted but already equal to the template: sync leaves it, so commit it
+        elif was["dirty"]:
+            # Uncommitted but already in the state this run's install() produces, present or removed
+            # (an earlier run wrote or deleted it and was never committed, #1154): sync leaves it, so commit it.
+            already.append(rel)
     if foreign:  # put the owner's edits back, so a re-run asks again instead of committing the template over them
         for rel in foreign:
             path, was = repo_path / rel, before[rel]
@@ -335,6 +348,12 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None, commit: bo
     repos live elsewhere passes --root; without that, every repo would silently SKIP as
     "not present on this machine" and the command would still report success.
 
+    A public repo with no declared variant gets its committed hook files and its local
+    core.hooksPath=.githooks removed (the old per-repo copy, #1154): `olivercode install`'s
+    global core.hooksPath covers it instead, so a template change never costs that repo a
+    commit. A private or declared-variant repo keeps its own committed hook, since the
+    global default runs the public gates.
+
     With commit=True each repo's changed hook files are then committed by path under `story`
     (see _commit_synced). The default writes files and commits nothing.
     """
@@ -362,14 +381,17 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None, commit: bo
                          f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced, hooksPath set", commit, story):
                 skipped += 1
             continue
-        # A private repo gets the private variant, which drops the PII gate (it holds
-        # personal data by design). Declared per
-        # profile, so every private repo gets its hook from sync-hooks and none is
-        # installed by hand and left to go stale on the next template change.
+        # A private repo keeps its own committed hook, which drops the PII gate (it holds
+        # personal data by design): sync-hooks installs it directly, since the machine's
+        # global default runs the public gates instead. A public repo with no variant holds
+        # no OliverCode file at all any more; it relies on that global default (#1154).
         is_private = bool(profile.get("private"))
-        variant_note = "private-variant " if is_private else ""
-        if _sync_one(name, repo_path, failed_repos, lambda: (_install_hook_pair(repo_path, templates_dir, private_repo=is_private), _queue_block(oc_root, name, repo_path)),
-                     f"  [OK] {name}: {variant_note}hooks synced, hooksPath set", commit, story):
+        if is_private:
+            if _sync_one(name, repo_path, failed_repos, lambda: (_install_hook_pair(repo_path, templates_dir, private_repo=True), _queue_block(oc_root, name, repo_path)),
+                         f"  [OK] {name}: private-variant hooks synced, hooksPath set", commit, story):
+                updated += 1
+        elif _sync_one(name, repo_path, failed_repos, lambda: (_migrate_to_global_hooks(repo_path), _queue_block(oc_root, name, repo_path)),
+                       f"  [OK] {name}: hook files removed, the machine's global core.hooksPath covers it", commit, story):
             updated += 1
 
     for name, root in _private_repos().items():

@@ -153,7 +153,7 @@ class TestEveryCommandSkips(FakeGh):
         self.assertEqual(0, code, out)
         self.assertIn("skip old-app: archived on GitHub", out)
         self.assertFalse((self.old / ".githooks").exists())
-        self.assertTrue((self.live / ".githooks" / "pre-commit").is_file())
+        self.assertFalse((self.live / ".githooks" / "pre-commit").is_file(), "a public repo with no variant relies on the global core.hooksPath (#1154)")
 
     def test_conform_skips_it_in_the_fleet_and_on_its_own(self):
         with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(self.profiles(), None)), \

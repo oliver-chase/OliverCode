@@ -9,8 +9,10 @@ fi
 
 # An owner opts a repo out by committing .githooks/commit-msg.optout. The file counts only once HEAD holds it, so
 # the commit that adds it is checked like any other. The hook never creates it, and every commit it lets through says so.
-OPTOUT_REL="$(cd "$HOOK_DIR" && pwd -P)"
-OPTOUT_REL="${OPTOUT_REL#"$(git rev-parse --show-toplevel 2>/dev/null)"/}/commit-msg.optout"
+# Read from the repo root and not from HOOK_DIR: core.hooksPath can be one machine-wide folder
+# outside every repo (#1154), so HOOK_DIR no longer names this repo's own .githooks. Git runs
+# this hook with the working directory already at the repo root, so the path needs no lookup.
+OPTOUT_REL=".githooks/commit-msg.optout"
 if git cat-file -e "HEAD:$OPTOUT_REL" 2>/dev/null; then
   echo "[commit-msg] Every commit-msg check is off (story, voice and test): $OPTOUT_REL is committed."
   exit 0

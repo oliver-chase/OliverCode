@@ -20,6 +20,7 @@ from lib import claude_settings as _claude_settings
 from lib import cmd_guide
 from lib import queue_shim as _queue_shim
 from lib import repo_gates as _repo_gates
+from lib import repo_profiles as _repo_profiles
 from lib.skills_catalog import skill_dirs
 from lib.skill_links import broken_links as _broken_links
 
@@ -378,6 +379,31 @@ def design_step(ask=None) -> str:
     return str(own) if "designFile" in updates else ""
 
 
+def set_global_hooks_path(oc_root: Path) -> str:
+    """Point git's global core.hooksPath at the hooks `olivercode install` builds, so every repo with
+    none of its own runs them with no per-repo commit (#1154). Returns one status word."""
+    target = _repo_gates.hook_templates(oc_root)
+    current = _repo_gates.global_hooks_path()
+    if current and Path(current).expanduser().resolve() == target.resolve():
+        return "already"
+    done = subprocess.run(["git", "config", "--global", "core.hooksPath", str(target)], capture_output=True)
+    return "set" if done.returncode == 0 else "failed"
+
+
+def report_own_hooks_repos(repos: list[tuple[str, Path]]) -> list[str]:
+    """Names each registered repo that keeps its own core.hooksPath (#1154), so the global default never
+    overrides it. Returns the names reported, for a test to check without parsing the printed lines."""
+    kept = []
+    for name, path in repos:
+        if not (path / ".git").exists():
+            continue
+        own = _repo_profiles.own_hooks_path(path)
+        if own:
+            print(f"  [KEPT] {name}: keeps its own core.hooksPath ({own}), the global default leaves it alone")
+            kept.append(name)
+    return kept
+
+
 def registered_repos() -> list[tuple[str, Path]]:
     """OliverCode and each cloned repo in the fleet registry: the repos install gives a board (#994)."""
     from lib.repo_profiles import iter_fleet, load_repo_profiles
@@ -591,6 +617,14 @@ def command_install(oc_root: Path) -> int:
             print(f"  [WARN] {problem}; to fix it run `chmod +x {shlex.quote(str(oc_root / '.githooks' / 'pre-commit'))}`")
         else:
             print(f"  [WARN] {problem}; to fix it run `{fix}`")
+
+    # Every other registered repo runs its commit gates from this one global setting, so a
+    # hook template change never costs a repo its own commit (#1154). A repo with its own
+    # core.hooksPath (husky and the like) is left alone and named below.
+    global_status = set_global_hooks_path(oc_root)
+    print(f"  [{global_status.upper()}] git's global core.hooksPath -> {_repo_gates.hook_templates(oc_root)}" if global_status != "failed"
+          else f"  [FAIL] could not set git's global core.hooksPath; run `git config --global core.hooksPath {_repo_gates.hook_templates(oc_root)}`")
+    report_own_hooks_repos(registered_repos())
 
     _schedule_replay()
     _retire_removed_jobs()

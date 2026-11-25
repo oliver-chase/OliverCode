@@ -159,6 +159,8 @@ class TestSessionNotesForStoppedGates(unittest.TestCase):
         repo = temp_dir(self, "olivercode-stopped-gates-", resolve=True)
         scratch_repo(repo)
         cmd_fleet._install_hook_pair(repo, TEMPLATES, private_repo=False)
+        git(repo, "add", ".githooks")
+        git(repo, "commit", "-qn", "-m", "legacy per-repo hook commit")  # a repo still holding the old committed copies (#1154)
         claude = temp_dir(self, "olivercode-claude-")
         quiet_helpers = {name: mock.patch.object(session_check, name, return_value=[])
                          for name in ("placement_notes", "gh_notes", "checkout_notes")}  # the checkout under test is this worktree, which trails origin/main whenever main moves
