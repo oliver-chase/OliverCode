@@ -177,7 +177,7 @@ class TestInstall(HomeCase):
         for phrase in ("Claude Code remains interactive", "delegated work",
                        "The thread that started a run is the one to steer it",
                        "olivercode dispatch N", "olivercode drain REPO",
-                       "validates", "olivercode status"):
+                       "runs validation", "olivercode status"):
             self.assertIn(phrase.lower(), intro.lower())
         steps = [line.strip() for line in intro.splitlines() if line.strip()[:2] in ("1.", "2.", "3.")]
         self.assertEqual(len(steps), 3)
