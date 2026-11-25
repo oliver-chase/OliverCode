@@ -45,14 +45,14 @@ INSTALL_RECORD = ".olivercode-install.json"
 
 # The first install's closing text: how work runs, the first steps and the habits that keep it cheap, in 20 lines at most (#972, #991).
 INTRODUCTION = """How OliverCode works
-  You work in one thread and say what you want. Each request becomes a story on the repo's board.
-  `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, and the runner validates it and lands it for you.
+  Use Claude Code interactively for strategy, exploration, planning, debugging and ordinary coding. Nothing becomes a backlog item automatically.
+  Explicitly delegate bounded work to `olivercode dispatch N` or `olivercode drain REPO` when unattended execution is useful; the runner validates and lands it.
   The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost.
 
 First steps, in order
   1. Register your repos: olivercode discover --root <folder holding your repos> --register
   2. Check this machine: olivercode health
-  3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`. A chat never builds a board story by hand.
+  3. Use Claude Code normally. When you want durable tracking or unattended execution, file a bounded story and delegate it with `olivercode dispatch N` or `olivercode drain REPO`.
 
 Using it well
 """ + "\n".join(f"  {habit}" for habit in cmd_guide.USING_IT_WELL) + """
