@@ -107,6 +107,31 @@ class DrainCase(unittest.TestCase):
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
         return code, out, st
 
+    def test_a_story_over_its_spend_ceiling_is_parked_before_another_builder_starts(self):
+        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "validation failed", "tokens": 10}]})
+        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.01]), \\
+                mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
+            closed, used = cmd_drain.work_story(io, issue(1), state())
+        self.assertFalse(closed)
+        self.assertEqual([1], io.started)
+        self.assertEqual([1], io.parked)
+        self.assertEqual([1], io.released)
+        self.assertIn("$6.01", io.comments[-1][1])
+        self.assertIn("$6.00", io.comments[-1][1])
+        self.assertIn("maxStorySpend", io.comments[-1][1])
+
+    def test_a_story_under_its_spend_ceiling_can_start_its_next_round(self):
+        io = FakeIo([issue(1)], cap=1, builds={1: [
+            {"done": False, "reason": "validation failed", "tokens": 10},
+            {"done": True, "reason": "ok", "tokens": 10},
+        ]})
+        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 5.99]), \\
+                mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
+            closed, _ = cmd_drain.work_story(io, issue(1), state())
+        self.assertTrue(closed)
+        self.assertEqual([1, 1], io.started)
+        self.assertEqual([1], io.closed)
+
     def test_api_errors_back_off_exponentially_without_consuming_builder_restarts(self):
         errors = [{"done": False, "api_error": True, "api_error_cause": "529 overloaded_error", "reason": "API error", "tokens": 0} for _ in range(2)]
         io = FakeIo([issue(1)], cap=1, builds={1: errors + [{"done": True, "reason": "ok", "tokens": 1}]})
