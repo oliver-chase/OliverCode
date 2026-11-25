@@ -14,7 +14,7 @@ What the harness covers today:
 - A GitHub budget and a validation queue that every session shares
 - A decision ledger that keeps the owner's exact words for each decision
 
-Also in place: a check that policy cannot turn off silently, and a lessons log that `olivercode lesson add` appends to. Fresh-clone portability, second-device sync, honest token counts and a check for each lesson are tracked on the backlog.
+Also in place: a check that policy cannot turn off silently. Fresh-clone portability, second-device sync and honest token counts are tracked on the backlog.
 
 ## Install
 
@@ -66,7 +66,7 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 | The recipe binder every cook follows | Rules, voice and design files | Loaded into every session |
 | The training manuals | Skills | How to audit, file a story, plan and diagnose a bug |
 | Shared operating standards | Repository and fleet configuration | Applies consistent safeguards while allowing repo-specific workflows and validation |
-| The incident log | Lessons and decisions | What went wrong, and what you decided |
+| The incident log | Decisions | What you decided |
 
 A delegated task gets a bounded execution context; OliverCode remains responsible for coordinating the work, checking the result, recovering when safe, integrating it and reporting back.
 
@@ -174,7 +174,6 @@ python3 scripts/olivercode conform
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode story`, `olivercode candidates`, `olivercode gh-limit`, `olivercode gated` |
 | Owner and decisions | `olivercode owner`, `olivercode decisions` |
-| Learning | `olivercode lesson` |
 | Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode policy` |
 | Orientation | `olivercode guide` |
 

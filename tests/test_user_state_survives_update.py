@@ -1,4 +1,4 @@
-"""Story #762: the user's settings, audit choices and lessons live outside the tracked files and survive every update."""
+"""Story #762: the user's settings, audit choices live outside the tracked files and survive every update."""
 
 import json
 import os
@@ -14,7 +14,7 @@ from test_update_keeps_local_learning import Checkout, git, write
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "audit" / "scripts"))
 import audit_mode  # noqa: E402
-from lib import lessons, local_config, repo_profiles  # noqa: E402
+from lib import local_config, repo_profiles  # noqa: E402
 
 USER_FILES = ("olivercode.local.json", "shared/repo-profiles.local.json", "docs/backlog-config.local.json", "docs/LESSONS.jsonl")
 
@@ -32,14 +32,12 @@ class WithIgnore(Checkout):
 
 
 class SettingsHaveOnePerUserHome(WithIgnore):
-    def test_a_preference_an_audit_mode_and_a_lesson_leave_every_tracked_file_alone(self):
+    def test_a_preference_and_an_audit_mode_leave_every_tracked_file_alone(self):
         audit_mode.set_mode("full")
         local_config.save_local({"autoCoverLessons": True})
-        lessons.add("a check missed", "the skill drifted", "check the override", repo=self.clone)
         write(self.clone, "docs/backlog-config.local.json", '{"repoOwner": "me"}')
         write(self.clone, "shared/repo-profiles.local.json", '{"profiles": {}}')
         self.assertEqual(audit_mode.get_mode(), "full")
-        self.assertFalse(lessons.path(self.clone).is_relative_to(self.clone))
         self.assertEqual(git(self.clone, "status", "--porcelain", "--untracked-files=all"), "")
 
     def test_every_per_user_file_is_ignored_and_untracked_in_this_checkout(self):

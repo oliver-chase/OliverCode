@@ -33,14 +33,13 @@ MANAGED = (
     ("PostToolUse", "Edit|Write|MultiEdit", "design_hook.py"),
     ("Stop", None, "early-stop-guard.py"),
     ("Stop", None, "wip_save.py"),
-    ("UserPromptSubmit", None, "lesson_capture.py"),
     ("UserPromptSubmit", None, "owner_decision_capture.py"),
     ("UserPromptSubmit", None, "error_paste.py"),
     ("UserPromptSubmit", None, "status_hint.py"),
 )
 # Scripts cut from the repo. Install and update remove an entry that runs one, from any checkout, so a machine that
 # installed an older version never keeps a hook for a script that is about to go (#886).
-RETIRED = ("start_guard.py", "start_confirm.py", "ask_guard.py", "owner_prompt.py", "context_guard.py", "denial_watch.py")
+RETIRED = ("start_guard.py", "start_confirm.py", "ask_guard.py", "owner_prompt.py", "context_guard.py", "denial_watch.py", "lesson_capture.py")
 TIMEOUT_S = 10
 # Tools a session needs without a permission prompt: session control, the sidebar, worktree cleanup and the repo's
 # own validation. Install adds them to permissions.allow beside the owner's entries and health reports any missing.

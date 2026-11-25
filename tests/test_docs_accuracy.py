@@ -77,7 +77,7 @@ class TestDocsAccuracy(unittest.TestCase):
             "Rules, voice and design files": ["docs/RULES.md", "docs/VOICE.md", "docs/DESIGN.md"],
             "Skills": ["skills/INDEX.md"],
             "Repository and fleet configuration": ["scripts/lib/local_config.py", "docs/backlog-config.json"],
-            "Lessons and decisions": ["scripts/lib/cmd_lesson.py", "scripts/lib/decisions.py"],
+            "Decisions": ["scripts/lib/decisions.py"],
         }
         self.assertEqual(16, len(rows))
         self.assertEqual(set(parts), {cells[1] for cells in rows})

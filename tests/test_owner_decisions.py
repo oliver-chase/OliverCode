@@ -1,4 +1,4 @@
-"""#884: an owner message that names a story is saved by the lesson_capture hook and reaches that story's builder."""
+"""#884: an owner message that names a story is saved by the owner_decision_capture hook and reaches that story's builder."""
 
 import json
 import os
@@ -77,7 +77,7 @@ class TestOwnerDecisions(unittest.TestCase):
         self.assertEqual(owner_decisions.entries(79), [])
         self.assertEqual(owner_decisions.entries(80), [])
 
-    def test_a_decision_stated_after_the_lesson_hook_is_removed_is_recorded_and_briefed(self):
+    def test_a_decision_stated_in_a_prompt_is_recorded_and_briefed(self):
         subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"session_id": "s3", "prompt": "Story #46: the ledger keeps this decision"}),
                        text=True, capture_output=True, env=os.environ.copy(), check=True)
         self.assertEqual(len(owner_decisions.entries(46)), 1)

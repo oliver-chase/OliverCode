@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code UserPromptSubmit hook: each owner message that names a story (#N) is appended to the decisions ledger for that story's builder (#884, #1046).
 
-It is the ledger's own writer, so the ledger keeps recording after the lesson_capture hook is removed (#983). It prints nothing to the session and never blocks the prompt, and it fails open on its own error.
+It is the ledger's own writer. It prints nothing to the session and never blocks the prompt, and it fails open on its own error.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import lesson_flags, owner_decisions  # noqa: E402
+from lib import owner_decisions, prompt_source  # noqa: E402
 
 
 def main() -> int:
@@ -26,7 +26,7 @@ def main() -> int:
     if os.environ.get("OLIVERCODE_HEADLESS") == "1":
         return 0
     prompt = str(data.get("prompt") or "")
-    if lesson_flags.from_owner(prompt):
+    if prompt_source.from_owner(prompt):
         owner_decisions.record(prompt, str(data.get("session_id") or ""))
     return 0
 

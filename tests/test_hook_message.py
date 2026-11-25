@@ -61,7 +61,7 @@ class TestEveryHookEmitsBoundedMessages(unittest.TestCase):
     def test_every_registered_hook_that_refuses_or_advises_goes_through_the_bound(self):
         """A hook that prints a refusal or advice without `hook_message.bounded` fails here. The reports a hook prints as data are listed: the design check, the
         status digest and the session-start summary are findings or status, not refusals."""
-        reports = {"design_hook.py", "status_hint.py", "session_check.py", "gh_watch.py", "wip_save.py", "lesson_capture.py", "owner_decision_capture.py"}
+        reports = {"design_hook.py", "status_hint.py", "session_check.py", "gh_watch.py", "wip_save.py", "owner_decision_capture.py"}
         for _, _, script in claude_settings.MANAGED:
             if script in reports:
                 continue

@@ -202,8 +202,6 @@ class TestScheduledEntryPoints(unittest.TestCase):
             prompt = f"```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad {n}\n```\n"
             subprocess.run([sys.executable, str(hooks / "error_paste.py")], input=json.dumps({"prompt": prompt, "session_id": "s", "cwd": checkout}),
                            capture_output=True, text=True, env=self.env, check=True)
-            subprocess.run([sys.executable, str(hooks / "lesson_capture.py")], input=json.dumps({"prompt": "no, that is wrong, stop doing that", "session_id": "s"}),
-                           capture_output=True, text=True, env=self.env, check=True)
         self.assertEqual([], creations(self.record))
         self.assertEqual(50, self.candidate_count(), "each pasted error adds one candidate and no more")
         self.assertFalse((self.oc / "story-outbox.jsonl").exists())

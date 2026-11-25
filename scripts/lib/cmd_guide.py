@@ -113,9 +113,6 @@ GROUPS = (
         ("owner", "Keep the steps only the owner can take"),
         ("decisions", "Keep the owner's decisions in their own words"),
     )),
-    ("Learning", (
-        ("lesson", "Record a mistake and the rule that prevents it"),
-    )),
     ("Fleet and policy", (
         ("discover", "Find the git repos on this machine and register them"),
         ("init-fleet", "Create your private repo for fleet settings"),

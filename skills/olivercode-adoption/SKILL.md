@@ -89,7 +89,7 @@ Keep a list of the parts covered as you go. These are all the parts, in teaching
 11. **Version cut job** (`olivercode version-cut --schedule`). It cuts a version from what landed on main
 12. **Framework CI workflow** (`.github/workflows/framework-ci.yml`). It runs health, validation and the install rehearsal on push and pull request, and is paused while GitHub Actions billing is blocked
 13. **Skills.** Say the phrase and the skill loads: `audit`, `backlog`, `diagnosing-bugs`, `plan` and `skill-creation`. The `audit` skill runs only when the user names it
-14. **Owner steps, decisions and lessons.** `olivercode owner` keeps the steps only the user can take, `olivercode decisions` keeps their decisions in their words, and `olivercode lesson` records a mistake with the rule that prevents it
+14. **Owner steps and decisions.** `olivercode owner` keeps the steps only the user can take, `olivercode decisions` keeps their decisions in their words
 
 The scheduled jobs start no model. Check any of them with `launchctl list | grep olivercode` on a Mac, and expect one line per installed job.
 
