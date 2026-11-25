@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import hook_message  # noqa: E402
 
 PROMISE_RE = re.compile(
     r"\b(I'?ll|I will|let me|next,? I|now I'?ll)\b[^.]{0,60}"
@@ -260,17 +261,8 @@ def _block_reason(input_data: dict) -> str:
     return ""
 
 
-PROMISE_REASON = (
-    "The previous response ended by stating an intent to do work without "
-    "actually doing it. Do that work now with tool calls. End the turn only "
-    "when the task is complete or you are blocked on input only the user can "
-    "provide."
-)
-HANDOFF_REASON = (
-    "The previous response hands the owner a step that no tool call in this session ran and saw refused. Run the "
-    "step yourself first, even when an earlier list names it. If a tool refuses it, name the command and the error, "
-    "then list the one step only the owner can take."
-)
+PROMISE_REASON = "The last reply promised work it did not do. Do it now with tool calls; stop only when done or blocked on the user. See docs/RULES.md, Execution."
+HANDOFF_REASON = "The last reply handed the owner a step no tool call tried. Run it yourself; if refused, name the command and error. See docs/RULES.md, Prepared owner steps."
 
 
 def main() -> int:
@@ -280,7 +272,7 @@ def main() -> int:
         input_data = {}
     reason = _block_reason(input_data)
     if reason:
-        print(json.dumps({"decision": "block", "reason": reason}))
+        print(json.dumps({"decision": "block", "reason": hook_message.bounded(reason)}))
         return 0
 
     print(json.dumps({}))

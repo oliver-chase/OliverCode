@@ -16,6 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
+from lib import hook_message  # noqa: E402
 import archived_guard  # noqa: E402
 import commit_guard  # noqa: E402
 import gh_guard  # noqa: E402
@@ -104,14 +105,14 @@ def main() -> int:
     rewritten = _safely(updated_input, data) if found and all(k == "allow" for k, _ in found) else None
     if rewritten:  # a warning never drops the queue rewrite; the output carries both reasons
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
-                                                 "permissionDecisionReason": " ".join([r for _, r in found] + ["Validation waits in the per-user queue."]),
+                                                 "permissionDecisionReason": hook_message.bounded(" ".join([r for _, r in found] + ["Validation waits in the per-user queue."])),
                                                  "updatedInput": rewritten}}))
         return 0
     if found:
         kind, reason = next((v for v in found if v[0] == "deny"), found[0])
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                                  "permissionDecision": kind,
-                                                 "permissionDecisionReason": reason}}))
+                                                 "permissionDecisionReason": hook_message.bounded(reason)}}))
         return 0
     rewritten = _safely(updated_input, data)
     if rewritten:

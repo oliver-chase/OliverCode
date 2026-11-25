@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import candidates, cmd_owner, failure_log, local_config, repo_state  # noqa: E402
+from lib import candidates, cmd_owner, failure_log, hook_message, local_config, repo_state  # noqa: E402
 
 
 
@@ -103,6 +103,7 @@ def main() -> int:
         return 0
     text = file_story(str(data.get("prompt") or ""), str(data.get("session_id") or ""), str(data.get("cwd") or ""))
     if text:
+        text = hook_message.bounded(text)
         print(json.dumps({"systemMessage": text, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}))
     return 0
 
