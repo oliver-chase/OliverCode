@@ -58,7 +58,7 @@ class TestDocsAccuracy(unittest.TestCase):
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         start, end = text.index("## How work runs"), text.index("## How it works, in plain terms")
         self.assertLess(start, end)
-        section = text[end:text.index("## Dispatch planning")]
+        section = text[end:text.index("A delegated task gets a bounded execution context")]
         rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in section.splitlines()
                 if line.startswith("| ") and not line.startswith("| In the kitchen")]
         parts = {
