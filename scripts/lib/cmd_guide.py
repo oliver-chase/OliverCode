@@ -31,12 +31,12 @@ ARCHITECTURE = (
 
 # The habits that keep OliverCode cheap, printed after the first steps by the guide and the first install's introduction, one line each (#991).
 USING_IT_WELL = (
-    "Work in one thread per topic, and start a fresh one when it grows long.",
-    "Never ask a thread for status. Run `olivercode status` instead.",
-    "Say what you want once and let the runner build it.",
-    "Keep a story small and name its files.",
-    "Never start a builder in a chat: `olivercode dispatch N` builds a board story without one.",
-    "A long thread costs more on every message, because all of it is re-read.",
+    "Use interactive Claude Code for thinking and collaboration; delegate explicitly when you want OliverCode to take responsibility for execution.",
+    "Describe the outcome, constraints and what done looks like; OliverCode should handle the planning and task mechanics.",
+    "Let OliverCode determine scope, split work and identify dependencies when doing so improves the result.",
+    "Use `olivercode status` to see progress, blockers, completed work and decisions that need you.",
+    "Keep owner decisions for genuine trade-offs, permissions, production actions and ambiguous requirements.",
+    "Use the current `olivercode dispatch N` and `olivercode drain REPO` entry points for queued execution until the owner front door is fully implemented.",
 )
 
 # City, the status page published as an artifact, and how it reaches the phone (#999). Install, the adoption skill and the guide print the same lines.
