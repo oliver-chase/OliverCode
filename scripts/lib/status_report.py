@@ -345,6 +345,84 @@ def _landed(slug: str, log: list[dict], now: float) -> str:
     return "".join(parts)
 
 
+def _median(values: list[float]):
+    ordered = sorted(values)
+    return None if not ordered else (ordered[len(ordered) // 2] if len(ordered) % 2 else (ordered[len(ordered) // 2 - 1] + ordered[len(ordered) // 2]) / 2)
+
+
+def _validation_seconds(now: float) -> dict[str, list[float]]:
+    """{local day: run seconds of each validation that day}, from the validation queue's own log."""
+    out: dict[str, list[float]] = {}
+    try:
+        lines = (failure_log.home() / "validate-runs.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            row = json.loads(line)
+            out.setdefault(time.strftime("%Y-%m-%d", time.localtime(float(row["at"]))), []).append(float(row["run"]))
+        except (ValueError, KeyError, TypeError):
+            continue
+    return out
+
+
+def spend_days(log: list[dict], now: float, chats: dict | None = None, validation: dict | None = None) -> list[dict]:
+    """One row per local day of the last DAYS, newest first, with what the desktop chats and the runner's builders read that day and the waste and speed beside it (#1150).
+    A builder reads input, cache-read and cache-write tokens in each round. Rows hold no model call and no GraphQL: transcripts, the run log and the validation log."""
+    from lib import usage_sessions
+    chats = usage_sessions.chat_spend(days=DAYS, now=now) if chats is None else chats
+    validation = _validation_seconds(now) if validation is None else validation
+    landed: dict[str, list] = {}
+    for slug in {r.get("repo") for r in log if r.get("repo")}:
+        for row in history(log, slug, now):
+            landed.setdefault(time.strftime("%Y-%m-%d", time.localtime(_epoch(row.get("at")))), []).append(row)
+    rows = []
+    for back in range(DAYS):
+        day = time.strftime("%Y-%m-%d", time.localtime(now - back * 86400))
+        rounds = [r for r in log if isinstance(r.get("round"), int) and time.strftime("%Y-%m-%d", time.localtime(_epoch(r.get("at")))) == day]
+        read = lambda r: sum(int(r.get(k) or 0) for k in ("input", "cache_read", "cache_write"))  # noqa: E731
+        builder = sum(read(r) for r in rounds)
+        mine = chats.get(day, {"tokens": 0, "calls": 0, "starts": [], "chats": []})
+        total = builder + mine["tokens"]
+        priced = [r["cost"] for r in landed.get(day, []) if r["cost"] is not None]
+        rows.append({"day": day, "chat": mine["tokens"], "builder": builder, "total": total,
+                     "cost_per_story": (sum(priced) / len(priced)) if priced else None,
+                     "chat_start": _median(mine["starts"]), "builder_start": _median([read(r) for r in rounds if r["round"] == 1]),
+                     "limit_share": (sum(1 for r in rounds if r.get("stop") == "max_turns") / len(rounds)) if rounds else None,
+                     "api_share": (sum(1 for r in rounds if r.get("stop") == "api_error") / len(rounds)) if rounds else None,
+                     "validation": _median(validation.get(day, [])),
+                     "top": sorted(mine["chats"], key=lambda c: -c[1])[:3]})
+    return rows
+
+
+def _spend_panel(log: list[dict], now: float) -> str:
+    """The spend panel: for each day the tokens desktop chats and runner builders read with each one's share, the cost per landed story, median start sizes, the share of
+    rounds that stopped on the turn limit or an API error, the median validation time and the day's three costliest chats (#1150)."""
+    try:
+        days = spend_days(log, now)
+    except (OSError, ValueError):
+        return ""
+    pct = lambda v: "none" if v is None else f"{v * 100:.0f}%"  # noqa: E731
+    count = lambda v: "none" if v is None else f"{v:,.0f}"  # noqa: E731
+    parts = ["<h2>Spend by day</h2>"]
+    for d in days:
+        label = datetime.strptime(d["day"], "%Y-%m-%d").strftime("%A %d %B")
+        if not d["total"] and not d["top"]:
+            parts.append(f"<h3>{label}: No activity</h3>")
+            continue
+        share = lambda n: pct(n / d["total"]) if d["total"] else "none"  # noqa: E731
+        parts.append(f"<h3>{label}: {d['total']:,} tokens read</h3>")
+        parts.append(_table(["Who", "Tokens read", "Share of the day", "Median start tokens"],
+                            [["Desktop chats", f"{d['chat']:,}", share(d["chat"]), count(d["chat_start"])],
+                             ["Runner builders", f"{d['builder']:,}", share(d["builder"]), count(d["builder_start"])]], ""))
+        parts.append(f"<p>Cost per landed story: {_money(d['cost_per_story'])}. Builder rounds stopped on the turn limit: {pct(d['limit_share'])}, on an API error: {pct(d['api_share'])}. "
+                     f"Median validation time: {'none' if d['validation'] is None else f'{d['validation']:.0f} seconds'}.</p>")
+        if d["top"]:
+            parts.append(_table(["Costliest chats", "Tokens read", "Calls", "Average context"],
+                                [[name[:8], f"{tokens:,}", f"{calls:,}", f"{tokens // max(1, calls):,}"] for name, tokens, calls in d["top"]], ""))
+    return "".join(parts)
+
+
 SCRIPT = """<script>
 (function () {
   var pub = Number(document.body.dataset.published || 0), active = document.body.dataset.active === "1", stale = Number(document.body.dataset.stale) * 60;
@@ -391,7 +469,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{STALE_MINUTES}"><main>{panel}'
             f"<h1>OliverCode status</h1><p class=\"muted\">This machine: {html.escape(platform.node())}. Last rewritten {datetime.fromtimestamp(now):%A %d %B %H:%M}. {html.escape(spend)}</p>"
-            f'<p id="published" class="warn"></p>{body}<h2>Waits on you, in any repo</h2>{owner}{SCRIPT}</main></body></html>')
+            f'<p id="published" class="warn"></p>{body}{_spend_panel(log, now)}<h2>Waits on you, in any repo</h2>{owner}{SCRIPT}</main></body></html>')
 
 
 def _owner_steps() -> list[dict]:

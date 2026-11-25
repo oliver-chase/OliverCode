@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -974,6 +975,60 @@ class TestOutsideLandings(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertTrue(status_report.page_path().exists())
         self.assertEqual(str(status_report.page_path()), run.call_args[0][0][-1])
+
+
+class TestSpendPanel(unittest.TestCase):
+    """The spend panel: each day's tokens read by desktop chats and runner builders, with speed and waste beside it (#1150)."""
+    START = T0
+    NOW = T0 + 600
+
+    def stamp(self, seconds):
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.START + seconds))
+
+    def log(self):
+        row = lambda n, rnd, stop, inp, cache_read, cache_write, cost: {
+            "story": f"story-{n}", "round": rnd, "stop": stop, "input": inp, "cache_read": cache_read, "cache_write": cache_write,
+            "cost_usd": cost, "at": self.stamp(rnd * 60), "repo": "o/r", "model": "sonnet"}
+        return [row(1, 1, "completed", 10, 900, 90, 0.5), row(1, 2, "max_turns", 10, 1900, 90, 0.5), row(2, 1, "api_error", 20, 1000, 0, 0.0),
+                row(2, 2, "completed", 5, 495, 0, 0.25), {"story": "story-1", "landed": True, "title": "One", "at": self.stamp(300), "repo": "o/r"}]
+
+    def today(self):
+        return time.strftime("%Y-%m-%d", time.localtime(self.START))
+
+    def chats(self):
+        return {self.today(): {"tokens": 6000, "calls": 4, "starts": [100, 300, 500],
+                               "chats": [("aaa", 3000, 2), ("bbb", 2000, 1), ("ccc", 500, 1), ("ddd", 500, 1)]}}
+
+    def row(self):
+        rows = status_report.spend_days(self.log(), self.NOW, chats=self.chats(), validation={self.today(): [10.0, 30.0, 20.0]})
+        return next(r for r in rows if r["day"] == self.today())
+
+    def test_a_day_adds_the_tokens_desktop_chats_and_runner_builders_read(self):
+        d = self.row()
+        self.assertEqual((6000, 4520, 10520), (d["chat"], d["builder"], d["total"]))
+
+    def test_speed_and_waste_sit_beside_the_spend(self):
+        d = self.row()
+        self.assertEqual((300, 1010), (d["chat_start"], d["builder_start"]), "the median first-call size of the chats and of the builders' first rounds")
+        self.assertEqual((0.25, 0.25), (d["limit_share"], d["api_share"]), "one round of four stopped on the turn limit and one on an API error")
+        self.assertEqual(20.0, d["validation"])
+        self.assertEqual(1.0, d["cost_per_story"], "the one landed story's rounds cost 0.50 and 0.50")
+
+    def test_the_panel_shows_shares_the_three_costliest_chats_and_no_activity_for_an_empty_day(self):
+        rows = status_report.spend_days(self.log(), self.NOW, chats=self.chats(), validation={self.today(): [20.0]})
+        with mock.patch.object(status_report, "spend_days", return_value=rows):
+            html = status_report._spend_panel(self.log(), self.NOW)
+        self.assertIn("10,520 tokens read", html)
+        self.assertIn("57%", html)
+        self.assertIn("43%", html)
+        self.assertIn("1,500", html, "the average context of the chat with 3,000 tokens over 2 calls")
+        self.assertTrue(all(name in html for name in ("aaa", "bbb", "ccc")) and "ddd" not in html)
+        self.assertEqual(status_report.DAYS - 1, html.count("No activity"))
+
+    def test_building_the_panel_calls_no_model_and_starts_no_process(self):
+        with mock.patch.object(status_report.subprocess, "run", side_effect=AssertionError("a process started")), \
+                mock.patch.object(status_report.model, "run_cli", side_effect=AssertionError("a model call"), create=True):
+            self.assertIn("Spend by day", status_report._spend_panel(self.log(), self.NOW))
 
 
 if __name__ == "__main__":
