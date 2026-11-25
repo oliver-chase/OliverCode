@@ -151,14 +151,50 @@ def job_loaded(label):
     return subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{label}"], capture_output=True).returncode == 0
 
 
+def _live_targets(src, commits):
+    """(hook scripts, job labels) the commits change in checkout `src`: the managed hooks whose entry must be in settings.json and the
+    launchd jobs whose label must be loaded. A job is demanded only when a commit itself adds or changes its definition, not merely a
+    file that holds one (#1157)."""
+    files = {f for c in commits for f in _git(src, "diff-tree", "--no-commit-id", "--name-only", "-r", c).stdout.split()}
+    managed = {script for _, _, script in claude_settings.MANAGED}
+    changed = {Path(f).name for f in files if f.startswith("scripts/hooks/")} & managed
+    if "scripts/lib/claude_settings.py" in files:
+        changed = set(managed)
+    labels = set()
+    for f, changed_text in _added_lines(src, commits).items():
+        if Path(f).name.startswith("test_") or "/tests/" in f"/{f}":
+            continue  # a test builds fake jobs; it does not run one (#767)
+        try:
+            whole = (Path(src) / f).read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            whole = changed_text
+        labels |= job_labels(changed_text, whole)
+    return changed, labels
+
+
+def _unlinked_live_check(commits, root):
+    """(reason, proof) when no installed checkout is linked (#1186). The close does not need one unless a commit changes a hook entry or
+    a launchd job, since only those stay inactive until the installed checkout runs them. The proof says the live check did not run, so a
+    skipped check is never shown as passed. A commit this checkout cannot read is refused, since nothing says what it changed."""
+    refusal = "the installed OliverCode checkout ($OC) was not found; run `olivercode install` from it"
+    if not commits or any(_git(root, "cat-file", "-e", f"{c}^{{commit}}").returncode != 0 for c in commits):
+        return refusal, None
+    hooks, labels = _live_targets(root, commits)
+    if hooks or labels:
+        names = ", ".join(sorted(hooks) + sorted(labels))
+        return f"{refusal}; these commits change {names}, which must be live before the story closes", None
+    return None, ("Live: not checked. No installed OliverCode checkout is linked on the machine that closed this story, "
+                  "and the commits change no hook entry and no launchd job.")
+
+
 def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings=None):
     """(reason, proof): reason is None when the installed checkout `oc` holds `commits` and what they change is loaded (#713).
 
     An installed checkout that is behind is updated once with `olivercode update`, then checked again. Proof names the
-    installed commit, plus each hook entry or launchd job label the commits touch that is confirmed active. A job is
-    demanded only when a commit itself adds or changes the job's definition, not merely a file that holds one (#1157)."""
+    installed commit, plus each hook entry or launchd job label the commits touch that is confirmed active. With no installed
+    checkout, the close goes ahead only when the commits change no hook entry and no job (#1186)."""
     if oc is None or not is_olivercode(oc):
-        return "the installed OliverCode checkout ($OC) was not found; run `olivercode install` from it", None
+        return _unlinked_live_check(commits, root)
     ahead = main_checkout.ahead_refusal(Path(oc)) or main_checkout.stale_refusal(Path(oc))  # an ahead checkout is refused before any update runs, so nothing changes (#785)
     if ahead:
         return ahead, None
@@ -171,26 +207,14 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
                 "run `olivercode update` there and fix what it reports"), None
     head = _git(oc, "rev-parse", "--short", "HEAD").stdout.strip()
     proof = [f"installed checkout {head} holds {', '.join(c[:10] for c in commits)}"]
-    files = {f for c in commits for f in _git(oc, "diff-tree", "--no-commit-id", "--name-only", "-r", c).stdout.split()}
     settings = settings or Path.home() / ".claude" / "settings.json"
     managed = {script: (event, matcher) for event, matcher, script in claude_settings.MANAGED}
-    changed = {Path(f).name for f in files if f.startswith("scripts/hooks/")} & set(managed)
-    if "scripts/lib/claude_settings.py" in files:
-        changed = set(managed)
+    changed, labels = _live_targets(oc, commits)
     if changed:
         lacking = set(claude_settings.missing(settings, Path(oc) / "scripts" / "hooks"))
         if changed & lacking:
             return f"the hook entry for {', '.join(sorted(changed & lacking))} is not in {settings}; run `olivercode install`", None
         proof += [f"hook entry {managed[s][0]} {s} is in settings.json" for s in sorted(changed)]
-    labels = set()
-    for f, changed_text in _added_lines(oc, commits).items():
-        if Path(f).name.startswith("test_") or "/tests/" in f"/{f}":
-            continue  # a test builds fake jobs; it does not run one (#767)
-        try:
-            whole = (Path(oc) / f).read_text(encoding="utf-8")
-        except (OSError, ValueError):
-            whole = changed_text
-        labels |= job_labels(changed_text, whole)
     for label in sorted(labels):
         if not loaded(label):
             return f"launchd job {label} is not loaded; run `olivercode install`", None

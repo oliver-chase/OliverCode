@@ -245,6 +245,33 @@ class LiveCheck(unittest.TestCase):
         reason, _ = cs.live_check(["a" * 40], None, self.oc)
         self.assertIn("$OC", reason)
 
+    def test_no_installed_checkout_still_closes_a_story_that_changes_no_hook_or_job_and_says_the_live_check_did_not_run(self):
+        """#1186: only a hook entry or a launchd job stays inactive until the installed checkout runs it, so other stories close on their commits."""
+        c = self.commit("docs/a.md", "x")
+        reason, proof = cs.live_check([c], None, self.oc)
+        self.assertIsNone(reason)
+        self.assertTrue(proof.startswith("Live: not checked."))
+        self.assertIn("no hook entry and no launchd job", proof)
+
+    def test_no_installed_checkout_refuses_a_hook_story_and_names_the_hook(self):
+        c = self.commit("scripts/hooks/wip_save.py", "x")
+        reason, proof = cs.live_check([c], None, self.oc)
+        self.assertIn("wip_save.py", reason)
+        self.assertIn("$OC", reason)
+        self.assertIsNone(proof)
+
+    def test_no_installed_checkout_refuses_a_job_story_and_names_the_label(self):
+        c = self.commit("scripts/lib/cmd_job.py", 'LABEL = "com.olivercode.demo-job"\n'
+                        'def schedule(on):\n    return launchd.schedule(on, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n')
+        reason, _ = cs.live_check([c], None, self.oc)
+        self.assertIn("com.olivercode.demo-job", reason)
+
+    def test_no_installed_checkout_ignores_a_job_a_test_builds(self):
+        c = self.commit("tests/test_job.py", 'launchd.job("com.olivercode.fixture", ["x"], "x.out")\n')
+        reason, proof = cs.live_check([c], None, self.oc)
+        self.assertIsNone(reason)
+        self.assertTrue(proof.startswith("Live: not checked."))
+
     def test_a_hook_story_needs_its_entry_in_settings_and_names_it(self):
         c = self.commit("scripts/hooks/wip_save.py", "x")
         reason, _ = cs.live_check([c], self.oc, self.oc, settings=self.settings)
