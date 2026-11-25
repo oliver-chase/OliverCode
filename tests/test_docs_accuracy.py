@@ -62,10 +62,10 @@ class TestDocsAccuracy(unittest.TestCase):
         rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in section.splitlines()
                 if line.startswith("| ") and not line.startswith("| In the kitchen")]
         parts = {
-            "Your one thread": ["skills/backlog/SKILL.md"],
+            "Interactive Claude Code": ["CLAUDE.md"],
             "The board, one per repo": ["docs/backlog-config.json"],
             "The runner, a script with no model": ["scripts/lib/cmd_drain.py"],
-            "The builder, one fresh headless session": ["scripts/lib/agent_loop.py"],
+            "Optional headless builder": ["scripts/lib/agent_loop.py"],
             "Model by story size": ["scripts/lib/agent_loop.py"],
             "Validation": ["scripts/validate.sh"],
             "The reviewer": ["scripts/lib/agent_loop.py"],
