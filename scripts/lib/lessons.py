@@ -100,6 +100,48 @@ def _cover(p: Path, lesson_id: str, ref: str) -> dict:
     return found
 
 
+
+def mark_implemented(ref: str, evidence: str, repo: str | Path | None = None) -> int:
+    """Mark lessons linked to REF implemented after the story's completion gate succeeds.
+
+    The lesson remains in the append-only log. The implementation reference and date are
+    added to matching records in both the repo and structure logs.
+    """
+    if not (ref or "").strip() or not (evidence or "").strip():
+        raise ValueError("implementation needs a story reference and commit evidence")
+    targets = [path(repo)]
+    structure = path()
+    if structure != targets[0]:
+        targets.append(structure)
+    changed = 0
+    for target in targets:
+        with failure_log.locked(target):
+            lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
+            out, found = [], False
+            for line in lines:
+                try:
+                    item = json.loads(line) if line.strip() else None
+                except ValueError:
+                    item = None
+                if isinstance(item, dict) and item.get("covered_by") == ref:
+                    item["implemented_by"] = evidence.strip()
+                    item["implemented_on"] = date.today().isoformat()
+                    line = json.dumps(item)
+                    found = True
+                out.append(line)
+            if found:
+                failure_log.write_private(target, "\\n".join(out) + "\\n")
+                changed += sum(1 for line in lines if line.strip() and _matches_covered(line, ref))
+    return changed
+
+
+def _matches_covered(line: str, ref: str) -> bool:
+    try:
+        item = json.loads(line)
+    except ValueError:
+        return False
+    return isinstance(item, dict) and item.get("covered_by") == ref
+
 def uncovered(repo: str | Path | None = None) -> list[dict]:
     return [r for r in read(repo) if not r.get("covered_by")]
 
