@@ -169,7 +169,8 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
                 code = 1
                 (log_dir / f"{name}.log").write_text(f"Could not start test module: {exc}\\n", encoding="utf-8")
             took = time.monotonic() - began
-            progress(f"  [{\"FAIL\" if code else \" OK \"}] {name} ({took:.1f}s)")
+            label = "FAIL" if code else " OK "
+            progress(f"  [{label}] {name} ({took:.1f}s)")
             return name, code, took
 
         with ThreadPoolExecutor(max_workers=jobs()) as pool:
