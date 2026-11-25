@@ -107,11 +107,27 @@ class DrainCase(unittest.TestCase):
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
         return code, out, st
 
+    def test_story_spend_sums_builder_reader_and_fix_rows_for_only_that_story_and_repo(self):
+        home = temp_dir(self)
+        (home / "run-log.jsonl").write_text(
+            '{"story":"story-3","repo":"o/r","cost_usd":1.25}\\n'
+            '{"story":"story-3-review","repo":"o/r","cost_usd":0.50}\\n'
+            '{"story":"story-3-fix","repo":"o/r","cost_usd":0.25}\\n'
+            '{"story":"story-30","repo":"o/r","cost_usd":20}\\n'
+            '{"story":"story-3","repo":"other/repo","cost_usd":10}\\n'
+            '{"story":"story-3","repo":"o/r","cost_usd":null}\\n'
+            'not json\\n',
+            encoding="utf-8",
+        )
+        with mock.patch.object(cmd_drain.failure_log, "home", return_value=home):
+            self.assertEqual(2.0, cmd_drain.story_spend(3, "o/r"))
+            self.assertEqual(0.0, cmd_drain.story_spend(4, "o/r"))
+
     def test_a_story_over_its_spend_ceiling_is_parked_before_another_builder_starts(self):
         io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "validation failed", "tokens": 10}]})
         with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.01]), \\
                 mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
-            closed, used = cmd_drain.work_story(io, issue(1), state())
+                closed, used = cmd_drain.work_story(io, issue(1), state())
         self.assertFalse(closed)
         self.assertEqual([1], io.started)
         self.assertEqual([1], io.parked)
@@ -127,7 +143,7 @@ class DrainCase(unittest.TestCase):
         ]})
         with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 5.99]), \\
                 mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
-            closed, _ = cmd_drain.work_story(io, issue(1), state())
+                closed, _ = cmd_drain.work_story(io, issue(1), state())
         self.assertTrue(closed)
         self.assertEqual([1, 1], io.started)
         self.assertEqual([1], io.closed)
