@@ -89,11 +89,13 @@ DEFINES = re.compile(r"""launchd\.job\(\s*([\w"'.-]+)|launchd\.schedule\(\s*[^,(
                      r"""|["']Label["']\s*:\s*([\w"'.-]+)|<key>Label</key>\s*<string>([\w.-]+)</string>""")
 
 
-def job_labels(text):
-    """The com.olivercode.* labels a file defines or schedules: the label of each launchd.job or launchd.schedule
+def job_labels(text, whole=None):
+    """The com.olivercode.* labels `text` defines or schedules: the label of each launchd.job or launchd.schedule
     call, plist "Label" key, or LaunchAgent <key>Label</key>, read literally or through a NAME = "label" constant.
-    A label that only appears as data, such as an entry in the feature register, is not a job this file runs (#767)."""
-    consts = dict(LABEL_CONST.findall(text))
+    A label that only appears as data, such as an entry in the feature register, is not a job this file runs (#767).
+    `whole` resolves a NAME constant that `text` references but does not itself define, such as when `text` is only
+    the lines a commit changed and the constant sits elsewhere in the file (#1157). It defaults to `text`."""
+    consts = dict(LABEL_CONST.findall(text if whole is None else whole))
     found = set()
     for groups in DEFINES.findall(text):
         arg = next(g for g in groups if g).strip("\"'")
@@ -101,6 +103,22 @@ def job_labels(text):
         if label.startswith("com.olivercode."):
             found.add(label)
     return found
+
+
+def _added_lines(oc, commits):
+    """{file: text} the lines each commit adds or changes, across all commits, keyed by path relative to oc.
+    A context-free (-U0) diff holds only those lines, so a commit that leaves a job's definition untouched
+    contributes nothing for that file even when the file also holds the job (#1157)."""
+    added = {}
+    for c in commits:
+        patch = _git(oc, "diff-tree", "--no-commit-id", "-r", "-p", "-U0", c).stdout
+        path = None
+        for line in patch.splitlines():
+            if line.startswith("diff --git a/"):
+                path = line.split(" b/", 1)[-1]
+            elif path and line.startswith("+") and not line.startswith("+++"):
+                added[path] = added.get(path, "") + line[1:] + "\n"
+    return added
 
 
 def is_olivercode(root):
@@ -136,7 +154,8 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
     """(reason, proof): reason is None when the installed checkout `oc` holds `commits` and what they change is loaded (#713).
 
     An installed checkout that is behind is updated once with `olivercode update`, then checked again. Proof names the
-    installed commit, plus each hook entry or launchd job label the commits touch that is confirmed active."""
+    installed commit, plus each hook entry or launchd job label the commits touch that is confirmed active. A job is
+    demanded only when a commit itself adds or changes the job's definition, not merely a file that holds one (#1157)."""
     if oc is None or not is_olivercode(oc):
         return "the installed OliverCode checkout ($OC) was not found; run `olivercode install` from it", None
     ahead = main_checkout.ahead_refusal(Path(oc)) or main_checkout.stale_refusal(Path(oc))  # an ahead checkout is refused before any update runs, so nothing changes (#785)
@@ -163,13 +182,14 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
             return f"the hook entry for {', '.join(sorted(changed & lacking))} is not in {settings}; run `olivercode install`", None
         proof += [f"hook entry {managed[s][0]} {s} is in settings.json" for s in sorted(changed)]
     labels = set()
-    for f in files:
+    for f, changed_text in _added_lines(oc, commits).items():
         if Path(f).name.startswith("test_") or "/tests/" in f"/{f}":
             continue  # a test builds fake jobs; it does not run one (#767)
         try:
-            labels |= job_labels((Path(oc) / f).read_text(encoding="utf-8"))
+            whole = (Path(oc) / f).read_text(encoding="utf-8")
         except (OSError, ValueError):
-            pass
+            whole = changed_text
+        labels |= job_labels(changed_text, whole)
     for label in sorted(labels):
         if not loaded(label):
             return f"launchd job {label} is not loaded; run `olivercode install`", None

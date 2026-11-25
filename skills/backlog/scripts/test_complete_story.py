@@ -267,6 +267,23 @@ class LiveCheck(unittest.TestCase):
         reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: self.fail(f"{label} is a test fixture"))
         self.assertIsNone(reason)
 
+    def test_a_commit_that_edits_unrelated_lines_demands_no_job(self):
+        job = ('LABEL = "com.olivercode.version-cut"\n'
+               'def schedule():\n    return launchd.schedule(True, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n\n'
+               'def cleanup():\n    pass\n')
+        self.commit("scripts/lib/cmd_version.py", job)
+        c = self.commit("scripts/lib/cmd_version.py", job.replace('pass', 'return "done"'))
+        reason, proof = cs.live_check([c], self.oc, self.oc, loaded=lambda label: self.fail(f"{label} is unrelated to this commit"))
+        self.assertIsNone(reason)
+        self.assertNotIn("launchd job", proof)
+
+    def test_a_commit_that_changes_the_job_call_demands_it_resolving_the_constant_from_the_whole_file(self):
+        self.commit("scripts/lib/cmd_version.py", 'LABEL = "com.olivercode.version-cut"\ndef schedule():\n    pass\n')
+        c = self.commit("scripts/lib/cmd_version.py", 'LABEL = "com.olivercode.version-cut"\n'
+                        'def schedule():\n    return launchd.schedule(True, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n')
+        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: False)
+        self.assertIn("com.olivercode.version-cut is not loaded", reason)
+
     def test_a_plist_label_or_literal_schedule_call_is_demanded(self):
         c = self.commit("scripts/lib/cmd_plist.py", 'def plist():\n    return {"Label": "com.olivercode.plist-job"}\n'
                         'launchd.schedule(True, "com.olivercode.lit-job", plist, "a", "b")\n')
