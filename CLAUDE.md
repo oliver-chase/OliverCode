@@ -14,9 +14,9 @@ It applies to every reply and file, and skill messages and drafted documents go 
 ## Rules
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
 - Asked to update OliverCode: run `olivercode update`, then `olivercode health`, `olivercode place` and `bash scripts/validate.sh`, and report each result. Run `olivercode conform` too when a fleet is registered, naming each failure's fix
+- Apply the `lean` skill's smallest-sufficient-change method to every coding task. Preserve security, trust-boundary validation, data-loss handling, accessibility and required tests; never optimize away correctness.
 - Before committing, run the repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
 - `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `olivercode conform` finds stopped hooks, and `~/.claude/olivercode/docs/GATES.md` lists the gates
-- A request that changes files is filed as a story and built and merged unasked, per `~/.claude/olivercode/docs/RULES.md` ("The backlog"). The `audit` skill runs only when named. Read the rest of RULES.md only for OliverCode's own structure
-- A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`. Asked to build one in a desktop chat, offer that command instead
+- Interactive Claude Code is first-class for strategy, exploration, planning, debugging and ordinary coding. Do not turn a normal chat into a backlog story or headless run. Use `olivercode dispatch N` or `olivercode drain REPO` only when the owner explicitly delegates bounded unattended work or requests durable backlog tracking. See `docs/RULES.md` ("Execution")
 - Every terminal command given to the owner starts with `cd` to the exact checkout that owns it (OliverCode: `cd ~/.claude/olivercode`); put the command on the next line and never imply a repo command works from an arbitrary folder
 - Board config: `docs/backlog-config.json` names this repo's GitHub Project. A `docs/backlog-config.local.json` overrides it when present
