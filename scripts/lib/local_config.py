@@ -268,9 +268,9 @@ def builder_note() -> str:
 
 
 def saved_builders() -> int | None:
-    """The owner's maxBuilders when it is a whole number of 1 or more, else None."""
+    """The owner's maxBuilders when valid, else the safe one-builder default."""
     saved = setting("maxBuilders")
-    return saved if isinstance(saved, int) and not isinstance(saved, bool) and saved >= 1 else None
+    return saved if isinstance(saved, int) and not isinstance(saved, bool) and saved >= 1 else 1
 
 
 def max_builders() -> int:
