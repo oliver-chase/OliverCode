@@ -46,7 +46,7 @@ class ParallelGates(unittest.TestCase):
         err = Notifying()
         result = []
         worker = threading.Thread(target=lambda: result.append(validate_gates.run_gates(
-            [("smoke", "printf \\\"  [RUN ] test_slow\\\\n\\\"; sleep 0.8")], timeout=5, out=io.StringIO(), err=err)))
+            [("smoke", "echo '  [RUN ] test_slow'; sleep 0.8")], timeout=5, out=io.StringIO(), err=err)))
         worker.start()
         self.assertTrue(seen.wait(0.5), "smoke progress should be visible before the test command exits")
         self.assertTrue(worker.is_alive())
