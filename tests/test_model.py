@@ -86,6 +86,12 @@ class TestRunCli(unittest.TestCase):
         self.assertIn("maximum number of turns", out["text"])
         self.assertEqual((model.STDERR_TAIL, True), (len(out["stderr"]), out["stderr"].endswith("warn")))
 
+    def test_api_error_flag_from_claude_json_is_preserved(self):
+        payload = json.dumps({"result": "API Error: 529 overloaded_error", "is_error": True, "subtype": "error_during_execution"})
+        out = self.call(stdout=payload, code=1)[1]
+        self.assertTrue(out["is_error"])
+        self.assertIn("529 overloaded_error", out["text"])
+
     def test_a_timeout_names_the_session_it_stopped(self):
         import subprocess
         with mock.patch("shutil.which", return_value="/bin/claude"), mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("claude", 1)):
