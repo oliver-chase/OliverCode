@@ -37,7 +37,15 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 ## How work runs
 
-Use Claude Code normally for strategy, exploration, planning, debugging and ordinary coding. Nothing becomes a backlog item automatically. When you explicitly delegate bounded work or want durable tracking, use the board and optional headless runner: `olivercode dispatch N` or `olivercode drain REPO` runs a story in its own worktree, validates it, lands it and records the result. `olivercode status` shows the runner and backlog without spending a model turn. You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
+Use Claude Code normally for strategy, exploration, planning, debugging and ordinary coding. Nothing becomes a backlog item automatically.
+
+When you explicitly delegate bounded work, `olivercode dispatch N` or `olivercode drain REPO` runs it unattended in its own worktree, validates it, lands it and records the result.
+
+Use the backlog and headless runner when you want durable tracking or unattended execution; otherwise stay in your interactive conversation.
+
+`olivercode status` shows the runner and backlog without spending a model turn.
+
+You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
 
 ## How it works, in plain terms
 
