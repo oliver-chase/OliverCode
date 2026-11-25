@@ -20,6 +20,20 @@ from lib import failure_log, model, usage_sessions
 from lib.local_config import OC_ROOT
 
 MAX_ROUNDS = 2  # the builder session and one short fix session (#888)
+API_ERROR_RE = re.compile(r"api error|overloaded_error|rate.?limit|too many requests|\b(?:429|500|502|503|504|529)\b|authentication_error|invalid x-api-key", re.I)
+
+def api_error_cause(reply: dict) -> str:
+    """The useful API failure cause from a CLI result, bounded for comments and local logs."""
+    for value in (reply.get("text"), reply.get("stderr"), reply.get("stop")):
+        text = str(value or "").strip()
+        if text and API_ERROR_RE.search(text):
+            return text[-300:]
+    return ""
+
+def is_api_error(reply: dict) -> bool:
+    """True only when a failed CLI result identifies a provider/API failure, not a code or validation defect."""
+    return bool(reply.get("api_error") or reply.get("stop") == "api_error" or api_error_cause(reply))
+
 RESUMABLE = ("max_turns", "timeout")  # stops that leave a healthy session worth one more round (#877)
 CONTINUE = "Your session stopped before you finished ({why}). Continue from where you left off, commit by explicit path and stop."
 TAIL_LINES = 60
@@ -305,6 +319,14 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
     append_log(row)
 
 
+def log_api_error(story: str, model_name: str, cause: str, repo: str = "") -> None:
+    """Record an API stop without a round number, so it never burns story rounds or model-escalation thresholds."""
+    row = {"story": story, "model": model_name, "stop": "api_error", "stderr_tail": cause[:300],
+           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    if repo:
+        row["repo"] = repo
+    append_log(row)
+
 def append_log(row: dict) -> None:
     """Append one JSON line to the run log. A log that cannot be written never stops a loop."""
     try:
@@ -361,8 +383,14 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             reply = {**reply, "resumed": resumed}
             tokens += reply["tokens"]
             claude_session = reply["session_id"] or claude_session
-            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why, repo=repo)
             summary = reply["text"]
+            if is_api_error(reply):
+                cause = api_error_cause(reply) or str(reply.get("text") or reply.get("stderr") or reply.get("stop") or "Unspecified API error")[:300]
+                log_api_error(session, model_name, cause, repo=repo)
+                say(f"API error: {cause}")
+                return {"done": False, "api_error": True, "api_error_cause": cause, "reason": f"API error: {cause}",
+                        "rounds": n - 1, "tokens": tokens, "summary": summary}
+            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why, repo=repo)
             say(f"Round {n}: {summary.strip()[:300]}")
             if reply["code"] != 0 and reply.get("stop") in RESUMABLE and not resumed and claude_session:
                 say(f"Round {n}: claude stopped on {reply['stop']}. Resuming the same session once.")
