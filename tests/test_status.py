@@ -48,6 +48,12 @@ class TestStatus(unittest.TestCase):
                        live=lambda now, count, rows: [], waiting=lambda: [], cands=lambda: "- 3 candidate(s) wait: run `olivercode candidates` to review them.")
         self.assertIn("3 candidate(s) wait: run `olivercode candidates`", out.getvalue())
 
+    def test_status_warning_names_the_last_api_error_cause(self):
+        claims = {"o/r#7": {"agent": "drain", "since": NOW.timestamp() - 60, "at": NOW.timestamp()}}
+        log = [{"story": "story-7", "stop": "api_error", "stderr_tail": "529 overloaded_error", "at": NOW.isoformat()}]
+        notes = cmd_status.story_notes(NOW.timestamp(), claims, log, True, None, {})
+        self.assertIn("529 overloaded_error", notes["7"])
+
     def test_a_falling_count_prints_the_rate_and_a_zero_date(self):
         rows = [issue("2026-11-01", "2026-11-20")] * 14 + [issue("2026-11-20")] * 7
         code, text = self.status(14, rows)
