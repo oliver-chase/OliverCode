@@ -39,11 +39,11 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive.
 
-When you explicitly delegate an outcome, OliverCode takes responsibility for moving that work forward; the request becomes durable work on the appropriate repo's board, with scope and dependencies clarified as needed.
+For unattended execution today, delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.
 
-OliverCode selects and manages the execution path: isolated Claude Code sessions, useful parallel work, recovery, appropriate validation, safe integration and cleanup. Today, `olivercode dispatch N` and `olivercode drain REPO` are the explicit queue execution entry points.
+The current queue entry points, `olivercode dispatch N` and `olivercode drain REPO`, start isolated Claude Code worktrees, run validation and safely land or report blocked work.
 
-The owner-facing status view reports what is running, waiting, blocked, failed or complete, and what needs your decision.
+`olivercode status` and City show current queue/run state; the fuller owner-facing supervision experience is the target described below.
 
 ## How it works, in plain terms
 
