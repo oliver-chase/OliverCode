@@ -332,6 +332,14 @@ class TestDigest(unittest.TestCase):
         log = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}]
         self.assertIn("the last run on story-5 stopped with max_turns", cmd_status.last_lines(False, None, "", log, None)[-1])
 
+    def test_a_city_publish_row_is_not_mistaken_for_the_last_run(self):
+        """#990: a failed publish is City's own round, not a story's, so it never names city-publish as a run to resume."""
+        log = [{"story": "story-5", "round": 3, "stop": "end_turn", "at": "2026-11-23T11:00:00Z"},
+               {"story": "city-publish", "round": 1, "stop": "error", "at": "2026-11-23T11:05:00Z"}]
+        self.assertEqual(["Last landed: none in the last 7 days."], cmd_status.last_lines(False, None, "", log, None))
+        stopped = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}] + log[1:]
+        self.assertIn("the last run on story-5 stopped with max_turns", cmd_status.last_lines(False, None, "", stopped, None)[-1])
+
 
     def test_each_building_story_names_its_repo_size_state_minutes_and_what_holds_it(self):
         """#1112: a story waiting for validation names the slot's holder, and each other state reads from the run log, the holds and the queue (#1122)."""

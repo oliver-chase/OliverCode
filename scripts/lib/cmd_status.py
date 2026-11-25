@@ -325,15 +325,17 @@ def idle_line(alive: bool, open_now: int) -> str:
     return f"Runner idle: no story is building and {open_now} stories are open. Start it with `olivercode drain REPO`."
 
 def last_lines(alive: bool, landed_row: dict | None, ready: str, log: list[dict], holder: dict | None) -> list[str]:
-    """The Last landed section: the newest landing, the next Ready story, then an indented warning when the last run did not stop cleanly (#987)."""
+    """The Last landed section: the newest landing, the next Ready story, then an indented warning when the last run did not stop cleanly (#987).
+    City's own publish rounds (#990) are not a story's run, so they are skipped when finding that last run."""
     lines = [f"Last landed: #{landed_row.get('number')} {_text(landed_row.get('title'), 60)}." if landed_row else f"Last landed: none in the last {DAYS} days."]
     if ready:
         lines.append(f"Next Ready: {ready}.")
-    if log and log[-1].get("stop", "") not in CLEAN_STOPS:
-        story = str(log[-1].get("story", ""))
+    runs = [r for r in log if r.get("story") != "city-publish"]
+    if runs and runs[-1].get("stop", "") not in CLEAN_STOPS:
+        story = str(runs[-1].get("story", ""))
         resume = "" if holder else f" Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`."
-        cause = f": {str(log[-1].get('stderr_tail'))[:180]}" if log[-1].get("stop") == "api_error" and log[-1].get("stderr_tail") else ""
-        lines.append(f"  Warning: the last run on {story} stopped with {log[-1].get('stop')}{cause}.{resume}")
+        cause = f": {str(runs[-1].get('stderr_tail'))[:180]}" if runs[-1].get("stop") == "api_error" and runs[-1].get("stderr_tail") else ""
+        lines.append(f"  Warning: the last run on {story} stopped with {runs[-1].get('stop')}{cause}.{resume}")
     return lines
 
 
