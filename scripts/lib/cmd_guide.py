@@ -13,9 +13,9 @@ from lib.cli import COMMANDS
 # How work runs, in the order the guide and the README "How work runs" section both print it (#972).
 HOW_WORK_RUNS = (
     "You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive.",
-    "When you explicitly delegate an outcome, OliverCode takes responsibility for moving that work forward; the request becomes durable work on the appropriate repo's board, with scope and dependencies clarified as needed.",
-    "OliverCode selects and manages the execution path: isolated Claude Code sessions, useful parallel work, recovery, appropriate validation, safe integration and cleanup. Today, `olivercode dispatch N` and `olivercode drain REPO` are the explicit queue execution entry points.",
-    "The owner-facing status view reports what is running, waiting, blocked, failed or complete, and what needs your decision.",
+    "For unattended execution today, delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.",
+    "The current queue entry points, `olivercode dispatch N` and `olivercode drain REPO`, start isolated Claude Code worktrees, run validation and safely land or report blocked work.",
+    "`olivercode status` and City show current queue/run state; the fuller owner-facing supervision experience is the target described below.",
 )
 
 THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost."
