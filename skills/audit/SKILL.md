@@ -1,6 +1,6 @@
 ---
 name: audit
-description: "The one audit for anything: a whole repo or suite, a skill or skill family, the docs, a commit range before it closes, or a plan before it runs. Reads every line, verifies each finding against the code, files every fix with a priority, and on a whole repo stops at the report and the filed issues, and fixes them all too when asked for audit and fix. Trigger on 'audit this', 'QA this', 'review tonight's work', 'are the docs accurate', 'audit my skills', 'audit my Claude config', 'is this over-engineered', 'is this shareable' or 'pressure test this plan'."
+description: "A proportionate audit of a repo, suite, skill, docs, commit range or plan. Verifies meaningful findings against source and behavior, fixes safe in-scope work when authorized, and tracks only substantive follow-up. Trigger on 'audit this', 'QA this', 'review tonight's work', 'are the docs accurate', 'audit my skills', 'audit my Claude config', 'is this over-engineered', 'is this shareable' or 'pressure test this plan'."
 ---
 
 # Audit
@@ -39,7 +39,7 @@ Every route loads `references/lenses.md`. A target with a user interface also lo
 1. **Scope.** Run `python3 scripts/audit_ledger.py <target> --pending`. It lists the files no earlier audit read, or that changed since, with a line total, and says so when there is no ledger yet. That list is the read contract and the report names it. Audit everything only for a first audit or when the owner asks.
 2. **Sweep.** Run `python3 scripts/sweep.py <target>` and `python3 scripts/fleet_check.py <target>`. They find unused code, orphan files, oversized files and voice violations with no model, and their rows are candidates to judge.
 3. **Read the relevant scope.** Start with the pending-file list and the requested target. Read it directly in one pass when practical. Use batches or parallel readers only when the target is genuinely too large for one pass or parallel work will materially shorten the audit. Do not wait in repeated load-guard loops; record what could not be inspected and continue with the evidence available. Mark ledger progress so a genuinely interrupted large audit can resume. Never claim to have read files that were not inspected.
-4. **Verify proportionally.** Reproduce suspected bugs. Run the smallest relevant test or command. Get an independent review for security, destructive changes, risky deletions or genuinely ambiguous findings—not every wording or low-risk observation. Record uncertainty honestly. Avoid scratch-copy mutation experiments unless they answer a real question.
+4. **Verify proportionally.** Reproduce suspected bugs. Run the smallest relevant test or command. Get an independent review for security, destructive changes, risky deletions or genuinely ambiguous findings—not every wording or low-risk observation. When an independent review is warranted, use `sonnet` readers unless the owner names another model. Record uncertainty honestly. Avoid scratch-copy mutation experiments unless they answer a real question.
 5. **Report** in the order below, written per `docs/VOICE.md` in the target repo or `~/.claude/VOICE.md`. On a whole repo, print the full report in the thread (what it is, size, findings, over-engineering, cuts, simplifications and the engine parts to cut or merge) before step 6 files or fixes anything
 6. **Track only real follow-up.** Fix small, safe, local issues inline when the owner asked for fixes or the work is clearly within scope. File an issue only when the work is substantial, independently actionable, cannot be completed in this pass, needs an owner decision, or must be prioritized against other work. Search and extend an existing issue before creating one. Group related follow-up into a small number of outcome-based issues. Do not file cosmetic preferences, speculative ideas, or every line in the Simplify list.
 7. **Coverage check.** Record what was actually inspected and the outcome of each meaningful finding: fixed, covered by an existing issue, filed as worthwhile follow-up, deferred with a reason, or rejected. A recommendation does not need an issue unless it represents real work worth tracking. Deliver a concise report with the evidence, limits and next action. Use the report checker when its constraints fit the requested audit; do not create administrative work merely to satisfy a report format.
@@ -59,7 +59,7 @@ An audit split across sessions stays one audit, run through `python3 scripts/fin
 - **P1.** A wrong result, a broken command, a wrong or missing document for a shipped part, or waste of 10% or more in size, tokens or time
 - **P2.** Everything else. It is filed and fixed last, and never dropped
 
-Fix nothing during the audit itself. The exceptions: the whole-target route's to-done phase, which runs the stories in order (`references/done.md`), the changes route, which fixes its findings before the commit, and the plan route, which appends its findings to the plan. The audit stops at the report and the filed issues unless the owner says "audit and fix" or sets `auditMode` to full. A request to report only skips the to-done phase. Once the report and every issue are filed, `python3 scripts/audit_mode.py next` (add `--fix` for "audit and fix") says whether the to-done phase starts (`references/done.md`).
+Do not mutate a target during a report-only audit. In fix mode ("audit and fix" or `auditMode: full`), implement safe, in-scope fixes and verify them; reserve owner decisions for genuine trade-offs or permission boundaries. File only substantial follow-up that cannot be completed in this pass or needs separate prioritization.
 
 ## The report
 
@@ -79,7 +79,7 @@ A plan, docs or changes audit is small: its report is a findings list with each 
 ## Rules
 
 - An audit aims at a smaller, simpler target that keeps its features, and weighs over-engineering, dead code, oversized files and tests that cannot fail as heavily as bugs. The epic writes its size target as `Size target: at most N lines`
-- Every finding and recommendation is filed. An owner decision is filed as a story that names what it blocks
+- Track only substantive, independently actionable follow-up. Small safe fixes stay inline when authorized; cosmetic observations, speculative ideas and implementation subtasks are not filed
 - A finding is a defect with evidence. A style preference outside the voice, a hypothetical and a "consider" are not findings
 - A layout or design fix is judged by whether the composition holds up to realistic longer content, not only the sample shown: uniform margins, deliberate element placement and real slack for longer text
 - An example or source file (a template, fixture, deck-copy example or transcript) may break a content rule on purpose, so it is never filed as a defect. Text a build copies into a finished document as written is output and keeps its rules
