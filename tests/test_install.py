@@ -165,8 +165,10 @@ class WhoBuilds(unittest.TestCase):
         from lib import cmd_guide
         self.assertIn("3. Use Claude Code normally. When you want durable tracking or unattended execution, file a bounded story and delegate it with `olivercode dispatch N` or `olivercode drain REPO`.", cmd_install.INTRODUCTION)
         _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("3. Use Claude Code normally.", out)
-        self.assertIn("durable tracking or unattended execution", out)
+        steps = [line.strip() for line in out.splitlines() if line.strip().startswith("3.")]
+        self.assertEqual(1, len(steps))
+        self.assertTrue(steps[0].startswith("3. Use Claude Code normally"))
+        self.assertIn("unattended execution", steps[0])
 
 
 
