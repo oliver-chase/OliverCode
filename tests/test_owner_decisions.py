@@ -63,11 +63,11 @@ class TestOwnerDecisions(unittest.TestCase):
         path = self.home / owner_decisions.FILE
         rows = [
             {"story": 79, "at": "old", "session": "runner", "text": "You are a fresh reader. Check story #79."},
-            {"story": 80, "at": "old", "session": "runner", "text": "Builder brief for story #80\\nContext follows"},
+            {"story": 80, "at": "old", "session": "runner", "text": "Builder brief for story #80\nContext follows"},
             {"story": 81, "at": "old", "session": "owner", "text": "Please treat this as a fresh reader exercise for #81"},
             {"story": 82, "at": "old", "session": "owner", "text": "I want to build #82"},
         ]
-        path.write_text("".join(json.dumps(row) + "\\n" for row in rows), encoding="utf-8")
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
         self.assertEqual(owner_decisions.entries(79), [])
         self.assertEqual(owner_decisions.entries(80), [])
         self.assertEqual(len(owner_decisions.entries(81)), 1)
@@ -78,9 +78,9 @@ class TestOwnerDecisions(unittest.TestCase):
 
     def test_legacy_cleanup_preserves_malformed_lines(self):
         path = self.home / owner_decisions.FILE
-        path.write_text("not-json\\n" + json.dumps({"story": 83, "text": "You are a fresh reader"}) + "\\n", encoding="utf-8")
+        path.write_text("not-json\n" + json.dumps({"story": 83, "text": "You are a fresh reader"}) + "\n", encoding="utf-8")
         self.assertEqual(owner_decisions.cleanup_legacy(), 1)
-        self.assertEqual(path.read_text(encoding="utf-8"), "not-json\\n")
+        self.assertEqual(path.read_text(encoding="utf-8"), "not-json\n")
 
     def test_the_hook_records_owner_prompts_but_skips_headless_prompts(self):
         def run(prompt, headless=False):
