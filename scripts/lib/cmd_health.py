@@ -194,6 +194,11 @@ def command_health(fleet_root: Path | None = None) -> int:
     for repo in [OC_ROOT, *(p for _n, _pr, p in _iter_fleet(load_repo_profiles(OC_ROOT)[0], fleet_root or OC_ROOT.parent))]:
         for line in main_checkout.drift(repo):
             t.warn(line)
+    from lib import cmd_guide
+    if cmd_guide.city_gap():
+        t.warn(cmd_guide.city_gap())
+    else:
+        t.ok("City is set up or skipped by choice")
     from lib import story_outbox
     unfiled = story_outbox.count()
     if unfiled:

@@ -56,10 +56,22 @@ def city_url() -> str:
     return str(setting("cityArtifact") or "")
 
 
+CITY_GAP = ('City is not set up in the Claude desktop app. Open the desktop app and say "Set up OliverCode City" to finish, '
+            'or say "Skip OliverCode City" to stop this reminder. The local status page works either way.')
+
+
+def city_gap() -> str:
+    """"" when City is set up or the owner declined it, else the one line that says it is not set up and what finishes it (#1195)."""
+    from lib.local_config import setting
+    return "" if city_url() or setting("cityDeclined") else CITY_GAP
+
+
 def city_lines() -> list[str]:
-    """What the guide says about City: its URL, the phone steps and the command that republishes it (#999)."""
+    """What the guide says about City: its URL, the phone steps and the command that republishes it (#999). Pin state is never read back, so it is unverified."""
+    from lib.local_config import setting
     url = city_url()
-    return [f"City: {url or 'not published yet; the olivercode-adoption skill publishes it from the Claude desktop app'}",
+    state = f"{url} (pin state unverified)" if url else ("skipped by choice" if setting("cityDeclined") else "not set up; " + CITY_GAP)
+    return [f"City: {state}",
             *[f"  {n}. {step}" for n, step in enumerate(PHONE_STEPS, 1)],
             f"Republish City with `{CITY_PUBLISH}`."]
 

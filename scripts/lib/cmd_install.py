@@ -80,7 +80,7 @@ def city_step(desktop: bool | None = None) -> str:
         return ""
     url = cmd_guide.city_url()
     print(f"City: {url} (saved as cityArtifact, so no second artifact is made)" if url else
-          "City: not published yet. The olivercode-adoption skill publishes the status page as the OliverCode City artifact, saves its URL as cityArtifact, pins it and opens it.")
+          "City: not set up yet. The olivercode-adoption skill publishes the status page as the OliverCode City artifact, saves its URL as cityArtifact, pins it, opens it and confirms it opens. If it cannot, it reports City as incomplete and names what is missing.")
     if not setting("cityOnPhone"):
         print("Phone: follow these steps, then confirm City opened on the phone")
         for n, step in enumerate(cmd_guide.PHONE_STEPS, 1):

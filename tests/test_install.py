@@ -358,6 +358,8 @@ class CityStep(unittest.TestCase):
         from lib import cmd_guide
         _, out = quiet(cmd_install.city_step)
         self.assertIn("publishes the status page as the OliverCode City artifact", out)
+        self.assertIn("City: not set up yet", out)  # a printed handoff is not a finished City (#1193)
+        self.assertIn("reports City as incomplete", out)
         for step in cmd_guide.PHONE_STEPS:
             self.assertEqual(1, out.count(step))
 

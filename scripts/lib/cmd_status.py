@@ -513,7 +513,7 @@ def no_origin(folder: Path) -> str:
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
-        waiting=None, cands=None, folder: Path | None = None, numbers=None) -> int:
+        waiting=None, cands=None, folder: Path | None = None, numbers=None, city=None) -> int:
     if not slug:
         out(no_origin(folder or Path.cwd()))
         return 1
@@ -547,6 +547,10 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
     if held:
         out("")
         out("Run: " + run_lock.describe(held, now.timestamp()))
+    gap = (city or city_gap)()
+    if gap:
+        out("")
+        out('City: not set up in Claude Desktop. Open it and say "Set up OliverCode City", or "Skip OliverCode City".')
     return 0
 
 
@@ -610,6 +614,12 @@ def _story_line(row: dict, closed: bool = False) -> str:
 def open_lines(opened: list[dict]) -> list[str]:
     """The open stories in priority order, at most OPEN_SHOWN. An owner-gated story carries OWNER_GATED, so Next Ready passes over it."""
     return [_story_line(r) + (OWNER_GATED if open_issues.owner_gated(r) else "") for r in sorted(opened, key=open_issues.rank)[:OPEN_SHOWN]]
+
+
+def city_gap() -> str:
+    """The City reminder, or "" when City is set up or skipped (#1195). Lazy: cmd_guide imports this module's neighbors."""
+    from lib import cmd_guide
+    return cmd_guide.city_gap()
 
 
 def candidate_line() -> str:
