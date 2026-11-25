@@ -37,7 +37,7 @@ Read [`docs/SETUP.md`](docs/SETUP.md) for machine setup, restoration, removal an
 
 ## How work runs
 
-You work in one thread, and you say what you want. Each request becomes a story on the repo's board. `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, in its own worktree. The builder commits and stops, and the runner validates the commit, lands it on main, logs the story and closes it. A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`. `olivercode status` shows what is open. You decide production deploys, payments, credentials and the rules files, and the runner leaves those to you.
+You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive. When you explicitly delegate an outcome, OliverCode takes responsibility for moving that work forward. The request becomes durable work on the appropriate repo's board, with scope and dependencies clarified as needed. OliverCode selects and manages the execution path: isolated Claude Code sessions, useful parallel work, recovery, appropriate validation, safe integration and cleanup. Today, `olivercode dispatch N` and `olivercode drain REPO` are the explicit queue execution entry points. The owner-facing status view reports what is running, waiting, blocked, failed or complete, and what needs your decision.
 
 ## How it works, in plain terms
 
@@ -63,6 +63,66 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 | The incident log | Lessons and decisions | What went wrong, and what you decided |
 
 Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
+
+
+## Target architecture: owner to outcome
+
+OliverCode is an autonomous operator with a small owner interface. The owner supplies the outcome and direction; OliverCode handles the operational work in between. Its internal complexity earns its place by improving autonomy, reliability, speed and trust—not by exposing more commands or decisions to the owner.
+
+```mermaid
+flowchart TD
+    O[Owner: outcome, context and priorities] --> F[1. Front door]
+    F --> A[2. Autonomous orchestration]
+    A --> E[3. Execution]
+    E --> Q[4. Quality and delivery]
+    Q -->|validated and safe| I[Integrated outcome]
+    Q -->|failure or incomplete| A
+    A -->|dependency, retry or recovery| A
+    S[5. Supervision] -. observes .-> A
+    S -. observes .-> E
+    S -. observes .-> Q
+    S --> N[Progress, notifications and decisions]
+    N --> O
+    A -. only when genuinely needed .-> D[Owner decision]
+    D --> A
+```
+
+| Layer | OliverCode owns |
+|---|---|
+| **1. Front door** | Accept ideas, bugs, features and priorities in natural language; preserve the distinction between interactive Claude Code conversation and explicit delegation |
+| **2. Autonomous orchestration** | Understand intent, investigate scope, plan and decompose when useful, select repositories and workflows, manage dependencies and prioritize work |
+| **3. Execution** | Start and manage isolated Claude Code sessions, choose appropriate parallelism, coordinate workers, resume or restart safely, and recover from routine failures |
+| **4. Quality and delivery** | Choose checks proportional to risk, inspect results, fix and revalidate failures, review when warranted, integrate safely and clean up |
+| **5. Supervision** | Track truthful state and progress, detect stalled or failed work, communicate meaningful updates, record outcomes and costs, and escalate only decisions that need the owner |
+
+### The autonomous execution loop
+
+This is the operating loop inside the orchestration and execution layers. It is a capability cycle, not a list of commands the owner must learn.
+
+```mermaid
+flowchart TD
+    A[Receive delegated outcome] --> B[Understand scope, repo and dependencies]
+    B --> C[Choose workflow and execution plan]
+    C --> D[Select eligible work]
+    D --> E[Isolate task and start Claude Code]
+    E --> F[Implement]
+    F --> G[Run risk-appropriate validation]
+    G --> H{Meets outcome and safety requirements?}
+    H -->|Yes| I[Integrate, record and clean up]
+    H -->|No, recoverable| J[Diagnose and retry or fix]
+    J --> F
+    H -->|Blocked or owner decision needed| K[Continue independent work; notify owner]
+    K --> B
+    I --> L[Report outcome, evidence and cost]
+```
+
+The loop should continue independently where it safely can: a blocked task should not stop unrelated work; a recoverable failure should trigger a bounded repair attempt; conflicting changes should be coordinated or escalated; and an unsafe or ambiguous action should pause for an owner decision. Interactive Claude Code remains first-class and is never silently converted into queued work.
+
+### How we judge complexity
+
+Keep planning, grooming, decomposition, recovery, supervision and notifications when they materially increase the chance of completing the owner's outcome without intervention. Simplify duplicated state, competing lifecycle owners, unnecessary model sessions, redundant checks and process that adds no reliability. Measure owner interventions, completion rate, recovery rate, time to outcome, unnecessary sessions, validation time and truthful reporting—not lines deleted.
+
+These diagrams describe the target architecture; the workflow and command sections below describe the current shipped interface.
 
 ## Using it well
 
