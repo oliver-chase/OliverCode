@@ -41,7 +41,7 @@ scripts/olivercode discover --root ~/dev --root ~/work   # read-only, one --root
 
 ## Step 2: back up, then install activation
 
-`install` backs up an existing `~/.claude/CLAUDE.md` to `CLAUDE.md.pre-olivercode` itself and never deletes anything in `~/.claude/skills/`. Make your own restore point for that folder:
+`install` backs up an existing `~/.claude/CLAUDE.md` to `CLAUDE.md.pre-olivercode` itself and never deletes anything in `~/.claude/skills/`. Make your own restore point for that folder. **The runner defaults to one concurrent builder** so it does not consume the owner’s Claude usage allowance in several parallel sessions. Set `maxBuilders` in `olivercode.local.json`, or pass `--parallel N` to `drain`, only when you deliberately want more parallel usage:
 
 ```bash
 cp -R ~/.claude/skills ~/.claude/skills.pre-olivercode 2>/dev/null || true
