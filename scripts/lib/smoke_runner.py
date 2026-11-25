@@ -173,9 +173,10 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
             progress(f"  [{label}] {name} ({took:.1f}s)")
             return name, code, took
 
+        run_began = time.monotonic()
         with ThreadPoolExecutor(max_workers=jobs()) as pool:
             results = list(pool.map(one, units))
-        if os.environ.get("OLIVERCODE_VALIDATE_TIMES"):
+        if os.environ.get("OLIVERCODE_VALIDATE_TIMES") or time.monotonic() - run_began >= SHOW_SLOWEST_AFTER:  # a long run names its slowest modules without being asked (#1180)
             print("  slowest units: " + ", ".join(f"{n} {t:.0f}s" for n, _, t in sorted(results, key=lambda r: -r[2])[:10]), file=out)
         ran = 0
         for name, _, _ in results:
@@ -195,6 +196,9 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
         save_timings(spent)
         print(f"  Ran {ran} tests across {len(mods)} modules, all passed", file=out)
     return 0
+
+
+SHOW_SLOWEST_AFTER = 30  # seconds a run takes before it prints its ten slowest units unasked
 
 
 def main(argv: list[str]) -> int:

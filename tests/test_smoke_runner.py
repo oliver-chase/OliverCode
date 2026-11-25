@@ -34,6 +34,24 @@ class TestSmokeProgress(unittest.TestCase):
         self.assertTrue(any("[ OK ] test_example (" in line for line in lines))
         self.assertTrue(any("all passed" in line for line in lines))
 
+    def test_a_run_that_takes_long_prints_its_slowest_units_without_being_asked(self):
+        """#1180: the slowest-module line shows after SHOW_SLOWEST_AFTER seconds, and a quick run stays quiet."""
+        unit = ("test_example", "test_example", Path("/repo/tests"), [])
+        for after, expected in ((0, True), (10 ** 6, False)):
+            output = io.StringIO()
+            with (
+                mock.patch.object(smoke_runner, "modules", return_value=[("test_example", Path("/repo/tests"), "test_example")]),
+                mock.patch.object(smoke_runner, "plan", return_value=[unit]),
+                mock.patch.object(smoke_runner, "load_timings", return_value={}),
+                mock.patch.object(smoke_runner, "jobs", return_value=1),
+                mock.patch.object(smoke_runner, "save_timings"),
+                mock.patch.object(smoke_runner, "SHOW_SLOWEST_AFTER", after),
+                mock.patch.dict(smoke_runner.os.environ, {"OLIVERCODE_VALIDATE_TIMES": ""}),
+                mock.patch.object(smoke_runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)),
+            ):
+                smoke_runner.run(Path("/repo"), out=output)
+            self.assertEqual(expected, "slowest units: test_example" in output.getvalue())
+
     def test_a_test_process_that_cannot_start_is_reported_as_a_failure(self):
         output = io.StringIO()
         unit = ("test_example", "test_example", Path("/repo/tests"), [])
