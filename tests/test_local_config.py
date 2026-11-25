@@ -64,15 +64,27 @@ class LocalConfig(unittest.TestCase):
             self.assertEqual(2, local_config.scaled_builders(now=1000))
             self.assertEqual(2, local_config.scaled_builders(now=1100))
 
-    def test_a_saved_maxbuilders_is_the_limit_and_nothing_scales_it(self):
+    def test_one_builder_is_the_default_and_an_explicit_limit_overrides_it(self):
         with mock.patch.object(local_config, "scaled_builders", return_value=3):
-            self.assertEqual(3, local_config.max_builders())
+            self.assertEqual(1, local_config.max_builders())
+            self.assertEqual(1, local_config.saved_builders())
+            self.write({"maxBuilders": 2})
+            self.assertEqual(2, local_config.max_builders())
+            self.assertEqual(2, local_config.saved_builders())
             self.write({"maxBuilders": 6})
             self.assertEqual(6, local_config.max_builders())
             self.assertEqual("", local_config.builder_note())
             for bad in (0, -2, "four", True, 2.5):
                 self.write({"maxBuilders": bad})
-                self.assertEqual(3, local_config.max_builders(), bad)
+                self.assertEqual(1, local_config.max_builders(), bad)
+
+    def test_story_spend_ceiling_defaults_to_six_dollars_and_accepts_an_owner_override(self):
+        self.assertEqual(6.0, local_config.max_story_spend())
+        self.write({"maxStorySpend": 9.5})
+        self.assertEqual(9.5, local_config.max_story_spend())
+        for bad in (0, -1, "six", True, None):
+            self.write({"maxStorySpend": bad})
+            self.assertEqual(6.0, local_config.max_story_spend(), bad)
 
     def test_unset_means_this_machine_has_none(self):
         self.assertEqual(local_config.private_repos(), {})

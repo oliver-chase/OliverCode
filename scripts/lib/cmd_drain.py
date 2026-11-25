@@ -505,6 +505,10 @@ class TurnLimitParked(CommitBlocked):
     """A builder stopped on the turn limit twice in a row, so the story is parked in Backlog (#1123)."""
 
 
+class SpendCeilingParked(CommitBlocked):
+    """A story exceeded its cumulative spend ceiling and must not start another builder round (#1218)."""
+
+
 TURN_LIMIT_STOPS = 2  # consecutive stops on the turn limit after which the story is parked instead of restarted
 
 
@@ -520,6 +524,33 @@ def policy_stop_comment(stop: dict) -> str:
             f"- Last finding: {stop['finding'] or 'none'}\n"
             f"- File: {stop['file'] or 'none named'}\n"
             "- Next: run the diagnosing-bugs loop on the gate's finding, then return this story to Ready.")
+
+
+def story_spend(n: int, repo: str = "") -> float:
+    """Recorded spend for one story across its builder, reader and fix sessions; missing or malformed rows count as zero (#1218)."""
+    path = failure_log.home() / "run-log.jsonl"
+    prefix = f"story-{n}"
+    total = 0.0
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("story") or "")
+                if name != prefix and not name.startswith(prefix + "-"):
+                    continue
+                if repo and row.get("repo") != repo:
+                    continue
+                cost = row.get("cost_usd")
+                if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
+                    total += float(cost)
+    except OSError:
+        pass
+    return total
 
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
@@ -550,6 +581,11 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         return False, 0
     attempt, story_api_errors = 0, 0
     while attempt <= RESTARTS:
+        ceiling, spent = local_config.max_story_spend(), story_spend(n, getattr(io, "slug", ""))
+        if spent > ceiling:
+            io.comment(n, f"Parked: this story has spent ${spent:.2f}, above its ${ceiling:.2f} ceiling, so no further builder round will start.\n"
+                          "- Next: split the work, or raise maxStorySpend in olivercode.local.json and return the story to Ready.")
+            raise SpendCeilingParked(tokens)
         if state.get("api_error_stop"):
             return False, tokens
         state["sessions"] += 1
