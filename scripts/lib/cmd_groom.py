@@ -101,14 +101,24 @@ def priority_mismatches(stories):
     return found
 
 
-def size_of(story):
-    """The Size line the story states, else one from the files it names (Files area and Creates) plus its scenarios, never the length of its body (#1091)."""
+SIZE_ORDER = ("XS", "S", "M", "L", "XL")
+
+
+def inferred_size(body):
+    """The minimum Size implied by the distinct Files area/Creates paths and scenarios (#1140)."""
     from lib import intake
-    body = story.get("body") or ""
-    if m := re.search(r"Size:\s*(XS|S|M|L|XL)\b", body):
-        return m.group(1)
-    count = len(set(intake.files_area(body)) | set(intake.creates(body))) + len(re.findall(r"^\s*Scenario(?: Outline)?:", body, re.M))
+    count = len(set(intake.files_area(body)) | set(intake.creates(body))) + len(re.findall(r"^\s*Scenario(?: Outline)?:", body or "", re.M))
     return next((name for limit, name in SIZES if count <= limit), "XL")
+
+
+def size_of(story):
+    """The greater of a story's stated Size and the minimum implied by its Files area and scenarios (#1091, #1140)."""
+    body = story.get("body") or ""
+    stated = re.search(r"Size:\s*(XS|S|M|L|XL)\b", body)
+    sizes = [inferred_size(body)]
+    if stated:
+        sizes.append(stated.group(1))
+    return max(sizes, key=SIZE_ORDER.index)
 
 
 SPLIT_TITLE = "Split #{n} into smaller stories"
@@ -191,9 +201,11 @@ def filled(items, stories, fixes, hold=frozenset(), split=frozenset()):
         want = {}
         if not card.get("priority"):
             want["priority"] = epic_priority(story, stories, carded) or priority_of(story)
-        if not card.get("size"):
-            want["size"] = size_of(story)
         status = by.get(number, {}).get("fields", {}).get("status") or card.get("status") or "Backlog"
+        target_size = size_of(story)
+        current_size = str(card.get("size") or "")
+        if not current_size or (status == "Ready" and current_size in SIZE_ORDER and SIZE_ORDER.index(current_size) < SIZE_ORDER.index(target_size)):
+            want["size"] = target_size
         epic = str(board_grooming.field(card, "work type") or "").lower() == "epic"
         held = HELD_LABELS & set(story.get("labels") or []) or BLOCKED.search(story.get("body") or "")
         if status == "Backlog" and not epic and not held and number not in hold:
