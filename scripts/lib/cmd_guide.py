@@ -20,6 +20,15 @@ HOW_WORK_RUNS = (
 
 THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost."
 
+# The owner-facing architecture; the README carries the full diagrams and explanation.
+ARCHITECTURE = (
+    "Front door — give an outcome, context and priorities; ordinary interactive Claude Code stays interactive.",
+    "Autonomous orchestration — understand, plan, decompose when useful, route, prioritize and coordinate work.",
+    "Execution — manage isolated Claude Code sessions, parallelism, resumption and routine recovery.",
+    "Quality and delivery — validate proportionally to risk, repair failures, review when warranted, integrate safely and clean up.",
+    "Supervision — monitor truthful progress, detect stalls, notify on meaningful changes and ask for decisions only when needed.",
+)
+
 # The habits that keep OliverCode cheap, printed after the first steps by the guide and the first install's introduction, one line each (#991).
 USING_IT_WELL = (
     "Work in one thread per topic, and start a fresh one when it grows long.",
@@ -216,6 +225,9 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
     for sentence in HOW_WORK_RUNS:
         print(f"  {sentence}")
     print(f"  {THREAD_LINE}")
+    print("\\nArchitecture, owner to outcome")
+    for layer in ARCHITECTURE:
+        print(f"  {layer}")
     print("\nFirst steps, in order")
     print(f"  1. {_fleet_step(oc_root)}")
     print("  2. olivercode health                                                   check this machine")
