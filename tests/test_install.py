@@ -163,9 +163,9 @@ class WhoBuilds(unittest.TestCase):
 
     def test_the_first_steps_end_on_building_a_story_in_install_and_the_guide(self):
         from lib import cmd_guide
-        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`", cmd_install.INTRODUCTION)
+        self.assertIn("3. For queued execution today: create or choose a repo story, then run `olivercode dispatch N` or `olivercode drain REPO`.", cmd_install.INTRODUCTION)
         _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO", out)
+        self.assertIn("3. For queued execution today: create or choose a repo story, then run olivercode dispatch N or olivercode drain REPO", out)
 
 
 
