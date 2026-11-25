@@ -20,10 +20,10 @@ A generated report or cache is ignored and never tracked. Downstream repos inher
 
 ## Execution
 
-Every non-trivial change in every repo follows this sequence without being asked. A typo fix needs no spec.
+Every non-trivial change follows the smallest-sufficient-change method in the `lean` skill. A typo fix needs no spec. Interactive work stays interactive; backlog and headless execution are explicit tools, not mandatory stages for every conversation.
 
 1. **Measure the gap.** Count what exists, run what runs and read the live code
-2. **Write the spec** as a story in the repo's board before any code: the failure it prevents, what is in scope and out, and the watch-out
+2. **Track deliberately.** File a board story when the owner delegates autonomous work, requests durable tracking, or the work needs cross-session coordination. Do not create a story for every interactive chat or ordinary coding exchange.
 3. **Rank by the cost of being wrong.** Silent data loss first, then a bypassable security boundary, then a loud and recoverable failure, then cost, then ergonomics
 4. **Build one spec at a time, test first.** Write the failing test, implement, then remove the guard to confirm the test goes red and restore it
 5. **Update the documents** the change affects, and read the diff for stale references
@@ -31,7 +31,7 @@ Every non-trivial change in every repo follows this sequence without being asked
 7. **Commit and push** with a message that gives the why
 8. **Simplify.** Merge duplicated helpers and delete dead code the change made redundant. Never remove functionality to reduce size
 
-QA runs when the owner asks for it, as a separate pass by a separate reader that verifies by running. For a rendered artifact (an HTML page, a UI, a chart), a linter confirms only that the file is well formed, so render it and look at the screenshot and the console.
+Validation and review scale with risk as defined by the `lean` skill. An independent reader is conditional on risk, not a mandatory stage for every change. QA can be requested separately. For a rendered artifact (an HTML page, a UI, a chart), a linter confirms only that the file is well formed, so render it and look at the screenshot and the console.
 
 Working rules that hold in every session:
 
@@ -50,7 +50,7 @@ Working rules that hold in every session:
 - `gh_watch.py` (`PostToolUse`) records a GitHub rate limit seen in command output, and `owner_decision_capture.py` (`UserPromptSubmit`) keeps each owner message that names a story for that story's builder, and `error_paste.py` (`UserPromptSubmit`) prints nothing to the session, and file a pasted error as a story, and `status_hint.py` (`UserPromptSubmit`) answers a status question from the status digest with no tool call
 - `early-stop-guard.py` and `wip_save.py` (`Stop`) send a turn back to work when it promises work it did not do, and snapshot uncommitted work into `refs/wip/` at most every 10 minutes (`olivercode wip list|restore`)
 
-The owner works in one thread. `olivercode dispatch N` and `olivercode drain REPO` build each story in one fresh headless session, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
+The owner may use as many interactive Claude Code conversations as useful. `olivercode dispatch N` and `olivercode drain REPO` are optional unattended execution modes for explicitly delegated stories, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
 
 ### Prepared owner steps
 
