@@ -596,7 +596,7 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             handoff = budget_handoff(worktree, out)
             io.backlog(n)
             state.setdefault("cancelled", []).append(n)
-            io.comment(n, f"Cancelled by the owner before landing. The worktree and branch are kept for a handoff; nothing was pushed.\\n- Next: review the handoff and return the story to Ready when you want to resume.\\n{handoff}")
+            io.comment(n, f"Cancelled by the owner before landing. The worktree and branch are kept for a handoff; nothing was pushed.\n- Next: review the handoff and return the story to Ready when you want to resume.\n{handoff}")
             return False, tokens
         if out.get("api_error"):
             story_api_errors += 1
