@@ -280,6 +280,7 @@ class ListLimit(unittest.TestCase):
 
 class CloseGateDimension(unittest.TestCase):
     CFG = {"repoOwner": "o", "repoName": "r", "closeGateFromIssue": 50}
+    BUILDER = {"body": "Agent action\n- Agent: claude\n- Role: builder\n- Result: built\n- Commit: abc1234"}
 
     @staticmethod
     def runner(comments_by_issue, reasons=None):
@@ -294,23 +295,27 @@ class CloseGateDimension(unittest.TestCase):
 
     def test_an_issue_closed_without_the_mark_is_flagged_with_its_number_and_fix(self):
         items = [item(60, "Complete"), item(61, "Complete")]
-        found = bh.check_close_gate(items, self.CFG, runner=self.runner({61: [{"body": "done\n\nClosed by complete_story.py."}], 60: [{"body": "Closing."}]}))
+        found = bh.check_close_gate(items, self.CFG, runner=self.runner({61: [self.BUILDER, {"body": "done\n\nClosed by complete_story.py."}], 60: [self.BUILDER, {"body": "Closing."}]}))
         self.assertEqual(1, len(found))
         self.assertIn("#60", found[0])
         self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
+
+    def test_an_external_agent_close_without_an_olivercode_builder_entry_is_allowed(self):
+        comments = {60: [{"body": "Closed by external agent. No OliverCode action log."}]}
+        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments)))
 
     def test_a_duplicate_closed_as_not_planned_is_not_flagged(self):
         comments = {60: [{"body": "Duplicate of #70. Findings folded into #70."}]}
         self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "not_planned"})))
 
     def test_a_completed_close_without_the_mark_is_still_flagged(self):
-        comments = {60: [{"body": "Closing."}]}
+        comments = {60: [self.BUILDER, {"body": "Closing."}]}
         found = bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "completed"}))
         self.assertEqual(1, len(found))
         self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
 
     def test_a_comment_that_only_quotes_the_mark_does_not_count(self):
-        quoted = {60: [{"body": "> Closed by complete_story.py."}, {"body": "Closed by complete_story.py. is the mark\nthanks"}]}
+        quoted = {60: [self.BUILDER, {"body": "> Closed by complete_story.py."}, {"body": "Closed by complete_story.py. is the mark\nthanks"}]}
         self.assertEqual(1, len(bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(quoted))))
 
     def test_older_and_open_items_and_a_null_key_are_not_read(self):
