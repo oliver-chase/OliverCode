@@ -147,3 +147,6 @@ bash scripts/validate.sh
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+Pause a drain with `olivercode pause REPO`, resume it with `olivercode resume REPO`, or cancel one active story with `olivercode cancel REPO STORY`. Cancellation keeps the worktree for handoff and does not land the story.
