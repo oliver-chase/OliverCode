@@ -9,6 +9,7 @@ import contextlib
 import io
 import os
 import json
+import plistlib
 import subprocess
 import sys
 import unittest
@@ -339,6 +340,52 @@ class TestUninstall(HomeCase):
             self.assertEqual((self.claude / name).resolve(), (elsewhere / "rules.md").resolve(), name)
         self.assertEqual((self.claude / "skills" / "their-skill").resolve(), (elsewhere / "their-skill").resolve())
         self.assertTrue((self.claude / "skills" / "vendor-skill").is_dir())
+
+    def _plist(self, label, checkout):
+        agents = self.tmp / "Library" / "LaunchAgents"
+        agents.mkdir(parents=True, exist_ok=True)
+        path = agents / f"{label}.plist"
+        path.write_bytes(plistlib.dumps({"Label": label, "ProgramArguments": ["/usr/bin/python3", str(checkout / "scripts" / "olivercode"), "x"]}))
+        return path
+
+    def test_removes_every_job_this_checkout_creates_and_boots_each_out(self):
+        from lib import cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain
+        labels = [m.LABEL for m in (cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain)]
+        self.assertEqual(5, len(set(labels)))
+        labels.append("com.olivercode.from-a-newer-version")  # not in this code, but it runs this checkout
+        plists = [self._plist(label, self.root) for label in labels]
+        other = self._plist("com.olivercode.other-checkout", self.tmp / "elsewhere")
+        ran = mock.Mock()
+        with mock.patch.object(cmd_install.launchd, "supported", return_value=True):
+            code, out = quiet(cmd_install.command_uninstall, self.root, ran)
+        self.assertEqual(0, code)
+        self.assertFalse(any(p.exists() for p in plists))
+        self.assertTrue(other.exists())
+        booted = sorted(c.args[0][2].split("/")[-1] for c in ran.call_args_list if c.args[0][1] == "bootout")
+        self.assertEqual(sorted(labels), booted)
+        self.assertEqual(len(labels), out.count("[JOB] removed"))
+        self.assertIn(f"{len(labels)} scheduled job(s) removed", out.strip().splitlines()[-1])
+
+    def test_nothing_to_remove_exits_0_without_calling_launchctl(self):
+        ran = mock.Mock()
+        with mock.patch.object(cmd_install.launchd, "supported", return_value=True):
+            code, out = quiet(cmd_install.command_uninstall, self.root, ran)
+        self.assertEqual(0, code)
+        ran.assert_not_called()
+        self.assertIn("0 scheduled job(s) removed", out.strip().splitlines()[-1])
+
+    def test_removes_managed_and_retired_hook_entries_from_any_checkout(self):
+        def entry(script, root):
+            return {"matcher": "x", "hooks": [{"type": "command", "command": f'python3 "{root}/scripts/hooks/{script}"'}]}
+        mine = {"matcher": "Edit", "hooks": [{"type": "command", "command": "~/mine.sh"}]}
+        self.claude.mkdir(parents=True)
+        hooks = {"PreToolUse": [mine, entry("pretool_guard.py", self.root), entry("denial_watch.py", "/old/OliverCode")],
+                 "Stop": [entry("wip_save.py", "/moved/OliverCode")]}
+        (self.claude / "settings.json").write_text(json.dumps({"hooks": hooks}))
+        self.assertEqual(self._quiet(cmd_install.command_uninstall), 0)
+        saved = (self.claude / "settings.json").read_text()
+        self.assertNotIn("scripts/hooks", saved)
+        self.assertEqual({"hooks": {"PreToolUse": [mine]}}, json.loads(saved))
 
     def _tree(self):
         return sorted((str(p.relative_to(self.tmp)), p.is_symlink()) for p in self.tmp.rglob("*"))

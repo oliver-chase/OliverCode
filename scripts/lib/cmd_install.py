@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import pwd
 import shlex
 import subprocess
@@ -170,6 +171,35 @@ def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[st
         run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
         plist.unlink(missing_ok=True)
         print(f"  [JOB] removed the job {label}, which has no command any more")
+        gone.append(label)
+    return gone
+
+
+def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run) -> list[str]:
+    """Boot out and delete every com.olivercode.* launchd job this checkout can create, and any other com.olivercode.* plist
+    whose command runs this checkout's scripts/olivercode (a job from a newer version). Returns the labels it removed (#1272).
+    Cron and systemd entries are never written by this code, so there is nothing to remove off macOS."""
+    if not launchd.supported():
+        return []
+    from lib import cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain
+    folder = launchd.agents_dir(home)
+    launchers = {str(oc_root / "scripts" / "olivercode"), str(oc_root.resolve() / "scripts" / "olivercode")}
+    labels = [m.LABEL for m in (cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain)] + list(REMOVED_JOBS)
+    for plist in sorted(folder.glob("com.olivercode.*.plist")) if folder.is_dir() else []:
+        try:
+            args = plistlib.loads(plist.read_bytes()).get("ProgramArguments", [])
+        except (OSError, ValueError):
+            continue
+        if launchers & {str(a) for a in args}:
+            labels.append(plist.name[:-len(".plist")])
+    gone = []
+    for label in dict.fromkeys(labels):
+        plist = folder / f"{label}.plist"
+        if not plist.is_file():
+            continue
+        run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
+        plist.unlink(missing_ok=True)
+        print(f"  [JOB] removed {label}")
         gone.append(label)
     return gone
 
@@ -561,7 +591,7 @@ def command_install(oc_root: Path) -> int:
     return 1 if broken or broken_settings else 0
 
 
-def command_uninstall(oc_root: Path) -> int:
+def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     """Undo `install`: remove what it wrote in ~/.claude and nothing else.
 
     A link is removed when it points into this checkout, or when it dangles and an
@@ -634,6 +664,10 @@ def command_uninstall(oc_root: Path) -> int:
         print(f"  [FAIL] ~/.claude/settings.json could not be read ({exc}); left as it is, hooks not removed")
         broken_settings = True
 
+    jobs = remove_jobs(oc_root, run=run)
+    if not jobs:
+        print("  [ABSENT] launchd jobs")
+
     shim = _queue_shim.uninstall(oc_root)
     print(f"  [{shim.upper()}] ~/.local/bin/validate-queue")
     for line in _queue_shim.uninstall_launcher(oc_root):
@@ -655,4 +689,5 @@ def command_uninstall(oc_root: Path) -> int:
         print(f"~/.claude/skills{BACKUP_SUFFIX} is your own copy from docs/SETUP.md Step 2; uninstall leaves it.")
         print()
     print("Next: unset core.hooksPath in each governed repo (docs/SETUP.md \"Backing out\").")
+    print(f"Uninstall finished: {len(jobs)} scheduled job(s) removed.")
     return 1 if broken_settings else 0
