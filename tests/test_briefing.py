@@ -19,10 +19,10 @@ STEPS = [
 ]
 
 
-def snap(steps=STEPS, building=0, city=True, ideas=20):
+def snap(steps=STEPS, building=0, city=True, ideas=20, paused=False):
     return briefing.snapshot(slug="o/r", now=NOW, open_now=7, rows=[], numbers={"tokens_per_closed": 9_115_088, "cost_per_closed": 3.43, "handovers": 9, "threads": 7, "open": 7},
                              steps=steps, today=[{"story": "1209", "title": "City opens on what needs you", "tokens": 100, "cost": 1.0}], ready="P1 #461 Morning run",
-                             runner={"building": building, "allowed": 2, "load": "load 11 on 10 cores"}, ideas=ideas, city=city, latest={"number": 1209, "title": "City opens"})
+                             runner={"building": building, "allowed": 2, "load": "load 11 on 10 cores", "paused": paused}, ideas=ideas, city=city, latest={"number": 1209, "title": "City opens"})
 
 
 class GroupingCase(unittest.TestCase):
@@ -49,6 +49,15 @@ class TextCase(unittest.TestCase):
         text = "\n".join(out)
         for want in ("5 things need you.", "olivercode owner list", "olivercode drain REPO", "olivercode candidates", "olivercode health"):
             self.assertIn(want, text)
+
+
+    def test_paused_state_is_plainly_reported_in_terminal_and_city(self):
+        terminal = "\\n".join(briefing.text(snap(paused=True)))
+        city = briefing.dashboard_html(snap(paused=True))
+        self.assertIn("Runner    Paused — waiting for resume", terminal)
+        self.assertIn("The runner is paused.", terminal)
+        self.assertIn(">Paused<", city)
+        self.assertIn("Paused: no new stories will start.", city)
 
     def test_no_engineering_words_reach_the_owner(self):
         text = "\n".join(briefing.text(snap())).lower() + briefing.dashboard_html(snap()).lower()
