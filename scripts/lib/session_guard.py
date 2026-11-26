@@ -103,7 +103,7 @@ def _write_start(row: dict) -> bool:
         return False
 
 
-def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25) -> Lease:
+def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25, repo_slug: str = "") -> Lease:
     """Wait for and hold one shared account slot; configured maxBuilders is the hard session cap."""
     cap = max(1, local_config.max_builders())
     slot_dir = failure_log.home() / "model-session-slots"
@@ -119,7 +119,7 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
                 continue
             started_epoch = time.time()
             metadata = {"event": "session_start", "session": session, "session_id": session_id,
-                        "model": model or "", "repo": Path(cwd).name, "started_at": _stamp(),
+                        "model": model or "", "repo": repo_slug or Path(cwd).name, "started_at": _stamp(),
                         "slot": n, "cap": cap, "active_sessions": _active(slot_dir, cap),
                         "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
             if not _write_start(metadata):
