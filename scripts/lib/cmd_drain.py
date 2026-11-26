@@ -186,8 +186,9 @@ class Io:
             return ""
 
     def capacity(self) -> int:
-        """Available builder slots under the shared account cap, less other repos' active builders."""
-        return max(0, self.limit() - run_lock.building_elsewhere(self.slug))
+        """Available slots: the per-drain limit, bounded by the shared cap after other repos' builders."""
+        fleet_capacity = max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
+        return min(self.limit(), fleet_capacity)
 
 
     def holders(self) -> list[str]:
