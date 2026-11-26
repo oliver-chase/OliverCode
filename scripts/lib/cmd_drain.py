@@ -431,7 +431,10 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if not closed:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
         return closed, used
-    except (CloseRefused, Parked):  # a refused close leaves the story with the gate's message and its one stopped row (#1011); a parked one waits in QA (#1297)
+    except CloseRefused:  # a refused close leaves the story with the gate's message and its one stopped row (#1011)
+        return False, 0
+    except Parked:  # a parked story waits in QA (#1297) and the run-end count calls it landed (#1320)
+        state.setdefault("parked", []).append(n)
         return False, 0
     finally:
         io.release(n)
@@ -564,8 +567,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     except Exception:
                         pass
             state["tokens"] += used
-            if closed or issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
-                (state["closed"] if closed else state["blocked"]).append(issue["number"])
+            if closed or issue["number"] in state.get("parked", ()):
+                state["closed"].append(issue["number"])
+            elif issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
+                state["blocked"].append(issue["number"])
         io.beat([i["number"] for i in running.values()])
 
     try:

@@ -1000,9 +1000,11 @@ class CloseByScript(unittest.TestCase):
         io.staged = lambda: True
         io.parked = []
         io.park_in_qa = io.parked.append
-        closed, _ = cmd_drain.work_story(io, issue(1), {"sessions": 0, "restarts": {}, "tokens": 0})
+        state = {"sessions": 0, "restarts": {}, "tokens": 0}
+        closed, _ = cmd_drain.work_story(io, issue(1), state)
         self.assertFalse(closed)
         self.assertEqual(([1], [], [], [1]), (io.parked, io.closed, io.kept, io.released))
+        self.assertEqual([1], state["parked"])  # #1320: the run-end count reads a parked story as landed
 
     def test_a_landed_story_closes_by_script_without_a_second_session(self):
         io = FakeIo([issue(1)])
