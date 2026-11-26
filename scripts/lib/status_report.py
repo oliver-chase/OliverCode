@@ -460,13 +460,13 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 Georgia, 'Times New Roman', serif; }"
             "main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 76px; }"
             "h1, h2, h3, h4 { color: #17151b; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; line-height: 1.2; } h1 { font-size: clamp(32px, 5vw, 48px); margin: 0 0 12px; } h2 { font-size: 28px; margin: 48px 0 14px; } h3 { font-size: 21px; } h4 { font-size: 17px; }"
-            "a { color: #7864c8; } a:focus-visible, summary:focus-visible { outline: 2px solid #a99be8; outline-offset: 3px; }""
+            "a { color: #7864c8; } a:focus-visible, summary:focus-visible { outline: 2px solid #a99be8; outline-offset: 3px; }"
             "p { margin: 8px 0; } .muted { color: var(--muted); } .warn { color: var(--accent); }"
             "table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; } th, td { text-align: left; padding: 8px 12px 8px 0; vertical-align: top; border-bottom: 1px solid var(--line); }"
             "th { font-weight: 500; color: var(--muted); }"
             "table { font-size: 14px; } td, th { border-color: var(--line); }"
             "summary { cursor: pointer; padding: 12px 0; color: var(--text); }"
-            ".muted, #published { color: var(--muted); } #published { font-size: 13px; }
+            ".muted, #published { color: var(--muted); } #published { font-size: 13px; }"
             "@media (max-width: 640px) { thead { display: none; } tr, td { display: block; } tr { padding: 8px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; }"
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'
