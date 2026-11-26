@@ -49,7 +49,7 @@ scripts/olivercode install
 scripts/olivercode health
 ```
 
-Install links OliverCode's shared files and skills into Claude's configuration, merges its hook entries, and sets up the command on your PATH. Existing skills are left alone; files it replaces are backed up. Keep those backups until you've verified everything.
+Install links OliverCode's shared files and skills into Claude's configuration, merges its hook entries, and sets up the command on your PATH. Existing skills are left alone; files it replaces are backed up. Keep those backups until you've verified everything. The runner starts with one builder and stops a story after $6 in recorded Claude spend. Raise those limits only deliberately, in your local settings or with `drain --parallel`.
 
 Before it changes your permissions, run:
 
@@ -152,7 +152,7 @@ Clone OliverCode and your fleet repos, restore your local settings, and run the 
 
 ## More detail
 
-The deeper configuration options, command behavior, runner internals, and troubleshooting notes are kept in [REFERENCE.md](REFERENCE.md) so this setup guide stays focused.
+The deeper configuration options, command behavior, runner internals, and troubleshooting notes are kept in [REFERENCE.md](REFERENCE.md) so this setup guide stays focused. The reference retains the detailed information from the old guide rather than dropping it.
 
 ## Remove it
 
