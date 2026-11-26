@@ -713,7 +713,7 @@ class TestWeakenedTests(unittest.TestCase):
     def test_only_matching_moved_assertions_offset_removed_assertions(self):
         diff = self.diff("tests/test_old.py", "@@ -1,2 +0,0 @@", "-        self.assertEqual(1, f())", "-        self.assertTrue(g())")
         diff += self.diff("tests/test_new.py", "@@ -0,0 +1,1 @@", "+        self.assertEqual(1, f())")
-        self.assertEqual(["tests/test_old.py:1 removes 1 assertion(s) without removing the code they cover"],
+        self.assertEqual(["tests/test_old.py:2 removes 1 assertion(s) without removing the code they cover"],
                          cmd_land.weakened(cmd_land._changed_lines(diff)))
 
     def test_a_deleted_test_file_counts_its_assertions_under_its_own_path(self):
