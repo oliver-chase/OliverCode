@@ -72,6 +72,13 @@ Work through a repository's open stories:
 
 ```bash
 olivercode drain REPO
+
+# Pause new stories; resume later
+olivercode pause REPO
+olivercode resume REPO
+
+# Cancel one active story, preserving its handoff
+olivercode cancel REPO 42
 ```
 
 Check current work and system health:
