@@ -311,9 +311,9 @@ def dashboard_html(snap: dict) -> str:
     next_up = f'<p><b>Next up:</b> {esc(snap["ready"])}</p>' if snap["ready"] else ""
     cards = "".join([
         _card("Stories in the queue", str(snap["open"]), f'{len(snap["today"])} delivered today'),
+        _card("Delivered today", str(len(snap["today"])), f'{snap["today_tokens"]:,} tokens · {_money(snap["today_cost"])}'),
         _card("Waiting on you", str(snap["waiting"]), "decisions, approvals or fixes"),
         _card("Cost per delivery", cost[0], cost[1]),
-        _card("Delivered today", str(len(snap["today"])), f'{snap["today_tokens"]:,} tokens · {_money(snap["today_cost"])}'),
     ])
     flow = (
         f'<div class="flow"><div><span class="label">Delivered</span><strong>{snap["closed"]}</strong><span class="note">this week</span></div>'
