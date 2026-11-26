@@ -59,11 +59,15 @@ class TextCase(unittest.TestCase):
 class DashboardCase(unittest.TestCase):
     def test_the_dashboard_answers_the_four_questions_and_keeps_the_terminal_commands_as_plain_text(self):
         page = briefing.dashboard_html(snap())
-        for heading in ("What needs your attention", "What OliverCode is doing", "How work is going", "How the system is doing"):
+        for heading in ("What needs your attention", "Work underway", "Delivery pace", "System health"):
             self.assertIn(heading, page)
         self.assertIn("cd ~/.claude/olivercode", page)
         self.assertIn("olivercode status", page)
         self.assertNotIn("oc-term", page)
+        self.assertIn("Daily breakdown", page)
+        self.assertIn("Benchmark:", page)
+        self.assertIn("expansion", page)
+        self.assertIn("this week", page)
 
     def test_a_step_cannot_inject_markup(self):
         page = briefing.dashboard_html(snap(steps=[{"id": 1, "session": "maintain", "step": "<script>steal()</script> approve"}]))
