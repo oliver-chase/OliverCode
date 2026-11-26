@@ -41,7 +41,7 @@ class TestRunCli(unittest.TestCase):
         self.assertEqual("", rows[0]["model"])
         self.assertIn("started_at", out)
         self.assertIn("duration_s", out)
-        self.assertEqual(1, out["session_cap"])
+        self.assertEqual(1, out["session_cap"])\n        self.assertEqual(1, out["session_attempt"])
         self.assertEqual(0.0123, rows[1]["cost_usd"])
 
     def test_no_api_key_is_read_or_passed(self):
