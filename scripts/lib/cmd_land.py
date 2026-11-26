@@ -259,7 +259,7 @@ def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
             bucket.setdefault(path, []).append((line, text.strip()))
     if net_code <= 0:
         excess_removed, excess_added = [], []
-        for path in set(removed) | set(added):
+        for path in dict.fromkeys((*removed, *added)):
             old, new = list(removed.get(path, [])), list(added.get(path, []))
             # Exact unchanged assertions are paired first. A remaining same-file
             # edit keeps the previous net-count behavior (a one-for-one rewrite
