@@ -210,6 +210,11 @@ def unproven_closes(items, config, finished="Complete", runner=gh_api):
             data, _ = cs.fetch(own, number, runner)
         except (RuntimeError, ValueError) as exc:
             sys.exit(f"cannot read #{number} to check how it closed: {exc}")
+        bodies = cs.flatten(data)
+        # The OliverCode close protocol applies only to work claimed by an OliverCode builder.
+        # External agents may close issues without OliverCode's action log or completion marker.
+        if not any((action := cs.parse_action(body)) and action[1] == "builder" for body in bodies):
+            continue
         if not cs.closed_by_script(data):
             found.append((number, c.get("title", "")))
     return found
