@@ -424,6 +424,7 @@ def _usage_analytics(log: list[dict], now: float) -> str:
     landed = [row for slug in slugs for row in history(log, slug, now)]
     measured_cost = [float(r["cost"]) for r in landed if r.get("cost") is not None and not r.get("outside")]
     measured_time = [float(r["minutes"]) for r in landed if isinstance(r.get("minutes"), (int, float)) and not r.get("outside")]
+    measured_stories = [r for r in landed if not r.get("outside")]
     avg_cost = sum(measured_cost) / len(measured_cost) if measured_cost else None
     avg_time = sum(measured_time) / len(measured_time) if measured_time else None
 
@@ -431,11 +432,13 @@ def _usage_analytics(log: list[dict], now: float) -> str:
     by_model = {}
     for row in model_rows:
         model_name = str(row["model"])
-        bucket = by_model.setdefault(model_name, {"rounds": 0, "tokens": 0, "costs": []})
+        bucket = by_model.setdefault(model_name, {"rounds": 0, "tokens": 0, "costs": [], "durations": []})
         bucket["rounds"] += 1
         bucket["tokens"] += sum(int(row.get(k) or 0) for k in ("input", "output", "cache_read", "cache_write"))
         if isinstance(row.get("cost_usd"), (int, float)):
             bucket["costs"].append(float(row["cost_usd"]))
+        if isinstance(row.get("duration_s"), (int, float)):
+            bucket["durations"].append(float(row["duration_s"]))
     model_story_counts = {}
     model_mix = {}
     for story in landed:
@@ -455,11 +458,15 @@ def _usage_analytics(log: list[dict], now: float) -> str:
         daily_tokens.append((label, day["total"], f"{day['total']:,}"))
 
     model_distribution = sorted(model_story_counts.items(), key=lambda item: (-item[1], item[0]))
-    model_cost = []
+    model_cost, model_tokens, model_duration = [], [], []
     for name, bucket in sorted(by_model.items(), key=lambda item: (-item[1]["tokens"], item[0])):
         costs = bucket["costs"]
         model_cost.append((name, sum(costs) / len(costs) if costs else None,
                            f"${sum(costs) / len(costs):.2f}/round" if costs else "not recorded"))
+        durations = bucket["durations"]
+        model_duration.append((name, sum(durations) / len(durations) / 60 if durations else None,
+                               f"{sum(durations) / len(durations) / 60:.1f} min/round" if durations else "not recorded"))
+        model_tokens.append((name, bucket["tokens"], f"{bucket['tokens']:,} tokens"))
     mix_rows = [(f"{count} model type{'s' if count != 1 else ''}", amount, str(amount) + " stories")
                 for count, amount in sorted(model_mix.items())]
     top_models = [(name, count, f"{count} stories") for name, count in model_distribution]
@@ -467,12 +474,14 @@ def _usage_analytics(log: list[dict], now: float) -> str:
     cards = (f'<div class="usage-kpis"><div><span>Average cost per story</span><strong>{_money(avg_cost)}</strong></div>'
              f'<div><span>Average elapsed time</span><strong>{avg_time_label}</strong></div>'
              f'<div><span>Model types used</span><strong>{len(by_model)}</strong></div>'
-             f'<div><span>Stories measured</span><strong>{len(landed)}</strong></div></div>')
+             f'<div><span>Stories measured</span><strong>{len(measured_stories)}</strong></div></div>')
     charts = _bar_rows("Daily token use", daily_tokens, "Desktop chat and runner-builder input/context tokens, combined.")
     charts += _bar_rows("Average cost per landed story", daily_cost, "Recorded runner cost only; work completed outside the runner is excluded.")
     charts += _bar_rows("Average elapsed time per landed story", daily_time, "Wall-clock build time recorded by the runner.")
     charts += _bar_rows("Model distribution by stories", top_models, "A story is counted once for every distinct model type used across its recorded rounds.")
+    charts += _bar_rows("Tokens used by model", model_tokens, "Recorded builder input, output and cache tokens over the last seven days.")
     charts += _bar_rows("Average cost per builder round", model_cost, "Per-model round cost, not a per-story attribution.")
+    charts += _bar_rows("Average model round duration", model_duration, "Recorded elapsed time per model invocation; not whole-story duration.")
     charts += _bar_rows("Model types used per story", mix_rows, "Distinct model types recorded across each landed story's rounds.")
     parts = [f'<section class="usage"><h2>Usage &amp; delivery</h2><p class="section-intro">How much work the system is doing, what it costs, and which models are doing it. Figures reflect recorded activity; missing data stays unreported.</p>',
              cards, '<div class="usage-charts">', charts, '</div>']
