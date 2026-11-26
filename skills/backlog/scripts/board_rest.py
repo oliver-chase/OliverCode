@@ -7,6 +7,8 @@ caller then falls back to the GraphQL command.
 from __future__ import annotations
 
 import json
+import re
+from urllib.parse import parse_qs, urlparse
 
 VERSION = ["-H", "X-GitHub-Api-Version: 2022-11-28"]
 WANT = ("Title", "Status", "Priority", "Size", "Work Type", "Area", "Repository")
@@ -43,11 +45,47 @@ def project_items(config: dict, run) -> list | None:
             continue
         want = {w.lower() for w in WANT}  # boards spell a field "Work Type" or "Work type"
         ids = ",".join(str(f["id"]) for f in _objects(fields) if f["name"].lower() in want)
-        raw = run(["api", *VERSION, f"{base}/items?per_page=100&fields={ids}", "--paginate", "--jq", ".[]"])
+        raw = _all_items(run, f"{base}/items", ids)
         if raw is None:
             return None
-        return [shape(item) for item in _objects(raw) if not item.get("archived_at")]
+        return [shape(item) for item in raw if not item.get("archived_at")]
     return None
+
+
+PAGE, RETRY_PAGE = 100, 25
+
+
+def _page(run, url: str, size: int, after: str | None, ids: str):
+    """One page of items and the cursor of the next, or None when the call failed. The items endpoint pages by the
+    `after` cursor in the response's Link header, so the page is read with `-i`."""
+    cursor = f"&after={after}" if after else ""
+    raw = run(["api", *VERSION, "-i", f"{url}?per_page={size}&fields={ids}{cursor}"])
+    if raw is None:
+        return None
+    head, _, body = raw.replace("\r\n", "\n").partition("\n\n")
+    try:
+        rows = json.loads(body)
+    except ValueError:
+        return None
+    link = next((line for line in head.splitlines() if line.lower().startswith("link:")), "")
+    nxt = re.search(r'<([^>]*)>;\s*rel="next"', link)
+    found = nxt and parse_qs(urlparse(nxt.group(1)).query).get("after")
+    return rows, (found[0] if found else None)
+
+
+def _all_items(run, url: str, ids: str) -> list | None:
+    """Every item, one cursor page at a time. A page that fails is read again once from the same cursor with a smaller
+    page size, and a retry that fails too gives None, so the caller never falls back to the GraphQL read (#1310)."""
+    rows: list = []
+    after = None
+    while True:
+        got = _page(run, url, PAGE, after, ids) or _page(run, url, RETRY_PAGE, after, ids)
+        if got is None:
+            return None
+        items, after = got
+        rows += items
+        if not after:
+            return rows
 
 
 def repo_issues(repo: str, run) -> list | None:

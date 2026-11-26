@@ -1,4 +1,5 @@
 import json
+from urllib.parse import parse_qs, urlparse
 import unittest
 
 import board_rest as br
@@ -13,6 +14,10 @@ ITEM = {
         {"name": "Repository", "data_type": "repository", "value": {"full_name": "o/r"}},
     ],
 }
+
+
+def page(*objects):
+    return "HTTP/2.0 200 OK\n\n" + json.dumps(list(objects))
 
 
 def lines(*objects):
@@ -38,12 +43,12 @@ class ProjectItems(unittest.TestCase):
             calls.append(args)
             if "fields?per_page=100" in args[3]:
                 return lines({"id": 11, "name": "Status"}, {"id": 12, "name": "Assignees"})
-            return lines(ITEM, {**ITEM, "archived_at": "2026-01-01"})
+            return page(ITEM, {**ITEM, "archived_at": "2026-01-01"})
 
         items = br.project_items(self.CFG, run)
         self.assertEqual(1, len(items))
-        self.assertIn("fields=11", calls[1][3])
-        self.assertNotIn("12", calls[1][3].split("fields=")[1])
+        self.assertIn("fields=11", calls[1][-1])
+        self.assertNotIn("12", calls[1][-1].split("fields=")[1])
 
     def test_a_field_name_spelled_with_other_capitals_is_read(self):
         calls = []
@@ -52,22 +57,52 @@ class ProjectItems(unittest.TestCase):
             calls.append(args)
             if "fields?per_page=100" in args[3]:
                 return lines({"id": 13, "name": "Work type"})
-            return lines(ITEM)
+            return page(ITEM)
 
         br.project_items(self.CFG, run)
-        self.assertIn("fields=13", calls[1][3])
+        self.assertIn("fields=13", calls[1][-1])
 
     def test_a_user_path_that_fails_falls_to_the_organization_path(self):
         seen = []
 
         def run(args):
-            seen.append(args[3].split("/")[0])
-            if args[3].startswith("users/"):
+            url = next(a for a in args if "projectsV2" in a)
+            seen.append(url.split("/")[0])
+            if url.startswith("users/"):
                 return None
-            return lines({"id": 1, "name": "Status"}) if "fields?" in args[3] else lines(ITEM)
+            return lines({"id": 1, "name": "Status"}) if "fields?" in url else page(ITEM)
 
         self.assertEqual(1, len(br.project_items(self.CFG, run)))
         self.assertEqual(["users", "orgs", "orgs"], seen)
+
+    def paged(self, fail):
+        """A runner serving 150 items by `after` cursor (the index to resume at); `fail(size, after)` says which item
+        pages answer None."""
+        calls = []
+
+        def run(args):
+            if "fields?" in args[3]:
+                return lines({"id": 1, "name": "Status"})
+            query = parse_qs(urlparse(args[4]).query)
+            size, after = int(query["per_page"][0]), int(query.get("after", ["0"])[0])
+            calls.append((size, after))
+            if fail(size, after):
+                return None
+            rows = [{**ITEM, "content": {"number": n}} for n in range(150)][after:after + size]
+            link = f'Link: <https://api.github.com/x?per_page={size}&after={after + size}>; rel="next"\n' \
+                if after + size < 150 else ""
+            return f"HTTP/2.0 200 OK\n{link}\n" + json.dumps(rows)
+        return run, calls
+
+    def test_a_failed_page_is_read_again_as_a_smaller_page(self):
+        run, calls = self.paged(lambda size, after: size == 100 and after == 100)
+        items = br.project_items(self.CFG, run)
+        self.assertEqual(list(range(150)), [i["content"]["number"] for i in items])
+        self.assertEqual([(100, 0), (100, 100), (25, 100), (100, 125)], calls)
+
+    def test_a_page_that_fails_after_the_retry_gives_none(self):
+        run, _ = self.paged(lambda size, after: after == 100)
+        self.assertIsNone(br.project_items(self.CFG, run))
 
     def test_a_board_rest_cannot_read_returns_none(self):
         self.assertIsNone(br.project_items(self.CFG, lambda args: None))

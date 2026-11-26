@@ -111,9 +111,13 @@ class Io:
         """The board's card for each story number, from the shared board copy groom keeps. None when the board cannot be read, so drain stops
         rather than treat an unread story as Ready (#1014)."""
         import check_board_hygiene
+        self.unread = ""
         try:
             items = check_board_hygiene.load_items(backlog_config(self.repo))
-        except (Exception, SystemExit):
+        except SystemExit as stop:  # the REST read could not finish, and the drain says so (#1310)
+            self.unread = str(stop.code or "")
+            return None
+        except Exception:
             return None
         return {(i.get("content") or {}).get("number"): i for i in items}
 
@@ -559,6 +563,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             hold_waited = False
             issues = io.list_open()
             if issues is None:
+                if unread := getattr(io, "unread", ""):
+                    agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "stopped", reason=unread)
+                    say(f"Drain stopped: {unread}.")
+                    return 1
                 say("Drain stopped: the open stories were not read.")
                 return 1
             skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()}

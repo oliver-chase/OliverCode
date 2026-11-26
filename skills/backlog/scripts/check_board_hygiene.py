@@ -61,18 +61,11 @@ def load_items(config, use_cache=True):
 
 
 def fetch_items(config):
-    """The board through REST (core budget), else through `gh project item-list` (GraphQL budget)."""
+    """The board through REST (core budget). It never reads through `gh project item-list`, which spends the GraphQL
+    budget every agent shares (#1310)."""
     items = board_rest.project_items(config, run_gh_soft)
-    if items is not None:
-        return items
-    out = run_gh([
-        "project", "item-list", str(config["projectNumber"]),
-        "--owner", config["projectOwner"], "--format", "json", "--limit", str(ITEM_LIMIT),
-    ])
-    items = json.loads(out)["items"]
-    if len(items) >= ITEM_LIMIT:
-        sys.exit(f"The board returned {len(items)} items, the list limit, so the sweep may be cut short. "
-                 "Raise ITEM_LIMIT in check_board_hygiene.py and run again.")
+    if items is None:
+        sys.exit("the board could not be read over REST")
     return items
 
 

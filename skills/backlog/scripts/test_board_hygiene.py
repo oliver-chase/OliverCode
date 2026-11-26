@@ -252,16 +252,16 @@ class ConfigLoading(unittest.TestCase):
             self.assertEqual(CONFIG, bh.load_config(path))
 
 
-class ListLimit(unittest.TestCase):
-    def test_a_board_at_the_list_limit_stops_the_run(self):
+class RestOnly(unittest.TestCase):
+    def test_a_board_rest_cannot_read_stops_the_run_with_no_graphql_call(self):
         with tempfile.TemporaryDirectory() as home, \
                 mock.patch.dict("os.environ", {"OLIVERCODE_HOME": home}), \
                 mock.patch.object(bh.gh_budget, "points_refusal", return_value=""), \
                 mock.patch.object(bh, "run_gh_soft", return_value=None), \
-                mock.patch.object(bh, "run_gh", lambda args: json.dumps({"items": [{}] * bh.ITEM_LIMIT})), \
+                mock.patch.object(bh, "run_gh", side_effect=AssertionError("GraphQL read")), \
                 self.assertRaises(SystemExit) as raised:
             bh.load_items({"projectNumber": 1, "projectOwner": "o"})
-        self.assertIn("limit", str(raised.exception))
+        self.assertIn("the board could not be read over REST", str(raised.exception))
 
 
 class CloseGateDimension(unittest.TestCase):

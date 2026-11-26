@@ -460,6 +460,25 @@ class DrainCase(unittest.TestCase):
         code, out, _ = self.run_drain(io)
         self.assertEqual(code, 1)
 
+    def test_a_board_rest_cannot_read_stops_the_drain_with_that_reason_and_one_stopped_row(self):  # #1310
+        io = FakeIo([])
+        io.unread = "the board could not be read over REST"
+        io.list_open = lambda: None
+        rows = []
+        with mock.patch.object(cmd_drain.agent_loop, "log_stage", lambda *a, **k: rows.append((a[2], k.get("reason", "")))):
+            code, out = quiet(cmd_drain.drain, io, state())
+        self.assertEqual((code, rows), (1, [("stopped", io.unread)]))
+        self.assertIn("the board could not be read over REST", out)
+
+    def test_board_cards_keeps_the_reason_the_board_read_stopped_with(self):  # #1310
+        io = cmd_drain.Io.__new__(cmd_drain.Io)
+        io.repo = Path("/repo")
+        import check_board_hygiene
+        with mock.patch.object(cmd_drain, "backlog_config", return_value={}), \
+                mock.patch.object(check_board_hygiene, "load_items", side_effect=SystemExit("the board could not be read over REST")):
+            self.assertIsNone(io.board_cards())
+        self.assertEqual("the board could not be read over REST", io.unread)
+
     def test_command_refuses_bad_arguments(self):
         self.assertEqual(quiet(cmd_drain.command_drain, [])[0], 2)
         self.assertEqual(quiet(cmd_drain.command_drain, ["/nonexistent-repo-xyz"])[0], 1)
