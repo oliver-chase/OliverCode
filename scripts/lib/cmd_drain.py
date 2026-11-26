@@ -527,83 +527,14 @@ def policy_stop_comment(stop: dict) -> str:
 
 
 def story_spend(n: int, repo: str = "") -> float:
-    """Recorded spend for a story: session telemetry is authoritative, old run-log rows are the compatibility fallback (#1218, #1221)."""
-    prefix = f"story-{n}"
-    total = 0.0
-    sessions = failure_log.home() / session_guard.LOG
-    try:
-        with sessions.open(encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    row = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-                if not isinstance(row, dict) or row.get("event") != "session_end":
-                    continue
-                name = str(row.get("session") or "")
-                if name != prefix and not name.startswith(prefix + "-"):
-                    continue
-                repo_name = Path(repo).name
-                row_repo = str(row.get("repo") or "")
-                if repo and row_repo and (row_repo != repo if "/" in row_repo or "/" in repo else row_repo != repo_name and not row_repo.startswith(repo_name + "-")):
-                    continue
-                cost = row.get("cost_usd")
-                if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
-                    total += float(cost)
-    except OSError:
-        pass
-    # Only pre-telemetry rows without session IDs are counted here; new sessions use the log above.
-    path = failure_log.home() / "run-log.jsonl"
-    try:
-        with path.open(encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    row = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-                if not isinstance(row, dict):
-                    continue
-                name = str(row.get("story") or "")
-                if name != prefix and not name.startswith(prefix + "-"):
-                    continue
-                if repo and row.get("repo") and row.get("repo") != repo:
-                    continue
-                if row.get("session_id"):
-                    continue
-                cost = row.get("cost_usd")
-                if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
-                    total += float(cost)
-    except OSError:
-        pass
-    return total
+    """Recorded spend for a story, across model sessions and legacy rows."""
+    return session_guard.story_spend(n, repo)
+
 
 def story_cost_unknown(n: int, repo: str = "") -> bool:
-    """True when a previous model call for this story has no trustworthy cost record."""
-    path = failure_log.home() / "run-log.jsonl"
-    prefix = f"story-{n}"
-    if not path.exists():
-        return session_guard.story_has_unknown_cost(n, repo)
-    try:
-        with path.open(encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    row = json.loads(line)
-                except (ValueError, TypeError):
-                    return True
-                if not isinstance(row, dict):
-                    return True
-                name = str(row.get("story") or "")
-                if name != prefix and not name.startswith(prefix + "-"):
-                    continue
-                if repo and row.get("repo") and row.get("repo") != repo:
-                    continue
-                if "round" in row and row.get("cost_usd") is None:
-                    return True
-                if row.get("stop") == "api_error" and row.get("cost_usd") is None:
-                    return True
-    except OSError:
-        return True
-    return session_guard.story_has_unknown_cost(n, repo)
+    """Whether the story has an unpriced or incomplete prior model invocation."""
+    return session_guard.story_cost_unknown(n, repo)
+
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n, tokens, note, blocks, budget_stops = issue["number"], 0, "", 0, 0
