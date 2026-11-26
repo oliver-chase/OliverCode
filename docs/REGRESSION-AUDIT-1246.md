@@ -1,6 +1,6 @@
 # Regression audit for #1246
 
-Measured on 26 Nov 2026 at commit `80ddb7ed`, which is kept on the branch `archive/2026-11-25`. Main was restored to the tree of `18ad4ff9` after this measurement (#1269). Times are US Eastern. The figures come from the headless session transcripts, the run log, the landing logs, the closed-issue list and the commit history, including the pre-squash backup for 22 Nov.
+Measured on 26 Nov 2026 at commit `80ddb7ed`, which is kept under the tag `archive/main-2026-11-25`. Main was restored to the tree of `18ad4ff9` after this measurement (#1269). Times are US Eastern. The figures come from the headless session transcripts, the run log, the landing logs, the closed-issue list and the commit history, including the pre-squash backup for 22 Nov.
 
 ## Two-hour windows, 22 Nov 12:00 to 24 Nov 24:00
 
