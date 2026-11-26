@@ -60,7 +60,7 @@ def project_settings() -> str:
 
 
 def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns: int = 8, timeout: int = TIMEOUT, session: str = "",
-            system: str = "", model: str = "", resume: str = "", project_only: bool | None = None) -> dict:
+            system: str = "", model: str = "", resume: str = "", project_only: bool | None = None, repo_slug: str = "") -> dict:
     """Run `claude -p` once in a directory: {'code', 'text', 'tokens', 'session_id', 'usage', 'cost_usd', 'stop', 'stderr', 'settings'}. `resume` continues an earlier Claude Code session.
     `stop` is the CLI's own stop reason: its `terminal_reason` ('max_turns' when the turn cap ended the session), else its result subtype, and '' when it gave none (#877).
     `stderr` is the last STDERR_TAIL characters of what the CLI wrote to stderr.
@@ -91,7 +91,7 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
         argv += ["--session-id", known]
     env = {**os.environ, HEADLESS_ENV: "1"}
     try:
-        lease = session_guard.acquire(session, model, cwd, known, resumed=bool(resume))
+        lease = session_guard.acquire(session, model, cwd, known, resumed=bool(resume), repo_slug=repo_slug)
     except RuntimeError as exc:
         raise ModelError(str(exc)) from exc
     try:
