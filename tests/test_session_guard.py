@@ -102,6 +102,18 @@ class TestSessionGuard(unittest.TestCase):
         rows = [json.loads(line) for line in (self.home / session_guard.LOG).read_text().splitlines()]
         self.assertEqual(1, len(rows), "no session-start event is written when the story is already at its ceiling")
 
+    def test_attempt_ceiling_persists_and_blocks_new_session(self):
+        rows = []
+        for n in range(8):
+            rows.append({"event": "session_start", "session": "story-8", "session_id": f"sid-{n}", "repo": "o/r"})
+            rows.append({"event": "session_end", "session": "story-8", "session_id": f"sid-{n}", "repo": "o/r", "cost_usd": 0.1})
+        (self.home / session_guard.LOG).write_text("\\n".join(json.dumps(row) for row in rows) + "\\n", encoding="utf-8")
+        with mock.patch.object(session_guard.local_config, "max_story_attempts", return_value=8):
+            with self.assertRaisesRegex(RuntimeError, "attempt ceiling"):
+                session_guard.acquire("story-8-fix", "sonnet", "/work/Repo-8", "sid-next", repo_slug="o/r")
+        saved = [json.loads(line) for line in (self.home / session_guard.LOG).read_text().splitlines()]
+        self.assertEqual(16, len(saved), "exhaustion does not append another start record")
+
     def test_start_telemetry_failure_refuses_to_launch_and_releases_slot(self):
         with mock.patch.object(session_guard, "_write", return_value=False):
             with self.assertRaisesRegex(RuntimeError, "durable session-start telemetry"):
