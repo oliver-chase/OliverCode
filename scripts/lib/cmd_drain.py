@@ -35,6 +35,15 @@ FULL_WAITS = 12 # five-minute waits for another repo's run to free a builder bef
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
 
 
+def notify(text: str) -> None:
+    """One macOS notification for the owner. A missing osascript, or the suite's guard standing in for it, sends nothing and the run goes on (#1308)."""
+    script = f'display notification "{text.replace(chr(92), "").replace(chr(34), chr(39))}" with title "OliverCode drain"'
+    try:
+        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def skip_reason(issue: dict, repo: Path | None = None) -> str:
     """Why drain does not start an open story now, or '' when it may. Only a Ready story with a board Size and a Files area is built (#1014)."""
     if owner_gated(issue):
@@ -379,6 +388,7 @@ def finish(io, worktree: Path, n: int, why: str) -> None:
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
         io.stopped(n, reason)  # the refusal is the reason status shows (#1291)
+        notify(f"Story #{n} close refused: {reason}")
         raise CloseRefused(reason)
 
 
@@ -456,6 +466,7 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if out.get("usage_limit"):  # the story goes back to Ready unblocked, and the drain starts no new builder (#1299)
             state.setdefault("limited", []).append(n)
             io.comment(n, f"Drain stopped: {out['reason']}")
+            notify(f"Story #{n} hit the usage limit: {out['reason']}")
             return False, tokens
         if out.get("fatal"):  # a reason a restart cannot fix blocks the story and starts no new session (#1012)
             io.comment(n, f"Drain blocked: {out['reason']}")
@@ -557,6 +568,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     if issue["number"] not in reported:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")
+                        if owner_gated(issue):
+                            notify(f"Story #{issue['number']} is owner-gated and waits for you")
                     continue
                 if held := io.blockers(issue):  # a story waits until every blocker is closed, and the skip names the blocker (#1064)
                     if (issue["number"], tuple(held)) not in reported:
@@ -708,6 +721,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
             agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
                                 **({"reason": f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}."} if state.get("limited")
                                    else {"reason": f"The run stopped: {state['held']}."} if state.get("held") else {}))
+            notify(f"Drain ended: {len(state['closed'])} landed, {len(state['blocked'])} stopped")
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)

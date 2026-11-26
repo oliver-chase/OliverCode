@@ -871,6 +871,22 @@ class DetachedRun(unittest.TestCase):
         lines = cmd_status.activity(time.time(), {}, self.rows(), False, 0, "")
         self.assertRegex(lines[2], r"^Last run ended \d{4}-\d\d-\d\d \d\d:\d\d UTC: 2 stories landed, 1 stopped\.$")
 
+    def test_a_run_end_sends_one_notification_with_the_counts(self):
+        def work(io, st, sleep=None):
+            st["closed"] += [1, 2]
+            st["blocked"].append(3)
+            return 0
+        with mock.patch.object(cmd_drain, "drain", side_effect=work), mock.patch.object(cmd_drain.subprocess, "run") as run:
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
+        calls = [c for c in run.call_args_list if c.args and c.args[0][0] == "osascript"]
+        self.assertEqual(1, len(calls))
+        self.assertIn("2 landed, 1 stopped", calls[0].args[0][2])
+
+    def test_notify_sends_nothing_and_does_not_raise_without_osascript(self):
+        with mock.patch.object(cmd_drain.subprocess, "run", side_effect=FileNotFoundError):
+            cmd_drain.notify("anything")
+        cmd_drain.notify("the suite's guard stands in for osascript")
+
     def test_watch_prints_each_new_stage_row_and_ends_with_the_run(self):
         from lib import cmd_status
         from lib.agent_loop import log_stage
