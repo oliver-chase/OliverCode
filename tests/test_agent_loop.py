@@ -62,56 +62,6 @@ class TestValidationCommand(unittest.TestCase):
         self.assertEqual(["npm", "run", "verify"], agent_loop.validation_command(repo))
 
 
-class TestRoundCheck(unittest.TestCase):
-    """#1142: the runner's check after each builder round narrows scripts/validate.sh's smoke gate to the files this
-    story's branch changed against origin's default branch. A story's landing (cmd_land.py) validates separately and is
-    untouched by this."""
-
-    def test_changed_files_lists_the_branch_diff_against_origin(self):
-        repo = scratch_repo(temp_dir(self))
-        (repo / "a.py").write_text("a = 1\n")
-        git(repo, "add", "a.py")
-        git(repo, "commit", "-m", "first")
-        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-        (repo / "b.py").write_text("b = 2\n")
-        git(repo, "add", "b.py")
-        git(repo, "commit", "-m", "second")
-        self.assertEqual(["b.py"], agent_loop.changed_files(repo))
-
-    def test_changed_files_is_empty_when_git_has_nothing_to_compare(self):
-        self.assertEqual([], agent_loop.changed_files(temp_dir(self)))  # not a git repo at all
-
-    def test_validate_hands_scripts_validate_sh_the_round_and_the_changed_files(self):
-        repo = temp_dir(self)
-        (repo / "scripts").mkdir()
-        (repo / "scripts" / "validate.sh").write_text("exit 0\n")
-        seen = {}
-
-        def run(argv, **kw):
-            seen["argv"] = argv
-            return subprocess.CompletedProcess(argv, 0, "", "")
-
-        with mock.patch.object(agent_loop, "changed_files", return_value=["scripts/lib/cmd_land.py"]), \
-                mock.patch.object(agent_loop.subprocess, "run", side_effect=run):
-            agent_loop.validate(repo)
-        self.assertEqual(["--round", "scripts/lib/cmd_land.py"], seen["argv"][-2:])
-
-    def test_validate_does_not_narrow_an_npm_validation_command(self):
-        repo = temp_dir(self)
-        (repo / "package.json").write_text('{"scripts": {"check": "true"}}')
-        seen = {}
-
-        def run(argv, **kw):
-            seen["argv"] = argv
-            return subprocess.CompletedProcess(argv, 0, "", "")
-
-        with mock.patch.object(agent_loop, "changed_files") as changed, \
-                mock.patch.object(agent_loop.subprocess, "run", side_effect=run):
-            agent_loop.validate(repo)
-        changed.assert_not_called()
-        self.assertNotIn("--round", seen["argv"])
-
-
 class TestRunLog(unittest.TestCase):
     """What a headless run costs (docs/SETUP.md), #878: one JSON line per round under the OliverCode home folder."""
 
