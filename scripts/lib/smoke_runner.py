@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 """The smoke tests of validate.sh: every tests/test_*.py module and every skills/*/scripts/test_*.py module, each in its own process (#757).
 
-    smoke_runner.py [REPO_ROOT] [--changed FILE...]
-
---changed narrows the run to the runner's per-round check (#1142): given the files a builder round changed, it runs only the
-test modules whose source imports or names one of them, and prints which it chose. A changed file that is not Python counts through
-the code and tests that name it (#1168). When none do, or --changed is absent, every module runs, which is what `olivercode land`
-gets. The one exception is a change to prose files (.md, .txt) that no test or code names: no module runs, and the run says so.
+    smoke_runner.py [REPO_ROOT]
 
 Each module runs as `python3 -m unittest -b MODULE` from its own folder, several at a time (OLIVERCODE_VALIDATE_JOBS, default the
 machine's core count), largest file first so the slowest modules start first. -b buffers a module's output and this runner replays
@@ -26,7 +21,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -118,97 +112,26 @@ def modules(root: Path) -> list[tuple[str, Path, str]]:
     return sorted(found, key=lambda m: -(m[1] / f"{m[2]}.py").stat().st_size)
 
 
-def changed_stems(files: list[str]) -> set[str]:
-    """The module name of each changed .py file, the only files a test module could import or name."""
-    return {Path(f).stem for f in files if f.endswith(".py")}
-
-
-PROSE = (".md", ".txt")
-
-
-def named_by(root: Path, files: list[str]) -> set[str]:
-    """The module name of each tracked .py file that names a changed file that is not Python, by its file name (#1168). A test that reads a
-    doc or a data file names it in its own source or in the code it imports, so those stems pull their tests in through `affected`."""
-    names = {Path(f).name for f in files if not f.endswith(".py")}
-    if not names:
-        return set()
-    found = set()
-    for folder in ("scripts", "skills", "tests"):
-        for path in (root / folder).rglob("*.py"):
-            if any(name in path.read_text(encoding="utf-8", errors="replace") for name in names):
-                found.add(path.stem)
-    return found
-
-
-def affected(mods: list[tuple[str, Path, str]], stems: set[str]) -> list[tuple[str, Path, str]]:
-    """The test modules a changed stem names directly (its own module), plus any whose source imports or mentions one, by a
-    whole-word match. Empty when `stems` is empty, which tells `run` to fall back to the full suite."""
-    if not stems:
-        return []
-    named = [m for m in mods if m[2] in stems]
-    pattern = re.compile(r"\b(" + "|".join(re.escape(s) for s in stems) + r")\b")
-    searched = [m for m in mods if m not in named and pattern.search((m[1] / f"{m[2]}.py").read_text(encoding="utf-8", errors="replace"))]
-    return named + searched
-
-
-PUSH_TIME = ("test_drain_canary",)  # modules a full run leaves to the push to the default branch, where `olivercode validated check` runs them once per tree (#1155)
-
-
-def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
+def run(root: Path, out=sys.stdout) -> int:
     mods = modules(root)
-    if changed is None and os.environ.get("OLIVERCODE_CANARY") != "1":
-        skipped = [m for m in mods if m[2] in PUSH_TIME]
-        if skipped:
-            mods = [m for m in mods if m[2] not in PUSH_TIME]
-            print(f"  Not run here: {', '.join(n for n, _, _ in skipped)}. It runs at the push to the default branch; OLIVERCODE_CANARY=1 includes it in this run.", file=out)
     if not mods:
         print("  Ran 0 tests across 0 modules, all passed", file=out)
         return 0
-    if changed is not None:
-        selected = affected(mods, changed_stems(changed) | named_by(root, changed))
-        if not selected and changed and all(f.endswith(PROSE) for f in changed):
-            print("  Round check: the changed files are prose that no test or code names, so no test module runs. The full suite runs when the story lands.", file=out)
-            return 0
-        if selected:
-            print(f"  Round check: {len(selected)} of {len(mods)} modules cover the changed files: {', '.join(n for n, _, _ in selected)}", file=out)
-            mods = selected
-        else:
-            print("  Round check: no test module covers the changed files, running the full suite", file=out)
     with tempfile.TemporaryDirectory(prefix="olivercode-smoke-") as tmp:
         log_dir = Path(tmp)
         units = plan(mods, load_timings(), jobs())
-        output_lock = threading.Lock()
-
-        verbose = os.environ.get("OLIVERCODE_VALIDATE_VERBOSE", "1") != "0"
-
-        def progress(message: str) -> None:
-            # Per-module output is opt-in; failures and the final summary are always shown.
-            if verbose:
-                with output_lock:
-                    print(message, file=out, flush=True)
-
-        print(f"  Running {len(units)} test unit(s) across {len(mods)} module(s), {jobs()} workers.", file=out, flush=True)
 
         def one(unit):
             name, module, folder, ids = unit
             began = time.monotonic()
-            progress(f"  [RUN ] {name}")
-            try:
-                with open(log_dir / f"{name}.log", "w", encoding="utf-8") as log:
-                    code = subprocess.run([sys.executable, "-m", "unittest", "-b", *(ids or [module])], cwd=folder, stdout=log,
-                                          stderr=subprocess.STDOUT).returncode
-            except OSError as exc:
-                code = 1
-                (log_dir / f"{name}.log").write_text(f"Could not start test module: {exc}\n", encoding="utf-8")
-            took = time.monotonic() - began
-            label = "FAIL" if code else " OK "
-            progress(f"  [{label}] {name} ({took:.1f}s)")
-            return name, code, took
+            with open(log_dir / f"{name}.log", "w", encoding="utf-8") as log:
+                code = subprocess.run([sys.executable, "-m", "unittest", "-b", *(ids or [module])], cwd=folder, stdout=log,
+                                      stderr=subprocess.STDOUT).returncode
+            return name, code, time.monotonic() - began
 
-        run_began = time.monotonic()
         with ThreadPoolExecutor(max_workers=jobs()) as pool:
             results = list(pool.map(one, units))
-        if os.environ.get("OLIVERCODE_VALIDATE_TIMES") or time.monotonic() - run_began >= SHOW_SLOWEST_AFTER:  # a long run names its slowest modules without being asked (#1180)
+        if os.environ.get("OLIVERCODE_VALIDATE_TIMES"):
             print("  slowest units: " + ", ".join(f"{n} {t:.0f}s" for n, _, t in sorted(results, key=lambda r: -r[2])[:10]), file=out)
         ran = 0
         for name, _, _ in results:
@@ -230,17 +153,9 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
     return 0
 
 
-SHOW_SLOWEST_AFTER = 30  # seconds a run takes before it prints its ten slowest units unasked
-
-
 def main(argv: list[str]) -> int:
-    args = list(argv)
-    changed = None
-    if "--changed" in args:
-        i = args.index("--changed")
-        changed, args = args[i + 1:], args[:i]
-    root = Path(args[0]) if args else Path(__file__).resolve().parents[2]
-    return run(root, changed=changed)
+    root = Path(argv[0]) if argv else Path(__file__).resolve().parents[2]
+    return run(root)
 
 
 if __name__ == "__main__":
