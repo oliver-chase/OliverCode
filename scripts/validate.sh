@@ -92,7 +92,7 @@ run_docs_check() {
 run_limits_check() {
   # The size ceiling only warns (#879): the check prints the count and never fails the run.
   echo "=== validate: checking size limits ==="
-  python3 "${SCRIPT_DIR}/olivercode" limits check
+  python3 "${SCRIPT_DIR}/olivercode" limits check || true
 }
 
 run_reference_check() {
