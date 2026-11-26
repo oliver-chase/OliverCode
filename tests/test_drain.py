@@ -127,7 +127,7 @@ class DrainCase(unittest.TestCase):
     def test_session_telemetry_cost_is_counted_once_with_legacy_rows(self):
         home = temp_dir(self)
         (home / "model-sessions.jsonl").write_text(
-            '{"event":"session_end","session":"story-3","session_id":"sid","repo":"r-3","cost_usd":1.0}\n',
+            '{"event":"session_end","session":"story-3","session_id":"sid","repo":"o/r","cost_usd":1.0}\n',
             encoding="utf-8")
         (home / "run-log.jsonl").write_text(
             '{"story":"story-3","repo":"o/r","session_id":"sid","cost_usd":1.0}\n'
