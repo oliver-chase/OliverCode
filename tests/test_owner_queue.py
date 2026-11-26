@@ -56,32 +56,8 @@ class TestOwnerQueue(unittest.TestCase):
         self.assertIn("set_pinned for x9 with pinned=false", out)
 
 
-class TestReadableList(unittest.TestCase):
-    def test_steps_that_differ_only_in_a_path_become_one_line_with_their_numbers(self):
-        """#1177: stale worktrees read as one line, and an unlike step keeps its own."""
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
-            for n in (1, 2, 3):
-                cmd_owner.add("maintain", f"maintain health: /Users/x/_worktrees/OliverCode-{n} runs commit hooks older than origin/main")
-            cmd_owner.add("maintain", "maintain health: python3 is 3.9")
-            text = cmd_owner.listing([i for i in cmd_owner.items() if i["status"] == "open"])
-        self.assertIn("3 like this", text)
-        self.assertIn("(#1, #2, #3)", text)
-        self.assertIn("python3 is 3.9", text)
-        self.assertTrue(text.startswith("4 things waiting on you"))
-
-
-class TestQuietQueue(unittest.TestCase):
-    def test_the_same_ask_is_held_once_and_counts_its_repeats(self):
-        """#1205: a repeat keeps one open step and counts it; an info line is not an open step; a done step can be raised again."""
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
-            first = cmd_owner.add("conform", "repo: hooks needs the owner", command="fix", error="stopped")
-            again = cmd_owner.add("conform", "repo: hooks needs the owner", command="fix", error="stopped")
-            cmd_owner.note("groom", "an info line")
-            self.assertEqual(first["id"], again["id"])
-            open_items = [i for i in cmd_owner.items() if i["status"] == "open"]
-            self.assertEqual((1, 2), (len(open_items), open_items[0]["repeats"]))
-            cmd_owner.close(first["id"])
-            self.assertNotEqual(first["id"], cmd_owner.add("conform", "repo: hooks needs the owner", command="fix", error="stopped")["id"])
+if __name__ == "__main__":
+    unittest.main()
 
 
 class TestPreparedOwnerSteps(unittest.TestCase):
@@ -95,16 +71,16 @@ class TestPreparedOwnerSteps(unittest.TestCase):
         home = temp_dir(self)
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             code, _ = self.run_cmd("add", "--session", "s1", "--step", "Create the Kit account",
-                                   "--tab", "https://example.test/signup", "--after", "queues the first reminder",
-                                   "--check", "the account API endpoint")
+                                   "--tab", "https://app.kit.com/signup", "--after", "queues the first newsletter",
+                                   "--check", "the Kit API account endpoint")
             self.assertEqual(0, code)
             _, listed = self.run_cmd("list")
-            self.assertIn("https://example.test/signup", listed)
-            self.assertIn("queues the first reminder", listed)
+            self.assertIn("https://app.kit.com/signup", listed)
+            self.assertIn("queues the first newsletter", listed)
             code, closed = self.run_cmd("done", "1")
             self.assertEqual(0, code)
-            self.assertIn("Resume: check the result in the account API endpoint", closed)
-            self.assertIn("queues the first reminder", closed)
+            self.assertIn("Resume: check the result in the Kit API account endpoint", closed)
+            self.assertIn("queues the first newsletter", closed)
 
     def test_a_secret_or_a_half_prepared_step_is_refused_and_nothing_is_written(self):
         home = temp_dir(self)
@@ -141,46 +117,3 @@ class TestPreparedOwnerSteps(unittest.TestCase):
             self.run_cmd("add", "--session", "s1", "--step", "Key", "--command", "gh auth login", "--error", "refused")
             _, closed = self.run_cmd("done", "1")
             self.assertNotIn("Resume:", closed)
-
-
-class TestOwnerNotification(unittest.TestCase):
-    def raise_step(self, session="drain", step="Story 7 needs your answer", platform="darwin", on=True, times=1):
-        home = temp_dir(self)
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(cmd_owner.sys, "platform", platform), \
-                mock.patch.object(cmd_owner.local_config, "setting", return_value=on), \
-                mock.patch.object(cmd_owner.subprocess, "run") as run:
-            for _ in range(times):
-                cmd_owner.add(session, step, "ls", "refused")
-            return run, cmd_owner.listing(cmd_owner.items())
-
-    def test_a_new_drain_step_sends_one_notification_with_its_text(self):
-        run, _ = self.raise_step()
-        run.assert_called_once()
-        argv = run.call_args.args[0]
-        self.assertEqual("osascript", argv[0])
-        self.assertIn("Story 7 needs your answer", argv[2])
-
-    def test_the_same_step_raised_again_sends_no_second_notification(self):
-        run, _ = self.raise_step(times=2)
-        self.assertEqual(1, run.call_count)
-
-    def test_housekeeping_steps_send_nothing_and_still_list(self):
-        for session in ("conform", "maintain", "groom"):
-            run, listed = self.raise_step(session=session)
-            run.assert_not_called()
-            self.assertIn("Story 7 needs your answer", listed)
-
-    def test_setting_off_or_not_a_mac_sends_nothing_and_still_lists(self):
-        for kwargs in ({"on": False}, {"platform": "linux"}):
-            run, listed = self.raise_step(**kwargs)
-            run.assert_not_called()
-            self.assertIn("Story 7 needs your answer", listed)
-
-    def test_the_only_process_started_is_osascript(self):
-        run, _ = self.raise_step(step='Quote "this" \\ path')
-        self.assertEqual({"osascript"}, {c.args[0][0] for c in run.call_args_list})
-        self.assertIn('\\"this\\" \\\\ path', run.call_args.args[0][2])
-
-
-if __name__ == "__main__":
-    unittest.main()

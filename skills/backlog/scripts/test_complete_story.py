@@ -34,7 +34,7 @@ class CompleteStory(unittest.TestCase):
         self.run_it("no-builder.json")  # nothing was written, so the copy stays
         self.assertTrue(self.copy.exists())
 
-    def run_it(self, comments, items="PVTI_1", extra=None, fail=None, failtext="HTTP 422: Validation Failed", pushed=lambda commit, root=None: None, live=None, root_marker=False, verified=(), body=BODY):
+    def run_it(self, comments, items="PVTI_1", extra=None, fail=None, failtext="HTTP 422: Validation Failed", pushed=lambda commit, root=None: None, live=None, root_marker=False):
         calls = []
 
         def runner(args):
@@ -45,7 +45,7 @@ class CompleteStory(unittest.TestCase):
             if "--slurp" in args:
                 text = json.dumps([json.loads((FIX / comments).read_text())])
             elif ".body" in args:
-                text = Path(body).read_text()
+                text = Path(BODY).read_text()
             elif any("projectsV2" in a for a in args):
                 text = "\n".join(json.dumps(r) for r in (
                     [{"number": 99, "id": "PVTI_other", "repo": ""}, {"number": 54, "id": items, "repo": "https://api.github.com/repos/o/r"}]
@@ -59,8 +59,7 @@ class CompleteStory(unittest.TestCase):
         cfg.close()
         self.addCleanup(os.unlink, cfg.name)
         self.err = io.StringIO()
-        code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0",
-                        *[a for v in verified for a in ("--verified", v)]],
+        code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0"],
                        runner=runner, out=out, err=self.err, pushed=pushed, **({'live': live} if live else {}))
         out.flush()
         return code, out.buffer.getvalue().decode(), [" ".join(c) for c in calls]
@@ -79,30 +78,8 @@ class CompleteStory(unittest.TestCase):
         self.assertIn("updateProjectV2ItemFieldValue", queued)
         self.assertIn("OPT_DONE", queued)
 
-    def test_the_evidence_lists_each_scenario_with_how_it_was_verified(self):
-        code, _, calls = self.run_it("builder-only.json", verified=["Work is finished=tested: test_finish passes", "Work fails=observed: the failure message printed"])
-        self.assertEqual(code, 0)
-        joined = "\n".join(calls)
-        self.assertIn("Criteria\n- Work is finished: tested: test_finish passes\n- Work fails: observed: the failure message printed", joined.replace("-f body=", ""))
-
-    def test_a_scenario_with_no_evidence_is_listed_as_not_verified_and_the_story_still_closes(self):
-        code, _, calls = self.run_it("builder-only.json", verified=["Work is finished=tested: test_finish passes"])
-        self.assertEqual(code, 0)
-        self.assertIn("- Work fails: not verified, no evidence given", "\n".join(calls))
-
-    def test_a_story_with_no_scenarios_gets_no_criteria_section(self):
-        code, _, calls = self.run_it("builder-only.json", body=str(FIX / "story-no-gherkin.body"))
-        self.assertEqual(code, 0)
-        self.assertNotIn("Criteria", "\n".join(calls))
-
-    def test_a_verified_name_that_matches_no_scenario_refuses_the_close(self):
-        code, text, calls = self.run_it("builder-only.json", verified=["Typo scenario=tested"])
-        self.assertEqual(code, 1)
-        self.assertIn("names no scenario of the story: Typo scenario", text)
-        self.assertNotIn("state=closed", "\n".join(calls))
-
     def test_the_evidence_comment_ends_with_the_close_mark_the_sweep_reads(self):
-        code, _, calls = self.run_it("builder-only.json", body=str(FIX / "story-no-gherkin.body"))
+        code, _, calls = self.run_it("builder-only.json")
         self.assertEqual(code, 0)
         self.assertIn("3 files, validate.sh exits 0\n\nClosed by complete_story.py.", "\n".join(calls).replace("-f body=", ""))
 
@@ -257,35 +234,9 @@ class LiveCheck(unittest.TestCase):
         self.assertIn("branch olivercode-local", reason)
         self.assertIsNone(proof)
 
-
-    def test_no_installed_checkout_closes_a_story_and_says_the_live_check_did_not_run(self):
-        """#1186: the gates apply while OliverCode is installed, so a story closes on its commits and run output without it."""
-        c = self.commit("docs/a.md", "x")
-        reason, proof = cs.live_check([c], None, self.oc)
-        self.assertIsNone(reason)
-        self.assertTrue(proof.startswith("Live: not checked."))
-        self.assertIn("no hook entry and no launchd job", proof)
-
-    def test_no_installed_checkout_closes_a_hook_story_and_names_the_hook_as_not_verified(self):
-        """#1186: with OliverCode not installed there is no session for a hook to be live in, so the close goes ahead and says so."""
-        c = self.commit("scripts/hooks/wip_save.py", "x")
-        reason, proof = cs.live_check([c], None, self.oc)
-        self.assertIsNone(reason)
-        self.assertIn("Live: not checked", proof)
-        self.assertIn("wip_save.py, which were not verified live", proof)
-
-    def test_no_installed_checkout_closes_a_job_story_and_names_the_label_as_not_verified(self):
-        c = self.commit("scripts/lib/cmd_job.py", 'LABEL = "com.olivercode.demo-job"\n'
-                        'def schedule(on):\n    return launchd.schedule(on, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n')
-        reason, proof = cs.live_check([c], None, self.oc, loaded=lambda label: self.fail("nothing is loaded without an install"))
-        self.assertIsNone(reason)
-        self.assertIn("com.olivercode.demo-job, which were not verified live", proof)
-
-    def test_no_installed_checkout_ignores_a_job_a_test_builds(self):
-        c = self.commit("tests/test_job.py", 'launchd.job("com.olivercode.fixture", ["x"], "x.out")\n')
-        reason, proof = cs.live_check([c], None, self.oc)
-        self.assertIsNone(reason)
-        self.assertTrue(proof.startswith("Live: not checked."))
+    def test_a_missing_installed_checkout_refuses_the_close(self):
+        reason, _ = cs.live_check(["a" * 40], None, self.oc)
+        self.assertIn("$OC", reason)
 
     def test_a_hook_story_needs_its_entry_in_settings_and_names_it(self):
         c = self.commit("scripts/hooks/wip_save.py", "x")
@@ -315,23 +266,6 @@ class LiveCheck(unittest.TestCase):
         c = self.commit("skills/backlog/scripts/test_fake.py", 'launchd.schedule(True, "com.olivercode.fake-job", plist, "a", "b")\n')
         reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: self.fail(f"{label} is a test fixture"))
         self.assertIsNone(reason)
-
-    def test_a_commit_that_edits_unrelated_lines_demands_no_job(self):
-        job = ('LABEL = "com.olivercode.version-cut"\n'
-               'def schedule():\n    return launchd.schedule(True, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n\n'
-               'def cleanup():\n    pass\n')
-        self.commit("scripts/lib/cmd_version.py", job)
-        c = self.commit("scripts/lib/cmd_version.py", job.replace('pass', 'return "done"'))
-        reason, proof = cs.live_check([c], self.oc, self.oc, loaded=lambda label: self.fail(f"{label} is unrelated to this commit"))
-        self.assertIsNone(reason)
-        self.assertNotIn("launchd job", proof)
-
-    def test_a_commit_that_changes_the_job_call_demands_it_resolving_the_constant_from_the_whole_file(self):
-        self.commit("scripts/lib/cmd_version.py", 'LABEL = "com.olivercode.version-cut"\ndef schedule():\n    pass\n')
-        c = self.commit("scripts/lib/cmd_version.py", 'LABEL = "com.olivercode.version-cut"\n'
-                        'def schedule():\n    return launchd.schedule(True, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n')
-        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: False)
-        self.assertIn("com.olivercode.version-cut is not loaded", reason)
 
     def test_a_plist_label_or_literal_schedule_call_is_demanded(self):
         c = self.commit("scripts/lib/cmd_plist.py", 'def plist():\n    return {"Label": "com.olivercode.plist-job"}\n'

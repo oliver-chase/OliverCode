@@ -122,36 +122,15 @@ def hooks(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant
         if not fatal:
             return Row("hooks", "pass", f"declared hook variant ({variant}); merge template hook fixes by hand")
         problems = fatal
-    if problems == [repo_gates.UNSET_HOOKS_PATH] and not private and not variant and not repo_gates.has_committed_hooks(repo):
-        # No per-repo hook files or hooksPath at all: a public repo with neither relies on the
-        # machine's global core.hooksPath from `olivercode install` instead of a commit (#1154).
-        problem = repo_gates.global_hooks_problem(oc_root)
-        if problem:
-            return _fail("hooks", problem, repo_gates.GLOBAL_HOOKS_FIX)
-        return Row("hooks", "pass", "no per-repo core.hooksPath; the machine's global default covers it")
     if problems:
         return _fail("hooks", "; ".join(problems), "olivercode sync-hooks --commit --story N")
     return Row("hooks", "pass")
 
 
-def global_hooks_path(repo: Path, *, oc_root: Path = OC_ROOT, **_) -> Row:
-    """Git's global core.hooksPath points at the hooks `olivercode install` builds, so a repo with
-    none of its own still runs them (#1154). Runs once, on the engine checkout."""
-    if not (repo / ENGINE_GATE).is_file():
-        return Row("global-hooks-path", "skip", "not an engine checkout")
-    problem = repo_gates.global_hooks_problem(oc_root)
-    if problem:
-        return _fail("global-hooks-path", problem, repo_gates.GLOBAL_HOOKS_FIX)
-    return Row("global-hooks-path", "pass")
-
-
 def managed_files(repo: Path, *, oc_root: Path = OC_ROOT, private: bool = False, variant: str = "", **_) -> Row:
     """A declared variant or a private repo runs a different pre-commit, and the hooks row checks that file."""
     manifest = oc_root / "shared" / "project-bootstrap-manifest.json"
-    try:
-        entries = json.loads(manifest.read_text()).get("templatedFiles", [])
-    except (OSError, ValueError, AttributeError) as exc:
-        return _fail("managed-files", f"{manifest} could not be read ({exc})", "olivercode update, which restores the manifest")
+    entries = json.loads(manifest.read_text()).get("templatedFiles", [])
     drifted = []
     for entry in entries:
         if entry.get("mode") != "strict" or (entry["target"] == ".githooks/pre-commit" and (private or variant)):
@@ -287,28 +266,16 @@ def fleet_private(repo: Path, *, offline: bool, runner=subprocess.run, **_) -> R
     if offline or not (repo / ENGINE_GATE).is_file():
         return Row("fleet-private", "skip", "offline" if offline else "not an engine checkout")
     folder = local_config.fleet_registry_path().parent
-    try:
-        done = subprocess.run(["git", "-C", str(folder), "remote", "get-url", "origin"], capture_output=True, text=True, timeout=15)
-    except (OSError, subprocess.TimeoutExpired):
-        return Row("fleet-private", "skip", f"unknown: git could not read the remote of {folder}")
-    url = done.stdout if done.returncode == 0 else ""
+    url = subprocess.run(["git", "-C", str(folder), "remote", "get-url", "origin"], capture_output=True, text=True, timeout=15).stdout
     match = re.search(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?\s*$", url)
     if not match:
         return Row("fleet-private", "skip", f"no fleet repo with a GitHub remote at {folder}")
     owner, name = match.groups()
-    try:
-        got = [runner(["gh", "api", f"repos/{owner}/{name}{tail}"], capture_output=True, text=True, timeout=30) for tail in ("", "/collaborators")]
-    except (OSError, subprocess.TimeoutExpired):
-        return Row("fleet-private", "skip", "unknown: gh did not answer")
+    got = [runner(["gh", "api", f"repos/{owner}/{name}{tail}"], capture_output=True, text=True, timeout=30) for tail in ("", "/collaborators")]
     if got[0].returncode:
-        return Row("fleet-private", "skip", "unknown: gh cannot reach the fleet repo (signed out or offline)")
-    try:
-        public = not json.loads(got[0].stdout).get("private")
-        others = [p["login"] for p in json.loads(got[1].stdout or "[]") if p["login"].lower() != owner.lower()] if not got[1].returncode else []
-    except (ValueError, TypeError, KeyError, AttributeError):
-        return Row("fleet-private", "skip", "unknown: gh answered with text that could not be read")
-    if got[1].returncode and not public:
-        return Row("fleet-private", "skip", "unknown: gh could not read the collaborators of the fleet repo")
+        return Row("fleet-private", "skip", "gh cannot reach the fleet repo")
+    public = not json.loads(got[0].stdout).get("private")
+    others = [p["login"] for p in json.loads(got[1].stdout or "[]") if p["login"].lower() != owner.lower()] if not got[1].returncode else []
     if public or others:
         return _fail("fleet-private", "the fleet repo " + " and ".join((["is public"] if public else []) + ([f"has {len(others)} collaborator(s) beyond the owner"] if others else [])),
                      "; ".join((["`gh repo edit %s/%s --visibility private --accept-visibility-change-consequences`" % (owner, name)] if public else []) + (["remove each collaborator in the repo settings under Collaborators"] if others else [])))
@@ -345,7 +312,7 @@ def unfinished_work_snapshot(repo: Path, *, home: Path | None = None, **_) -> Ro
     return Row("unfinished-work-snapshot", "pass")
 
 
-CHECKS = (ignore, validation, engine_only, fleet_private, sleep_setting, global_hooks_path, board, issues, hooks, managed_files, tests, branches, delete_on_merge,
+CHECKS = (ignore, validation, engine_only, fleet_private, sleep_setting, board, issues, hooks, managed_files, tests, branches, delete_on_merge,
           permission_policy, unfinished_work_snapshot)
 
 

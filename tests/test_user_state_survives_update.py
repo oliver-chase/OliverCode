@@ -1,4 +1,4 @@
-"""Story #762: the user's settings, audit choices live outside the tracked files and survive every update."""
+"""Story #762: the user's settings, audit choices and lessons live outside the tracked files and survive every update."""
 
 import json
 import os
@@ -14,7 +14,7 @@ from test_update_keeps_local_learning import Checkout, git, write
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "audit" / "scripts"))
 import audit_mode  # noqa: E402
-from lib import local_config, repo_profiles  # noqa: E402
+from lib import lessons, local_config, repo_profiles, state_migrations  # noqa: E402
 
 USER_FILES = ("olivercode.local.json", "shared/repo-profiles.local.json", "docs/backlog-config.local.json", "docs/LESSONS.jsonl")
 
@@ -32,12 +32,14 @@ class WithIgnore(Checkout):
 
 
 class SettingsHaveOnePerUserHome(WithIgnore):
-    def test_a_preference_and_an_audit_mode_leave_every_tracked_file_alone(self):
+    def test_a_preference_an_audit_mode_and_a_lesson_leave_every_tracked_file_alone(self):
         audit_mode.set_mode("full")
         local_config.save_local({"autoCoverLessons": True})
+        lessons.add("a check missed", "the skill drifted", "check the override", repo=self.clone)
         write(self.clone, "docs/backlog-config.local.json", '{"repoOwner": "me"}')
         write(self.clone, "shared/repo-profiles.local.json", '{"profiles": {}}')
         self.assertEqual(audit_mode.get_mode(), "full")
+        self.assertFalse(lessons.path(self.clone).is_relative_to(self.clone))
         self.assertEqual(git(self.clone, "status", "--porcelain", "--untracked-files=all"), "")
 
     def test_every_per_user_file_is_ignored_and_untracked_in_this_checkout(self):
@@ -61,6 +63,7 @@ class UntrackedFilesDoNotBlockTheUpdate(WithIgnore):
         settings = json.loads((self.clone / "olivercode.local.json").read_text())
         self.assertEqual(settings.pop("fleetRegistry"), str(Path(os.environ["OLIVERCODE_FLEET_DIR"]) / "repo-profiles.json"))
         self.assertEqual(settings, {"auditMode": "gated"})
+        self.assertIn('{"id": "L-old"}', lessons.path(self.clone).read_text())
 
     def test_an_untracked_file_the_release_adds_is_refused_with_a_stash_of_that_file_only(self):
         write(self.clone, "skills/new/SKILL.md", "mine")
@@ -84,6 +87,34 @@ class AUserWhoCannotPushIsNotToldToPush(Checkout):
         self.assertEqual(git(self.clone, "rev-parse", "olivercode-local"), mine)
         code, calls, out = self.update()
         self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]), out)
+
+
+class AReleaseMovesAStateFile(Checkout):
+    def test_install_moves_the_old_lesson_log_once_with_a_backup_and_leaves_one_copy(self):
+        write(self.clone, "docs/LESSONS.jsonl", '{"id": "L-old"}\n{"id": "L-both"}\n')
+        target = lessons.path(self.clone)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('{"id": "L-both"}\n')
+        _, out = self.install()
+        self.assertIn("[MIGRATED]", out)
+        self.assertFalse((self.clone / "docs" / "LESSONS.jsonl").exists())
+        self.assertEqual(target.read_text().splitlines(), ['{"id": "L-both"}', '{"id": "L-old"}'])
+        backups = list((self.ohome / "backups").iterdir())
+        self.assertEqual(len(backups), 1)
+        self.assertIn("L-old", backups[0].read_text())
+        self.assertIn("1", state_migrations.applied())
+        _, again = self.install()
+        self.assertNotIn("[MIGRATED]", again)
+        self.assertEqual(len(list((self.ohome / "backups").iterdir())), 1)
+
+    def test_a_moved_json_file_keeps_the_values_the_new_home_already_holds(self):
+        old, new = self.clone / "old.json", self.ohome / "new.json"
+        old.write_text('{"a": 1, "b": 1}')
+        new.write_text('{"b": 2}')
+        moved = state_migrations.run(self.clone, (state_migrations.Migration(99, "test", lambda oc: old, lambda oc: new, "json"),))
+        self.assertEqual(len(moved), 1)
+        self.assertEqual(json.loads(new.read_text()), {"a": 1, "b": 2})
+        self.assertFalse(old.exists())
 
 
 class AReleaseAddsADefault(unittest.TestCase):

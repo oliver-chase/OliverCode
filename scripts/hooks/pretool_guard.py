@@ -4,7 +4,7 @@
 One hook parses the input once per tool call and asks each guard in turn: commit_guard (a commit that would skip the repo's gates),
 archived_guard (a commit or push in a repo GitHub archived or deleted), placement_guard (a clone or worktree outside its home), main_checkout (an edit or commit in a fleet repo's main checkout), policy_guard (the repo's policy.json) and gh_guard
 (the shared GitHub budget), reset_guard (a `git reset --hard` in a main checkout or a tree with uncommitted changes), and model_guard (a subagent on a model other than Sonnet that the owner never named). When none objects, queue_guard routes a validation command through `olivercode queue run`. A deny from any guard wins over an ask. Each guard fails open on its own bug, so
-one broken guard never disables the others and never blocks a command.
+one broken guard never disables the others and never blocks a command. The guards stay runnable on their own.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
-from lib import hook_message  # noqa: E402
 import archived_guard  # noqa: E402
 import commit_guard  # noqa: E402
 import gh_guard  # noqa: E402
@@ -105,14 +104,14 @@ def main() -> int:
     rewritten = _safely(updated_input, data) if found and all(k == "allow" for k, _ in found) else None
     if rewritten:  # a warning never drops the queue rewrite; the output carries both reasons
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
-                                                 "permissionDecisionReason": hook_message.bounded(" ".join([r for _, r in found] + ["Validation waits in the per-user queue."])),
+                                                 "permissionDecisionReason": " ".join([r for _, r in found] + ["Validation waits in the per-user queue."]),
                                                  "updatedInput": rewritten}}))
         return 0
     if found:
         kind, reason = next((v for v in found if v[0] == "deny"), found[0])
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                                  "permissionDecision": kind,
-                                                 "permissionDecisionReason": hook_message.bounded(reason)}}))
+                                                 "permissionDecisionReason": reason}}))
         return 0
     rewritten = _safely(updated_input, data)
     if rewritten:

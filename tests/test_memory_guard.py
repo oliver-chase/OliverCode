@@ -46,9 +46,6 @@ class TestMemoryGuard(unittest.TestCase):
         prose = write("/repo/.claude-optimization/memory/MEMORY.md", "Always do X.")
         self.assertNotEqual("", guard.reason(prose))
 
-    def test_an_owner_fact_with_should_or_always_passes(self):
-        self.assertEqual("", guard.reason(write(MEM, "The owner should see one summary and always reads it first.")))
-
     def test_edit_and_multiedit_are_checked(self):
         edit = {"tool_input": {"file_path": MEM, "new_string": "Always do X."}}
         multi = {"tool_input": {"file_path": MEM, "edits": [{"new_string": "Do X (#12). Never Y."}]}}

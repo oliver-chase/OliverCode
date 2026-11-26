@@ -174,15 +174,14 @@ class TestInstall(HomeCase):
         self.assertEqual(rc, 0)
         intro = out[out.index("How OliverCode works"):].strip()
         self.assertLessEqual(len(intro.splitlines()), 20)
-        for phrase in ("Claude Code remains interactive", "delegated work",
-                       "The thread that started a run is the one to steer it",
-                       "olivercode dispatch N", "olivercode drain REPO",
-                       "runs validation", "olivercode status"):
+        for habit in ("Work in one thread per topic", "Never start a builder in a chat"):
+            self.assertIn(habit, intro)
+        for phrase in ("one thread", "each request becomes a story", "olivercode dispatch N",
+                       "olivercode drain REPO", "validates", "olivercode status"):
             self.assertIn(phrase.lower(), intro.lower())
         steps = [line.strip() for line in intro.splitlines() if line.strip()[:2] in ("1.", "2.", "3.")]
         self.assertEqual(len(steps), 3)
-        self.assertIn("Set up OliverCode", steps[0])  # the owner is never told to run discover with a folder path (#1196)
-        self.assertNotIn("<", steps[0])
+        self.assertIn("discover", steps[0])
         self.assertIn("health", steps[1])
         self.assertIn("story", steps[2])
 

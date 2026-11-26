@@ -1,6 +1,5 @@
 """The commit-msg hook blocks a commit with no story reference, in a scratch repo."""
 
-import atexit
 import os
 import shutil
 import subprocess
@@ -14,41 +13,20 @@ from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
 
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "commit-msg"
 
-def _installed_claude_dir() -> str:
-    """A ~/.claude whose CLAUDE.md links into an OliverCode checkout, which is what the story check reads as an install (#1187)."""
-    claude = Path(tempfile.mkdtemp(prefix="olivercode-claude-"))
-    atexit.register(shutil.rmtree, claude, ignore_errors=True)
-    (claude / "CLAUDE.md").symlink_to(REPO_ROOT / "CLAUDE.md")
-    return str(claude)
-
-
-os.environ["OLIVERCODE_CLAUDE_DIR"] = _installed_claude_dir()  # every commit-msg test runs as on an installed machine unless it says otherwise
-
-_TEMPLATE: Path | None = None  # the one scratch repo every CommitMsgCase subclass in this process shares (#1143)
-
-
-def _template():
-    """Builds the scratch repo with the hook installed and a.txt staged on first use; every later caller,
-    including subclasses in other modules such as test_commit_msg_closes, reuses it (#1143)."""
-    global _TEMPLATE
-    if _TEMPLATE is None:
-        template = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-template-"))
-        scratch_repo(template)
-        hooks = template / ".githooks"
-        hooks.mkdir()
-        shutil.copy2(HOOK, hooks / "commit-msg")
-        git(template, "config", "core.hooksPath", ".githooks")
-        (template / "a.txt").write_text("a\n")
-        git(template, "add", "a.txt")
-        atexit.register(shutil.rmtree, template, ignore_errors=True)
-        _TEMPLATE = template
-    return _TEMPLATE
-
 
 class CommitMsgCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._template = _template()
+        """One scratch repo per class with the hook installed and a.txt staged; each test copies it."""
+        cls._template = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-template-"))
+        cls.addClassCleanup(shutil.rmtree, cls._template, ignore_errors=True)
+        scratch_repo(cls._template)
+        hooks = cls._template / ".githooks"
+        hooks.mkdir()
+        shutil.copy2(HOOK, hooks / "commit-msg")
+        git(cls._template, "config", "core.hooksPath", ".githooks")
+        (cls._template / "a.txt").write_text("a\n")
+        git(cls._template, "add", "a.txt")
 
     def setUp(self):
         self.repo = temp_dir(self, "olivercode-commitmsg-") / "repo"
@@ -67,27 +45,6 @@ class CommitMsgCase(unittest.TestCase):
         """Puts the repo in the state git is in while it commits a merge, with MERGE_HEAD set."""
         head = git(self.repo, "rev-parse", "HEAD").stdout.strip()
         (self.repo / ".git" / "MERGE_HEAD").write_text(head + "\n")
-
-
-class TestStoryCheckFollowsTheInstall(CommitMsgCase):
-    def test_a_commit_with_no_story_number_goes_through_when_OliverCode_is_not_installed(self):
-        self.first_commit()
-        with mock.patch.dict(os.environ, {"OLIVERCODE_CLAUDE_DIR": str(temp_dir(self, "olivercode-noinstall-"))}):
-            result = self.commit("Fix the sync")
-        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertIn("story check was skipped because the framework is not installed", result.stdout + result.stderr)
-
-    def test_a_commit_with_no_story_number_is_blocked_when_OliverCode_is_installed(self):
-        self.first_commit()
-        result = self.commit("Fix the sync")
-        self.assertEqual(1, result.returncode)
-        self.assertIn("names no story", result.stdout + result.stderr)
-
-    def test_the_secret_scan_does_not_read_the_install(self):
-        """The workflow gate follows the install; the scan that protects secrets does not (#1187). It lives in the pre-commit gate, so this reads its source."""
-        gates = (REPO_ROOT / "core" / "hooks" / "gates" / "secrets.sh").read_text()
-        self.assertNotIn("OC_INSTALLED", gates)
-        self.assertNotIn("OLIVERCODE_CLAUDE_DIR", gates)
 
 
 class TestCommitMsg(CommitMsgCase):
@@ -401,14 +358,10 @@ class TestCommitMsgEdges(CommitMsgCase):
 class TestCommitCheck(CommitMsgCase):
     """`olivercode commit-check FILE_OR_TEXT` (scripts/lib/cmd_commit_check.py) runs the same checks on a draft, in the current repo, and prints every finding."""
 
-    CHECK_CODE = ("import sys; sys.path.insert(0, %r); from lib.cmd_commit_check import command_commit_check; "
-                  "sys.exit(command_commit_check(sys.argv[1:]))" % str(REPO_ROOT / "scripts"))
-
     def check(self, draft):
-        """Runs lib/cmd_commit_check.py directly rather than through the full `olivercode` launcher, which
-        imports every command module (#1143)."""
+        cli = REPO_ROOT / "scripts" / "olivercode"
         env = {k: v for k, v in os.environ.items() if k != "OLIVERCODE_FAILURE_LOG"}
-        return subprocess.run([sys.executable, "-c", self.CHECK_CODE, draft], cwd=self.repo, capture_output=True, text=True, env=env)
+        return subprocess.run([sys.executable, str(cli), "commit-check", draft], cwd=self.repo, capture_output=True, text=True, env=env)
 
     def test_a_draft_text_prints_every_blocking_finding_and_exits_non_zero(self):
         self.first_commit()
@@ -441,7 +394,8 @@ class TestCommitCheck(CommitMsgCase):
         self.first_commit()
         log = self.repo / "failures.log"
         env = {**os.environ, "OLIVERCODE_FAILURE_LOG": str(log)}
-        subprocess.run([sys.executable, "-c", self.CHECK_CODE, "Add a feature closes #5"], cwd=self.repo, capture_output=True, text=True, env=env)
-        done = subprocess.run([sys.executable, "-c", self.CHECK_CODE, "No story at all"], cwd=self.repo, capture_output=True, text=True, env=env)
+        cli = REPO_ROOT / "scripts" / "olivercode"
+        subprocess.run([sys.executable, str(cli), "commit-check", "Add a feature closes #5"], cwd=self.repo, capture_output=True, text=True, env=env)
+        done = subprocess.run([sys.executable, str(cli), "commit-check", "No story at all"], cwd=self.repo, capture_output=True, text=True, env=env)
         self.assertEqual(1, done.returncode)
         self.assertFalse(log.exists() and log.read_text().strip(), "a draft check is not a refusal")

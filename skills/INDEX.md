@@ -9,7 +9,6 @@
 | Skill | Domain |
 |-------|--------|
 | `diagnosing-bugs` | Bug diagnosis through a tight feedback loop |
-| `lean` | Smallest sufficient engineering change, risk-aware review, audit, debt and measured gain |
 | `audit` | The one audit: a whole repo to a report and filed issues, a skill or family, the docs, a commit range or a plan |
 | `olivercode-adoption` | Onboarding a fork into an existing setup |
 | `plan` | Markdown planning before work starts |

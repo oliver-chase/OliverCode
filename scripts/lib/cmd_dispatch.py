@@ -14,10 +14,9 @@ import re
 import subprocess
 import sys
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, backlog_setup, failure_log, intake, gh_budget, local_config, open_issues, run_lock
+from lib import backlog_setup, failure_log, intake, gh_budget, local_config, open_issues, run_lock
 from lib.local_config import OC_ROOT
 from lib.placement import config as placement_config
 
@@ -43,11 +42,7 @@ def headless_brief(n: int, story: dict, agent: str, worktree=None, extras: str =
     """The one brief a headless builder gets, for `dispatch` and `drain` alike (#877): the story, what it names, and rules that end at the commit.
     `extras` is text between the story and the rules (code excerpts, owner decisions) and `note` says why an earlier builder stopped."""
     builder, reader, why = intake.models(story, f"story-{n}")  # the same names the runner starts (#1015), and the rule that chose the builder (#1026)
-    from lib import cmd_groom
-    review = agent_loop.review_mode(cmd_groom.size_of(story), story.get("labels") or (), intake.files_area(story.get("body") or ""), cmd_groom.priority_of(story))
-    review_note = (f"a fresh {reader.capitalize()} reader reads the commit before it lands" if review == "full"
-                   else "repository validation and commit gates check the commit before it lands")
-    model = f"Run on {builder.capitalize()} ({why}), and {review_note}"
+    model = f"Run on {builder.capitalize()} ({why}), and a fresh {reader.capitalize()} reader reads the commit before it lands"
     body = (story.get("body") or "").strip()
     extras = extras.replace(" and validate before the last commit. `olivercode land` then lands the branch and each story is closed.", ". The runner validates and lands the branch and closes each story.")
     text = f"Story #{n}: {story['title']}\n\n{body}\n\n{extras + chr(10) if extras else ''}{HEADLESS_RULES.format(n=n, model=model, agent=agent)}\n"
@@ -68,12 +63,8 @@ def _functions(path: Path, body: str) -> list[tuple[str, str]]:
     except (OSError, SyntaxError, ValueError):
         return []
     lines = text.splitlines()
-    # Only identifiers explicitly marked as code in the story select source.
-    # Plain English words such as "check", "run" or "git" must not pull in
-    # unrelated functions with those names.
-    named = set(re.findall(r"`([A-Za-z_]\w*)\s*(?:\(\s*\))?`", body))
     return [(node.name, "\n".join(lines[node.lineno - 1:node.end_lineno])) for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in named]
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and re.search(rf"\b{re.escape(node.name)}\b", body)]
 
 
 def _callers(repo: Path, name: str, skip: str) -> list[str]:
@@ -104,10 +95,8 @@ def file_excerpts(body: str, repo) -> str:
 
 
 def gh(args: list[str]):
-    """Run `gh`, refusing first while the shared GitHub hold is on for what it spends: a REST `gh api` call still runs
-    under a GraphQL-only hold."""
-    rest = args[:1] == ["api"] and "graphql" not in args[1:2]
-    why = gh_budget.refusal("rest" if rest else "graphql")
+    """Run `gh`, refusing first while the shared GitHub hold is on."""
+    why = gh_budget.refusal()
     if why:
         return subprocess.CompletedProcess(args, 1, "", why)
     return subprocess.run(["gh", *args], capture_output=True, text=True)
@@ -139,6 +128,8 @@ def _parse(argv: list[str]):
             sid, i = argv[i + 1], i + 2
         elif argv[i] == "--dry-run":
             dry, i = True, i + 1
+        elif argv[i] == "--run":  # dispatch always builds headless now; the flag is accepted so older instructions that still name it work
+            i += 1
         elif argv[i].startswith("--"):
             return None
         else:
@@ -176,8 +167,7 @@ def _local_claim(slug: str, n: int, now: float, write: str = "", clear: bool = F
             return ""
         if write:
             claims = {k: v for k, v in claims.items() if now - float(v.get("at", 0)) < limit}
-            since = float((claims.get(key) or {}).get("since") or now)  # a renewal moves "at" and keeps when the claim began (#1093)
-            claims[key] = {"agent": write, "since": since, "at": now}
+            claims[key] = {"agent": write, "at": now}
             failure_log.write_private(path, json.dumps(claims))
             return ""
     mine = claims.get(key) or {}
@@ -185,10 +175,7 @@ def _local_claim(slug: str, n: int, now: float, write: str = "", clear: bool = F
 
 
 def live_claim(runner, slug: str, n: int, story: dict, now: float) -> str:
-    """'claimed by NAME ...' for a claim another session holds, else ''. A claim expires after CLAIM_HOURS, or at once when the run lock
-    records a dead run that was building the story (#1201)."""
-    if n in run_lock.dead_building(slug, now):
-        return ""
+    """'claimed by NAME ...' for a claim another session holds, else ''. A claim expires after CLAIM_HOURS."""
     return _claimant(story, now) or _local_claim(slug, n, now)
 
 
@@ -251,8 +238,6 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
         return _refuse(f"story #{n}'s Files area names the folder {wide[0]}, which would hold every other story back. Rewrite it with the files it changes.")
     agent = sid or "dispatch"
     worktree = placement_config().worktrees / f"{repo.name}-{n}"
-    if claim := live_claim(runner, slug, n, story, clock()):  # before the run lock, so a refused build joins no queue and writes nothing (#1106)
-        return _refuse(f"story #{n} is {claim}, built in {worktree}. Take the next open story.")
     if dry:
         refused = _start_checks(runner, slug, n, story, clock, busy)
         if refused:
@@ -260,79 +245,27 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
         print(f"Dry run: story #{n} would build headless in {worktree}, claimed as {agent}. No claim posted.")
         return 0
     from lib import cmd_drain  # drain imports this module, so the import waits until a builder runs
-    io = io or cmd_drain.Io(Path(repo), slug, agent, runner, origin=f"thread {sid}" if sid else f"olivercode dispatch {n}")
+    io = io or cmd_drain.Io(Path(repo), slug, agent, runner)
     pid = os.getpid()
     if not cmd_drain.take_run(io, slug, f"dispatch {n}" + (f" from {sid}" if sid else ""), [n]):  # one run per repo: a second thread's story joins the running queue (#992)
         return 0
-    started = False
     try:
-        with run_lock.Heartbeat(slug, pid, also=_beat_and_tick(io, cmd_drain)):
+        with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
             refused = _start_checks(runner, slug, n, story, clock, busy)
             if refused:
                 return refused
-            started = True
-            try:
-                waiting = [i for i in io.list_open() if cmd_drain.owner_gated(i) and not cmd_drain.is_epic(i)]
-            except Exception:  # what waits on the owner is a courtesy, so a failed read leaves it empty
-                waiting = []
-            begun = cmd_drain._event(io, "begin", queue=[story], waiting=waiting)
-            if begun:
-                print(begun)
-            run_state = cmd_drain.new_state()
-            code = _build(io, cmd_drain, story, n, worktree, run_state)
-            pool = None
-            running: dict = {}
-            try:
-                while True:
-                    queued = run_lock.release(slug, pid)  # stories other threads queued meanwhile run next, in priority order
-                    if not queued and not running:
-                        break
-                    if queued:
-                        if not pool:
-                            limit = getattr(io, "limit", lambda: 5)()
-                            pool = ThreadPoolExecutor(max_workers=max(1, limit))
-                        stories = [st for st, why in (read_story(runner, slug, q) for q in queued) if not why and st.get("state", "").upper() == "OPEN"]
-                        for nxt in sorted(stories, key=open_issues.rank):
-                            capacity = getattr(io, "capacity", lambda: 5)()
-                            if len(running) >= capacity:
-                                break
-                            if not live_claim(runner, slug, nxt["number"], nxt, clock()):
-                                nxt_area = intake.files_area(nxt.get("body") or "")
-                                if any(intake.overlaps(nxt_area, intake.files_area(r.get("body") or "")) for r in running.values()):
-                                    continue
-                                running[pool.submit(cmd_drain.work_story, io, nxt, run_state)] = nxt
-                    if running:
-                        finished, _ = wait(running, timeout=cmd_drain.REWRITE_SECONDS, return_when=FIRST_COMPLETED)
-                        for fut in finished:
-                            issue = running.pop(fut)
-                            try:
-                                closed, _used = fut.result()
-                                nxt_n = issue["number"]
-                                print(f"Story #{nxt_n} {'landed and closed' if closed else 'stayed open and is back on Ready; the reason is in its comment'}. Branch story/{nxt_n} in {placement_config().worktrees / f'{repo.name}-{nxt_n}'}.")
-                            except Exception:
-                                pass
-            finally:
-                if pool:
-                    pool.shutdown(wait=True)
+            code = _build(io, cmd_drain, story, n, worktree)
+            while True:
+                queued = run_lock.release(slug, pid)  # stories other threads queued meanwhile run next, in priority order
+                if not queued:
+                    break
+                stories = [st for st, why in (read_story(runner, slug, q) for q in queued) if not why and st.get("state", "").upper() == "OPEN"]
+                for nxt in sorted(stories, key=open_issues.rank):
+                    if not live_claim(runner, slug, nxt["number"], nxt, clock()):
+                        _build(io, cmd_drain, nxt, nxt["number"], placement_config().worktrees / f"{repo.name}-{nxt['number']}")
             return code
     finally:
-        if started:
-            cmd_drain._event(io, "end")
         run_lock.release(slug, pid)
-
-
-def _beat_and_tick(io, cmd_drain):
-    """The heartbeat's per-beat work: renew the claims and, once REWRITE_SECONDS have passed since the last rewrite, tick the status page (#990)."""
-    last = [time.time()]
-
-    def beat() -> None:
-        refresh = getattr(io, "refresh_claims", None)
-        if refresh:
-            refresh()
-        if time.time() - last[0] >= cmd_drain.REWRITE_SECONDS:
-            last[0] = time.time()
-            cmd_drain._event(io, "tick")
-    return beat
 
 
 def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> int:
@@ -346,10 +279,9 @@ def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> i
     return 0
 
 
-def _build(io, cmd_drain, story: dict, n: int, worktree, state=None) -> int:
+def _build(io, cmd_drain, story: dict, n: int, worktree) -> int:
     io.claim(n)
     io.beat([n])
-    cmd_drain._event(io, "start", story)
-    closed, _used = cmd_drain.work_story(io, story, state if state is not None else cmd_drain.new_state())
+    closed, _used = cmd_drain.work_story(io, story, cmd_drain.new_state())
     print(f"Story #{n} {'landed and closed' if closed else 'stayed open and is back on Ready; the reason is in its comment'}. Branch story/{n} in {worktree}.")
     return 0 if closed else 1

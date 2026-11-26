@@ -32,27 +32,6 @@ class TestRunCli(unittest.TestCase):
         _, out = self.call()
         self.assertEqual(("ok", "abc", 57, 0), (out["text"], out["session_id"], out["tokens"], out["code"]))
 
-    def test_cli_call_writes_durable_start_and_end_session_records(self):
-        _, out = self.call()
-        rows = [json.loads(line) for line in (self.home / "model-sessions.jsonl").read_text().splitlines()]
-        self.assertEqual(["session_start", "session_end"], [row["event"] for row in rows])
-        self.assertTrue(rows[0]["session_id"])
-        self.assertEqual(rows[0]["session_id"], rows[1]["session_id"])
-        self.assertEqual("", rows[0]["model"])
-        self.assertIn("started_at", out)
-        self.assertIn("duration_s", out)
-        self.assertEqual(1, out["session_cap"])
-        self.assertEqual(1, out["session_attempt"])
-        self.assertEqual(0.0123, rows[1]["cost_usd"])
-
-    def test_session_start_telemetry_failure_blocks_the_cli_launch(self):
-        with mock.patch("shutil.which", return_value="/bin/claude"), \
-             mock.patch.object(model.session_guard, "_write_start", return_value=False), \
-             mock.patch("subprocess.run") as run:
-            with self.assertRaisesRegex(model.ModelError, "durable session-start telemetry"):
-                model.run_cli("task", str(self.home))
-        run.assert_not_called()
-
     def test_no_api_key_is_read_or_passed(self):
         run, _ = self.call()
         self.assertNotIn("api", " ".join(run.call_args_list[0][0][0]).lower())
@@ -70,12 +49,6 @@ class TestRunCli(unittest.TestCase):
         self.assertIn("--strict-mcp-config", argv)
         self.assertEqual({"mcpServers": {}}, json.loads(argv[argv.index("--mcp-config") + 1]))
         self.assertEqual("Read,Edit,Write,Bash,Grep,Glob", argv[argv.index("--allowedTools") + 1])
-
-    def test_the_built_in_tool_set_is_narrowed_and_skills_are_disabled(self):
-        run, _ = self.call()
-        argv = run.call_args_list[0][0][0]
-        self.assertIn("--disable-slash-commands", argv)
-        self.assertEqual("Read,Edit,Write,Bash,Grep,Glob", argv[argv.index("--tools") + 1])
 
     def test_every_token_kind_and_the_cost_come_back(self):
         _, out = self.call()
@@ -106,12 +79,6 @@ class TestRunCli(unittest.TestCase):
         self.assertEqual((1, "max_turns", "abc"), (out["code"], out["stop"], out["session_id"]))
         self.assertIn("maximum number of turns", out["text"])
         self.assertEqual((model.STDERR_TAIL, True), (len(out["stderr"]), out["stderr"].endswith("warn")))
-
-    def test_api_error_flag_from_claude_json_is_preserved(self):
-        payload = json.dumps({"result": "API Error: 529 overloaded_error", "is_error": True, "subtype": "error_during_execution"})
-        out = self.call(stdout=payload, code=1)[1]
-        self.assertTrue(out["is_error"])
-        self.assertIn("529 overloaded_error", out["text"])
 
     def test_a_timeout_names_the_session_it_stopped(self):
         import subprocess

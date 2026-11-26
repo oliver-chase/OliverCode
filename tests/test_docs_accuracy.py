@@ -39,60 +39,37 @@ class TestDocsAccuracy(unittest.TestCase):
         help_text = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True).stdout
         self.assertEqual([], sorted(w for w in listed if f"olivercode {w}" not in help_text))
 
-    def test_every_command_in_help_is_in_the_readme_table(self):
-        """#906: a command the launcher prints must have a row in the README table, so a reader can find it."""
-        help_text = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True).stdout
-        commands = set(re.findall(r"olivercode ([a-z][a-z-]*)", help_text))
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertEqual([], sorted(c for c in commands if f"`olivercode {c}" not in readme))
-
-    def test_the_audit_ledger_lists_only_tracked_files(self):
-        """#906: docs/AUDITED.txt names files that exist in the repo, so a deleted file leaves no stale audit line."""
-        tracked = set(subprocess.run(["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.splitlines())
-        paths = [line.split()[1] for line in (REPO_ROOT / "docs" / "AUDITED.txt").read_text(encoding="utf-8").splitlines()
-                 if len(line.split()) == 2 and len(line.split()[0]) == 40]
-        self.assertEqual([], [p for p in paths if p not in tracked])
-
     def test_the_plain_terms_table_sits_after_how_work_runs_and_each_part_it_names_exists(self):
         """#974: the kitchen table in the README names one real file per part, so a reader can find each part it describes."""
         text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         start, end = text.index("## How work runs"), text.index("## How it works, in plain terms")
         self.assertLess(start, end)
-        section = text[end:text.index("A delegated task gets a bounded execution context")]
+        section = text[end:text.index("## Dispatch planning")]
         rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in section.splitlines()
                 if line.startswith("| ") and not line.startswith("| In the kitchen")]
         parts = {
-            "Owner-facing front door": ["scripts/lib/cli.py", "scripts/lib/cmd_groom.py"],
-            "Durable work queue": ["scripts/lib/story_outbox.py"],
-            "Autonomous orchestrator": ["scripts/lib/cmd_dispatch.py", "scripts/lib/agent_loop.py"],
-            "Isolated Claude Code session": ["scripts/lib/agent_loop.py"],
-            "Workflow and model selection": ["scripts/lib/model.py"],
-            "Risk-proportional quality checks": ["scripts/validate.sh"],
-            "Review": ["scripts/lib/agent_loop.py"],
-            "Safe delivery": ["scripts/lib/cmd_land.py"],
+            "Your one thread": ["skills/backlog/SKILL.md"],
+            "The board, one per repo": ["docs/backlog-config.json"],
+            "The runner, a script with no model": ["scripts/lib/cmd_drain.py"],
+            "The builder, one fresh headless session": ["scripts/lib/agent_loop.py"],
+            "Model by story size": ["scripts/lib/agent_loop.py"],
+            "Validation": ["scripts/validate.sh"],
+            "The reviewer": ["scripts/lib/agent_loop.py"],
+            "Land and close": ["scripts/lib/cmd_land.py"],
             "Commit gates": ["docs/GATES.md"],
-            "Safety and policy controls": ["scripts/hooks/pretool_guard.py"],
+            "Tool guards": ["scripts/hooks/pretool_guard.py"],
             "The candidates list": ["scripts/lib/candidates.py"],
-            "Background maintenance": ["scripts/lib/schedules.py"],
+            "Scheduled jobs": ["scripts/lib/schedules.py"],
             "Rules, voice and design files": ["docs/RULES.md", "docs/VOICE.md", "docs/DESIGN.md"],
             "Skills": ["skills/INDEX.md"],
-            "Repository and fleet configuration": ["scripts/lib/local_config.py", "docs/backlog-config.json"],
-            "Decisions": ["scripts/lib/decisions.py"],
+            "Fleet checks": ["scripts/lib/conform.py"],
+            "Lessons and decisions": ["scripts/lib/cmd_lesson.py", "scripts/lib/decisions.py"],
         }
         self.assertEqual(16, len(rows))
         self.assertEqual(set(parts), {cells[1] for cells in rows})
         self.assertTrue(all(len(cells) == 3 for cells in rows))
         missing = [path for paths in parts.values() for path in paths if not (REPO_ROOT / path).is_file()]
         self.assertEqual([], missing)
-
-    def test_internal_audit_records_do_not_need_to_clutter_the_readme_index(self):
-        root = temp_dir(self)
-        (root / "docs").mkdir()
-        (root / "README.md").write_text("[SETUP](docs/SETUP.md)\\n", encoding="utf-8")
-        (root / "docs" / "SETUP.md").write_text("# Setup\\n", encoding="utf-8")
-        for name in docs_check.INTERNAL_DOCS:
-            (root / "docs" / name).write_text("# Internal record\\n", encoding="utf-8")
-        self.assertEqual([], docs_check.check_readme(root))
 
     def test_a_doc_that_names_a_command_the_launcher_lacks_fails_the_docs_check(self):
         root = temp_dir(self)

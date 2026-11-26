@@ -41,7 +41,7 @@ def main() -> int:
     if saw_limit(command, output):
         gh_budget.note_limit(who="gh_watch", resources=gh_budget.limit_resources(command, output))
     if key and uses_gh(command):
-        gh_budget.note_after(key, session, command, cwd=data.get("cwd"))
+        gh_budget.note_after(key, session, command)
     return 0
 
 

@@ -51,6 +51,7 @@ class StoryFormat(unittest.TestCase):
         for example in examples:
             self.assertEqual([], sf.check_body(example, blocker=True, line_numbers=True))
         skill = (HERE.parent / "SKILL.md").read_text(encoding="utf-8")
+        delegating = (HERE.parent / "references" / "delegating-a-backlog.md").read_text(encoding="utf-8")
         self.assertNotRegex(skill, r"(?i)pull request|\bweekly\b|ask where a config|Which dimension should I check")
 
     def test_a_story_without_gherkin_is_rejected_with_a_fix(self):
@@ -84,16 +85,6 @@ class StoryFormat(unittest.TestCase):
 
     def test_a_missing_story_sentence_is_rejected(self):
         self.assertEqual(["User story sentence"], parts("story-no-sentence.body"))
-
-    def test_a_story_sized_l_or_xl_is_rejected_with_the_split_fix(self):
-        """#1132: no builder can finish a Size L or XL story, so filing one is refused."""
-        for size in ("L", "XL"):
-            problems = sf.check_body(body("story-good.body").replace("Size: S", f"Size: {size}"))
-            self.assertEqual([f'Size "{size}" is too large for a story'], [p for p, _ in problems])
-            self.assertIn("one thin story per boundary under an epic", problems[0][1])
-
-    def test_an_epic_sized_l_is_accepted(self):
-        self.assertEqual([], sf.check_body(body("epic-good.body").replace("Size: M", "Size: L")))
 
     def test_invalid_priority_and_size_are_rejected(self):
         found = parts("story-bad-values.body")

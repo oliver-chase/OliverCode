@@ -23,7 +23,7 @@ A generated report or cache is ignored and never tracked. Downstream repos inher
 Every non-trivial change in every repo follows this sequence without being asked. A typo fix needs no spec.
 
 1. **Measure the gap.** Count what exists, run what runs and read the live code
-2. **Write the spec** before any code: the failure it prevents, what is in scope and out, and the watch-out. In a chat the spec is a short plan in the conversation, and it becomes a board story only when the owner delegates the work to the runner or asks for durable tracking ("The backlog")
+2. **Write the spec** as a story in the repo's board before any code: the failure it prevents, what is in scope and out, and the watch-out
 3. **Rank by the cost of being wrong.** Silent data loss first, then a bypassable security boundary, then a loud and recoverable failure, then cost, then ergonomics
 4. **Build one spec at a time, test first.** Write the failing test, implement, then remove the guard to confirm the test goes red and restore it
 5. **Update the documents** the change affects, and read the diff for stale references
@@ -35,22 +35,20 @@ QA runs when the owner asks for it, as a separate pass by a separate reader that
 
 Working rules that hold in every session:
 
-- Every terminal command given to the owner starts with `cd` to the exact checkout that owns it; put the command on the next line. Do not imply repo-scoped commands work from an arbitrary folder.
-
 - A broken, failing or slow system gets the `diagnosing-bugs` loop before any code changes
 - A comment says what defect the code prevents or why it has this shape, and stays only when the code cannot say it
 - Gate and lint findings get one pass: fix every finding, then re-run once
 - Read a file before its first edit, and grep for callers before changing a function signature
 - A deterministic script beats a model call, and a targeted grep or line range beats a whole-file read
 
-`olivercode install` merges Claude Code hook entries into `~/.claude/settings.json`, each pointing at this checkout's script. Every entry is deterministic and fails open with a note on stderr, so a hook's own bug never blocks a commit or a session. Every refusal or advice a hook prints is one line of at most 200 characters that ends with a doc pointer, which `scripts/lib/hook_message.py` enforces (#893). `olivercode health` fails when one is missing.
+`olivercode install` merges Claude Code hook entries into `~/.claude/settings.json`, each pointing at this checkout's script. Every entry is deterministic and fails open with a note on stderr, so a hook's own bug never blocks a commit or a session. `olivercode health` fails when one is missing.
 
 - `session_check.py` (`SessionStart`) reports what would fail silently in the folder a session opened, such as gates git skips or a repo outside `repoRoot`
 - `pretool_guard.py` (`PreToolUse`) runs the guards in one process, and a deny wins over an ask. They refuse a commit that skips the gates (`commit_guard.py`), a commit or push in an archived repo (`archived_guard.py`), a clone or worktree outside `repoRoot`, a clone of a repo that belongs to another device (`otherDeviceRepos` and `otherDeviceOwners` in `olivercode.local.json`) and a `gh repo create` for a folder with no origin (`placement_guard.py`) and an Agent call on a model other than Sonnet that the owner never named (`model_guard.py`) and a `git reset --hard` in a main checkout or a tree with uncommitted changes (`reset_guard.py`). `policy_guard.py` enforces `.olivercode/policy.json` and asks the owner at a push, a mass delete or a third failed gate, `gh_guard.py` keeps one shared GitHub budget, and `memory_guard.py` refuses a memory write that states a rule
-- `gh_watch.py` (`PostToolUse`) records a GitHub rate limit seen in command output, and `owner_decision_capture.py` (`UserPromptSubmit`) keeps each owner message that names a story for that story's builder, and `error_paste.py` (`UserPromptSubmit`) adds a pasted traceback to the candidates list for the owner to review, and creates no issue, and `status_hint.py` (`UserPromptSubmit`) answers a status question from the status digest with no tool call
+- `gh_watch.py` (`PostToolUse`) records a GitHub rate limit seen in command output, and `owner_decision_capture.py` (`UserPromptSubmit`) keeps each owner message that names a story for that story's builder, and `error_paste.py` (`UserPromptSubmit`) prints nothing to the session, and file a pasted error as a story, and `status_hint.py` (`UserPromptSubmit`) answers a status question from the status digest with no tool call
 - `early-stop-guard.py` and `wip_save.py` (`Stop`) send a turn back to work when it promises work it did not do, and snapshot uncommitted work into `refs/wip/` at most every 10 minutes (`olivercode wip list|restore`)
 
-The owner works in one thread. `olivercode dispatch N` and `olivercode drain REPO` build each story in one fresh headless session, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
+The owner works in one thread. `olivercode dispatch N --run` and `olivercode drain REPO` build each story in one fresh headless session, with Sonnet for building and Opus for design judgment and cold review, and the runner validates the commit and lands it. Each repo profile declares a `canonicalValidationCommand`, a full build that decides soundness. Run it before the commit, because the gates miss a build or type error.
 
 ### Prepared owner steps
 
@@ -87,7 +85,7 @@ Every repo separates the public tracked surface (code, documents, templates, val
 
 OliverCode is the shared orchestration framework: standards (`docs/RULES.md`), skills (`skills/`), project templates (`core/templates/project/`), shared manifests (`shared/`), documents (`docs/`), a thin launcher (`scripts/olivercode`) and the commit hooks (`.githooks/`). A clone works standalone. Product repos live at `<fleet-root>/*`, and product-specific documents and workflows stay in each project repo. Per-machine state lives in `runtime/control-plane/`, which is gitignored and never pushed, and OliverCode holds no logs, telemetry, handoff data or project credentials.
 
-`~/.claude/` is local and per machine. `olivercode install` writes only the `CLAUDE.md`, `VOICE.md` and `DESIGN.md` links, a link per skill, its hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, a PATH block in `~/.zshenv`, `~/.bashrc` and the login profile, and a `.pre-olivercode` backup of anything it replaced.
+`~/.claude/` is local and per machine. `olivercode install` writes only the `CLAUDE.md`, `VOICE.md` and `DESIGN.md` links, a link per skill, its hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, and a `.pre-olivercode` backup of anything it replaced.
 
 ## Skill placement
 
@@ -109,9 +107,7 @@ Documents live in `docs/`. `olivercode --help` holds the command list, and `docs
 
 A repo whose `CLAUDE.md` names a `backlog-config.json` keeps its open work in that GitHub Project, which the `backlog` skill maintains, and every repo's Project runs the kanban baseline in `shared/kanban-baseline.json`. The board has no pull-request lane. A repo without a config keeps its open items in `docs/BACKLOG.md`.
 
-Priority is one written scale. P0 is security, data loss or a broken mainline; P1 is a correctness defect, blocked work or a reliability failure; P2 is an improvement, cost reduction or ergonomic change. The `Priority:` line in a story is the source of truth. Grooming may report a line that disagrees with the scale, but it does not rewrite the owner's choice. When Ready stories share a priority, the drain starts the story that unblocks the most open work first, then uses issue number as the remaining tie-breaker.
-
-A substantial delegated outcome becomes a story when it needs independent ownership, sequencing, acceptance criteria or follow-through. Search and extend an existing story before creating one. Small safe fixes, documentation touch-ups and implementation subtasks stay within the current ask and do not each become stories. A request that arrives mid-task is added to the current story when it belongs to that outcome; a separate story is created only when it is independently actionable. `skills/backlog/references/story-template.md` defines the body and `check_story_format.py` verifies it. Each agent that commits logs it on the story.
+Every owner request that changes files becomes a story before work starts, except a change to one file of 20 changed lines or fewer that adds no behavior, which commits with the number of the open epic it fits. `skills/backlog/references/story-template.md` defines the body and `check_story_format.py` verifies it. A request that arrives mid-task is filed without reordering the board unless the owner says "stop", "do this first" or "drop that". Each agent that commits logs it on the story.
 
 The runner builds each story in its own worktree under `_worktrees` in `repoRoot` (`~/Developer/Repos/_worktrees` with the default layout), on its own branch, in one fresh headless session. The builder commits and stops. The runner runs the repo's validation, lands the commit on the default branch with `olivercode land`, which merges and pushes it, logs the story with `log_action.py` and closes it on that evidence. A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`, and a session the owner works in files the story and offers that command instead. Production deploys, payments, credentials and the owner's rules files stay with the owner. Nothing closes on a builder's own report, and there is no pull request. For a story in this repo, `complete_story.py` also confirms the installed checkout at `$OC` holds the commits and that the hook entry or launchd job the story changes is active.
 

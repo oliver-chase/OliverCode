@@ -1,8 +1,8 @@
 """`olivercode maintain`: check this machine's harness and repair what is safe to repair.
 
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
-a dangling activation link, prunes a worktree whose folder is gone, deletes merged local branches,
-moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live (#997): a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
+a dangling activation link, prunes a worktree whose folder is gone, deletes merged local branches, downloads git files that iCloud evicted
+from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live (#997): a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
 that drifted, a repo inside a synced folder, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
 With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scripts/run-tests.sh and records the commit, exit code and test count for `olivercode health` (#977).
 `--schedule` installs a daily launchd job that runs `maintain --fix`.
@@ -32,6 +32,7 @@ from lib import local_config
 from lib.local_config import OC_ROOT, claude_dir
 
 LABEL = "com.olivercode.maintain"
+DOWNLOAD_SECONDS = 60
 
 
 @dataclass
@@ -40,7 +41,6 @@ class Problem:
     text: str
     fixable: bool = False
     fixed: bool = False
-    failed: bool = False  # the check itself did not run, so the owner fixes its cause and has no decision to make
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -53,6 +53,12 @@ def _repos(cfg: placement.Config) -> list[Path]:
     return [p for p in sorted(cfg.root.iterdir())
             if not p.name.startswith("_") and ((p / ".git").is_dir() or (p / hygiene.NOSYNC).is_dir())
             and not repo_state.skipped(p.name, p)]
+
+
+def dataless_files(repo: Path) -> list[Path]:
+    """Files in the repo's .git that iCloud evicted: they read as empty until downloaded, and git hangs on them."""
+    ran = subprocess.run(["find", str((repo / ".git").resolve()), "-type", "f", "-flags", "+dataless"], capture_output=True, text=True)
+    return [Path(line) for line in ran.stdout.splitlines() if line]
 
 
 def check_links(fix: bool, install=None) -> list[Problem]:
@@ -135,6 +141,19 @@ def check_branches(cfg: placement.Config, fix: bool, now: float | None = None) -
                 stale.append(name)
         if stale:
             found.append(Problem("branches", f"{repo.name}: {len(stale)} unmerged branch(es) older than {STALE_BRANCH_HOURS} hours with no worktree: {', '.join(sorted(stale)[:4])}"))
+    return found
+
+
+def check_icloud(cfg: placement.Config, fix: bool) -> list[Problem]:
+    """Evicted .git files make git hang. Reading them downloads them."""
+    found = []
+    for repo in _repos(cfg):
+        if not (files := dataless_files(repo)):
+            continue
+        found.append(problem := Problem("icloud", f"{repo.name}: {len(files)} git file(s) evicted by iCloud", fixable=True))
+        if fix:
+            hygiene.download(files, DOWNLOAD_SECONDS)
+            problem.fixed = not dataless_files(repo)
     return found
 
 
@@ -261,12 +280,12 @@ def check_health() -> list[Problem]:
     return [Problem("health", l) for l in lines] if code else []
 
 
-STRAY_COMMANDS = {"claude", "python", "python3", "Python"}
+STRAY_COMMANDS = {"claude", "ffmpeg", "python", "python3", "Python"}
 ONE_TIME_DATE = re.compile(r"-(\d{4}-\d{2}-\d{2})$")
 
 
 def _stray_processes(ps_text: str, own_pid: int, user: str | None = None) -> list[str]:
-    """One line per claude or python process of this user that has run for a day or more, from `ps -axo pid=,etime=,user=,comm=` text.
+    """One line per claude, ffmpeg or python process of this user that has run for a day or more, from `ps -axo pid=,etime=,user=,comm=` text.
     Another account's processes are not this user's to report."""
     user = user or getpass.getuser()
     out = []
@@ -281,7 +300,7 @@ def _stray_processes(ps_text: str, own_pid: int, user: str | None = None) -> lis
 
 def check_tidy(cfg: placement.Config, fix: bool, ps_text: str | None = None, tasks_dir: Path | None = None, today: str | None = None) -> list[Problem]:
     """The daily tidy: with --fix, remove merged and clean worktrees (the `olivercode clean --apply` step). List, and delete none of, the
-    worktrees that stay and why, branches with commits not on the default branch, claude and python processes older than a day,
+    worktrees that stay and why, branches with commits not on the default branch, claude, ffmpeg and python processes older than a day,
     and one-time scheduled tasks whose dated name has passed."""
     found: list[Problem] = []
     removed, kept = [], []
@@ -357,7 +376,7 @@ def check_groom(fix: bool) -> list[Problem]:
     from lib import cmd_groom
     if cmd_groom.command_groom(["--all"]) == 0:
         return []
-    return [Problem("groom", "a board did not groom; the reason is printed above and in `~/.olivercode/groom-state.json`", failed=True)]
+    return [Problem("groom", "a board did not groom; the reason is in the owner queue and `~/.olivercode/groom-state.json`", fixable=False)]
 
 
 def check_queues(fix: bool) -> list[Problem]:
@@ -368,20 +387,19 @@ def check_queues(fix: bool) -> list[Problem]:
     try:
         denials.close_resolved()
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        return [Problem("queues", f"the owner queue was not processed: {error}", failed=True)]
+        return [Problem("queues", f"the owner queue was not processed: {error}", fixable=False)]
     return []
 
 
 def check_outsiders(fix: bool) -> list[Problem]:
     """Queues each issue or pull request by an author outside `allowedAuthors` for the owner once (#826)."""
     from lib import cmd_sweep, outsiders
-    skipped: list[str] = []
     try:
-        cfgs = [json.loads(p.read_text()) for _, p in cmd_sweep.boards(skipped)] if fix else []
+        cfgs = [json.loads(p.read_text()) for _, p in cmd_sweep.boards()] if fix else []
         outsiders.check([(c["repoName"], f"{c['repoOwner']}/{c['repoName']}") for c in cfgs])
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        skipped.append(f"the outsider check did not run: {error}")
-    return [Problem("outsiders", line, failed=True) for line in skipped]
+        return [Problem("outsiders", f"the outsider check did not run: {error}", fixable=False)]
+    return []
 
 
 def suite_record(code: int, out: str) -> dict:
@@ -466,7 +484,7 @@ def check_failure_candidates(fix: bool) -> list[Problem]:
     try:
         file_failure_candidates(failure_gaps())
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        return [Problem("candidates", f"the failing checks were not filed as candidates: {error}", failed=True)]
+        return [Problem("candidates", f"the failing checks were not filed as candidates: {error}", fixable=False)]
     return []
 
 
@@ -545,7 +563,7 @@ def check_state(fix: bool, home: Path | None = None, limits: dict | None = None)
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
     fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's registry
     cfg = cfg or placement.config()
-    problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_copies(cfg, fix),
+    problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
                 *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_candidates(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
@@ -571,11 +589,9 @@ def report(problems: list[Problem], fix: bool) -> int:
             state = "FIXED"
         elif p.fixable and not fix:
             state = "FIXABLE (run with --fix)"
-        elif p.failed:
-            state = "CHECK FAILED"
         else:
             state = "NEEDS A DECISION" if not p.fixable else "NOT FIXED"
-        lines.append(f"  [{state}] {p.step}: {p.text}" + (". Fix that cause, then run `olivercode maintain --fix`" if p.failed and not p.text.rstrip().endswith("`") else ""))
+        lines.append(f"  [{state}] {p.step}: {p.text}")
         if state == "NEEDS A DECISION":
             _queue_decision(p)
         if not p.fixed:
@@ -607,6 +623,10 @@ def plist() -> dict:
         "StandardOutPath": str(failure_log.home() / "maintain.out"),
         "StandardErrorPath": str(failure_log.home() / "maintain.out"),
     }
+
+
+def _agent_path() -> Path:
+    return launchd.plist_path(LABEL)
 
 
 def schedule(on: bool) -> int:

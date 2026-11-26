@@ -21,27 +21,21 @@ def _verify(config: Path) -> None:
     check_board_hygiene.verify_config(json.loads(config.read_text(encoding="utf-8")), config)
 
 
-def boards(skipped: list[str] | None = None) -> list[tuple[str, Path]]:
-    """(name, backlog config) for OliverCode and every cloned fleet repo whose board has a config, one per Project.
-
-    SKIPPED, when given, collects one line per repo left out: the repo, the reason and the fix."""
+def boards() -> list[tuple[str, Path]]:
+    """(name, backlog config) for OliverCode and every cloned fleet repo whose board has a config, one per Project."""
     repos = [("OliverCode", OC_ROOT)]
     try:
         profiles, _ = load_repo_profiles(OC_ROOT)
         repos += [(name, path) for name, _, path in iter_fleet(profiles, OC_ROOT.parent) if (path / ".git").exists()]
-    except (OSError, ValueError) as exc:
-        if skipped is not None:
-            skipped.append(f"the fleet registry could not be read ({exc}). Run `olivercode discover --register`")
+    except (OSError, ValueError):
+        pass
     found, seen = [], set()
     for name, path in repos:
         config = path / "docs" / "backlog-config.json"
         try:
             key = tuple(backlog_config(path)[k] for k in ("projectOwner", "projectNumber"))
             _verify(config)
-        except (OSError, ValueError, KeyError, SystemExit) as exc:  # a config that names another repo's Project is never swept (#687)
-            if skipped is not None and config.exists():  # a repo with no board config has nothing to sweep
-                why = exc if isinstance(exc, (OSError, ValueError, KeyError)) else (exc.code if isinstance(exc.code, str) else "it names another repo's Project")
-                skipped.append(f"{name}: {config} was left out ({why}). Fix the file, or run `olivercode backlog-setup {path} --apply`")
+        except (OSError, ValueError, KeyError, SystemExit):  # a config that names another repo's Project is never swept (#687)
             continue
         if key not in seen:
             seen.add(key)

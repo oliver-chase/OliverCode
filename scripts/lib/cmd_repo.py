@@ -240,10 +240,6 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
             missing_src.append(entry["source"])
             continue
         exists = dst.exists()
-        if dst_rel == ".github/CODEOWNERS" and "<your-github-owner>" not in fills:
-            print(f"  [SKIP     ] {dst_rel}   (no origin remote names an owner)")
-            kept += 1
-            continue
         if mode == "offered" and (exists or not first_run):
             kept += 1
             continue
@@ -278,7 +274,7 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     else:
         print("\nNext: run `olivercode sync-hooks`, which installs the hooks and sets core.hooksPath.")
         if not target_origin:
-            print("The repo has no origin remote, so .github/CODEOWNERS was not written. Add it by hand with the owner line.")
+            print("The repo has no origin remote, so .github/CODEOWNERS still names <your-github-owner>.")
     return 1 if missing_src else 0
 
 
@@ -302,10 +298,7 @@ def rebuild_stale_hooks(apply: bool) -> list[str]:
     from lib import cmd_land, health_checks, placement
     lines = []
     for wt in placement.worktrees():
-        if wt.merged or not health_checks.stale_hook(wt.path):
-            continue
-        if wt.dirty:
-            lines.append(f"KEEP   {wt.path} (its hooks are stale; uncommitted changes keep it here, so commit or discard them, then run clean)")
+        if wt.dirty or wt.merged or not health_checks.stale_hook(wt.path):
             continue
         if not apply:
             lines.append(f"REBUILD {wt.path} (its hooks predate origin/main; run with --apply to rebase it and rebuild them)")
@@ -333,11 +326,7 @@ def command_worktree(argv: list[str]) -> int:
     from lib import cmd_land, placement
     usage = "Usage: olivercode worktree add N | olivercode worktree fix [PATH]"
     if len(argv) == 2 and argv[0] == "add" and argv[1].isdigit():
-        found = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True).stdout.strip()
-        if not found:
-            print(f"Error: {Path.cwd()} is not inside a git repo. `cd` into the repo that holds story {argv[1]}, then run `olivercode worktree add {argv[1]}`.")
-            return 1
-        repo = Path(found).parent
+        repo = Path(subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True).stdout.strip() or ".git").parent
         wt = placement.config().worktrees / f"{repo.name}-{argv[1]}"
         problems = cmd_land.add_worktree(repo, wt, argv[1])
     elif argv[:1] == ["fix"] and len(argv) <= 2:
@@ -368,11 +357,14 @@ def command_policy(argv: list[str]) -> int:
 
 
 def command_gh_limit(argv: list[str]) -> int:
-    """`olivercode gh-limit [clear]`: the shared GitHub rate-limit hold."""
+    """`olivercode gh-limit [clear|report]`: the shared GitHub rate-limit hold and what each session spent."""
     from lib import gh_budget
     if argv == ["clear"]:
         gh_budget.clear()
         print("GitHub hold cleared.")
+        return 0
+    if argv == ["report"]:
+        print(gh_budget.report())
         return 0
     if argv[:1] == ["queue"] and argv[1:2] in (["--"], []) and argv[2:3] == ["gh"]:
         print(f"Queued. {gh_budget.enqueue(argv[2:])} gh command(s) wait for the GraphQL reset.")
@@ -387,7 +379,7 @@ def command_gh_limit(argv: list[str]) -> int:
         from lib import cmd_ghreplay
         return cmd_ghreplay.schedule(argv == ["--schedule"])
     if argv:
-        print("Usage: olivercode gh-limit [clear|replay|--schedule|--unschedule|queue -- gh ...]")
+        print("Usage: olivercode gh-limit [clear|report|replay|--schedule|--unschedule|queue -- gh ...]")
         return 1
     why = gh_budget.refusal()
     print(why or "No GitHub rate-limit hold is on.")

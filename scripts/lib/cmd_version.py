@@ -9,7 +9,6 @@ import importlib.util
 import os
 import subprocess
 from datetime import date
-from pathlib import Path
 
 from lib import cmd_land, denials, failure_log, launchd
 from lib.local_config import OC_ROOT
@@ -66,18 +65,11 @@ def cut_and_land(cutter, day: str, story: str) -> int:
         lock.unlink(missing_ok=True)
 
 
-def _worktrees_dir():
-    """Where the cut's worktree goes: under the owner's repoRoot when the local file names one, else beside this checkout (#1039)."""
-    from lib import local_config
-    root = local_config.load_local().get("repoRoot")
-    return Path(root).expanduser() / "_worktrees" if root else OC_ROOT.parent / "_worktrees"
-
-
 def _cut_and_land(cutter, day: str, story: str) -> int:
     """Commits the cut in a worktree of origin/main and lands it, so the installed checkout only fast-forwards (#785). `land` retries
     while main moves for up to ten minutes and ends sooner only on a rebase conflict or failed validation (#784, #789)."""
     subprocess.run(["git", "-C", str(OC_ROOT), "fetch", "-q", "origin"], capture_output=True)
-    wt = _worktrees_dir() / f"oc-cut-{day}"
+    wt = OC_ROOT.parent / "_worktrees" / f"oc-cut-{day}"
     if wt.exists():
         print(f"version-cut: {wt} already exists. Land it or remove it, then cut again")
         return 1

@@ -16,8 +16,6 @@ REPO="$(jq -r '.repoOwner' "$CONFIG")/$(jq -r '.repoName' "$CONFIG")"
 
 ## Create + add + set (queue fields, then one batch)
 
-Filing a story goes through `olivercode board file BODY_FILE --title TITLE --config CONFIG` (#1107), which runs the format check first and creates nothing on a failed check. The commands below are what it runs, for a case it does not cover.
-
 ```bash
 number=$(gh api -X POST "repos/$REPO/issues" -f title="<title>" -F body=@BODY_FILE --jq .number)
 jq -n --argjson n "$number" '{issues: [{number: $n, fields: {status: "Backlog", priority: "P2", size: "S", workType: "Story"}}]}' |
@@ -77,7 +75,7 @@ Each dimension's `--dimension` name is in brackets.
 - **Required fields** (`fields`): every open item has Priority and Size, plus Work Type and Area where the config defines them
 - **Status drift** (`drift`): the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board
 - **Duplicate cards** (`duplicates`): no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues
-- **Board reopens** (`board-reopens`): every open issue whose last reopen sat within ten seconds of a board Status change by the same person is listed with the date. A replayed board queue reopened closed work this way, and `batch_project.py` now skips such a change unless it is given `--reopen N`
-- **Grooming** (`groom`): a Backlog or Ready item with a builder entry belongs in QA. An epic whose sub-issues are all closed belongs in the finished column, and one with some closed belongs in In Progress. A Ready epic moves to Backlog, since an epic is never built directly; grooming moves each epic with its stories and comments on it (#1105). Two open stories sharing three or more title words, most of the shorter title, may duplicate each other
+- **Close gate** (`close-gate`): every Complete item numbered at or above the config's `closeGateFromIssue` has a comment ending in `Closed by complete_story.py.`, which only `complete_story.py` writes. A story closed through the API, `gh issue close` or the web has none and is listed with the fix: reopen it and run `complete_story.py`. A null or absent key switches the dimension off
+- **Grooming** (`groom`): a Backlog or Ready item with a builder entry belongs in QA. An epic whose sub-issues are all closed belongs in the finished column, and one with some closed belongs in In Progress. Two open stories sharing three or more title words, most of the shorter title, may duplicate each other
 
 The board list, issue lists and comment history are read with explicit limits and pagination. Without `--config`, or with a path that holds no file, the script stops with one line that names the example config a fork starts from.

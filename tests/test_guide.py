@@ -24,7 +24,6 @@ class TestGuide(unittest.TestCase):
         self.assertEqual(code, 0)
         for name in _names():
             self.assertIn(name, text)
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "skills")  # the skill phrases live behind `guide skills` (#1177)
         rows = cmd_guide.skill_triggers(REPO_ROOT)
         self.assertGreaterEqual(len(rows), 6)
         for name, phrases in rows:
@@ -45,18 +44,13 @@ class TestGuide(unittest.TestCase):
 
 
 class TestHowWorkRunsMatches(unittest.TestCase):
-    def test_the_guide_opens_with_the_first_steps_then_how_work_runs_before_the_command_list(self):
+    def test_the_guide_opens_with_how_work_runs_before_the_command_list(self):
         code, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         self.assertEqual(code, 0)
-        self.assertTrue(text.startswith("OliverCode\n"))  # the guide opens with what it is, then how to start (#1177)
-        self.assertLess(text.index("Getting started"), text.index("How it works"))
-
-    def test_readme_preserves_the_owner_to_outcome_architecture_diagrams(self):
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("## Target architecture: owner to outcome", readme)
-        self.assertGreaterEqual(readme.count("```mermaid"), 2)
-        for layer in cmd_guide.ARCHITECTURE:  # the layers live in the README and the install introduction; the short guide leaves them out (#1177)
-            self.assertIn(layer.split(" — ")[0], readme)
+        self.assertTrue(text.startswith("How work runs\n"))
+        self.assertLess(text.index(cmd_guide.HOW_WORK_RUNS[-1]), text.index(cmd_guide.GROUPS[0][0]))
+        for sentence in cmd_guide.HOW_WORK_RUNS:
+            self.assertIn(sentence, text)
 
     def test_the_readme_section_says_the_same_things_in_the_same_order(self):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
@@ -77,13 +71,14 @@ class TestGuideByJob(unittest.TestCase):
         listed = {c.split()[0] for _, cmds in cmd_guide.GROUPS for c, _ in cmds}
         self.assertEqual(set(_names()), listed)
 
-    def test_the_guide_prints_first_steps_then_how_work_runs_then_the_commands_by_job(self):
+    def test_the_guide_prints_how_work_runs_then_first_steps_then_the_commands_by_job(self):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        order = [text.index(t) for t in ("Getting started", "How it works", "Install and keep things up to date", "Releases and documentation", "Run `olivercode guide NAME`")]
+        order = [text.index(t) for t in ("How work runs", "First steps, in order", "Install and update", "Orientation", "Skills:")]
         self.assertEqual(order, sorted(order))
         for _, cmds in cmd_guide.GROUPS:
             for cmd, line in cmds:
-                self.assertIn(f"{cmd}", text)  # each command is named; its one-line description is in `guide NAME` and the README
+                self.assertIn(f"{cmd}", text)
+                self.assertIn(line, text)
                 self.assertNotIn("\n", line)
 
     def test_a_name_says_what_a_command_gate_guard_job_or_skill_does_and_where_it_lives(self):
@@ -111,35 +106,14 @@ class TestReadmeListsEveryCommand(unittest.TestCase):
             self.assertIn(name, _names(), f"docs/SETUP.md describes {name}, which olivercode --help does not list")
 
 
-class TestShortGuide(unittest.TestCase):
-    """#1177: the guide orients in under a minute, and the long parts sit behind named topics."""
-
-    def test_the_default_guide_is_short_and_free_of_the_architecture_vocabulary(self):
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertLess(len(text.splitlines()), 60)
-        for word in ("Autonomous orchestration", "Front door", "Quality and delivery", "thread that started a run"):
-            self.assertNotIn(word, text)
-
-    def test_it_says_what_to_use_when_and_names_the_first_commands(self):
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        for want in ("What to use when", "`dispatch`", "`drain`", "`owner list`", "olivercode health", "olivercode guide NAME"):
-            self.assertIn(want, text)
-
-    def test_the_city_topic_keeps_the_phone_steps_and_the_skills_topic_keeps_the_phrases(self):
-        _, city = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
-        for step in cmd_guide.PHONE_STEPS:
-            self.assertIn(step, city)
-        _, skills = quiet(cmd_guide.command_guide, REPO_ROOT, "skills")
-        self.assertIn("Say the phrase to Claude Code", skills)
-
-    def test_every_command_set_names_only_real_commands(self):
-        named = {c.split()[0] for _, cmds in cmd_guide.COMMAND_SETS for c in cmds.split(" · ")}
-        self.assertEqual(set(_names()), named)
-
-
 class TestUsingItWell(unittest.TestCase):
-    def test_the_readme_holds_each_habit(self):
-        """#991: the README holds the six habits, one line each. The short guide leaves them out (#1177)."""
+    def test_the_guide_lists_each_habit_in_a_section_between_the_first_steps_and_the_commands(self):
+        """#991: the guide and the README hold the same six habits, one line each, after the first steps and before the commands."""
+        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
+        order = [text.index(t) for t in ("First steps, in order", "Using it well", cmd_guide.USING_IT_WELL[0], "Commands, by the job")]
+        self.assertEqual(order, sorted(order))
+        for habit in cmd_guide.USING_IT_WELL:
+            self.assertIn(habit, text)
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         for habit in cmd_guide.USING_IT_WELL:
             self.assertIn(habit.rstrip("."), readme)
@@ -166,20 +140,6 @@ class TestStatusSteps(unittest.TestCase):
         self.assertIn("olivercode-adoption", closing)
         self.assertNotIn("Run `olivercode guide` to see how work runs.", closing)
 
-    def test_the_first_step_names_no_file_path_and_the_city_line_does_not_repeat_itself(self):
-        """#1196, #1195: the owner's first step carries no registry path, and City's state reads once, not 'not set up; City is not set up'."""
-        from pathlib import Path
-        from unittest import mock
-        for found in ({}, {"a": {}}):
-            with mock.patch("lib.repo_profiles.load_repo_profiles", return_value=(found, Path("/some/shared/repo-profiles.json"))):
-                step = cmd_guide._fleet_step(REPO_ROOT)
-            self.assertNotIn("/", step)
-            self.assertIn('Say "Set up OliverCode"', step)
-        with mock.patch("lib.local_config.load_local", return_value={}):
-            line = cmd_guide.city_lines()[0]
-        self.assertTrue(line.startswith("City: not set up in the Claude desktop app."), line)
-        self.assertNotIn("City is not set up", line)
-
     def test_the_introduction_and_the_guide_say_the_thread_steers_a_run_and_status_is_free(self):
         from lib import cmd_install
         line = "The thread that started a run is the one to steer it."
@@ -187,4 +147,5 @@ class TestStatusSteps(unittest.TestCase):
         self.assertIn(line, cmd_install.INTRODUCTION.replace("\n  ", " "))
         self.assertIn(free, cmd_install.INTRODUCTION.replace("\n  ", " "))
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("olivercode status", text)
+        self.assertIn(line, text)
+        self.assertIn(free, text)

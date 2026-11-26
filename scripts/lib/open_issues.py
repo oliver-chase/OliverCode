@@ -50,35 +50,4 @@ def fetch(slug: str) -> list[dict] | None:
 
 
 def rank(issue: dict) -> tuple:
-    """Order higher urgency first, then stories that unblock the most work.
-
-    GitHub includes dependency counts in issue responses when available. Older
-    responses and tests omit them, so a missing count is safely treated as zero.
-    """
-    summary = issue.get("issue_dependencies_summary") or {}
-    unblocks = summary.get("total_blocking", summary.get("blocking", issue.get("unblocks", 0)))
-    try:
-        unblocks = int(unblocks or 0)
-    except (TypeError, ValueError):
-        unblocks = 0
-    return (priority(issue) or "P9", -unblocks, issue.get("number", 0))
-
-
-class Memo:
-    """One drain pass's reads of a story's comments and blockers. A story is read again only when its updated_at, comment count or blocker count
-    changed, and `forget` drops a kind when a landing can change it. A read that fails (None) is never kept."""
-
-    def __init__(self):
-        self.rows: dict = {}
-
-    def get(self, kind: str, issue: dict, read):
-        key = (kind, issue.get("number"), issue.get("updated_at"), issue.get("comments"), (issue.get("issue_dependencies_summary") or {}).get("blocked_by"))
-        if key not in self.rows:
-            found = read()
-            if found is None:
-                return None
-            self.rows[key] = found
-        return self.rows[key]
-
-    def forget(self, kind: str) -> None:
-        self.rows = {k: v for k, v in self.rows.items() if k[0] != kind}
+    return (priority(issue) or "P9", issue.get("number", 0))

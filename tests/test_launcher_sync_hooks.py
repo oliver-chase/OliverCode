@@ -34,18 +34,19 @@ class TestCommandSyncHooks(ScratchHome):
                 mock.patch.object(cmd_fleet, "_private_repos", return_value=self.private):
             return quiet(launcher.command_sync_hooks, self.oc, self.fleet)
 
-    def test_a_public_fleet_repo_has_its_hook_files_removed_and_hooks_path_unset(self):
+    def test_a_fleet_repo_gets_the_public_hooks_and_a_hooks_path(self):
         repo = scratch_repo(self.fleet / "alpha")
         (repo / ".githooks").mkdir()
-        for name in ("pre-commit", "pre-commit-private", "pre-push", "commit-msg"):
-            (repo / ".githooks" / name).write_text("old\n")
-        git(repo, "config", "core.hooksPath", ".githooks")
+        (repo / ".githooks" / "pre-commit-private").write_text("stale\n")
         code, out = self.sync({"alpha": {}})
         self.assertEqual(code, 0)
-        self.assertIn("[OK] alpha: hook files removed, the machine's global core.hooksPath covers it", out)
-        for name in ("pre-commit", "pre-commit-private", "pre-push", "commit-msg"):
-            self.assertFalse((repo / ".githooks" / name).exists(), name)
-        self.assertEqual("", git(repo, "config", "--get", "core.hooksPath", check=False).stdout.strip())
+        self.assertIn("[OK] alpha: hooks synced", out)
+        self.assertEqual(["commit-msg", "pre-commit", "pre-push"], sorted(p.name for p in (repo / ".githooks").iterdir()))
+        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), (TEMPLATES / "pre-commit").read_bytes())
+        self.assertTrue(os.access(repo / ".githooks" / "pre-commit", os.X_OK))
+        self.assertEqual(git(repo, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
+        for name in ("pre-push", "commit-msg"):
+            self.assertTrue((repo / ".githooks" / name).is_file(), name)
 
     def test_a_private_profile_gets_the_private_variant_as_its_live_hook(self):
         repo = scratch_repo(self.fleet / "vault")
@@ -99,12 +100,13 @@ class TestCommandSyncHooks(ScratchHome):
         self.assertIn("0 target(s) synced, 0 skipped.", out)
         self.assertFalse((self.fleet / "alpha" / ".githooks").exists())
 
-    def test_a_second_run_changes_nothing_for_a_public_repo(self):
+    def test_a_second_run_changes_nothing(self):
         repo = scratch_repo(self.fleet / "alpha")
         self.sync({"alpha": {}})
+        first = (repo / ".githooks" / "pre-commit").read_bytes()
         code, _ = self.sync({"alpha": {}})
         self.assertEqual(code, 0)
-        self.assertFalse((repo / ".githooks" / "pre-commit").exists())
+        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), first)
 
 
 class TestSyncHooksCommit(ScratchHome):
@@ -127,19 +129,6 @@ class TestSyncHooksCommit(ScratchHome):
         git(repo, "commit", "-q", "--no-verify", "-m", "First commit")
         return repo
 
-    def repo_with_committed_hooks(self, name="alpha"):
-        """A public repo synced before #1154: committed per-repo hook copies and a local
-        core.hooksPath, which a migrating sync-hooks run now removes and commits."""
-        repo = self.repo(name)
-        (repo / ".githooks").mkdir()
-        for filename in ("pre-commit", "pre-push", "commit-msg"):
-            (repo / ".githooks" / filename).write_text(f"{filename}\n")
-            (repo / ".githooks" / filename).chmod(0o755)
-        git(repo, "add", ".githooks")
-        git(repo, "commit", "-q", "--no-verify", "-m", "Old per-repo hook commit")
-        git(repo, "config", "core.hooksPath", ".githooks")
-        return repo
-
     def sync(self, *, commit=True, story="acme/widgets#7", archived=None):
         with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=({"alpha": {}}, None)), \
                 mock.patch.object(cmd_fleet, "_private_repos", return_value={}), \
@@ -148,7 +137,7 @@ class TestSyncHooksCommit(ScratchHome):
             return quiet(launcher.command_sync_hooks, self.oc, self.fleet, commit=commit, story=story)
 
     def test_a_changed_hook_is_committed_by_path_and_an_unrelated_staged_file_stays_staged(self):
-        repo = self.repo_with_committed_hooks()
+        repo = self.repo()
         (repo / "other.txt").write_text("staged for another reason\n")
         git(repo, "add", "other.txt")
         code, out = self.sync()
@@ -161,7 +150,6 @@ class TestSyncHooksCommit(ScratchHome):
         self.assertTrue(message.startswith("Sync the managed hook files from OliverCode (acme/widgets#7)\n"))
         self.assertIn("\nNo test: managed hook files copied from OliverCode\n", message)
         self.assertEqual("Size: XS", message.strip().splitlines()[-1])
-        self.assertEqual("", git(repo, "config", "--get", "core.hooksPath", check=False).stdout.strip())
 
     def test_a_commit_without_a_story_asks_for_one(self):
         repo = self.repo()
@@ -171,7 +159,8 @@ class TestSyncHooksCommit(ScratchHome):
         self.assertEqual(1, len(git(repo, "log", "--format=%H").stdout.split()))
 
     def test_a_hook_with_local_edits_before_sync_makes_the_repo_skip(self):
-        repo = self.repo_with_committed_hooks()
+        repo = self.repo()
+        self.sync()
         (repo / ".githooks" / "pre-push").write_text("local edit\n")
         head = git(repo, "rev-parse", "HEAD").stdout
         code, out = self.sync()
@@ -179,13 +168,13 @@ class TestSyncHooksCommit(ScratchHome):
         self.assertIn("alpha: not committed, .githooks/pre-push already had uncommitted changes that are not the template", out)
         self.assertEqual(head, git(repo, "rev-parse", "HEAD").stdout)
         self.assertEqual("local edit\n", (repo / ".githooks" / "pre-push").read_text())
-        code, out = self.sync()  # a re-run asks again and never deletes the file out from under the edit (#1032)
+        code, out = self.sync()  # a re-run asks again and never commits the template over the edit (#1032)
         self.assertIn("not the template", out)
         self.assertEqual(head, git(repo, "rev-parse", "HEAD").stdout)
 
     def test_uncommitted_hooks_that_already_match_the_template_are_committed_with_the_story(self):
-        repo = self.repo_with_committed_hooks()
-        self.sync(commit=False)  # hook files removed but the removal left uncommitted, as an earlier update did
+        repo = self.repo()
+        self.sync(commit=False)  # hooks written but left uncommitted, as an earlier update did
         self.assertNotEqual("", git(repo, "status", "--porcelain", "--", ".githooks").stdout)
         code, out = self.sync()
         self.assertEqual(0, code, out)
@@ -211,22 +200,22 @@ class TestSyncHooksCommit(ScratchHome):
         self.assertEqual("", git(repo, "diff", "--cached", "--name-only").stdout)
 
     def test_without_commit_nothing_is_committed(self):
-        repo = self.repo_with_committed_hooks()
+        repo = self.repo()
         code, out = self.sync(commit=False)
         self.assertEqual(0, code, out)
         self.assertNotIn("committed", out)
-        self.assertEqual(2, len(git(repo, "log", "--format=%H").stdout.split()))
-        self.assertFalse((repo / ".githooks" / "pre-commit").is_file())
+        self.assertEqual(1, len(git(repo, "log", "--format=%H").stdout.split()))
+        self.assertTrue((repo / ".githooks" / "pre-commit").is_file())
 
     def test_a_second_run_has_nothing_to_commit(self):
-        repo = self.repo_with_committed_hooks()
+        repo = self.repo()
         self.sync()
         _, out = self.sync()
         self.assertIn("alpha: nothing to commit", out)
-        self.assertEqual(3, len(git(repo, "log", "--format=%H").stdout.split()))
+        self.assertEqual(2, len(git(repo, "log", "--format=%H").stdout.split()))
 
     def test_a_commit_the_repo_gates_refuse_is_reported_and_unstaged(self):
-        repo = self.repo_with_committed_hooks()
+        repo = self.repo()
         real = gitfiles._git
 
         def refuse(path, *args):

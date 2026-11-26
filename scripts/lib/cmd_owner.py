@@ -14,19 +14,16 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
-import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import failure_log, local_config
+from lib import failure_log
 from lib.cli import flags as _flags
 
 USAGE = """Usage:
   olivercode owner add --session SID --step "TEXT" (--command "CMD" --error "ERROR" | --decision)
   olivercode owner add --session SID --step "TEXT" --tab URL --after "WHAT HAPPENS AFTER SUBMIT" [--check "HOW TO VERIFY"]
   olivercode owner list
-  olivercode owner show ID
   olivercode owner done ID
   olivercode owner summary"""
 WEEK = timedelta(days=7)
@@ -63,34 +60,8 @@ def _append(item: dict) -> None:
         fh.write(json.dumps(item) + "\n")
 
 
-def _expire_notes() -> None:
-    """Drop info notes older than a week from the file, so the queue does not grow by the notes of every night (#1024)."""
-    p = path()
-    if not p.is_file():
-        return
-    cutoff = (_now() - WEEK).isoformat(timespec="seconds")
-    rows = [l for l in p.read_text(encoding="utf-8").splitlines()]
-
-    def stale(line: str) -> bool:
-        try:
-            row = json.loads(line)
-        except ValueError:
-            return False
-        return isinstance(row, dict) and row.get("status") == "info" and str(row.get("created", "")) < cutoff
-
-    if not any(stale(l) for l in rows):
-        return
-    with failure_log.locked(p):
-        kept = [l for l in p.read_text(encoding="utf-8").splitlines() if not stale(l)]
-        failure_log.write_private(p, "".join(l + "\n" for l in kept))
-
-
 def items() -> list[dict]:
-    """The latest line per id, in id order. A done line keeps the step, command and error of the line it closes. An info note older than seven days is dropped from the file first."""
-    try:
-        _expire_notes()
-    except OSError:
-        pass
+    """The latest line per id, in id order. A done line keeps the step, command and error of the line it closes."""
     latest: dict[int, dict] = {}
     for line in _lines():
         latest[line["id"]] = {**latest.get(line["id"], {}), **line}
@@ -100,26 +71,6 @@ def items() -> list[dict]:
 # A card number, or a password, key, token or code written into a field, which no agent ever types or stores (#635). The keyword
 # needs a non-letter before it, so a repo name such as OliverCode: is not read as a code (#973).
 _SECRET = re.compile(r"\b(?:\d[ -]?){13,19}\b|(?<![A-Za-z])(?:password|passwd|passcode|pwd|secret|token|api[_-]?key|otp|code|cvv)\s*[=:]\s*\S", re.IGNORECASE)
-
-
-def _held(lines: list[dict], session: str, step: str) -> dict | None:
-    """The open item for the same session and step text, merged across its lines, or None."""
-    latest: dict[int, dict] = {}
-    for line in lines:
-        latest[line["id"]] = {**latest.get(line["id"], {}), **line}
-    return next((i for i in latest.values() if i.get("status") == "open" and i.get("session") == session and i.get("step") == step), None)
-
-
-def _notify(text: str) -> None:
-    """One macOS notification for a new step when the notifications setting is on. Never raises, never waits long."""
-    try:
-        if sys.platform != "darwin" or local_config.setting("notifications") is not True:
-            return
-        body = _brief(text, 120).replace("\\", "\\\\").replace('"', '\\"')
-        subprocess.run(["osascript", "-e", f'display notification "{body}" with title "OliverCode"'],
-                       capture_output=True, timeout=5, check=False)
-    except Exception:
-        pass
 
 
 def add(session: str, step: str, command: str = "", error: str = "", tab: str = "", after: str = "", check: str = "",
@@ -137,12 +88,7 @@ def add(session: str, step: str, command: str = "", error: str = "", tab: str = 
     if not tab.strip() and bool(command.strip()) != bool(error.strip()):
         raise ValueError("a step carries the command tried and its error together")
     with failure_log.locked(path()):  # the next id and the append are one step, so two writers never share an id
-        every = _lines()
-        held = _held(every, session, step)
-        if held is not None:  # the same ask again counts the repeat and queues nothing new (#1205)
-            _append({"id": held["id"], "repeats": int(held.get("repeats", 1)) + 1, "status": "open"})
-            return {**held, "repeats": int(held.get("repeats", 1)) + 1}
-        nxt = max((i["id"] for i in every), default=0) + 1
+        nxt = max((i["id"] for i in _lines()), default=0) + 1
         if tab.strip():
             item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
                     "command": "", "error": "", "tab": tab, "after": after, "check": check, "status": "open"}
@@ -150,60 +96,11 @@ def add(session: str, step: str, command: str = "", error: str = "", tab: str = 
             item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
                     "command": command, "error": error, "status": "open", **(extra or {})}
         _append(item)
-    if session == "drain":  # only a stopped story's new step reaches the owner's desktop; upkeep and repeats stay quiet (#1215)
-        _notify(item["step"])
     return item
 
 
-def close(item_id: int, reason: str = "") -> None:
-    _append({"id": item_id, "status": "done", "closed": _now().isoformat(timespec="seconds"), **({"reason": reason} if reason else {})})
-
-
-def add_once(session: str, key: str, step: str, command: str, error: str, prefix: str = "") -> dict:
-    """One open item per KEY. A second call with the key open rewrites its step to the latest (a new count) and queues nothing new.
-    An older open item with no key whose step begins with PREFIX counts as the same subject (#1024)."""
-    held = next((i for i in items() if i["status"] == "open" and (i.get("key") == key or (prefix and not i.get("key") and i["step"].startswith(prefix)))), None)
-    if held is None:
-        return add(session, step, command, error, extra={"key": key})
-    if held["step"] != step:
-        _append({"id": held["id"], "step": step, "command": command, "error": error, "status": "open"})
-    return {**held, "step": step}
-
-
-def close_where(test, reason: str) -> list[int]:
-    """Mark done, with REASON, every open item TEST accepts. Returns their ids."""
-    done = [i["id"] for i in items() if i["status"] == "open" and test(i)]
-    for n in done:
-        close(n, reason)
-    return done
-
-
-def story_of(item: dict) -> int | None:
-    """The story an item waits on: its story field, else the number in a step that begins "Story #N"."""
-    if isinstance(item.get("story"), int):
-        return item["story"]
-    found = re.match(r"Story #(\d+) ", item.get("step") or "")
-    return int(found.group(1)) if found else None
-
-
-def story_closed(slug: str, number: int) -> bool:
-    """True when the story reads closed over REST. A story that cannot be read counts as still open."""
-    try:
-        done = subprocess.run(["gh", "api", f"repos/{slug}/issues/{number}", "--jq", ".state"], capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return done.returncode == 0 and done.stdout.strip() == "closed"
-
-
-def clear_stories(slug: str, closed=story_closed, only: int | None = None) -> list[int]:
-    """Close the open items that wait on a story now closed. An item whose key names another repo is left alone."""
-    def test(item: dict) -> bool:
-        n = story_of(item)
-        if n is None or (only is not None and n != only):
-            return False
-        other = re.match(r"policy-stop:(.+)#\d+$", item.get("key") or "")
-        return (other.group(1) == slug if other else True) and closed(slug, n)
-    return close_where(test, "the story is closed")
+def close(item_id: int) -> None:
+    _append({"id": item_id, "status": "done", "closed": _now().isoformat(timespec="seconds")})
 
 
 def queue_denied(session: str, key: str, step: str, command: str, error: str, resolve: dict) -> dict | None:
@@ -229,56 +126,6 @@ def _show(item: dict) -> str:
                 f"; session {item['session']}, {item['created'][:10]})")
     how = f"tried `{item['command']}`: {item['error']}" if item.get("command") else "a decision only the owner can make"
     return f"  #{item['id']} {item['step']} ({how}; session {item['session']}, {item['created'][:10]})"
-
-
-def _brief(text: str, width: int = 100) -> str:
-    """The first line of a step, cut at a word with an ellipsis when it is longer than width (#1177)."""
-    line = (text or "").splitlines()[0].strip() if (text or "").strip() else ""
-    return line if len(line) <= width else line[:width].rsplit(" ", 1)[0] + "…"
-
-
-# Plain titles for who raised a step, in the order the owner should read them: decisions first, upkeep last (#1177).
-TITLES = (("groom", "Decisions about your boards"), ("drain", "Stories stopped and waiting for you"), ("dispatch", "Stories stopped and waiting for you"),
-          ("gh-replay", "GitHub writes that failed"), ("status-page", "City page"), ("conform", "Repos that do not match the standard"),
-          ("fleet-sync", "Repos that could not catch up with GitHub"), ("maintain", "Machine upkeep"))
-
-
-_PATHS = re.compile(r"(?:/[\w.~-]+){2,}|[0-9a-f]{12,}|#\d+")
-
-
-def _shape(item: dict) -> str:
-    """A step with its paths, hashes and numbers blanked and its subject word dropped, so two steps about the same thing share a key."""
-    return re.sub(r"^\w+ (?:health|suite|placement|tidy|branches|synced|docs): ", "", _PATHS.sub("…", _brief(item["step"], 400))).strip()
-
-
-def listing(open_items: list[dict]) -> str:
-    """The open steps under plain headings, the count first, one line each (#1177). A prepared step keeps its tab and after-submit line.
-    `owner show ID` prints the command tried and its error."""
-    if not open_items:
-        return "Nothing is waiting on you."
-    order = {who: n for n, (who, _) in enumerate(TITLES)}
-    titles = dict(TITLES)
-    groups: dict[str, list[dict]] = {}
-    for item in open_items:
-        who = item.get("session") or "other"
-        groups.setdefault(titles.get(who, f"From {who}"), []).append(item)
-    rank = {title: min([order[w] for w, t in TITLES if t == title] or [99]) for title in groups}
-    out = [f"{len(open_items)} thing{'s' if len(open_items) != 1 else ''} waiting on you", "", "Next: `olivercode owner show NUMBER` gives the detail of one, and `olivercode owner done NUMBER` clears it once it is handled.", ""]
-    for title in sorted(groups, key=lambda t: (rank[t], t)):
-        rows = groups[title]
-        out.append(f"{title} ({len(rows)})")
-        alike: dict[str, list[dict]] = {}
-        for i in rows:
-            alike.setdefault(_shape(i) if not i.get("tab") else f"tab{i['id']}", []).append(i)
-        for same in alike.values():
-            i = same[0]
-            if len(same) > 1:  # steps that differ only in a path or a number are one line with their numbers (#1177)
-                out.append(f"  {len(same)} like this: {_brief(_PATHS.sub('…', i['step']), 80)} (" + ", ".join(f"#{j['id']}" for j in same) + ")")
-                continue
-            repeat = f"  (raised {i['repeats']} times)" if int(i.get("repeats", 1)) > 1 else ""
-            out.append(_show(i) if i.get("tab") else f"  #{i['id']:<4} {_brief(i['step'])}{repeat}")
-        out.append("")
-    return "\n".join(out).rstrip()
 
 
 def waiting_steps(session: str) -> str:
@@ -332,12 +179,9 @@ def command_owner(argv: list[str]) -> int:
         print(waiting_steps(item["session"]))
         return 0
     if sub == "list" and not rest:
-        print(listing([i for i in items() if i["status"] == "open"]))
+        open_items = [i for i in items() if i["status"] == "open"]
+        print("\n".join(_show(i) for i in open_items) if open_items else "Nothing waits on the owner.")
         return 0
-    if sub == "show" and len(rest) == 1 and rest[0].isdigit():
-        found = next((i for i in items() if i["id"] == int(rest[0])), None)
-        print(_show(found) if found else f"No owner step #{rest[0]}.")
-        return 0 if found else 1
     if sub == "done" and len(rest) == 1 and rest[0].isdigit():
         found = next((i for i in items() if i["id"] == int(rest[0]) and i["status"] == "open"), None)
         if not found:

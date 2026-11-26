@@ -55,15 +55,15 @@ jobs:
           done
           exit 1
       - name: Roll back
-        if: failure()
+        if: failure() && steps.live.outcome == 'failure'
         env:
           DEPLOY_KEY: ${{ secrets.__DEPLOY_SECRET__ }}
         run: __ROLLBACK_COMMAND__
       - name: File a P0
-        if: failure()
+        if: failure() && steps.live.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "P0: production deploy failed after ${GITHUB_SHA::7}, rolled back" \
-            --body "A step of the deploy of ${GITHUB_SHA} failed, and the workflow ran the rollback. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            --title "P0: production check failed after ${GITHUB_SHA::7}, rolled back" \
+            --body "The live check on __LIVE_URL__ failed after the deploy of ${GITHUB_SHA}. The workflow ran the rollback. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

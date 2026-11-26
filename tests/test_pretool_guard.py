@@ -53,12 +53,12 @@ class TestDispatch(unittest.TestCase):
     def test_a_deny_from_one_guard_is_printed_with_its_reason(self):
         with quiet_guards(placement_guard__reason="Repos live under /x."):
             out = run_main(BASH)
-        self.assertEqual(("deny", "Repos live under /x. See docs/RULES.md, Execution."), (out["permissionDecision"], out["permissionDecisionReason"]))
+        self.assertEqual(("deny", "Repos live under /x."), (out["permissionDecision"], out["permissionDecisionReason"]))
 
     def test_a_memory_rule_is_refused_with_its_reason(self):
         with quiet_guards(), mock.patch.object(pretool.memory_guard, "reason", return_value="Rules belong in a skill."):
             out = run_main({**BASH, "tool_input": {"command": "bash scripts/validate.sh"}})
-        self.assertEqual(("deny", "Rules belong in a skill. See docs/RULES.md, Execution."), (out["permissionDecision"], out["permissionDecisionReason"]))
+        self.assertEqual(("deny", "Rules belong in a skill."), (out["permissionDecision"], out["permissionDecisionReason"]))
 
     def test_a_deny_wins_over_an_ask(self):
         ask = policy.Decision("ask", "push", "A push needs the owner.")
@@ -71,7 +71,7 @@ class TestDispatch(unittest.TestCase):
         ask = policy.Decision("ask", "push", "A push needs the owner.")
         with quiet_guards(policy_guard__decide=(ask, "repo")), mock.patch.object(pretool.policy, "log_block"):
             out = run_main(BASH)
-        self.assertEqual(("ask", "A push needs the owner. See docs/RULES.md, Execution."), (out["permissionDecision"], out["permissionDecisionReason"]))
+        self.assertEqual(("ask", "A push needs the owner."), (out["permissionDecision"], out["permissionDecisionReason"]))
 
     def test_a_broken_guard_does_not_hide_the_others_or_block(self):
         with quiet_guards(commit_guard__reason=RuntimeError("bug"), placement_guard__reason="Repos live under /x."):
@@ -92,21 +92,12 @@ class TestDispatch(unittest.TestCase):
         with quiet_guards(policy_guard__decide=(deny, "repo"), commit_guard__reason="never"), \
                 mock.patch.object(pretool.policy, "log_block"):
             out = run_main(payload)
-        self.assertEqual("That path is denied. See docs/RULES.md, Execution.", out["permissionDecisionReason"])
+        self.assertEqual("That path is denied.", out["permissionDecisionReason"])
 
     def test_a_plain_command_prints_nothing_and_garbage_input_exits_zero(self):
         for stdin in ('{"tool_input": {"command": "ls"}, "cwd": "/tmp"}', "not json", "[]", ""):
             ran = subprocess.run([sys.executable, str(SCRIPT)], input=stdin, capture_output=True, text=True)
             self.assertEqual((0, ""), (ran.returncode, ran.stdout), stdin)
-
-
-class TestABuilderMayValidate(unittest.TestCase):
-    """#1156: a headless builder runs the repo's full validation like any other session; nothing refuses it."""
-
-    def test_a_headless_builder_runs_the_full_validation(self):
-        with quiet_guards(), mock.patch.dict("os.environ", {"OLIVERCODE_HEADLESS": "1"}):
-            out = run_main({**BASH, "tool_input": {"command": "bash scripts/validate.sh"}})
-        self.assertNotEqual("deny", (out or {}).get("permissionDecision"))
 
 
 class TestRegistration(unittest.TestCase):

@@ -26,12 +26,10 @@ for check in checks:
 sys.exit(1 if failed else 0)
 ' "$REPO_ROOT" || exit 1
 fi
-# A repo's own executable .githooks/pre-commit.local, read from the repo root and not from
-# HOOK_DIR: core.hooksPath can be one machine-wide folder outside every repo (#1154), so
-# HOOK_DIR no longer names this repo's own .githooks. The file is not part of this template,
-# so sync-hooks never overwrites it. It gets the staged file list on stdin and blocks the
-# commit by exiting non-zero.
-if [ -x "$REPO_ROOT/.githooks/pre-commit.local" ]; then
+# A repo's own executable .githooks/pre-commit.local. The file is not part
+# of this template, so sync-hooks never overwrites it. It gets the staged file list on
+# stdin and blocks the commit by exiting non-zero.
+if [ -x "$HOOK_DIR/pre-commit.local" ]; then
   echo "[pre-commit] Repo-local gates..."
-  printf '%s\n' "$STAGED_FILES" | "$REPO_ROOT/.githooks/pre-commit.local" || exit 1
+  printf '%s\n' "$STAGED_FILES" | "$HOOK_DIR/pre-commit.local" || exit 1
 fi

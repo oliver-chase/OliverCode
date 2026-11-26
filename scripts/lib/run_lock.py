@@ -75,12 +75,6 @@ def dead_reason(rec: dict, now: float, alive=None) -> str:
     return ""
 
 
-def dead_building(slug: str, now: float | None = None, alive=None) -> list[int]:
-    """The stories a recorded run was building when it died (#1201), or [] when it is live or no run is recorded."""
-    rec = _read(path(slug))
-    return [] if not rec or not dead_reason(rec, time.time() if now is None else now, alive) else list(rec.get("building") or [])
-
-
 def active(slug: str, now: float | None = None, alive=None) -> dict:
     """The live run's record for a repo, or {} when none holds it. It reads and changes nothing."""
     rec = _read(path(slug))
@@ -97,14 +91,6 @@ def building_elsewhere(slug: str, now: float | None = None, alive=None) -> int:
         if record.name != own and not dead_reason(rec, now, alive):
             total += len(rec.get("building") or [])
     return total
-
-
-def holders_elsewhere(slug: str, now: float | None = None, alive=None) -> list[str]:
-    """The repos whose live runs are building stories, named for the line that ends a drain waiting on a full machine (#1111)."""
-    now = time.time() if now is None else now
-    own = path(slug).name
-    return [r.name[:-5].replace("__", "/") for r in sorted(path(slug).parent.glob("*.json"))
-            if r.name != own and (rec := _read(r)) and not dead_reason(rec, now, alive) and rec.get("building")]
 
 
 def acquire(slug: str, who: str, now: float, page: str = "", want: list[int] | None = None, pid: int | None = None, alive=None) -> tuple[dict, dict, str]:
@@ -192,82 +178,3 @@ class Heartbeat:
     def __exit__(self, *exc):
         self.stop.set()
         self.thread.join(timeout=5)
-
-
-def control_dir(slug: str) -> Path:
-    return gh_budget.home() / "controls" / slug.replace("/", "__")
-
-
-def pause_path(slug: str) -> Path:
-    return control_dir(slug) / "pause"
-
-
-def cancel_path(slug: str, story: int) -> Path:
-    return control_dir(slug) / f"cancel-{int(story)}"
-
-
-def is_paused(slug: str) -> bool:
-    return pause_path(slug).is_file()
-
-
-def pause(slug: str) -> None:
-    with _exclusive(slug):
-        target = pause_path(slug)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("paused\n", encoding="utf-8")
-
-
-def resume(slug: str) -> bool:
-    with _exclusive(slug):
-        target = pause_path(slug)
-        existed = target.exists()
-        target.unlink(missing_ok=True)
-        return existed
-
-
-def request_cancel(slug: str, story: int) -> bool:
-    with _exclusive(slug) as target:
-        rec = _read(target)
-        if not rec or dead_reason(rec, time.time()) or story not in (rec.get("building") or []):
-            return False
-        marker = cancel_path(slug, story)
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("cancel\n", encoding="utf-8")
-        return True
-
-
-def cancel_requested(slug: str, story: int) -> bool:
-    return cancel_path(slug, story).is_file()
-
-
-def finish_story(slug: str, pid: int, story: int) -> None:
-    with _exclusive(slug) as target:
-        rec = _read(target)
-        if rec.get("pid") == pid:
-            rec["building"] = [n for n in (rec.get("building") or []) if n != story]
-            rec["beat"] = time.time()
-            _write(target, rec)
-        cancel_path(slug, story).unlink(missing_ok=True)
-
-
-def clear_cancel(slug: str, story: int) -> bool:
-    with _exclusive(slug):
-        target = cancel_path(slug, story)
-        existed = target.exists()
-        target.unlink(missing_ok=True)
-        return existed
-
-
-@contextmanager
-def claim_guard(slug: str):
-    with _exclusive(slug):
-        yield not pause_path(slug).is_file()
-
-
-def set_paused(slug: str, pid: int, value: bool) -> None:
-    with _exclusive(slug) as target:
-        rec = _read(target)
-        if rec.get("pid") == pid:
-            rec["paused"] = bool(value)
-            rec["beat"] = time.time()
-            _write(target, rec)

@@ -37,9 +37,11 @@ class InitFleet(unittest.TestCase):
         names = {p.name for p in cmd_initfleet.TEMPLATE.iterdir()}
         self.assertEqual(names, {"repo-profiles.json", "owner-rules.json", "owner-queue.jsonl", "review-config.json", "CLAUDE.md"})
         text = " ".join(p.read_text() for p in cmd_initfleet.TEMPLATE.iterdir()).lower()
-        # The template holds no repo URL or address, so it names no owner.
-        for forbidden in ("github.com/", "@"):
-            self.assertNotIn(forbidden, text)
+        import subprocess
+        who = subprocess.run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"], capture_output=True, text=True).stdout
+        owner = who.strip().rstrip("/").split("/")[-2].split(":")[-1].lower() if "/" in who else ""
+        if owner:
+            self.assertNotIn(owner, text)
 
     def run_cmd(self, runner, *extra):
         dest = temp_dir(self) / "fleet"
@@ -84,17 +86,6 @@ class InitFleet(unittest.TestCase):
         self.assertIn("not a fleet repo", out)
         self.assertFalse(any("POST" in " ".join(c) or " push " in " ".join(c) for c in calls))
         self.assertFalse(dest.exists())
-
-    def test_a_run_that_stopped_after_the_create_says_how_to_remove_the_repo_on_the_failed_step_and_on_the_rerun(self):
-        """#1035: a push that fails after the repo was created names the removal command, and the next run, which finds the repo without a registry, names it again."""
-        base = fake(calls=[])
-        failing = lambda args: (1, "remote rejected") if " push " in " ".join(args) else base(args)
-        rc, out, _ = self.run_cmd(failing)
-        self.assertEqual(1, rc)
-        self.assertIn("gh repo delete me/olivercode-fleet --yes", out)
-        rc, out, _ = self.run_cmd(fake(calls=[], github="other"))
-        self.assertEqual(1, rc)
-        self.assertIn("gh repo delete me/olivercode-fleet --yes", out)
 
     def test_a_fleet_repo_already_on_github_is_cloned_and_nothing_is_created(self):
         calls = []

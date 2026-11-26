@@ -182,11 +182,6 @@ class TestSessionCheck(RepoCase):
         super().setUp()
         self.claude = self.tmp / "claude"
         self.claude.mkdir()
-        # This machine's own repos and this checkout's distance from origin/main are not the subject: each test injects none.
-        self.machine = {name: mock.patch.object(session, name, return_value=[]) for name in ("placement_notes", "checkout_notes")}
-        for patcher in self.machine.values():
-            patcher.start()
-            self.addCleanup(patcher.stop)
 
     def test_names_gates_that_git_skips(self):
         self.gates(point_git_at_them=False)
@@ -205,8 +200,8 @@ class TestSessionCheck(RepoCase):
         self.assertIn("no commit gates", " ".join(session.notes(self.repo, self.claude)))
 
     def test_a_headless_start_runs_no_placement_scan(self):
-        self.machine["placement_notes"].stop()  # this test runs the real note, whose scan it counts
-        self.addCleanup(self.machine["placement_notes"].start)
+        self.addCleanup(setattr, session, "checkout_notes", session.checkout_notes)
+        session.checkout_notes = lambda: []  # the checkout under test trails origin/main whenever main moves
         with mock.patch.object(placement, "findings", return_value=[]) as scan, mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": "1"}):
             session.notes(self.tmp, self.claude)
         scan.assert_not_called()
@@ -311,12 +306,6 @@ class TestSettingsRemove(unittest.TestCase):
         settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine, ours]}]}}
         self.assertEqual(claude_settings.without(settings),
                          {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine]}]}})
-
-    def test_the_automode_text_names_no_deleted_layer(self):
-        """#906: sessions are told about the owner thread and the runner, never a manager, lead or handover."""
-        text = " ".join(part for pair in claude_settings.automode_rules().values() for part in pair).lower()
-        for word in ("manager", "lead", "handover", "replacement"):
-            self.assertNotIn(word, text)
 
     def test_install_removes_the_retired_manager_entries_from_any_checkout(self):
         retired = [{"type": "command", "command": f'python3 "/old/checkout/scripts/hooks/{n}"'} for n in claude_settings.RETIRED]
@@ -488,24 +477,13 @@ class StatusHint(unittest.TestCase):
         self.assertEqual(0, bad.returncode)
 
 
-class DesignHookTest(unittest.TestCase):
-    hook = load_script("scripts/hooks/design_hook.py")
+class TestRetiredDesignHook(unittest.TestCase):
+    """A settings file written by a later install can name design_hook.py, so the script stays as a no-op that install strips."""
 
-    def test_entry_is_managed_for_edits(self):
-        self.assertIn(("PostToolUse", "Edit|Write|MultiEdit", "design_hook.py"), claude_settings.MANAGED)
+    def test_the_script_exits_0_and_prints_nothing(self):
+        script = str(REPO_ROOT / "scripts" / "hooks" / "design_hook.py")
+        ran = subprocess.run([sys.executable, script], input='{"tool_name": "Edit"}', capture_output=True, text=True)
+        self.assertEqual((0, "", ""), (ran.returncode, ran.stdout, ran.stderr))
 
-    def test_reports_floor_tells_only_and_at_most_ten(self):
-        tmp = temp_dir(self, "olivercode-designhook-")
-        page = tmp / "p.html"
-        page.write_text("<p class='eyebrow'>x</p>\n" + "<p>Lorem ipsum</p>\n" * 15)
-        text = self.hook.report(str(page))
-        self.assertEqual(text.count("placeholder-copy"), 10)
-        self.assertNotIn("eyebrow", text)
-        page.write_text("<h1>Fine</h1>")
-        self.assertEqual(self.hook.report(str(page)), "")
-
-    def test_a_bad_payload_lets_the_edit_stand(self):
-        run = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/hooks/design_hook.py")], input="not json",
-                             capture_output=True, text=True)
-        self.assertEqual(run.returncode, 0)
-        self.assertIn("design_hook: skipped", run.stderr)
+    def test_install_strips_its_entry(self):
+        self.assertIn("design_hook.py", claude_settings.RETIRED)

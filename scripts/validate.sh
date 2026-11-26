@@ -11,17 +11,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PRECOMMIT="${REPO_ROOT}/.githooks/pre-commit"
 
 run_precommit() {
-  # "$@": files changed against origin's default branch, from a round check (#1142). Given files, the hook
-  # scans only those; empty for a full run, which scans the whole tree, as `olivercode land` always runs it.
   if [[ -x "$PRECOMMIT" ]]; then
-    if [[ $# -gt 0 ]]; then
-      echo "=== validate: running pre-commit gates over the changed files ==="
-      OLIVERCODE_SCAN_FILES="$(printf '%s\n' "$@")" bash "$PRECOMMIT"
-    else
-      echo "=== validate: running pre-commit gates over the whole tree ==="
-      # The hook reads staged files by default, so on a clean tree it would scan nothing.
-      OLIVERCODE_SCAN_TREE=1 bash "$PRECOMMIT"
-    fi
+    echo "=== validate: running pre-commit gates over the whole tree ==="
+    # The hook reads staged files by default, so on a clean tree it would scan nothing.
+    OLIVERCODE_SCAN_TREE=1 bash "$PRECOMMIT"
     echo "=== validate: pre-commit passed ==="
   else
     echo "=== validate: pre-commit hook not found at $PRECOMMIT ==="
@@ -99,7 +92,7 @@ run_docs_check() {
 run_limits_check() {
   # The size ceiling only warns (#879): the check prints the count and never fails the run.
   echo "=== validate: checking size limits ==="
-  python3 "${SCRIPT_DIR}/olivercode" limits check
+  python3 "${SCRIPT_DIR}/olivercode" limits check || true
 }
 
 run_reference_check() {
@@ -134,9 +127,6 @@ run_queue_bypass() {
 }
 
 run_smoke_tests() {
-  # "$@": files changed against origin's default branch, which narrows this gate to the modules that cover them (a round
-  # check, #1142); empty for a full run, which every module gets, as `olivercode land` always runs it.
-  #
   # Skipped when tests/ does not exist. Tests read the one tracked shared/repo-profiles.json, so they pass identically everywhere.
   #
   # Python-only by design. A `node --test <dir>/*.mjs` block with no .mjs test present
@@ -146,11 +136,7 @@ run_smoke_tests() {
   [[ -d "${REPO_ROOT}/tests" ]] || return 0
   echo "=== validate: running smoke tests ==="
   # Each test module runs in its own process, several at a time (scripts/lib/smoke_runner.py), with failures replayed in full.
-  if [[ $# -gt 0 ]]; then
-    python3 "${SCRIPT_DIR}/lib/smoke_runner.py" "$REPO_ROOT" --changed "$@" || exit 1
-  else
-    python3 "${SCRIPT_DIR}/lib/smoke_runner.py" "$REPO_ROOT" || exit 1
-  fi
+  python3 "${SCRIPT_DIR}/lib/smoke_runner.py" "$REPO_ROOT" || exit 1
   echo "=== validate: smoke tests passed ==="
 }
 
@@ -158,10 +144,8 @@ run_smoke_tests() {
 GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)
 
 run_gate() {
-  local name="$1"
-  shift
-  case "$name" in
-    precommit) run_precommit "$@" ;;
+  case "$1" in
+    precommit) run_precommit ;;
     fleet) run_consistency ;;
     bloat) run_bloat_check || exit 1 ;;
     quality) run_code_quality || exit 1 ;;
@@ -169,9 +153,9 @@ run_gate() {
     docs) run_docs_check ;;
     limits) run_limits_check ;;
     bypass) run_queue_bypass ;;
-    smoke) run_smoke_tests "$@" ;;
+    smoke) run_smoke_tests ;;
     hookstate) run_hook_state ;;
-    *) echo "validate: no gate named '$name'" >&2; exit 2 ;;
+    *) echo "validate: no gate named '$1'" >&2; exit 2 ;;
   esac
 }
 
@@ -182,28 +166,6 @@ run_gates() {
   local args=() gate
   for gate in "${GATES[@]}"; do
     args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate")")
-  done
-  python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
-}
-
-round_notice() {
-  # Names the gates a round ran and the ones it left to the landing, so a green round is never read as the whole run (#1192).
-  local ran=" precommit bypass smoke " left=() gate
-  for gate in "${GATES[@]}"; do
-    [[ "$ran" == *" $gate "* ]] || left+=("$gate")
-  done
-  echo "=== validate: round check ran:${ran% } ==="
-  echo "=== validate: round check left out: ${left[*]}. They run when the story lands. ==="
-}
-
-run_round_gates() {
-  # "$@": files changed against origin's default branch. A round gets only the checks that protect that change:
-  # precommit scans the changed files, smoke runs the tests that cover them, and bypass preserves the validation-slot
-  # trust boundary. Whole-repo hygiene/docs/fleet checks run at full validation/land, not after every builder round.
-  local args=() gate
-  round_notice
-  for gate in precommit bypass smoke; do
-    args+=("${gate}=$(printf '%q ' bash "${SCRIPT_DIR}/validate.sh" --gate "$gate" "$@")")
   done
   python3 "${SCRIPT_DIR}/lib/validate_gates.py" "${args[@]}"
 }
@@ -221,28 +183,16 @@ main() {
       echo "                         skills' own script tests, if present) and fleet conformance, in"
       echo "                         parallel inside one queue slot, printing each gate as it starts and finishes"
       echo "                         OLIVERCODE_VALIDATE_TIMEOUT (seconds) is the run's budget and"
-      echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: 4, maximum: 4);"
+      echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: cores);"
       echo "                         OLIVERCODE_VALIDATE_JOBS sets the smoke test parallelism"
       echo "  --tree                 Same as no args (the pre-commit gates always scan every tracked file)"
-      echo "  --round FILE...        Fast per-round check: changed-file precommit, validation-slot bypass and"
-      echo "                         smoke tests covering changed files; whole-tree checks run at land/release"
-      echo "  --round-notice         Print the gates a round runs and the ones it leaves to the landing"
       echo "  --check-consistency    Run the fleet name check only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
       echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
       echo "  --help                 Show this help"
       ;;
     --gate)
-      shift
-      run_gate "$@"
-      ;;
-    --round-notice)
-      round_notice
-      ;;
-    --round)
-      shift
-      run_build_hooks
-      run_round_gates "$@"
+      run_gate "${2:-}"
       ;;
     --check-consistency)
       run_build_hooks

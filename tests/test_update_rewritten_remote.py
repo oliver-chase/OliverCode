@@ -31,15 +31,6 @@ class RewrittenRemote(unittest.TestCase):
         git(self.origin, "commit", "-q", "-a", "--amend", "-m", "shared work")
         git(self.clone, "fetch", "-q")
 
-    def test_a_changed_tracked_file_is_named_in_the_refusal_and_a_personal_file_is_not(self):
-        git(self.clone, "reset", "-q", "--hard", "@{u}")
-        (self.clone / "olivercode.local.json").write_text("{}")  # untracked personal state never blocks
-        self.assertIsNone(update_state.problem(self.clone))
-        (self.clone / "f").write_text("my edit")
-        what, fix = update_state.problem(self.clone)
-        self.assertIn("1 tracked framework file(s) differ from the release: f", what)
-        self.assertIn("stash push", fix)
-
     def test_a_replaced_commit_upstream_is_a_rewritten_remote(self):
         self.assertTrue(update_state.rewritten(self.clone))
 

@@ -49,3 +49,13 @@ def check(root: Path) -> list[str]:
         line += f" It is {total - cap} over. This is a warning and blocks nothing: raise the number in {LIMITS_FILE} once the growth is accepted."
     return [line]
 
+
+def inbound(root: Path, path: str) -> list[str]:
+    """Every tracked line outside the file itself that links or names it, as file:line."""
+    needles = {path, Path(path).name}
+    hits = []
+    for row in git(root, "grep", "-I", "-n", "-F", "-e", path, "-e", Path(path).name).splitlines():
+        file, _, rest = row.partition(":")
+        if file != path and not file.startswith("docs/AUDITED") and any(n in rest for n in needles):
+            hits.append(f"{file}:{rest.split(':', 1)[0]}")
+    return hits

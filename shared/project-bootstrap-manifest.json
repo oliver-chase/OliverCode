@@ -20,6 +20,16 @@
       "mode": "strict"
     },
     {
+      "source": "core/templates/project/scripts/version_cut.py",
+      "target": "scripts/version_cut.py",
+      "mode": "strict"
+    },
+    {
+      "source": "core/templates/project/scripts/docs_check.py",
+      "target": "scripts/docs_check.py",
+      "mode": "strict"
+    },
+    {
       "source": "core/templates/project/CLAUDE.md",
       "target": "CLAUDE.md",
       "mode": "presence"

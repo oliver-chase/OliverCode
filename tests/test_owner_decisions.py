@@ -1,4 +1,4 @@
-"""#884: an owner message that names a story is saved by the owner_decision_capture hook and reaches that story's builder."""
+"""#884: an owner message that names a story is saved by the lesson_capture hook and reaches that story's builder."""
 
 import json
 import os
@@ -59,25 +59,16 @@ class TestOwnerDecisions(unittest.TestCase):
         lines = (self.home / owner_decisions.FILE).read_text().splitlines()
         self.assertEqual([json.loads(line)["text"] for line in lines], ["Story #40: note 2", "Story #40: note 3", "Story #40: note 4"])
 
-    def test_the_hook_records_owner_prompts_but_skips_headless_prompts(self):
-        def run(prompt, headless=False):
-            env = os.environ.copy()
-            if headless:
-                env["OLIVERCODE_HEADLESS"] = "1"
-            else:
-                env.pop("OLIVERCODE_HEADLESS", None)
+    def test_the_hook_records_an_owner_prompt_and_skips_another_sessions_message(self):
+        def run(prompt):
             subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"session_id": "s9", "prompt": prompt}),
-                           text=True, capture_output=True, env=env, check=True)
+                           text=True, capture_output=True, env=os.environ.copy(), check=True)
         run("Please build #77 with a flat file")
         run("Another Claude session sent a message: finish #78")
-        run("You are a fresh reader. Check story #79.", headless=True)
-        run("Builder brief for story #80", headless=True)
         self.assertEqual(len(owner_decisions.entries(77)), 1)
         self.assertEqual(owner_decisions.entries(78), [])
-        self.assertEqual(owner_decisions.entries(79), [])
-        self.assertEqual(owner_decisions.entries(80), [])
 
-    def test_a_decision_stated_in_a_prompt_is_recorded_and_briefed(self):
+    def test_a_decision_stated_after_the_lesson_hook_is_removed_is_recorded_and_briefed(self):
         subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"session_id": "s3", "prompt": "Story #46: the ledger keeps this decision"}),
                        text=True, capture_output=True, env=os.environ.copy(), check=True)
         self.assertEqual(len(owner_decisions.entries(46)), 1)

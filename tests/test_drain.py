@@ -24,25 +24,19 @@ def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
     return {"number": n, "title": title or f"Story {n}", "body": body, "labels": [{"name": l} for l in labels], "comments": 0, "status": status, "size": size}
 
 
-BATCH = {"body": "Built in a batch session with #976"}
-
-
 class FakeIo:
     def __init__(self, issues, cap=2, builds=None, land_ok=True, tokens=10, stops=None):
         self.agent, self.moved, self.released, self.already, self.kept, self.on_main = "drain", [], [], False, [], set()
-        self.readied = []
         self.ghost_land = False
         self.refuse_close = ""
         self.slug, self.issues, self.cap, self.builds, self.land_ok, self.tokens = "o/r", list(issues), cap, builds or {}, land_ok, tokens
         self.stops, self.owner = stops or {}, []  # story number -> the policy stop its builder hit; the owner-queue lines written
         self.closed, self.comments, self.started, self.claims, self.lock = [], [], [], set(), threading.Lock()
-        self.cleaned = []
         self.active, self.peak_overlap = set(), []
         self.deps = {}  # story number -> the numbers of the stories that block it (#1064)
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
 
     def landed_lead(self, i): return self.leads.get(i["number"])
-    def told(self, n, sha): return (n, sha) in getattr(self, "toldof", set())
 
     def blockers(self, i):
         """The blockers of a story that are still open, as GitHub's dependency link would name them."""
@@ -81,7 +75,6 @@ class FakeIo:
             self.on_main.add(n)
         return self.land_ok, "RESULT pushed abc1234" if self.land_ok else "RESULT validate-failed"
     def comment(self, n, body): self.comments.append((n, body))
-    def cleanup_landed(self, n): self.cleaned.append(n); return []
     def close_by_script(self, wt, n, why):
         if self.refuse_close:
             return False, self.refuse_close
@@ -89,9 +82,7 @@ class FakeIo:
         self.moved.append(n)
         return True, ""
     def release(self, n): self.released.append(n)
-    def ready(self, n): self.readied.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
-    def backlog(self, n): self.parked = getattr(self, "parked", []) + [n]
     def landed(self, wt, n): return self.already or (n in self.on_main)
     def policy_stop(self, n, wt): return self.stops.get(n)
     def queue_owner(self, n, stop): self.owner.append((n, stop))
@@ -107,120 +98,6 @@ class DrainCase(unittest.TestCase):
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
         return code, out, st
 
-    def test_story_spend_sums_builder_reader_and_fix_rows_for_only_that_story_and_repo(self):
-        home = temp_dir(self)
-        (home / "run-log.jsonl").write_text(
-            '{"story":"story-3","repo":"o/r","cost_usd":1.25}\n'
-            '{"story":"story-3-review","repo":"o/r","cost_usd":0.50}\n'
-            '{"story":"story-3-fix","repo":"o/r","cost_usd":0.25}\n'
-            '{"story":"story-30","repo":"o/r","cost_usd":20}\n'
-            '{"story":"story-3","repo":"other/repo","cost_usd":10}\n'
-            '{"story":"story-3","cost_usd":100}\n'
-            '{"story":"story-3","repo":"o/r","cost_usd":null}\n'
-            'not json\n',
-            encoding="utf-8",
-        )
-        with mock.patch.object(cmd_drain.failure_log, "home", return_value=home):
-            self.assertEqual(2.0, cmd_drain.story_spend(3, "o/r"))
-            self.assertEqual(0.0, cmd_drain.story_spend(4, "o/r"))
-
-    def test_session_telemetry_cost_is_counted_once_with_legacy_rows(self):
-        home = temp_dir(self)
-        (home / "model-sessions.jsonl").write_text(
-            '{"event":"session_end","session":"story-3","session_id":"sid","repo":"o/r","cost_usd":1.0}\n',
-            encoding="utf-8")
-        (home / "run-log.jsonl").write_text(
-            '{"story":"story-3","repo":"o/r","session_id":"sid","cost_usd":1.0}\n'
-            '{"story":"story-3","repo":"o/r","cost_usd":0.5}\n', encoding="utf-8")
-        with mock.patch.object(cmd_drain.failure_log, "home", return_value=home):
-            self.assertEqual(1.5, cmd_drain.story_spend(3, "o/r"))
-
-    def test_a_story_over_its_spend_ceiling_is_parked_before_another_builder_starts(self):
-        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "validation failed", "tokens": 10}]})
-        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.01]):
-            with mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
-                closed, used = cmd_drain.work_story(io, issue(1), state())
-        self.assertFalse(closed)
-        self.assertEqual([1], io.started)
-        self.assertEqual([1], io.parked)
-        self.assertEqual([1], io.released)
-        self.assertIn("$6.01", io.comments[-1][1])
-        self.assertIn("$6.00", io.comments[-1][1])
-        self.assertIn("maxStorySpend", io.comments[-1][1])
-
-    def test_a_story_under_its_spend_ceiling_can_start_its_next_round(self):
-        io = FakeIo([issue(1)], cap=1, builds={1: [
-            {"done": False, "reason": "validation failed", "tokens": 10},
-            {"done": True, "reason": "ok", "tokens": 10},
-        ]})
-        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 5.99]):
-            with mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
-                closed, _ = cmd_drain.work_story(io, issue(1), state())
-        self.assertTrue(closed)
-        self.assertEqual([1, 1], io.started)
-        self.assertEqual([1], io.closed)
-
-    def test_exact_spend_ceiling_parks_before_starting_another_session(self):
-        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "validation failed", "tokens": 10}]})
-        with mock.patch.object(cmd_drain, "story_spend", side_effect=[0.0, 6.0]), \
-             mock.patch.object(cmd_drain, "story_cost_unknown", return_value=False), \
-             mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
-            closed, _ = cmd_drain.work_story(io, issue(1), state())
-        self.assertFalse(closed)
-        self.assertEqual([1], io.started)
-        self.assertEqual([1], io.parked)
-        self.assertIn("reaching its $6.00 ceiling", io.comments[-1][1])
-
-    def test_attempt_ceiling_parks_story_across_runner_restarts(self):
-        io = FakeIo([issue(1)], cap=1)
-        with mock.patch.object(cmd_drain.session_guard, "story_attempts", return_value=8), \
-             mock.patch.object(cmd_drain.local_config, "max_story_attempts", return_value=8), \
-             mock.patch.object(cmd_drain, "story_spend", return_value=0.0), \
-             mock.patch.object(cmd_drain, "story_cost_unknown", return_value=False):
-            closed, _ = cmd_drain.work_story(io, issue(1), state())
-        self.assertFalse(closed)
-        self.assertEqual([], io.started)
-        self.assertEqual([1], io.parked)
-        self.assertIn("8-session attempt ceiling", io.comments[-1][1])
-
-    def test_unknown_cost_parks_story_before_any_new_builder(self):
-        home = temp_dir(self)
-        (home / "run-log.jsonl").write_text(
-            '{"story":"story-1","repo":"o/r","round":1,"cost_usd":null}\n', encoding="utf-8")
-        io = FakeIo([issue(1)], cap=1)
-        with mock.patch.object(cmd_drain.failure_log, "home", return_value=home), \
-             mock.patch.object(cmd_drain, "story_spend", return_value=0.0), \
-             mock.patch.object(cmd_drain.local_config, "max_story_spend", return_value=6.0):
-            closed, _ = cmd_drain.work_story(io, issue(1), state())
-        self.assertFalse(closed)
-        self.assertEqual([], io.started)
-        self.assertEqual([1], io.parked)
-        self.assertIn("cost is unknown", io.comments[-1][1])
-
-    def test_api_errors_back_off_exponentially_without_consuming_builder_restarts(self):
-        errors = [{"done": False, "api_error": True, "api_error_cause": "529 overloaded_error", "reason": "API error", "tokens": 0} for _ in range(2)]
-        io = FakeIo([issue(1)], cap=1, builds={1: errors + [{"done": True, "reason": "ok", "tokens": 1}]})
-        sleeps = []
-        with mock.patch.object(cmd_drain.time, "sleep", side_effect=sleeps.append):
-            code, out, st = self.run_drain(io)
-        self.assertEqual(0, code)
-        self.assertEqual([60, 120], sleeps)
-        self.assertEqual([1], io.closed)
-        self.assertEqual(3, st["sessions"])
-        self.assertEqual(0, st["api_error_streak"])
-
-    def test_five_consecutive_api_errors_stop_the_drain_with_the_cause(self):
-        errors = [{"done": False, "api_error": True, "api_error_cause": "529 overloaded_error", "reason": "API error", "tokens": 0} for _ in range(5)]
-        io = FakeIo([issue(1)], cap=1, builds={1: errors})
-        sleeps = []
-        with mock.patch.object(cmd_drain.time, "sleep", side_effect=sleeps.append):
-            code, out, st = self.run_drain(io)
-        self.assertEqual(1, code)
-        self.assertEqual([60, 120, 240, 480], sleeps)
-        self.assertIn("five consecutive API errors", out)
-        self.assertIn("529 overloaded_error", out)
-        self.assertEqual("529 overloaded_error", st["api_error_stop"])
-
     def test_orders_p0_first_and_skips_epics_claimed_and_owner_gated(self):
         io = FakeIo([issue(1, "Priority: P2"), issue(2, "Priority: P0"), issue(3, "Work type: Epic"), issue(4, labels=["owner-gate"]), issue(5), issue(6, "Priority: P1")], cap=1)
         io.claims.add(5)
@@ -230,29 +107,19 @@ class DrainCase(unittest.TestCase):
         self.assertIn("Drain done: 3 stories closed", out)
         self.assertEqual(code, 0)
 
-    def test_four_independent_stories_build_at_the_same_time(self):
-        """Four builders are genuinely concurrent when capacity is four and their Files areas do not overlap."""
-        gate = threading.Barrier(4, timeout=5)
-        stories = [issue(n, f"Files area: scripts/story_{n}.py") for n in range(1, 5)]
-        io = FakeIo(stories, cap=4)
-        build = io.build
-        io.build = lambda i, wt, note: (gate.wait(), build(i, wt, note))[1]
+    def test_never_two_builders_on_the_same_files(self):
+        io = FakeIo([issue(1, "Files area: scripts/lib/cmd_drain.py"), issue(2, "Files area: scripts/lib/cmd_drain.py"), issue(3, "Files area: scripts/lib/cmd_land.py")], cap=3)
         self.run_drain(io)
-        self.assertEqual(sorted(io.closed), [1, 2, 3, 4])
-        self.assertEqual(4, max(map(len, io.peak_overlap)))
+        self.assertEqual(sorted(io.closed), [1, 2, 3])
+        for active in io.peak_overlap:
+            self.assertFalse({1, 2} <= active)
 
-
-    def test_a_rebase_conflict_restarts_the_builder_with_the_fix_named(self):
-        """#1080: the builder is told to rebase onto the default branch and keep both changes."""
-        io = FakeIo([issue(1)], cap=1)
-        notes, results = [], ["RESULT rebase-conflict", "RESULT pushed abc1234"]
-        build = io.build
-        io.build = lambda i, wt, note: (notes.append(note), build(i, wt, note))[1]
-        io.land = lambda wt, n: (io.on_main.add(n) or True, results.pop(0)) if results[0].endswith("abc1234") else (False, results.pop(0))
+    def test_a_folder_and_a_file_inside_it_overlap_through_the_one_rule(self):
+        io = FakeIo([issue(1, "Files area: scripts/lib"), issue(2, "Files area: scripts/lib/cmd_drain.py")], cap=2)
         self.run_drain(io)
-        self.assertEqual([1], io.closed)
-        self.assertIn("rebase onto origin", notes[1])
-        self.assertIn("keep both", notes[1])
+        self.assertEqual(sorted(io.closed), [1, 2])
+        for active in io.peak_overlap:
+            self.assertFalse({1, 2} <= active)
 
     def test_only_ready_sized_stories_with_a_files_area_are_built_and_each_skip_is_named_once(self):
         io = FakeIo([issue(1, status="Backlog"), issue(2, size=""), {**issue(3), "body": "Priority: P0"}, issue(4)], cap=4)
@@ -333,29 +200,24 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], st["blocked"])
         self.assertIn("Fix the thing (#976)", io.comments[0][1])
 
-    def test_drain_capacity_respects_configured_cap_parallel_narrowing_and_other_repos(self):
+    def test_the_default_drain_fills_the_machine_limit_and_parallel_overrides_it(self):
+        """#1055: with no flag a drain runs up to maxBuilders less what other repos build; --parallel N wins; a bad N is refused."""
         with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
-                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=1):
-            self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
-            self.assertEqual(2, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=2).capacity())
-            self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=8).capacity())
-        with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=1), \
-                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=0):
-            self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
-
-    def test_ready_stories_sharing_files_are_serialized_even_with_parallel_capacity(self):
-        stories = [issue(1, "Files area: shared.py"), issue(2, "Files area: shared.py")]
-
-        class Slow(FakeIo):
-            def build(self, story, worktree, note):
-                if story["number"] == 1:
-                    time.sleep(0.08)
-                return super().build(story, worktree, note)
-
-        io = Slow(stories, cap=2)
-        self.run_drain(io)
-        self.assertEqual([1, 2], io.started)
-        self.assertEqual(1, max(map(len, io.peak_overlap)))
+                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=3):
+            self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
+            self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
+        with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
+                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=6):
+            self.assertEqual(0, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
+        seen = []
+        factory = lambda repo, slug, parallel=None: seen.append(parallel) or FakeIo([])
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/nonexistent")), mock.patch.object(cmd_drain, "backlog_config",
+                                                                                                             return_value={"repoOwner": "o", "repoName": "r"}):
+            quiet(cmd_drain.command_drain, ["r"], factory, lambda s: None)
+            quiet(cmd_drain.command_drain, ["r", "--parallel", "2"], factory, lambda s: None)
+            code, _ = quiet(cmd_drain.command_drain, ["r", "--parallel", "0"], factory, lambda s: None)
+        self.assertEqual([None, 2], seen)
+        self.assertEqual(2, code)
 
     def test_a_story_whose_files_area_names_a_folder_is_skipped_and_the_rest_run(self):
         """#1077: a folder-wide area overlapped every story and held a 4-builder drain to 1."""
@@ -463,20 +325,6 @@ class DrainCase(unittest.TestCase):
         io.land = lambda wt, n: self.fail("land ran for a story that was already on the default branch")
         self.run_drain(io)
         self.assertEqual(([], [1], [1]), (io.started, io.closed, io.moved))
-        self.assertEqual([1], io.cleaned, "closing a story already on main must reconcile its worktree and branches")
-
-    def test_real_io_cleanup_uses_the_story_worktree_and_shared_land_cleanup(self):
-        from types import SimpleNamespace
-
-        worktrees = temp_dir(self)
-        worktree = worktrees / "repo-42"
-        worktree.mkdir()
-        io = cmd_drain.Io.__new__(cmd_drain.Io)
-        io.repo = Path("repo")
-        with mock.patch.object(cmd_drain, "placement_config", return_value=SimpleNamespace(worktrees=worktrees)), \
-             mock.patch.object(cmd_drain.cmd_land, "cleanup", return_value=["Removed worktree"]) as cleanup:
-            self.assertEqual(["Removed worktree"], io.cleanup_landed(42))
-        cleanup.assert_called_once_with(worktree)
 
     def test_a_refused_close_of_a_landed_story_leaves_the_card_where_it_is(self):
         io = FakeIo([issue(1)])
@@ -517,32 +365,6 @@ class DrainCase(unittest.TestCase):
         io.ghost_land = True
         self.run_drain(io)
         self.assertEqual((io.closed, io.moved, io.kept), ([], [], [1]))
-
-    def test_a_story_of_size_l_or_xl_is_skipped_and_named(self):
-        for size in ("L", "XL"):
-            reason = cmd_drain.skip_reason(issue(1, size=size))
-            self.assertIn(f"Size {size}", reason)
-            self.assertIn("split", reason)
-        self.assertEqual(cmd_drain.skip_reason(issue(1, size="M")), "")
-
-    def test_a_story_that_stops_on_the_turn_limit_twice_is_parked_and_the_next_story_builds(self):
-        spent = {"done": False, "reason": "max_turns", "budget": True}
-        io = FakeIo([issue(1, "Priority: P0"), issue(2)], cap=1, builds={1: [dict(spent) for _ in range(4)]})
-        _, _, st = self.run_drain(io)
-        self.assertEqual(io.started.count(1), 2)  # no third restart
-        self.assertEqual(io.parked, [1])
-        self.assertEqual((io.closed, io.kept), ([2], []))
-        self.assertIn(1, io.released)
-        self.assertTrue(any(n == 1 and body.startswith("Parked:") for n, body in io.comments))
-
-    def test_a_turn_limit_stop_followed_by_another_failure_is_not_parked(self):
-        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "x", "budget": True},
-                                             {"done": False, "reason": "claude exited 1"},
-                                             {"done": False, "reason": "x", "budget": True},
-                                             {"done": False, "reason": "y"}]})
-        self.run_drain(io)
-        self.assertEqual(io.started.count(1), 4)
-        self.assertFalse(getattr(io, "parked", []))
 
     def test_a_blocked_story_stays_open_and_returns_to_ready(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1 in round 1."} for _ in range(4)]})
@@ -626,24 +448,6 @@ class TestRealIo(unittest.TestCase):
             with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
                 self.io.build(issue(7, f"Do it.\nSize: {size}", labels=labels), Path("/wt/7"), "")
             self.assertEqual((model_name, rounds), (run_loop.call_args.kwargs["model_name"], run_loop.call_args.kwargs["rounds"]), size)
-
-    def test_the_turn_budget_follows_the_story_size(self):
-        for size, turns in (("XS", 40), ("S", 40), ("M", 60), ("L", 60)):
-            with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
-                self.io.build(issue(7, f"Do it.\nSize: {size}"), Path("/wt/7"), "")
-            self.assertEqual(turns, run_loop.call_args.kwargs["max_turns"], size)
-
-    def test_a_spent_budget_leaves_a_handoff_comment_and_the_next_round_starts_from_it(self):
-        spent = {"done": False, "budget": True, "reason": "claude exited 1, stop reason max_turns", "summary": "Wrote the parser; tests are left."}
-        notes = []
-        io = FakeIo([issue(1)], builds={1: [spent]})
-        build = io.build
-        io.build = lambda i, wt, note: notes.append(note) or build(i, wt, note)
-        _, out, st = DrainCase.run_drain(self, io)
-        self.assertEqual(io.closed, [1])
-        self.assertIn("Budget reached: the builder used every turn", io.comments[0][1])
-        self.assertIn("Left: Wrote the parser; tests are left.", io.comments[0][1])
-        self.assertIn("Left: Wrote the parser", notes[1])
 
     def test_the_brief_carries_the_resume_note_and_names_no_other_story(self):
         lead = issue(7, "Do it.\nSize: XS")
@@ -733,14 +537,14 @@ class TestRealIo(unittest.TestCase):
         """#988: the lead commit is named, and the mate's work is not built again."""
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
         mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
-        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}, BATCH]
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
         lead = self.mate_io(refused).landed_lead(mate)
         self.assertEqual("Fix the thing (#976)", lead[1])
         self.assertEqual(git(self.repo, "rev-parse", "HEAD").stdout.strip(), lead[0])
 
     def test_a_story_is_built_as_before_without_a_refused_close_an_overlapping_file_or_a_comment(self):
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
-        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}, BATCH]
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
         mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
         self.assertIsNone(self.mate_io([]).landed_lead(mate))
         self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_land.py"), "comments": 1}))
@@ -749,27 +553,8 @@ class TestRealIo(unittest.TestCase):
     def test_a_story_with_its_own_commit_on_main_is_not_a_mate(self):
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
         self.commit_file("scripts/lib/cmd_drain.py", "Fix the story (#974)")
-        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}, BATCH]
+        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
         self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}))
-
-    def test_a_coincidental_touch_is_no_lead_and_the_batch_commit_is_named_over_a_newer_touch(self):
-        """#1084: with no batch comment a touched file blocks nothing, and with one the batch commit is named, not the newest touch."""
-        refused = {"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}
-        mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
-        self.commit_file("scripts/lib/cmd_drain.py", "Batch work (#976)")
-        batch = git(self.repo, "rev-parse", "HEAD").stdout.strip()
-        self.commit_file("scripts/lib/cmd_drain.py", "Later touch (#999)")
-        self.assertIsNone(self.mate_io([refused]).landed_lead(mate))
-        self.assertEqual(batch, self.mate_io([refused, BATCH]).landed_lead(mate)[0])
-
-    def test_a_commit_already_named_in_a_not_built_comment_gets_no_second_comment(self):
-        io = self.mate_io([{"body": "Not built: commit abcdef123456 (x) is the batch session commit"}])
-        self.assertTrue(io.told(974, "abcdef1234567890"))
-        self.assertFalse(io.told(974, "0123456789abcdef"))
-        fake = FakeIo([issue(974)])
-        fake.leads[974], fake.toldof = ("abcdef1234567890", "x (#976)"), {(974, "abcdef1234567890")}
-        self.assertEqual((False, 0), cmd_drain._work_story(fake, issue(974), state()))
-        self.assertEqual([], fake.comments)
 
     def test_head_that_names_the_story_and_sits_on_the_default_branch_is_landed(self):
         git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
@@ -870,22 +655,6 @@ class StoppedRun(unittest.TestCase):
         self.assertFalse(run_lock.path("o/r").exists())
         self.assertEqual(previous, signal.getsignal(signal.SIGTERM))
 
-    def test_sighup_releases_the_run_lock_and_restores_the_handler(self):
-        """#1141: closing the terminal tab follows the same cleanup path as SIGTERM."""
-        def stopped(io, st, sleep=None):
-            os.kill(os.getpid(), signal.SIGHUP)
-            time.sleep(5)
-            return 0
-
-        previous = signal.getsignal(signal.SIGHUP)
-        ended = []
-        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
-                mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", side_effect=stopped):
-            code, _ = quiet(cmd_drain.command_drain, ["r"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
-        self.assertEqual([130], ended)
-        self.assertFalse(run_lock.path("o/r").exists())
-        self.assertEqual(previous, signal.getsignal(signal.SIGHUP))
-
     def test_a_new_run_releases_the_local_claims_no_live_run_holds_and_leaves_other_repos_alone(self):
         """#1076: a claim a stopped run left behind is released when the next run takes the lock, so the story is eligible in its normal order."""
         now = time.time()
@@ -908,6 +677,10 @@ class StoppedRun(unittest.TestCase):
         self.assertEqual((0, []), (code, ended))
 
 
+if __name__ == "__main__":
+    unittest.main()
+
+
 class CloseByScript(unittest.TestCase):
     def test_a_refused_close_leaves_the_story_open_with_one_comment_naming_the_gate(self):
         io = FakeIo([issue(1)])
@@ -926,59 +699,3 @@ class CloseByScript(unittest.TestCase):
         self.assertTrue(closed)
         self.assertEqual([1], io.closed)
         self.assertEqual(1, io.started.count(1))
-
-
-class OncePerPassCase(unittest.TestCase):
-    def test_the_board_is_read_again_after_the_wait_for_a_free_builder(self):
-        io = FakeIo([issue(1)], cap=[0, 0, 1])
-        reads, sleeps = [], []
-        listed = io.list_open
-        io.list_open = lambda: (reads.append(1), listed())[1]
-        cmd_drain.drain(io, state(), sleep=sleeps.append, say=lambda t: None)
-        self.assertEqual([300], sleeps)
-        self.assertEqual([1], io.started)
-        self.assertEqual(3, len(reads))  # the start, after the wait, after the story finished
-
-    def test_a_board_read_drops_the_kept_blockers_but_not_the_comments(self):
-        io = cmd_drain.Io(Path("/repo"), "o/r", runner=lambda args: mock.Mock(returncode=0, stdout="[]", stderr=""))
-        io.memo.get("blockers", {"number": 5}, lambda: [3])
-        io.memo.get("comments", {"number": 5}, lambda: ["c"])
-        with mock.patch.object(cmd_drain, "fetch_open", return_value=[]), mock.patch.object(cmd_drain, "costed", side_effect=lambda s, c, call: call()), mock.patch.object(io, "board_cards", return_value={}):
-            io.list_open()
-        self.assertEqual([4], io.memo.get("blockers", {"number": 5}, lambda: [4]))
-        self.assertEqual(["c"], io.memo.get("comments", {"number": 5}, lambda: ["new"]))
-
-    def test_the_board_is_read_at_the_start_and_again_only_after_a_story_finishes(self):
-        io = FakeIo([issue(1), issue(2)], cap=1)
-        reads = []
-        listed = io.list_open
-        io.list_open = lambda: (reads.append(1), listed())[1]
-        drain_io = io
-        cmd_drain.drain(drain_io, state(), sleep=lambda s: None, say=lambda t: None)
-        self.assertEqual([1, 2], io.started)
-        self.assertEqual(3, len(reads))  # the start, then once after each story finished
-
-    def test_io_reads_an_unchanged_story_comments_and_blockers_once(self):
-        calls = []
-        def runner(args):
-            calls.append(args[1])
-            return mock.Mock(returncode=0, stdout="[]", stderr="")
-        io = cmd_drain.Io(Path("/repo"), "o/r", runner=runner)
-        story = {"number": 5, "updated_at": "t", "comments": 1, "issue_dependencies_summary": {"blocked_by": 1}}
-        with mock.patch.object(cmd_drain.cmd_dispatch, "live_claim", return_value=""):
-            for _ in range(3):
-                io.claimed(story), io.blockers(story)
-        self.assertEqual(2, len(calls))
-
-    def test_the_drain_calls_are_logged_under_their_own_session_key(self):
-        home = temp_dir(self)
-        readings = iter([{"remaining": 4000, "reset": 0}, {"remaining": 3990, "reset": 0}])
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home), "OLIVERCODE_GH_POINTS_FLOOR": "0"}), \
-                mock.patch.object(cmd_drain.gh_budget, "points_reading", side_effect=lambda *a, **k: next(readings)):
-            self.assertEqual("ok", cmd_drain.costed("drain:o/r", "gh api repos/o/r/issues", lambda: "ok"))
-            rows = cmd_drain.gh_budget._read_rows(time.time(), 3600)
-            self.assertIn("drain:o/r", [r["session"] for r in rows])
-
-
-if __name__ == "__main__":
-    unittest.main()

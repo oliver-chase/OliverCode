@@ -19,13 +19,11 @@ LENSES = {
     "over-engineering and unused parts": r"over-engineer|unused",
     "cost in use": r"cost in use|cost to",
     "voice": r"voice",
-    "design": r"design",
     "documentation coverage": r"documentation|doc coverage",
     "functionality gaps": r"gap",
     "portability and sharing": r"portab|sharing|shareable",
     "test necessity": r"test necessity",
 }
-OPTIONAL_LENSES = {"design"}  # 7b applies to a target that ships visuals, so a report need not name it
 ISSUE = re.compile(r"#\d+")
 SEPARATOR = re.compile(r"^\|?[\s:|-]+\|[\s:|-]*$")
 
@@ -96,12 +94,10 @@ def check(text):
     body = "\n".join(l.strip("| ").split("|")[0] if l.lstrip().startswith("|") else l[:80]
                      for l in section if l.lstrip().startswith("|") or "Checked" in l[:80])
     for lens, rx in LENSES.items():
-        if lens not in OPTIONAL_LENSES and not re.search(rx, body, re.I):
+        if not re.search(rx, body, re.I):
             problems.append(f"findings never mention the lens: {lens}. Fix: add a row, or \"Checked, nothing found\" with what was checked")
     # Each lens opens with one or two plain sentences before its first table row, so the owner reads its meaning first.
     for lens, rx in LENSES.items():
-        if lens in OPTIONAL_LENSES and not re.search(rx, body, re.I):
-            continue
         opener = next((i for i, l in enumerate(section) if l.strip() and not l.lstrip().startswith("|") and re.search(rx, l[:80], re.I)), None)
         row = next((i for i, l in enumerate(section) if l.lstrip().startswith("|") and re.search(rx, l.strip("| ").split("|")[0], re.I)), None)
         if opener is None or (row is not None and row < opener):

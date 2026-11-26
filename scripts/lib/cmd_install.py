@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import plistlib
 import pwd
 import shlex
 import subprocess
@@ -12,15 +11,14 @@ import sys
 from pathlib import Path
 
 from lib import launchd
+from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import setting
-from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, link_default_registry, load_local, local_path, save_local, voice_file
+from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, load_local, local_path, save_local, voice_file
 
 from lib import claude_settings as _claude_settings
 from lib import cmd_guide
 from lib import queue_shim as _queue_shim
 from lib import repo_gates as _repo_gates
-from lib import repo_profiles as _repo_profiles
 from lib.skills_catalog import skill_dirs
 from lib.skill_links import broken_links as _broken_links
 
@@ -46,59 +44,19 @@ INSTALL_RECORD = ".olivercode-install.json"
 
 # The first install's closing text: how work runs, the first steps and the habits that keep it cheap, in 20 lines at most (#972, #991).
 INTRODUCTION = """How OliverCode works
-  Claude Code remains interactive for exploration, planning, debugging and work you want to do together.
-  For unattended execution today, delegated work is represented by a repo story; you may need to create or choose it first.
-  Dispatch and drain start isolated Claude Code worktrees; OliverCode runs validation and safely lands or reports blocked work.
+  You work in one thread and say what you want. Each request becomes a story on the repo's board.
+  `olivercode dispatch N` or `olivercode drain REPO` builds a story in one fresh headless Claude session, and the runner validates it and lands it for you.
   The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost.
 
 First steps, in order
-  1. Say "Set up OliverCode" in Claude: it finds your project folders, shows what it found and asks which to connect.
+  1. Register your repos: olivercode discover --root <folder holding your repos> --register
   2. Check this machine: olivercode health
-  3. For queued execution today: create or choose a repo story, then run `olivercode dispatch N` or `olivercode drain REPO`.
+  3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`. A chat never builds a board story by hand.
 
 Using it well
 """ + "\n".join(f"  {habit}" for habit in cmd_guide.USING_IT_WELL) + """
 
 Run `olivercode guide` for the full overview."""
-
-
-def desktop_app() -> bool:
-    """True when this session runs in the Claude desktop app, the only place install can publish and pin City (#999)."""
-    # shortcut: assumes the desktop app sets CLAUDE_CODE_ENTRYPOINT=claude-desktop, unverified here; correct the value if the app reports another.
-    return os.environ.get("CLAUDE_CODE_ENTRYPOINT") == "claude-desktop"
-
-
-def city_step(desktop: bool | None = None) -> str:
-    """Install's City step (#999). In the desktop app it names the saved City URL, which a second install reuses with no second artifact, or says the
-    adoption skill publishes City next, then names each phone step once until the user has confirmed City on the phone (`cityOnPhone`). Outside the
-    desktop app it prints the local page path and the command that publishes City, and says why pinning and Remote Control are skipped."""
-    from lib import failure_log
-    desktop = desktop_app() if desktop is None else desktop
-    if not desktop:
-        print(f"City: the local page is {failure_log.home() / 'status.html'}. Publish it with `{cmd_guide.CITY_PUBLISH}`.")
-        print("  Pinning City and Remote Control are skipped, because they need the Claude desktop app.")
-        return ""
-    url = cmd_guide.city_url()
-    print(f"City: {url} (saved as cityArtifact, so no second artifact is made)" if url else
-          "City: not set up yet. The olivercode-adoption skill publishes the status page as the OliverCode City artifact, saves its URL as cityArtifact, pins it, opens it and confirms it opens. If it cannot, it reports City as incomplete and names what is missing.")
-    if not setting("cityOnPhone"):
-        print("Phone: follow these steps, then confirm City opened on the phone")
-        for n, step in enumerate(cmd_guide.PHONE_STEPS, 1):
-            print(f"  {n}. {step}")
-    return url
-
-
-def status_page_line() -> str:
-    """Write the status page when none exists, so a first install has one, and say where it is. `olivercode status --open` opens it (#996)."""
-    from lib import status_report
-    path = status_report.page_path()
-    if path.exists():
-        return f"  [ALREADY] status page at {path}"
-    try:
-        status_report.write_empty()
-    except OSError as exc:
-        return f"  [WARN] the status page could not be written to {path} ({exc}); `olivercode status --open` writes it"
-    return f"  [WRITTEN] status page at {path}; `olivercode status --open` opens it"
 
 
 def closing_lines(oc_root: Path) -> str:
@@ -110,8 +68,7 @@ def closing_lines(oc_root: Path) -> str:
 Walk through the rest of setup: say "set up OliverCode" in Claude Code, and the olivercode-adoption skill takes you through it."""
 
 
-# "olivercode" is ~/.claude/olivercode, which points at the checkout itself, so a rule names its paths under one stable folder and needs no shell step to find the repo (#1017).
-RULE_LINKS = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md", "DESIGN.md": Path("docs") / "DESIGN.md", "olivercode": Path(".")}
+RULE_LINKS = {"CLAUDE.md": Path("CLAUDE.md"), "VOICE.md": Path("docs") / "VOICE.md", "DESIGN.md": Path("docs") / "DESIGN.md"}
 
 
 def _managed_links(oc_root: Path) -> dict[str, Path]:
@@ -231,39 +188,13 @@ def retire_removed_pages(home: Path | None = None) -> list[str]:
     return gone
 
 
-def repair_job_plists(home: Path | None = None, run=subprocess.run) -> list[str]:
-    """Rewrite each OliverCode job plist that has no PATH with the PATH that finds gh, then reload it, since launchd's default PATH has
-    no gh and the job fails every run (#1010). Returns the labels it repaired."""
-    from lib import launchd
-    folder = (home or Path.home()) / "Library" / "LaunchAgents"
-    fixed = []
-    for plist in sorted(folder.glob("com.olivercode.*.plist")) if folder.is_dir() else []:
-        try:
-            data = plistlib.loads(plist.read_bytes())
-        except (OSError, ValueError):
-            continue
-        env = data.get("EnvironmentVariables") or {}
-        if "PATH" in env:
-            continue
-        data["EnvironmentVariables"] = {**env, "PATH": launchd.job_path()}
-        plist.write_bytes(plistlib.dumps(data))
-        label = data.get("Label") or plist.stem
-        run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
-        loaded = run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)], capture_output=True, text=True)
-        note = "" if loaded.returncode == 0 else f"; launchctl refused it: {loaded.stderr.strip()}"
-        print(f"  [JOB] {label} ran with no PATH, so it could not find gh; rewrote it with PATH and reloaded it{note}")
-        fixed.append(label)
-    return fixed
-
-
 def _retire_removed_jobs() -> None:
-    """Remove the jobs and pages of removed commands, and give each job plist a PATH that finds gh, under the same real-home rule as the replay job."""
+    """Remove the jobs and pages of removed commands, under the same real-home rule as the replay job."""
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
     retire_removed_jobs()
     retire_removed_pages()
-    repair_job_plists()
 
 
 def owner_terminal() -> bool:
@@ -350,11 +281,6 @@ def fleet_step(oc_root: Path, ask=None) -> str:
     configured = load_local().get("fleetRegistry")
     if configured is None or Path(configured).expanduser().resolve().parent in merged:
         _set_fleet_registry(dest / REGISTRY)
-    if str(local_path()) != os.devnull:
-        registry = Path(load_local().get("fleetRegistry") or dest / REGISTRY).expanduser()
-        note = link_default_registry(registry)
-        if note:
-            print(note)
     return ""
 
 
@@ -377,31 +303,6 @@ def design_step(ask=None) -> str:
         print("Design file: the shipped docs/DESIGN.md. Set designFile in olivercode.local.json to change it.")
     save_local(updates)
     return str(own) if "designFile" in updates else ""
-
-
-def set_global_hooks_path(oc_root: Path) -> str:
-    """Point git's global core.hooksPath at the hooks `olivercode install` builds, so every repo with
-    none of its own runs them with no per-repo commit (#1154). Returns one status word."""
-    target = _repo_gates.hook_templates(oc_root)
-    current = _repo_gates.global_hooks_path()
-    if current and Path(current).expanduser().resolve() == target.resolve():
-        return "already"
-    done = subprocess.run(["git", "config", "--global", "core.hooksPath", str(target)], capture_output=True)
-    return "set" if done.returncode == 0 else "failed"
-
-
-def report_own_hooks_repos(repos: list[tuple[str, Path]]) -> list[str]:
-    """Names each registered repo that keeps its own core.hooksPath (#1154), so the global default never
-    overrides it. Returns the names reported, for a test to check without parsing the printed lines."""
-    kept = []
-    for name, path in repos:
-        if not (path / ".git").exists():
-            continue
-        own = _repo_profiles.own_hooks_path(path)
-        if own:
-            print(f"  [KEPT] {name}: keeps its own core.hooksPath ({own}), the global default leaves it alone")
-            kept.append(name)
-    return kept
 
 
 def registered_repos() -> list[tuple[str, Path]]:
@@ -475,6 +376,10 @@ def command_install(oc_root: Path) -> int:
     checkout moved, is replaced in place. `uninstall` restores the backup. Install records
     the links it wrote in ~/.claude/.olivercode-install.json so uninstall need not guess.
     """
+    live = _live_copy.problem(oc_root)
+    if live:
+        print(f"  [FAIL] {live}")
+        return 1
     from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, gh_problem
     if sys.version_info[:2] < MIN_PYTHON:
         print(f"  [FAIL] Python is {sys.version_info[0]}.{sys.version_info[1]} and OliverCode needs {MIN_PYTHON_TEXT} or newer: {PYTHON_FIX}")
@@ -531,8 +436,6 @@ def command_install(oc_root: Path) -> int:
         target.symlink_to(source)
         return "linked"
 
-    status = _link(claude_dir / "olivercode", oc_root)
-    print(f"  [{status.upper()}] ~/.claude/olivercode")
     status = _link(claude_dir / "CLAUDE.md", oc_root / "CLAUDE.md")
     print(f"  [{status.upper()}] ~/.claude/CLAUDE.md")
     # CLAUDE.md imports the voice by this fixed path. A relative import from a symlinked
@@ -568,6 +471,10 @@ def command_install(oc_root: Path) -> int:
         print(f"  [REMOVED] links to skills this checkout no longer has: {', '.join(retired)}")
     from lib import failure_log  # the hooks log blocked commits only where this folder exists
     failure_log.home().mkdir(parents=True, exist_ok=True)
+    # A release that moves a state file moves the user's copy once, with a backup (#762).
+    from lib import state_migrations
+    for line in state_migrations.run(oc_root):
+        print(f"  [MIGRATED] {line}")
     expected = {k: oc_root / rel for k, rel in RULE_LINKS.items()}
     expected.update({f"skills/{name}": source for name, source in wanted.items()})
     _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, src in expected.items()
@@ -618,14 +525,6 @@ def command_install(oc_root: Path) -> int:
         else:
             print(f"  [WARN] {problem}; to fix it run `{fix}`")
 
-    # Every other registered repo runs its commit gates from this one global setting, so a
-    # hook template change never costs a repo its own commit (#1154). A repo with its own
-    # core.hooksPath (husky and the like) is left alone and named below.
-    global_status = set_global_hooks_path(oc_root)
-    print(f"  [{global_status.upper()}] git's global core.hooksPath -> {_repo_gates.hook_templates(oc_root)}" if global_status != "failed"
-          else f"  [FAIL] could not set git's global core.hooksPath; run `git config --global core.hooksPath {_repo_gates.hook_templates(oc_root)}`")
-    report_own_hooks_repos(registered_repos())
-
     _schedule_replay()
     _retire_removed_jobs()
 
@@ -641,7 +540,7 @@ def command_install(oc_root: Path) -> int:
     if untouched:
         print(f"  [KEPT] {len(untouched)} entr(y/ies) not managed by this checkout, left as-is: "
               f"{', '.join(untouched)}")
-        print("         Say 'Set up OliverCode' and Claude classifies them.")
+        print("         `olivercode discover --root <dir>` classifies them.")
 
     print()
     if backups:
@@ -655,8 +554,6 @@ def command_install(oc_root: Path) -> int:
         board_step(registered_repos())
     else:
         print("Board step skipped here. Run `olivercode install` in your own terminal, or `olivercode backlog-setup DIR --apply` for each repo.")
-    city_step()
-    print(status_page_line())
     print(closing_lines(oc_root))
     if first_install:
         print()
@@ -700,7 +597,7 @@ def command_uninstall(oc_root: Path) -> int:
 
     for name, rel in RULE_LINKS.items():
         path, note = claude_dir / name, ""
-        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or _points_into(path, voice_file(root).resolve()) or _points_into(path, design_file(root).resolve()) or name in moved_links):
+        if path.is_symlink() and (_points_into(path, (root / rel).resolve()) or _points_into(path, voice_file(root).resolve()) or name in moved_links):
             if not path.exists():
                 note = f" (it pointed at {os.readlink(path)}, which is gone)"
             path.unlink()

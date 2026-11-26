@@ -43,12 +43,12 @@ class Schedules(unittest.TestCase):
         return schedules.check(self.tasks, self.agents, repo_root=self.root, home=self.tmp, **kw)
 
     def test_a_page_refresh_task_is_listed_with_its_cost_and_warns_naming_the_token_free_path(self):
-        self.task("report-refresh", "Rebuild the report page and republish it each morning.")
+        self.task("dash-refresh", "Rebuild the dashboard and republish it to its artifact each morning.")
         self.task("other", "Count the files.")
         self.plist("p.plist", "co.x.pageRefresh", ["/bin/sh", "-c", f"{self.repo}/run.py dashboard refresh"])
         self.assertEqual(schedules.refreshes(self.tasks, self.agents, self.tmp, prefixes=("co.x",)),
-                         [("report-refresh", True), ("co.x.pageRefresh", False)])
-        found = [f for f in self.check() if f.task == "report-refresh"]
+                         [("dash-refresh", True), ("co.x.pageRefresh", False)])
+        found = [f for f in self.check() if f.task == "dash-refresh"]
         self.assertEqual(len(found), 1)
         self.assertIn("starts a Claude session", found[0].text)
         self.assertIn("starts no Claude session", found[0].text)
@@ -65,9 +65,7 @@ class Schedules(unittest.TestCase):
         self.task("paused", "Check the inbox.")
         self.task("manual", "Check the inbox.")
         crons = {"polls": ("0 */2 * * *", True), "gated": ("0 */2 * * *", True), "paused": ("0 * * * *", False)}
-        everything = self.check(crons=crons)
-        self.assertEqual([f.task for f in everything if f.task in ("gated", "paused", "manual")], [])
-        found = [f for f in everything if "gate" in f.text]
+        found = [f for f in self.check(crons=crons) if "gate" in f.text]
         self.assertEqual([(f.level, f.task) for f in found], [("FAIL", "polls")])
         self.assertIn("olivercode gated --job polls CHECK -- ", found[0].text)
         self.assertIn("12 times a day", found[0].text)

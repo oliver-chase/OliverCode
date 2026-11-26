@@ -3,7 +3,7 @@
 It rebases the worktree on origin/main, squashes a branch of several commits into one whose message is the first commit's title and the story number (#898), runs the repo's validation up to twice unless a passing run already recorded the same tree (#910), pushes HEAD:main and retries up to four times when main moves. After a push it fast-forwards the main
 checkout when that is clean and prints how far behind an edited or diverged one is. The log is ~/.olivercode/land/land-REPO-N.log (under OLIVERCODE_HOME when set) and ends
 with `RESULT pushed SHA`, `RESULT rebase-conflict`, `RESULT validate-failed`, `RESULT squash-failed` (the commits could not be squashed), `RESULT push-failed` (the push failed while main stood still) or `RESULT main-kept-moving` (a land keeps retrying with a short pause for ten minutes while main moves and each rebase is clean). A second land for a story that is already running refuses. Land never edits docs/LIMITS.json: the size ceiling only warns (#879).
-A commit that changes a file outside its story's Files area lands and the story gets a comment naming the files; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
+A commit that changes a file outside its story's Files area ends with `RESULT outside-area` and gets a comment on the story; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
 
 A landed story is cleaned up here (#712): the worktree, the local branch and the remote branch are deleted, so no session needs a removal permission. Work that did not land
 stays in its worktree, gets a handover file ~/.olivercode/land/handover-REPO-N.md, and no branch is pushed for it.
@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import agent_loop, backlog_setup, cmd_owner, failure_log, intake, local_config, maintain, validated
+from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, validated
 from lib.validate_gates import PROGRESS  # the lines that also print on the terminal while a land validates (#776)
 from lib.local_config import OC_ROOT
 
@@ -26,8 +26,6 @@ LOG_DIR: Path | None = None  # None means failure_log.home() / "land", which bel
 TRIES = 4
 BUDGET = 600  # seconds a land keeps retrying after TRIES clean rebases while main keeps moving (#784)
 PAUSE = 5
-CLAIM_WAIT = 300  # seconds a landing waits on another run's claim before it stops (#1116)
-LAND_AS = "OLIVERCODE_LAND_AS"  # the agent of the run that started this land, set by the drain and dispatch (#1106)
 USAGE = "Usage: olivercode land WORKTREE STORY"
 CUT_LOCK = "version-cut.lock"
 TEST_FILE = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|[._](test|spec)\.\w+$")
@@ -53,13 +51,10 @@ def _validate_once(wt: Path, log, say=print) -> bool:
     except OSError as exc:
         log.write(f"validate: {exc}\n")
         return False
-    try:
-        for line in proc.stdout:
-            log.write(line)
-            if line.startswith(PROGRESS):
-                say(line.rstrip("\n"), flush=True)
-    finally:
-        proc.stdout.close()
+    for line in proc.stdout:
+        log.write(line)
+        if line.startswith(PROGRESS):
+            say(line.rstrip("\n"), flush=True)
     return proc.wait() == 0
 
 
@@ -244,8 +239,10 @@ def _changed_lines(diff: str) -> list[tuple[str, int, str, str]]:
 
 
 def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
-    """What in a commit weakens a test, each as `file:line reason` (#1073, #1216): a skip, `|| true`, or assertions lost after matching exact assertion lines moved across test files."""
-    found, removed, added = [], {}, {}
+    """What in a commit weakens a test, each as `file:line reason` (#1073): a skip added to a test file, `|| true` added to a test or validation
+    file, or assertions removed from a test file net of the ones added to it. Assertions may go when the commit deletes more non-blank code
+    outside the tests than it adds there, since that is the code they covered. A one-line edit nets to zero, so it covers nothing."""
+    found, lost = [], {}
     code = [sign for path, _, sign, text in rows if not TEST_FILE.search(path) and text.strip()]
     net_code = code.count("-") - code.count("+")
     for path, line, sign, text in rows:
@@ -255,49 +252,26 @@ def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
         if sign == "+" and (test or VALIDATION_FILE.search(path)) and OR_TRUE.search(text):
             found.append(f"{path}:{line} adds || true to a test command")
         if test and ASSERT.search(text):
-            bucket = removed if sign == "-" else added
-            bucket.setdefault(path, []).append((line, text.strip()))
+            first, net = lost.get(path, (None, 0))
+            if sign == "-" and first is None:
+                first = line
+            lost[path] = (first, net + (1 if sign == "-" else -1))
     if net_code <= 0:
-        excess_removed, excess_added = [], []
-        for path in dict.fromkeys((*removed, *added)):
-            old, new = list(removed.get(path, [])), list(added.get(path, []))
-            # Exact unchanged assertions are paired first. A remaining same-file
-            # edit keeps the previous net-count behavior (a one-for-one rewrite
-            # is not a weakening); only the excess can be considered moved/lost.
-            for item in list(old):
-                if item in new:
-                    old.remove(item)
-                    new.remove(item)
-            paired = min(len(old), len(new))
-            old, new = old[paired:], new[paired:]
-            excess_removed.extend((path, *item) for item in old)
-            excess_added.extend((path, *item) for item in new)
-        unmatched_by_text = {}
-        for path, line, text in excess_removed:
-            unmatched_by_text.setdefault(text, []).append((path, line))
-        for _, text in excess_added:
-            candidates = unmatched_by_text.get(text, [])
-            if candidates:
-                candidates.pop()
-        unmatched = {}
-        for remaining in unmatched_by_text.values():
-            for path, line in remaining:
-                unmatched.setdefault(path, []).append(line)
-        found += [f"{path}:{min(lines)} removes {len(lines)} assertion(s) without removing the code they cover"
-                  for path, lines in unmatched.items()]
+        found +=[f"{path}:{first} removes {net} assertion(s) without removing the code they cover" for path, (first, net) in lost.items() if net > 0]
     return found
 
 
 def _scope_refusal(wt: Path, base: str, area: list[str], story: str, log) -> str:
-    """The result word when the commit must not land because it weakens a test, or "" when it may (#1073). A file outside the story's Files area
-    is named in the log and on the story and still lands: a refusal made every restart repeat the same edit until the story ran out of restarts,
-    and validation and the reader already judge the change."""
+    """The result word when the commit must not land: it changes a file outside the story's Files area, or it weakens a test. "" when it may (#1073).
+    A story with no Files area has no area to hold the commit to, so only the test check applies to it."""
     outside = [p for p in _git(wt, "diff", "--name-only", "--no-renames", f"origin/{base}", "HEAD").stdout.splitlines()
                if area and not intake.in_area(p, area)]
     if outside:
         names = ", ".join(outside)
-        log.write(f"Note: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}).\n")
-        _story_comment(wt, story, f"This commit changes files outside the Files area: {names}. The Files area is {', '.join(area)}.")
+        log.write(f"Refused: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}), so nothing landed.\n")
+        _story_comment(wt, story, f"Landing refused: this commit changes {names}, which is outside the Files area ({', '.join(area)}). "
+                                  "Widen the Files area to include it, or drop the change.")
+        return "outside-area"
     diff = _git(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout
     found = weakened(_changed_lines(diff))
     if found:
@@ -355,10 +329,9 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
 
 
-def cleanup(wt: Path, story: str | None = None) -> list[str]:
-    """Delete a landed story's worktree and branches. Returns one line per thing removed or kept and why.
-    Nothing is removed while the worktree has uncommitted changes or a commit that is not on origin/main, and main is never touched.
-    The runner branch is keyed by the story number, so clean it even when the builder used a differently named branch."""
+def cleanup(wt: Path) -> list[str]:
+    """Delete a landed story's worktree, local branch and remote branch. Returns one line per thing removed or kept and why.
+    Nothing is removed while the worktree has uncommitted changes or a commit that is not on origin/main, and main is never touched."""
     branch = _git(wt, "branch", "--show-current").stdout.strip()
     common = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
     if not common or _git(wt, "merge-base", "--is-ancestor", "HEAD", f"origin/{default_branch(wt)}").returncode != 0:
@@ -376,10 +349,6 @@ def cleanup(wt: Path, story: str | None = None) -> list[str]:
         done = _git(Path(common), "push", "origin", "--delete", branch)
         lines.append(f"Deleted remote branch {branch}." if done.returncode == 0 else f"Remote branch {branch} stays: {done.stderr.strip()[:100]}")
     runner = f"agent/story-{branch.rsplit('/', 1)[-1].removeprefix('story-')}" if branch.startswith(("story/", "agent/")) else ""
-    # Branch naming is not a reliable lifecycle key: builders can land from fix/* or another scoped branch.
-    # The runner's branch is keyed by the story number, so include that exact branch too.
-    if story and story.isdigit():
-        runner = f"agent/story-{story}"
     if runner and runner != branch and _git(Path(common), "ls-remote", "--exit-code", "--heads", "origin", runner).returncode == 0:
         done = _git(Path(common), "push", "origin", "--delete", runner)  # the runner's own pushed branch (#1035)
         lines.append(f"Deleted remote branch {runner}." if done.returncode == 0 else f"Remote branch {runner} stays: {done.stderr.strip()[:100]}")
@@ -457,27 +426,6 @@ def _claim(lock: Path) -> int | None:
     return _holder(lock) or -1
 
 
-def _wait_for_claim(wt: Path, story: str) -> bool:
-    """Hold a landing while a live run other than the caller holds the story's claim, naming the commit held (#1106). The drain and dispatch land
-    their own builds with LAND_AS set to their agent, which is the holder, so a run never waits on itself. A claim lapses when its run stops renewing it. After five minutes the wait stops and returns False, so a landing never sits on its own run's claim (#1116)."""
-    from lib import cmd_dispatch  # dispatch imports the drain, which runs this command, so the import waits
-    slug, told, me = _story_slug(wt), False, os.environ.get(LAND_AS, "")
-    deadline = time.monotonic() + CLAIM_WAIT
-    while slug and story.isdigit() and time.monotonic() < deadline:
-        held = cmd_dispatch._local_claim(slug, int(story), time.time())
-        if not held or (me and held == f"held by {me}"):
-            return True
-        if not told:
-            sha = _git(wt, "rev-parse", "--short", "HEAD").stdout.strip()
-            print(f"Story #{story} is {held}, so commit {sha} in {wt} waits for that run to finish.", flush=True)
-            told = True
-        time.sleep(PAUSE)
-    if not (slug and story.isdigit()):
-        return True
-    print(f"Story #{story} stays {held} after {CLAIM_WAIT // 60} minutes, so the landing of {wt} stops. The story goes back to Ready and its worktree stays.", flush=True)
-    return False
-
-
 def command_land(argv: list[str]) -> int:
     if len(argv) != 2 or argv[0].startswith("-") or not argv[1].lstrip("#").isdigit() or not (Path(argv[0]) / ".git").exists():
         print(USAGE)
@@ -487,8 +435,6 @@ def command_land(argv: list[str]) -> int:
     folder.mkdir(parents=True, exist_ok=True)
     while cut_running(folder):  # a land waits until a running version cut finishes (#789)
         time.sleep(PAUSE)
-    if not _wait_for_claim(wt, story):
-        return 1
     key = f"{_repo_name(wt)}-{story}"
     path = folder / f"land-{key}.log"
     lock = folder / f"land-{key}.lock"
@@ -509,11 +455,8 @@ def command_land(argv: list[str]) -> int:
     if result != "pushed":
         print(f"Handover written to {write_handover(wt, story, result, path, key)}. No branch was pushed.")
         return 1
-    slug = _story_slug(wt)
-    if slug and str(story).isdigit():  # the runner closes the story after this, so the landing itself ends a wait on it (#1024)
-        cmd_owner.clear_stories(slug, closed=lambda s, n: True, only=int(story))
     root, branch = _main_checkout(wt) or OC_ROOT, default_branch(wt)  # read before cleanup removes the worktree
-    for line in cleanup(wt, story):
+    for line in cleanup(wt):
         print(line)
     for stale in (folder / f"handover-{key}.md", folder / f"handover-{story}.md"):
         stale.unlink(missing_ok=True)  # an earlier failed land left it; the story landed, so it is stale

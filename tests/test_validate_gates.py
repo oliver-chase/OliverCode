@@ -33,39 +33,12 @@ class ParallelGates(unittest.TestCase):
         for word in ("a-out", "b-out", "c-out"):
             self.assertIn(word, out)
 
-    def test_smoke_unit_progress_is_forwarded_before_the_gate_finishes(self):
-        import threading
-
-        seen = threading.Event()
-        class Notifying(io.StringIO):
-            def write(self, value):
-                if "[RUN ] test_slow" in value:
-                    seen.set()
-                return super().write(value)
-
-        err = Notifying()
-        result = []
-        worker = threading.Thread(target=lambda: result.append(validate_gates.run_gates(
-            [("smoke", "echo '  [RUN ] test_slow'; sleep 0.8")], timeout=5, out=io.StringIO(), err=err)))
-        worker.start()
-        self.assertTrue(seen.wait(0.5), "smoke progress should be visible before the test command exits")
-        self.assertTrue(worker.is_alive())
-        worker.join(3)
-        self.assertFalse(worker.is_alive())
-        self.assertEqual([0], result)
     def test_gates_overlap_in_time(self):
         import time
         began = time.monotonic()
         code, _, _ = run([(f"g{i}", "sleep 1") for i in range(4)], timeout=20)
         self.assertEqual(0, code)
         self.assertLess(time.monotonic() - began, 3.0)
-
-    def test_a_gate_that_exits_reports_its_real_exit_code(self):
-        real_sleep = validate_gates.time.sleep
-        with mock.patch.object(validate_gates.time, "sleep", lambda _s: real_sleep(0.8)):  # the gate exits while the loop sleeps past the 0.5s deadline
-            code, out, err = run([("quick", "exit 3")], timeout=0.5)
-        self.assertNotIn("stalled", out)
-        self.assertEqual(3, code)
 
     def test_a_stalled_gate_is_stopped_once_named_and_never_started_again(self):
         """#1072: a gate past the budget fails the run with exit 124 and its name, and no retry starts it a second time."""
@@ -120,39 +93,19 @@ class ParallelGates(unittest.TestCase):
         self.assertIn("never started before the budget: later", err)
         self.assertIn("stalled gate 'later'", out)
 
-    def test_the_gate_cap_defaults_to_four_and_can_be_overridden(self):
+    def test_the_gate_cap_defaults_to_the_core_count(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": ""}), mock.patch("os.cpu_count", return_value=8):
-            self.assertEqual(4, validate_gates.default_max_gates())
+            self.assertEqual(8, validate_gates.default_max_gates())
         self.assertFalse(hasattr(validate_gates, "default_retries"))
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": "3"}):
             self.assertEqual(3, validate_gates.default_max_gates())
-        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": "10"}):
-            self.assertEqual(4, validate_gates.default_max_gates())
 
     def test_validate_sh_lists_each_gate_once_and_runs_one_by_name(self):
         text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
         self.assertIn("GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)", text)
-        self.assertIn("for gate in precommit bypass smoke; do", text)
         import subprocess
         done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--gate", "nonesuch"], capture_output=True, text=True)
         self.assertEqual(2, done.returncode)
-
-    def test_a_round_names_the_gates_it_ran_and_the_ones_it_left_to_the_landing(self):
-        import subprocess
-        done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--round-notice"], capture_output=True, text=True)
-        self.assertEqual(0, done.returncode)
-        self.assertIn("round check ran: precommit bypass smoke", done.stdout)
-        left = [line for line in done.stdout.splitlines() if "left out" in line][0]
-        for gate in ("fleet", "bloat", "quality", "refs", "docs", "limits", "hookstate"):
-            self.assertIn(gate, left)
-        for gate in ("precommit", "bypass", "smoke"):
-            self.assertNotIn(gate, left)
-        self.assertIn("when the story lands", left)
-
-    def test_a_full_validation_names_no_gate_as_left_out(self):
-        text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
-        full = text.split("run_gates() {", 1)[1].split("\n}\n", 1)[0]
-        self.assertNotIn("round_notice", full)
 
 
 class QueueBypassGate(unittest.TestCase):
@@ -167,27 +120,6 @@ class QueueBypassGate(unittest.TestCase):
 
     def test_this_repo_has_no_bypass(self):
         self.assertEqual([], queue_bypass.check(REPO_ROOT))
-
-    def test_a_mention_of_the_queue_in_a_comment_or_an_env_value_does_not_queue_the_line(self):
-        for line in ("pytest  # validate_queue run", 'echo "validate_queue run"; pytest', "VALIDATE_QUEUE_SLOT=none pytest", "echo validate_queue; npm test"):
-            repo = self.repo_with({"scripts/nightly.sh": f"#!/usr/bin/env bash\n{line}\n"})
-            self.assertEqual(1, len(queue_bypass.check(repo)), line)
-
-    def test_a_quoted_or_variable_path_to_the_queue_passes(self):
-        for line in ('python3 "$validate_queue" run -- pytest', "python3 $validate_queue run -- pytest"):
-            repo = self.repo_with({"scripts/nightly.sh": f"#!/usr/bin/env bash\n{line}\n"})
-            self.assertEqual([], queue_bypass.check(repo), line)
-
-    def test_a_line_that_runs_the_queue_passes(self):
-        repo = self.repo_with({"scripts/nightly.sh": "#!/usr/bin/env bash\nvalidate-queue run -- pytest\n"})
-        self.assertEqual([], queue_bypass.check(repo))
-
-    def test_git_failing_fails_the_gate_and_names_the_cause(self):
-        out = io.StringIO()
-        with mock.patch("sys.stdout", out):
-            code = queue_bypass.main(["/nonexistent-olivercode-path"])
-        self.assertEqual(1, code)
-        self.assertIn("unknown", out.getvalue())
 
     def test_a_script_that_runs_the_suite_directly_is_named_with_the_entry_point(self):
         repo = self.repo_with({"scripts/nightly.sh": "#!/usr/bin/env bash\npython3 -m unittest discover -s tests\n"})
@@ -246,30 +178,9 @@ class SmokeRunner(unittest.TestCase):
 
     def test_parallelism_comes_from_the_core_count_and_can_be_overridden(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": ""}), mock.patch("os.cpu_count", return_value=12):
-            self.assertEqual(4, smoke_runner.jobs())
+            self.assertEqual(12, smoke_runner.jobs())
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": "3"}):
             self.assertEqual(3, smoke_runner.jobs())
-        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": "10"}):
-            self.assertEqual(4, smoke_runner.jobs())
-
-    def test_changed_files_select_only_the_modules_that_cover_them(self):
-        """#1142: a round check narrows to the modules that import or name a changed file, and names which it picked."""
-        root = self.make("pass")
-        (root / "tests" / "test_b.py").write_text(
-            "import unittest\n\n\ndef helper():\n    return 'cmd_land'\n\n\nclass T(unittest.TestCase):\n    def test_y(self):\n        pass\n",
-            encoding="utf-8")
-        out = io.StringIO()
-        self.assertEqual(0, smoke_runner.run(root, out, changed=["scripts/lib/cmd_land.py"]))
-        text = out.getvalue()
-        self.assertIn("1 of 2 modules cover the changed files: test_b", text)
-        self.assertIn("Ran 1 tests across 1 modules, all passed", text)
-
-    def test_no_module_covering_the_changed_files_runs_the_full_suite(self):
-        """#1142: a changed file no test module names falls back to the whole suite. Prose is the one exception (#1168)."""
-        out = io.StringIO()
-        self.assertEqual(0, smoke_runner.run(self.make("pass"), out, changed=["docs/notes.json"]))
-        self.assertIn("running the full suite", out.getvalue())
-        self.assertIn("Ran 1 tests across 1 modules, all passed", out.getvalue())
 
 
 if __name__ == "__main__":

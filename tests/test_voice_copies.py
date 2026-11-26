@@ -7,9 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-import _support  # noqa: E402,F401  (isolates the local config and HOME)
 from lib.health_checks import _check_voice_copies  # noqa: E402
 
 

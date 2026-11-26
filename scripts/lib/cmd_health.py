@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import statistics
-import sys
 from pathlib import Path
 
 from lib import claude_settings as _claude_settings
@@ -18,7 +16,6 @@ from lib.health_checks import (
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 from lib.local_config import private_repos as _private_repos
 from lib.local_config import skills_root as _skills_root
-from lib import local_config as _local_config
 from lib import repo_state as _repo_state
 from lib.repo_profiles import iter_fleet as _iter_fleet
 from lib.repo_profiles import load_repo_profiles
@@ -78,34 +75,6 @@ class _HealthTally:
                     f"missing context (see WARN above); nothing failed")
         return f"HEALTHY — {self.passed} checks passed"
 
-
-# A local checkout directory and its GitHub repository name are independent.
-# A clone may be placed in any directory; a difference is informational, not a repair
-# decision. In particular, health and conform must never stop to ask the user to rename
-# either side (#1034).
-
-
-def repo_names_mismatches(profiles: dict, fleet_root: Path) -> list[tuple[str, str, str]]:
-    """(registry name, folder name, GitHub name) for each cloned repo whose names differ."""
-    out = []
-    for name, _profile, path in _iter_fleet(profiles, fleet_root, skip_archived=False):
-        slug = _repo_state.origin(path) if (path / ".git").exists() else None
-        if not slug:
-            continue
-        github = slug.split("/", 1)[1]
-        if len({name.lower(), path.name.lower(), github.lower()}) > 1:
-            out.append((name, path.name, github))
-    return out
-
-
-def repo_names_check(profiles: dict, fleet_root: Path, out=print) -> tuple[int, int, int]:
-    """Report differing names for context; never prompt, persist a choice, or require a rename."""
-    found = repo_names_mismatches(profiles, fleet_root)
-    for registry, folder, github in found:
-        out(f"  [INFO] {registry}: local folder '{folder}', GitHub repo '{github}'. Both names are kept; no rename is needed.")
-    if not found:
-        out("  [OK] every registered repo's folder, GitHub and registry names agree")
-    return 1, 0, 0
 
 def command_health(fleet_root: Path | None = None) -> int:
     """Run health checks on this machine's setup: Claude Code hooks, control plane, skill links, remotes.
@@ -167,11 +136,6 @@ def command_health(fleet_root: Path | None = None) -> int:
     for repo in [OC_ROOT, *(p for _n, _pr, p in _iter_fleet(load_repo_profiles(OC_ROOT)[0], fleet_root or OC_ROOT.parent))]:
         for line in main_checkout.drift(repo):
             t.warn(line)
-    from lib import cmd_guide
-    if cmd_guide.city_gap():
-        t.warn(cmd_guide.city_gap())
-    else:
-        t.ok("City is set up or skipped by choice")
     from lib import story_outbox
     unfiled = story_outbox.count()
     if unfiled:
@@ -238,18 +202,6 @@ def command_health(fleet_root: Path | None = None) -> int:
     within, text = context_budget.report(OC_ROOT)
     t.ok(text.splitlines()[0]) if within else t.fail(text.splitlines()[0])
 
-    # Desktop transcript usage is separate from headless builder usage. This
-    # reports the measured first-call prompt, not an estimate from file sizes.
-    from lib import usage_sessions
-    starts = usage_sessions.recent_chat_starts(days=7)
-    if starts:
-        median_start = int(statistics.median(tokens for _path, tokens in starts))
-        largest = ", ".join(f"{path.stem} ({tokens:,})" for path, tokens in starts[:3])
-        t.ok(f"{len(starts)} desktop chats measured in 7 days; median initial context {median_start:,} tokens")
-        print(f"  [INFO] largest initial contexts: {largest}")
-    else:
-        t.warn("no desktop chat start measurements in the last 7 days")
-
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the
     # pieces are still wired together and recoverable. See health_checks.py for the
     # failure classes.
@@ -294,10 +246,6 @@ def command_health(fleet_root: Path | None = None) -> int:
     else:
         t.ok(f"every board was groomed within {cmd_groom.STALE_HOURS} hours")
 
-    from lib.health_checks import _check_parked_stories
-    cmd_groom.put_gh_on_path()
-    t.add(*_check_parked_stories(slugs))
-
     # Repos to check for remote reachability and oversized files: the private repos,
     # this framework repo, and every fleet repo that exists on disk.
     topo_repos: list[tuple[str, Path]] = [(n, p) for n, p in _private_repos().items() if (p / ".git").exists() and not _repo_state.skipped(n, p)]
@@ -308,8 +256,6 @@ def command_health(fleet_root: Path | None = None) -> int:
             topo_repos.append((name, repo_path))
 
     t.add(*_check_fleet_locations(_profiles, fleet_root or OC_ROOT.parent))
-    print("\nRepo names:")
-    t.add(*repo_names_check(_profiles, fleet_root or OC_ROOT.parent))
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
 

@@ -11,20 +11,16 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import candidates, failure_log, gh_budget, intake, story_outbox  # noqa: E402
+from lib import candidates, failure_log, gh_budget, intake, lesson_cover, story_outbox  # noqa: E402
 
 
 def origin_as_github() -> dict:
-    """Environment that gives a child process an injected GitHub origin, so it names a target for its candidates whatever the checkout's own remote is."""
-    return {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "remote.origin.url", "GIT_CONFIG_VALUE_0": "https://github.com/acme/widget.git"}
-
-
-def github_checkout(case) -> str:
-    """A throwaway checkout whose origin is a GitHub URL. The hooks read origin from the cwd they are given, and an injected origin loses to the one a clean clone already has."""
-    path = temp_dir(case)
-    subprocess.run(["git", "init", "-q", str(path)], check=True)
-    subprocess.run(["git", "-C", str(path), "remote", "add", "origin", "https://github.com/acme/widget.git"], check=True)
-    return str(path)
+    """Environment that makes a checkout whose origin is a local path (a clean clone) read as its own GitHub repo, so a child process names a target for its candidates."""
+    origin = subprocess.run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"], capture_output=True, text=True).stdout.strip()
+    if not origin or "github.com" in origin:
+        return {}
+    cfg = json.loads((REPO_ROOT / "docs" / "backlog-config.json").read_text(encoding="utf-8"))
+    return {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.https://github.com/{cfg['repoOwner']}/{cfg['repoName']}.git.insteadOf", "GIT_CONFIG_VALUE_0": origin}
 
 
 class Runner:
@@ -102,7 +98,8 @@ class TestNoDirectFiling(unittest.TestCase):
         cfg = home / "local.json"
         cfg.write_text("{}")
         env = {"OLIVERCODE_HOME": str(home), "OLIVERCODE_LOCAL_CONFIG": str(cfg), "OLIVERCODE_FAILURE_LOG": str(home / "failures.log")}
-        for p in (mock.patch.dict(os.environ, env), mock.patch.object(gh_budget, "refusal", return_value="")):
+        for p in (mock.patch.dict(os.environ, env), mock.patch.object(gh_budget, "refusal", return_value=""),
+                  mock.patch.object(lesson_cover, "own_backlog", return_value=True)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -130,7 +127,7 @@ class TestNoDirectFiling(unittest.TestCase):
     def test_a_pasted_error_adds_a_candidate_and_creates_no_issue(self):
         sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
         import error_paste
-        text = error_paste.file_story("```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad\n```\n", "s", github_checkout(self))
+        text = error_paste.file_story("Traceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad\n", "s", "")
         self.assertIn("candidate", text)
         self.assertEqual(["Fix: ValueError: bad"], [i["title"] for i in candidates.items()])
         self.assertEqual(0, story_outbox.count())
@@ -197,10 +194,11 @@ class TestScheduledEntryPoints(unittest.TestCase):
 
     def test_the_hooks_create_no_issue(self):
         hooks = REPO_ROOT / "scripts" / "hooks"
-        checkout = github_checkout(self)
         for n in range(50):
-            prompt = f"```\nTraceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad {n}\n```\n"
-            subprocess.run([sys.executable, str(hooks / "error_paste.py")], input=json.dumps({"prompt": prompt, "session_id": "s", "cwd": checkout}),
+            prompt = f"Traceback (most recent call last):\n  File \"a.py\", line 1\nValueError: bad {n}\n"
+            subprocess.run([sys.executable, str(hooks / "error_paste.py")], input=json.dumps({"prompt": prompt, "session_id": "s", "cwd": "/nonexistent"}),
+                           capture_output=True, text=True, env=self.env, check=True)
+            subprocess.run([sys.executable, str(hooks / "lesson_capture.py")], input=json.dumps({"prompt": "no, that is wrong, stop doing that", "session_id": "s"}),
                            capture_output=True, text=True, env=self.env, check=True)
         self.assertEqual([], creations(self.record))
         self.assertEqual(50, self.candidate_count(), "each pasted error adds one candidate and no more")

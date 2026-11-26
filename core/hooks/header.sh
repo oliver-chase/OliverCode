@@ -5,19 +5,18 @@
 set -euo pipefail
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Git runs a client-side hook with the working directory already at the top of the working
-# tree that triggered it, worktree included, so the repo root never depends on where this
-# script sits. core.hooksPath can now be one machine-wide folder outside every repo (#1154),
-# so HOOK_DIR is no longer inside the repo for every caller.
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+# Git sets GIT_DIR when it runs a hook in a linked worktree, and `git -C <dir>` then takes
+# <dir> as the work tree, so every repo path would point inside .githooks. Git runs a hook
+# from the work-tree root, so in that case the root comes from the current directory.
+if [ -n "${GIT_DIR:-}" ]; then
+  REPO_ROOT="$(git rev-parse --show-toplevel)"
+else
+  REPO_ROOT="$(git -C "$HOOK_DIR" rev-parse --show-toplevel)"
+fi
 # A commit checks only what it stages, so a clean commit says nothing about the rest of the tree.
 # `validate.sh --tree` sets this to run every gate over every tracked file.
-# `validate.sh --round` sets OLIVERCODE_SCAN_FILES instead, to a round check's changed files (#1142), so the
-# gates scan just those instead of the whole tree.
 if [ "${OLIVERCODE_SCAN_TREE:-}" = 1 ]; then
   STAGED_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off ls-files)
-elif [ -n "${OLIVERCODE_SCAN_FILES:-}" ]; then
-  STAGED_FILES="$OLIVERCODE_SCAN_FILES"
 else
   STAGED_FILES=$(git -C "$REPO_ROOT" -c core.quotepath=off diff --cached --name-only --no-renames --diff-filter=ACM)
 fi

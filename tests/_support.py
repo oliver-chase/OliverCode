@@ -52,18 +52,6 @@ def temp_dir(case, prefix="olivercode-test-", resolve=False):
     return path.resolve() if resolve else path
 
 
-def quiet_health(*args):
-    """Run `olivercode health` with stdout captured and the two checks that scan this machine's git worktrees stubbed; return (result, printed text).
-
-    A test that reads one health line does not need a walk over every worktree of the real checkout, which took about 4 of the 5 seconds a full
-    run costs and made the result depend on the machine's own worktrees (#1181). The worktree checks have their own tests."""
-    from unittest import mock
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-    from lib import cmd_health
-    with mock.patch.object(cmd_health, "_check_worktree_hooks", return_value=(0, 0, 0)), mock.patch.object(cmd_health, "spent_worktree_lines", return_value=[]):
-        return quiet(cmd_health.command_health, *args)
-
-
 def quiet(fn, *args, **kwargs):
     """Run fn with stdout captured; return (result, printed text)."""
     import contextlib
