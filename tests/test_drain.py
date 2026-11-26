@@ -330,13 +330,15 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], st["blocked"])
         self.assertIn("Fix the thing (#976)", io.comments[0][1])
 
-    def test_drain_capacity_is_hard_capped_at_one_even_with_parallel_or_config(self):
+    def test_drain_capacity_respects_configured_cap_parallel_narrowing_and_other_repos(self):
         with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
+                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=1):
+            self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
+            self.assertEqual(2, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=2).capacity())
+            self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=8).capacity())
+        with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=1), \
                 mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=0):
-            self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
             self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
-        with mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=1):
-            self.assertEqual(0, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
 
     def test_ready_stories_sharing_files_are_serialized_even_with_parallel_capacity(self):
         stories = [issue(1, "Files area: shared.py"), issue(2, "Files area: shared.py")]

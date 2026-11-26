@@ -26,7 +26,7 @@ LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 
 # A setting a release adds gets its default here. The saved value wins, so a default only fills a key the user never set.
-DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False, "cityDeclined": False, "notifications": True, "maxBuilders": 1, "maxStorySpend": 6.0}
+DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False, "cityDeclined": False, "notifications": True, "maxBuilders": 1, "maxStorySpend": 6.0, "maxStoryAttempts": 8}
 BACKLOG_CONFIG = "docs/backlog-config.json"
 LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
 
@@ -171,26 +171,38 @@ def setting(key: str):
     return settings().get(key)
 
 
+def builder_ceiling(cores: int | None = None, mem_gb: int | None = None) -> int:
+    """A hard local ceiling: half the cores or memory above the 4 GB system reserve."""
+    cores = cores or os.cpu_count() or 1
+    if mem_gb is None:
+        try:
+            mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") // 2**30
+        except (ValueError, OSError, AttributeError):
+            mem_gb = 8
+    return max(1, min(cores // 2, mem_gb - 4))
+
+
 def saved_builders() -> int:
-    """Temporary hard cap: saved configuration cannot raise Claude concurrency above one."""
-    return 1
+    """The owner's configured account-wide session cap, defaulting to one."""
+    value = setting("maxBuilders")
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 1
 
 
 def max_builders() -> int:
-    """Temporary hard cap for every OliverCode model invocation."""
-    return 1
+    """The configured session cap, bounded by the machine's hard resource ceiling."""
+    return min(saved_builders(), builder_ceiling())
 
 
 def max_story_attempts() -> int:
-    """Temporary ceiling: no more than four model invocations per story, regardless of saved overrides."""
+    """Maximum model invocations for one story across restarts and handoffs; default eight."""
     value = setting("maxStoryAttempts")
-    return min(value, 4) if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 4
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 8
 
 
 def max_story_spend() -> float:
-    """Temporary ceiling: recorded spend cannot exceed $3 per story, regardless of saved overrides."""
+    """Cumulative recorded Claude spend allowed for one story; default six dollars."""
     value = setting("maxStorySpend")
-    return min(float(value), 3.0) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 3.0
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 6.0
 
 
 def _overlay(base: dict, top: dict) -> dict:

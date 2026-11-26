@@ -19,7 +19,7 @@ class TestSessionGuard(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.cap = mock.patch.object(session_guard.local_config, "max_builders", return_value=4)
+        self.cap = mock.patch.object(session_guard.local_config, "max_builders", return_value=1)
         self.cap.start()
         self.addCleanup(self.cap.stop)
 
@@ -49,6 +49,31 @@ class TestSessionGuard(unittest.TestCase):
         self.assertTrue(all(r["cap"] == 1 and r["active_sessions"] == 1 for r in starts))
         self.assertEqual({"sid-1", "sid-2"}, {r["session_id"] for r in ends})
         self.assertTrue(all(r["cost_usd"] is not None for r in ends))
+
+    def test_two_different_stories_can_use_two_configured_account_slots(self):
+        self.cap.stop()
+        cap_two = mock.patch.object(session_guard.local_config, "max_builders", return_value=2)
+        cap_two.start()
+        self.addCleanup(cap_two.stop)
+        first = session_guard.acquire("story-20", "sonnet", "/work/Repo-20", "sid-a", repo_slug="o/r")
+        entered = threading.Event()
+        second = []
+        def second_call():
+            lease = session_guard.acquire("story-21", "sonnet", "/work/Repo-21", "sid-b", repo_slug="o/r")
+            second.append(lease)
+            entered.set()
+        thread = threading.Thread(target=second_call)
+        thread.start()
+        thread.join(timeout=2)
+        self.assertTrue(entered.is_set(), "a second story should use the second configured slot")
+        first.finish({"cost_usd": 0.1, "stop_reason": "completed"})
+        first.release()
+        second[0].finish({"cost_usd": 0.1, "stop_reason": "completed"})
+        second[0].release()
+        rows = [json.loads(line) for line in (self.home / session_guard.LOG).read_text().splitlines()]
+        starts = [r for r in rows if r["event"] == "session_start"]
+        self.assertEqual(2, len(starts))
+        self.assertTrue(all(r["cap"] == 2 for r in starts))
 
     def test_same_story_sessions_serialize_even_when_account_cap_is_two(self):
         self.cap.stop()

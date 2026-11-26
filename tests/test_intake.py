@@ -115,8 +115,8 @@ class TestPrevention(unittest.TestCase):
 
 
 class TestTurnBudget(unittest.TestCase):
-    def test_every_story_returns_to_the_same_30_turn_baseline(self):
-        self.assertEqual((30, 30, 30, 30), tuple(intake.turns(size) for size in ("XS", "S", "M", "L")))
+    def test_turn_budget_scales_with_story_size_without_restarting_context_too_early(self):
+        self.assertEqual((40, 40, 60, 60), tuple(intake.turns(size) for size in ("XS", "S", "M", "L")))
 
 
 if __name__ == "__main__":

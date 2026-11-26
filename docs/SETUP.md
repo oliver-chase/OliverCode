@@ -64,7 +64,7 @@ scripts/olivercode install --show-allow
 
 This lists each permission and what it allows. Approve the changes before the allow list is written.
 
-The temporary usage-protection mode allows one Claude model session at a time, caps recorded spend at $3 per story, and stops after four model invocations per story. Saved settings and `drain --parallel` cannot raise these caps.
+OliverCode defaults to one Claude model session at a time, a $6 recorded-spend ceiling and eight model invocations per story. You can raise or lower the session and story limits in `olivercode.local.json`; the session cap is still bounded by the machine's CPU and memory ceiling. `drain --parallel N` can narrow a run, but cannot exceed the configured account-wide cap.
 
 ## 4. Put your rules in the right place
 
