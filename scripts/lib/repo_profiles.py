@@ -74,29 +74,19 @@ def registry_gap(repo_root: Path) -> str:
             "Name the repo that holds it under privateRepos in olivercode.local.json")
 
 
-def registries_with_profiles(fleet_root: Path, reading: Path) -> list[Path]:
-    """Other <repo>/olivercode/repo-profiles.json files beside fleet_root's repos that hold profiles, so an empty registry
-    can name where the profiles are (#1083). The file being read is left out."""
-    found = []
-    for path in sorted(Path(fleet_root).glob(f"*/{REGISTRY_DIR}/{REGISTRY_NAME}")):
-        try:
-            if path.resolve() != Path(reading).resolve() and json.loads(path.read_text()).get("profiles"):
-                found.append(path)
-        except (OSError, ValueError, AttributeError):
-            continue
-    return found
+def load_local_profiles(repo_root: Path) -> dict:
+    """The profiles in the registry this checkout reads, or {} when it is missing or unreadable."""
+    try:
+        return json.loads(registry_file(repo_root).read_text()).get("profiles", {})
+    except (OSError, ValueError):
+        return {}
 
 
 def load_repo_profiles(repo_root):
     """Return (profiles: dict, source_path: Path)."""
     path = registry_file(repo_root)
-    try:
-        with open(path) as f:
-            data = json.load(f)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(exc.errno, f"{path} is missing. Run `olivercode discover --register` to create it") from exc
-    except json.JSONDecodeError as exc:
-        raise json.JSONDecodeError(f"{path} is not valid JSON ({exc.msg} at line {exc.lineno}). Fix that line, then run the command again", exc.doc, exc.pos) from exc
+    with open(path) as f:
+        data = json.load(f)
     return data.get("profiles", {}), path
 
 

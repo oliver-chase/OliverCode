@@ -12,7 +12,7 @@ from unittest import mock
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import context_budget, policy, policy_parse  # noqa: E402
+from lib import context_budget, policy  # noqa: E402
 
 GUARD = REPO_ROOT / "scripts" / "hooks" / "policy_guard.py"
 
@@ -127,7 +127,7 @@ class TestEvaluate(unittest.TestCase):
         echo_only = {"commands": {"allow": ["echo"]}}
         for command in ("echo hi 2>&1", "echo hi >&2", "echo hi 2>&-"):
             self.assertIsNone(policy.evaluate_bash(echo_only, command), command)
-        self.assertEqual(["out.txt"], policy._write_targets("ls", next(policy_parse._segments("ls &> out.txt"))[1:]))
+        self.assertEqual(["out.txt"], policy._write_targets("ls", next(policy._segments("ls &> out.txt"))[1:]))
         script = "python3 - <<'EOF'\nif x >= 2:\n    pass\nEOF\n"
         self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, script, root=Path("/repo")))
         self.assertEqual("deny", policy.evaluate_bash(policy.DEFAULT, "cat <<EOF\nhi\nEOF\ngit push --force").kind)

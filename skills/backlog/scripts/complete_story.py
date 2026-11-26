@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Close a story: check its builder entry, then move it to Complete, comment the evidence and close it.
 
-Usage: complete_story.py --story N --config CONFIG --evidence TEXT [--verified "SCENARIO=how it was verified"]...
+Usage: complete_story.py --story N --config CONFIG --evidence TEXT
 A story needs a builder entry and every builder commit on origin/main. On a refusal it prints the reason and
 changes nothing. On success it finds the story's project item through the REST items list, posts TEXT as a
 comment and closes the issue through REST, then sets Status to Complete by the config's ids (the only GraphQL
@@ -23,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 import board_mirror  # noqa: E402
 import gh_budget  # noqa: E402
-from check_kanban_baseline import scope_hint  # noqa: E402
 import repo_name_guard  # noqa: E402
 from lib import rename_check  # noqa: E402
 from lib import claude_settings  # noqa: E402
@@ -89,13 +88,11 @@ DEFINES = re.compile(r"""launchd\.job\(\s*([\w"'.-]+)|launchd\.schedule\(\s*[^,(
                      r"""|["']Label["']\s*:\s*([\w"'.-]+)|<key>Label</key>\s*<string>([\w.-]+)</string>""")
 
 
-def job_labels(text, whole=None):
-    """The com.olivercode.* labels `text` defines or schedules: the label of each launchd.job or launchd.schedule
+def job_labels(text):
+    """The com.olivercode.* labels a file defines or schedules: the label of each launchd.job or launchd.schedule
     call, plist "Label" key, or LaunchAgent <key>Label</key>, read literally or through a NAME = "label" constant.
-    A label that only appears as data, such as an entry in the feature register, is not a job this file runs (#767).
-    `whole` resolves a NAME constant that `text` references but does not itself define, such as when `text` is only
-    the lines a commit changed and the constant sits elsewhere in the file (#1157). It defaults to `text`."""
-    consts = dict(LABEL_CONST.findall(text if whole is None else whole))
+    A label that only appears as data, such as an entry in the feature register, is not a job this file runs (#767)."""
+    consts = dict(LABEL_CONST.findall(text))
     found = set()
     for groups in DEFINES.findall(text):
         arg = next(g for g in groups if g).strip("\"'")
@@ -103,22 +100,6 @@ def job_labels(text, whole=None):
         if label.startswith("com.olivercode."):
             found.add(label)
     return found
-
-
-def _added_lines(oc, commits):
-    """{file: text} the lines each commit adds or changes, across all commits, keyed by path relative to oc.
-    A context-free (-U0) diff holds only those lines, so a commit that leaves a job's definition untouched
-    contributes nothing for that file even when the file also holds the job (#1157)."""
-    added = {}
-    for c in commits:
-        patch = _git(oc, "diff-tree", "--no-commit-id", "-r", "-p", "-U0", c).stdout
-        path = None
-        for line in patch.splitlines():
-            if line.startswith("diff --git a/"):
-                path = line.split(" b/", 1)[-1]
-            elif path and line.startswith("+") and not line.startswith("+++"):
-                added[path] = added.get(path, "") + line[1:] + "\n"
-    return added
 
 
 def is_olivercode(root):
@@ -150,48 +131,13 @@ def job_loaded(label):
     return subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{label}"], capture_output=True).returncode == 0
 
 
-def _live_targets(src, commits):
-    """(hook scripts, job labels) the commits change in checkout `src`: the managed hooks whose entry must be in settings.json and the
-    launchd jobs whose label must be loaded. A job is demanded only when a commit itself adds or changes its definition, not merely a
-    file that holds one (#1157)."""
-    files = {f for c in commits for f in _git(src, "diff-tree", "--no-commit-id", "--name-only", "-r", c).stdout.split()}
-    managed = {script for _, _, script in claude_settings.MANAGED}
-    changed = {Path(f).name for f in files if f.startswith("scripts/hooks/")} & managed
-    if "scripts/lib/claude_settings.py" in files:
-        changed = set(managed)
-    labels = set()
-    for f, changed_text in _added_lines(src, commits).items():
-        if Path(f).name.startswith("test_") or "/tests/" in f"/{f}":
-            continue  # a test builds fake jobs; it does not run one (#767)
-        try:
-            whole = (Path(src) / f).read_text(encoding="utf-8")
-        except (OSError, ValueError):
-            whole = changed_text
-        labels |= job_labels(changed_text, whole)
-    return changed, labels
-
-
-def _unlinked_live_check(commits, root):
-    """(reason, proof) when no installed checkout is linked (#1186). OliverCode governs a Claude Code session only while it is installed, so a
-    machine without it has nothing a hook entry or a launchd job could be live in, and the close does not wait on one. The proof says the live
-    check did not run, and names the hooks and jobs the commits change, so a skipped check is never shown as passed."""
-    try:
-        hooks, labels = _live_targets(root, commits)
-    except OSError:
-        hooks, labels = set(), set()
-    changed = sorted(hooks) + sorted(labels)
-    detail = f"the commits change {', '.join(changed)}, which were not verified live" if changed else "the commits change no hook entry and no launchd job"
-    return None, f"Live: not checked. No installed OliverCode checkout is linked on the machine that closed this story, and {detail}."
-
-
 def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings=None):
     """(reason, proof): reason is None when the installed checkout `oc` holds `commits` and what they change is loaded (#713).
 
     An installed checkout that is behind is updated once with `olivercode update`, then checked again. Proof names the
-    installed commit, plus each hook entry or launchd job label the commits touch that is confirmed active. With no installed
-    checkout, the close goes ahead and its Live line says the check did not run (#1186)."""
+    installed commit, plus each hook entry or launchd job label the commits touch that is confirmed active."""
     if oc is None or not is_olivercode(oc):
-        return _unlinked_live_check(commits, root)
+        return "the installed OliverCode checkout ($OC) was not found; run `olivercode install` from it", None
     ahead = main_checkout.ahead_refusal(Path(oc)) or main_checkout.stale_refusal(Path(oc))  # an ahead checkout is refused before any update runs, so nothing changes (#785)
     if ahead:
         return ahead, None
@@ -204,35 +150,30 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
                 "run `olivercode update` there and fix what it reports"), None
     head = _git(oc, "rev-parse", "--short", "HEAD").stdout.strip()
     proof = [f"installed checkout {head} holds {', '.join(c[:10] for c in commits)}"]
+    files = {f for c in commits for f in _git(oc, "diff-tree", "--no-commit-id", "--name-only", "-r", c).stdout.split()}
     settings = settings or Path.home() / ".claude" / "settings.json"
     managed = {script: (event, matcher) for event, matcher, script in claude_settings.MANAGED}
-    changed, labels = _live_targets(oc, commits)
+    changed = {Path(f).name for f in files if f.startswith("scripts/hooks/")} & set(managed)
+    if "scripts/lib/claude_settings.py" in files:
+        changed = set(managed)
     if changed:
         lacking = set(claude_settings.missing(settings, Path(oc) / "scripts" / "hooks"))
         if changed & lacking:
             return f"the hook entry for {', '.join(sorted(changed & lacking))} is not in {settings}; run `olivercode install`", None
         proof += [f"hook entry {managed[s][0]} {s} is in settings.json" for s in sorted(changed)]
+    labels = set()
+    for f in files:
+        if Path(f).name.startswith("test_") or "/tests/" in f"/{f}":
+            continue  # a test builds fake jobs; it does not run one (#767)
+        try:
+            labels |= job_labels((Path(oc) / f).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
     for label in sorted(labels):
         if not loaded(label):
             return f"launchd job {label} is not loaded; run `olivercode install`", None
         proof.append(f"launchd job {label} is loaded")
     return None, "Live: " + "; ".join(proof) + "."
-
-
-SCENARIO = re.compile(r"^\s*Scenario(?: Outline)?:\s*(.+?)\s*$", re.M)
-
-
-def criteria_block(body, verified):
-    """(the Criteria section, the --verified names that match no scenario). Each Gherkin scenario of the story is listed with how it
-    was verified (tested, observed or not verifiable), and a scenario given nothing reads "not verified" so a passing run is never
-    taken for a seen outcome (#1198). A story with no scenarios gets no section."""
-    names = SCENARIO.findall(body or "")
-    if not names:
-        return "", []
-    given = {k.strip().lower(): v.strip() for k, v in verified}
-    unknown = [k for k, _ in verified if k.strip().lower() not in {n.lower() for n in names}]
-    lines = [f"- {n}: {given.get(n.lower()) or 'not verified, no evidence given'}" for n in names]
-    return "Criteria\n" + "\n".join(lines), unknown
 
 
 RUN_OUTPUT = re.compile(r"^\s*Run output:\s*\S|^\s*Run output:\s*\n\s*\S", re.M)  # the live run of the story's scenario (#836)
@@ -241,18 +182,8 @@ RUN_OUTPUT = re.compile(r"^\s*Run output:\s*\S|^\s*Run output:\s*\n\s*\S", re.M)
 def call(runner, args):
     done = runner(args)
     if done.returncode != 0:
-        why = (done.stderr or "gh api failed").strip()
-        raise RuntimeError(why + scope_hint(why))
+        raise RuntimeError((done.stderr or "gh api failed").strip())
     return done.stdout
-
-
-def _already_posted(runner, repo, story, evidence):
-    """True when the story already holds a comment with exactly this evidence."""
-    try:
-        done = runner([f"repos/{repo}/issues/{story}/comments?per_page=100", "--paginate", "--jq", ".[].body | @json"])
-        return done.returncode == 0 and evidence.strip() in {json.loads(line).strip() for line in done.stdout.splitlines() if line.strip()}
-    except (OSError, ValueError):
-        return False
 
 
 def item_id(cfg, story, runner):
@@ -276,13 +207,7 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
     p.add_argument("--story", type=int, required=True)
     p.add_argument("--config", required=True)
     p.add_argument("--evidence", required=True, help="the comment: files touched and what shipped")
-    p.add_argument("--verified", action="append", default=[], metavar="SCENARIO=HOW",
-                   help="how one Gherkin scenario was verified: tested, observed or not verifiable, with the evidence")
     args = p.parse_args(argv)
-    verified = [tuple(v.split("=", 1)) for v in args.verified if "=" in v]
-    if len(verified) != len(args.verified):
-        print("complete_story: --verified takes SCENARIO=HOW", file=err)
-        return 2
     if not args.evidence.strip():
         print("complete_story: --evidence is empty; name the files touched and what shipped", file=err)
         return 2
@@ -322,12 +247,6 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
               "scenario live and add its output after a line that starts with `Run output:`", file=out)
         return 1
     evidence = args.evidence
-    block, unknown = criteria_block(body, verified)
-    if unknown:
-        print(f"complete_story: #{args.story} not completed: --verified names no scenario of the story: {', '.join(unknown)}", file=out)
-        return 1
-    if block:
-        evidence = f"{evidence}\n\n{block}"
     commits = builder_commits(flatten(data))
     if commits and is_olivercode(root):  # done means live: the installed checkout holds the work before the story closes
         reason, proof = live(commits, oc or installed_root(), root)
@@ -356,8 +275,6 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
     ]
     for i, (label, call_args) in enumerate(steps):
         try:
-            if i == 0 and _already_posted(runner, repo, args.story, evidence):
-                continue  # an earlier run posted it before it failed later, so a rerun adds no second copy
             call(runner, call_args)
         except (RuntimeError, ValueError) as exc:
             landed = ", ".join(s for s, _ in steps[:i]) or "nothing"
@@ -379,7 +296,6 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
             queued = "GraphQL hit its limit"
     if queued:
         gh_budget.enqueue(["gh", "api", *move])
-    if queued:
         print(f"#{args.story} is commented and closed; its Complete status is queued for the GraphQL reset", file=out)
         return 0
     print(f"#{args.story} is Complete, commented and closed", file=out)

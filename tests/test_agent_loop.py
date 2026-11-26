@@ -5,19 +5,18 @@ import io
 import json
 import os
 import shutil
-import subprocess
 import sys
 import unittest
 from unittest import mock
 
-from _support import REPO_ROOT, git, scratch_repo, temp_dir
+from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import agent_loop, cmd_run, model  # noqa: E402
 
 
-def reply(text="done", code=0, tokens=10, session_id="c1", stderr=""):
-    return {"code": code, "text": text, "tokens": tokens, "session_id": session_id, **({"stderr": stderr} if stderr else {})}
+def reply(text="done", code=0, tokens=10, session_id="c1"):
+    return {"code": code, "text": text, "tokens": tokens, "session_id": session_id}
 
 
 class Scripted:
@@ -62,56 +61,6 @@ class TestValidationCommand(unittest.TestCase):
         self.assertEqual(["npm", "run", "verify"], agent_loop.validation_command(repo))
 
 
-class TestRoundCheck(unittest.TestCase):
-    """#1142: the runner's check after each builder round narrows scripts/validate.sh's smoke gate to the files this
-    story's branch changed against origin's default branch. A story's landing (cmd_land.py) validates separately and is
-    untouched by this."""
-
-    def test_changed_files_lists_the_branch_diff_against_origin(self):
-        repo = scratch_repo(temp_dir(self))
-        (repo / "a.py").write_text("a = 1\n")
-        git(repo, "add", "a.py")
-        git(repo, "commit", "-m", "first")
-        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-        (repo / "b.py").write_text("b = 2\n")
-        git(repo, "add", "b.py")
-        git(repo, "commit", "-m", "second")
-        self.assertEqual(["b.py"], agent_loop.changed_files(repo))
-
-    def test_changed_files_is_empty_when_git_has_nothing_to_compare(self):
-        self.assertEqual([], agent_loop.changed_files(temp_dir(self)))  # not a git repo at all
-
-    def test_validate_hands_scripts_validate_sh_the_round_and_the_changed_files(self):
-        repo = temp_dir(self)
-        (repo / "scripts").mkdir()
-        (repo / "scripts" / "validate.sh").write_text("exit 0\n")
-        seen = {}
-
-        def run(argv, **kw):
-            seen["argv"] = argv
-            return subprocess.CompletedProcess(argv, 0, "", "")
-
-        with mock.patch.object(agent_loop, "changed_files", return_value=["scripts/lib/cmd_land.py"]), \
-                mock.patch.object(agent_loop.subprocess, "run", side_effect=run):
-            agent_loop.validate(repo)
-        self.assertEqual(["--round", "scripts/lib/cmd_land.py"], seen["argv"][-2:])
-
-    def test_validate_does_not_narrow_an_npm_validation_command(self):
-        repo = temp_dir(self)
-        (repo / "package.json").write_text('{"scripts": {"check": "true"}}')
-        seen = {}
-
-        def run(argv, **kw):
-            seen["argv"] = argv
-            return subprocess.CompletedProcess(argv, 0, "", "")
-
-        with mock.patch.object(agent_loop, "changed_files") as changed, \
-                mock.patch.object(agent_loop.subprocess, "run", side_effect=run):
-            agent_loop.validate(repo)
-        changed.assert_not_called()
-        self.assertNotIn("--round", seen["argv"])
-
-
 class TestRunLog(unittest.TestCase):
     """What a headless run costs (docs/SETUP.md), #878: one JSON line per round under the OliverCode home folder."""
 
@@ -125,8 +74,7 @@ class TestRunLog(unittest.TestCase):
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             agent_loop.run_loop("do it", repo, "story-878", run=replies, check=lambda cwd: next(checks), say=lambda *_: None, model_name="sonnet")
         rows = [json.loads(line) for line in (home / "run-log.jsonl").read_text().splitlines()]
-        self.assertEqual([1, 2, 1], [r["round"] for r in rows if "round" in r])  # the reader's own row comes last
-        self.assertEqual(("story-878", "pass"), (rows[-1]["story"], rows[-1]["review"]))  # then its verdict, which holds no round
+        self.assertEqual([1, 2, 1], [r["round"] for r in rows])  # the reader's own row comes last
         self.assertEqual(("story-878", "sonnet", 3, 4, 100, 50, 0.5), tuple(rows[0][k] for k in ("story", "model", "input", "output", "cache_read", "cache_write", "cost_usd")))
         self.assertIsNone(rows[1]["cost_usd"])
 
@@ -174,7 +122,6 @@ class TestExitOne(unittest.TestCase):
         self.assertEqual(2, len(run.prompts))
         self.assertIn("stop reason max_turns after one resume", out["reason"])
         self.assertIn("stderr: boom", out["reason"])
-        self.assertTrue(out["budget"])  # every turn was spent, so the drain leaves a handoff (#1113)
 
     def test_a_timeout_resumes_the_session_the_run_started(self):
         run = Scripted(model.ModelTimeout("claude -p ran past 900 seconds and was stopped.", "sid-9"), reply("committed", session_id="sid-9"), reply("PASS"))
@@ -196,27 +143,8 @@ class TestExitOne(unittest.TestCase):
         self.assertEqual("claude exited 1 in round 1, stop reason error_during_execution. stderr: auth expired", out["reason"])
         self.assertEqual(("error_during_execution", "auth expired"), (self.rows()[0]["stop"], self.rows()[0]["stderr_tail"]))
 
-    def test_api_error_is_logged_without_a_round_and_does_not_escalate_the_model(self):
-        run = Scripted({**reply("", code=1), "stop": "error_during_execution", "text": "API Error: 529 overloaded_error"})
-        out = self.loop(run)
-        self.assertTrue(out["api_error"])
-        self.assertEqual(0, out["rounds"])
-        self.assertEqual("haiku", run.models[0])
-        self.assertEqual("haiku", agent_loop.restart_model("story-1", "haiku"))
-        rows = [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
-        self.assertEqual(1, len(rows))
-        self.assertNotIn("round", rows[0])
-        self.assertEqual("api_error", rows[0]["stop"])
-        self.assertIn("529 overloaded_error", rows[0]["stderr_tail"])
 
-    def test_successful_work_that_mentions_an_api_status_code_is_not_an_api_failure(self):
-        run = Scripted(reply("I added handling for HTTP 429 responses"))
-        out = self.loop(run, review_mode="none")
-        self.assertTrue(out["done"])
-        self.assertNotIn("api_error", out)
-
-
-class TestRunLogUsage(unittest.TestCase):
+class TestRunLog(unittest.TestCase):
     """#878, #909, #976: a run-log line holds the CLI's usage, cost and stop reason and the start size, which is the first call's context and never the session's total."""
 
     def setUp(self):
@@ -320,20 +248,6 @@ class TestLoop(unittest.TestCase):
     def test_a_small_story_touching_only_docs_tests_or_one_command_starts_on_the_smallest_model(self):
         self.assertEqual("haiku", agent_loop.model_for("XS", files=["docs/RULES.md", "tests/test_cmd_status.py", "scripts/lib/cmd_status.py"], priority="P2"))
 
-    def test_only_medium_or_larger_design_or_risky_stories_get_a_fresh_reader(self):
-        self.assertEqual("none", agent_loop.review_mode("S", files=["docs/RULES.md"], priority="P2"))
-        self.assertEqual("full", agent_loop.review_mode("S", files=["scripts/hooks/gh_guard.py"], priority="P2"))
-        self.assertEqual("none", agent_loop.review_mode("S", priority="P0"))
-        self.assertEqual("full", agent_loop.review_mode("M", files=["docs/RULES.md"], priority="P2"))
-        self.assertEqual("full", agent_loop.review_mode("S", labels=[{"name": "design"}], priority="P2"))
-
-    def test_a_small_story_on_a_claim_lock_dispatch_queue_or_gate_selection_file_keeps_the_full_lane(self):
-        for path in ("scripts/lib/validate_queue.py", "scripts/lib/run_lock.py", "scripts/lib/cmd_dispatch.py", "scripts/lib/failure_log.py",
-                     "scripts/lib/smoke_runner.py", "scripts/lib/validate_gates.py", "scripts/validate.sh"):
-            with self.subTest(path=path):
-                self.assertEqual("full", agent_loop.review_mode("XS", files=[path], priority="P2"))
-        self.assertEqual("sonnet", agent_loop.model_for("S", files=["scripts/lib/validate_queue.py"], priority="P2"))
-
     def test_the_route_names_the_rule_that_chose_the_model(self):
         self.assertEqual(("sonnet", "its Files area touches scripts/lib/agent_loop.py"), agent_loop.route("XS", files=["scripts/lib/agent_loop.py"]))
         self.assertEqual(("sonnet", "priority P0"), agent_loop.route("S", priority="P0"))
@@ -410,27 +324,12 @@ class TestLoop(unittest.TestCase):
         out = self.loop(run, [(True, "")])
         self.assertEqual((True, 2), (out["done"], len(run.prompts)))
 
-    def test_reader_verdict_accepts_explicit_final_line_and_legacy_pass(self):
-        cases = (
-            ("PASS", "pass"),
-            ("PASS, the diff does what the story says.", "pass"),
-            ("All checks line up\nVERDICT: PASS", "pass"),
-            ("Confirmed\nVERDICT: PASS", "pass"),
-            ("The diff does what the story says.\nIt breaks nothing.\nPASS", "pass"),
-            ("scripts/a.py: wrong\nVERDICT: FINDINGS", "findings"),
-            ("PASSING concerns", "findings"),
-            ("Passing is not a verdict", "findings"),
-            ("scripts/a.py: wrong", "findings"),
-            ("VERDICT: MAYBE", "findings"),
-        )
-        for text, verdict in cases:
+    def test_only_a_reply_whose_first_word_is_pass_passes(self):
+        for text, verdict in (("PASS", "pass"), ("PASS, the diff does what the story says.", "pass"), ("PASSING concerns", "findings"),
+                              ("Passing is not a verdict", "findings"), ("scripts/a.py: wrong", "findings")):
             with self.subTest(text=text):
                 out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
                 self.assertEqual(verdict, out["verdict"])
-
-    def test_the_brief_asks_for_a_final_verdict_line_and_names_no_other_form(self):
-        self.assertIn("VERDICT: PASS or VERDICT: FINDINGS", agent_loop.REVIEW_BRIEF)
-        self.assertNotIn("first line", agent_loop.REVIEW_BRIEF)
 
     def test_a_reader_that_fails_once_is_asked_again_and_its_pass_lands_the_story(self):
         run = Scripted(reply("built"), model.ModelError("no reader"), reply("PASS"))
@@ -443,16 +342,6 @@ class TestLoop(unittest.TestCase):
         self.assertEqual((False, 3), (out["done"], len(run.prompts)))
         self.assertIn("nothing is pushed", out["reason"])
         self.assertEqual("claude exited 1.", out["held"])
-
-    def test_a_failed_reader_leaves_its_exit_code_and_stderr_in_the_run_log(self):
-        """#1204: the log row keeps the exit code and the end of stderr, and the story is still held."""
-        run = Scripted(reply("built"), reply("", code=2, stderr="auth expired"), reply("", code=2, stderr="auth expired"))
-        out = self.loop(run, [(True, "")])
-        self.assertFalse(out["done"])
-        rows = [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
-        row = [r for r in rows if r.get("review") == "none"][-1]
-        self.assertEqual(2, row["exit_code"])
-        self.assertIn("stderr: auth expired", row["findings"])
 
     def test_a_diff_over_the_limit_is_cut_and_the_marker_names_each_file_the_reader_did_not_see(self):
         full = ("diff --git a/scripts/a.py b/scripts/a.py\n+ok\n" "diff --git a/scripts/b.py b/scripts/b.py\n+" + "y" * agent_loop.DIFF_LIMIT + "\n"
@@ -499,12 +388,6 @@ class TestLoop(unittest.TestCase):
         self.assertNotIn("make no tool call", seen["system"] + seen["prompt"])
         self.assertIn("not a finding", seen["prompt"])
 
-    def test_a_routine_story_does_not_start_a_second_model_session_after_validation(self):
-        run = Scripted(reply("built"))
-        out = self.loop(run, [(True, "all green")], review_mode="none")
-        self.assertTrue(out["done"])
-        self.assertEqual(1, len(run.prompts))
-
     def test_a_restart_after_three_rounds_starts_the_next_build_one_level_up(self):
         run = Scripted(reply("built"), reply("fixed"), reply("again"))
         out = self.loop(run, [(False, "a"), (False, "b"), (False, "c")], model_name="haiku", rounds=3)
@@ -520,7 +403,7 @@ class TestLoop(unittest.TestCase):
 
     def test_the_brief_names_the_builder_and_reader_the_runner_starts(self):
         from lib import cmd_dispatch
-        for size, labels, expect in (("S", [], "Run on Haiku (size S with no risky path or P0 priority), and repository validation and commit gates"),
+        for size, labels, expect in (("S", [], "Run on Haiku (size S with no risky path or P0 priority), and a fresh Sonnet reader"),
                                      ("M", [], "Run on Sonnet (size M), and a fresh Sonnet reader"),
                                      ("M", [{"name": "design"}], "Run on Opus (labeled design), and a fresh Opus reader")):
             with self.subTest(size=size, labels=labels):
@@ -629,23 +512,6 @@ class TestRunCommand(unittest.TestCase):
                 mock.patch.object(cmd_run.agent_loop, "run_loop", return_value={**done, "done": False}):
             self.assertEqual(1, self.run_cmd(["x"])[0])
 
-
-
-class TestOwnerCancellation(unittest.TestCase):
-    def test_cancel_stops_after_the_current_model_session_before_validation(self):
-        repo = temp_dir(self)
-        (repo / "scripts").mkdir()
-        (repo / "scripts" / "validate.sh").write_text("exit 0\n")
-        scripted = Scripted(reply("partial work"))
-        checks = []
-        stop = iter((False, True))
-        out = agent_loop.run_loop("task", repo, "story-42", run=scripted,
-                                  check=lambda cwd: checks.append(cwd) or (True, ""),
-                                  review_mode="none", stop_check=lambda: next(stop))
-        self.assertTrue(out["cancelled"])
-        self.assertEqual(1, len(scripted.prompts))
-        self.assertEqual([], checks)
-        self.assertIn("partial work", out["summary"])
 
 if __name__ == "__main__":
     unittest.main()

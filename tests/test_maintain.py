@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from _maintain_case import Base
-from _support import REPO_ROOT, git, git_env, load_script, quiet, quiet_health, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import failure_log, health_checks, hygiene, maintain, placement  # noqa: E402
@@ -145,6 +145,20 @@ class TestBranches(Base):
         import time
         self.assertEqual([p for p in maintain.check_branches(self.cfg, True, now=time.time() + 25 * 3600) if "done" in p.text], [])
         self.assertIn("done", git(repo, "branch", "--format=%(refname:short)").stdout.split())
+
+
+class TestIcloud(Base):
+    def test_evicted_git_files_are_downloaded(self):
+        repo = self.root / "app"
+        scratch_repo(repo)
+        state = {"left": [repo / ".git" / "HEAD"]}
+        def fake_dataless(_repo):
+            return list(state["left"])
+        def fake_download(paths, seconds=0):
+            state["left"] = []
+            return len(paths)
+        with mock.patch.object(maintain, "dataless_files", fake_dataless), mock.patch.object(maintain.hygiene, "download", fake_download):
+            self.assertTrue(maintain.check_icloud(self.cfg, True)[0].fixed)
 
 
 class TestCopies(Base):
@@ -404,18 +418,8 @@ class TestStateFolder(Base):
         from lib import cmd_health
         with mock.patch.object(cmd_health, "_check_state_folder", return_value=(0, 1, 0)) as check:
             with mock.patch.object(cmd_health, "_claude_dir", lambda: self.home / ".claude"):
-                quiet_health()
+                quiet(cmd_health.command_health)
         check.assert_called_once_with()
-
-    def test_the_health_command_still_runs_the_worktree_checks_the_other_health_tests_stub(self):
-        """#1181: quiet_health stubs the two worktree checks so a test that reads one line stays fast, so one test holds that health calls them."""
-        from lib import cmd_health
-        with mock.patch.object(cmd_health, "_check_worktree_hooks", return_value=(0, 0, 0)) as hooks, \
-                mock.patch.object(cmd_health, "spent_worktree_lines", return_value=[]) as spent, \
-                mock.patch.object(cmd_health, "_claude_dir", lambda: self.home / ".claude"):
-            quiet(cmd_health.command_health)
-        hooks.assert_called_once_with()
-        spent.assert_called_once_with()
 
     def test_health_reads_its_limits_from_the_limits_file(self):
         limits = health_checks.state_limits(REPO_ROOT)

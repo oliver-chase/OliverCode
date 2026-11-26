@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import cmd_status, prompt_source  # noqa: E402
+from lib import cmd_status, lesson_flags  # noqa: E402
 
 CHARS = 1200  # the board line and the open list, about three hundred tokens, is what a status answer needs
 # A question about the board only: "status" alone, or "status" in a question or a status-of phrase. "the PR status is red" and "add a status field" are not questions.
@@ -32,7 +32,7 @@ WORD_RE = re.compile(r"[a-z']+")
 
 
 def is_status_question(prompt: str) -> bool:
-    return prompt_source.from_owner(prompt) and not ASK_RE.match(prompt) and bool(STATUS_RE.search(prompt))
+    return lesson_flags.from_owner(prompt) and not ASK_RE.match(prompt) and bool(STATUS_RE.search(prompt))
 
 
 def is_status_only(prompt: str) -> bool:

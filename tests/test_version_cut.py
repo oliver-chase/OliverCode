@@ -252,17 +252,12 @@ class TestDocsCheck(unittest.TestCase):
 
 
 class TestWiring(unittest.TestCase):
-    def test_no_fleet_repo_gets_the_engine_only_scripts(self):
+    def test_the_managed_files_ship_both_scripts(self):
         import json
         entries = json.loads((REPO_ROOT / "shared" / "project-bootstrap-manifest.json").read_text())["templatedFiles"]
-        targets = {e["target"] for e in entries}
-        self.assertNotIn("scripts/version_cut.py", targets)
-        self.assertNotIn("scripts/docs_check.py", targets)
-
-    def test_a_story_line_in_the_body_files_the_commit_when_the_subject_has_none(self):
-        self.assertEqual("#1053", version_cut.story_of({"subject": "Fix the cut", "body": "Story: #1053\n"}))
-        self.assertEqual("#7", version_cut.story_of({"subject": "Fix the cut (#7)", "body": "Story: #1053"}))
-        self.assertEqual("", version_cut.story_of({"subject": "Fix the cut", "body": ""}))
+        targets = {e["target"]: e["mode"] for e in entries}
+        self.assertEqual("strict", targets["scripts/version_cut.py"])
+        self.assertEqual("strict", targets["scripts/docs_check.py"])
 
     def test_a_bad_argument_prints_the_usage_and_cuts_nothing(self):
         with mock.patch.object(cmd_version, "load", side_effect=AssertionError("ran")) as load, contextlib.redirect_stdout(io.StringIO()) as out:

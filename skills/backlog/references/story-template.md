@@ -12,7 +12,7 @@ A story body has these parts, in this order:
 4. The fields on one line: `Priority: P0|P1|P2. Size: XS|S|M|L|XL. Work type: Story.`
 5. For a story, the line `Existing coverage checked:` naming the code, doc or issue you searched and what you found, so no story rebuilds something that exists
 6. Optional detail after the fields, such as the fit check from `SKILL.md` and a re-runnable audit command for an L or XL item
-7. For a story the runner builds, a last line `Files area:` naming the files it changes. It names files and never a folder, because a landing holds the commit to its Files area and a folder would let the story change anything inside it
+7. For a story the runner builds, a last line `Files area:` naming the files it changes. It names files and never a folder, because the runner never builds two stories whose areas overlap and a folder overlaps every story that touches a file inside it
 
 Name the role for the person who gets the outcome. The owner is `the owner`. Write each scenario so a second agent can QA the story from the criteria alone.
 

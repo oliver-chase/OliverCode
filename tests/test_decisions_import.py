@@ -1,7 +1,6 @@
 """olivercode decisions import turns a markdown decisions log into decision records, once."""
 
 import os
-import re
 import sys
 import unittest
 from datetime import date, timedelta
@@ -42,7 +41,7 @@ class TestDecisionsImport(unittest.TestCase):
         self.assertEqual(sorted(r["title"].split(" ", 1)[1] for r in flagged), ["Keep the database local", "Weekly backups"])
         self.assertIn("more than 90 days", out)
         self.assertIn("65", out)
-        self.assertTrue(all(re.search(r":\d+$", r["source"]) and str(self.file.resolve()) in r["source"] for r in recs))
+        self.assertTrue(all(r["source"].endswith(f":{r['source'].rsplit(':', 1)[1]}") and str(self.file.resolve()) in r["source"] for r in recs))
         self.assertEqual(self.file.read_bytes(), self.before)
 
     def test_a_second_run_adds_no_duplicates(self):

@@ -66,28 +66,6 @@ class ValidateQueueTest(unittest.TestCase):
         self.assertFalse(os.path.exists(held), "the EXIT trap frees the slot")
 
 
-class RunLogStoryTest(unittest.TestCase):
-    """#1178: a validation run made in a story worktree is logged with its story, so time per story can be counted."""
-
-    def setUp(self):
-        self.home = temp_dir(self)
-        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def rows(self):
-        return [json.loads(line) for line in (self.home / "validate-runs.jsonl").read_text().splitlines()]
-
-    def test_a_story_worktree_run_carries_its_story_and_another_run_does_not(self):
-        with mock.patch.object(validate_queue.failure_log, "story_of", return_value=1204):
-            validate_queue.log_run(1.0, 2.0)
-        with mock.patch.object(validate_queue.failure_log, "story_of", return_value=None):
-            validate_queue.log_run(0.0, 3.0)
-        first, second = self.rows()
-        self.assertEqual(1204, first["story"])
-        self.assertNotIn("story", second)
-
-
 class QueueRobustnessTest(unittest.TestCase):
     """A fresh install, old or damaged state, a crashed holder and a reused pid all end with a working queue and a stderr line that names the repair (#757)."""
 
@@ -112,7 +90,6 @@ class QueueRobustnessTest(unittest.TestCase):
     def test_the_wait_and_the_hard_cap_are_fixed_and_no_variable_changes_them(self):
         """#1072: nothing sets these, so they are constants."""
         self.assertFalse(hasattr(validate_queue, "wait_seconds") or hasattr(validate_queue, "hard_cap_seconds"))
-        self.assertEqual(10 * 60, validate_queue.WAIT_SECONDS)
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_HARD_CAP": "1"}):
             folder = validate_queue.slots_dir()
             folder.mkdir(parents=True, exist_ok=True)
@@ -127,43 +104,16 @@ class QueueRobustnessTest(unittest.TestCase):
         validate_queue.release(slot)
         self.assertFalse(slot.exists())
 
-    def write_runs(self, loads):
-        validate_queue.runs_log().parent.mkdir(parents=True, exist_ok=True)
-        validate_queue.runs_log().write_text("".join(json.dumps({"at": 0, "wait": 0, "run": 1, "load": x}) + "\n" for x in loads))
-
-    def test_the_slot_count_follows_cores_and_recent_load_unless_the_variable_sets_it(self):
-        for name in ("OLIVERCODE_VALIDATE_SLOTS",):
-            os.environ.pop(name, None)
-        self.write_runs([3.0] * 10)
-        for cores, expected in ((1, 1), (8, 1), (11, 1), (12, 2), (64, 2)):
+    def test_the_slot_count_comes_from_the_cores_unless_the_variable_sets_it(self):
+        for cores, expected in ((1, 1), (3, 1), (8, 1), (16, 2), (64, 8)):
             with mock.patch("os.cpu_count", return_value=cores):
                 self.assertEqual(expected, validate_queue.slot_count(), cores)
+        with mock.patch("os.cpu_count", return_value=64), mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "3"}):
+            self.assertEqual(3, validate_queue.slot_count())
         with mock.patch("os.cpu_count", return_value=None):
             self.assertEqual(1, validate_queue.slot_count())
-        with mock.patch("os.cpu_count", return_value=16):
-            self.write_runs([3.0] * 9)  # too few runs to know
-            self.assertEqual(1, validate_queue.slot_count())
-            self.write_runs([3.0] * 9 + [16.0])  # one run reached the core count
-            self.assertEqual(1, validate_queue.slot_count())
-            self.write_runs([40.0] + [3.0] * 10)  # only the last ten count
-            self.assertEqual(2, validate_queue.slot_count())
-
-    def test_the_variable_sets_the_slot_count_whatever_the_machine(self):
-        self.write_runs([3.0] * 10)
-        with mock.patch("os.cpu_count", return_value=64), mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "1"}):
-            self.assertEqual(1, validate_queue.slot_count())
-
-    def test_a_validation_logs_its_wait_run_time_and_load(self):
-        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "1"}), mock.patch.object(validate_queue.failure_log, "story_of", return_value=None):  # the branch the test runs on must not add a story
-            for name in ("OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT"):
-                os.environ.pop(name, None)
-            self.assertEqual(0, validate_queue.run(["true"], poll=0.05))
-        rows = validate_queue.recent_runs()
-        self.assertEqual(1, len(rows))
-        self.assertEqual({"at", "wait", "run", "load"}, set(rows[0]))
 
     def test_a_bad_slot_count_falls_back_to_the_machine_default_and_says_so(self):
-        self.write_runs([3.0] * 10)
         with mock.patch("os.cpu_count", return_value=16), mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_SLOTS": "lots"}):
             count, err = self.stderr_of(validate_queue.slot_count)
         self.assertEqual(2, count)

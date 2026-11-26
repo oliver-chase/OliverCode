@@ -26,7 +26,7 @@ LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 
 # A setting a release adds gets its default here. The saved value wins, so a default only fills a key the user never set.
-DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False, "cityDeclined": False, "notifications": True, "maxBuilders": 1, "maxStorySpend": 6.0, "maxStoryAttempts": 8}
+DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False}
 BACKLOG_CONFIG = "docs/backlog-config.json"
 LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
 
@@ -75,38 +75,6 @@ def fleet_registry_path() -> Path:
     OLIVERCODE_FLEET_REGISTRY wins over both."""
     value = os.environ.get("OLIVERCODE_FLEET_REGISTRY") or load_local().get("fleetRegistry") or DEFAULT_FLEET_REGISTRY
     return Path(value).expanduser()
-
-
-def _profile_count(path: Path) -> int:
-    """How many profiles the registry file at path holds, 0 when it is missing or unreadable."""
-    try:
-        return len(json.loads(Path(path).read_text()).get("profiles", {}))
-    except (OSError, ValueError, AttributeError):
-        return 0
-
-
-def link_default_registry(registry: Path) -> str:
-    """Makes the default registry path a link to registry, so the default and the configured path read one file (#1083).
-    Only a link already at the default path is repointed, so no folder is made under it. A stale link is replaced and a
-    link already right is kept, so a repeat run never raises FileExistsError. A real file at the default path is the
-    owner's and stays, as does a link whose target holds profiles when registry holds none, so a repoint never hides the
-    owner's profiles. Returns what it did, or "" when nothing changed."""
-    default = Path(DEFAULT_FLEET_REGISTRY).expanduser()
-    registry = Path(registry).expanduser()
-    if default == registry or not registry.is_file():
-        return ""
-    if default.is_symlink():
-        if default.resolve() == registry.resolve():
-            return ""
-        if _profile_count(default) and not _profile_count(registry):
-            return f"{default} links to {default.resolve()}, which holds profiles that {registry} lacks, so it was not repointed"
-        default.unlink()
-    elif default.exists():
-        return f"{default} is a file of its own, so it was not linked to {registry}"
-    else:
-        return ""
-    default.symlink_to(registry)
-    return f"Linked {default} to {registry}"
 
 
 def skills_root() -> Path | None:
@@ -171,38 +139,24 @@ def setting(key: str):
     return settings().get(key)
 
 
-def builder_ceiling(cores: int | None = None, mem_gb: int | None = None) -> int:
-    """A hard local ceiling: half the cores or memory above the 4 GB system reserve."""
+def default_builders(cores: int | None = None, mem_gb: int | None = None) -> int:
+    """The builder limit with no saved value: half the cores or the memory in GB less 4, whichever is smaller, never below 1.
+    A builder session holds 150 to 350 MB and mostly waits on the model, and 4 GB stays free for the system and the one validation run (#1055)."""
     cores = cores or os.cpu_count() or 1
     if mem_gb is None:
         try:
             mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") // 2**30
-        except (ValueError, OSError, AttributeError):
+        except (ValueError, OSError, AttributeError):  # a platform without sysconf gets the 8 GB this default was measured on
             mem_gb = 8
     return max(1, min(cores // 2, mem_gb - 4))
 
 
-def saved_builders() -> int:
-    """The owner's configured account-wide session cap, defaulting to one."""
-    value = setting("maxBuilders")
-    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 1
-
-
 def max_builders() -> int:
-    """The configured session cap, bounded by the machine's hard resource ceiling."""
-    return min(saved_builders(), builder_ceiling())
-
-
-def max_story_attempts() -> int:
-    """Maximum model invocations for one story across restarts and handoffs; default eight."""
-    value = setting("maxStoryAttempts")
-    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 8
-
-
-def max_story_spend() -> float:
-    """Cumulative recorded Claude spend allowed for one story; default six dollars."""
-    value = setting("maxStorySpend")
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 6.0
+    """The machine-wide builder limit drain and dispatch share: maxBuilders in the local file, else the default for this machine."""
+    saved = setting("maxBuilders")
+    if isinstance(saved, int) and not isinstance(saved, bool) and saved >= 1:
+        return saved
+    return default_builders()
 
 
 def _overlay(base: dict, top: dict) -> dict:

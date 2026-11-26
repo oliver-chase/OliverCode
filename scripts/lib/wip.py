@@ -182,19 +182,13 @@ def restore(start: Path, ref: str, target: Path | None = None) -> Path:
     if any(target == t or t in target.parents for t in top):
         raise ValueError(f"{target} is inside a working tree; pick a folder outside it with --to")
     files = _files(repo, sha)
-    made = not target.exists()
     target.mkdir(parents=True, exist_ok=True)
-    try:
-        with tempfile.TemporaryDirectory(prefix="oc-wip-") as tmp:
-            env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
-            _run(repo, "read-tree", sha, env=env)
-            subprocess.run(["git", "-C", str(repo), "checkout-index", "-f", f"--prefix={target}/", "-z", "--stdin"],
-                           input="\0".join(files) + "\0" if files else "", text=True, capture_output=True, check=True,
-                           env={**os.environ, **env})
-    except (OSError, RuntimeError, subprocess.SubprocessError):
-        if made and not any(target.iterdir()):
-            target.rmdir()  # a failed restore leaves no empty folder behind
-        raise
+    with tempfile.TemporaryDirectory(prefix="oc-wip-") as tmp:
+        env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
+        _run(repo, "read-tree", sha, env=env)
+        subprocess.run(["git", "-C", str(repo), "checkout-index", "-f", f"--prefix={target}/", "-z", "--stdin"],
+                       input="\0".join(files) + "\0" if files else "", text=True, capture_output=True, check=True,
+                       env={**os.environ, **env})
     return target
 
 

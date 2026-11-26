@@ -3,9 +3,7 @@
 import json
 import os
 import shutil
-import subprocess
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -14,42 +12,31 @@ from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 session_check = load_script("scripts/hooks/session_check.py", "session_check_land")
-from lib import cmd_drain, cmd_land, maintain, validated  # noqa: E402
+from lib import cmd_land, maintain, validated  # noqa: E402
 
 REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
-
-_TEMPLATE: Path | None = None  # the one origin/main/wt fixture every Base subclass in this module shares (#1143)
-
-
-def setUpModule():
-    """One origin, main checkout and story worktree for the whole module; each test copies them and repoints their absolute paths."""
-    global _TEMPLATE
-    root = Path(tempfile.mkdtemp(prefix="olivercode-land-template-")).resolve()
-    origin = root / "origin.git"
-    scratch_repo(origin, bare=True, branch="main")
-    seed = scratch_repo(root / "seed", branch="main")
-    git(seed, "remote", "add", "origin", str(origin))
-    (seed / "scripts").mkdir()
-    (seed / "scripts" / "validate.sh").write_text("exit 0\n")
-    (seed / "a.txt").write_text("a")
-    git(seed, "add", "."); git(seed, "commit", "-q", "-m", "one"); git(seed, "push", "-q", "origin", "main")
-    git(root, "clone", "-q", str(origin), str(root / "main"))
-    git(root / "main", "config", "user.email", "t@example.invalid"); git(root / "main", "config", "user.name", "T")
-    git(root / "main", "worktree", "add", "-q", "-b", "story/9", str(root / "wt"), "origin/main")
-    (root / "wt" / "b.txt").write_text("b")
-    git(root / "wt", "add", "."); git(root / "wt", "commit", "-q", "-m", "Add b (#9)")
-    _TEMPLATE = root
-
-
-def tearDownModule():
-    if _TEMPLATE is not None:
-        shutil.rmtree(_TEMPLATE, ignore_errors=True)
 
 
 class Base(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._template = _TEMPLATE
+        """One origin, main checkout and story worktree per class; each test copies them and repoints their absolute paths."""
+        cls._template = Path(tempfile.mkdtemp(prefix="olivercode-land-template-")).resolve()
+        cls.addClassCleanup(shutil.rmtree, cls._template, ignore_errors=True)
+        root = cls._template
+        origin = root / "origin.git"
+        scratch_repo(origin, bare=True, branch="main")
+        seed = scratch_repo(root / "seed", branch="main")
+        git(seed, "remote", "add", "origin", str(origin))
+        (seed / "scripts").mkdir()
+        (seed / "scripts" / "validate.sh").write_text("exit 0\n")
+        (seed / "a.txt").write_text("a")
+        git(seed, "add", "."); git(seed, "commit", "-q", "-m", "one"); git(seed, "push", "-q", "origin", "main")
+        git(root, "clone", "-q", str(origin), str(root / "main"))
+        git(root / "main", "config", "user.email", "t@example.invalid"); git(root / "main", "config", "user.name", "T")
+        git(root / "main", "worktree", "add", "-q", "-b", "story/9", str(root / "wt"), "origin/main")
+        (root / "wt" / "b.txt").write_text("b")
+        git(root / "wt", "add", "."); git(root / "wt", "commit", "-q", "-m", "Add b (#9)")
 
     def setUp(self):
         self.root = temp_dir(self, resolve=True)
@@ -114,44 +101,6 @@ class TestLandResumes(Base):
         self.assertEqual(1, code)
         self.assertIn("already running", out)
         self.assertIn("land-main-9.log", out)
-
-    def test_a_land_waits_while_another_run_holds_the_story_and_names_its_commit(self):
-        held = iter(["held by drain", "held by drain", ""])
-        with mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.object(cmd_land, "PAUSE", 0), \
-                mock.patch.dict(os.environ, {cmd_land.LAND_AS: "dispatch"}), mock.patch("lib.cmd_dispatch._local_claim", side_effect=lambda *a, **k: next(held)):
-            code, out = self.land()
-        self.assertIn("is held by drain, so commit", out)
-        self.assertIn(str(self.wt), out)
-
-    def test_a_land_stops_after_five_minutes_on_a_claim_and_names_the_run(self):
-        ticks = iter(range(0, 10000, 200))
-        with mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.object(cmd_land, "PAUSE", 0), \
-                mock.patch.dict(os.environ, {cmd_land.LAND_AS: ""}), mock.patch("lib.cmd_dispatch._local_claim", return_value="held by drain"), \
-                mock.patch.object(cmd_land.time, "monotonic", side_effect=lambda: next(ticks)):
-            code, out = self.land()
-        self.assertEqual(1, code)
-        self.assertIn("stays held by drain after 5 minutes", out)
-
-    def test_the_holder_lands_its_own_story_without_waiting(self):
-        class NoWaitClock:
-            """cmd_land's clock, whose sleep fails. The global time.sleep stays real, since a subprocess poll under load calls it (#1106)."""
-            def __getattr__(self, name):
-                return getattr(time, name)
-
-            def sleep(self, _):
-                raise AssertionError("waited")
-
-        for agent in ("drain", "dispatch"):
-            with self.subTest(agent=agent), mock.patch.object(cmd_land, "_story_slug", return_value="o/r"), mock.patch.dict(os.environ, {cmd_land.LAND_AS: agent}), \
-                    mock.patch("lib.cmd_dispatch._local_claim", return_value=f"held by {agent}"), mock.patch.object(cmd_land, "time", NoWaitClock()):
-                code, out = self.land()
-            self.assertNotIn("waits for that run", out)
-
-    def test_the_drain_and_dispatch_tell_the_land_their_agent(self):
-        io = cmd_drain.Io(self.wt, "o/r", "dispatch")
-        with mock.patch.object(cmd_drain.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
-            io.land(self.wt, 9)
-        self.assertEqual(run.call_args.kwargs["env"][cmd_land.LAND_AS], "dispatch")
 
     def test_a_second_claim_fails_while_the_first_holds_and_succeeds_after_release_or_when_the_holder_is_gone(self):
         lock = self.root / "claim.lock"
@@ -270,11 +219,9 @@ class TestLandSquash(Base):
         for name in ("b", "c", "d"):
             self.assertEqual(name, git(self.main, "show", f"origin/main:{name}.txt").stdout)
 
-    def test_several_stories_add_their_own_commit(self):
-        """Several, not ten: each land here is the same code path test_a_landing_pushes... already covers once, so a round number buys no extra coverage, only wall time (#1143)."""
+    def test_ten_stories_add_ten_commits(self):
         before = int(git(self.main, "rev-list", "--count", "origin/main").stdout)
-        stories = 4
-        for n in range(stories):
+        for n in range(10):
             wt = self.root / f"wt{n}"
             git(self.main, "fetch", "-q", "origin")
             git(self.main, "worktree", "add", "-q", "-b", f"story/1{n}", str(wt), "origin/main")
@@ -284,7 +231,7 @@ class TestLandSquash(Base):
             code, out = quiet(cmd_land.command_land, [str(wt), f"1{n}"])
             self.assertEqual(0, code, out)
         git(self.main, "fetch", "-q", "origin")
-        self.assertEqual(before + stories, int(git(self.main, "rev-list", "--count", "origin/main").stdout))
+        self.assertEqual(before + 10, int(git(self.main, "rev-list", "--count", "origin/main").stdout))
 
 
 class TestLand(Base):
@@ -425,32 +372,6 @@ class TestCleanup(Base):
         self.assertIn("Removed worktree", out)
         self.assertIn("Deleted remote branch story/9", out)
 
-    def test_cleanup_uses_the_story_id_to_remove_runner_branch_even_from_a_non_story_branch(self):
-        git(self.main, "push", "-q", "origin", "--delete", "story/9")
-        git(self.wt, "branch", "-m", "feature/cleanup")
-        git(self.wt, "push", "-q", "origin", "HEAD:refs/heads/feature/cleanup")
-        git(self.wt, "push", "-q", "origin", "HEAD:refs/heads/agent/story-9")
-        code, out = self.land()
-        self.assertEqual(0, code, out)
-        self.assertFalse(self.wt.exists())
-        git(self.main, "fetch", "-q", "--prune", "origin")
-        remote = git(self.main, "branch", "-r").stdout
-        self.assertNotIn("origin/feature/cleanup", remote)
-        self.assertNotIn("origin/agent/story-9", remote)
-        self.assertIn("Deleted remote branch feature/cleanup", out)
-        self.assertIn("Deleted remote branch agent/story-9", out)
-
-    def test_a_landed_story_deletes_the_handover_an_earlier_failed_land_left(self):
-        """#1035: a handover from a failed attempt is stale once the story lands, so no file is left behind."""
-        logs = self.root / "logs"
-        logs.mkdir(exist_ok=True)
-        stale = [logs / "handover-main-9.md", logs / "handover-9.md"]
-        for path in stale:
-            path.write_text("validate-failed\n")
-        code, _ = self.land()
-        self.assertEqual(0, code)
-        self.assertEqual([], [p.name for p in stale if p.exists()])
-
     def test_a_landing_whose_branch_was_never_pushed_still_cleans_up(self):
         git(self.main, "push", "-q", "origin", "--delete", "story/9")
         code, out = self.land()
@@ -568,40 +489,27 @@ OR_TRUE_LINE = "make " + "|" + "| true"
 class TestLandStaysInStory(Base):
     """A landing refuses a commit that changes a file outside its story's Files area, or that weakens a test (#1073)."""
 
-    def test_every_test_file_is_inside_the_area_and_an_unlisted_code_file_is_not(self):
-        """The rules ask for a test with every change, and a module's test often has another name (cmd_status.py is tested in
-        test_status.py) or covers a neighbour, so a test file never counts as scope creep. The weakened-test check still guards it."""
+    def test_the_test_of_a_listed_file_is_inside_the_area_and_another_files_test_is_not(self):
+        """#1078: the test the rules require is never refused; a test of an unlisted file still is."""
         from lib import intake
-        area = ["scripts/lib/cmd_status.py", "skills/audit/scripts/check_report.py", "scripts/hooks/early-stop-guard.py"]
-        for path in ("tests/test_status.py", "tests/test_limits.py", "skills/audit/scripts/test_check_report.py",
-                     "skills/backlog/scripts/test_board_hygiene.py", "tests/test_early_stop_guard.py", "scripts/lib/cmd_status.py"):
+        area = ["scripts/lib/maintain.py", "skills/audit/scripts/check_report.py", "scripts/hooks/early-stop-guard.py"]
+        for path in ("tests/test_maintain.py", "skills/audit/scripts/test_check_report.py", "tests/test_early_stop_guard.py", "scripts/lib/maintain.py"):
             self.assertTrue(intake.in_area(path, area), path)
-        for path in ("scripts/lib/cmd_health.py", "tests/maintain.py", "skills/backlog/SKILL.md"):
+        for path in ("tests/test_limits.py", "scripts/lib/cmd_health.py", "tests/maintain.py"):
             self.assertFalse(intake.in_area(path, area), path)
 
-    def test_a_commit_that_adds_a_test_of_another_name_lands(self):
-        self.body = "Files area: b.txt"
-        (self.wt / "tests").mkdir()
-        (self.wt / "tests" / "test_other.py").write_text("import unittest\n")
-        git(self.wt, "add", "."); git(self.wt, "commit", "-q", "-m", "Test b (#9)")
-        code, out = self.land()
-        self.assertEqual(0, code, out)
-        self.assertIn("RESULT pushed", out)
-        self.comment.assert_not_called()
-
-    def test_a_commit_outside_the_files_area_lands_and_is_named_on_the_story(self):
-        """A refusal made each restart repeat the same edit and burned the story's restarts, so validation and the reader judge the change and
-        the story records the extra files."""
+    def test_a_commit_outside_the_files_area_is_refused_and_named_on_the_story(self):
         self.body = "Files area: a.txt"
+        before = git(self.root / "origin.git", "rev-parse", "main").stdout
         code, out = self.land()
-        self.assertEqual(0, code, out)
-        self.assertIn("RESULT pushed", out)
+        self.assertEqual(1, code)
+        self.assertIn("RESULT outside-area", out)
         self.assertIn("b.txt", (self.root / "logs" / "land-main-9.log").read_text())
         self.comment.assert_called_once()
         text = self.comment.call_args.args[2]
         self.assertIn("b.txt", text)
-        self.assertIn("outside the Files area", text)
-        self.assertEqual("b", git(self.root / "origin.git", "show", "main:b.txt").stdout, "the commit reached main")
+        self.assertIn("Widen the Files area", text)
+        self.assertEqual(before, git(self.root / "origin.git", "rev-parse", "main").stdout, "nothing reached main")
 
     def test_a_commit_inside_its_files_area_lands_and_gets_no_comment(self):
         self.body = "Files area: b.txt, scripts/"
@@ -704,17 +612,6 @@ class TestWeakenedTests(unittest.TestCase):
         self.assertEqual(["scripts/validate.sh:2 adds " + "|" + "| true to a test command"], cmd_land.weakened(flagged))
         product = cmd_land._changed_lines(self.diff("scripts/lib/a.py", "@@ -1,0 +2,1 @@", "+" + OR_TRUE_LINE))
         self.assertEqual([], cmd_land.weakened(product))
-
-    def test_assertions_moved_between_test_files_are_not_counted_as_lost(self):
-        diff = self.diff("tests/test_old.py", "@@ -1,2 +0,0 @@", "-        self.assertEqual(1, f())", "-        self.assertTrue(g())")
-        diff += self.diff("tests/test_new.py", "@@ -0,0 +1,2 @@", "+        self.assertEqual(1, f())", "+        self.assertTrue(g())")
-        self.assertEqual([], cmd_land.weakened(cmd_land._changed_lines(diff)))
-
-    def test_only_matching_moved_assertions_offset_removed_assertions(self):
-        diff = self.diff("tests/test_old.py", "@@ -1,2 +0,0 @@", "-        self.assertEqual(1, f())", "-        self.assertTrue(g())")
-        diff += self.diff("tests/test_new.py", "@@ -0,0 +1,1 @@", "+        self.assertEqual(1, f())")
-        self.assertEqual(["tests/test_old.py:2 removes 1 assertion(s) without removing the code they cover"],
-                         cmd_land.weakened(cmd_land._changed_lines(diff)))
 
     def test_a_deleted_test_file_counts_its_assertions_under_its_own_path(self):
         diff = ("diff --git a/tests/test_gone.py b/tests/test_gone.py\n--- a/tests/test_gone.py\n+++ /dev/null\n@@ -1,1 +0,0 @@\n"

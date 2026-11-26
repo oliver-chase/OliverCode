@@ -72,7 +72,7 @@ Every claim is checked against the code, and the code wins.
 
 OliverCode's `docs/DESIGN.md` is the only design standard. Read it and the target's own `docs/DESIGN.md`, then check every page, slide, image and interface the target makes.
 
-- Count hits on the tells list by kind, and name the file and line for each. `python3 skills/audit/scripts/design_check.py <target>` finds them (file, line, rule and tier per row, exit 1 on any hit), and a hit is a finding, a reflex hit unless the design note waives it. The PostToolUse edit hook reports floor hits as a session builds
+- Count hits on the tells list by kind, and name the file and line for each
 - Check color tokens, type weights, the 4-pixel grid, contrast, phone width and dark theme against the rules
 - A suite that ships visuals carries a byte-identical copy of OliverCode's `docs/DESIGN.md` at its own `docs/DESIGN.md`. A target with visual output and no brand design note is a finding
 

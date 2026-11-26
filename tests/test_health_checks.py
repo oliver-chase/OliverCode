@@ -6,17 +6,15 @@ degrade to a skip when that context is missing, and must fail only on a real pro
 
 import json
 import os
-import shutil
 import subprocess
-import sys
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo, quiet, temp_dir
+from _support import git, load_script, scratch_repo, quiet, temp_dir
 
 health = load_script("scripts/lib/health_checks.py", "health_checks")
-from lib import health_env, health_topology  # noqa: E402
+from lib import health_topology  # noqa: E402
 
 
 class HealthBase(unittest.TestCase):
@@ -132,10 +130,6 @@ class RemotesResolve(HealthBase):
             self.check([("work", work)], "fatal: repository 'https://example.invalid/gone.git/' not found", 128),
         )
 
-    def test_a_missing_tool_is_unverified_not_a_missing_repo(self):
-        work = self.repo("work", origin="https://example.invalid/x.git")
-        self.assertEqual((0, 0, 1), self.check([("work", work)], "git: command not found", 127))
-
     def test_a_network_error_and_an_unknown_error_only_warn(self):
         work = self.repo("work", origin="https://example.invalid/x.git")
         self.assertEqual((0, 0, 1), self.check([("work", work)], "Could not resolve host: example.invalid", 128))
@@ -216,22 +210,22 @@ class TestFleetLocations(unittest.TestCase):
 
 class PythonVersion(unittest.TestCase):
     def check(self, version):
-        with mock.patch.object(health_env.shutil, "which", return_value="/x/python3"), \
-                mock.patch.object(health_env, "python_version", return_value=version):
+        with mock.patch.object(health.shutil, "which", return_value="/x/python3"), \
+                mock.patch.object(health, "python_version", return_value=version):
             return quiet(health._check_python)
 
     def test_an_old_python_fails_naming_found_minimum_and_fix(self):
         (result, out) = self.check((3, 9))
         self.assertEqual(result, (0, 1, 0))
         self.assertIn("3.9", out)
-        self.assertIn(f"{health_env.MIN_PYTHON[0]}.{health_env.MIN_PYTHON[1]}", out)
+        self.assertIn(f"{health.MIN_PYTHON[0]}.{health.MIN_PYTHON[1]}", out)
         self.assertIn("brew install python@", out)
 
     def test_the_minimum_passes(self):
-        self.assertEqual(self.check(health_env.MIN_PYTHON)[0], (1, 0, 0))
+        self.assertEqual(self.check(health.MIN_PYTHON)[0], (1, 0, 0))
 
     def test_a_missing_python_fails(self):
-        with mock.patch.object(health_env.shutil, "which", return_value=None):
+        with mock.patch.object(health.shutil, "which", return_value=None):
             result, out = quiet(health._check_python)
         self.assertEqual(result, (0, 1, 0))
         self.assertIn("brew install", out)
@@ -250,15 +244,6 @@ class LauncherLink(HealthBase):
         self.assertEqual(result, (0, 1, 0))
         self.assertIn(str(self.root / "gone"), out)
         self.assertIn(f"ln -sf /oc/scripts/olivercode {link}", out)
-
-    def test_the_launcher_is_checked_where_install_puts_it(self):
-        link = self.root / "installed"
-        link.symlink_to(self.root / "gone")
-        with mock.patch.dict(os.environ, {}, clear=False), mock.patch("lib.queue_shim.launcher_path", return_value=link):
-            os.environ.pop("OLIVERCODE_LAUNCHER", None)
-            result, out = quiet(health._check_launcher, self.oc)
-        self.assertEqual(result, (0, 1, 0))
-        self.assertIn(str(link), out)
 
     def test_a_live_link_passes(self):
         real = self.root / "real"
@@ -404,47 +389,6 @@ class StaleWorktreeHook(HealthBase):
         self.assertEqual("", health.stale_hook(plain))
         self.assertEqual("", health.stale_hook(self.wt, base="origin/nothing"))
 
-class StaleBuiltHook(HealthBase):
-    """#902: a rebase moves a worktree's gate sources but not its built hooks, which are untracked, so the hook still runs the gate main changed."""
-
-    def setUp(self):
-        super().setUp()
-        self.repo = scratch_repo(self.root / "app", branch="main")
-        shutil.copytree(REPO_ROOT / "core" / "hooks", self.repo / "core" / "hooks")
-        (self.repo / "scripts").mkdir()
-        shutil.copy(REPO_ROOT / "scripts" / "build-hooks.py", self.repo / "scripts" / "build-hooks.py")
-        (self.repo / "core" / "templates" / "project").mkdir(parents=True)
-        (self.repo / "core" / "templates" / "project" / ".gitkeep").write_text("")
-        (self.repo / ".githooks").mkdir()
-        for hook in ("pre-commit", "pre-push", "commit-msg"):
-            os.symlink(f"../core/templates/project/{hook}", self.repo / ".githooks" / hook)
-        (self.repo / ".gitignore").write_text("/core/templates/project/pre-commit\n/core/templates/project/pre-commit-private\n"
-                                              "/core/templates/project/pre-push\n/core/templates/project/commit-msg\n")
-        git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-qm", "Base (#1)")
-        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-        self.wt = self.root / "app-1"
-        git(self.repo, "worktree", "add", "-q", str(self.wt), "-b", "story/1")
-        self.build(self.wt)
-        gate = self.repo / "core" / "hooks" / "gates" / "repo-local.sh"
-        gate.write_text(gate.read_text() + "\n# main drops this check (#619)\n")
-        git(self.repo, "commit", "-qam", "Change a gate (#619)")
-        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-        git(self.wt, "rebase", "-q", "origin/main")  # the worktree now has main's sources and the old build
-
-    @staticmethod
-    def build(wt):
-        subprocess.run([sys.executable, str(wt / "scripts" / "build-hooks.py")], check=True, capture_output=True)
-
-    def test_a_rebased_worktree_with_an_old_build_is_stale_and_names_the_hook(self):
-        why = health.stale_hook(self.wt)
-        self.assertIn("core/templates/project/pre-commit", why)
-
-    def test_a_worktree_rebuilt_after_its_rebase_is_current(self):
-        self.build(self.wt)
-        self.assertEqual("", health.stale_hook(self.wt))
-
-
 class TestGhVersion(unittest.TestCase):
     def test_an_old_gh_fails_naming_the_version_and_a_command(self):
         from lib import cli
@@ -459,52 +403,4 @@ class TestGhVersion(unittest.TestCase):
         from lib import cli
         self.assertIsNone(cli.gh_problem(mock.Mock(return_value=mock.Mock(stdout="gh version 2.60.0 (x)"))))
         self.assertIsNone(cli.gh_problem(mock.Mock(side_effect=FileNotFoundError)))
-
-
-class ParkedStories(unittest.TestCase):
-    """#1132: a story the drain parked on the turn limit twice must have a thin story naming it as parent, or health fails."""
-
-    @staticmethod
-    def fake(search_out, stories=None, stories_fail=False):
-        def run(args):
-            if args[:3] == ["api", "-X", "GET"] and args[3] == "search/issues":
-                return search_out
-            if stories_fail:
-                return None
-            return "\n".join(json.dumps(s) for s in (stories or []))
-        return run
-
-    def test_no_boards_is_a_skip(self):
-        self.assertEqual(quiet(health._check_parked_stories, [])[0], (1, 0, 0))
-
-    def test_no_parked_stories_passes(self):
-        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake(""))
-        self.assertEqual(result, (1, 0, 0))
-        self.assertIn("[OK]", out)
-
-    def test_a_failed_search_warns(self):
-        result, out = quiet(health._check_parked_stories, ["o/r"], lambda args: None)
-        self.assertEqual(result, (0, 0, 1))
-        self.assertIn("[WARN]", out)
-
-    def test_a_parked_story_with_no_split_fails_naming_the_fix(self):
-        stories = [{"number": 5, "title": "Big thing", "body": "", "id": 1, "labels": []}]
-        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake("5", stories))
-        self.assertEqual(result, (0, 1, 0))
-        self.assertIn("[FAIL]", out)
-        self.assertIn("o/r#5", out)
-        self.assertIn("Split from #5", out)
-
-    def test_a_parked_story_with_a_split_filed_passes(self):
-        stories = [
-            {"number": 5, "title": "Big thing", "body": "", "id": 1, "labels": []},
-            {"number": 6, "title": "Split #5 part 1", "body": "Split from #5", "id": 2, "labels": []},
-        ]
-        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake("5", stories))
-        self.assertEqual(result, (1, 0, 0))
-
-    def test_a_failed_story_read_warns(self):
-        result, out = quiet(health._check_parked_stories, ["o/r"], self.fake("5", stories_fail=True))
-        self.assertEqual(result, (0, 0, 1))
-        self.assertIn("[WARN]", out)
 

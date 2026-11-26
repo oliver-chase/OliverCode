@@ -16,8 +16,7 @@ from pathlib import Path
 
 MEMORY_PATH = re.compile(r"(?:\.claude-optimization/memory/|\.claude/projects/[^/\s'\"]+/memory/)")
 AUTO_MEMORY = re.compile(r"\.claude/projects/[^/\s'\"]+/memory/")
-# A rule is a line that starts with an imperative (or a sentence or a quoted string does); a fact that holds should or always mid-sentence is allowed.
-RULE = re.compile(r"(?:^|[.!?]\s+|['\"])[\s>#*\-\d.)]*(?:always|never|must|should|shall|whenever|do not|don'?t|before (?:you|each|every|any)|from now on)\b", re.IGNORECASE | re.MULTILINE)
+RULE = re.compile(r"\b(?:always|never|must|should|shall|rule|whenever|do not|don'?t|before (?:you|each|every|any)|from now on)\b", re.IGNORECASE)
 POINTER_LINE = re.compile(r"^\s*(?:[-*]\s*)?\[[^\]]+\]\([^)]+\)(?:\s*[-:—].*)?$")
 
 REFUSAL = ("Refused: this write puts a rule into memory, and auto-memory under ~/.claude/projects is never written. Rules belong "
@@ -38,10 +37,10 @@ def _only_pointers(path: str, text: str) -> bool:
 def _shell_targets(command: str) -> list[str]:
     """The memory paths a parsed shell command writes: redirect, tee, cp, mv and `sed -i` targets."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from lib import policy, policy_parse
+    from lib import policy
     found = []
-    for words in policy_parse.lex_uncommented(command):
-        name, rest = policy_parse._head(words)
+    for words in policy.lex_uncommented(command):
+        name, rest = policy._head(words)
         found += [t for t in policy._write_targets(name, rest) if MEMORY_PATH.search(t.replace("\\", "/"))]
     return found
 

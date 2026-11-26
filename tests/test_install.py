@@ -11,7 +11,7 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_initfleet, cmd_install, health_checks, health_env  # noqa: E402
+from lib import cmd_initfleet, cmd_install, health_checks  # noqa: E402
 
 IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.invalid", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}
 
@@ -97,7 +97,7 @@ class BoardStep(unittest.TestCase):
 
     def gh(self, code, scopes="'project', 'repo'"):
         stderr = f"Token scopes: {scopes}" if code == 0 else "not logged in"
-        return mock.patch.object(health_env, "_gh_auth_status", return_value=subprocess.CompletedProcess(["gh"], code, "", stderr))
+        return mock.patch.object(health_checks, "_gh_auth_status", return_value=subprocess.CompletedProcess(["gh"], code, "", stderr))
 
     def test_a_signed_out_gh_stops_the_board_step_before_any_repo(self):
         repo = temp_dir(self) / "widget"
@@ -162,15 +162,12 @@ class WhoBuilds(unittest.TestCase):
         self.assertIn(self.RULE, " ".join(cmd_guide.HOW_WORK_RUNS))
 
     def test_the_first_steps_end_on_building_a_story_in_install_and_the_guide(self):
-        """The contract is that step 3 names queued execution and both commands that start it, not the sentence around them (#1181)."""
         from lib import cmd_guide
-        _, guide = quiet(cmd_guide.command_guide, REPO_ROOT)
-        start = next(l for l in guide.splitlines() if "To hand off work" in l)  # the guide's third getting-started line (#1177)
-        for where, text in (("install introduction", cmd_install.INTRODUCTION), ("guide", "3. " + start)):
-            step = next((line for line in text.splitlines() if line.lstrip().startswith("3.")), "")
-            self.assertTrue(step, f"{where} has no step 3")
-            for needed in ("story", "olivercode dispatch", "olivercode drain"):
-                self.assertIn(needed, step.replace("`", ""), f"{where} step 3 no longer names {needed}")
+        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`", cmd_install.INTRODUCTION)
+        _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
+        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO", out)
+
+
 
 
 class DesignFile(unittest.TestCase):
@@ -192,16 +189,6 @@ class DesignFile(unittest.TestCase):
         self.assertEqual(str(own), local_config.load_local()["designFile"])
         self.assertEqual(1, len(asked))
 
-    def test_an_existing_design_file_setting_does_not_prompt_again(self):
-        from lib import local_config
-        own = temp_dir(self) / "mine.md"
-        own.write_text("mine\n")
-        self.config.write_text(json.dumps({"designFile": str(own)}))
-        asked = []
-        quiet(cmd_install.design_step, lambda q: asked.append(q) or "")
-        self.assertEqual([], asked)
-        self.assertEqual(str(own), local_config.load_local()["designFile"])
-
     def test_a_blank_answer_keeps_the_shipped_design_and_is_not_asked_again(self):
         from lib import local_config
         asked = []
@@ -214,7 +201,7 @@ class DesignFile(unittest.TestCase):
     def test_the_guide_names_design_file_and_the_relink_command(self):
         from lib import cmd_guide
         from lib.local_config import OC_ROOT
-        _, out = quiet(cmd_guide.command_guide, OC_ROOT, "design")
+        _, out = quiet(cmd_guide.command_guide, OC_ROOT)
         line = next(l for l in out.splitlines() if "designFile" in l)
         self.assertIn("olivercode install", line)
         self.assertIn("~/.claude/DESIGN.md", line)
@@ -320,21 +307,6 @@ class FleetStep(unittest.TestCase):
         self.assertEqual(1, out.count("Fleet repo:"))
         self.assertEqual(1, _commits(self.fleet))
 
-    def test_a_repeat_install_links_a_stale_default_registry_and_does_not_collide(self):
-        cmd_initfleet.scaffold_local(self.fleet)
-        cmd_initfleet.make_local_repo(self.fleet)
-        self.home.mkdir(parents=True, exist_ok=True)
-        stale = self.home / "stale.json"
-        stale.write_text("{}")
-        default = self.home / ".olivercode" / "fleet" / "repo-profiles.json"
-        default.parent.mkdir(parents=True)
-        default.symlink_to(stale)
-        self.config.write_text(json.dumps({"fleetRegistry": str(self.fleet / "repo-profiles.json")}))
-        for _ in range(2):
-            error, _ = quiet(cmd_install.fleet_step, self.checkout)
-            self.assertEqual("", error)
-            self.assertEqual((self.fleet / "repo-profiles.json").resolve(), default.resolve())
-
     def test_a_github_copy_is_cloned_on_yes_and_no_repo_is_created(self):
         with mock.patch("lib.cmd_initfleet.github_login", return_value=("me", "")), \
                 mock.patch("lib.cmd_initfleet.github_repo_kind", return_value=("fleet", "")), \
@@ -344,60 +316,6 @@ class FleetStep(unittest.TestCase):
         connect.assert_called_once_with(self.fleet, "me", "olivercode-fleet")
         self.assertFalse(self.fleet.exists())
         self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
-
-
-class FirstRunIntroduction(unittest.TestCase):
-    def test_the_first_run_text_asks_for_no_folder_path(self):
-        """#1196: the owner is never told to substitute a path into a command."""
-        self.assertNotIn("<", cmd_install.INTRODUCTION)
-        self.assertIn('Say "Set up OliverCode"', cmd_install.INTRODUCTION)
-
-
-class CityStep(unittest.TestCase):
-    """Install sets up City on the desktop and the phone, and the guide repeats it (#999)."""
-
-    def setUp(self):
-        self.config = temp_dir(self) / "olivercode.local.json"
-        patch = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(self.config), "CLAUDE_CODE_ENTRYPOINT": "claude-desktop"})
-        patch.start()
-        self.addCleanup(patch.stop)
-
-    def test_a_first_desktop_install_says_the_skill_publishes_city_and_names_each_phone_step_once(self):
-        from lib import cmd_guide
-        _, out = quiet(cmd_install.city_step)
-        self.assertIn("publishes the status page as the OliverCode City artifact", out)
-        self.assertIn("City: not set up yet", out)  # a printed handoff is not a finished City (#1193)
-        self.assertIn("reports City as incomplete", out)
-        for step in cmd_guide.PHONE_STEPS:
-            self.assertEqual(1, out.count(step))
-
-    def test_a_second_install_reuses_the_saved_url_and_stops_once_the_phone_is_confirmed(self):
-        self.config.write_text(json.dumps({"cityArtifact": "https://claude.ai/artifact/abc", "cityOnPhone": True}))
-        url, out = quiet(cmd_install.city_step)
-        self.assertEqual("https://claude.ai/artifact/abc", url)
-        self.assertIn("no second artifact", out)
-        self.assertNotIn("Phone:", out)
-
-    def test_outside_the_desktop_app_it_prints_the_page_path_and_the_publish_command_and_skips_the_rest(self):
-        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
-            _, out = quiet(cmd_install.city_step)
-        self.assertIn("status.html", out)
-        self.assertIn("`olivercode status publish`", out)
-        self.assertIn("skipped", out)
-        self.assertNotIn("Install the Claude app", out)
-
-    def test_the_guide_names_the_url_the_phone_steps_and_the_republish_command(self):
-        from lib import cmd_guide
-        self.config.write_text(json.dumps({"cityArtifact": "https://claude.ai/artifact/abc"}))
-        _, out = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
-        self.assertIn("https://claude.ai/artifact/abc", out)
-        self.assertIn("Open the pinned OliverCode City artifact.", out)
-        self.assertIn("olivercode status publish", out)
-
-
-class CheckoutLink(unittest.TestCase):
-    def test_install_links_the_checkout_root_at_the_documented_path(self):
-        self.assertEqual(Path("."), cmd_install.RULE_LINKS["olivercode"])
 
 
 if __name__ == "__main__":

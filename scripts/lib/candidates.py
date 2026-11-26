@@ -7,11 +7,13 @@ queues each chosen story in the story outbox and flushes it, so a promoted candi
 
 from __future__ import annotations
 
+import fcntl
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import failure_log, jsonl_store, repo_name_guard, story_outbox
+from lib import failure_log, repo_name_guard, story_outbox
 
 USAGE = "Usage: olivercode candidates [add --source NAME --repo OWNER/NAME --title TITLE (--body TEXT | --body-file FILE) | promote N... | promote --all | drop N...]"
 
@@ -38,7 +40,18 @@ def candidates_file() -> Path:
 
 
 def items() -> list[dict]:
-    return jsonl_store.read(candidates_file())
+    p = candidates_file()
+    if not p.is_file():
+        return []
+    out = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(item, dict) and item.get("repo") and item.get("title"):
+            out.append(item)
+    return out
 
 
 def count() -> int:
@@ -46,11 +59,22 @@ def count() -> int:
 
 
 def _save(rows: list[dict]) -> None:
-    jsonl_store.save(candidates_file(), rows)
+    p = candidates_file()
+    if not rows:
+        p.unlink(missing_ok=True)
+        return
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    tmp.replace(p)
 
 
+@contextmanager
 def _locked():
-    return jsonl_store.locked(candidates_file())
+    candidates_file().parent.mkdir(parents=True, exist_ok=True)
+    with candidates_file().with_suffix(".lock").open("w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
 
 
 def has(repo: str, title: str) -> bool:

@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from _support import REPO_ROOT, git, git_env, temp_dir
+from _support import REAL_HOME, REPO_ROOT, git, git_env, temp_dir
 
 
 def owner_leaks(root: Path, markers: list[str]) -> list[str]:
@@ -41,7 +41,10 @@ class TestCleanCloneInstall(unittest.TestCase):
         self.assertEqual(health.returncode, 0, health.stdout + health.stderr)
 
     def test_no_tracked_file_holds_this_machines_home_path(self):
-        self.assertEqual(owner_leaks(self.clone, [str(REPO_ROOT)]), [])
+        home = (REAL_HOME or "").rstrip("/")
+        if len(home) < 2:
+            self.skipTest("this machine's HOME is unset or the filesystem root, so it names no owner")
+        self.assertEqual(owner_leaks(self.clone, [home]), [])
 
     def test_the_leak_scan_names_a_file_that_holds_a_marker(self):
         repo = temp_dir(self)

@@ -33,10 +33,10 @@ class TestScanSpeed(unittest.TestCase):
             failure_log.trim(log, keep=1000)
 
     def test_refreshes_uses_the_jobs_it_is_given_without_listing_them_again(self):
-        found = [("report-refresh", "refresh the report page with claude -p", [])]
+        found = [("dash-refresh", "refresh the dashboard page with claude -p", [])]
         with mock.patch.object(schedules, "jobs", side_effect=AssertionError("listed again")):
             out = schedules.refreshes(Path("/none"), Path("/none"), Path("/none"), prefixes=("",), found=found)
-        self.assertEqual([name for name, _ in out], ["report-refresh"])
+        self.assertEqual([name for name, _ in out], ["dash-refresh"])
 
 
 if __name__ == "__main__":

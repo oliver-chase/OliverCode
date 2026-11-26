@@ -2,7 +2,6 @@
 
 import contextlib
 import io
-import json
 import os
 import sys
 import unittest
@@ -49,8 +48,7 @@ class TestRun(unittest.TestCase):
         reader = lambda path: (CONFIG, items, issues)
         applier = lambda path, payload: applied.append(payload) or 0
         with mock.patch.object(sweep.gh_budget, "refusal", return_value=held):
-            code = sweep.run(board_list=lambda: [("Alpha", Path("a.json"))], reader=reader, applier=applier, dry_run=dry_run, out=lines.append,
-                             grooming=lambda name, path, out: 0)
+            code = sweep.run(board_list=lambda: [("Alpha", Path("a.json"))], reader=reader, applier=applier, dry_run=dry_run, out=lines.append)
         return code, applied, lines
 
     def test_a_board_in_step_writes_nothing(self):
@@ -72,51 +70,14 @@ class TestRun(unittest.TestCase):
         lines = []
         def reader(path):
             raise RuntimeError("the repo's issues could not be read through REST")
-        code = sweep.run(board_list=lambda: [("Alpha", Path("a.json"))], reader=reader, applier=lambda *a: self.fail("wrote"), out=lines.append,
-                         grooming=lambda name, path, out: 0)
+        code = sweep.run(board_list=lambda: [("Alpha", Path("a.json"))], reader=reader, applier=lambda *a: self.fail("wrote"), out=lines.append)
         self.assertEqual(1, code)
         self.assertIn("the sweep did not run", lines[0])
 
     def test_a_failed_write_exits_nonzero(self):
         with mock.patch.object(sweep.gh_budget, "refusal", return_value=""):
-            code = sweep.run(board_list=lambda: [("A", Path("a"))], reader=lambda p: (CONFIG, [], [issue(1, "OPEN")]), applier=lambda p, r: 2, out=lambda t: None,
-                             grooming=lambda name, path, out: 0)
+            code = sweep.run(board_list=lambda: [("A", Path("a"))], reader=lambda p: (CONFIG, [], [issue(1, "OPEN")]), applier=lambda p, r: 2, out=lambda t: None)
         self.assertEqual(1, code)
-
-
-class TestGroom(unittest.TestCase):
-    def go(self, groomed=True, state=None, held="", dry_run=False):
-        lines, calls = [], []
-        config = Path(temp_dir(self)) / "backlog.json"
-        config.write_text(json.dumps({"repoOwner": "o", "repoName": "r"}), encoding="utf-8")
-        def fake_groom(name, path, run=None):
-            calls.append(name)
-            return groomed
-        with mock.patch.object(sweep.gh_budget, "refusal", return_value=held), \
-                mock.patch.object(sweep.gh_budget, "points_refusal", return_value=""), \
-                mock.patch("lib.cmd_groom.groom_board", side_effect=fake_groom), \
-                mock.patch("lib.cmd_groom.load_state", return_value=state or {}):
-            code = sweep.run(board_list=lambda: [("Alpha", config)], reader=lambda p: (CONFIG, [], []), applier=lambda p, r: 0,
-                             dry_run=dry_run, out=lines.append)
-        return code, calls, lines
-
-    def test_every_sync_grooms_the_board_after_it(self):
-        code, calls, lines = self.go()
-        self.assertEqual((0, ["Alpha"], ["Alpha: in step"]), (code, calls, lines))
-
-    def test_a_dry_run_does_not_groom(self):
-        _, calls, _ = self.go(dry_run=True)
-        self.assertEqual([], calls)
-
-    def test_a_failed_groom_names_its_cause_and_fails_the_run(self):
-        code, _, lines = self.go(groomed=False, state={"o/r": {"failed": "could not read the issues of o/r"}})
-        self.assertEqual(1, code)
-        self.assertIn("Alpha: grooming did not run (could not read the issues of o/r)", lines)
-
-    def test_a_held_graphql_budget_waits_without_a_failure(self):
-        code, calls, lines = self.go(held="GraphQL is on hold. Resets at noon.")
-        self.assertEqual((0, []), (code, calls))
-        self.assertIn("Alpha: grooming waits, GraphQL is on hold", lines[-1])
 
 
 class TestCommand(unittest.TestCase):

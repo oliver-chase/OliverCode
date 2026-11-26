@@ -34,11 +34,11 @@ def is_main_checkout(root: Path | None) -> bool:
 def _shell_writes(command: str, cwd: Path) -> list[Path]:
     """The files a command writes: redirect targets, tee, cp, mv, touch and `sed -i` files, read from the parsed
     command words so quoted text and comments name nothing."""
-    from lib import policy, policy_parse
+    from lib import policy
     found: list[Path] = []
     try:
-        for words in policy_parse.lex_uncommented(command):
-            name, rest = policy_parse._head(words)
+        for words in policy.lex_uncommented(command):
+            name, rest = policy._head(words)
             found += [cwd / Path(t).expanduser() for t in policy._write_targets(name, rest) if t and not t.startswith("&")]
     except ValueError:
         return []

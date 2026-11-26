@@ -80,6 +80,12 @@ class TestWarning(Repo):
         data = json.loads((REPO_ROOT / limits.LIMITS_FILE).read_text(encoding="utf-8"))
         self.assertEqual({"_comment", "limit", "stateEntries", "stateBytes", "stateLogBytes"}, set(data))
 
+    def test_inbound_lists_each_line_that_names_a_document(self):
+        with open(self.root / "README.md", "a", encoding="utf-8") as fh:
+            fh.write("See docs/GUIDE.md for the guide\n")
+        commit(self.root, "Link the guide (#2)")
+        self.assertEqual(["README.md:21"], limits.inbound(self.root, "docs/GUIDE.md"))
+
     def test_bad_arguments_print_the_usage(self):
         for argv in (["nope"], [], ["check", "--root"], ["record", "--story", "3"]):
             self.assertEqual(1, quiet(cmd_limits.command_limits, argv)[0], argv)

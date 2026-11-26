@@ -41,12 +41,12 @@ from lib.cmd_fleet import (  # noqa: E402
 )
 from lib.cmd_dispatch import command_dispatch  # noqa: E402
 from lib.cmd_drain import command_drain  # noqa: E402
-from lib.cmd_control import command_control  # noqa: E402
 from lib.cmd_board import command_board  # noqa: E402
 from lib.cmd_version import command_docs_check, command_version_cut  # noqa: E402
 from lib.cmd_land import command_land  # noqa: E402
 from lib.cmd_run import command_run  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
+from lib.cmd_lesson import command_lesson  # noqa: E402
 from lib.gated import command_gated  # noqa: E402
 from lib.story_outbox import command_story  # noqa: E402
 from lib.candidates import command_candidates  # noqa: E402
@@ -54,12 +54,12 @@ from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
 from lib.cmd_initfleet import command_init_fleet  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
 from lib.cmd_owner import command_owner  # noqa: E402
+from lib.cmd_rule import command_rule  # noqa: E402
 from lib.decisions import command_decisions  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
 from lib.validated import command as command_validated  # noqa: E402
 from lib.cmd_health import command_health  # noqa: E402
 from lib.cmd_status import command_status  # noqa: E402
-from lib.cmd_telemetry import command_telemetry  # noqa: E402
 from lib.cmd_commit_check import command_commit_check  # noqa: E402
 from lib.wip import command_wip  # noqa: E402
 from lib.cmd_install import command_install, command_uninstall  # noqa: E402
@@ -119,8 +119,6 @@ def main() -> int:
         return command_health(root)
     if cmd == "status":
         return command_status(argv)
-    if cmd == "telemetry":
-        return command_telemetry(argv)
     if cmd == "validated":
         return command_validated(argv)
     if cmd == "queue":
@@ -146,8 +144,6 @@ def main() -> int:
         return command_dispatch(argv)
     if cmd == "drain":
         return command_drain(argv)
-    if cmd in {"pause", "resume", "cancel"}:
-        return command_control([cmd, *argv])
     if cmd == "decisions":
         return command_decisions(argv)
     if cmd == "fleet-sync":
@@ -158,6 +154,10 @@ def main() -> int:
         return command_init_fleet(argv)
     if cmd == "owner":
         return command_owner(argv)
+    if cmd == "rule":
+        return command_rule(argv)
+    if cmd == "lesson":
+        return command_lesson(argv)
     if cmd == "story":
         return command_story(argv)
     if cmd == "candidates":

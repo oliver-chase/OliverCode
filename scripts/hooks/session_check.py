@@ -11,8 +11,8 @@ This runs in every session, in whatever folder it starts, and names these gaps:
 - a repo, worktree or backup sits outside repoRoot (scripts/lib/placement.py)
 - the OliverCode checkout holds commits origin/main lacks, or trails it with edits (the fast-forward and the board groom belong to `olivercode maintain --fix`)
 
-In a repo that has commit gates, a session that is not headless prints one line: the open count and the story building. The count comes from the status
-digest when it is under DIGEST_TTL old, and from a fresh read of GitHub when it is not (#985, #1017). The line tells the session nothing to read.
+In a repo that has commit gates, a session that is not headless also refreshes the status digest with no model call and prints three lines: the open
+count, the last story landed and the digest to read before acting (#985).
 
 It prints nothing else when nothing is wrong, so a healthy session pays no context for it.
 """
@@ -22,7 +22,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -31,12 +30,7 @@ import repo_gates  # noqa: E402
 RULE_LINKS = ("CLAUDE.md", "VOICE.md", "DESIGN.md")
 
 
-def _failed(what: str, exc: Exception) -> str:
-    """The session note for a check that raised: a SessionStart hook shows only its JSON, never stderr, so the owner reads the cause and the command that shows it."""
-    return f"The {what} check failed ({type(exc).__name__}: {exc}), so this session skipped it. Run `olivercode health` to see the cause."
-
-
-def notes(cwd: Path, claude_dir: Path) -> list[str]:
+def notes(cwd: Path, claude_dir: Path, session_id: str = "") -> list[str]:
     out = []
     for name in RULE_LINKS:
         link = claude_dir / name
@@ -62,38 +56,6 @@ def headless() -> bool:
     return os.environ.get("OLIVERCODE_HEADLESS") == "1"  # model.HEADLESS_ENV
 
 
-def status_line(cwd: Path) -> list[str]:
-    """The one session-start line for a governed repo: its open count and the story building (#985, #992, #1017). The count comes from the status digest
-    when that is under DIGEST_TTL old, so a session that starts soon after another calls no GitHub. Nothing in a headless builder, an ungoverned folder or
-    a failed read."""
-    if headless():
-        return []
-    try:
-        root = repo_gates.repo_root(cwd)
-        if not root or not repo_gates.has_gates(root):
-            return []
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from lib import cmd_status, repo_state, run_lock
-        slug = repo_state.origin(root)
-        if not slug:
-            return []
-        now = datetime.now(timezone.utc)
-        open_now = cmd_status.cached_open(slug, now)
-        if open_now is None:
-            done = cmd_status.write_digest(slug, out=lambda _text: None)
-            if done is None:
-                return []
-            open_now = done[2]
-        held = run_lock.active(slug, now.timestamp())
-    except Exception as exc:  # noqa: BLE001 -- a digest bug never blocks a session
-        print(f"session_check: status line failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return []
-    building = ", ".join(f"#{n}" for n in held.get("building") or []) if held else ""
-    state = f"building {building}" if building else "none building"
-    return [f"{slug}: {open_now} open stories, {state}." + (" A request joins the queue as a story." if held else "")]
-
-
-# shortcut: digest_notes and run_notes are no longer called by the hook (status_line replaced them); tests outside story #1017's Files area still exercise them, so delete them with those tests.
 def digest_notes(cwd: Path) -> list[str]:
     """The three session-start lines from a refreshed status digest, or nothing in a headless builder, an ungoverned folder or a failed read (#985)."""
     if headless():
@@ -106,7 +68,8 @@ def digest_notes(cwd: Path) -> list[str]:
         from lib import cmd_status, repo_state
         done = cmd_status.write_digest(repo_state.origin(root), out=lambda _text: None)
     except Exception as exc:  # noqa: BLE001 -- a digest bug never blocks a session
-        return [_failed("status digest", exc)]
+        print(f"session_check: status digest failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
     return done[2] if done else []
 
 
@@ -123,7 +86,8 @@ def run_notes(cwd: Path) -> list[str]:
         slug = repo_state.origin(root)
         rec = run_lock.active(slug) if slug else {}
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
-        return [_failed("run lock check", exc)]
+        print(f"session_check: run lock check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
     if not rec:
         return []
     building = ", ".join(f"#{n}" for n in rec.get("building") or [])
@@ -138,7 +102,8 @@ def placement_notes() -> list[str]:
         from lib import placement
         stray = placement.findings()
     except Exception as exc:  # noqa: BLE001 -- a placement bug never blocks a session
-        return [_failed("placement check", exc)]
+        print(f"session_check: placement check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
     if not stray:
         return []
     names = ", ".join(f"{f.path.name} ({f.kind})" for f in stray[:5]) + (f" and {len(stray) - 5} more" if len(stray) > 5 else "")
@@ -153,7 +118,8 @@ def checkout_notes() -> list[str]:
         from lib import main_checkout, maintain
         ahead = main_checkout.ahead_refusal(maintain.OC_ROOT) or main_checkout.stale_refusal(maintain.OC_ROOT)  # names the commits an ahead checkout holds, with the command that moves them (#785)
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
-        return [_failed("checkout fast-forward", exc)]
+        print(f"session_check: checkout fast-forward failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
     return [ahead] if ahead else []
 
 
@@ -163,7 +129,8 @@ def gh_notes() -> list[str]:
         import gh_budget
         why = gh_budget.refusal()
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
-        return [_failed("rate-limit note", exc)]
+        print(f"session_check: rate-limit note failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
     return [why] if why else []
 
 
@@ -173,8 +140,8 @@ def main() -> int:
     except json.JSONDecodeError:
         data = {}
     cwd = Path(data.get("cwd") or ".")
-    found = notes(cwd, Path.home() / ".claude")
-    parts = (["OliverCode session check: " + " ".join(found)] if found else []) + status_line(cwd)
+    found = notes(cwd, Path.home() / ".claude", str(data.get("session_id") or ""))
+    parts = (["OliverCode session check: " + " ".join(found)] if found else []) + run_notes(cwd) + digest_notes(cwd)
     if parts:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}))
     return 0

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, load_script, quiet, quiet_health, temp_dir
+from _support import REPO_ROOT, load_script, quiet, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher_shim")
 from lib import cmd_install, cmd_health, queue_shim  # noqa: E402
@@ -87,7 +87,7 @@ class TestInstallAndUninstall(HomeCase):
 class TestHealth(HomeCase):
     def health(self):
         with mock.patch.object(cmd_health, "_claude_dir", lambda: self.home / ".claude"):
-            return quiet_health()[1]
+            return quiet(cmd_health.command_health)[1]
 
     def line(self, out):
         return [l for l in out.splitlines() if "validate-queue" in l]
@@ -112,15 +112,6 @@ class TestHealth(HomeCase):
 
     def test_a_machine_install_never_linked_is_not_checked(self):
         self.assertEqual([], self.line(self.health()))
-
-
-class TestShellFiles(HomeCase):
-    def test_no_startup_file_for_a_shell_the_machine_lacks(self):
-        with mock.patch.object(queue_shim.shutil, "which", lambda name: None if name == "zsh" else "/bin/" + name):
-            self.install()
-            self.assertFalse((self.home / ".zshenv").exists())
-            self.assertTrue((self.home / ".bashrc").exists())
-            self.assertIsNone(queue_shim.launcher_problem(REPO_ROOT))
 
 
 if __name__ == "__main__":

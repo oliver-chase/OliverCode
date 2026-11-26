@@ -170,7 +170,7 @@ def prevention(slug: str, epic: int = 1, repeats=None, fetch=gh_issues, file=can
         if key in seen or filed >= cap:
             continue
         body = PREVENT_BODY.format(what=what, nth=len(times) + 1, n=len(times), gate=gate, first=times[0], last=times[-1],
-                                   times=", ".join(times[:10]), epic=epic_of(issues, epic))
+                                   times=", ".join(times[:10]), epic=epic)
         file(slug, title, body)
         seen[key] = len(times)
         filed += 1
@@ -190,12 +190,6 @@ WAIT_DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 WAIT_SPAN = re.compile(r"\b(\d+)[- ]days?\s+(?:of\s+)?(?:data|window|wait)|\bwait\w*\s+(?:for\s+)?(\d+)\s+days?\b", re.I)
 WAIT_DAYS = 14
 SMALL = ("XS", "S")
-SMALL_TURNS, FULL_TURNS = 40, 60  # a builder's turn budget by story size (#1113). At 30 for every size, 113 of 248 traced rounds ended on the cap, 24 of 41 small ones, and each restart re-read the context (#1155, #1203)
-
-
-def turns(size: str) -> int:
-    """Give small stories 40 turns and larger stories 60, avoiding needless context-reloading handoffs."""
-    return SMALL_TURNS if size in SMALL else FULL_TURNS
 
 
 def _listed(line: re.Pattern, body: str) -> list[str]:
@@ -224,11 +218,15 @@ def overlaps(a: list[str], b: list[str]) -> bool:
 
 
 def in_area(path: str, area: list[str]) -> bool:
-    """True when the path is inside the area or is any test file (test_*.py). The rules ask for a test with every change, and a module's test
-    often has another name (cmd_status.py is tested in test_status.py) or covers a neighbour, so refusing it threw away finished builds.
-    The landing's weakened-test check still guards every test file (#1073, #1078)."""
+    """True when the path is inside the area, or is the test of a file the area lists: test_NAME.py for NAME.py or NAME.sh, a hyphen read as an
+    underscore. The rules ask for a test with every change, so the test of a listed file never counts as scope creep (#1078)."""
+    if overlaps([path], area):
+        return True
     name = Path(path).name
-    return overlaps([path], area) or (name.startswith("test_") and name.endswith(".py"))
+    if not name.startswith("test_"):
+        return False
+    stem = Path(name[len("test_"):]).stem
+    return any(Path(a).stem.replace("-", "_") == stem for a in area if not a.endswith("/"))
 
 
 def long_wait(body: str, today: datetime.date | None = None) -> str:
@@ -264,11 +262,11 @@ def models(story: dict, session: str = "") -> tuple[str, str, str]:
 def plan(issues: list[dict], today: datetime.date | None = None) -> dict:
     """{"groups": [[numbers in order]], "rewrite": [numbers with no files area], "waits": {number: flag}, "models": {number: (builder, QA)}}.
     Stories that share a file sit in one group in priority order, and different groups run in parallel."""
-    from lib import cmd_groom, open_issues
+    from lib import cmd_groom
     todo = [i for i in issues if "work type: epic" not in (i.get("body") or "").lower() and "epic" not in {
         (l.get("name") if isinstance(l, dict) else l or "").lower() for l in i.get("labels") or []}]
     areas = {i["number"]: files_area(i.get("body") or "") for i in todo}
-    rank = {i["number"]: (cmd_groom.priority_of(i), open_issues.rank(i)[1], i["number"]) for i in todo}
+    rank = {i["number"]: (cmd_groom.priority_of(i), i["number"]) for i in todo}
     groups: list[list[int]] = []
     for n in sorted((n for n in areas if areas[n]), key=rank.get):
         hit = [g for g in groups if any(overlaps(areas[n], areas[m]) for m in g)]

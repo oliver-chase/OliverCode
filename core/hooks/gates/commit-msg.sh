@@ -9,10 +9,8 @@ fi
 
 # An owner opts a repo out by committing .githooks/commit-msg.optout. The file counts only once HEAD holds it, so
 # the commit that adds it is checked like any other. The hook never creates it, and every commit it lets through says so.
-# Read from the repo root and not from HOOK_DIR: core.hooksPath can be one machine-wide folder
-# outside every repo (#1154), so HOOK_DIR no longer names this repo's own .githooks. Git runs
-# this hook with the working directory already at the repo root, so the path needs no lookup.
-OPTOUT_REL=".githooks/commit-msg.optout"
+OPTOUT_REL="$(cd "$HOOK_DIR" && pwd -P)"
+OPTOUT_REL="${OPTOUT_REL#"$(git rev-parse --show-toplevel 2>/dev/null)"/}/commit-msg.optout"
 if git cat-file -e "HEAD:$OPTOUT_REL" 2>/dev/null; then
   echo "[commit-msg] Every commit-msg check is off (story, voice and test): $OPTOUT_REL is committed."
   exit 0
@@ -36,14 +34,6 @@ fi
 # warning and never counts. `olivercode commit-check` sets OLIVERCODE_COMMIT_CHECK to run these checks on a draft: it changes nothing and queues nothing (#881).
 BLOCK_COUNT=0
 block() { BLOCK_COUNT=$((BLOCK_COUNT + 1)); }
-# An early exit for a merge or a first commit still refuses when a check above it already blocked.
-exempt_exit() {
-  if [ "$BLOCK_COUNT" -gt 0 ]; then
-    echo "[commit-msg] $BLOCK_COUNT blocking finding$([ "$BLOCK_COUNT" -eq 1 ] || echo s). Fix all of them, then commit again."
-    exit 1
-  fi
-  exit 0
-}
 # REPO-NAME-1. The framework's own commits never name the owner's other repos. The names come from the local
 # registry through scripts/lib/repo_name_guard.py, which only the framework's checkout holds, so every other repo skips this check.
 GUARD_TOP="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -55,7 +45,7 @@ if [ -n "$GUARD_TOP" ] && [ -f "$GUARD_TOP/scripts/lib/repo_name_guard.py" ] && 
   rm -f "$GUARD_FILE"
   if [ "$GUARD_RC" -ne 0 ]; then
     echo "[commit-msg] BLOCKED: the message names another repo. Write \"another repo\" instead."
-    block
+    exit 1
   fi
 fi
 # sed quits at the first non-blank line, so a long message can close the pipe before printf finishes.
@@ -107,10 +97,10 @@ case "$SUBJECT" in
 esac
 if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
     && [ -z "$(staged_code)" ]; then
-  exempt_exit
+  exit 0
 fi
 if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
-  exempt_exit
+  exit 0
 fi
 
 # VOICE-1. A repo that ships docs/VOICE.md opts in to voice enforcement; every other repo skips it. A commit message follows docs/VOICE.md: no bullet that ends in a period and no contrast
@@ -131,14 +121,7 @@ fi
 TOKEN_END='([^[:alnum:]_]|$)'
 NUMBER='#0*[1-9][0-9]*'
 STORY_REF="(^|[^[:alnum:]_/#&])${NUMBER}${TOKEN_END}|[[:alnum:]_.-]+/[[:alnum:]_.-]+${NUMBER}${TOKEN_END}"
-# The framework governs a Claude Code session only while it is installed, which links ~/.claude/CLAUDE.md into its checkout (#1187). Without that
-# link nothing here keeps a board, so a commit with no story number goes through and says the check was skipped.
-OC_CLAUDE_MD="${OLIVERCODE_CLAUDE_DIR:-$HOME/.claude}/CLAUDE.md"
-OC_INSTALLED=""
-if [ -L "$OC_CLAUDE_MD" ] && [ -f "$(dirname "$(readlink "$OC_CLAUDE_MD")")/scripts/olivercode" ]; then OC_INSTALLED=1; fi
-if [ -z "${EXEMPT_STORY:-}" ] && ! printf '%s\n' "$MESSAGE" | grep -Eq "$STORY_REF" && [ -z "$OC_INSTALLED" ]; then
-  echo "[commit-msg] Note: the story check was skipped because the framework is not installed on this machine."
-elif [ -z "${EXEMPT_STORY:-}" ] && ! printf '%s\n' "$MESSAGE" | grep -Eq "$STORY_REF"; then
+if [ -z "${EXEMPT_STORY:-}" ] && ! printf '%s\n' "$MESSAGE" | grep -Eq "$STORY_REF"; then
   echo "[commit-msg] BLOCKED: the commit message names no story."
   echo "  Add the story number, for example \"Fix the sync (#53)\" or a line \"Story: #53\"."
   echo "  A revert or fixup/squash commit that names an existing commit, a merge that stages no code and a repo's first commit are exempt."

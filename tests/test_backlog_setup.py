@@ -509,3 +509,15 @@ class TestWorkflows(SetupCase):
         self.assertIn("/projects/1/workflows", self.text)
         self.assertIn("Item closed", self.text)
         self.assertIn("is:issue is:open", self.text)
+
+    def test_a_readable_board_with_a_workflow_off_is_named(self):
+        self.run_setup()
+        next(iter(self.fake.projects.values()))["workflows"] = {"Item closed": False, "Auto-add to project": True}
+        problems = backlog_setup.workflow_problems(self.repo, backlog_setup.Api(self.fake.runner))
+        self.assertEqual(1, len(problems))
+        self.assertIn("Item closed", problems[0])
+        self.assertIn("/projects/1/workflows", problems[0])
+
+    def test_an_unreadable_workflow_list_reports_nothing(self):
+        self.run_setup()
+        self.assertEqual([], backlog_setup.workflow_problems(self.repo, backlog_setup.Api(self.fake.runner)))

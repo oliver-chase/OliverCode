@@ -73,15 +73,15 @@ def run(repos=None, check=validate, out=print) -> int:
         profiles, _ = load_repo_profiles(OC_ROOT)
         repos = [(name, path) for name, _, path in iter_fleet(profiles, OC_ROOT.parent) if (path / ".git").exists()]
     failed = []
+    queued = {i["step"] for i in cmd_owner.items() if i["status"] == "open"}
     for name, path in repos:
         line, command, error = sync_repo(path, check)
         out(f"{name}: {line}")
-        key = f"fleet-sync:{name}"
         if command:
             failed.append(name)
-            cmd_owner.add_once("fleet-sync", key, f"Bring {name} level with origin: {line}", command, error, prefix=f"Bring {name} level with origin")
-        elif line == "level with origin" or line.startswith("pushed"):
-            cmd_owner.close_where(lambda i: i.get("key") == key or i["step"].startswith(f"Bring {name} level with origin"), "the repo is level with origin")
+            step = f"Bring {name} level with origin: {line}"
+            if step not in queued:
+                cmd_owner.add("fleet-sync", step, command, error)
     out(f"{len(failed)} of {len(repos)} repo(s) need the owner" + (": " + ", ".join(failed) if failed else "."))
     return 0
 

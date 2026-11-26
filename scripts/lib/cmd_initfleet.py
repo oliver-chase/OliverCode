@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from lib.local_config import FLEET_NAME, OC_ROOT, fleet_home, fleet_registry_path, link_default_registry
+from lib.local_config import FLEET_NAME, OC_ROOT, fleet_home, fleet_registry_path
 
 TEMPLATE = OC_ROOT / "core" / "templates" / "fleet"
 USAGE = "Usage: olivercode init-fleet [--owner LOGIN] [--name REPO] [--dir PATH]"
@@ -236,8 +236,4 @@ def _registry_hint(dest: Path) -> int:
     """Says how to point fleetRegistry at dest when the fleet commands read another registry. Returns 0."""
     if dest / REGISTRY != fleet_registry_path():
         print(f"Set \"fleetRegistry\": \"{dest / REGISTRY}\" in olivercode.local.json so the fleet commands read it.")
-    elif "OLIVERCODE_FLEET_REGISTRY" not in os.environ:
-        note = link_default_registry(dest / REGISTRY)
-        if note:
-            print(note)
     return 0

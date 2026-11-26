@@ -63,12 +63,6 @@ class TestIntake(unittest.TestCase):
         self.assertTrue(bad)
         self.assertIn("did not run", line)
 
-    def test_plan_starts_the_story_that_unblocks_more_first(self):
-        def story(n, blocking=0):
-            return {"number": n, "title": "t", "body": "Priority: P1.\nFiles area: a.py", "labels": [],
-                    "issue_dependencies_summary": {"total_blocking": blocking}}
-        self.assertEqual([[2, 1]], intake.plan([story(1), story(2, 2)])["groups"])
-
 
 class TestPrevention(unittest.TestCase):
     """Repeated blockers: 3 entries file one story, an open story gets a comment, 2 entries file nothing."""
@@ -112,11 +106,6 @@ class TestPrevention(unittest.TestCase):
         self.assertEqual(2, len(self.comments))
         self.sweep(issues)
         self.assertEqual(2, len(self.comments))
-
-
-class TestTurnBudget(unittest.TestCase):
-    def test_turn_budget_scales_with_story_size_without_restarting_context_too_early(self):
-        self.assertEqual((40, 40, 60, 60), tuple(intake.turns(size) for size in ("XS", "S", "M", "L")))
 
 
 if __name__ == "__main__":

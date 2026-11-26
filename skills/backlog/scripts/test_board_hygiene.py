@@ -1,4 +1,4 @@
-"""Test the sweep checks (status drift, required fields, duplicate cards), the REST reads and the config guards.
+"""Test the sweep checks (status drift, required fields, duplicate cards, close gate), the REST reads and the config guards.
 Run: python3 -m unittest discover -p "test_*.py"   (from this folder)
 """
 import contextlib
@@ -38,8 +38,8 @@ class DimensionScoping(unittest.TestCase):
             mock.patch.object(bh, "check_required_fields", spy("fields")),
             mock.patch.object(bh, "check_status_drift", spy("drift")),
             mock.patch.object(bh, "check_duplicate_cards", spy("duplicates")),
+            mock.patch.object(bh, "check_close_gate", spy("close-gate")),
             mock.patch.object(bh, "check_grooming", spy("groom")),
-            mock.patch.object(bh, "check_board_reopens", spy("board-reopens")),
             mock.patch("sys.argv", ["check_board_hygiene.py", "--config", "x.json", *flags]),
         ]
         with contextlib.ExitStack() as stack, redirect_stdout(io.StringIO()):
@@ -49,7 +49,7 @@ class DimensionScoping(unittest.TestCase):
         return calls
 
     def test_no_flag_runs_every_dimension(self):
-        self.assertEqual({"fields", "drift", "duplicates", "board-reopens", "groom"},
+        self.assertEqual({"fields", "drift", "duplicates", "close-gate", "groom"},
                          set(self.run_main()))
 
     def test_one_dimension_runs_alone(self):
@@ -161,19 +161,6 @@ class Grooming(unittest.TestCase):
         found["work Type"] = work
         return found
 
-    def test_an_epic_moves_with_its_stories(self):
-        epics = [self.titled(n, s, "e", "Epic") for n, s in
-                 ((10, "Ready"), (11, "Ready"), (12, "Backlog"), (13, "In Progress"), (14, "Ready"), (15, "Complete"))]
-        moves = {n: (status, text) for n, status, text in bh.epic_moves(
-            epics, {10: (0, 0), 11: (4, 1), 12: (3, 3), 13: (4, 0), 14: (2, 2), 15: (2, 2)}, "Complete")}
-        self.assertEqual({10, 11, 12, 14}, set(moves), "13 has no closed story and no move; 15 is already Complete")
-        self.assertEqual("Backlog", moves[10][0])
-        self.assertIn("not built directly", moves[10][1])
-        self.assertEqual("In Progress", moves[11][0])
-        self.assertIn("1 of 4 sub-issues are closed", moves[11][1])
-        self.assertEqual("Complete", moves[12][0])
-        self.assertEqual("Complete", moves[14][0], "a Ready epic whose sub-issues are all closed completes, not Backlog")
-
     def test_built_work_lagging_epics_and_overlapping_titles_are_flagged(self):
         builder = [{"body": "Agent action\n- Agent: b\n- Role: builder\n- Result: built"}]
         found = bh.built_not_moved([item(1, "Ready"), item(2, "QA"), item(3, "Backlog")],
@@ -277,34 +264,53 @@ class ListLimit(unittest.TestCase):
         self.assertIn("limit", str(raised.exception))
 
 
-def comments_runner(comments_by_issue):
-    def run(args):
-        number = int(args[-1].split("/")[-2] if args[-1].endswith("/comments") else args[0].split("/")[-1])
-        if "--slurp" in args:
-            return subprocess.CompletedProcess([], 0, json.dumps([comments_by_issue.get(number, [])]), "")
-        return subprocess.CompletedProcess([], 0, "", "")
-    return run
+class CloseGateDimension(unittest.TestCase):
+    CFG = {"repoOwner": "o", "repoName": "r", "closeGateFromIssue": 50}
 
+    @staticmethod
+    def runner(comments_by_issue, reasons=None):
+        def run(args):
+            number = int(args[-1].split("/")[-2] if args[-1].endswith("/comments") else args[0].split("/")[-1])
+            if "--slurp" in args:
+                return subprocess.CompletedProcess([], 0, json.dumps([comments_by_issue.get(number, [])]), "")
+            if ".state_reason" in args:
+                return subprocess.CompletedProcess([], 0, f"{(reasons or {}).get(number, 'null')}\n", "")
+            return subprocess.CompletedProcess([], 0, "", "")
+        return run
 
-class HalfDoneClose(unittest.TestCase):
-    """#1202: an open In Progress story whose last comment is the closing line is a close that died; anything else is left alone."""
-    MARK = "Evidence.\n\nClosed by complete_story.py."
+    def test_an_issue_closed_without_the_mark_is_flagged_with_its_number_and_fix(self):
+        items = [item(60, "Complete"), item(61, "Complete")]
+        found = bh.check_close_gate(items, self.CFG, runner=self.runner({61: [{"body": "done\n\nClosed by complete_story.py."}], 60: [{"body": "Closing."}]}))
+        self.assertEqual(1, len(found))
+        self.assertIn("#60", found[0])
+        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
 
-    def found(self, comments, status="In Progress", state="OPEN"):
-        run = comments_runner({61: comments})
-        return bh.half_closes([item(61, status)], {61: state}, "o/r", run)
+    def test_a_duplicate_closed_as_not_planned_is_not_flagged(self):
+        comments = {60: [{"body": "Duplicate of #70. Findings folded into #70."}]}
+        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "not_planned"})))
 
-    def test_the_closing_line_as_the_last_comment_is_a_half_done_close(self):
-        self.assertEqual([61], self.found([{"body": "claimed"}, {"body": self.MARK}]))
+    def test_a_completed_close_without_the_mark_is_still_flagged(self):
+        comments = {60: [{"body": "Closing."}]}
+        found = bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "completed"}))
+        self.assertEqual(1, len(found))
+        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
 
-    def test_no_closing_comment_or_a_mere_quote_of_it_is_left_alone(self):
-        self.assertEqual([], self.found([{"body": "claimed"}]))
-        self.assertEqual([], self.found([{"body": "It ends with Closed by complete_story.py. in the middle of the text"}]))
-        self.assertEqual([], self.found([{"body": self.MARK}, {"body": "later note"}]))
+    def test_a_comment_that_only_quotes_the_mark_does_not_count(self):
+        quoted = {60: [{"body": "> Closed by complete_story.py."}, {"body": "Closed by complete_story.py. is the mark\nthanks"}]}
+        self.assertEqual(1, len(bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(quoted))))
 
-    def test_only_an_open_in_progress_card_counts(self):
-        self.assertEqual([], self.found([{"body": self.MARK}], status="Ready"))
-        self.assertEqual([], self.found([{"body": self.MARK}], state="CLOSED"))
+    def test_older_and_open_items_and_a_null_key_are_not_read(self):
+        def boom(args):
+            raise AssertionError("read")
+        self.assertEqual([], bh.check_close_gate([item(49, "Complete"), item(70, "In Progress")], self.CFG, runner=boom))
+        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], dict(self.CFG, closeGateFromIssue=None), runner=boom))
+
+    def test_a_failed_read_stops_the_check_and_a_bad_key_is_refused(self):
+        bad = lambda args: subprocess.CompletedProcess([], 1, "", "boom")
+        with self.assertRaises(SystemExit):
+            bh.check_close_gate([item(60, "Complete")], self.CFG, runner=bad)
+        with self.assertRaises(SystemExit):
+            bh.check_close_gate([], dict(self.CFG, closeGateFromIssue="50"))
 
 
 class ImportIsolation(unittest.TestCase):

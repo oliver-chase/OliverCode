@@ -7,7 +7,6 @@ import os
 import subprocess
 import tempfile
 import unittest
-from unittest import mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -58,52 +57,6 @@ class LogAction(unittest.TestCase):
         code = la.main(argv, runner=Recorder(), out=out, err=err, pushed=lambda c: None, names_story=lambda c, s: "commit abc1234 does not name #5 in its message")
         self.assertEqual(2, code)
         self.assertIn("does not name #5", err.getvalue())
-
-    def test_an_unnamed_commit_posts_only_with_a_reason_and_the_entry_states_it(self):
-        """#1186: work that landed in a commit that never named its story can still be logged, and the entry says why."""
-        base = ["--repo", "o/r", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234", "--files", "1", "--result", "ok"]
-        refuse = lambda c, s: "commit abc1234 does not name #5 in its message"
-        posted = []
-        runner = lambda a: (posted.append(a), subprocess.CompletedProcess([], 0, "https://x/1", ""))[1]
-        with mock.patch.object(la, "batch_names", return_value=False):
-            code = la.main(base, runner=runner, out=io.StringIO(), err=io.StringIO(), pushed=lambda c: None, names_story=refuse)
-            self.assertEqual((2, 0), (code, len(posted)))
-            code = la.main(base + ["--unnamed-commit", " "], runner=runner, out=io.StringIO(), err=io.StringIO(), pushed=lambda c: None, names_story=refuse)
-            self.assertEqual((2, 0), (code, len(posted)))
-            code = la.main(base + ["--unnamed-commit", "the backoff landed with no story number"], runner=runner, out=io.StringIO(), err=io.StringIO(), pushed=lambda c: None, names_story=refuse)
-        self.assertEqual((0, 1), (code, len(posted)))
-        self.assertIn("Commit does not name the story: the backoff landed with no story number", " ".join(posted[0]))
-
-    def test_a_batch_commit_counts_as_the_builder_commit_of_a_batched_story(self):
-        """#1084: a commit naming (#M) that changed N's Files area is N's commit when N's comments say "batch session with #M"."""
-        with tempfile.TemporaryDirectory() as tmp:
-            who = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_COMMITTER_NAME": "t", "GIT_AUTHOR_EMAIL": "t-at-test", "GIT_COMMITTER_EMAIL": "t-at-test"}
-            git = lambda *a: subprocess.run(["git", "-C", tmp, *a], capture_output=True, text=True, check=True, env=who)
-            git("init", "-q")
-            (Path(tmp) / "a.py").write_text("x\n")
-            git("add", "a.py")
-            git("commit", "-qm", "Build both (#6)")
-            sha = git("rev-parse", "HEAD").stdout.strip()
-            def reply(comment, area="Files area: a.py"):
-                return lambda args: subprocess.CompletedProcess([], 0, json.dumps([[{"body": comment}]]) if "--slurp" in args else area, "")
-            self.assertIsNone(la.batch_names(sha, 5, "o/r", reply("Built in a batch session with #6"), tmp))
-            self.assertFalse(la.batch_names(sha, 5, "o/r", reply("no batch here"), tmp))
-            self.assertFalse(la.batch_names(sha, 5, "o/r", reply("Built in a batch session with #6", "Files area: b.py"), tmp))
-            self.assertFalse(la.batch_names(sha, 5, "o/r", reply("Built in a batch session with #7"), tmp))
-
-    def test_main_drops_the_naming_refusal_only_when_a_batch_names_the_commit(self):
-        """#1084: the builder entry for a batched story posts, and one with no batch partner is still refused."""
-        argv = ["--repo", "o/r", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234", "--files", "1", "--result", "ok"]
-        refuse = lambda c, s: "commit abc1234 does not name #5 in its message"
-        posted = []
-        runner = lambda a: (posted.append(a), subprocess.CompletedProcess([], 0, "https://x/1", ""))[1]
-        for found, expected in ((None, 0), (False, 2)):
-            posted.clear()
-            with mock.patch.object(la, "batch_names", return_value=found):
-                out, err = io.StringIO(), io.StringIO()
-                code = la.main(argv, runner=runner, out=out, err=err, pushed=lambda c: None, names_story=refuse)
-            self.assertEqual(expected, code)
-            self.assertEqual(1 if expected == 0 else 0, len(posted))
 
     def test_a_builder_entry_for_an_unpushed_commit_is_refused_and_a_pushed_one_posts(self):
         argv = ["--repo", "o/r", "--story", "5", "--agent", "b", "--role", "builder", "--commit", "abc1234", "--files", "1", "--result", "ok"]

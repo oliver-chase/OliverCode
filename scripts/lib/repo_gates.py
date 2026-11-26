@@ -61,14 +61,11 @@ def fix_command(root: Path) -> str:
     return f'git -C "{root}" config core.hooksPath .githooks'
 
 
-UNSET_HOOKS_PATH = "core.hooksPath is unset, so git runs none of this repo's commit gates"
-
-
 def gate_problem(root: Path) -> str:
     """Why git would skip this repo's gates, or "" when they run. Only for a repo with gates."""
     configured = hooks_path(root)
     if not configured:
-        return UNSET_HOOKS_PATH
+        return "core.hooksPath is unset, so git runs none of this repo's commit gates"
     hooks_dir = Path(configured).expanduser()
     if hooks_dir.is_absolute() and has_gates(root):
         # Absolute works in the main checkout but sends every worktree to this checkout's hooks, where commit_guard refuses its commits.
@@ -87,39 +84,6 @@ def gate_problem(root: Path) -> str:
     if not os.access(live, os.X_OK):
         return f"{live} is not executable, so git skips it"
     return ""
-
-
-GLOBAL_HOOKS_FIX = "olivercode install"
-
-
-def global_hooks_path() -> str:
-    """Git's global core.hooksPath, or "" when none is set. A test isolates this through GIT_CONFIG_GLOBAL (tests/_support.py)."""
-    try:
-        out = subprocess.run(["git", "config", "--global", "--get", "core.hooksPath"], capture_output=True, text=True, timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return out.stdout.strip() if out.returncode == 0 else ""
-
-
-def global_hooks_problem(oc_root: Path) -> str:
-    """Why a repo with no hooksPath of its own still runs no gates, or "" when the machine's global
-    core.hooksPath (set by `olivercode install`, #1154) covers it with OliverCode's built hooks."""
-    expected = hook_templates(oc_root)
-    configured = global_hooks_path()
-    if not configured:
-        return "the global core.hooksPath is unset, so a repo with none of its own runs no commit gates"
-    if Path(configured).expanduser().resolve() != expected.resolve():
-        return f"the global core.hooksPath is {configured}, not {expected}"
-    live = expected / "pre-commit"
-    if not live.is_file() or not os.access(live, os.X_OK):
-        return f"{live} is missing or not executable"
-    return ""
-
-
-def has_committed_hooks(repo_root: Path) -> bool:
-    """True when the repo still tracks an OliverCode hook file in .githooks, the old per-repo copy sync-hooks
-    used to commit (#1154). A repo with none of these relies on the global core.hooksPath instead."""
-    return any(_tracked(repo_root, name) for name in ("pre-commit", "pre-commit-private", "pre-push", "commit-msg"))
 
 
 def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess:

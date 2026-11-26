@@ -35,29 +35,13 @@ INSIDE = {"scripts/validate.sh", "scripts/lib/smoke_runner.py", "scripts/lib/que
 SUITE = re.compile(r"-m[ \t]+[\"']?(unittest|pytest)\b|(^|[\s\"'(;&|])pytest([\s\"')]|$)|\bnpm[ \t]+(run[ \t]+)?test\b|\brun-tests\.sh\b")
 # In Python a start is a quoted command or an argv list, so a usage line in a docstring is not read as one.
 PY_SUITE = re.compile(r"[\"']-m[\"']\s*,\s*[\"'](unittest|pytest)[\"']|[\"'](python3?\s+-m\s+(unittest|pytest)|pytest|npm\s+(run\s+)?test|bash\s+scripts/run-tests\.sh)\b")
-# A line is queued when it runs the queue as a command or calls it, so a mention in a trailing comment, a string or an env value does not count.
-QUEUED = re.compile(r"(^|[\s;&|(`])(\S*/)?(validate[_-]queue(\.py)?\s+run|olivercode\s+queue\s+run|queue\s+run)\b|[\"']{2}\s+run\b|\$\{?\w*queue\w*\}?\s+run\b|\bqueued\(|\bvalidate_queue\.(run|queued)\b")  # a quoted or variable path to the queue, such as python3 "$validate_queue" run, is blanked or unexpanded by _code
+QUEUED = re.compile(r"validate[_-]queue|queue run|queued\(|OLIVERCODE_VALIDATE_SLOT|VALIDATE_QUEUE_SLOT")
 SLOT_SKIP = re.compile(r"(VALIDATE_QUEUE_SLOT|OLIVERCODE_VALIDATE_SLOT|VALIDATE_QUEUE_BIN)=[^\s]*|env\s+-u\s+\S*(VALIDATE_QUEUE_SLOT|OLIVERCODE_VALIDATE_SLOT)")
 SCRIPT_SUFFIXES = (".sh", ".py", ".bash", ".zsh")
 
 
-def _code(line: str) -> str:
-    """The line with quoted strings blanked and any trailing comment cut, so a mention in either does not count as a queue call."""
-    line = re.sub(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'", '""', line)
-    return re.sub(r"\s#.*$", "", line)
-
-
-class GitUnreadable(Exception):
-    """git could not list the repo's tracked files."""
-
-
 def tracked(root: Path) -> list[str]:
-    try:
-        done = subprocess.run(["git", "-C", str(root), "-c", "core.quotepath=false", "ls-files", "-z"], capture_output=True)
-    except OSError as exc:
-        raise GitUnreadable(f"git could not start ({exc})") from exc
-    if done.returncode:
-        raise GitUnreadable(f"git ls-files failed in {root}: {done.stderr.decode('utf-8', 'replace').strip()[:120] or 'no detail'}")
+    done = subprocess.run(["git", "-C", str(root), "-c", "core.quotepath=false", "ls-files", "-z"], capture_output=True)
     return [f for f in done.stdout.decode("utf-8", "surrogateescape").split("\0") if f]
 
 
@@ -88,7 +72,7 @@ def check(root: Path) -> list[str]:
     """One finding per bypass, each naming the script, the line and the entry point to use."""
     root = Path(root)
     findings = []
-    for rel in tracked(root):  # raises GitUnreadable when git cannot list the files
+    for rel in tracked(root):
         path = root / rel
         if not path.is_file():
             continue
@@ -105,20 +89,15 @@ def check(root: Path) -> list[str]:
                 continue
             if "validate.sh" in line and SLOT_SKIP.search(line):
                 findings.append(f"{rel}:{n} starts validate.sh with the queue variables replaced, which skips its slot. Use `{ENTRY}` as it is")
-            elif (PY_SUITE if rel.endswith(".py") else SUITE).search(line) and not QUEUED.search(_code(line)):
+            elif (PY_SUITE if rel.endswith(".py") else SUITE).search(line) and not QUEUED.search(line):
                 findings.append(f"{rel}:{n} starts the test suite directly, outside the validation queue. Use `{ENTRY}`, or wrap the command in `olivercode queue run --`")
     return findings
 
 
 def main(argv: list[str]) -> int:
     root = Path(argv[0]) if argv else Path(__file__).resolve().parents[2]
+    findings = check(root)
     print("=== validate: checking that every caller goes through the validation queue ===")
-    try:
-        findings = check(root)
-    except GitUnreadable as exc:
-        print(f"  [FAIL] unknown: {exc}, so no script was read")
-        print("=== validate: queue bypass check FAILED (the tracked files could not be read) ===")
-        return 1
     for f in findings:
         print(f"  [FAIL] {f}")
     if findings:

@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -49,8 +48,8 @@ class ValidatedPush(unittest.TestCase):
         shutil.copytree(self._template / "work", self.work, symlinks=True)
         self.git("remote", "set-url", "origin", str(self.remote))
 
-    def git(self, *args, env=None):
-        return subprocess.run(["git", *args], cwd=self.work, env={**self.env, **(env or {})}, capture_output=True, text=True)
+    def git(self, *args):
+        return subprocess.run(["git", *args], cwd=self.work, env=self.env, capture_output=True, text=True)
 
     def tree(self):
         return self.git("rev-parse", "HEAD^{tree}").stdout.strip()
@@ -62,7 +61,8 @@ class ValidatedPush(unittest.TestCase):
             f.write(line + "\n")
 
     def push(self, ref="main", **env):
-        result = self.git("push", "origin", ref, env=env)  # the extra settings last for this push only
+        self.env.update(env)
+        result = self.git("push", "origin", ref)
         result.output = result.stdout + result.stderr
         return result
 
@@ -78,9 +78,7 @@ class ValidatedPush(unittest.TestCase):
 
     def test_a_record_for_another_tree_refuses(self):
         self.write_record("1" * 40)
-        result = self.push()
-        self.assertNotEqual(result.returncode, 0, result.output)
-        self.assertIn("no passing full validation", result.output)
+        self.assertNotEqual(self.push().returncode, 0)
 
     def test_a_record_of_a_failed_validation_refuses(self):
         # Lesson S-no-validate: a push happens only after the repo's validation passes.
@@ -91,9 +89,7 @@ class ValidatedPush(unittest.TestCase):
 
     def test_a_record_older_than_seven_days_refuses(self):
         self.write_record(self.tree(), datetime.now(timezone.utc) - timedelta(days=8))
-        result = self.push()
-        self.assertNotEqual(result.returncode, 0, result.output)
-        self.assertIn("no passing full validation", result.output)
+        self.assertNotEqual(self.push().returncode, 0)
 
     def test_a_non_main_push_needs_no_validation_record_once_the_branch_override_is_set(self):
         self.git("checkout", "-q", "-b", "feat")
@@ -126,10 +122,7 @@ class ValidatedPush(unittest.TestCase):
     def test_the_launcher_recorded_by_a_pass_is_found(self):
         del self.env["OLIVERCODE_LAUNCHER"]
         (self.home / "launcher").write_text(str(LAUNCHER) + "\n")
-        result = self.push()
-        self.assertNotEqual(result.returncode, 0, result.output)
-        self.assertIn("no passing full validation", result.output)
-        self.assertNotIn("no olivercode launcher resolves", result.output)
+        self.assertNotEqual(self.push().returncode, 0)
 
     def oc_checkout(self):
         """A home whose ~/.claude/CLAUDE.md links into a checkout holding scripts/olivercode, as `olivercode land` finds it."""
@@ -192,16 +185,12 @@ class Record(unittest.TestCase):
             os.environ["OLIVERCODE_HOME"] = self.old
 
     def test_the_record_holds_the_tree_of_the_working_tree_and_keeps_200_lines(self):
-        # The tree is the same for every record() in a batch, so it is hashed once per batch rather than
-        # 205 times: each hash alone costs three subprocess calls (#1143).
         (self.repo / "dirty.txt").write_text("new\n")
-        tree_a = validated.working_tree(self.repo)
         for _ in range(100):
-            validated.record(self.repo, tree_a)
+            validated.record(self.repo)
         (self.repo / "dirty.txt").write_text("newer\n")
-        tree_b = validated.working_tree(self.repo)
         for _ in range(105):
-            validated.record(self.repo, tree_b)
+            validated.record(self.repo)
         lines = (self.home / "validated.jsonl").read_text().splitlines()
         self.assertEqual(len(lines), 200)
         # The first five old-tree lines were dropped and the newest line is last: dropping the wrong end changes these counts.
@@ -260,69 +249,6 @@ class Record(unittest.TestCase):
         self.assertNotEqual(stamped, validated.working_tree(self.repo))
         self.assertTrue(validated.is_validated(before))
         self.assertFalse(validated.is_validated(validated.working_tree(self.repo)))
-
-
-class CanaryAtPush(unittest.TestCase):
-    """The drain canary leaves the full validation and runs once per tree at the push to the default branch (#1155)."""
-
-    def setUp(self):
-        self.tmp = temp_dir(self, "validated-canary-")
-        self.home = self.tmp / "home"
-        p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
-        p.start()
-        self.addCleanup(p.stop)
-        self.repo = scratch_repo(self.tmp / "repo", branch="main")
-        (self.repo / "tests").mkdir()
-        (self.repo / "tests" / "test_drain_canary.py").write_text("")
-        (self.repo / "scripts").mkdir()
-        (self.repo / "scripts" / "validate.sh").write_text("olivercode validated record\n")
-        env = git_env()
-        subprocess.run(["git", "-C", str(self.repo), "add", "-A"], env=env, check=True)
-        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-m", "canary"], env=env, check=True)
-        self.tree = validated.working_tree(self.repo)
-
-    def test_a_repo_with_no_canary_needs_nothing(self):
-        (self.repo / "tests" / "test_drain_canary.py").unlink()
-        self.assertEqual(0, validated.canary(self.repo, "any", run=lambda root: self.fail("no canary to run")))
-
-    def test_the_push_runs_the_canary_once_and_records_the_pass_for_that_tree(self):
-        ran = []
-        self.assertEqual(0, validated.canary(self.repo, self.tree, run=lambda root: ran.append(root) or True))
-        self.assertEqual(0, validated.canary(self.repo, self.tree, run=lambda root: self.fail("a recorded pass is not run again")))
-        self.assertEqual(1, len(ran))
-        self.assertIsNotNone(validated.recorded_pass(self.tree, check="canary"))
-
-    def test_a_canary_pass_never_counts_as_a_full_validation(self):
-        validated.record(self.repo, self.tree, check="canary")
-        self.assertIsNone(validated.recorded_pass(self.tree))
-        validated.record(self.repo, self.tree)
-        self.assertIsNotNone(validated.recorded_pass(self.tree))
-
-    def test_a_failing_canary_blocks_and_names_the_command_and_a_tree_it_cannot_run_for_blocks_too(self):
-        self.assertEqual(1, validated.canary(self.repo, self.tree, run=lambda root: False))
-        self.assertIsNone(validated.recorded_pass(self.tree, check="canary"))
-        self.assertEqual(1, validated.canary(self.repo, "0" * 40, run=lambda root: self.fail("the checkout holds another tree")))
-
-    def test_the_canary_runs_through_the_validation_queue_with_a_command_unittest_accepts(self):
-        """The queue-bypass gate needs the queue call, and a real run found that an option before discover is rejected, so the command is held here."""
-        from lib import validate_queue
-        with mock.patch.object(validate_queue, "run", return_value=0) as queued:
-            self.assertTrue(validated.run_canary(self.repo))
-        command = queued.call_args[0][0]
-        self.assertEqual(["-m", "unittest", "discover"], command[1:4])
-        self.assertIn("test_drain_canary.py", command)
-        with mock.patch.object(validate_queue, "run", return_value=1):
-            self.assertFalse(validated.run_canary(self.repo))
-
-    def test_the_check_runs_the_canary_after_a_full_validation_and_the_override_skips_it(self):
-        sha = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True, text=True, env=git_env(), check=True).stdout.strip()
-        validated.record(self.repo, self.tree)
-        with mock.patch.object(validated, "run_canary", return_value=False):
-            self.assertEqual(1, validated.check(self.repo, sha))
-            with mock.patch.dict(os.environ, {validated.OVERRIDE: "1"}):
-                self.assertEqual(0, validated.check(self.repo, sha))
-        with mock.patch.object(validated, "run_canary", return_value=True):
-            self.assertEqual(0, validated.check(self.repo, sha))
 
 
 if __name__ == "__main__":

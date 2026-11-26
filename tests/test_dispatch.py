@@ -96,32 +96,14 @@ class TestDispatch(DispatchCase):
         self.assertEqual((0, ["claim", "build", "land", "close", "release"]), (code, io.steps))
         self.assertIn("Story #77 landed and closed", out)
         self.assertEqual("Fixture story title", io.issue["title"])
+        code, _, io = self.run_dispatch(argv=("77", "--run"))  # the old flag is accepted and changes nothing
+        self.assertEqual((0, ["claim", "build", "land", "close", "release"]), (code, io.steps))
 
     def test_the_story_runs_the_same_work_story_drain_uses(self):
         with mock.patch.object(cmd_drain, "work_story", return_value=(True, 5)) as work:
             code, _, _ = self.run_dispatch()
         self.assertEqual(0, code)
         self.assertEqual(77, work.call_args.args[1]["number"])
-
-    def test_initial_and_queued_stories_share_one_dispatch_run_state(self):
-        """The initial story and queued stories share one circuit-breaker state."""
-        seen = []
-
-        def work(_io, story, state):
-            seen.append((story["number"], state))
-            if story["number"] == 77:
-                state["api_error_stop"] = "rate limit"
-            return False, 0
-
-        with mock.patch.object(cmd_drain, "work_story", side_effect=work), \
-             mock.patch.object(cmd_dispatch.run_lock, "release", side_effect=[[78], [], []]), \
-             mock.patch.object(cmd_dispatch, "read_story", side_effect=lambda _runner, _slug, number: ({**STORY, "number": number}, "")), \
-             mock.patch.object(cmd_dispatch, "live_claim", return_value=""):
-            self.run_dispatch()
-
-        self.assertEqual([77, 78], [n for n, _ in seen])
-        self.assertIs(seen[0][1], seen[1][1])
-        self.assertEqual("rate limit", seen[1][1]["api_error_stop"])
 
     def test_a_dispatch_while_another_run_holds_the_repo_joins_its_queue_and_builds_nothing(self):
         """#992: no second builder starts; the story is appended, and the holder is named."""
@@ -180,18 +162,6 @@ class TestDispatch(DispatchCase):
         code, out, io = self.run_dispatch(story=claimed)
         self.assertEqual((code, io.steps), (1, []))
         self.assertIn("other-session", out)
-
-
-class TestClaimStart(DispatchCase):
-    def test_a_renewed_claim_keeps_its_start(self):
-        """#1093: renewal moves the claim's time and never its start."""
-        cmd_dispatch._local_claim("o/r", 5, 1000.0, write="drain")
-        cmd_dispatch._local_claim("o/r", 5, 1600.0, write="drain")
-        entry = json.loads((self.home / "dispatch-claims.json").read_text())["o/r#5"]
-        self.assertEqual((1000.0, 1600.0), (entry["since"], entry["at"]))
-        cmd_dispatch._local_claim("o/r", 5, 1700.0, clear=True)
-        cmd_dispatch._local_claim("o/r", 5, 1800.0, write="drain")
-        self.assertEqual(1800.0, json.loads((self.home / "dispatch-claims.json").read_text())["o/r#5"]["since"])
 
 
 class TestForkOrigin(DispatchCase):
@@ -332,6 +302,10 @@ class TestDispatchRun(DispatchCase):
         self.assertIn("stayed open", out)
 
 
+if __name__ == "__main__":
+    unittest.main()
+
+
 class TestFileExcerpts(unittest.TestCase):
     """#887: the brief holds the functions and callers a story's Files area names."""
 
@@ -346,7 +320,7 @@ class TestFileExcerpts(unittest.TestCase):
 
     def test_the_named_function_and_its_callers_are_in_the_excerpts(self):
         repo = self.make_repo()
-        out = cmd_dispatch.file_excerpts("Fix `build_thing`.\n\nFiles area: scripts/thing.py", repo)
+        out = cmd_dispatch.file_excerpts("Fix build_thing.\n\nFiles area: scripts/thing.py", repo)
         self.assertIn("def build_thing(x):", out)
         self.assertIn("scripts/user.py:3", out)
         self.assertNotIn("def other", out)
@@ -355,34 +329,6 @@ class TestFileExcerpts(unittest.TestCase):
         repo = self.make_repo()
         self.assertEqual("", cmd_dispatch.file_excerpts("Files area: scripts/thing.py", repo))
         self.assertEqual("", cmd_dispatch.file_excerpts("Fix build_thing.", repo))
-
-    def test_only_backticked_function_names_select_excerpts(self):
-        repo = self.make_repo()
-        thing = repo / "scripts" / "thing.py"
-        thing.write_text(
-            "def land():\n    return 1\n\n"
-            "def check():\n    return 2\n\n"
-            "def git():\n    return 3\n",
-            encoding="utf-8",
-        )
-        git(repo, "add", "-A")
-        git(repo, "commit", "-m", "add common-name functions")
-        out = cmd_dispatch.file_excerpts(
-            "Please check the git status and land the change with `land()`.\n"
-            "Files area: scripts/thing.py",
-            repo,
-        )
-        self.assertIn("def land():", out)
-        self.assertNotIn("def check():", out)
-        self.assertNotIn("def git():", out)
-
-    def test_backticked_bare_function_name_is_supported(self):
-        repo = self.make_repo()
-        out = cmd_dispatch.file_excerpts(
-            "Fix `build_thing`.\nFiles area: scripts/thing.py",
-            repo,
-        )
-        self.assertIn("def build_thing(x):", out)
 
 
 class TestBriefRules(unittest.TestCase):
@@ -393,7 +339,3 @@ class TestBriefRules(unittest.TestCase):
         self.assertIn("Reuse before you write", brief)
         self.assertIn("already exists here, is in the standard library", brief)
         self.assertIn("`shortcut: <limit>, <when to upgrade>`", brief)
-
-
-if __name__ == "__main__":
-    unittest.main()

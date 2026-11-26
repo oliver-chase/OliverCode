@@ -5,14 +5,13 @@ OliverCode or a path on this machine. The shim is two lines that exec this check
 absolute path. Install writes it, uninstall removes it, and health checks it.
 
 The same install also puts `olivercode` itself on the PATH (#777): a symlink at ~/.local/bin/olivercode to this checkout's
-launcher, plus a marked PATH block in the startup files of each installed zsh or bash when ~/.local/bin is not on the PATH yet.
+launcher, plus a marked PATH block in the zsh and bash startup files when ~/.local/bin is not on the PATH yet.
 """
 
 from __future__ import annotations
 
 import os
 import shlex
-import shutil
 from pathlib import Path
 
 NAME = "validate-queue"
@@ -115,18 +114,12 @@ def launcher_target(oc_root: Path) -> Path:
     return Path(oc_root).resolve() / "scripts" / "olivercode"
 
 
-def _shell_files() -> dict[str, list[Path]]:
+def profile_files() -> list[Path]:
     """The startup files a new zsh or bash shell reads, login or not: .zshenv covers every zsh, .bashrc a non-login bash,
     and the first bash login file that exists (or .bash_profile) a login bash."""
     home = Path.home()
     login = next((home / n for n in (".bash_profile", ".bash_login", ".profile") if (home / n).exists()), home / ".bash_profile")
-    return {"zsh": [home / ".zshenv"], "bash": [home / ".bashrc", login]}
-
-
-def profile_files(every: bool = False) -> list[Path]:
-    """The startup files of the shells installed here, so install writes no file for a shell the machine lacks. `every`
-    adds the other shells' files, for uninstall to strip a block an earlier install wrote."""
-    return [f for shell, files in _shell_files().items() if every or shutil.which(shell) for f in files]
+    return [home / ".zshenv", home / ".bashrc", login]
 
 
 def _local_bin_on_path() -> bool:
@@ -194,7 +187,7 @@ def uninstall_launcher(oc_root: Path) -> list[str]:
     else:
         out.append("  [ABSENT] ~/.local/bin/olivercode")
     stripped = []
-    for f in profile_files(every=True):
+    for f in profile_files():
         text = _read(f)
         if text and BLOCK_START in text:
             f.write_text(_strip_block(text), encoding="utf-8")
@@ -206,11 +199,12 @@ def uninstall_launcher(oc_root: Path) -> list[str]:
 
 def launcher_problem(oc_root: Path) -> str | None:
     """Why `olivercode` would not run from a new shell, or None. Needs the link to this checkout, and ~/.local/bin on the
-    PATH either now or through the profile block in a startup file of each installed shell."""
+    PATH either now or through the profile block in a zsh and a bash startup file."""
     path = launcher_path()
     if not path.is_symlink() or Path(os.readlink(path)) != launcher_target(oc_root):
         return f"`olivercode` is not linked to this checkout at {path}, so a new shell will not find it. {FIX.capitalize()}"
     if not _local_bin_on_path():
-        if not all(any(_has_block(f) for f in files) for shell, files in _shell_files().items() if shutil.which(shell)):
+        zsh, *bash = profile_files()
+        if not (_has_block(zsh) and any(_has_block(f) for f in bash)):
             return f"{path.parent} is not on the PATH of a new shell, so `olivercode` is not found. {FIX.capitalize()}"
     return None

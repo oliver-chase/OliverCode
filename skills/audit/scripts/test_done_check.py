@@ -40,10 +40,6 @@ class DoneCheckTest(unittest.TestCase):
         results = done_check.checks(repo("Sharing: portable\n"), run=fake({}))
         self.assertEqual(self.names(results), set())
 
-    def test_a_skipped_voice_check_is_not_a_violation(self):
-        results = done_check.checks(repo("Sharing: portable\n"), run=fake({"fleet_check": (0, "voice: skipped, no voice file\n")}))
-        self.assertEqual(self.names(results), set())
-
     def test_missing_verdict_and_a_failing_validation_fail(self):
         results = done_check.checks(repo(), run=fake({"validate": (1, "boom\n")}))
         self.assertEqual(self.names(results), {"validation", "sharing verdict recorded"})

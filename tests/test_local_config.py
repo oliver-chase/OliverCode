@@ -26,31 +26,17 @@ class LocalConfig(unittest.TestCase):
     def write(self, data):
         self.file.write_text(json.dumps(data))
 
-    def test_builder_cap_is_configurable_but_never_exceeds_the_machine_ceiling(self):
-        self.assertEqual(1, local_config.max_builders())
-        self.write({"maxBuilders": 3})
-        with mock.patch.object(local_config, "builder_ceiling", return_value=2):
-            self.assertEqual(3, local_config.saved_builders())
-            self.assertEqual(2, local_config.max_builders())
-        for bad in (0, -2, "four", True, 2.5, None):
-            self.write({"maxBuilders": bad})
-            self.assertEqual(1, local_config.saved_builders())
-
-    def test_story_attempts_default_to_eight_and_allow_an_explicit_override(self):
-        self.assertEqual(8, local_config.max_story_attempts())
-        self.write({"maxStoryAttempts": 12})
-        self.assertEqual(12, local_config.max_story_attempts())
-        for bad in (0, -1, "eight", True, 2.5, None):
-            self.write({"maxStoryAttempts": bad})
-            self.assertEqual(8, local_config.max_story_attempts())
-
-    def test_story_spend_ceiling_defaults_to_six_dollars_and_accepts_an_owner_override(self):
-        self.assertEqual(6.0, local_config.max_story_spend())
-        self.write({"maxStorySpend": 9.5})
-        self.assertEqual(9.5, local_config.max_story_spend())
-        for bad in (0, -1, "six", True, None):
-            self.write({"maxStorySpend": bad})
-            self.assertEqual(6.0, local_config.max_story_spend(), bad)
+    def test_the_builder_limit_follows_cores_and_memory_unless_the_owner_sets_it(self):
+        """#1055: half the cores or the memory in GB less 4, whichever is smaller, and never below 1."""
+        self.assertEqual(4, local_config.default_builders(cores=8, mem_gb=8))
+        self.assertEqual(8, local_config.default_builders(cores=16, mem_gb=32))
+        self.assertEqual(1, local_config.default_builders(cores=2, mem_gb=4))
+        with mock.patch.object(local_config, "default_builders", return_value=4):
+            self.write({"maxBuilders": 6})
+            self.assertEqual(6, local_config.max_builders())
+            for bad in (0, -2, "four", True, 2.5):
+                self.write({"maxBuilders": bad})
+                self.assertEqual(4, local_config.max_builders(), bad)
 
     def test_unset_means_this_machine_has_none(self):
         self.assertEqual(local_config.private_repos(), {})
@@ -79,51 +65,3 @@ class LocalConfig(unittest.TestCase):
     def test_repo_paths_expand_a_tilde(self):
         self.write({"repoPaths": {"alpha": "~/work/alpha"}})
         self.assertEqual(local_config.repo_paths(), {"alpha": Path.home() / "work" / "alpha"})
-
-    def test_default_registry_links_to_the_configured_one_and_repeats(self):
-        home = temp_dir(self)
-        registry = home / "fleet" / "repo-profiles.json"
-        registry.parent.mkdir()
-        registry.write_text('{"profiles": {"a": {}}}')
-        stale = home / "shared.json"
-        stale.write_text("{}")
-        default = home / ".olivercode" / "fleet" / "repo-profiles.json"
-        default.parent.mkdir(parents=True)
-        default.symlink_to(stale)
-        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
-            self.assertTrue(local_config.link_default_registry(registry))
-            self.assertEqual(default.resolve(), registry.resolve())
-            self.assertEqual(local_config.link_default_registry(registry), "")
-
-    def test_default_registry_link_is_not_made_where_none_exists(self):
-        home = temp_dir(self)
-        registry = home / "repo-profiles.json"
-        registry.write_text("{}")
-        default = home / ".olivercode" / "fleet" / "repo-profiles.json"
-        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
-            self.assertEqual(local_config.link_default_registry(registry), "")
-        self.assertFalse(default.parent.exists())
-
-    def test_default_registry_link_keeps_a_target_with_profiles_when_the_registry_has_none(self):
-        home = temp_dir(self)
-        registry = home / "repo-profiles.json"
-        registry.write_text("{}")
-        shared = home / "shared.json"
-        shared.write_text('{"profiles": {"a": {}}}')
-        default = home / "default.json"
-        default.symlink_to(shared)
-        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
-            note = local_config.link_default_registry(registry)
-        self.assertIn("not repointed", note)
-        self.assertEqual(default.resolve(), shared.resolve())
-
-    def test_default_registry_real_file_stays_and_says_so(self):
-        home = temp_dir(self)
-        registry = home / "repo-profiles.json"
-        registry.write_text('{"profiles": {"a": {}}}')
-        default = home / "default.json"
-        default.write_text("{}")
-        with mock.patch.object(local_config, "DEFAULT_FLEET_REGISTRY", str(default)):
-            note = local_config.link_default_registry(registry)
-        self.assertIn("not linked", note)
-        self.assertFalse(default.is_symlink())

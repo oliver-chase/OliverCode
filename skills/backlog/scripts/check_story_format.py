@@ -98,9 +98,6 @@ def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False
         problems.append(("Size", "add `Size: XS`, `S`, `M`, `L` or `XL`"))
     elif s.group(1).upper() not in SIZES:
         problems.append((f"Size \"{s.group(1)}\" is not valid", "use XS, S, M, L or XL"))
-    elif kind == "Story" and s.group(1).upper() in ("L", "XL"):
-        problems.append((f"Size \"{s.group(1).upper()}\" is too large for a story",
-                         "file one thin story per boundary under an epic instead, because no builder can finish a Size L or XL story"))
     if not wt:
         problems.append(("Work type", "add `Work type: Story` or `Work type: Epic`"))
     elif work_type not in WORK_TYPES:

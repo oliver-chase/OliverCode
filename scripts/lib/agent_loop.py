@@ -20,20 +20,6 @@ from lib import failure_log, model, usage_sessions
 from lib.local_config import OC_ROOT
 
 MAX_ROUNDS = 2  # the builder session and one short fix session (#888)
-API_ERROR_RE = re.compile(r"api error|overloaded_error|rate.?limit|too many requests|\b(?:429|500|502|503|504|529)\b|authentication_error|invalid x-api-key", re.I)
-
-def api_error_cause(reply: dict) -> str:
-    """The useful API failure cause from a CLI result, bounded for comments and local logs."""
-    for value in (reply.get("text"), reply.get("stderr"), reply.get("stop")):
-        text = str(value or "").strip()
-        if text and API_ERROR_RE.search(text):
-            return text[-300:]
-    return ""
-
-def is_api_error(reply: dict) -> bool:
-    """True only when a failed CLI result identifies a provider/API failure, not a code or validation defect."""
-    return bool(reply.get("api_error") or reply.get("stop") == "api_error" or ((reply.get("code", 0) != 0 or reply.get("is_error")) and api_error_cause(reply)))
-
 RESUMABLE = ("max_turns", "timeout")  # stops that leave a healthy session worth one more round (#877)
 CONTINUE = "Your session stopped before you finished ({why}). Continue from where you left off, commit by explicit path and stop."
 TAIL_LINES = 60
@@ -43,10 +29,7 @@ DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment 
 LADDER = ("haiku", "sonnet", "opus")
 RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round starts its next build one level up (#1015)
 READER = "sonnet"  # the least capable model that reads a commit: no story is read by anything weaker (#1015)
-RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py",  # landing, claims, gates and the loop itself (#1026)
-               "cmd_dispatch.py", "run_lock.py", "failure_log.py",  # dispatch, locks and run persistence (#1191)
-               "validate_queue.py", "queue_shim.py", "queue_bypass.py", "validated.py", "gated.py",  # the validation queue and its record
-               "smoke_runner.py", "validate_gates.py", "validate.sh")  # which checks run
+RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py")  # landing, claims, gates and the loop itself (#1026)
 RISKY_DIRS = ("core/hooks", "scripts/hooks")
 SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
@@ -94,28 +77,11 @@ def default_branch(cwd: str | Path) -> str:
     return "main"
 
 
-def changed_files(cwd: str | Path) -> list[str]:
-    """The paths this story's branch touches against origin's default branch (#1142), the files a round check hands
-    validate.sh's smoke gate so it narrows to the tests that cover them. Empty when git has nothing to report, including
-    when the lookup itself fails -- a round check then falls back to the whole suite rather than crash the loop."""
-    try:
-        ran = subprocess.run(["git", "-C", str(cwd), "diff", "--name-only", f"origin/{default_branch(cwd)}...HEAD"],
-                             capture_output=True, text=True)
-    except (OSError, subprocess.SubprocessError):
-        return []
-    return [line for line in ran.stdout.splitlines() if line] if ran.returncode == 0 else []
-
-
 def validate(cwd: str | Path) -> tuple[bool, str]:
-    """(passed, the end of its output). It waits for a slot in the per-user validation queue. This is the runner's round
-    check (#1142): when the repo validates through its own scripts/validate.sh, it runs `--round` with the files this
-    story's branch changed, which narrows the smoke gate to the tests that cover them. `olivercode land` validates
-    separately (cmd_land.py), in full, so a story's landing still runs every test once."""
+    """(passed, the end of its output). It waits for a slot in the per-user validation queue."""
     command = validation_command(cwd)
     if command is None:
         return False, NO_VALIDATION
-    if command == ["bash", "scripts/validate.sh"]:
-        command = [*command, "--round", *changed_files(cwd)]
     argv = [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "queue", "run", "--", *command]
     try:
         ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
@@ -160,19 +126,6 @@ def risky_paths(files) -> list[str]:
         if name.rsplit("/", 1)[-1] in RISKY_FILES or any(name == d or name.startswith(d + "/") for d in RISKY_DIRS):
             hits.append(path)
     return hits
-
-
-def review_mode(size: str, labels=(), files=(), priority: str = "") -> str:
-    """Return the safe review lane: full for substantial or risky work, none for routine XS/S work (#1015).
-
-    Every story still runs repository validation and commit gates. A fresh reader is required for medium-or-larger work,
-    design work, and changes to the runner's safety boundary. Keeping this decision here gives every runner caller
-    the same conservative policy.
-    """
-    names = {(l.get("name") if isinstance(l, dict) else l or "").lower() for l in labels or []}
-    if size not in ("XS", "S") or "design" in names or risky_paths(files):  # priority alone never calls a reader (#1155)
-        return "full"
-    return "none"
 
 
 def route(size: str, labels=(), files=(), priority: str = "") -> tuple[str, str]:
@@ -227,8 +180,8 @@ def reader_for(builder: str) -> str:
 
 REVIEW_BRIEF = ("You are a fresh reader. You get the story, the diff and the test output below, and you may read and search the worktree. Check that the diff does what the "
                 "story's scenarios say and breaks nothing. When the diff alone cannot settle a point, such as whether a helper it calls exists, open the file and check: a "
-                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. List each finding on its own line with the file and what is "
-                "wrong, then end your reply with a final line of VERDICT: PASS or VERDICT: FINDINGS.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
+                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. Answer PASS on the first line "
+                "when it does. Otherwise list each finding on its own line with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
 FIX_BRIEF = ("You are a new session, not the story's builder. A fresh reader checked the story's commit and reports the findings below. Fix every finding "
@@ -240,56 +193,37 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
     return FIX_BRIEF.format(task=task, diff=branch_diff(cwd), finding=finding)
 
 
-def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
-           max_turns: int = READER_TURNS, attempts: int = 2, repo: str = "", stop_check=None) -> dict:
-    """One fresh headless reader on the diff, the story and the test output (#891). Accepts an explicit final-line VERDICT: PASS/FINDINGS, a bare PASS as the
-    reply's last line, plus the historical first-line PASS form (#1153, #1213).
+def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER) -> dict:
+    """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
     prompt = REVIEW_BRIEF.format(task=task, diff=branch_diff(cwd), tail=tail)
-    failure, exit_code = "", None
-    for attempt in range(1, attempts + 1):
+    failure = ""
+    for attempt in (1, 2):
         try:
-            call_kwargs = {"allowed_tools": READER_TOOLS, "max_turns": max_turns, "session": f"{session}-review", "system": READER_SYSTEM, "model": model_name}
-            if run is model.run_cli and repo:
-                call_kwargs["repo_slug"] = repo
-            reply = run(prompt, str(cwd), **call_kwargs)
+            reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=READER_TURNS, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
         else:
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
-                # Accept the documented machine-readable verdict on the final line, a bare
-                # PASS as that final line, or the historical first-line PASS form.
-                final_line = text.splitlines()[-1].strip() if text.splitlines() else ""
-                explicit = re.fullmatch(r"VERDICT:\s*(PASS|FINDINGS)", final_line, re.I)
-                if explicit:
-                    verdict = "pass" if explicit.group(1).upper() == "PASS" else "findings"
-                elif re.fullmatch(r"PASS", final_line, re.I):
-                    verdict = "pass"
-                else:
-                    verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
-                log_round(f"{session}-review", 1, model_name, reply, repo=repo)
+                verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
+                log_round(f"{session}-review", 1, model_name, reply)
                 log_review(session, verdict, text)
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
                 return {"verdict": verdict, "text": text}
             failure = f"claude exited {reply['code']}." if reply.get("code", 0) != 0 else "The reader replied with nothing."
-            err_tail = (reply.get("stderr") or "").strip()
-            if err_tail:
-                failure += f" stderr: {err_tail[-300:]}"  # the cause of a reader's failure, which the log did not keep (#1204)
-            exit_code = reply.get("code", 0)
         say(f"Review: no verdict on attempt {attempt}. {failure}")
-    log_review(session, "none", failure, exit_code)
+    log_review(session, "none", failure)
     return {"verdict": "none", "text": failure}
 
 
-def log_review(story: str, verdict: str, text: str, exit_code: int | None = None) -> None:
-    """Append the reader's pass or findings for a story to the run log, with the exit code of a reader that gave no verdict (#1204). A log that cannot be written never stops a loop."""
+def log_review(story: str, verdict: str, text: str) -> None:
+    """Append the reader's pass or findings for a story to the run log. A log that cannot be written never stops a loop."""
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000],
-                                 **({"exit_code": exit_code} if exit_code is not None else {})}) + "\n")
+            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000]}) + "\n")
     except OSError:
         pass
 
@@ -315,43 +249,19 @@ def start_size(session_id: str, projects: Path | None = None) -> int | None:
     return None
 
 
-def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "", repo: str = "", attempt: int | None = None) -> None:
-    """Append a model invocation's usage and session metadata. No prompt or transcript content is retained."""
+def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "") -> None:
+    """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost, stop reason and write time, and on a session's first round the tokens it started with (#878, #987).
+    A log that cannot be written never stops a loop."""
     usage = reply.get("usage") or {}
     row = {"story": story, "round": n, "model": model_name, "input": usage.get("input", 0), "output": usage.get("output", 0),
            "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0), "cost_usd": reply.get("cost_usd"),
            "stop": reply.get("stop", ""), "stderr_tail": reply.get("stderr", ""), "resumed": bool(reply.get("resumed")),
-           "settings": reply.get("settings", ""), "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-    for key in ("session_id", "started_at", "duration_s", "slot", "session_cap", "active_sessions", "session_attempt", "story_attempt"):
-        if reply.get(key) is not None:
-            row[key] = reply[key]
-    if attempt is not None:
-        row["attempt"] = attempt
+           "settings": reply.get("settings", ""),  # which setup ran, so the two start sizes can be compared (#911)
+           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
-        row["route"] = why
-    if repo:
-        row["repo"] = repo
-    append_log(row)
-
-def log_api_error(story: str, model_name: str, cause: str, repo: str = "", reply: dict | None = None) -> None:
-    """Record an API stop without a round number, preserving any usage/cost the CLI reported."""
-    reply = reply or {}
-    row = {"story": story, "model": model_name, "stop": "api_error", "stderr_tail": cause[:300],
-           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "cost_usd": reply.get("cost_usd")}
-    if reply.get("session_id"):
-        row["session_id"] = reply["session_id"]
-    usage = reply.get("usage") or {}
-    row.update({"input": usage.get("input", 0), "output": usage.get("output", 0),
-                "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0)})
-    if repo:
-        row["repo"] = repo
-    append_log(row)
-
-
-def append_log(row: dict) -> None:
-    """Append one JSON line to the run log. A log that cannot be written never stops a loop."""
+        row["route"] = why  # the rule that chose the model the build started on (#1026)
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
@@ -372,36 +282,28 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "", stop_check=None) -> dict:
+             run=None, check=None, say=print, why: str = "") -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
     finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
-    `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
-    `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode, repo, stop_check)
+    `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026)."""
+    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full", repo="", stop_check=None) -> dict:
+def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="") -> dict:
     run, check = run or model.run_cli, check or validate
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
     start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
     while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
-        if stop_check and stop_check():
-            return {"done": False, "cancelled": True, "reason": "Owner cancelled this story before the next model session.", "rounds": n, "tokens": tokens, "summary": summary}
         n += 1
         fix_owed, model_name = False, escalate(start, failures)
         resumed = False
         while True:
             try:
-                call_kwargs = {"max_turns": max_turns, "session": session, "system": SYSTEM, "model": model_name, "resume": claude_session}
-                if run is model.run_cli and repo:
-                    call_kwargs["repo_slug"] = repo
-                reply = run(prompt, cwd, **call_kwargs)
+                reply = run(prompt, cwd, max_turns=max_turns, session=session, system=SYSTEM, model=model_name, resume=claude_session)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
-                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed, "session_id": exc.session_id}, why=why, repo=repo, attempt=n)
-                if stop_check and stop_check():
-                    return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its current model session timed out.", "rounds": n, "tokens": tokens, "summary": summary}
+                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed}, why=why)
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
@@ -409,22 +311,12 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 claude_session, prompt, resumed = exc.session_id, CONTINUE.format(why="it ran past the time limit"), True
                 continue
             except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
-                if stop_check and stop_check():
-                    return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its model session failed.", "rounds": n - 1, "tokens": tokens, "summary": summary}
                 return {"done": False, "reason": str(exc), "rounds": n - 1, "tokens": tokens, "summary": summary}
             reply = {**reply, "resumed": resumed}
             tokens += reply["tokens"]
             claude_session = reply["session_id"] or claude_session
+            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why)
             summary = reply["text"]
-            if stop_check and stop_check():
-                return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its current model session.", "rounds": n, "tokens": tokens, "summary": summary}
-            if is_api_error(reply):
-                cause = api_error_cause(reply) or str(reply.get("text") or reply.get("stderr") or reply.get("stop") or "Unspecified API error")[:300]
-                log_api_error(session, model_name, cause, repo=repo, reply=reply)
-                say(f"API error: {cause}")
-                return {"done": False, "api_error": True, "api_error_cause": cause, "reason": f"API error: {cause}",
-                        "rounds": n - 1, "tokens": tokens, "summary": summary}
-            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why, repo=repo, attempt=n)
             say(f"Round {n}: {summary.strip()[:300]}")
             if reply["code"] != 0 and reply.get("stop") in RESUMABLE and not resumed and claude_session:
                 say(f"Round {n}: claude stopped on {reply['stop']}. Resuming the same session once.")
@@ -432,8 +324,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 continue
             break
         if reply["code"] != 0:
-            return {"done": False, "reason": exit_reason(reply, n, resumed), "rounds": n, "tokens": tokens, "summary": summary,
-                    **({"budget": True} if reply.get("stop") == "max_turns" else {})}  # every turn spent, so the drain leaves a handoff (#1113)
+            return {"done": False, "reason": exit_reason(reply, n, resumed), "rounds": n, "tokens": tokens, "summary": summary}
         if not checked:
             return {"done": False, "reason": f"The model finished, but nothing checked the result. {NO_VALIDATION}", "fatal": True,
                     "rounds": n, "tokens": tokens, "summary": summary}
@@ -442,13 +333,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                     "rounds": n, "tokens": tokens, "summary": summary}
         passed, tail = check(cwd)
         if passed:
-            if review_mode == "none":
-                return {"done": True, "reason": "The repo's validation passes; routine story review is covered by validation and commit gates.",
-                        "rounds": n, "tokens": tokens, "summary": summary}
-            if stop_check and stop_check():
-                return {"done": False, "cancelled": True, "reason": "Owner cancelled this story before review.", "rounds": n, "tokens": tokens, "summary": summary}
-            verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
-                             max_turns=READER_TURNS, attempts=2, repo=repo)
+            verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name))
             if verdict["verdict"] == "none":  # the reader gave no verdict twice, so the story is held for a retry and nothing lands (#1015)
                 return {"done": False, "held": verdict["text"], "reason": f"The fresh reader gave no verdict, so nothing is pushed: {verdict['text'][:300]}",
                         "rounds": n, "tokens": tokens, "summary": summary}
