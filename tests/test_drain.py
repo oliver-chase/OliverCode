@@ -400,6 +400,16 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(quiet(cmd_drain.command_drain, [])[0], 2)
         self.assertEqual(quiet(cmd_drain.command_drain, ["/nonexistent-repo-xyz"])[0], 1)
 
+    def test_a_bare_repo_name_resolves_under_repo_root_from_any_checkout(self):
+        """#1298: a checkout outside repoRoot still finds `tesknota` under repoRoot."""
+        root = temp_dir(self)
+        repo = Path(root) / "tesknota"
+        (repo / "docs").mkdir(parents=True)
+        (repo / "docs" / "backlog-config.json").write_text("{}")
+        with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(root=Path(root))), \
+                mock.patch.object(cmd_drain, "OC_ROOT", Path(root) / "_worktrees" / "oc-staging"):
+            self.assertEqual(repo.resolve(), cmd_drain.resolve_repo("tesknota"))
+
     def test_a_drain_of_the_engine_repository_refuses_and_a_scratch_copy_does_not(self):
         """#1278, #1293: any OliverCode checkout is refused unless this machine's settings name an engineBranch."""
         code, out = quiet(cmd_drain.command_drain, [str(cmd_drain.OC_ROOT)])

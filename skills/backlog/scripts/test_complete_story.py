@@ -172,6 +172,22 @@ class CompleteStory(unittest.TestCase):
         self.assertIn("not on the project board", text)
         self.assertEqual([], writes(calls))
 
+    def test_a_broken_paged_read_falls_back_to_the_one_issue_graphql_lookup(self):
+        # The REST read fails partway and never reaches story 54, so its card comes from GraphQL (#1304).
+        def runner(args):
+            calls.append(args)
+            if any("projectsV2" in a for a in args):
+                return subprocess.CompletedProcess([], 1, json.dumps({"number": 99, "id": "PVTI_other", "repo": ""}) + "\n", "unexpected end of JSON input")
+            if "graphql" in args and any("projectItems" in a for a in args):
+                nodes = [{"id": "PVTI_x", "project": {"number": 7}}, {"id": "PVTI_card", "project": {"number": 1}}] if found else []
+                return subprocess.CompletedProcess([], 0, json.dumps({"data": {"repository": {"issue": {"projectItems": {"nodes": nodes}}}}}), "")
+            return subprocess.CompletedProcess([], 0, "", "")
+        cfg = {"repoOwner": "o", "repoName": "r", "projectNumber": 1, "projectOwner": "o"}
+        calls, found = [], True
+        self.assertEqual("PVTI_card", cs.item_id(cfg, 54, runner))
+        calls, found = [], False
+        self.assertIsNone(cs.item_id(cfg, 54, runner))
+
     def test_an_olivercode_story_closes_only_when_it_is_live_and_the_evidence_names_the_proof(self):
         with unittest.mock.patch.object(cs, "is_olivercode", lambda root: True):
             code, text, calls = self.run_it("builder-only.json", live=lambda c, oc, root: ("the installed checkout lacks abc", None))
