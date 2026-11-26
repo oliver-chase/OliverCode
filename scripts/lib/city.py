@@ -17,7 +17,7 @@ from lib import briefing, cmd_status, failure_log, repo_state
 from lib.local_config import OC_ROOT
 
 PANEL_TTL = 1800  # seconds a cached dashboard serves a rewrite before it is read again; matches status_report.REWRITE_MINUTES
-PANEL_VERSION = 6  # invalidate the cached portfolio rows after they became expandable repo details
+PANEL_VERSION = 7  # rebuild the panel after the City section order changed
 
 
 def cache_path() -> Path:
