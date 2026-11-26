@@ -20,7 +20,7 @@ from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, policy, run_lock
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, gitfiles, intake, local_config, model, policy, run_lock
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -44,6 +44,9 @@ def notify(text: str) -> None:
         pass
 
 
+NO_AREA = "it names no Files area"
+
+
 def skip_reason(issue: dict, repo: Path | None = None) -> str:
     """Why drain does not start an open story now, or '' when it may. Only a Ready story with a board Size and a Files area is built (#1014)."""
     if owner_gated(issue):
@@ -56,7 +59,7 @@ def skip_reason(issue: dict, repo: Path | None = None) -> str:
         return f"its Size is {issue['size']}, so it needs splitting into S and M stories"
     area = intake.files_area(issue.get("body") or "")
     if not area:
-        return "it names no Files area"
+        return NO_AREA
     if wide := intake.folders(area, repo):
         return f"its Files area names the folder {wide[0]}, which would hold every other story back; name the files instead"
     return ""
@@ -120,6 +123,30 @@ class Io:
         except Exception:
             return None
         return {(i.get("content") or {}).get("number"): i for i in items}
+
+    def add_files_area(self, issue: dict) -> bool:
+        """Give a Ready story with no Files area one, once, just before it builds (#1316). One call to the smallest model reads the story and the repo's
+        tracked files and names the files it changes. Every named file must be tracked or on a Creates line, else the story stays unchanged.
+        On success the story's body gets a `Files area:` line, a comment names the files, and `issue['body']` is updated for this run."""
+        body, n = issue.get("body") or "", issue["number"]
+        tracked = gitfiles.tracked_files(self.repo)
+        prompt = (f"Story #{n}: {issue.get('title', '')}\n\n{body}\n\nThe repo's tracked files:\n" + "\n".join(tracked) +
+                  "\n\nName the files this story changes. Reply with one line only, `Files area: ` then the paths, comma-separated. Name files, never folders. Reply `Files area:` with none when you cannot tell.")  # shortcut: the whole file list goes in the prompt, so a repo too large for it finds none; split by folder when one does
+        try:
+            ran = model.run_cli(prompt, str(self.repo), allowed_tools="", max_turns=1, timeout=120, model=agent_loop.LADDER[0])
+        except model.ModelError:
+            return False
+        named = intake.files_area(ran["text"]) if ran["code"] == 0 else []
+        made = set(intake.creates(body))
+        if not named or any(p not in tracked and p not in made for p in named):
+            return False
+        line = "Files area: " + ", ".join(named)
+        done = self.gh(["api", "-X", "PATCH", f"repos/{self.slug}/issues/{n}", "-f", f"body={body.rstrip()}\n\n{line}\n"])
+        if done.returncode != 0:
+            return False
+        issue["body"] = f"{body.rstrip()}\n\n{line}\n"
+        self.comment(n, f"The drain added this story's {line}")
+        return True
 
     def blockers(self, issue: dict) -> list[int]:
         """The numbers of the open stories that block this one, through GitHub's REST dependency link. The list read says how many are open, so a story
@@ -518,7 +545,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     the claims of the stories it was building and returns to Ready without waiting for their builders (#1076)."""
     running: dict = {}
     pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
-    waits, reported = 0, set()
+    waits, reported, filled = 0, set(), set()
     stopped = False
     hold_waited = False
 
@@ -572,7 +599,14 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()}
             todo = []
             for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
-                if why := skip_reason(issue, io.repo):  # each skipped story is named once per drain, with the reason (#1014)
+                why = skip_reason(issue, io.repo)
+                if why == NO_AREA and issue["number"] not in filled:  # a Ready story gets its Files area once per drain, just before it builds (#1316)
+                    filled.add(issue["number"])
+                    if io.add_files_area(issue):
+                        why = skip_reason(issue, io.repo)
+                    else:
+                        why += " and none could be found"
+                if why:  # each skipped story is named once per drain, with the reason (#1014)
                     if issue["number"] not in reported:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")

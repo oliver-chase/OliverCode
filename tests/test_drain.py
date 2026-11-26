@@ -36,6 +36,14 @@ class FakeIo:
         self.deps = {}  # story number -> the numbers of the stories that block it (#1064)
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
 
+    def add_files_area(self, i):
+        self.asked = getattr(self, "asked", []) + [i["number"]]
+        if i["number"] not in self.found:
+            return False
+        i["body"] += "\nFiles area: " + self.found[i["number"]]
+        return True
+
+    found = {}  # story number -> the Files area the model names for it (#1316)
     def landed_lead(self, i): return self.leads.get(i["number"])
     def staged(self): return False
     def stopped(self, n, reason): self.stops_logged = getattr(self, "stops_logged", []) + [(n, reason)]
@@ -129,9 +137,38 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(io.started, [4])
         self.assertIn("Skipped #1: its board Status is Backlog, not Ready.", out)
         self.assertIn("Skipped #2: it has no Size on the board.", out)
-        self.assertIn("Skipped #3: it names no Files area.", out)
+        self.assertIn("Skipped #3: it names no Files area and none could be found.", out)
+        self.assertEqual([3], io.asked)  # only the Ready, sized story with no area is asked about (#1316)
         self.assertEqual(1, out.count("Skipped #1:"))
         self.assertEqual(code, 0)
+
+    def test_a_ready_story_with_no_files_area_gets_one_and_builds_in_the_same_run(self):
+        """#1316"""
+        io = FakeIo([{**issue(1), "body": "Priority: P1"}], cap=1)
+        io.found = {1: "scripts/lib/cmd_drain.py"}
+        code, out, _ = self.run_drain(io)
+        self.assertEqual([1], io.started)
+        self.assertEqual([1], io.asked)
+        self.assertNotIn("Skipped", out)
+
+    def test_add_files_area_edits_the_body_comments_and_refuses_an_untracked_file(self):
+        """#1316"""
+        repo = temp_dir(self)
+        git(repo, "init", "-q")
+        (repo / "a.py").write_text("x")
+        git(repo, "add", "a.py")
+        calls = []
+        io = cmd_drain.Io(repo, "o/r", runner=lambda args: calls.append(args) or subprocess.CompletedProcess(args, 0, "", ""))
+        for text, ok in (("Files area: a.py", True), ("Files area: b.py", False), ("Files area:", False), ("Files area: b.py\nCreates: b.py", True)):
+            calls.clear()
+            story = {"number": 7, "title": "t", "body": "Creates: b.py" if "Creates" in text else "As the owner"}
+            with mock.patch.object(cmd_drain.model, "run_cli", return_value={"code": 0, "text": text}) as ran:
+                self.assertEqual(ok, io.add_files_area(story), text)
+            self.assertEqual("haiku", ran.call_args.kwargs["model"])
+            self.assertEqual(2 if ok else 0, len(calls))  # the body edit, then the comment
+            self.assertEqual(ok, "Files area:" in story["body"])
+        with mock.patch.object(cmd_drain.model, "run_cli", side_effect=cmd_drain.model.ModelError("no")):
+            self.assertFalse(io.add_files_area({"number": 8, "body": ""}))
 
     def test_a_blocked_story_waits_and_names_its_blocker(self):
         io = FakeIo([issue(1), issue(2)], cap=1)
