@@ -11,7 +11,7 @@ from pathlib import Path
 from lib import backlog_setup as _backlog_setup
 from lib import conform as _conform
 from lib import repo_gates, repo_profiles
-from lib import update_state
+from lib import update_state, status_report
 from lib import validate_snippet as _snippet
 from lib.cli import require_dir, take_flag
 from lib.gitfiles import commit_after, commit_changes
@@ -446,10 +446,25 @@ def command_update(oc_root: Path | None = None, story: str | None = None) -> int
     pull_code = subprocess.run(["git", "-C", str(root), "pull", "--ff-only"]).returncode
     if pull_code != 0:
         return pull_code
+    # Only renderer changes need a page rebuild/publish reminder. Content-only releases do not.
+    dashboard_changed = subprocess.run([
+        "git", "-C", str(root), "diff", "--quiet", "HEAD@{1}", "HEAD", "--",
+        "scripts/lib/status_report.py", "scripts/lib/briefing.py", "scripts/lib/city.py",
+    ]).returncode == 1
     launcher = [sys.executable, str(root / "scripts" / "olivercode")]
     install_code = subprocess.run([*launcher, "install"]).returncode
     sync_code = subprocess.run([*launcher, "sync-hooks", *(["--commit", "--story", story] if story else [])]).returncode
     conform_code = subprocess.run([*launcher, "conform"]).returncode
     if conform_code:
         print("Conform found failures in the fleet. Each Fix line above names the repair; `olivercode conform --fix --story N` applies the ones it can.")
-    return install_code or sync_code or conform_code
+    result = install_code or sync_code or conform_code
+    if dashboard_changed and not result:
+        page_code = subprocess.run([*launcher, "status", "page"]).returncode
+        if page_code:
+            print("The dashboard code updated, but the local status page could not be regenerated. Run `olivercode status page`.")
+            return page_code
+        if status_report.city_url():
+            print("The local status page was refreshed. Your published City Artifact may still show the previous design; publish the update when ready with `olivercode status publish`. Nothing was published automatically.")
+        else:
+            print("The local status page was refreshed. No City Artifact is configured, so there is nothing to publish.")
+    return result
