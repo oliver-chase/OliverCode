@@ -484,7 +484,7 @@ def _usage_analytics(log: list[dict], now: float) -> str:
              f'<div><span>Model types used</span><strong>{len(by_model)}</strong></div>'
              f'<div><span>Stories measured</span><strong>{len(measured_stories)}</strong></div></div>')
     charts = _bar_rows("Daily token use", daily_tokens, "Desktop chat and runner-builder input/context tokens, combined.")
-    charts += _bar_rows("Average cost per landed story", daily_cost, "Recorded runner cost only; work completed outside the runner is excluded.")
+    charts += _bar_rows("Cost over time", daily_cost, "Average recorded runner cost per landed story by day; work completed outside the runner is excluded.")
     charts += _bar_rows("Average elapsed time per landed story", daily_time, "Wall-clock build time recorded by the runner.")
     charts += _bar_rows("Model distribution by stories", top_models, "A story is counted once for every distinct model type used across its recorded rounds.")
     charts += _bar_rows("Tokens used by model", model_tokens, "Recorded builder input, output and cache tokens over the last seven days.")
