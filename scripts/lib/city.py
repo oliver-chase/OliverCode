@@ -17,7 +17,7 @@ from lib import briefing, cmd_status, failure_log, repo_state
 from lib.local_config import OC_ROOT
 
 PANEL_TTL = 1800  # seconds a cached dashboard serves a rewrite before it is read again; matches status_report.REWRITE_MINUTES
-PANEL_VERSION = 3  # bump whenever the dashboard markup or visual language changes
+PANEL_VERSION = 4  # bump whenever the dashboard markup or visual language changes
 
 
 def cache_path() -> Path:
