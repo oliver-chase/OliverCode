@@ -28,10 +28,6 @@ class TestGithubProjectAccess(unittest.TestCase):
         status.assert_called_once_with()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RepoNames(unittest.TestCase):
     def setUp(self):
         self.root = temp_dir(self, resolve=True)
@@ -74,3 +70,5 @@ class RepoNames(unittest.TestCase):
         self.assertIn("agree", lines[0])
 
 
+if __name__ == "__main__":
+    unittest.main()
