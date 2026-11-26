@@ -87,7 +87,7 @@ class DashboardCase(unittest.TestCase):
         self.assertIn('grid-template-columns:repeat(12,minmax(0,1fr))', briefing.STYLE)
         self.assertIn("--wash:#f5f3f7", briefing.STYLE)
         self.assertIn("align-items:stretch", briefing.STYLE)
-        self.assertIn(".city-grid>section.work>.card{height:100%}", briefing.STYLE)
+        self.assertIn(".city-grid>section.work>.card{flex:1}", briefing.STYLE)
         self.assertIn(".city-grid>section.health{grid-column:1/-1}", briefing.STYLE)
         self.assertIn("@media(max-width:380px)", briefing.STYLE)
         self.assertNotIn("#82788c", briefing.STYLE)
