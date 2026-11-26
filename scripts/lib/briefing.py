@@ -11,6 +11,8 @@ import html
 import re
 from datetime import datetime, timedelta
 
+from lib import local_config
+
 RULE = "─" * 40
 CD_TARGET = "~/.claude/olivercode"  # the documented path, so the owner can paste the two commands from City
 
@@ -221,10 +223,16 @@ def dashboard_html(snap: dict) -> str:
     runner, nums = snap["runner"], snap["numbers"]
     pill = f'<span class="pill {"good" if runner["building"] else ""}">{"Running" if runner["building"] else "Idle"}</span>'
     latest = f'<p class="note">Latest delivery: <b>#{esc(snap["latest"]["number"])} {esc(snap["latest"]["title"])}</b></p>' if snap.get("latest") else ""
+    budget = local_config.max_story_spend()
     if nums.get("tokens_per_closed") is not None:
-        cost = (_money(nums.get("cost_per_closed")), f"~{_millions(nums['tokens_per_closed'])} tokens per delivered story")
+        actual = nums.get("cost_per_closed")
+        if actual is None:
+            cost_note = f"~{_millions(nums['tokens_per_closed'])} tokens each · ${budget:.2f} budget"
+        else:
+            cost_note = f"~{_millions(nums['tokens_per_closed'])} tokens each · {'within' if actual <= budget else 'over'} ${budget:.2f} budget"
+        cost = (_money(actual), cost_note)
     else:
-        cost = ("Not recorded", "No completed stories in this window")
+        cost = ("Not recorded", f"${budget:.2f} per-story budget · no completed stories in this window")
     load = f'<p class="note">{esc(runner["load"])}</p>' if runner.get("load") else ""
     allowed = max(int(runner["allowed"]) or 1, 1)
     meter = f'<div class="meter" aria-label="{runner["building"]} of {allowed} builder slots in use"><i style="width:{min(100, runner["building"] / allowed * 100):.0f}%"></i></div>'
