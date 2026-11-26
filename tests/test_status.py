@@ -30,7 +30,7 @@ class TestStatus(unittest.TestCase):
         return code, out.getvalue()
 
     def test_status_names_a_story_a_policy_stop_left_waiting_on_the_owner(self):
-        step = "Story #1012 waits on you: triggers.gateFailures stopped its builder at the Owner identifiers gate, so drain did not restart it."
+        step = "Story #1012 waits on you: triggers.deleteFiles stopped its builder at the Owner identifiers gate, so drain did not restart it."
         out = io.StringIO()
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                        live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"])

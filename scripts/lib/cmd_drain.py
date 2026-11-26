@@ -20,7 +20,7 @@ from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, owner_decisions, policy, run_lock
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, policy, run_lock
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -150,15 +150,17 @@ class Io:
         return path
 
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
-        """One headless builder session on the story: the brief holds the code the story names and the owner's decisions, and the
+        """One headless builder session on the story: the brief holds the code the story names, and the
         model is the one the brief names (#1015), with a small story getting a third round (#890)."""
         n, size = issue["number"], cmd_groom.size_of(issue)
-        extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), owner_decisions.brief_section(n)) if part)
+        extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
         builder, _reader, why = intake.models(issue, f"story-{n}")
+        files = intake.files_area(issue.get("body") or "")
+        review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0))
+                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
@@ -578,6 +580,9 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     repo = resolve_repo(rest[0])
     if repo is None:
         print(f"Refused: {rest[0]} is not a repo with docs/backlog-config.json.")
+        return 1
+    if cmd_dispatch.is_engine(repo):
+        print(cmd_dispatch.ENGINE_REFUSAL)
         return 1
     cfg = backlog_config(repo)
     slug = cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)

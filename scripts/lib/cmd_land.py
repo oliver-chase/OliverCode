@@ -3,7 +3,7 @@
 It rebases the worktree on origin/main, squashes a branch of several commits into one whose message is the first commit's title and the story number (#898), runs the repo's validation up to twice unless a passing run already recorded the same tree (#910), pushes HEAD:main and retries up to four times when main moves. After a push it fast-forwards the main
 checkout when that is clean and prints how far behind an edited or diverged one is. The log is ~/.olivercode/land/land-REPO-N.log (under OLIVERCODE_HOME when set) and ends
 with `RESULT pushed SHA`, `RESULT rebase-conflict`, `RESULT validate-failed`, `RESULT squash-failed` (the commits could not be squashed), `RESULT push-failed` (the push failed while main stood still) or `RESULT main-kept-moving` (a land keeps retrying with a short pause for ten minutes while main moves and each rebase is clean). A second land for a story that is already running refuses. Land never edits docs/LIMITS.json: the size ceiling only warns (#879).
-A commit that changes a file outside its story's Files area ends with `RESULT outside-area` and gets a comment on the story; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
+A commit that changes a file outside its story's Files area lands and the story gets a comment naming the files; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
 
 A landed story is cleaned up here (#712): the worktree, the local branch and the remote branch are deleted, so no session needs a removal permission. Work that did not land
 stays in its worktree, gets a handover file ~/.olivercode/land/handover-REPO-N.md, and no branch is pushed for it.
@@ -262,16 +262,15 @@ def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
 
 
 def _scope_refusal(wt: Path, base: str, area: list[str], story: str, log) -> str:
-    """The result word when the commit must not land: it changes a file outside the story's Files area, or it weakens a test. "" when it may (#1073).
-    A story with no Files area has no area to hold the commit to, so only the test check applies to it."""
+    """The result word when the commit must not land because it weakens a test, or "" when it may (#1073). A file outside the story's Files area
+    is named in the log and on the story and still lands: a refusal made every restart repeat the same edit until the story ran out of restarts,
+    and validation and the reader already judge the change."""
     outside = [p for p in _git(wt, "diff", "--name-only", "--no-renames", f"origin/{base}", "HEAD").stdout.splitlines()
                if area and not intake.in_area(p, area)]
     if outside:
         names = ", ".join(outside)
-        log.write(f"Refused: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}), so nothing landed.\n")
-        _story_comment(wt, story, f"Landing refused: this commit changes {names}, which is outside the Files area ({', '.join(area)}). "
-                                  "Widen the Files area to include it, or drop the change.")
-        return "outside-area"
+        log.write(f"Note: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}).\n")
+        _story_comment(wt, story, f"This commit changes files outside the Files area: {names}. The Files area is {', '.join(area)}.")
     diff = _git(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout
     found = weakened(_changed_lines(diff))
     if found:

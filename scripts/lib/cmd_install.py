@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import pwd
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +15,7 @@ from pathlib import Path
 from lib import launchd
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import FLEET_NAME, OC_ROOT, design_file, fleet_home, load_local, local_path, save_local, voice_file
+from lib.local_config import OC_ROOT, design_file, local_path, voice_file
 
 from lib import claude_settings as _claude_settings
 from lib import cmd_guide
@@ -174,6 +176,52 @@ def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[st
     return gone
 
 
+def _defined_labels() -> list[str]:
+    """The labels of the jobs this code creates."""
+    from lib import cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain
+    return [m.LABEL for m in (cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain)]
+
+
+def _checkout_job_labels(oc_root: Path, folder: Path) -> list[str]:
+    """The labels of com.olivercode.* plists in folder whose command runs this checkout's scripts/olivercode."""
+    launchers = {str(oc_root / "scripts" / "olivercode"), str(oc_root.resolve() / "scripts" / "olivercode")}
+    found = []
+    for plist in sorted(folder.glob("com.olivercode.*.plist")) if folder.is_dir() else []:
+        try:
+            args = plistlib.loads(plist.read_bytes()).get("ProgramArguments", [])
+        except (OSError, ValueError):
+            continue
+        if launchers & {str(a) for a in args}:
+            found.append(plist.name[:-len(".plist")])
+    return found
+
+
+def _boot_out(folder: Path, labels, run) -> list[str]:
+    gone = []
+    for label in dict.fromkeys(labels):
+        plist = folder / f"{label}.plist"
+        if not plist.is_file():
+            continue
+        run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
+        plist.unlink(missing_ok=True)
+        print(f"  [JOB] removed {label}")
+        gone.append(label)
+    return gone
+
+
+def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run, stale_only: bool = False) -> list[str]:
+    """Boot out and delete every com.olivercode.* launchd job this checkout can create, and any other com.olivercode.* plist
+    whose command runs this checkout's scripts/olivercode (a job from a newer or older version). Returns the labels it removed (#1272).
+    With stale_only, a job this code defines stays and only the others go, which is what install does (#1284).
+    Cron and systemd entries are never written by this code, so there is nothing to remove off macOS."""
+    if not launchd.supported():
+        return []
+    folder = launchd.agents_dir(home)
+    defined = _defined_labels()
+    labels = ([] if stale_only else defined) + list(REMOVED_JOBS) + _checkout_job_labels(oc_root, folder)
+    return _boot_out(folder, [label for label in labels if not (stale_only and label in defined)], run)
+
+
 def retire_removed_pages(home: Path | None = None) -> list[str]:
     """Delete the pages that removed commands wrote under the home folder. Returns the paths it removed, relative to home."""
     folder = home or Path.home()
@@ -188,12 +236,13 @@ def retire_removed_pages(home: Path | None = None) -> list[str]:
     return gone
 
 
-def _retire_removed_jobs() -> None:
-    """Remove the jobs and pages of removed commands, under the same real-home rule as the replay job."""
+def _retire_removed_jobs(oc_root: Path) -> None:
+    """Remove the jobs and pages of removed commands, and any other job of this checkout the code no longer defines, under the same real-home rule as the replay job."""
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
     retire_removed_jobs()
+    remove_jobs(oc_root, stale_only=True)
     retire_removed_pages()
 
 
@@ -228,81 +277,19 @@ def _install_automode(settings_path: Path) -> bool:
     return False
 
 
-def fleet_repo_step(dest: Path, ask=None, push=None) -> str:
-    """Makes the fleet folder a local git repo with its files in one commit, prints its path and, on a first install, offers a private
-    GitHub copy once (#993). `ask` is None outside the owner's terminal, where nothing is pushed. Returns the error, or "" when it worked."""
-    from lib.cmd_initfleet import command_init_fleet, make_local_repo, scaffold_local
-    if not (dest / "repo-profiles.json").exists():
-        scaffold_local(dest)
-    made, error = make_local_repo(dest)
-    if error:
-        print(f"The fleet folder {dest} could not be made a git repo: {error}")
-        return error
-    print(f"Fleet repo: {dest}")
-    if made and ask is not None and ask("Push a private copy of the fleet repo to GitHub now? [y/N] ").strip().lower() in ("y", "yes"):
-        (push or command_init_fleet)(["--dir", str(dest)])
-    return ""
-
-
-def _offer_github_copy(dest: Path, ask) -> bool:
-    """Offers the owner's GitHub copy of olivercode-fleet when it exists and no local fleet does, and clones it on a yes (#1057). True when cloned."""
-    from lib.cmd_initfleet import connect_fleet, github_login, github_repo_kind
-    owner, _ = github_login()
-    if not owner or github_repo_kind(owner, FLEET_NAME)[0] != "fleet":
-        return False
-    if ask(f"A fleet repo {owner}/{FLEET_NAME} already exists on GitHub. Clone it into {dest} instead? [y/N] ").strip().lower() not in ("y", "yes"):
-        return False
-    return connect_fleet(dest, owner, FLEET_NAME) == 0
-
-
-def _set_fleet_registry(path: Path) -> None:
-    """Names path as fleetRegistry in the local file. A run that reads no local file (a test with OLIVERCODE_LOCAL_CONFIG at /dev/null) saves nothing."""
-    if str(local_path()) == os.devnull:
+def _inherit_local_config(oc_root: Path, claude_dir: Path) -> None:
+    """A checkout with no olivercode.local.json copies the one from the checkout ~/.claude/CLAUDE.md links to, when that is another checkout (#1282).
+    Runs before the links move and before anything reads the config. An existing file is never overwritten."""
+    dest = local_path()
+    link = claude_dir / "CLAUDE.md"
+    if str(dest) == os.devnull or dest.is_file() or not link.is_symlink():
         return
-    save_local({"fleetRegistry": str(path)})
-    print(f"fleetRegistry set to {path} in olivercode.local.json.")
-
-
-def fleet_step(oc_root: Path, ask=None) -> str:
-    """Install's fleet step (#1057). Merges every other fleet copy on this machine into olivercode-fleet beside the checkout, offers the GitHub copy
-    when there is no local one, makes the folder a git repo (#993) and names its registry as fleetRegistry when that is unset or named a copy just
-    merged. Returns the error from fleet_repo_step, or "" when it worked."""
-    from lib.cmd_initfleet import REGISTRY, fleet_copies, merge_fleet_copies
-    dest = fleet_home(oc_root)
-    copies = fleet_copies(oc_root)
-    merged = {copy.resolve() for copy in copies}
-    for line in (merge_fleet_copies(dest, copies, oc_root) if copies else []):
-        print(line)
-    connected = not copies and ask is not None and not (dest / REGISTRY).exists() and not (dest / ".git").exists() and _offer_github_copy(dest, ask)
-    if not connected:
-        error = fleet_repo_step(dest, ask=ask)
-        if error:
-            return error
-    configured = load_local().get("fleetRegistry")
-    if configured is None or Path(configured).expanduser().resolve().parent in merged:
-        _set_fleet_registry(dest / REGISTRY)
-    return ""
-
-
-def design_step(ask=None) -> str:
-    """Asks once for the owner's own design file (#995). A path to an existing file is saved as `designFile` in the local config, and a blank
-    answer keeps the shipped docs/DESIGN.md. Either way the question is not asked again, because `designAsked` is saved. `ask` is None outside the
-    owner's terminal, where nothing is asked. Returns the saved path, or "" when none was saved."""
-    local = load_local()
-    if ask is None or "designFile" in local or local.get("designAsked"):
-        return ""
-    answer = ask("Path to your own design file, or Enter to keep the shipped docs/DESIGN.md: ").strip()
-    own = Path(answer).expanduser() if answer else None
-    updates = {"designAsked": True}
-    if own is not None and own.is_file():
-        updates["designFile"] = str(own)
-        print(f"Design file: {own}, linked as ~/.claude/DESIGN.md below.")
-    elif answer:
-        print(f"{answer} is not a file, so the shipped docs/DESIGN.md stays. Set designFile in olivercode.local.json to change it.")
-    else:
-        print("Design file: the shipped docs/DESIGN.md. Set designFile in olivercode.local.json to change it.")
-    save_local(updates)
-    return str(own) if "designFile" in updates else ""
+    prior = Path(os.path.realpath(link)).parent
+    source = prior / "olivercode.local.json"
+    if prior == oc_root.resolve() or not source.is_file():
+        return
+    shutil.copyfile(source, dest)
+    print(f"  [COPIED] olivercode.local.json from {prior}")
 
 
 def registered_repos() -> list[tuple[str, Path]]:
@@ -390,6 +377,7 @@ def command_install(oc_root: Path) -> int:
         return 1
     claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"
+    _inherit_local_config(oc_root, claude_dir)
     first_install = _read_record(claude_dir) is None
     print("OliverCode install — activating this checkout in ~/.claude")
     print("=" * 40)
@@ -447,7 +435,6 @@ def command_install(oc_root: Path) -> int:
 
     status = _link(claude_dir / "VOICE.md", voice_file(oc_root), keep_own=True)
     print(f"  [{status.upper()}] ~/.claude/VOICE.md")
-    design_step(input if owner_terminal() else None)
     # DESIGN.md is read on visual work only, so CLAUDE.md does not import it.
     status = _link(claude_dir / "DESIGN.md", design_file(oc_root), keep_own=True)
     print(f"  [{status.upper()}] ~/.claude/DESIGN.md")
@@ -526,7 +513,7 @@ def command_install(oc_root: Path) -> int:
             print(f"  [WARN] {problem}; to fix it run `{fix}`")
 
     _schedule_replay()
-    _retire_removed_jobs()
+    _retire_removed_jobs(oc_root)
 
     broken = _broken_links(skills_dir)
     if broken:
@@ -549,7 +536,6 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
-    fleet_step(oc_root, ask=input if owner_terminal() else None)
     if owner_terminal():
         board_step(registered_repos())
     else:
@@ -561,7 +547,7 @@ def command_install(oc_root: Path) -> int:
     return 1 if broken or broken_settings else 0
 
 
-def command_uninstall(oc_root: Path) -> int:
+def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     """Undo `install`: remove what it wrote in ~/.claude and nothing else.
 
     A link is removed when it points into this checkout, or when it dangles and an
@@ -628,11 +614,15 @@ def command_uninstall(oc_root: Path) -> int:
 
     broken_settings = False
     try:
-        result = _claude_settings.remove(claude_dir / "settings.json")
+        result = _claude_settings.remove(claude_dir / "settings.json", oc_root)
         print(f"  [{result.upper()}] Claude Code hooks in ~/.claude/settings.json")
     except ValueError as exc:
         print(f"  [FAIL] ~/.claude/settings.json could not be read ({exc}); left as it is, hooks not removed")
         broken_settings = True
+
+    jobs = remove_jobs(oc_root, run=run)
+    if not jobs:
+        print("  [ABSENT] launchd jobs")
 
     shim = _queue_shim.uninstall(oc_root)
     print(f"  [{shim.upper()}] ~/.local/bin/validate-queue")
@@ -655,4 +645,5 @@ def command_uninstall(oc_root: Path) -> int:
         print(f"~/.claude/skills{BACKUP_SUFFIX} is your own copy from docs/SETUP.md Step 2; uninstall leaves it.")
         print()
     print("Next: unset core.hooksPath in each governed repo (docs/SETUP.md \"Backing out\").")
+    print(f"Uninstall finished: {len(jobs)} scheduled job(s) removed.")
     return 1 if broken_settings else 0

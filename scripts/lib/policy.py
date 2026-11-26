@@ -16,10 +16,7 @@ import os
 import re
 import shlex
 import subprocess
-import time
-from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 POLICY_FILE = ".olivercode/policy.json"
@@ -58,7 +55,7 @@ DEFAULT = {
         "allow": ["**"],
         "deny": [".git/**", ".env", ".env.*", ".secrets/**", ".githooks/**", ".olivercode/**"],
     },
-    "triggers": {"gateFailures": 3, "deleteFiles": 10, "push": True},
+    "triggers": {"deleteFiles": 10, "push": True},
 }
 
 
@@ -281,18 +278,10 @@ def evaluate_path(policy: dict, root: Path, file_path: str) -> Decision | None:
     return None
 
 
-# The pre-tool guards and the maintenance run log their own refusals under these names. Only a commit gate that blocked
-# a commit counts toward triggers.gateFailures, so an unrelated denial never makes the third commit ask.
+# The pre-tool guards and the maintenance run log their own refusals under these names. Only a commit gate that blocked a commit is
+# a commit-gate failure, which drain reads to name the gate behind a policy stop.
 NON_COMMIT_GATES = {"policy", "commit_guard", "archived_guard", "placement_guard", "reset_guard", "main_checkout_guard", "model_guard",
                     "gh_guard", "memory_guard", "maintain", "pre-push"}
-
-
-def _recent_failures(repo: str, minutes: int = 30) -> dict[str, int]:
-    """Commit-gate failure-log lines per gate for this repo in the last `minutes`."""
-    from lib import failure_log
-    cutoff = datetime.fromtimestamp(time.time() - minutes * 60, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return dict(Counter(gate for when, where, gate, _ in failure_log.entries() if where == repo and when >= cutoff and gate not in NON_COMMIT_GATES))
-
 
 REDIRECT = re.compile(r"^(?:\d*>>?|&>>?|>\|)$")
 WRITERS_ALL = {"tee", "touch", "rm", "mv", "truncate", "chmod", "chown"}
@@ -508,11 +497,6 @@ def evaluate_bash(policy: dict, command: str, repo: str = "", root: Path | None 
             targets = [w for w in rest if not w.startswith("-")]
             if (name == "rm" and (_recursive(rest) or len(targets) > limit)) or (name == "git" and sub == "rm" and len(targets) - 1 > limit):
                 ask = Decision("ask", "triggers.deleteFiles", "This deletes a folder or more than " + str(limit) + " files, so the policy asks first. See docs/RULES.md, Execution.")
-        needed = triggers.get("gateFailures")
-        if needed and name == "git" and sub == "commit" and repo and not ask:
-            gate, count = max(_recent_failures(repo).items(), key=lambda kv: kv[1], default=("", 0))
-            if count >= needed - 1:
-                ask = Decision("ask", "triggers.gateFailures", f"The {gate} gate has blocked this repo {count} times in 30 minutes, so this is attempt {count + 1}. Run the diagnosing-bugs loop on the cause. See docs/RULES.md, Execution.")
     return ask
 
 

@@ -27,7 +27,6 @@
     ]
   },
   "triggers": {
-    "gateFailures": 3,
     "deleteFiles": 10,
     "push": true
   }

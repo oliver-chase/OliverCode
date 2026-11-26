@@ -370,7 +370,7 @@ def check_job_python(agents: Path | None = None) -> list[Problem]:
 
 
 def check_groom(fix: bool) -> list[Problem]:
-    """Grooms every board when `maintain --fix` runs (#724); a failed board is a problem that names its repo."""
+    """Reads every board and reports its findings when `maintain --fix` runs (#724); groom writes nothing to GitHub (#1275). A failed board is a problem that names its repo."""
     if not fix:
         return []
     from lib import cmd_groom
@@ -380,7 +380,7 @@ def check_groom(fix: bool) -> list[Problem]:
 
 
 def check_queues(fix: bool) -> list[Problem]:
-    """Closes each denied-step owner line whose check now passes, once `maintain --fix` runs. It creates no issue (#971): a story request that waits in the story outbox is filed by `olivercode story outbox flush`, and `health` counts it."""
+    """Closes each denied-step owner line whose check now passes, once `maintain --fix` runs. It creates no issue (#971)."""
     if not fix:
         return []
     from lib import denials
@@ -466,26 +466,16 @@ def failure_gaps() -> list[tuple[str, str, str]]:
     return gaps
 
 
-def file_failure_candidates(gaps: list[tuple[str, str, str]]) -> int:
-    """Adds each gap as a candidate. The candidates list holds a repeat once, so a second run adds nothing (#978). Nothing reaches a board until the owner promotes it.
-    A gap bound for OliverCode's public board has any other fleet repo's name redacted first, so a scheduled task's name never reaches it."""
-    from lib import candidates, repo_name_guard
-    for repo, title, body in gaps:
-        if repo_name_guard.is_olivercode(repo):
-            title, body = repo_name_guard.redact(title), repo_name_guard.redact(body)
-        candidates.add("maintain", repo, title, body)
-    return len(gaps)
-
-
-def check_failure_candidates(fix: bool) -> list[Problem]:
-    """The daily run files each failing check as a candidate for its own repo (#978). A check that cannot read its inputs is reported."""
+def check_failure_gaps(fix: bool) -> list[Problem]:
+    """The daily run reports each failing check as a problem that names its repo and fix (#978). It files no story and writes no list (#1275).
+    A check that cannot read its inputs is reported."""
     if not fix:
         return []
     try:
-        file_failure_candidates(failure_gaps())
+        gaps = failure_gaps()
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        return [Problem("candidates", f"the failing checks were not filed as candidates: {error}", fixable=False)]
-    return []
+        return [Problem("gaps", f"the failing checks could not be read: {error}", fixable=False)]
+    return [Problem("gaps", f"{repo}: {title}. {body.strip().splitlines()[-1]}", fixable=False) for repo, title, body in gaps]
 
 
 STATE_STEP = "state"
@@ -564,7 +554,7 @@ def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> 
     fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's registry
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
-                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_candidates(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
+                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_gaps(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
     return problems

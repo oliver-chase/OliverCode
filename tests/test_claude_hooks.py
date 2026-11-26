@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -177,6 +177,90 @@ class TestCommitGuard(RepoCase):
         self.assertEqual((out.returncode, out.stdout), (0, ""))
 
 
+class TestUpdateNotice(unittest.TestCase):
+    """The session-start line that says the checkout trails its upstream branch (#1285)."""
+
+    def setUp(self):
+        self.tmp = temp_dir(self, "olivercode-update-", resolve=True)
+        origin = scratch_repo(self.tmp / "origin.git", bare=True, branch="main")
+        self.maker = scratch_repo(self.tmp / "maker", branch="main")
+        self.commit(self.maker, "base")
+        git(self.maker, "push", "-q", str(origin), "main")
+        git(self.tmp, "clone", "-q", str(origin), "checkout")
+        self.checkout = self.tmp / "checkout"
+        self.origin = origin
+        self.home = self.tmp / "home"
+        env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("OLIVERCODE_HEADLESS", None)
+
+    def test_the_update_line_also_reaches_the_user_as_a_system_message(self):
+        line = "3 OliverCode updates are available. Run `olivercode update`."
+        out = session.payload(["OliverCode session check: " + line], [line])
+        self.assertEqual(line, out["systemMessage"])
+        self.assertIn(line, out["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("systemMessage", session.payload(["OliverCode session check: other"], ["other"]))
+
+    def commit(self, repo, name):
+        (repo / name).write_text(name)
+        git(repo, "add", name)
+        git(repo, "commit", "-q", "-m", name)
+
+    def push_and_fetch(self, count):
+        for n in range(count):
+            self.commit(self.maker, f"c{n}")
+        git(self.maker, "push", "-q", str(self.origin), "main")
+        git(self.checkout, "fetch", "-q")
+
+    def test_behind_prints_one_line_with_the_count(self):
+        self.push_and_fetch(3)
+        self.assertEqual(session.update_notes(self.checkout), ["3 OliverCode updates are available. Run `olivercode update`."])
+
+    def test_one_commit_behind_reads_singular(self):
+        self.push_and_fetch(1)
+        self.assertEqual(session.update_notes(self.checkout), ["1 OliverCode update is available. Run `olivercode update`."])
+
+    def test_level_prints_nothing(self):
+        self.assertEqual(session.update_notes(self.checkout), [])
+
+    def test_git_failure_or_no_upstream_prints_nothing(self):
+        self.assertEqual(session.update_notes(self.tmp / "missing"), [])
+        git(self.checkout, "branch", "--unset-upstream")
+        self.assertEqual(session.update_notes(self.checkout), [])
+        with mock.patch.object(session.subprocess, "run", side_effect=OSError("no git")):
+            self.assertEqual(session.update_notes(self.checkout), [])
+
+    def test_headless_session_prints_nothing_and_fetches_nothing(self):
+        self.push_and_fetch(2)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": "1"}), mock.patch.object(session, "start_fetch") as popen:
+            self.assertEqual(session.update_notes(self.checkout), [])
+        popen.assert_not_called()
+
+    def test_stale_fetch_starts_one_background_fetch_a_day(self):
+        fetch_head = self.checkout / ".git" / "FETCH_HEAD"
+        fetch_head.write_text("")
+        old = fetch_head.stat().st_mtime - 2 * 24 * 3600
+        os.utime(fetch_head, (old, old))
+        with mock.patch.object(session, "start_fetch") as popen:
+            session.update_notes(self.checkout)
+            session.update_notes(self.checkout)  # a second session within the day starts none
+        popen.assert_called_once_with(self.checkout)
+        self.assertTrue((self.home / "update-fetch-attempt").exists())
+
+    def test_start_fetch_detaches_a_quiet_fetch(self):
+        with mock.patch.object(session.subprocess, "Popen") as popen:
+            session.start_fetch(self.checkout)
+        self.assertEqual(popen.call_args.args[0][-2:], ["fetch", "--quiet"])
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
+
+    def test_fresh_fetch_starts_none(self):
+        (self.checkout / ".git" / "FETCH_HEAD").write_text("")
+        with mock.patch.object(session, "start_fetch") as popen:
+            session.update_notes(self.checkout)
+        popen.assert_not_called()
+
+
 class TestSessionCheck(RepoCase):
     def setUp(self):
         super().setUp()
@@ -269,6 +353,18 @@ class TestSettingsMerge(unittest.TestCase):
         self.assertFalse([c for c in commands if "/old/place/" in c])
         self.assertEqual(claude_settings.merge(moved, Path("/new/place/scripts/hooks")), moved)
 
+    def test_the_removed_learning_hooks_are_not_written_and_an_old_install_loses_them(self):
+        """#1275: lesson_capture, owner_decision_capture and error_paste are gone, and a settings file that still names them is cleaned on install."""
+        removed = ("lesson_capture.py", "owner_decision_capture.py", "error_paste.py")
+        self.assertFalse([s for _, _, s in claude_settings.MANAGED if s in removed])
+        old = json.loads(json.dumps(self.OWNER))
+        old["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": claude_settings._command(s, Path("/oc/scripts/hooks")), "timeout": 10}]} for s in removed]
+        merged = claude_settings.merge(old, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        for script in removed:
+            self.assertFalse([c for c in commands if script in c], script)
+        self.assertIn("~/mine.sh", commands)
+
     def test_a_settings_shape_the_merge_would_guess_at_is_refused_and_left_alone(self):
         tmp = temp_dir(self, "olivercode-settings-")
         path = tmp / "settings.json"
@@ -307,30 +403,110 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertEqual(claude_settings.without(settings),
                          {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine]}]}})
 
-    def test_install_removes_the_retired_manager_entries_from_any_checkout(self):
-        retired = [{"type": "command", "command": f'python3 "/old/checkout/scripts/hooks/{n}"'} for n in claude_settings.RETIRED]
+    def test_install_removes_entries_for_scripts_the_version_no_longer_ships(self):
+        names = ("start_guard.py", "ask_guard.py", "context_guard.py", "never_heard_of_it.py")
+        gone = [{"type": "command", "command": f'python3 "/old/olivercode/scripts/hooks/{n}"'} for n in names]
         mine = {"type": "command", "command": "~/mine.sh"}
-        settings = {"hooks": {"PreToolUse": [{"hooks": retired}, {"matcher": "Bash", "hooks": [mine]}],
-                              "UserPromptSubmit": [{"hooks": [retired[3]]}]}}
+        settings = {"hooks": {"PreToolUse": [{"hooks": gone}, {"matcher": "Bash", "hooks": [mine]}]}}
         merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
-        for name in claude_settings.RETIRED:
+        for name in names:
             self.assertFalse(any(name in c for c in commands), name)
         self.assertIn("~/mine.sh", commands)
-        self.assertFalse({n for _, _, n in claude_settings.MANAGED} & set(claude_settings.RETIRED))
+
+    def test_an_entry_of_a_checkout_with_scripts_olivercode_goes_in_either_form(self):
+        root = temp_dir(self, "olivercode-other-", resolve=True)
+        (root / "scripts").mkdir()
+        (root / "scripts" / "olivercode").write_text("")
+        new = claude_settings._command("cut_script.py", root / "scripts" / "hooks")
+        old = f'python3 "{root}/scripts/hooks/cut_script.py"'
+        settings = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c}]} for c in (new, old)]}}
+        merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        self.assertFalse(any("cut_script" in c for c in commands))
+
+    def test_an_entry_from_an_existing_checkout_without_scripts_olivercode_is_kept(self):
+        root = temp_dir(self, "olivercode-theirs-", resolve=True)
+        (root / "scripts" / "hooks").mkdir(parents=True)
+        theirs = [claude_settings._command("session_check.py", root / "scripts" / "hooks"),
+                  f'python3 "{root}/scripts/hooks/their_hook.py"']
+        settings = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c} for c in theirs]}]}}
+        merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        for c in theirs:
+            self.assertIn(c, commands)
+
+    def test_a_script_outside_a_scripts_hooks_folder_is_never_removed(self):
+        mine = [{"type": "command", "command": c} for c in (
+            'python3 "/old/olivercode/scripts/other/start_guard.py"',
+            'python3 "/old/olivercode/hooks/session_check.py"',
+            'python3 "/old/olivercode/scripts/hooks/sub/session_check.py"',
+            claude_settings._command("mine.py", Path("/home/me/bin")))]
+        merged = claude_settings.merge({"hooks": {"Stop": [{"hooks": mine}]}}, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        for h in mine:
+            self.assertIn(h["command"], commands)
+
+    def test_installing_twice_leaves_one_entry_per_managed_hook(self):
+        path = self.path
+        hooks_dir = Path("/oc/scripts/hooks")
+        path.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": 'python3 "/gone/olivercode/scripts/hooks/cut.py"'}]}]}}))
+        claude_settings.install(path, hooks_dir)
+        self.assertEqual("already", claude_settings.install(path, hooks_dir))
+        commands = [h["command"] for groups in json.loads(path.read_text())["hooks"].values() for g in groups for h in g["hooks"]]
+        self.assertEqual(sorted(claude_settings._command(n, hooks_dir) for _, _, n in claude_settings.MANAGED), sorted(commands))
 
     def test_install_drops_the_denial_watch_entry_and_leaves_its_script(self):
-        entry = {"type": "command", "command": 'python3 "/old/checkout/scripts/hooks/denial_watch.py"'}
+        entry = {"type": "command", "command": 'python3 "/old/olivercode/scripts/hooks/denial_watch.py"'}
         merged = claude_settings.merge({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [entry]}]}}, Path("/oc/scripts/hooks"))
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertFalse(any("denial_watch" in c for c in commands))
         self.assertNotIn("denial_watch.py", [n for _, _, n in claude_settings.MANAGED])
         self.assertTrue((claude_settings.HOOKS_DIR / "denial_watch.py").is_file())
 
+    def test_a_missing_script_exits_0_silently_and_a_present_one_runs_as_before(self):
+        root = temp_dir(self, "olivercode-failopen-", resolve=True)
+        hooks = root / "dir with space" / "scripts" / "hooks"
+        hooks.mkdir(parents=True)
+        script = hooks / "gh_watch.py"
+        script.write_text("import sys\nprint('got ' + sys.stdin.read())\nsys.exit(3)\n")
+        cmd = claude_settings._command("gh_watch.py", hooks)
+        run = lambda: subprocess.run(cmd, shell=True, input="hello", capture_output=True, text=True)
+        ran = run()
+        self.assertEqual((3, "got hello\n"), (ran.returncode, ran.stdout))
+        script.unlink()
+        gone = run()
+        self.assertEqual((0, "", ""), (gone.returncode, gone.stdout, gone.stderr))
+
+    def test_an_old_form_entry_is_recognised_and_replaced_not_duplicated(self):
+        hooks = Path("/oc/scripts/hooks")
+        old = {"type": "command", "command": 'python3 "/oc/scripts/hooks/gh_watch.py"'}
+        merged = claude_settings.merge({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [old]}]}}, hooks)
+        commands = [h["command"] for g in merged["hooks"]["PostToolUse"] for h in g["hooks"]]
+        self.assertEqual([claude_settings._command("gh_watch.py", hooks)], commands)
+        self.assertIn("gh_watch.py", claude_settings.missing(Path("/nowhere.json"), hooks))
+        self.assertEqual([], claude_settings.missing_for(merged, hooks) if hasattr(claude_settings, "missing_for") else [])
+        self.assertEqual(claude_settings.without(merged).get("hooks"), None)
+
+    def test_dead_names_a_new_form_entry_and_health_reports_it_without_the_instruction_link(self):
+        from lib import cmd_health
+        home = temp_dir(self, "olivercode-deadhome-", resolve=True)
+        (home / ".claude").mkdir()
+        (home / "scripts").mkdir()
+        (home / "scripts" / "olivercode").write_text("")
+        cmd = claude_settings._command("session_check.py", home / "scripts" / "hooks")
+        (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": cmd}]}]}}))
+        self.assertEqual([cmd], claude_settings.dead(home / ".claude" / "settings.json"))
+        with mock.patch.object(Path, "home", staticmethod(lambda: home)), mock.patch.dict(os.environ, {"HOME": str(home)}):
+            out = quiet(cmd_health.command_health)[1]
+        self.assertFalse((home / ".claude" / "CLAUDE.md").exists())
+        self.assertRegex(out, r"\[FAIL\].*do not exist.*session_check\.py")
+
     def test_dead_names_a_managed_entry_whose_script_does_not_exist(self):
         root = temp_dir(self, "olivercode-dead-", resolve=True)
         (root / "scripts" / "hooks").mkdir(parents=True)
         (root / "scripts" / "hooks" / "here.py").write_text("")
+        (root / "scripts" / "olivercode").write_text("")
         cmds = [f'python3 "{root}/scripts/hooks/{n}"' for n in ("session_check.py", "gh_watch.py")]
         path = root / "settings.json"
         path.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c}]} for c in cmds]}}))
@@ -347,18 +523,24 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertNotIn(cut["command"], commands)
 
     def test_install_drops_an_entry_whose_script_is_gone_and_keeps_the_rest(self):
-        hooks_dir = temp_dir(self, "olivercode-hooksdir-", resolve=True)
+        hooks_dir = temp_dir(self, "olivercode-hooksdir-", resolve=True) / "scripts" / "hooks"
+        hooks_dir.mkdir(parents=True)
         (hooks_dir / "still_here.py").write_text("")
         gone = {"type": "command", "command": f'python3 "{hooks_dir}/gone.py"'}
+        other = temp_dir(self, "someone-elses-project-", resolve=True)  # exists and holds no scripts/olivercode
+        lost = {"type": "command", "command": 'python3 "/no/such/checkout/scripts/hooks/gone.py"'}  # its checkout is gone from disk
         kept = [{"type": "command", "command": c} for c in (
-            f'python3 "{hooks_dir}/still_here.py"',  # the script exists, so it stays
-            'python3 "/elsewhere/scripts/hooks/gone.py"',  # another checkout's folder
+            f'python3 "{hooks_dir}/still_here.py"',  # an unmanaged script of this checkout
+            f'python3 "{other}/scripts/hooks/gone.py"',  # another project's folder
             f'python3 "{hooks_dir}/gone.py" --flag',  # not the form install writes
             "~/mine.sh")]
-        settings = {"hooks": {"PostToolUse": [{"hooks": [gone]}, {"matcher": "Bash", "hooks": [gone, *kept]}]}}
+        settings = {"hooks": {"PostToolUse": [{"hooks": [gone]}, {"matcher": "Bash", "hooks": [gone, lost, *kept]}]}}
         merged = claude_settings.merge(settings, hooks_dir)
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertNotIn(gone["command"], commands)
+        self.assertNotIn(lost["command"], commands)  # under a checkout that no longer exists it can only fail, so it goes
+        self.assertNotIn(kept[0]["command"], commands)  # the script exists but this version does not manage it, so it goes
+        kept = kept[1:]
         self.assertTrue(all(h["command"] in commands for h in kept))
         self.assertEqual(merged["hooks"]["PostToolUse"][0], {"matcher": "Bash", "hooks": kept})
 
@@ -486,4 +668,5 @@ class TestRetiredDesignHook(unittest.TestCase):
         self.assertEqual((0, "", ""), (ran.returncode, ran.stdout, ran.stderr))
 
     def test_install_strips_its_entry(self):
-        self.assertIn("design_hook.py", claude_settings.RETIRED)
+        entry = {"type": "command", "command": f'python3 "{REPO_ROOT}/scripts/hooks/design_hook.py"'}
+        self.assertEqual({}, claude_settings.without({"hooks": {"Stop": [{"hooks": [entry]}]}}))

@@ -1,9 +1,8 @@
-"""Intake check on bulk-created issues (#728): open issues without the story template fail the sweep and get one rewrite story.
+"""Intake check on bulk-created issues (#728) and the repeated-blocker report. Both only report; neither files a story or edits an issue (#1275).
 
 `check(slug, issues)` runs `check_story_format.check_body` on every open issue. When MIN or more fail, the repo has had a
-bulk copy-in: the sweep queues one owner-queue line and files one story, "Rewrite N issues to the story template", whose body
-lists the numbers. A repo with an open rewrite story files no second one. Standard library only; the sweep passes in the
-`gh` runner so tests need no network.
+bulk copy-in, and the check names how many lack the template. `repeated_blockers` names each gate failure the failure log holds
+three or more times. Standard library only; the sweep passes in the `gh` runner so tests need no network.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lib import agent_loop, candidates, cmd_owner
+from lib import agent_loop, cmd_owner
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -23,32 +22,9 @@ sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 MIN = 5
 
 
-def candidate(slug: str, title: str, body: str) -> None:
-    """Add the story to the candidates list (#971). No automatic path creates an issue, so reloading a job cannot fill the board."""
-    candidates.add("intake", slug, title, body)
-
-
 SESSION = "intake-check"
-TITLE = "Rewrite {n} issues to the story template"
-PREFIX = "Rewrite "
+PREFIX = "Rewrite "  # a story an earlier release filed for the rewrite is not itself counted as malformed
 MARK = " issues to the story template"
-BODY = """**As the owner**, I want the copied-in issues rewritten to the story template, so that I never have to ask for it.
-
-```gherkin
-Feature: Have copied-in issues rewritten to the template
-  Scenario: Main case
-    Given {n} open issues without the story template: {numbers}
-    When each is rewritten from skills/backlog/references/story-template.md
-    Then check_story_format.py passes on every one
-```
-
-Epic: #{epic}
-Priority: P2. Size: M. Work type: Story.
-
-Existing coverage checked: `check_story_format.py` already names each missing part, and this story rewrites the issues it names.
-"""
-
-
 def gh_issues(slug: str) -> list[dict]:
     done = subprocess.run(["gh", "issue", "list", "--repo", slug, "--state", "open", "--limit", "500",
                            "--json", "number,title,body,labels"], capture_output=True, text=True, timeout=120)
@@ -72,14 +48,8 @@ def failing(issues: list[dict]) -> list[int]:
     return sorted(out)
 
 
-def epic_of(issues: list[dict], default: int) -> int:
-    """The lowest-numbered open issue whose body says `Work type: Epic`, else the default."""
-    found = [i["number"] for i in issues if "work type: epic" in (i.get("body") or "").lower()]
-    return min(found) if found else default
-
-
-def check(name: str, slug: str, epic: int = 1, fetch=gh_issues, file=candidate) -> tuple[bool, str]:
-    """(failed, line) for one repo. Adds one rewrite candidate when MIN or more open issues lack the template."""
+def check(name: str, slug: str, fetch=gh_issues) -> tuple[bool, str]:
+    """(failed, line) for one repo. Fails when MIN or more open issues lack the template, and files nothing."""
     try:
         issues = fetch(slug)
     except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
@@ -87,49 +57,18 @@ def check(name: str, slug: str, epic: int = 1, fetch=gh_issues, file=candidate) 
     bad = failing(issues)
     if len(bad) < MIN:
         return False, f"{name}: intake check clean, {len(bad)} open issue(s) lack the story template"
-    open_rewrite = any(i.get("title", "").startswith(PREFIX) and i.get("title", "").endswith(MARK) for i in issues)
-    if not open_rewrite:
-        file(slug, TITLE.format(n=len(bad)), BODY.format(n=len(bad), numbers=", ".join(f"#{n}" for n in bad), epic=epic_of(issues, epic)))
-    return True, f"{name}: {len(bad)} open issue(s) lack the story template" + (", a rewrite story is already open" if open_rewrite else ", one rewrite candidate added")
+    return True, f"{name}: {len(bad)} open issue(s) lack the story template: " + ", ".join(f"#{n}" for n in bad[:20])
 
 
 def run(boards, out=print, **kw) -> int:
     """Check each (name, slug, epic) repo, queue one owner-queue line per repo and return 1 when any fails."""
     failed = 0
-    for name, slug, epic in boards:
-        bad, line = check(name, slug, epic, **kw)
+    for name, slug, _epic in boards:
+        bad, line = check(name, slug, **kw)
         out(line)
         cmd_owner.note(SESSION, line)
         failed |= bad
     return int(failed)
-
-
-PREVENT = "Prevent the repeated block: "
-PREVENT_BODY = """**As the owner**, I want the repeated block "{what}" to stop costing a session, so that no one meets it a {nth} time.
-
-```gherkin
-Feature: Prevent a repeated block
-  Scenario: Main case
-    Given the failure log holds {n} entries for the gate {gate}, first seen {first} and last seen {last}
-    When a check is added that catches the cause before the gate runs
-    Then the block no longer reaches the log
-```
-
-Occurrences: {times}
-Epic: #{epic}
-Priority: P2. Size: S. Work type: Story.
-
-Existing coverage checked: the failure log already counts each occurrence, and no open story covers this one.
-"""
-
-
-def _seen_file():
-    from lib import failure_log
-    return failure_log.home() / "blocker-seen.json"
-
-
-def _comment(slug: str, number: int, text: str) -> None:
-    subprocess.run(["gh", "api", f"repos/{slug}/issues/{number}/comments", "-f", f"body={text}"], capture_output=True, text=True, timeout=60)
 
 
 def guard_exists(gate: str) -> bool:
@@ -140,46 +79,12 @@ def guard_exists(gate: str) -> bool:
     return any(p.stem.replace("-", "_") == want for p in (OC_ROOT / "scripts" / "hooks").glob("*.py"))
 
 
-def prevention(slug: str, epic: int = 1, repeats=None, fetch=gh_issues, file=candidate, comment=_comment) -> list[str]:
-    """A blocker the failure log holds 3 or more times adds one prevention candidate, at most `retroFilesPerRun` per run (#971). An open
-    story that already names it gets the new occurrences as a comment, a blocker met before adds nothing again, and a refusal from a
-    guard the tree no longer has adds nothing. No model call, and no issue is created."""
+def repeated_blockers(repeats=None) -> list[str]:
+    """One report line for each blocker the failure log holds 3 or more times, from a guard the tree still has. It files and edits nothing (#1275)."""
     from lib import failure_log
     repeats = failure_log.repeated() if repeats is None else repeats
-    repeats = {k: v for k, v in repeats.items() if guard_exists(k[0])}
-    if not repeats:
-        return []
-    try:
-        issues = fetch(slug)
-        seen = json.loads(_seen_file().read_text(encoding="utf-8")) if _seen_file().is_file() else {}
-    except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired):
-        return []
-    cap = int(candidates.limits()["retroFilesPerRun"])
-    lines, filed = [], 0
-    for (gate, reason), times in sorted(repeats.items()):
-        what = f"{gate}: {reason}"[:100]
-        title = PREVENT + what
-        key = f"{gate}\t{reason}"
-        found = next((i for i in issues if i.get("title", "") == title), None)
-        if found:
-            if len(times) > seen.get(key, 0):
-                comment(slug, found["number"], f"Seen again: {len(times)} entries now, latest {times[-1]}.")
-                seen[key] = len(times)
-                lines.append(f"{what}: occurrence added to #{found['number']}")
-            continue
-        if key in seen or filed >= cap:
-            continue
-        body = PREVENT_BODY.format(what=what, nth=len(times) + 1, n=len(times), gate=gate, first=times[0], last=times[-1],
-                                   times=", ".join(times[:10]), epic=epic)
-        file(slug, title, body)
-        seen[key] = len(times)
-        filed += 1
-        lines.append(f"{what}: prevention candidate added")
-    try:
-        _seen_file().write_text(json.dumps(seen), encoding="utf-8")
-    except OSError:
-        pass
-    return lines
+    return [f"{gate}: {reason}"[:100] + f" blocked {len(times)} times, latest {times[-1]}"
+            for (gate, reason), times in sorted(repeats.items()) if guard_exists(gate)]
 
 
 # Split open stories by files area so non-overlapping stories go to builders in parallel (#794).
@@ -218,15 +123,11 @@ def overlaps(a: list[str], b: list[str]) -> bool:
 
 
 def in_area(path: str, area: list[str]) -> bool:
-    """True when the path is inside the area, or is the test of a file the area lists: test_NAME.py for NAME.py or NAME.sh, a hyphen read as an
-    underscore. The rules ask for a test with every change, so the test of a listed file never counts as scope creep (#1078)."""
-    if overlaps([path], area):
-        return True
+    """True when the path is inside the area or is any test file (test_*.py). The rules ask for a test with every change, and a module's test
+    often has another name (cmd_status.py is tested in test_status.py) or covers a neighbour, so refusing it threw away finished builds.
+    The landing's weakened-test check still guards every test file (#1073, #1078)."""
     name = Path(path).name
-    if not name.startswith("test_"):
-        return False
-    stem = Path(name[len("test_"):]).stem
-    return any(Path(a).stem.replace("-", "_") == stem for a in area if not a.endswith("/"))
+    return overlaps([path], area) or (name.startswith("test_") and name.endswith(".py"))
 
 
 def long_wait(body: str, today: datetime.date | None = None) -> str:

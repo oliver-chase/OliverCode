@@ -1,14 +1,12 @@
 """OliverCode's hook entries in Claude Code's user settings, merged in without touching anything else.
 
 `~/.claude/settings.json` belongs to the operator: permissions, theme, model and any hook
-they wrote. OliverCode adds only the entries in MANAGED, recognised by the exact command
-`_command()` writes for one of its scripts under any checkout's `scripts/hooks/` folder, so a
-re-install replaces its own entries (also after the checkout moves) and never edits,
-duplicates or removes the operator's, even one that runs a script of the same name. `remove` takes
-out exactly those entries by the same rule, for `olivercode uninstall`.
-
-Install also drops an entry in that exact form whose script is missing from this checkout's
-`scripts/hooks/`, so a hook cut from the repo never leaves a dead entry behind.
+they wrote. OliverCode adds only the entries in MANAGED. It recognises its own entries by the command
+form `_command()` writes (or the older `python3 "<path>"`) for a `.py` script directly under a
+`scripts/hooks/` folder of an OliverCode checkout (see `_is_managed`), so a re-install replaces every
+one of them, also after the checkout moves or a script is cut, and never edits, duplicates or removes
+the operator's, even one that runs a script of the same name. `remove` takes out exactly those
+entries by the same rule, for `olivercode uninstall`.
 
 The hooks point at the scripts in this checkout, so an edit here takes effect in the next
 session with no reinstall.
@@ -32,14 +30,8 @@ MANAGED = (
     ("PostToolUse", "Bash", "gh_watch.py"),
     ("Stop", None, "early-stop-guard.py"),
     ("Stop", None, "wip_save.py"),
-    ("UserPromptSubmit", None, "lesson_capture.py"),
-    ("UserPromptSubmit", None, "owner_decision_capture.py"),
-    ("UserPromptSubmit", None, "error_paste.py"),
     ("UserPromptSubmit", None, "status_hint.py"),
 )
-# Scripts cut from the repo. Install and update remove an entry that runs one, from any checkout, so a machine that
-# installed an older version never keeps a hook for a script that is about to go (#886).
-RETIRED = ("start_guard.py", "start_confirm.py", "ask_guard.py", "owner_prompt.py", "context_guard.py", "denial_watch.py", "design_hook.py")
 TIMEOUT_S = 10
 # Tools a session needs without a permission prompt: session control, the sidebar, worktree cleanup and the repo's
 # own validation. Install adds them to permissions.allow beside the owner's entries and health reports any missing.
@@ -97,8 +89,7 @@ def automode_rules(oc_root: Path | None = None) -> dict:
             "through OliverCode's runner (olivercode dispatch and drain), each builder works one backlog story in its own "
             "worktree and ends with a commit, and the runner validates and lands that commit. The user has approved this standing workflow.",
             f"OliverCode's own repo is {root}. Its pre-push gate requires a passing scripts/validate.sh "
-            "run on the exact tree being pushed, and the untracked docs/LESSONS.jsonl file holds local lessons that are not "
-            "part of any commit.",
+            "run on the exact tree being pushed.",
         ),
         "allow": (
             "Starting, messaging, titling, pinning, detaching or stopping Claude Code desktop sessions "
@@ -106,8 +97,6 @@ def automode_rules(oc_root: Path | None = None) -> dict:
             "when the prompt names that story",
             "Listing Claude Code desktop sessions (mcp__ccd_session_mgmt__list_sessions) to find the session that runs "
             "a story's builder",
-            f"In {root}, temporarily moving the untracked docs/LESSONS.jsonl out of the tree to run "
-            "scripts/validate.sh and push validated commits to main, then moving it back",
         ),
     }
 
@@ -121,19 +110,39 @@ def automode_block() -> str:
     return json.dumps({"autoMode": {k: [DEFAULTS, *v] for k, v in AUTOMODE.items()}}, indent=2)
 
 
+# The runner every entry uses: exit 0 and do nothing when the script file is gone, since python's exit 2 on a missing
+# file would block the prompt or tool call it hooks (#1270). Otherwise exec python3, so stdin, stdout and the exit code pass through.
+_RUN = """sh -c 'test -f "$0" || exit 0; exec python3 "$0"'"""
+
+
 def _command(script: str, hooks_dir: Path) -> str:
-    return f'python3 "{hooks_dir / script}"'
+    return f'{_RUN} "{hooks_dir / script}"'
 
 
-# The exact form _command() writes, from any checkout path. It is the only form install has
-# ever written, so nothing looser is needed to recognise an older install.
-_MANAGED_COMMAND = re.compile(
-    r'python3 "(.+)/scripts/hooks/(' + "|".join(re.escape(s) for s in [m[2] for m in MANAGED] + list(RETIRED)) + r')"')
+# The form _command() writes, or the older `python3 "<path>"` an earlier install wrote: a `.py` script directly in a scripts/hooks folder.
+_RUNNER = rf'(?:{re.escape(_RUN)}|python3)'
+_HOOK_COMMAND = re.compile(_RUNNER + r' "(.+)/scripts/hooks/([^/"]+\.py)"')
 
 
-def _is_managed(handler: dict) -> bool:
+def _hook_parts(handler: dict) -> tuple[Path, str] | None:
+    """(checkout root, script name) for a handler in either command form, else None."""
     cmd = handler.get("command", "") if isinstance(handler, dict) else ""
-    return isinstance(cmd, str) and _MANAGED_COMMAND.fullmatch(cmd) is not None
+    m = _HOOK_COMMAND.fullmatch(cmd) if isinstance(cmd, str) else None
+    return (Path(m.group(1)), m.group(2)) if m else None
+
+
+def _is_managed(handler: dict, oc_root: Path = OC_ROOT) -> bool:
+    """True for an entry that runs a script in an OliverCode checkout's scripts/hooks, whether or not this version ships it:
+    the checkout root is this one, or holds scripts/olivercode, or is gone from disk. An entry in install's exact command
+    form under a root that no longer exists can only fail, and the old form blocks the prompt when it does, so it goes.
+    A root that exists without scripts/olivercode is someone else's project, and a script outside scripts/hooks is never matched."""
+    parts = _hook_parts(handler)
+    if not parts:
+        return False
+    root, name = parts
+    if root == oc_root or (root / "scripts" / "olivercode").exists():
+        return True
+    return not root.exists()
 
 
 def _check_shape(settings) -> None:
@@ -148,26 +157,14 @@ def _check_shape(settings) -> None:
             raise ValueError(f'"hooks.{event}" is not a list of hook groups')
 
 
-def _is_dead(handler: dict, hooks_dir: Path) -> bool:
-    """True for an entry in the exact form `_command()` writes for this checkout whose script is gone."""
-    cmd = handler.get("command", "") if isinstance(handler, dict) else ""
-    prefix = f'python3 "{hooks_dir}/'
-    if not (isinstance(cmd, str) and cmd.startswith(prefix) and cmd.endswith('"')):
-        return False
-    script = cmd[len(prefix):-1]
-    return bool(script) and "/" not in script and '"' not in script and not (hooks_dir / script).exists()
-
-
-def _strip_managed(hooks: dict, hooks_dir: Path | None = None) -> dict:
-    """Each event's hook groups with OliverCode's handlers taken out, and, given hooks_dir, the entries whose
-    script is missing from it. A group that held only those handlers is dropped, and an event left with no
-    group maps to an empty list."""
+def _strip_managed(hooks: dict, oc_root: Path = OC_ROOT) -> dict:
+    """Each event's hook groups with OliverCode's handlers taken out. A group that held only those handlers is
+    dropped, and an event left with no group maps to an empty list."""
     out = {}
     for event, groups in hooks.items():
         out[event] = []
         for group in groups:
-            kept = [h for h in group.get("hooks", [])
-                    if not _is_managed(h) and not (hooks_dir and _is_dead(h, hooks_dir))]
+            kept = [h for h in group.get("hooks", []) if not _is_managed(h, oc_root)]
             # A group the operator left empty stays as it was, so install does not rewrite the file on every run.
             if kept or not group.get("hooks"):
                 out[event].append({**group, "hooks": kept})
@@ -193,7 +190,7 @@ def merge(settings: dict, hooks_dir: Path = HOOKS_DIR) -> dict:
     out = json.loads(json.dumps(settings))  # deep copy; the caller's dict stays as read
     hooks = out.setdefault("hooks", {})
     # A fixed event order, so a re-install never churns the file.
-    hooks.update(_strip_managed({e: hooks.get(e, []) for e in dict.fromkeys([e for e, _, _ in MANAGED] + list(hooks))}, hooks_dir))
+    hooks.update(_strip_managed({e: hooks.get(e, []) for e in dict.fromkeys([e for e, _, _ in MANAGED] + list(hooks))}, hooks_dir.parent.parent))
     for event, matcher, script in MANAGED:
         group = {"hooks": [{"type": "command", "command": _command(script, hooks_dir), "timeout": TIMEOUT_S}]}
         if matcher:
@@ -231,8 +228,8 @@ def dead(settings_path: Path) -> list[str]:
         for g in groups:
             for h in g.get("hooks", []):
                 cmd = h.get("command", "") if isinstance(h, dict) else ""
-                m = _MANAGED_COMMAND.fullmatch(cmd) if isinstance(cmd, str) else None
-                if m and not (Path(m.group(1)) / "scripts" / "hooks" / m.group(2)).exists():
+                parts = _hook_parts(h)
+                if parts and _is_managed(h) and not (parts[0] / "scripts" / "hooks" / parts[1]).exists():
                     out.append(cmd)
     return out
 
@@ -246,7 +243,7 @@ def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
         current = {}
     present = {h.get("command") for groups in (current.get("hooks") or {}).values()
                for g in groups for h in g.get("hooks", []) if isinstance(h, dict)}
-    return [script for _, _, script in MANAGED if _command(script, hooks_dir) not in present]
+    return [script for _, _, script in MANAGED if _command(script, hooks_dir) not in present]  # an old-form entry counts as missing, so install rewrites it
 
 
 def install(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> str:
@@ -277,7 +274,7 @@ def managed_hooks(settings: dict) -> dict:
     return out
 
 
-def without(settings: dict) -> dict:
+def without(settings: dict, oc_root: Path = OC_ROOT) -> dict:
     """Return settings with every OliverCode hook entry taken out and everything else as it was.
     An event, or the "hooks" key itself, that only OliverCode's entries filled is dropped.
     Raises ValueError for a settings shape it cannot read safely."""
@@ -301,7 +298,7 @@ def without(settings: dict) -> dict:
             del out["autoMode"]
     if "hooks" not in out:
         return out
-    stripped = _strip_managed(out["hooks"])
+    stripped = _strip_managed(out["hooks"], oc_root)
     if stripped == out["hooks"]:
         return out  # nothing of OliverCode's here, so the owner's layout stays byte for byte
     out["hooks"] = {e: g for e, g in stripped.items() if g}
@@ -310,7 +307,7 @@ def without(settings: dict) -> dict:
     return out
 
 
-def remove(settings_path: Path) -> str:
+def remove(settings_path: Path, oc_root: Path = OC_ROOT) -> str:
     """Take OliverCode's hook entries out of the settings file. Returns "removed", "deleted"
     or "absent". When nothing but OliverCode's entries was in a plain file, the file itself
     goes, since Claude Code reads an absent settings file and `{}` the same way.
@@ -319,7 +316,7 @@ def remove(settings_path: Path) -> str:
         return "absent"
     text = settings_path.read_text()
     current = json.loads(text) if text.strip() else {}
-    cleaned = without(current)
+    cleaned = without(current, oc_root)
     if cleaned == current:
         return "absent"
     if not cleaned and not settings_path.is_symlink():  # a linked file is the owner's to keep

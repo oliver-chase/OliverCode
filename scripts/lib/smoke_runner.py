@@ -125,8 +125,9 @@ def run(root: Path, out=sys.stdout) -> int:
             name, module, folder, ids = unit
             began = time.monotonic()
             with open(log_dir / f"{name}.log", "w", encoding="utf-8") as log:
+                # No module sees this machine's global git settings, such as a global core.hooksPath (#1283).
                 code = subprocess.run([sys.executable, "-m", "unittest", "-b", *(ids or [module])], cwd=folder, stdout=log,
-                                      stderr=subprocess.STDOUT).returncode
+                                      stderr=subprocess.STDOUT, env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}).returncode
             return name, code, time.monotonic() - began
 
         with ThreadPoolExecutor(max_workers=jobs()) as pool:

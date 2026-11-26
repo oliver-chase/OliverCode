@@ -52,7 +52,7 @@ class TestRemovedJobs(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_gapsweep.py").exists())
         self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_burndown.py").exists())
 
-    def test_the_hourly_lesson_job_is_unloaded_and_deleted_and_its_command_is_gone(self):
+    def test_the_retired_hourly_job_is_unloaded_and_deleted_and_its_command_is_gone(self):
         label = "com.olivercode.lessons"
         self.assertIn(label, cmd_install.REMOVED_JOBS)
         (self.agents / f"{label}.plist").write_text("<plist/>")
@@ -80,11 +80,13 @@ class TestRemovedJobs(unittest.TestCase):
 
     def test_install_runs_the_removal(self):
         with mock.patch.object(cmd_install, "retire_removed_jobs") as retired, \
+                mock.patch.object(cmd_install, "remove_jobs") as stale, \
                 mock.patch.object(cmd_install, "retire_removed_pages") as pages, \
                 mock.patch.object(cmd_install.sys, "platform", "darwin"), \
                 mock.patch.object(cmd_install.pwd, "getpwuid", return_value=mock.Mock(pw_dir=str(cmd_install.Path.home()))):
-            cmd_install._retire_removed_jobs()
+            cmd_install._retire_removed_jobs(cmd_install.Path('/oc'))
         retired.assert_called_once_with()
+        stale.assert_called_once_with(cmd_install.Path('/oc'), stale_only=True)
         pages.assert_called_once_with()
 
     def test_the_help_lists_no_city_command(self):

@@ -275,7 +275,7 @@ class TestCleanCloneSuite(unittest.TestCase):
         self.record.write_text(json.dumps(maintain.suite_record(1, SUITE_FAIL)))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            result = health_checks._check_clean_clone_suite(self.record)
+            result = health_checks._check_clean_clone_suite(self.record, head="")
         self.assertEqual((0, 1, 0), result)
         self.assertIn("[FAIL]", out.getvalue())
         self.assertIn("test_maintain, test_policy", out.getvalue())
@@ -285,40 +285,41 @@ class TestCleanCloneSuite(unittest.TestCase):
         record["at"] -= 3 * 86400
         self.record.write_text(json.dumps(record))
         with contextlib.redirect_stdout(io.StringIO()) as out:
-            result = health_checks._check_clean_clone_suite(self.record)
+            result = health_checks._check_clean_clone_suite(self.record, head="")
         self.assertEqual((0, 1, 0), result)
         self.assertIn("3.0 days ago", out.getvalue())
+
+    def test_health_does_not_count_a_record_for_another_commit(self):
+        self.record.write_text(json.dumps({**maintain.suite_record(1, SUITE_FAIL), "commit": "a" * 40}))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            result = health_checks._check_clean_clone_suite(self.record, head="b" * 40)
+        self.assertEqual((0, 0, 1), result)
+        self.assertIn("[INFO]", out.getvalue())
+        self.assertIn("aaaaaaaa", out.getvalue())
 
     def test_health_passes_a_fresh_green_record(self):
         self.record.write_text(json.dumps(maintain.suite_record(0, SUITE_PASS)))
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual((1, 0, 0), health_checks._check_clean_clone_suite(self.record))
+            self.assertEqual((1, 0, 0), health_checks._check_clean_clone_suite(self.record, head=""))
 
 
-class TestFailureCandidates(unittest.TestCase):
-    """A failing check becomes one candidate for its own repo, and a second nightly run adds nothing (#978)."""
+class TestFailureGaps(unittest.TestCase):
+    """A failing check is reported and never becomes a candidate, a story or an issue (#978, #1275)."""
 
     def setUp(self):
-        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
+        self.home = temp_dir(self)
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_FAILURE_LOG": str(self.home / "failures.log")})
         patch.start()
         self.addCleanup(patch.stop)
 
-    def test_a_gap_becomes_one_candidate_and_a_second_run_adds_nothing(self):
-        from lib import candidates
-        gaps = [("acme/widget", "Rebase widget onto origin/main to refresh its commit hooks", "Fix: rebase")]
-        maintain.file_failure_candidates(gaps)
-        maintain.file_failure_candidates(gaps)
-        self.assertEqual(1, candidates.count())
-        self.assertEqual("acme/widget", candidates.items()[0]["repo"])
-
-    def test_the_nightly_run_files_each_failing_check_under_its_repo_and_check_only_files_none(self):
-        from lib import candidates
+    def test_the_nightly_run_reports_each_failing_check_and_check_only_reports_none(self):
         gaps = [("acme/widget", "Rebase widget", "Fix: x"), ("acme/gadget", "Gate for task nightly", "Fix: y")]
         with mock.patch.object(maintain, "failure_gaps", return_value=gaps):
-            self.assertEqual([], maintain.check_failure_candidates(True))
-            self.assertEqual({"acme/widget", "acme/gadget"}, {i["repo"] for i in candidates.items()})
-            self.assertEqual([], maintain.check_failure_candidates(False))
-        self.assertEqual(2, candidates.count())
+            found = maintain.check_failure_gaps(True)
+            self.assertEqual([], maintain.check_failure_gaps(False))
+        self.assertEqual(2, len(found))
+        self.assertIn("acme/widget: Rebase widget", found[0].text)
+        self.assertFalse(any(p.fixable for p in found))
 
     def test_a_stale_worktree_names_its_own_repo_and_a_task_names_the_engine(self):
         repo = scratch_repo(temp_dir(self) / "widget")
@@ -332,14 +333,22 @@ class TestFailureCandidates(unittest.TestCase):
         self.assertEqual(["acme/widget"], [g[0] for g in gaps if g[1].startswith("Rebase")])
         self.assertEqual([maintain.engine_slug()], [g[0] for g in gaps if g[1].startswith("Gate command")])
 
-    def test_a_gap_filed_on_the_public_engine_names_no_other_repo(self):
-        from lib import candidates
-        gaps = [(maintain.engine_slug(), "Gate command for scheduled task acme-widget-nightly", "Fix: give acme-widget-nightly a gate")]
-        with mock.patch("lib.repo_name_guard.fleet_names", return_value=["acme-widget"]):
-            maintain.file_failure_candidates(gaps)
-        item = candidates.items()[0]
-        self.assertEqual(1, candidates.count())
-        self.assertNotIn("acme-widget", item["title"] + item["body"])
+    def test_the_same_gate_failure_three_times_is_reported_and_no_candidate_is_written(self):
+        """#1275: three identical failures, then the nightly run: the repeat is reported and nothing is filed or listed."""
+        from lib import cmd_groom, failure_log
+        for _ in range(3):
+            failure_log.record("gate 4", "land interrupted", "r")
+        lines = []
+        with mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), \
+                mock.patch("lib.cmd_sweep.repos", return_value=[]), mock.patch("subprocess.run") as gh:
+            cmd_groom.check_intake([("R", Path("a.json"))], out=lines.append)
+            with mock.patch.object(maintain, "failure_gaps", return_value=[]):
+                self.assertEqual([], maintain.check_failure_gaps(True))
+        self.assertTrue(any("gate 4: land interrupted blocked 3 times" in line for line in lines))
+        gh.assert_not_called()
+        self.assertEqual([], sorted(p.name for p in self.home.iterdir() if "candidate" in p.name or "outbox" in p.name))
+        self.assertFalse((REPO_ROOT / "scripts" / "lib" / "candidates.py").exists())
+        self.assertFalse(hasattr(maintain, "file_failure_candidates"))
 
 
 class TestStateFolder(Base):

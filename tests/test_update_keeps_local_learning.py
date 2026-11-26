@@ -1,4 +1,4 @@
-"""Story #661: update keeps each device's skill overrides and lessons, and refuses a checkout it cannot pull into."""
+"""Story #661: update keeps each device's skill overrides and refuses a checkout it cannot pull into."""
 
 import os
 import shutil
@@ -10,7 +10,7 @@ from unittest import mock
 from _support import REPO_ROOT, git_env, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_fleet, cmd_install, lessons  # noqa: E402
+from lib import cmd_fleet, cmd_install  # noqa: E402
 
 ENV = {**git_env(), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com"}
@@ -73,12 +73,9 @@ class Checkout(unittest.TestCase):
         return code, calls, out
 
 
-class ScenarioOneKeepsLocalLearning(Checkout):
-    def test_shipped_files_change_while_the_override_and_lessons_stay(self):
+class ScenarioOneKeepsLocalOverrides(Checkout):
+    def test_shipped_files_change_while_the_override_stays(self):
         write(self.ohome / "skills", "shipped/SKILL.md", "local override")
-        lessons.add("a check missed", "the skill drifted", "check the override", repo=self.clone)
-        lesson_file = lessons.path(self.clone)
-        lesson_before = lesson_file.read_bytes()
         self.release("skills/shipped/SKILL.md", "shipped v2")
 
         code, calls, _ = self.update()
@@ -88,8 +85,6 @@ class ScenarioOneKeepsLocalLearning(Checkout):
         link = self.home / ".claude" / "skills" / "shipped"
         self.assertEqual(link.resolve(), (self.ohome / "skills" / "shipped").resolve())
         self.assertEqual((link / "SKILL.md").read_text(), "local override")
-        self.assertEqual(lesson_file.read_bytes(), lesson_before)
-        self.assertEqual(len(lessons.read(self.clone)), 1)
         self.assertEqual(git(self.clone, "status", "--porcelain"), "")
 
     def test_an_override_only_skill_is_linked_too(self):

@@ -175,13 +175,12 @@ class TestMainCheckout(Base):
         self.assertIn("no boards", found[0].text)
 
     def test_the_queue_check_closes_resolved_denials_on_fix_and_files_nothing(self):
-        with mock.patch("lib.denials.close_resolved") as close, mock.patch("lib.story_outbox.count", return_value=2), \
-                mock.patch("lib.story_outbox.flush") as flush:
+        with mock.patch("lib.denials.close_resolved") as close, mock.patch("subprocess.run") as gh:
             self.assertEqual([], maintain.check_queues(False))
             close.assert_not_called()
             self.assertEqual([], maintain.check_queues(True))
         close.assert_called_once_with()
-        flush.assert_not_called()
+        gh.assert_not_called()
 
     def test_the_queue_check_names_a_failure_and_does_not_raise(self):
         with mock.patch("lib.denials.close_resolved", side_effect=OSError("disk full")):

@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _support  # noqa: E402,F401  keeps this machine's olivercode.local.json out of the check
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from lib.health_checks import _check_voice_copies  # noqa: E402
 

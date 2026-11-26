@@ -1,4 +1,4 @@
-"""Intake check (#728) and the one first-run owner-queue line (#729)."""
+"""Intake check (#728) and the repeated-blocker report. Neither files a story (#1275)."""
 
 import contextlib
 import io
@@ -32,27 +32,20 @@ class TestIntake(unittest.TestCase):
         p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
         p.start()
         self.addCleanup(p.stop)
-        self.filed = []
 
     def run_check(self, issues):
-        return intake.check("Alpha", "o/r", 1, fetch=lambda slug: issues, file=lambda *a: self.filed.append(a))
+        return intake.check("Alpha", "o/r", fetch=lambda slug: issues)
 
-    def test_ten_template_less_issues_fail_and_file_one_story(self):
+    def test_ten_template_less_issues_fail_and_are_named_and_no_story_is_filed(self):
         issues = [{"number": n, "title": f"t{n}", "body": "just a line"} for n in range(1, 11)] + [{"number": 11, "title": "ok", "body": GOOD}]
         bad, line = self.run_check(issues)
         self.assertTrue(bad)
         self.assertIn("10 open issue(s) lack the story template", line)
-        self.assertEqual(1, len(self.filed))
-        self.assertEqual("Rewrite 10 issues to the story template", self.filed[0][1])
-        import check_story_format
-        self.assertEqual([], check_story_format.check_body(self.filed[0][2]))
+        self.assertIn("#1, #2", line)
+        self.assertFalse(hasattr(intake, "candidate"))
+        self.assertFalse(hasattr(intake, "BODY"))
 
-    def test_an_open_rewrite_story_files_no_second_one_and_a_few_issues_pass(self):
-        issues = [{"number": n, "title": f"t{n}", "body": "x"} for n in range(1, 8)]
-        issues.append({"number": 9, "title": "Rewrite 7 issues to the story template", "body": GOOD})
-        bad, line = self.run_check(issues)
-        self.assertTrue(bad)
-        self.assertEqual([], self.filed)
+    def test_a_few_issues_without_the_template_pass(self):
         bad, _ = self.run_check([{"number": 1, "title": "t", "body": "x"}, {"number": 2, "title": "ok", "body": GOOD}])
         self.assertFalse(bad)
 
@@ -64,48 +57,31 @@ class TestIntake(unittest.TestCase):
         self.assertIn("did not run", line)
 
 
-class TestPrevention(unittest.TestCase):
-    """Repeated blockers: 3 entries file one story, an open story gets a comment, 2 entries file nothing."""
+class TestRepeatedBlockers(unittest.TestCase):
+    """A blocker the failure log holds three times is reported, two are not, and nothing is filed, commented or remembered (#1275)."""
 
     def setUp(self):
         home = temp_dir(self)
         p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home), "OLIVERCODE_FAILURE_LOG": str(home / "failures.log")})
         p.start()
         self.addCleanup(p.stop)
-        self.filed, self.comments = [], []
+        self.home = home
 
-    def sweep(self, issues):
-        return intake.prevention("o/r", 7, fetch=lambda slug: issues, file=lambda *a: self.filed.append(a),
-                                 comment=lambda *a: self.comments.append(a))
-
-    def test_three_entries_file_one_story_and_two_file_nothing(self):
+    def test_three_entries_are_reported_and_two_are_not(self):
         from lib import failure_log
         for _ in range(2):
             failure_log.record("gate 4", "land interrupted", "r")
-        self.assertEqual([], self.sweep([]))
-        self.assertEqual([], self.filed)
+        self.assertEqual([], intake.repeated_blockers())
         failure_log.record("gate 4", "land interrupted", "r")
-        self.assertEqual(1, len(self.sweep([])))
-        self.assertEqual(1, len(self.filed))
-        self.assertIn("gate 4: land interrupted", self.filed[0][1])
-        self.assertIn("Occurrences:", self.filed[0][2])
-        import check_story_format
-        self.assertEqual([], check_story_format.check_body(self.filed[0][2]))
+        with mock.patch("subprocess.run") as gh:
+            lines = intake.repeated_blockers()
+        self.assertEqual(1, len(lines))
+        self.assertIn("gate 4: land interrupted blocked 3 times", lines[0])
+        gh.assert_not_called()
+        self.assertFalse((self.home / "blocker-seen.json").exists())
 
-    def test_an_open_story_gets_a_comment_and_no_second_story(self):
-        from lib import failure_log
-        for _ in range(3):
-            failure_log.record("gate 4", "land interrupted", "r")
-        issues = [{"number": 42, "title": intake.PREVENT + "gate 4: land interrupted", "body": GOOD}]
-        self.sweep(issues)
-        self.assertEqual([], self.filed)
-        self.assertEqual(1, len(self.comments))
-        self.assertEqual(42, self.comments[0][1])
-        failure_log.record("gate 4", "land interrupted", "r")
-        self.sweep(issues)
-        self.assertEqual(2, len(self.comments))
-        self.sweep(issues)
-        self.assertEqual(2, len(self.comments))
+    def test_a_refusal_from_a_guard_the_tree_no_longer_has_is_not_reported(self):
+        self.assertEqual([], intake.repeated_blockers({("gone_guard", "x"): ["t1", "t2", "t3"]}))
 
 
 if __name__ == "__main__":

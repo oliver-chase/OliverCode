@@ -69,17 +69,12 @@ GROUPS = (
         ("backlog-setup", "Set up or repair a repo's board"),
         ("board groom", "Fix drifted cards and fill in missing fields"),
         ("board sync", "Move closed stories to Complete and add open stories with no card"),
-        ("story", "Hold a story request until GitHub has room to file it"),
-        ("candidates", "Keep ideas for stories until the owner picks them"),
         ("gh-limit", "Show or lift the shared GitHub rate-limit hold"),
         ("gated", "Run a scheduled job's command only when a check finds work"),
     )),
     ("Owner and decisions", (
         ("owner", "Keep the steps only the owner can take"),
         ("decisions", "Keep the owner's decisions in their own words"),
-    )),
-    ("Learning", (
-        ("lesson", "Record a mistake and the rule that prevents it"),
     )),
     ("Fleet and policy", (
         ("discover", "Find the git repos on this machine and register them"),

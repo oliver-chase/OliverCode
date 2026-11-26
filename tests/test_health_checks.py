@@ -343,6 +343,9 @@ class SleepSettings(unittest.TestCase):
         self.assertEqual(result, (1, 0, 0))
         self.assertNotIn("[WARN]", out)
 
+    def test_display_sleep_alone_does_not_warn(self):
+        self.assertIsNone(health.sleep_warning(" sleep                0\n displaysleep         5\n"))
+
     def test_a_system_sleep_held_by_caffeinate_does_not_count(self):
         text = " sleep                1 (sleep prevented by caffeinate)\n displaysleep         0\n"
         self.assertIsNone(health.sleep_warning(text))

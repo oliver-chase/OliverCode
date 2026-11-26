@@ -14,7 +14,7 @@ from _support import REPO_ROOT, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "backlog" / "scripts"))
-from lib import cmd_dispatch, cmd_owner, failure_log, gh_budget, lessons, local_config, owner_decisions, story_outbox  # noqa: E402
+from lib import cmd_dispatch, cmd_owner, failure_log, gh_budget, local_config  # noqa: E402
 import log_action  # noqa: E402
 
 
@@ -43,22 +43,6 @@ class SharedState(unittest.TestCase):
         together(*[lambda i=i: cmd_dispatch._local_claim("o/r", i, 1000.0, write=f"agent-{i}") for i in range(8)])
         claims = json.loads((self.home / "dispatch-claims.json").read_text())
         self.assertEqual(8, len(claims))
-
-    def test_a_cover_and_an_add_keep_both(self):
-        lessons.add("first", "why", "rule")
-        first = lessons.read()[0]["id"]
-        together(lambda: lessons.cover(first, "story #1"), *[lambda i=i: lessons.add(f"what {i}", "why", f"rule {i}") for i in range(6)])
-        rows = lessons.read()
-        self.assertEqual(7, len(rows))
-        self.assertEqual("story #1", next(r for r in rows if r["id"] == first)["covered_by"])
-
-    def test_the_same_story_added_twice_queues_once(self):
-        together(*[lambda: story_outbox.add("o/r", "One story", "body") for _ in range(6)])
-        self.assertEqual(1, len(story_outbox.waiting()))
-
-    def test_owner_prompts_are_kept_private(self):
-        owner_decisions.record("do #5 now")
-        self.assertEqual(0o600, (self.home / owner_decisions.FILE).stat().st_mode & 0o777)
 
     def test_a_bad_budget_value_does_not_fail_the_import(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_WRITES_PER_HOUR": "lots"}):

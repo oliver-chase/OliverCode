@@ -1,4 +1,4 @@
-"""`olivercode board groom`: drifted and missing cards are fixed and an unchanged repo costs no board read (#660)."""
+"""`olivercode board groom`: drifted and missing cards are reported, nothing is written to GitHub, and an unchanged repo costs no board read (#660, #1275)."""
 
 import json
 import os
@@ -37,8 +37,8 @@ class TestGroom(unittest.TestCase):
             self.assertTrue(cmd_groom.groom_board("R", config, False, 1.0))
             self.assertTrue(cmd_groom.groom_board("R", config, False, 2.0))
             self.assertEqual(load.call_count, 1)
-            self.assertEqual(batch.call_count, 1)
-            self.assertEqual(sum(1 for c in note.call_args_list if "fixed 3 card(s)" in c.args[1]), 1)
+            batch.assert_not_called()
+            self.assertEqual(sum(1 for c in note.call_args_list if "3 card(s) have drifted" in c.args[1]), 1)
 
 
 class TestGroomNames(unittest.TestCase):
@@ -113,8 +113,24 @@ class TestGroomFields(unittest.TestCase):
         self.assertTrue(cmd_groom.stale(48, now=1e6, state={"a/b": {"ok": 1e6 - 1}}, slugs=["a/b", "c/d"]))
 
 
+class FakeGh:
+    """A gh that serves reads and records every write verb, so a test can prove groom wrote nothing (#1275)."""
+
+    WRITES = ("edit", "create", "close", "reopen", "label", "project-item-edit", "item-edit", "item-add", "comment", "-X", "PATCH", "POST")
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, args):
+        self.calls.append(list(args))
+        return ""
+
+    def writes(self):
+        return [c for c in self.calls if any(w in c for w in self.WRITES)]
+
+
 class TestGroomImportedPriorities(unittest.TestCase):
-    """#743: a priority copied in from a file is flagged until one rerank story judges it against the code."""
+    """#743, #1275: a priority copied in from a file is reported, and groom labels nothing and files no rerank story."""
 
     def fixture(self):
         body = "**As the owner**, I want a thing, so that x.\n\nDetail: Source: gap-analysis-2.md (S{n}).\nPriority: P1. Size: S. Work type: Story."
@@ -122,58 +138,63 @@ class TestGroomImportedPriorities(unittest.TestCase):
         stories[11] = {"number": 11, "title": "Typed by hand", "body": "Priority: P2. Size: S.", "labels": []}
         return stories
 
-    def run_groom(self, stories, mine):
-        calls, filed = [], []
-        line = cmd_groom.review_imported("o/r", stories, mine, 722, run=lambda a: calls.append(a) or "",
-                                         file=lambda *a: filed.append(a))
-        return line, calls, filed
+    def test_imported_priorities_are_listed_and_a_reviewed_one_is_left_out(self):
+        stories = self.fixture()
+        self.assertEqual(list(range(1, 11)), cmd_groom.imported(stories))
+        stories[3]["labels"] = [cmd_groom.REVIEWED]
+        self.assertNotIn(3, cmd_groom.imported(stories))
 
-    def test_ten_imported_issues_are_flagged_and_one_rerank_story_is_filed(self):
-        import check_story_format
-        stories, mine = self.fixture(), {}
-        line, calls, filed = self.run_groom(stories, mine)
-        flagged = [int(c[2]) for c in calls if c[:2] == ["issue", "edit"] and cmd_groom.FLAG in c]
-        self.assertEqual(flagged, list(range(1, 11)))
-        self.assertEqual(len(filed), 1)
-        self.assertEqual(filed[0][1], "Rerank 10 imported priorities against the code")
-        self.assertEqual(check_story_format.check_body(filed[0][2]), [])
-        self.assertIn("#10", filed[0][2])
-        self.assertIn("one rerank candidate added for 10", line)
-        _, calls, filed = self.run_groom(stories, mine)
-        self.assertEqual((calls, filed), ([], []))
+    def test_the_label_and_rerank_writers_are_gone(self):
+        self.assertFalse(hasattr(cmd_groom, "review_imported"))
+        self.assertFalse(hasattr(cmd_groom, "RERANK_BODY"))
 
-    def test_the_flags_clear_after_the_rerank_closes(self):
-        stories, mine = self.fixture(), {}
-        self.run_groom(stories, mine)
-        stories[12] = {"number": 12, "title": "Rerank 10 imported priorities against the code", "body": "", "labels": []}
-        _, calls, filed = self.run_groom(stories, mine)
-        self.assertEqual((calls, filed), ([], []))
-        del stories[12]
-        line, calls, filed = self.run_groom(stories, mine)
-        cleared = [int(c[2]) for c in calls if c[:2] == ["issue", "edit"] and cmd_groom.REVIEWED in c]
-        self.assertEqual(cleared, list(range(1, 11)))
-        self.assertTrue(all(cmd_groom.REVIEWED in s["labels"] and cmd_groom.FLAG not in s["labels"] for n, s in stories.items() if n <= 10))
-        self.assertEqual(filed, [])
-        self.assertEqual(mine, {})
-        self.assertEqual(cmd_groom.imported(stories), [])
 
-    def test_a_rerank_still_waiting_in_the_outbox_clears_nothing(self):
-        stories, mine = self.fixture(), {}
-        self.run_groom(stories, mine)
-        _, calls, filed = self.run_groom(stories, mine)
-        self.assertEqual((calls, filed), ([], []))
-        self.assertEqual(mine["rerank"]["numbers"], list(range(1, 11)))
+class TestGroomWritesNothing(unittest.TestCase):
+    """#1275: groom reports what it found and changes no issue body, label, link, status, field or state, and creates no issue or label."""
+
+    def groom(self, gh, stories, cards, issues):
+        home, repo = temp_dir(self), temp_dir(self)
+        (repo / "docs").mkdir()
+        config = repo / "docs" / "backlog-config.json"
+        config.write_text(json.dumps({"repoOwner": "o", "repoName": "r"}))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), \
+                mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), mock.patch.object(cmd_groom, "fingerprint", return_value="fp"), \
+                mock.patch("check_board_hygiene.load_items", return_value=cards), mock.patch("board_rest.repo_issues", return_value=issues), \
+                mock.patch.object(cmd_groom, "open_stories", return_value=stories), mock.patch("batch_project.main") as batch, \
+                mock.patch("subprocess.run") as sub, mock.patch.object(cmd_groom.cmd_owner, "note") as note:
+            ok = cmd_groom.groom_board("R", config, True, 1.0, run=gh)
+        return ok, batch, sub, note
+
+    def test_open_stories_on_the_board_are_reported_and_nothing_is_changed(self):
+        imported = "Source: gap.md.\nPriority: P1. Size: S."
+        stories = {1: {"number": 1, "title": "Add a thing", "body": "x", "labels": []}, 2: {"number": 2, "title": "Imported", "body": imported, "labels": []},
+                   3: {"number": 3, "title": "Closed upstream", "body": "Priority: P2. Size: S.", "labels": []}}
+        cards = [{"content": {"number": 1}, "status": "Backlog"}, {"content": {"number": 3}, "status": "Ready"}]
+        gh = FakeGh()
+        ok, batch, sub, note = self.groom(gh, stories, cards, [{"number": 1, "state": "OPEN"}, {"number": 2, "state": "OPEN"}, {"number": 3, "state": "CLOSED"}])
+        self.assertTrue(ok)
+        batch.assert_not_called()
+        self.assertEqual([], [c for c in sub.call_args_list if c.args and c.args[0][:1] == ["gh"]])
+        self.assertEqual([], gh.writes())
+        said = " ".join(c.args[1] for c in note.call_args_list)
+        self.assertIn("card(s) have drifted, are missing or lack Priority, Size or Ready", said)
+        self.assertIn("1 imported priorities have not been judged", said)
+
+    def test_no_function_in_groom_calls_a_gh_write_or_the_board_batch_writer(self):
+        text = (REPO_ROOT / "scripts" / "lib" / "cmd_groom.py").read_text(encoding="utf-8")
+        for needle in ("batch_project", '"issue", "edit"', '"label", "create"', '"issue", "create"', "intake.candidate", "--add-label"):
+            self.assertNotIn(needle, text)
 
 
 class TestGroomRunsTheSweepsChecks(unittest.TestCase):
-    def test_all_runs_the_intake_and_repeated_blocker_checks_after_the_boards(self):
+    def test_all_runs_the_intake_and_repeated_blocker_reports_after_the_boards(self):
         config = Path("/x/r/docs/backlog-config.json")
         with mock.patch.object(cmd_groom, "groom_board", return_value=True), mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), \
                 mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), \
                 mock.patch.object(cmd_groom, "boards", return_value=[("R", config)]), mock.patch("lib.cmd_sweep.repos", return_value=[("R", "o/r", 3)]), \
-                mock.patch("lib.intake.prevention", return_value=[]) as prevention, mock.patch("lib.intake.run", return_value=1) as intake_run:
+                mock.patch("lib.intake.repeated_blockers", return_value=["gate 4: x blocked 3 times, latest t"]) as repeated, mock.patch("lib.intake.run", return_value=1) as intake_run:
             self.assertEqual(1, cmd_groom.command_groom(["--all"]))
-        prevention.assert_called_once_with("o/r", 3)
+        repeated.assert_called_once_with()
         intake_run.assert_called_once_with([("R", "o/r", 3)])
 
     def test_a_held_budget_skips_the_intake_check_and_a_single_config_never_runs_it(self):

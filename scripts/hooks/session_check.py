@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -120,7 +122,57 @@ def checkout_notes() -> list[str]:
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
         print(f"session_check: checkout fast-forward failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         return []
-    return [ahead] if ahead else []
+    return ([ahead] if ahead else []) + update_notes()
+
+
+STALE_FETCH_SECONDS = 24 * 60 * 60
+
+
+def _git(root: Path, *args: str) -> str | None:
+    """Stdout of a local git call, or None when it fails or takes over 3 seconds."""
+    try:
+        done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def update_notes(root: Path | None = None) -> list[str]:
+    """One line when this checkout trails its upstream branch by its local refs (#1285). It never waits on the network:
+    a fetch older than a day starts one detached `git fetch`, tried at most once a day, and the next session sees its result."""
+    if headless():
+        return []
+    try:
+        root = root or Path(__file__).resolve().parent.parent.parent
+        behind = _git(root, "rev-list", "--count", "HEAD..@{upstream}")  # fails with no upstream or a detached HEAD
+        if behind is None or _git(root, "status", "--porcelain", "--untracked-files=no") != "":
+            return []
+        git_dir = _git(root, "rev-parse", "--git-dir")
+        if git_dir:
+            _fetch_if_stale(root, root / git_dir / "FETCH_HEAD")
+        count = int(behind)
+    except Exception as exc:  # noqa: BLE001 -- never blocks a session
+        print(f"session_check: update check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
+    return [f"{count} OliverCode update{' is' if count == 1 else 's are'} available. Run `olivercode update`."] if count > 0 else []
+
+
+def _fetch_if_stale(root: Path, fetch_head: Path) -> None:
+    """Start one background fetch when the last fetch and the last attempt are both over a day old."""
+    import failure_log
+    stamp = failure_log.home() / "update-fetch-attempt"
+    now = time.time()
+    for path in (fetch_head, stamp):
+        if path.exists() and now - path.stat().st_mtime < STALE_FETCH_SECONDS:
+            return
+    stamp.touch()
+    start_fetch(root)
+
+
+def start_fetch(root: Path) -> None:
+    """Detach one `git fetch` that outlives the hook; the hook never waits on it."""
+    subprocess.Popen(["git", "-C", str(root), "fetch", "--quiet"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 def gh_notes() -> list[str]:
@@ -143,8 +195,18 @@ def main() -> int:
     found = notes(cwd, Path.home() / ".claude", str(data.get("session_id") or ""))
     parts = (["OliverCode session check: " + " ".join(found)] if found else []) + run_notes(cwd) + digest_notes(cwd)
     if parts:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}))
+        print(json.dumps(payload(parts, found)))
     return 0
+
+
+def payload(parts: list[str], found: list[str]) -> dict:
+    """The hook's output: every note goes to the session as context, and the update line also goes to the user as a system message,
+    since context alone reaches only the model (#1285)."""
+    out: dict = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}
+    update = next((n for n in found if "`olivercode update`" in n), "")
+    if update:
+        out["systemMessage"] = update
+    return out
 
 
 if __name__ == "__main__":

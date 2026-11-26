@@ -100,7 +100,7 @@ class TestInstallKeepsTheUsersOwnRulesFiles(unittest.TestCase):
 
 
 class TestInstallCommand(unittest.TestCase):
-    def run_install(self, owner, fleet_step=None):
+    def run_install(self, owner):
         home = temp_dir(self, "oc-automode-home-")
         claude = home / ".claude"
         out = io.StringIO()
@@ -108,16 +108,10 @@ class TestInstallCommand(unittest.TestCase):
                 mock.patch.object(cmd_install, "owner_terminal", return_value=owner), \
                 mock.patch.object(cmd_install, "_schedule_replay"), \
                 mock.patch.object(cmd_install, "_queue_shim"), \
-                mock.patch.object(cmd_install, "fleet_step", fleet_step or mock.Mock(return_value="")), mock.patch.object(cmd_install, "board_step"), \
-                mock.patch.object(cmd_install, "design_step"), \
+                mock.patch.object(cmd_install, "board_step"), \
                 contextlib.redirect_stdout(out):
             cmd_install.command_install(REPO_ROOT)
         return claude / "settings.json", out.getvalue()
-
-    def test_install_hands_the_fleet_step_the_checkout(self):
-        step = mock.Mock(return_value="")
-        self.run_install(False, step)
-        self.assertEqual(REPO_ROOT, step.call_args.args[0])
 
     def test_owner_terminal_writes_rules(self):
         path, out = self.run_install(True)

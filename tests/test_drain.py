@@ -252,7 +252,7 @@ class DrainCase(unittest.TestCase):
         self.assertIn("nothing was pushed", io.comments[0][1])
 
     def test_a_policy_stopped_builder_is_not_restarted_and_the_owner_hears_once(self):
-        stop = {"rule": "triggers.gateFailures", "gate": "Owner identifiers", "finding": "scripts/lib/x.py:4 owner identifier", "file": "scripts/lib/x.py"}
+        stop = {"rule": "triggers.deleteFiles", "gate": "Owner identifiers", "finding": "scripts/lib/x.py:4 owner identifier", "file": "scripts/lib/x.py"}
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "commit refused"}]}, stops={1: stop})
         _, out, st = self.run_drain(io)
         self.assertEqual(io.started, [1])
@@ -269,7 +269,7 @@ class DrainCase(unittest.TestCase):
         home = temp_dir(self)
         log = home / "failures.log"
         rows = [f"2026-11-23T16:{m:02d}:{s:02d}Z\tOliverCode-1012\tOwner identifiers\tscripts/lib/owner.py:9 owner identifier found\n" for m, s in ((12, 0), (13, 0), (14, 0), (15, 0), (16, 0))]
-        rows += [f"2026-11-23T16:{m:02d}:00Z\tOliverCode-1012\tpolicy\task triggers.gateFailures\n" for m in range(19, 27)]
+        rows += [f"2026-11-23T16:{m:02d}:00Z\tOliverCode-1012\tpolicy\task triggers.deleteFiles\n" for m in range(19, 27)]
         log.write_text("".join(rows), encoding="utf-8")
 
         class Replay(FakeIo):
@@ -293,7 +293,7 @@ class DrainCase(unittest.TestCase):
 
     def test_the_owner_line_is_written_once_per_story_and_names_the_gate(self):
         home = temp_dir(self)
-        stop = {"rule": "triggers.gateFailures", "gate": "Owner identifiers", "finding": "", "file": ""}
+        stop = {"rule": "triggers.deleteFiles", "gate": "Owner identifiers", "finding": "", "file": ""}
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             io = cmd_drain.Io(Path("/repo"), "o/r")
             io.queue_owner(1012, stop)
@@ -389,6 +389,15 @@ class DrainCase(unittest.TestCase):
     def test_command_refuses_bad_arguments(self):
         self.assertEqual(quiet(cmd_drain.command_drain, [])[0], 2)
         self.assertEqual(quiet(cmd_drain.command_drain, ["/nonexistent-repo-xyz"])[0], 1)
+
+    def test_a_drain_of_the_engine_repository_refuses_and_a_scratch_copy_does_not(self):
+        """#1278: the checkout the launcher runs from is never built by the runner; OLIVERCODE_ALLOW_SELF=1 opts in."""
+        code, out = quiet(cmd_drain.command_drain, [str(cmd_drain.OC_ROOT)])
+        self.assertEqual(1, code)
+        self.assertIn("engine changes go through the staging branch", out)
+        self.assertFalse(cmd_drain.cmd_dispatch.is_engine(temp_dir(self)))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_ALLOW_SELF": "1"}):
+            self.assertFalse(cmd_drain.cmd_dispatch.is_engine(cmd_drain.OC_ROOT))
 
 
 class TestDrainClaims(unittest.TestCase):

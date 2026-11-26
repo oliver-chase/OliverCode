@@ -65,7 +65,7 @@ Start from `core/templates/project/CLAUDE.md`, keep only what is specific to the
 
 ## Step 5: register your fleet
 
-`install` makes your fleet repo `olivercode-fleet` beside the OliverCode checkout, a local git repo from the template, and names its `repo-profiles.json` as `fleetRegistry`. When your GitHub account already holds `olivercode-fleet`, install offers to clone it into that folder. Every install and update also merges any other fleet copy on this machine into that folder and removes the copy, keeping the folder's own file wherever both have one. It offers a private GitHub copy once. Run `scripts/olivercode init-fleet` to push that copy when you decline it at install, then run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads, with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none.
+`install` makes no fleet repo and asks nothing. Run `scripts/olivercode init-fleet` to scaffold your private `olivercode-fleet` and push it, or clone the one your GitHub account already holds. Then run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads, with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none.
 
 Your fleet's own stories, registry, owner-rule carriers and owner queue live in that private fleet repo and never in this one. File a story about one of your repos there, and keep this repo's issues to the engine.
 
@@ -114,7 +114,7 @@ Confirm anything you moved exists at its new home, tell the human what you could
 
 ## Keep the machine awake
 
-Sessions stop when the Mac sleeps. `olivercode health` prints one warning when `pmset -g` shows a display or system sleep timer above zero, and `olivercode conform` reports the same line as the `sleep-setting` row. To clear it, open System Settings, then Battery or Energy, and turn off sleep on power adapter and display sleep, or run `caffeinate -dimsu` in a terminal before leaving.
+Sessions stop when the Mac sleeps. `olivercode health` prints one warning when `pmset -g` shows a system sleep timer above zero, and `olivercode conform` reports the same line as the `sleep-setting` row. To clear it, open System Settings, then Battery or Energy, and turn off sleep on power adapter, or run `caffeinate -dimsu` in a terminal before leaving.
 
 ## Staying current
 
@@ -128,7 +128,7 @@ git fetch upstream && git merge upstream/main        # resolve conflicts deliber
 bash scripts/qa/rehearse-install.sh && scripts/olivercode sync-hooks
 ```
 
-Your own state lives outside the tracked files, so an update never touches it. Settings such as the audit mode sit in the git-ignored `olivercode.local.json`, and a key you never set takes the default a release ships. Lessons and other state sit under `~/.olivercode`. Your own repo and Project go in `docs/backlog-config.local.json` and your fleet in `shared/repo-profiles.local.json`, both git-ignored, and each overrides the tracked example. When a release moves a state file, install moves your copy once and keeps a backup in `~/.olivercode/backups`.
+Your own state lives outside the tracked files, so an update never touches it. Settings such as the audit mode sit in the git-ignored `olivercode.local.json`, and a key you never set takes the default a release ships. Other state sits under `~/.olivercode`. Your own repo and Project go in `docs/backlog-config.local.json` and your fleet in `shared/repo-profiles.local.json`, both git-ignored, and each overrides the tracked example. When a release moves a state file, install moves your copy once and keeps a backup in `~/.olivercode/backups`.
 
 ### Installed checkout stays level with origin
 
@@ -158,7 +158,7 @@ scripts/olivercode health     --root /path/to/where/your/repos/live
 
 Machine paths go in `olivercode.local.json` at the OliverCode root, which is gitignored. Copy `olivercode.local.example.json` and fill in:
 
-- `fleetRegistry`: the path of the fleet registry file. `install` sets it to `olivercode-fleet/repo-profiles.json` beside the checkout, and `~/.olivercode/fleet/repo-profiles.json` is the default when unset. With no registry at that path or under `privateRepos`, the fleet commands say no fleet is set and name `olivercode init-fleet`
+- `fleetRegistry`: the path of the fleet registry file. `init-fleet` names the registry it makes, and `~/.olivercode/fleet/repo-profiles.json` is the default when unset. With no registry at that path or under `privateRepos`, the fleet commands say no fleet is set and name `olivercode init-fleet`
 - `privateRepos`: private repos that get the private hook variant and a hook check
 - `skillsRoot`: the folder for personal skills, which the skill checks read
 - `repoRoot`: the one folder that holds every repo, `~/Developer/Repos` in the example. Any folder outside the synced ones works. Worktrees go in `_worktrees` and backups in `_archive` under it. It must sit outside every synced folder
@@ -201,8 +201,8 @@ In a repo with commit gates, a new interactive session refreshes `status-digest.
 - `dispatch N` checks the claim and the machine's builder limit, posts the claim and builds the story in one fresh headless session, and the runner validates, lands and closes it through the same code `drain` uses. `drain REPO` works a repo's open stories in priority order the same way, with as many builders as the machine-wide limit allows less what other repos' runs are building, and only stories whose files areas do not overlap run together. `drain REPO --parallel N` holds exactly N for that run. Validation still runs one at a time through its queue, and each landing rebases onto the commits that landed before it
 - `land WORKTREE STORY` rebases the worktree on origin/main, runs `scripts/validate.sh` up to twice unless the runner already recorded a pass for the same tree (the log names the record it used, #910), pushes `HEAD:main` (retrying while main moves, see "A land resumes and retries"), fast-forwards a clean main checkout and deletes the worktree and its branches. Work that does not land stays in its worktree with a handover file at `~/.olivercode/land/handover-REPO-N.md`
 - `limits check` prints the tracked line count against the one ceiling number in `docs/LIMITS.json` (tests are not counted) and exits 0 always. A count over the ceiling prints a warning and blocks nothing, and `validate.sh` and `land` never edit the file. Edit the number by hand to accept growth
-- `board` (`groom` and `sync`), `fleet-sync`, `maintain` and `gh-limit` run without a model call, and each takes `--schedule` where `--help` shows it. `gh-limit clear` lifts the shared GitHub rate-limit hold
-- `owner`, `decisions`, `lesson` and `story outbox` keep the owner's decisions, corrections and queued story requests in `~/.olivercode/`
+- `board` (`groom` reports and `sync`), `fleet-sync`, `maintain` and `gh-limit` run without a model call, and each takes `--schedule` where `--help` shows it. `gh-limit clear` lifts the shared GitHub rate-limit hold
+- `owner` and `decisions` keep the owner's steps and decisions in `~/.olivercode/`
 - `install` links `docs/VOICE.md` and `docs/DESIGN.md` into `~/.claude`, links each skill, merges the hook entries listed in `docs/RULES.md` ("Execution") into `~/.claude/settings.json` and sets `core.hooksPath` to `.githooks` here when unset. Any other file at a target path moves to `<name>.pre-olivercode` and is printed. `uninstall` reverses exactly that
 - `validated record|check SHA` keeps the passing full validations that the pre-push hook requires before a push to main
 - `queue show` lists the validation runs holding one of the slots that every `scripts/validate.sh` waits for. The slot count is `OLIVERCODE_VALIDATE_SLOTS`, which defaults to an eighth of this machine's cores (at least 1), so an 8-core laptop runs one validation at a time and a 16-core desktop runs two. A holder keeps its slot while its process lives and for up to 4 hours, and a run waits up to an hour before it goes ahead with a message that names why. A slot whose holder died, whose pid now belongs to another process or whose file is damaged is reclaimed with a line that names the repair The pretool guard routes `npm test`, `pytest` and the other commands in `QUEUED_COMMANDS` (`scripts/hooks/queue_guard.py`) through `queue run`

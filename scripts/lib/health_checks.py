@@ -360,9 +360,15 @@ def suite_record_path() -> Path:
     return failure_log.home() / "clean-clone-suite.json"
 
 
-def _check_clean_clone_suite(record: Path | None = None, now: float | None = None) -> tuple[int, int, int]:
+def _head_commit(root: Path) -> str:
+    done = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True)
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def _check_clean_clone_suite(record: Path | None = None, now: float | None = None, head: str | None = None) -> tuple[int, int, int]:
     """The clean-clone suite must have passed on a commit within two days (#977). A failed record names its failing modules, and a
-    stale one means the daily job has not run. A machine with no record yet is skipped, since the job has not run there."""
+    stale one means the daily job has not run. A machine with no record yet is skipped, since the job has not run there. A record
+    for a commit other than this checkout's says nothing about the installed version, so it is named and not counted (#1283)."""
     print("\nClean-clone suite:")
     path = record or suite_record_path()
     if not path.is_file():
@@ -374,6 +380,10 @@ def _check_clean_clone_suite(record: Path | None = None, now: float | None = Non
         print(f"  [FAIL] {path} does not parse; run `olivercode maintain --fix` to rewrite it")
         return 0, 1, 0
     commit = data.get("commit") or "unknown"
+    here = _head_commit(OC_ROOT) if head is None else head
+    if here and commit != "unknown" and commit != here:
+        print(f"  [INFO] the saved clean-clone result is for commit {commit[:8]} and this checkout is at {here[:8]}, so it is not counted; the daily job records a new one")
+        return 0, 0, 1
     if data.get("exit"):
         print(f"  [FAIL] the clean-clone suite failed on commit {commit}: {', '.join(data.get('failed') or ['no module was named'])}")
         return 0, 1, 0
@@ -523,27 +533,21 @@ def gh_ready() -> str:
     return ""
 
 
-SLEEP_FIX = ("In System Settings, open Battery or Energy and turn off sleep on power adapter and display sleep (Never), "
+SLEEP_FIX = ("In System Settings, open Battery or Energy and turn off sleep on power adapter, "
              "or run `caffeinate -dimsu` in a terminal before leaving")
 
 
 def sleep_warning(pmset_text: str) -> str | None:
     """The one plain line naming the fix when `pmset -g` shows a sleep that would stop a session, else None.
 
-    Display sleep and system sleep both count when their timer is above 0 minutes. A system sleep that
+    Only system sleep counts, when its timer is above 0 minutes: a dark display stops no process. A system sleep that
     powerd reports as prevented by caffeinate holds the machine awake, so it does not count.
     """
-    stops = []
     for line in pmset_text.splitlines():
         parts = line.split()
-        if len(parts) < 2 or parts[0] not in ("sleep", "displaysleep") or not parts[1].isdigit() or int(parts[1]) == 0:
-            continue
-        if parts[0] == "sleep" and "caffeinate" in line:
-            continue
-        stops.append("display sleep" if parts[0] == "displaysleep" else "system sleep")
-    if not stops:
-        return None
-    return f"This Mac would stop work on {' and '.join(stops)}. {SLEEP_FIX}"
+        if len(parts) >= 2 and parts[0] == "sleep" and parts[1].isdigit() and int(parts[1]) > 0 and "caffeinate" not in line:
+            return f"This Mac would stop work on system sleep. {SLEEP_FIX}"
+    return None
 
 
 def _pmset_text() -> str:

@@ -10,7 +10,10 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-import log_action as la
+# A machine's global git settings, such as a global core.hooksPath, must not reach the temp repos these tests commit in.
+os.environ.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
+
+import log_action as la  # noqa: E402
 
 ARGS = ["--repo", "o/r", "--story", "53", "--agent", "builder-1", "--role", "builder",
         "--commit", "abc1234", "--files", "4", "--result", "tests pass"]

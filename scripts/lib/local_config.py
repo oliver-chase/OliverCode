@@ -60,13 +60,6 @@ def private_repos() -> dict[str, Path]:
 
 
 DEFAULT_FLEET_REGISTRY = "~/.olivercode/fleet/repo-profiles.json"
-FLEET_NAME = "olivercode-fleet"  # the fleet repo's folder beside the checkout and its name on GitHub (#1057)
-
-
-def fleet_home(oc_root: Path = OC_ROOT) -> Path:
-    """Where install keeps the fleet repo: olivercode-fleet beside the OliverCode checkout, the same name init-fleet gives the GitHub copy (#1057).
-    OLIVERCODE_FLEET_DIR names another folder, which the test harness uses so no test writes beside this checkout."""
-    return Path(os.environ["OLIVERCODE_FLEET_DIR"]) if "OLIVERCODE_FLEET_DIR" in os.environ else Path(oc_root).parent / FLEET_NAME
 
 
 def fleet_registry_path() -> Path:

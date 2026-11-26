@@ -11,7 +11,10 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-import complete_story as cs
+# A machine's global git settings, such as a global core.hooksPath, must not reach the temp repos these tests commit in.
+os.environ.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
+
+import complete_story as cs  # noqa: E402
 
 FIX = Path(__file__).parent / "fixtures"
 BODY = str(FIX / "story-scenarios.body")
