@@ -88,7 +88,8 @@ class FakeIo:
         self.closed.append(n)
         self.moved.append(n)
         return True, ""
-    def release(self, n): self.released.append(n)\n    def clear_cancel(self, n): self.cleared = getattr(self, "cleared", []) + [n]
+    def release(self, n): self.released.append(n)
+    def clear_cancel(self, n): self.cleared = getattr(self, "cleared", []) + [n]
     def ready(self, n): self.readied.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
     def backlog(self, n): self.parked = getattr(self, "parked", []) + [n]
@@ -560,8 +561,10 @@ class DrainCase(unittest.TestCase):
 
     def test_pause_prevents_claiming_until_resumed(self):
         io = FakeIo([issue(1)])
-        pauses = iter((True, False))
-        with mock.patch.object(cmd_drain.run_lock, "is_paused", side_effect=lambda slug: next(pauses)), \
+        pause_checks = [True, False]
+        def paused(slug):
+            return pause_checks.pop(0) if pause_checks else False
+        with mock.patch.object(cmd_drain.run_lock, "is_paused", side_effect=paused), \
                 mock.patch.object(cmd_drain.run_lock, "set_paused"):
             code, out, st = self.run_drain(io)
         self.assertEqual(0, code)
