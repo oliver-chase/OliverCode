@@ -595,7 +595,6 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         tokens += out.get("tokens", 0)
         if out.get("cancelled"):
             handoff = budget_handoff(worktree, out)
-            io.clear_cancel(n)
             io.backlog(n)
             state.setdefault("cancelled", []).append(n)
             io.comment(n, f"Cancelled by the owner before landing. The worktree and branch are kept for a handoff; nothing was pushed.\n- Next: review the handoff and return the story to Ready when you want to resume.\n{handoff}")
