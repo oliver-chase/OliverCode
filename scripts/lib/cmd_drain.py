@@ -259,6 +259,20 @@ class Io:
             return True, ""
         return False, (done.stdout + done.stderr).strip()[-500:]
 
+    def staged(self) -> bool:
+        """True when this repo is OliverCode's own and lands on the owner's engineBranch, where complete_story.py refuses a close by design (#1297)."""
+        return bool(agent_loop.setting("engineBranch")) and agent_loop.is_engine_repo(self.repo)
+
+    def park_in_qa(self, n: int) -> None:
+        """An engine story that landed on the engine branch waits in QA with its issue open: a comment names the commit, the card moves, and the run log says landed (#1297)."""
+        branch = self.branch()
+        log = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--format=%H%x09%s"], capture_output=True, text=True)
+        sha = next((line.split("\t")[0] for line in log.stdout.splitlines() if f"(#{n})" in line), "")
+        self.comment(n, f"Landed on {branch} in commit {sha[:12] or 'unknown'}. The story stays open in QA until the owner promotes it.")
+        cfg = backlog_config(self.repo)
+        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "QA"}}]}]))
+        agent_loop.log_stage(f"story-{n}", self.repo.name, "landed")
+
     def stopped(self, n: int, reason: str) -> None:
         """Append the stopped row that says why a story left the status line (#1291)."""
         agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=reason)
@@ -320,6 +334,10 @@ class CloseRefused(RuntimeError):
     """complete_story.py refused the close of a landed story. The story stays open with the gate's message on it (#912)."""
 
 
+class Parked(RuntimeError):
+    """An engine story landed on the engine branch and waits in QA, so nothing more is done for it (#1297)."""
+
+
 def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
     """The sequence after a passing builder: land the worktree's new commits, or accept an earlier landing when the worktree has none, then close
     through complete_story.py with no model call. New commits land first, so an older commit on main that names the story never stands in for them (#1011).
@@ -334,12 +352,21 @@ def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
         why = "already on the default branch"
     else:
         return False, "The builder finished with no commit on the branch."
+    finish(io, worktree, n, why)
+    return True, why
+
+
+def finish(io, worktree: Path, n: int, why: str) -> None:
+    """Close a landed story through complete_story.py. An engine story on the engine branch parks in QA instead and raises Parked (#1297).
+    A refused close comments the gate's message, logs its one stopped row and raises CloseRefused (#912, #1291)."""
+    if io.staged():
+        io.park_in_qa(n)
+        raise Parked(n)
     closed, reason = io.close_by_script(worktree, n, why)
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
         io.stopped(n, reason)  # the refusal is the reason status shows (#1291)
         raise CloseRefused(reason)
-    return True, why
 
 
 def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
@@ -350,7 +377,7 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if not closed:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
         return closed, used
-    except CloseRefused:  # a landed story whose close the gate refused stays where it is, with the gate's message on it (#1011)
+    except (CloseRefused, Parked):  # a refused close leaves the story with the gate's message and its one stopped row (#1011); a parked one waits in QA (#1297)
         return False, 0
     finally:
         io.release(n)
@@ -395,11 +422,7 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         io.comment(n, f"Not built: commit {lead[0][:12]} ({lead[1]}) on the default branch changed this story's files, so its work most likely landed under that story. The owner decides whether this story closes.")
         return False, 0
     if not io.pending(n) and io.landed(io.repo, n):  # its commit is on the default branch and no unlanded work waits in its worktree, so it closes through the script and no builder starts (#1011)
-        closed, reason = io.close_by_script(io.repo, n, "already on the default branch")
-        if not closed:
-            io.comment(n, f"Close refused by complete_story.py: {reason}")
-            io.stopped(n, reason)  # the refusal is the reason status shows (#1291)
-            raise CloseRefused(reason)
+        finish(io, io.repo, n, "already on the default branch")
         return True, 0
     if io.validation() is None:  # no builder starts in a repo that nothing can validate (#1012)
         io.comment(n, f"Drain blocked: {agent_loop.NO_VALIDATION}")
@@ -423,8 +446,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if out["done"]:
             try:
                 closed, note = land_and_close(io, worktree, n)
-            except CloseRefused:
-                return False, tokens
+            except (CloseRefused, Parked):  # work_story ends the story and logs no second row (#1297), so the tokens are counted here
+                state["tokens"] += tokens
+                raise
             if closed:
                 return True, tokens
             if "push-failed" in note:  # a refused push is not the builder's to fix, so no session is restarted for it (#1296)

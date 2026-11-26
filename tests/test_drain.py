@@ -37,6 +37,7 @@ class FakeIo:
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
 
     def landed_lead(self, i): return self.leads.get(i["number"])
+    def staged(self): return False
     def stopped(self, n, reason): self.stops_logged = getattr(self, "stops_logged", []) + [(n, reason)]
 
     def blockers(self, i):
@@ -815,18 +816,27 @@ class CloseByScript(unittest.TestCase):
     def test_a_refused_close_leaves_the_story_open_with_one_comment_naming_the_gate(self):
         io = FakeIo([issue(1)])
         io.refuse_close = "complete_story: #1 not completed: the evidence holds no run output."
-        closed, _ = cmd_drain.work_story(io, issue(1), {"sessions": 0, "restarts": {}})
+        closed, _ = cmd_drain.work_story(io, issue(1), {"sessions": 0, "restarts": {}, "tokens": 0})
         self.assertFalse(closed)
         self.assertEqual([], io.closed)
-        self.assertEqual([1], io.kept)
         comments = [body for n, body in io.comments if n == 1]
         self.assertEqual(1, len(comments))
         self.assertIn("no run output", comments[0])
-        self.assertEqual([(1, io.refuse_close)], io.stops_logged)  # #1291: the refusal is the stopped row's reason
+        self.assertEqual([(1, io.refuse_close)], io.stops_logged)  # #1291: the refusal is the stopped row's reason, and #1297: only one row
+        self.assertEqual([], io.kept)  # keep_open would log a second stopped row
+
+    def test_an_engine_story_on_staging_moves_to_qa_and_stays_open(self):
+        io = FakeIo([issue(1)])
+        io.staged = lambda: True
+        io.parked = []
+        io.park_in_qa = io.parked.append
+        closed, _ = cmd_drain.work_story(io, issue(1), {"sessions": 0, "restarts": {}, "tokens": 0})
+        self.assertFalse(closed)
+        self.assertEqual(([1], [], [], [1]), (io.parked, io.closed, io.kept, io.released))
 
     def test_a_landed_story_closes_by_script_without_a_second_session(self):
         io = FakeIo([issue(1)])
-        closed, _ = cmd_drain.work_story(io, issue(1), {"sessions": 0, "restarts": {}})
+        closed, _ = cmd_drain.work_story(io, issue(1), {"sessions": 0, "restarts": {}, "tokens": 0})
         self.assertTrue(closed)
         self.assertEqual([1], io.closed)
         self.assertEqual(1, io.started.count(1))
