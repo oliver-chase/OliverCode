@@ -564,6 +564,13 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         return False, 0
     attempt, story_api_errors = 0, 0
     while attempt <= RESTARTS:
+        session_attempts = session_guard.story_attempts(n, getattr(io, "slug", ""))
+        max_attempts = local_config.max_story_attempts()
+        if session_attempts >= max_attempts:
+            io.comment(n, f"Parked: this story has reached its {max_attempts}-session attempt ceiling across runs and handoffs; no further model session will start.\\n"
+                          "- Next: split the work or review the prior attempts, then raise maxStoryAttempts in olivercode.local.json and return it to Ready.")
+            io.backlog(n)
+            return False, tokens
         ceiling, spent = local_config.max_story_spend(), story_spend(n, getattr(io, "slug", ""))
         if spent > ceiling:
             io.comment(n, f"Parked: this story has spent ${spent:.2f}, above its ${ceiling:.2f} ceiling, so no further builder round will start.\n"
