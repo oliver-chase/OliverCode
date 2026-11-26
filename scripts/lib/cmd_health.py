@@ -95,14 +95,15 @@ def command_health(fleet_root: Path | None = None) -> int:
     # to carry them; a fresh clone or CI runner has not installed, which is a skip.
     print("\nClaude Code hooks:")
     claude_md = _claude_dir() / "CLAUDE.md"
+    # A registered hook whose script is gone is reported whether or not install linked this checkout (#1270).
+    gone = _claude_settings.dead(_claude_dir() / "settings.json")
+    if gone:
+        t.fail(f"~/.claude/settings.json runs {len(gone)} hook script(s) that do not exist: "
+               f"{', '.join(gone)} — run `olivercode install`")
     if not (claude_md.is_symlink() and claude_md.resolve() == (OC_ROOT / "CLAUDE.md").resolve()):
         t.warn("install has not linked this checkout on this machine — hooks not checked")
     else:
         lacking = _claude_settings.missing(_claude_dir() / "settings.json")
-        gone = _claude_settings.dead(_claude_dir() / "settings.json")
-        if gone:
-            t.fail(f"~/.claude/settings.json runs {len(gone)} hook script(s) that do not exist, which blocks tool calls: "
-                   f"{', '.join(gone)} — run `olivercode install`")
         if lacking:
             t.fail(f"~/.claude/settings.json lacks {', '.join(lacking)} for this checkout — run `olivercode install`")
         else:
