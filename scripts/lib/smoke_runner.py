@@ -100,10 +100,10 @@ def jobs() -> int:
     try:
         n = int(os.environ.get("OLIVERCODE_VALIDATE_JOBS", ""))
         if n >= 1:
-            return n
+            return min(4, n)
     except ValueError:
         pass
-    return os.cpu_count() or 4
+    return min(4, os.cpu_count() or 4)
 
 
 def modules(root: Path) -> list[tuple[str, Path, str]]:
