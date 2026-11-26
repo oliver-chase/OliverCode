@@ -194,10 +194,10 @@ p{margin:8px 0}.sub,.label,.note,.summary-meta{color:var(--sub)}
 .pill.good,.pill.warn,.pill.bad{border-color:var(--line);background:#fff;color:var(--ink)}
 .pill.info{border-color:#c8a5ed;background:var(--lavender);color:#352344}
 .section-intro{max-width:70ch;color:var(--sub);margin:-2px 0 14px}
-.city-grid>section{min-width:0;min-height:0;height:100%;padding:17px 18px;background:#fff;border:1px solid var(--line);border-radius:5px}
+.city-grid>section{min-width:0;min-height:0;height:auto;padding:17px 18px;background:#fff;border:1px solid var(--line);border-radius:5px}
 .city-grid>section.keep{grid-column:span 5;display:flex;flex-direction:column}
-.city-grid>section.work{grid-column:span 7}
-.city-grid>section.work>.card{height:100%}
+.city-grid>section.work{grid-column:span 7;display:flex;flex-direction:column}
+.city-grid>section.work>.card{flex:1}
 .city-grid>section.attention-panel{grid-column:span 5}
 .city-grid>section.delivery{grid-column:1/-1}
 .city-grid>section.health{grid-column:1/-1}
