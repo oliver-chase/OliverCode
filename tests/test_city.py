@@ -60,6 +60,23 @@ class PanelCase(unittest.TestCase):
         self.assertEqual(T0, cached["at"])
         self.assertEqual({"at", "html"}, set(cached))
 
+    def test_portfolio_lists_multiple_registered_repositories_and_qualifies_the_metrics(self):
+        state = {
+            "org/alpha": {"active": True, "building": {"1": {}}, "queue": [{"n": 2}]},
+            "org/beta": {"active": False, "building": {}, "queue": []},
+        }
+        with mock.patch.object(status_report, "fleet_repos", return_value=[("org/alpha", Path("/alpha")), ("org/beta", Path("/beta"))]), \
+             mock.patch.object(status_report, "load_state", return_value=state), \
+             mock.patch.object(city.cmd_status, "run_log", return_value=[]), \
+             mock.patch.object(status_report, "history", return_value=[]):
+            page = city._portfolio_html(T0)
+        self.assertIn("org/alpha", page)
+        self.assertIn("org/beta", page)
+        self.assertIn("Building across projects", page)
+        self.assertIn("not GitHub backlog counts", page)
+        self.assertIn("1 building", page)
+        self.assertIn("1 queued", page)
+
     def test_a_dashboard_that_could_not_read_github_says_so_in_plain_words(self):
         with mock.patch.object(city.cmd_status, "recent", return_value=None), mock.patch.object(city.repo_state, "origin", return_value="o/r"):
             body = city.panel_html(T0)
