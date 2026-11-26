@@ -33,7 +33,7 @@ OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
 DIGEST_ITEMS = 5  # the latest decisions and the latest run-log rows the digest keeps before it trims to the limit
 MIN_SIZED = 5  # stories of one size that must reach staging in the window before status compares them (#1301)
 BENCHMARKS = {"XS": (21, 0.14)}  # size -> (minutes, dollars) from the 23 Nov baseline in #1246; shortcut: only XS is measured, add a size once its baseline is set
-USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR]"
+USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR] | olivercode status page [--root DIR]"
 
 
 def recent(slug: str, since: datetime, runner=issue_count.gh_list) -> list[dict] | None:
@@ -531,6 +531,9 @@ def digest(slug: str | None, out=print, **kw) -> int:
 
 
 def command_status(argv: list[str]) -> int:
+    if argv[:1] == ["page"]:
+        from lib import city  # local import: city reads this module's figures
+        return city.command_page(argv[1:])
     root = Path.cwd()
     writes = argv[:1] == ["digest"]
     argv = argv[1:] if writes else argv
