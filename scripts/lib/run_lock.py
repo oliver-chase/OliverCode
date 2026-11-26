@@ -166,6 +166,59 @@ def describe(rec: dict, now: float) -> str:
     building = ", ".join(f"#{n}" for n in rec.get("building") or [])
     return (f"{rec.get('who', 'A run')} (process {rec.get('pid')}) holds the run since {since}, "
             f"{'building ' + building if building else 'building nothing yet'}." + (f" Status page: {rec['page']}" if rec.get("page") else ""))
+\n\ndef control_dir(slug: str) -> Path:
+    return gh_budget.home() / "controls" / slug.replace("/", "__")
+
+
+def pause_path(slug: str) -> Path:
+    return control_dir(slug) / "pause"
+
+
+def cancel_path(slug: str, story: int) -> Path:
+    return control_dir(slug) / f"cancel-{int(story)}"
+
+
+def is_paused(slug: str) -> bool:
+    return pause_path(slug).is_file()
+
+
+def pause(slug: str) -> None:
+    target = pause_path(slug)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("paused\\n", encoding="utf-8")
+
+
+def resume(slug: str) -> bool:
+    target = pause_path(slug)
+    existed = target.exists()
+    target.unlink(missing_ok=True)
+    return existed
+
+
+def request_cancel(slug: str, story: int) -> None:
+    target = cancel_path(slug, story)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("cancel\\n", encoding="utf-8")
+
+
+def cancel_requested(slug: str, story: int) -> bool:
+    return cancel_path(slug, story).is_file()
+
+
+def clear_cancel(slug: str, story: int) -> bool:
+    target = cancel_path(slug, story)
+    existed = target.exists()
+    target.unlink(missing_ok=True)
+    return existed
+
+
+def set_paused(slug: str, pid: int, value: bool) -> None:
+    with _exclusive(slug) as target:
+        rec = _read(target)
+        if rec.get("pid") == pid:
+            rec["paused"] = bool(value)
+            rec["beat"] = time.time()
+            _write(target, rec)
 
 
 class Heartbeat:
