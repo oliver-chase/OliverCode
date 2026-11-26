@@ -448,7 +448,7 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit. Each builder takes one story, so no commit carries two stories' work (#988)."""
     n = issue["number"]
     run_id = telemetry_run_id(io.slug)
-    worker_id = f"{os.getpid()}:{threading.get_ident()}"
+    worker_id = f"{run_id}:{os.getpid()}:{threading.get_ident()}"
     claim_id = f"{run_id}:{n}"
     started = time.time()
     outcome, reason = "crashed", ""

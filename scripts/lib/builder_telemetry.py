@@ -99,27 +99,30 @@ def summarize(hours: float = 24, now: float | None = None, path: Path | None = N
         elif event == "builder_started":
             worker = str(row.get("worker_id") or row.get("event_id") or "")
             if worker:
-                starts[worker] = row
+                starts[f"{row.get('run_id', '')}:{worker}"] = row
                 claimed = claims.get(str(row.get("claim_id") or ""))
-                if claimed is not None and at >= claimed:
+                if start_window <= at <= now and claimed is not None and at >= claimed:
                     queue_waits.append(at - claimed)
         elif event == "builder_finished":
-            worker = str(row.get("worker_id") or "")
+            worker = f"{row.get('run_id', '')}:{row.get('worker_id', '')}"
             began = starts.pop(worker, None)
             if began is None:
-                unmatched_ends += 1
+                if start_window <= at <= now:
+                    unmatched_ends += 1
                 continue
             began_at = _epoch(began.get("at"))
             if began_at is None or at < began_at:
                 malformed += 1
                 continue
             intervals.append((began_at, at))
-            if row.get("outcome") == "landed":
-                completed += 1
-            else:
-                failed += 1
+            if start_window <= at <= now:
+                if row.get("outcome") == "landed":
+                    completed += 1
+                else:
+                    failed += 1
 
-    clipped = [(max(a, start_window), min(b, now)) for a, b in intervals if b >= start_window and a <= now]
+    recent_intervals = [(a, b) for a, b in intervals if b >= start_window and a <= now]
+    clipped = [(max(a, start_window), min(b, now)) for a, b in recent_intervals]
     clipped = [(a, b) for a, b in clipped if b > a]
     duration = sum(b - a for a, b in clipped)
     average = duration / window if window > 0 and clipped else None
@@ -132,6 +135,8 @@ def summarize(hours: float = 24, now: float | None = None, path: Path | None = N
         peak = max(peak, active)
     recent_starts = sum(1 for row in rows if row.get("event") == "builder_started"
                         and start_window <= (_epoch(row.get("at")) or 0) <= now)
+    unmatched_starts = sum(1 for row in starts.values()
+                           if start_window <= (_epoch(row.get("at")) or 0) <= now)
     return {
         "hours": float(hours),
         "builder_starts": recent_starts,
@@ -140,8 +145,8 @@ def summarize(hours: float = 24, now: float | None = None, path: Path | None = N
         "average_active": average,
         "peak_active": peak if clipped else None,
         "average_queue_wait_s": (sum(queue_waits) / len(queue_waits)) if queue_waits else None,
-        "matched_intervals": len(intervals),
-        "unmatched_starts": len(starts),
+        "matched_intervals": len(recent_intervals),
+        "unmatched_starts": unmatched_starts,
         "unmatched_ends": unmatched_ends,
         "malformed_events": malformed,
         "window_seconds": window,
