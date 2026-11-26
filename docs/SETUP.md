@@ -164,3 +164,9 @@ git -C <repo> config --unset core.hooksPath
 Run the second command in each managed repo to remove its hook setting. Then delete the OliverCode checkout if you no longer need it.
 
 Uninstall removes the changes OliverCode made to your Claude configuration and restores backups where possible. It doesn't delete your rules, skills, repo files, or fleet data.
+
+## Launcher commands
+
+- `pause`: stop a drain from claiming new stories while existing builders finish
+- `resume`: let a paused drain claim work again
+- `cancel`: stop one active story after its current model session, keep its worktree as a handoff and return the story to Backlog
