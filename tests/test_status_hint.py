@@ -69,5 +69,42 @@ class StatusOnly(unittest.TestCase):
         self.assertEqual("", self.run_hook("fix the parser bug").stdout)
 
 
+class LongThread(unittest.TestCase):
+    """#1319: a thread past 250,000 tokens of context is flagged once per session, and never in a headless builder."""
+
+    def setUp(self):
+        self.tmp = temp_dir(self)
+        self.transcript = self.tmp / "t.jsonl"
+
+    def write(self, tokens):
+        usage = {"input_tokens": 10, "cache_read_input_tokens": tokens - 10, "cache_creation_input_tokens": 0}
+        self.transcript.write_text(json.dumps({"message": {"usage": {"input_tokens": 1}}}) + "\n"
+                                   + json.dumps({"message": {"usage": usage}}) + "\n", encoding="utf-8")
+
+    def run_hook(self, session="s1", headless=False):
+        script = str(REPO_ROOT / "scripts" / "hooks" / "status_hint.py")
+        env = dict(os.environ, OLIVERCODE_HOME=str(self.tmp))
+        env.pop("OLIVERCODE_HEADLESS", None)
+        if headless:
+            env["OLIVERCODE_HEADLESS"] = "1"
+        data = {"prompt": "fix the parser", "session_id": session, "transcript_path": str(self.transcript)}
+        return subprocess.run([sys.executable, script], input=json.dumps(data), capture_output=True, text=True, env=env).stdout
+
+    def test_a_long_thread_is_flagged_once_per_session(self):
+        self.write(260_000)
+        self.assertIn("write a handoff", self.run_hook())
+        self.assertEqual("", self.run_hook())
+        self.assertIn("write a handoff", self.run_hook(session="s2"))
+
+    def test_a_short_thread_and_a_headless_builder_get_nothing(self):
+        self.write(200_000)
+        self.assertEqual("", self.run_hook())
+        self.write(400_000)
+        self.assertEqual("", self.run_hook(headless=True))
+
+    def test_an_unreadable_transcript_counts_as_short(self):
+        self.assertEqual(0, hint.context_tokens(self.tmp / "absent.jsonl"))
+
+
 if __name__ == "__main__":
     unittest.main()
