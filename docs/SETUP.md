@@ -114,7 +114,7 @@ Confirm anything you moved exists at its new home, tell the human what you could
 
 ## Keep the machine awake
 
-Sessions stop when the Mac sleeps. `olivercode health` prints one warning when `pmset -g` shows a display or system sleep timer above zero, and `olivercode conform` reports the same line as the `sleep-setting` row. To clear it, open System Settings, then Battery or Energy, and turn off sleep on power adapter and display sleep, or run `caffeinate -dimsu` in a terminal before leaving.
+Sessions stop when the Mac sleeps. `olivercode health` prints one warning when `pmset -g` shows a system sleep timer above zero, and `olivercode conform` reports the same line as the `sleep-setting` row. To clear it, open System Settings, then Battery or Energy, and turn off sleep on power adapter, or run `caffeinate -dimsu` in a terminal before leaving.
 
 ## Staying current
 

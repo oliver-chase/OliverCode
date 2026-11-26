@@ -275,7 +275,7 @@ class TestCleanCloneSuite(unittest.TestCase):
         self.record.write_text(json.dumps(maintain.suite_record(1, SUITE_FAIL)))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            result = health_checks._check_clean_clone_suite(self.record)
+            result = health_checks._check_clean_clone_suite(self.record, head="")
         self.assertEqual((0, 1, 0), result)
         self.assertIn("[FAIL]", out.getvalue())
         self.assertIn("test_maintain, test_policy", out.getvalue())
@@ -285,14 +285,22 @@ class TestCleanCloneSuite(unittest.TestCase):
         record["at"] -= 3 * 86400
         self.record.write_text(json.dumps(record))
         with contextlib.redirect_stdout(io.StringIO()) as out:
-            result = health_checks._check_clean_clone_suite(self.record)
+            result = health_checks._check_clean_clone_suite(self.record, head="")
         self.assertEqual((0, 1, 0), result)
         self.assertIn("3.0 days ago", out.getvalue())
+
+    def test_health_does_not_count_a_record_for_another_commit(self):
+        self.record.write_text(json.dumps({**maintain.suite_record(1, SUITE_FAIL), "commit": "a" * 40}))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            result = health_checks._check_clean_clone_suite(self.record, head="b" * 40)
+        self.assertEqual((0, 0, 1), result)
+        self.assertIn("[INFO]", out.getvalue())
+        self.assertIn("aaaaaaaa", out.getvalue())
 
     def test_health_passes_a_fresh_green_record(self):
         self.record.write_text(json.dumps(maintain.suite_record(0, SUITE_PASS)))
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual((1, 0, 0), health_checks._check_clean_clone_suite(self.record))
+            self.assertEqual((1, 0, 0), health_checks._check_clean_clone_suite(self.record, head=""))
 
 
 class TestFailureCandidates(unittest.TestCase):
