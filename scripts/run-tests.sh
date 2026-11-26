@@ -11,8 +11,8 @@
 # commit, so a failure points at a commit and not at a moving working tree.
 #
 # The run holds one slot in the per-user validation queue (scripts/lib/validate_queue.py), like every validation run, so
-# a suite started here waits behind the runs already going. The queue state stays in the real home, and the tests see the temporary one,
-# so a record or log in this machine's ~/.olivercode cannot change a verdict.
+# a suite started here waits behind the runs already going. The queue state lives in the temporary work folder too (#1271), so a test run
+# writes nothing in this machine's ~/.olivercode and a record or log there cannot change a verdict.
 set -u
 
 repo="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -22,11 +22,11 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 git clone -q --no-hardlinks --no-local "$repo" "$work/clone" || { echo "run-tests: clone failed" >&2; exit 2; }
 git -C "$work/clone" checkout -q --detach "$sha" || { echo "run-tests: could not check out $sha" >&2; exit 2; }
-mkdir "$work/home"
+mkdir "$work/home" "$work/queue-home"
 
 smoke_runner="$(cd "$(dirname "$0")" && pwd)/lib/smoke_runner.py"
 validate_queue="$(cd "$(dirname "$0")" && pwd)/lib/validate_queue.py"
-OLIVERCODE_HOME="${OLIVERCODE_HOME:-$HOME/.olivercode}" python3 "$validate_queue" run \
+OLIVERCODE_HOME="$work/queue-home" python3 "$validate_queue" run \
   env -u OLIVERCODE_HOME HOME="$work/home" python3 "$smoke_runner" "$work/clone"
 status=$?
 

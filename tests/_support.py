@@ -40,6 +40,17 @@ TEST_FLEET_ROOT = tempfile.mkdtemp(prefix="olivercode-test-fleet-")
 atexit.register(shutil.rmtree, TEST_FLEET_ROOT, ignore_errors=True)
 os.environ["OLIVERCODE_FLEET_DIR"] = str(Path(TEST_FLEET_ROOT) / "olivercode-fleet")
 
+# No test reaches the real gh, claude or osascript (#1271). A guard directory comes first on PATH, and each guard
+# names the call on stderr and exits 97. A test that needs one puts its own fake ahead of this directory.
+GUARD_STATUS = 97
+GUARD_DIR = tempfile.mkdtemp(prefix="olivercode-test-guard-")
+atexit.register(shutil.rmtree, GUARD_DIR, ignore_errors=True)
+for _tool in ("gh", "claude", "osascript"):
+    _guard = Path(GUARD_DIR) / _tool
+    _guard.write_text(f'#!/bin/sh\necho "test guard: unexpected call to {_tool} $*; supply a fake or patch it" >&2\nexit {GUARD_STATUS}\n')
+    _guard.chmod(0o755)
+os.environ["PATH"] = GUARD_DIR + os.pathsep + os.environ.get("PATH", "")
+
 # The built hooks are untracked (HOOK-OUTPUTS-1), and many tests copy or run them, so a fresh clone
 # builds them before any test reads one. The build rewrites only a hook that changed.
 subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "build-hooks.py")], check=True)
