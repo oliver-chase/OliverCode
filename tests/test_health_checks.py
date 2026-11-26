@@ -7,6 +7,7 @@ degrade to a skip when that context is missing, and must fail only on a real pro
 import json
 import os
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -15,6 +16,9 @@ from _support import git, load_script, scratch_repo, quiet, temp_dir
 
 health = load_script("scripts/lib/health_checks.py", "health_checks")
 from lib import health_topology  # noqa: E402
+
+# The install advice is per platform (lib/cli.py PYTHON_FIX): Homebrew on macOS, apt on Linux.
+FIX_COMMAND = "brew install python@" if sys.platform == "darwin" else "apt install python"
 
 
 class HealthBase(unittest.TestCase):
@@ -219,7 +223,7 @@ class PythonVersion(unittest.TestCase):
         self.assertEqual(result, (0, 1, 0))
         self.assertIn("3.9", out)
         self.assertIn(f"{health.MIN_PYTHON[0]}.{health.MIN_PYTHON[1]}", out)
-        self.assertIn("brew install python@", out)
+        self.assertIn(FIX_COMMAND, out)
 
     def test_the_minimum_passes(self):
         self.assertEqual(self.check(health.MIN_PYTHON)[0], (1, 0, 0))
@@ -228,7 +232,7 @@ class PythonVersion(unittest.TestCase):
         with mock.patch.object(health.shutil, "which", return_value=None):
             result, out = quiet(health._check_python)
         self.assertEqual(result, (0, 1, 0))
-        self.assertIn("brew install", out)
+        self.assertIn(FIX_COMMAND, out)
 
 
 class LauncherLink(HealthBase):

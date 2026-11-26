@@ -268,7 +268,9 @@ class TestWiring(unittest.TestCase):
 
     def test_schedule_writes_a_nightly_launchd_job(self):
         home = temp_dir(self)
+        # launchd is mocked, so the plist is built and checked on Linux too; supported() is forced true so the launchd path runs there.
         with mock.patch.dict(os.environ, {"HOME": str(home), "OLIVERCODE_HOME": str(home / "oc")}), \
+                mock.patch.object(launchd, "supported", return_value=True), \
                 mock.patch.object(launchd.subprocess, "run", return_value=mock.Mock(returncode=0, stderr="")), \
                 mock.patch.object(launchd, "newer_python", return_value="/usr/bin/python3"), \
                 mock.patch.object(Path, "home", return_value=home), contextlib.redirect_stdout(io.StringIO()):

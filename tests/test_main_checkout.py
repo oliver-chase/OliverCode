@@ -80,6 +80,8 @@ class TestMainCheckout(Base):
     def _origin_moves_on(self, work):
         other = self.root / "other"
         git(self.root, "clone", "-q", str(self.root / "origin.git"), str(other))
+        git(other, "config", "user.email", "test@example.invalid")  # a clone has no identity; the CI runner has no global one
+        git(other, "config", "user.name", "Test")
         (other / "b.txt").write_text("b\n")
         git(other, "add", "."); git(other, "commit", "-q", "-m", "fix"); git(other, "push", "-q", "origin", "main")
         git(work, "fetch", "-q", "origin")
