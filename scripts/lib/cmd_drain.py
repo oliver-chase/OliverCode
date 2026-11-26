@@ -174,21 +174,20 @@ class Io:
             return None
 
     def limit(self) -> int:
-        """Temporary Claude-account safety cap: one model session at a time."""
-        return 1
-
+        """The configured account-wide model-session cap, optionally narrowed for this drain."""
+        return min(self.parallel or local_config.max_builders(), local_config.max_builders())
 
     def event(self, kind: str, issue: dict | None = None, queue=(), waiting=()) -> str:
         """Rewrite the status page for a run event and publish it to City on the smallest model (#990). A failure here never stops a run."""
         model_name = agent_loop.model_for(cmd_groom.size_of(issue), issue.get("labels")) if issue and kind == "start" else ""
         try:
             return status_report.record(self.slug, kind, issue, origin=self.origin, builders=self.limit(), queue=queue, waiting=waiting, model_name=model_name)
-        except Exception:  # the page never stops a run
+        except Exception:
             return ""
 
     def capacity(self) -> int:
-        """Only one builder may hold a model slot across the local fleet."""
-        return max(0, 1 - run_lock.building_elsewhere(self.slug))
+        """Available builder slots under the shared account cap, less other repos' active builders."""
+        return max(0, self.limit() - run_lock.building_elsewhere(self.slug))
 
 
     def holders(self) -> list[str]:
