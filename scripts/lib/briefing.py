@@ -135,7 +135,9 @@ def text(snap: dict) -> list[str]:
     else:
         out.append("Nothing needs you right now.")
     out += ["", RULE, "", "WORK", ""]
-    out.append(f"  Builders  {runner['building']} running, {runner['allowed']} allowed")\n    if runner.get("paused"):\n        out.append("  Runner    Paused — waiting for resume")
+    out.append(f"  Builders  {runner['building']} running, {runner['allowed']} allowed")
+    if runner.get("paused"):
+        out.append("  Runner    Paused — waiting for resume")
     if runner.get("load"):
         out.append(f"  Machine   {runner['load']}")
     out.append(f"  Open      {plural(snap['open'], 'story', 'stories')}")
