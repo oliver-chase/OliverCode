@@ -555,6 +555,7 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([], io.closed)
         self.assertEqual([42], io.released)
         self.assertEqual([42], io.parked)
+        self.assertEqual([], io.kept, "outer cleanup must not put the cancelled story back in Ready")
         self.assertEqual([42], io.cleared)
         self.assertTrue(any("Cancelled by the owner" in comment and "unfinished changes" in comment for _, comment in io.comments))
         self.assertFalse(any(n == 42 for n in io.moved))
