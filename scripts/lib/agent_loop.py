@@ -51,9 +51,7 @@ RISKY_DIRS = ("core/hooks", "scripts/hooks")
 SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
-                 "and change nothing. Read or search the worktree only to settle a point the diff alone cannot.")
-READER_TOOLS = "Read,Grep,Glob"  # read-only, so the reader can open the file a diff calls into (#1079)
-READER_TURNS = 10  # enough for a few lookups and the answer; a one-turn reader could never open a file (#1079)
+                 "and make no tool call and no change.")
 
 
 NO_VALIDATION_FIX = "add scripts/validate.sh, or an npm validate or check script, and name it in the repo's CLAUDE.md."
@@ -208,14 +206,13 @@ def reader_for(builder: str) -> str:
     return LADDER[max(LADDER.index(READER), LADDER.index(builder) if builder in LADDER else 0)]
 
 
-REVIEW_BRIEF = ("You are a fresh reader. You get the story, the diff and the test output below, and you may read and search the worktree. Check that the diff does what the "
-                "story's scenarios say and breaks nothing. When the diff alone cannot settle a point, such as whether a helper it calls exists, open the file and check: a "
-                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. List each finding on its own line with the file and what is "
-                "wrong, then end your reply with a final line of VERDICT: PASS or VERDICT: FINDINGS.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
+REVIEW_BRIEF = ("You are a fresh reader. You see only the story, the diff and the test output below, and you make no tool call. Check that the diff does what the story's "
+                "scenarios say and breaks nothing the diff itself shows. If the diff says it was cut, name the files you could not check. Answer PASS on the first line "
+                "when it does. Otherwise list each finding on its own line with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
-FIX_BRIEF = ("You are a new session, not the story's builder. A fresh reader checked the story's commit and reports the findings below. Fix every finding "
-             "in one commit by explicit path and stop: the runner validates and the reader reads the commit again.\n\nThe story:\n{task}\n\nThe diff so far:\n{diff}\n\nThe reader's finding:\n{finding}")
+FIX_BRIEF = ("A fresh reader checked your story's commit and reports a problem below. Fix it, commit by explicit path and stop: the runner validates "
+             "and the reader reads the commit again.\n\nThe story:\n{task}\n\nThe diff so far:\n{diff}\n\nThe reader's finding:\n{finding}")
 
 
 def review_brief(task: str, cwd: str | Path, finding: str) -> str:
@@ -223,56 +220,37 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
     return FIX_BRIEF.format(task=task, diff=branch_diff(cwd), finding=finding)
 
 
-def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
-           max_turns: int = READER_TURNS, attempts: int = 2, repo: str = "", stop_check=None) -> dict:
-    """One fresh headless reader on the diff, the story and the test output (#891). Accepts an explicit final-line VERDICT: PASS/FINDINGS, a bare PASS as the
-    reply's last line, plus the historical first-line PASS form (#1153, #1213).
+def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER) -> dict:
+    """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
     prompt = REVIEW_BRIEF.format(task=task, diff=branch_diff(cwd), tail=tail)
-    failure, exit_code = "", None
-    for attempt in range(1, attempts + 1):
+    failure = ""
+    for attempt in (1, 2):
         try:
-            call_kwargs = {"allowed_tools": READER_TOOLS, "max_turns": max_turns, "session": f"{session}-review", "system": READER_SYSTEM, "model": model_name}
-            if run is model.run_cli and repo:
-                call_kwargs["repo_slug"] = repo
-            reply = run(prompt, str(cwd), **call_kwargs)
+            reply = run(prompt, str(cwd), allowed_tools="Read", max_turns=1, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
         else:
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
-                # Accept the documented machine-readable verdict on the final line, a bare
-                # PASS as that final line, or the historical first-line PASS form.
-                final_line = text.splitlines()[-1].strip() if text.splitlines() else ""
-                explicit = re.fullmatch(r"VERDICT:\s*(PASS|FINDINGS)", final_line, re.I)
-                if explicit:
-                    verdict = "pass" if explicit.group(1).upper() == "PASS" else "findings"
-                elif re.fullmatch(r"PASS", final_line, re.I):
-                    verdict = "pass"
-                else:
-                    verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
-                log_round(f"{session}-review", 1, model_name, reply, repo=repo)
+                verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
+                log_round(f"{session}-review", 1, model_name, reply)
                 log_review(session, verdict, text)
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
                 return {"verdict": verdict, "text": text}
             failure = f"claude exited {reply['code']}." if reply.get("code", 0) != 0 else "The reader replied with nothing."
-            err_tail = (reply.get("stderr") or "").strip()
-            if err_tail:
-                failure += f" stderr: {err_tail[-300:]}"  # the cause of a reader's failure, which the log did not keep (#1204)
-            exit_code = reply.get("code", 0)
         say(f"Review: no verdict on attempt {attempt}. {failure}")
-    log_review(session, "none", failure, exit_code)
+    log_review(session, "none", failure)
     return {"verdict": "none", "text": failure}
 
 
-def log_review(story: str, verdict: str, text: str, exit_code: int | None = None) -> None:
-    """Append the reader's pass or findings for a story to the run log, with the exit code of a reader that gave no verdict (#1204). A log that cannot be written never stops a loop."""
+def log_review(story: str, verdict: str, text: str) -> None:
+    """Append the reader's pass or findings for a story to the run log. A log that cannot be written never stops a loop."""
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000],
-                                 **({"exit_code": exit_code} if exit_code is not None else {})}) + "\n")
+            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000]}) + "\n")
     except OSError:
         pass
 
