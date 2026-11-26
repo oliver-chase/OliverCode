@@ -1,15 +1,18 @@
 """Deterministic builder lifecycle event parsing and time-weighted concurrency."""
 import json
+from contextlib import redirect_stdout
+from io import StringIO
 import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from _support import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import builder_telemetry
+from lib import builder_telemetry, cmd_telemetry
 
 
 class TestBuilderTelemetry(unittest.TestCase):
@@ -72,6 +75,24 @@ class TestBuilderTelemetry(unittest.TestCase):
         self.assertEqual(1, result["unmatched_starts"])
         self.assertEqual(1, result["unmatched_ends"])
         self.assertIsNone(result["average_active"])
+
+    def test_telemetry_command_formats_summary_and_rejects_invalid_hours(self):
+        summary = {
+            "builder_starts": 2, "completed": 1, "not_landed": 1,
+            "coverage_seconds": 3600, "average_active": 0.5, "peak_active": 2,
+            "average_queue_wait_s": 7.5, "unmatched_starts": 0,
+            "unmatched_ends": 0, "malformed_events": 0,
+        }
+        output = StringIO()
+        with patch.object(cmd_telemetry.builder_telemetry, "summarize", return_value=summary):
+            with redirect_stdout(output):
+                result = cmd_telemetry.command_telemetry(["--hours", "1"])
+        self.assertEqual(0, result)
+        self.assertIn("Average active builders: 0.50", output.getvalue())
+        self.assertIn("Average claim-to-start wait: 7.5s", output.getvalue())
+
+        with redirect_stdout(StringIO()):
+            self.assertEqual(2, cmd_telemetry.command_telemetry(["--hours", "0"]))
 
     def test_malformed_lines_are_counted_and_missing_log_is_empty(self):
         self.path.write_text("{bad json}\n", encoding="utf-8")
