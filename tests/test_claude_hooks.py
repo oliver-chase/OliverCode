@@ -515,15 +515,18 @@ class TestSettingsRemove(unittest.TestCase):
         hooks_dir.mkdir(parents=True)
         (hooks_dir / "still_here.py").write_text("")
         gone = {"type": "command", "command": f'python3 "{hooks_dir}/gone.py"'}
+        other = temp_dir(self, "someone-elses-project-", resolve=True)  # exists and holds no scripts/olivercode
+        lost = {"type": "command", "command": 'python3 "/no/such/checkout/scripts/hooks/gone.py"'}  # its checkout is gone from disk
         kept = [{"type": "command", "command": c} for c in (
             f'python3 "{hooks_dir}/still_here.py"',  # an unmanaged script of this checkout
-            'python3 "/elsewhere/scripts/hooks/gone.py"',  # another checkout's folder
+            f'python3 "{other}/scripts/hooks/gone.py"',  # another project's folder
             f'python3 "{hooks_dir}/gone.py" --flag',  # not the form install writes
             "~/mine.sh")]
-        settings = {"hooks": {"PostToolUse": [{"hooks": [gone]}, {"matcher": "Bash", "hooks": [gone, *kept]}]}}
+        settings = {"hooks": {"PostToolUse": [{"hooks": [gone]}, {"matcher": "Bash", "hooks": [gone, lost, *kept]}]}}
         merged = claude_settings.merge(settings, hooks_dir)
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertNotIn(gone["command"], commands)
+        self.assertNotIn(lost["command"], commands)  # under a checkout that no longer exists it can only fail, so it goes
         self.assertNotIn(kept[0]["command"], commands)  # the script exists but this version does not manage it, so it goes
         kept = kept[1:]
         self.assertTrue(all(h["command"] in commands for h in kept))

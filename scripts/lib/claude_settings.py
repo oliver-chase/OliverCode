@@ -139,16 +139,16 @@ def _hook_parts(handler: dict) -> tuple[Path, str] | None:
 
 def _is_managed(handler: dict, oc_root: Path = OC_ROOT) -> bool:
     """True for an entry that runs a script in an OliverCode checkout's scripts/hooks, whether or not this version ships it:
-    the checkout root is this one, or holds scripts/olivercode, or is gone from disk and the script is one MANAGED names
-    or the root's folder is named like an OliverCode checkout. A root that exists without scripts/olivercode is someone
-    else's project, and a script outside scripts/hooks is never matched."""
+    the checkout root is this one, or holds scripts/olivercode, or is gone from disk. An entry in install's exact command
+    form under a root that no longer exists can only fail, and the old form blocks the prompt when it does, so it goes.
+    A root that exists without scripts/olivercode is someone else's project, and a script outside scripts/hooks is never matched."""
     parts = _hook_parts(handler)
     if not parts:
         return False
     root, name = parts
     if root == oc_root or (root / "scripts" / "olivercode").exists():
         return True
-    return not root.exists() and (name in {m[2] for m in MANAGED} or "olivercode" in root.name.lower())
+    return not root.exists()
 
 
 def _check_shape(settings) -> None:
