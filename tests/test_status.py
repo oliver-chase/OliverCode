@@ -1256,6 +1256,22 @@ class TestUsageVisualization(unittest.TestCase):
         self.assertIn("Not enough recorded data yet.", chart)
         self.assertNotIn("<svg", chart)
 
+    def test_execution_efficiency_explains_telemetry_coverage_without_inventing_metrics(self):
+        with mock.patch.object(status_report, "spend_days", return_value=[]):
+            section = status_report._usage_analytics([], NOW)
+        self.assertIn("What the delivery data can explain", section)
+        self.assertIn("Measured now", section)
+        self.assertIn("Not yet measured end to end", section)
+        self.assertIn("Missing history is shown as unavailable, not zero", section)
+        self.assertIn("Queue wait", section)
+
+    def test_additional_details_sits_outside_the_dashboard_grid_at_full_width(self):
+        with mock.patch.object(status_report, "_usage_analytics", return_value=""), mock.patch.object(status_report, "_owner_steps", return_value=[]):
+            page = status_report.render({}, [], NOW, panel='<div class="city-grid">dashboard')
+        self.assertIn('</div><p id="published"', page)
+        self.assertIn('.owner-detail { display:block; width:100%; max-width:none;', page)
+        self.assertLess(page.index('</div><p id="published"'), page.index('<details class="owner-detail"'))
+
 
 if __name__ == "__main__":
     unittest.main()

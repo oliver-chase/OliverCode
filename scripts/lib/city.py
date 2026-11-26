@@ -17,7 +17,7 @@ from lib import briefing, cmd_status, failure_log, repo_state
 from lib.local_config import OC_ROOT
 
 PANEL_TTL = 1800  # seconds a cached dashboard serves a rewrite before it is read again; matches status_report.REWRITE_MINUTES
-PANEL_VERSION = 9  # rebuild the panel after the editorial dashboard layout changed
+PANEL_VERSION = 10  # rebuild the panel after the editorial dashboard layout changed
 
 
 def cache_path() -> Path:
@@ -42,7 +42,7 @@ def _dashboard(now: float, runner=None) -> str:
     from lib import status_report  # local import avoids the status-page/city cycle
     href = status_report.page_path().as_uri()
     link = (f'<div style="margin:0 0 24px;padding:12px 0;border-bottom:1px solid var(--line,#ddd)">'
-            f'<a href="{href}" style="display:inline-block;color:inherit;text-decoration:none;border:1px solid currentColor;padding:7px 10px;border-radius:3px;font-weight:600">Open the live local page ↗</a>'
+            f'<a href="{href}" style="display:inline-block;color:inherit;text-decoration:none;border:1px solid currentColor;padding:7px 10px;border-radius:3px;font-weight:600">Open the live local page</a>'
             f'<span style="display:block;color:var(--sub,#666);font-size:.85rem;margin-top:6px">Local file: <code>{html_escape(str(status_report.page_path()))}</code> · refreshes every 60 seconds</span></div>')
     portfolio = _portfolio_html(now)
     body = body.replace("<!--REPOSITORIES-->", portfolio) if "<!--REPOSITORIES-->" in body else body + portfolio
