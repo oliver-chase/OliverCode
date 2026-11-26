@@ -24,34 +24,15 @@ class TestSmokeProgress(unittest.TestCase):
             mock.patch.object(smoke_runner, "jobs", return_value=1),
             mock.patch.object(smoke_runner, "save_timings"),
             mock.patch.object(smoke_runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)),
-            mock.patch.dict(smoke_runner.os.environ, {"OLIVERCODE_VALIDATE_VERBOSE": "1"}),
         ):
             code = smoke_runner.run(Path("/repo"), out=output)
 
         self.assertEqual(0, code)
         lines = output.getvalue().splitlines()
-        self.assertTrue(any("Smoke progress: starting 1 test unit" in line for line in lines))
+        self.assertTrue(any("Running 1 test unit" in line for line in lines))
         self.assertTrue(any("[RUN ] test_example" in line for line in lines))
         self.assertTrue(any("[ OK ] test_example (" in line for line in lines))
         self.assertTrue(any("all passed" in line for line in lines))
-
-    def test_default_output_summarizes_the_suite_without_per_module_chatter(self):
-        output = io.StringIO()
-        unit = ("test_example", "test_example", Path("/repo/tests"), [])
-        with (
-            mock.patch.object(smoke_runner, "modules", return_value=[("test_example", Path("/repo/tests"), "test_example")]),
-            mock.patch.object(smoke_runner, "plan", return_value=[unit]),
-            mock.patch.object(smoke_runner, "load_timings", return_value={}),
-            mock.patch.object(smoke_runner, "jobs", return_value=1),
-            mock.patch.object(smoke_runner, "save_timings"),
-            mock.patch.object(smoke_runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)),
-            mock.patch.dict(smoke_runner.os.environ, {"OLIVERCODE_VALIDATE_VERBOSE": ""}),
-        ):
-            code = smoke_runner.run(Path("/repo"), out=output)
-        self.assertEqual(0, code)
-        self.assertIn("Running 1 test unit", output.getvalue())
-        self.assertNotIn("[RUN ]", output.getvalue())
-        self.assertNotIn("[ OK ]", output.getvalue())
 
     def test_a_run_that_takes_long_prints_its_slowest_units_without_being_asked(self):
         """#1180: the slowest-module line shows after SHOW_SLOWEST_AFTER seconds, and a quick run stays quiet."""
