@@ -172,7 +172,7 @@ def text(snap: dict) -> list[str]:
 STYLE = """
 :root{--bg:#fff;--card:#fff;--ink:#17151b;--sub:#687080;--line:#e8e6ed;--accent:#a99be8;--accent-strong:#7864c8;--lavender:#f0edff;--mint:#e5f5ed;--mint-ink:#39765b;--peach:#fff0e7;--peach-ink:#9b6546;--blue:#e9f2ff;--blue-ink:#5477a6;--yellow:#fff6dc;--yellow-ink:#92722d;--wash:#faf9fc}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Georgia,"Times New Roman",serif}
 main{max-width:1040px;margin:0 auto;padding:32px 24px 76px}
 h1,h2,h3,.big,.flow strong{font-family:Georgia,"Times New Roman",serif;font-weight:500}
 h1{font-size:clamp(2rem,5vw,3rem);line-height:1.12;letter-spacing:-.035em;margin:0}
