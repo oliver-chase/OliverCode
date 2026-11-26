@@ -201,7 +201,7 @@ p{margin:8px 0}.sub,.label,.note,.summary-meta{color:var(--sub)}
 .city-grid>section.work{grid-column:span 7}
 .city-grid>section.attention-panel{grid-column:span 5}
 .city-grid>section.delivery{grid-column:1/-1}
-.city-grid>section.health{grid-column:1/-1}
+.city-grid>section.health{grid-column:span 6}.city-grid>details.owner-detail{grid-column:span 6;margin:0!important;padding:17px 18px;border:1px solid var(--line);border-radius:5px;background:#fff;align-self:stretch}
 .city-grid>section h2{margin-bottom:10px}
 details{border-top:1px solid var(--line);padding:0}details:last-child{border-bottom:1px solid var(--line)}
 summary{cursor:pointer;list-style:none;padding:13px 3px;display:flex;align-items:flex-start;gap:12px;font-weight:600}
@@ -214,7 +214,7 @@ summary::-webkit-details-marker{display:none}summary:after{content:"＋";color:v
 .meter{height:6px;background:#ebe8e3;margin:12px 0 4px;border-radius:0;overflow:hidden}.meter i{display:block;height:100%;background:#82788c;border-radius:0}.health-list{margin-top:8px}.health-list .row{padding:12px 0}.health-list .fix{max-width:35ch;color:var(--sub);font-size:.86rem}
 code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1efec;padding:2px 5px;border-radius:2px}
 .portfolio{margin:0!important}.city-grid>section.portfolio{grid-column:span 7}.portfolio h2{margin:0 0 10px}.portfolio-row{padding:12px 0;border-top:1px solid var(--line);display:flex;gap:16px;align-items:center;justify-content:space-between}.portfolio-name{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.portfolio-stats{display:flex;gap:14px;flex-wrap:wrap;color:var(--sub);font:11px/1.5 Arial,sans-serif}.portfolio-totals{margin:12px 0}.portfolio-list{border-bottom:1px solid var(--line)}
-@media(max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.city-grid>section.keep,.city-grid>section.work,.city-grid>section.attention-panel{grid-column:1/-1}}
+@media(max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.city-grid>section.keep,.city-grid>section.work,.city-grid>section.attention-panel,.city-grid>section.health,.city-grid>details.owner-detail{grid-column:1/-1}}
 @media(max-width:600px){.city-grid{gap:12px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.portfolio-row{display:block}.portfolio-stats{margin-top:8px}.row{display:block}.row .sub,.row .fix{margin-top:6px;max-width:none}.flow{grid-template-columns:1fr}.flow>div,.flow>div+div{padding:9px 0;border-right:0;border-bottom:1px solid var(--line)}.flow>div:last-child{border-bottom:0}.bars{gap:5px}}
 """
 
@@ -338,5 +338,4 @@ def dashboard_html(snap: dict) -> str:
         f'<p class="note">Benchmark: deliveries need to stay ahead of incoming work to reduce backlog. This compares with your own queue, not an industry target.</p></div></section>'
         f'<!--USAGE_ANALYTICS-->'
         f'<section class="health" id="health"><h2>System health</h2>{_health_html(snap)}</section>'
-        f'</div>'
     )
