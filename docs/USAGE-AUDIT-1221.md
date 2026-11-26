@@ -23,6 +23,18 @@ The default `maxBuilders` is now 1, and the default cumulative story ceiling is 
 - The story spend check now parks at **greater than or equal to** the configured ceiling, and the same check runs at every model-session start—including internal validation repairs and reviews—so those calls cannot bypass the outer drain budget.\n- A configurable **8-session per-story attempt ceiling** (`maxStoryAttempts`) is counted from durable session-start records and legacy traces, persists across process restarts/handoffs, and parks the story when exhausted.
 - Regression tests cover slot serialization/release, telemetry failure, unknown cost, and exact-ceiling parking.
 
+## Retry and requeue ceilings already in the runner
+
+- Builder rounds: three restarts after the first round (four total per drain run).
+- Turn-limit handoffs: park after two consecutive stops.
+- CLI timeout: resume the same Claude session once, then stop.
+- Reader: at most two attempts for a verdict.
+- Reader finding: one fix session, followed by another read.
+- Commit-message gate: bounded to four builder rounds, then backlog.
+- API errors: exponential backoff per story and a stop after five consecutive queue-wide errors.
+- The new `maxStoryAttempts` ceiling adds a persistent cross-run cap to these existing per-run limits.
+
+
 ## Limits of this protection and the root-cause investigation
 
 The slot lock is machine-local. It cannot see interactive Claude sessions, other machines, or other processes that do not use OliverCode. It is therefore an OliverCode concurrency cap—not a Claude-account API-enforced quota. One model invocation can itself exceed the story's ceiling before its final cost is reported; the runner can stop subsequent sessions, not retroactively limit that call.
