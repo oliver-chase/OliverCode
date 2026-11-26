@@ -122,7 +122,7 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
             pass
         out.update({"started_at": lease.metadata["started_at"], "duration_s": round(time.time() - lease.started_epoch, 3),
                     "slot": lease.metadata["slot"], "session_cap": lease.metadata["cap"],
-                    "active_sessions": lease.metadata["active_sessions"], "session_attempt": lease.metadata["attempt"]})
+                    "active_sessions": lease.metadata["active_sessions"], "session_attempt": lease.metadata["attempt"], "story_attempt": lease.metadata["story_attempt"]})
         lease.finish({"stop_reason": out["stop"] or ("exit_code" if out["code"] else "completed"),
                       "exit_code": out["code"], "usage": out["usage"], "tokens": out["tokens"],
                       "cost_usd": out["cost_usd"], "resumed": bool(resume)})
