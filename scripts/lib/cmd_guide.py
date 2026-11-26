@@ -109,7 +109,7 @@ GROUPS = (
     ("Run and land work", (
         ("run", "Run one task in a fresh headless Claude session and validate it"),
         ("dispatch", "Build one story in its own session and land it"),
-        ("drain", "Build every open story in a repo, one after another"),
+        ("drain", "Build every open story in a repo, one after another"),\n        ("pause", "Stop a repo drain from claiming new stories"),\n        ("resume", "Continue a paused repo drain"),\n        ("cancel", "Cancel one active story, keeping its work as a handoff"),
         ("land", "Put a finished story on main"),
         ("wip", "Save uncommitted work without touching the working tree"),
         ("validated", "Record or check that a commit passed full validation"),
@@ -239,7 +239,7 @@ WHEN_TO_USE = (
 COMMAND_SETS = (
     ("Install and keep things up to date", "install · uninstall · update · bootstrap · sync-hooks"),
     ("Check and maintain your setup", "health · conform · maintain · limits · place · clean"),
-    ("Build and deliver work", "run · dispatch · drain · land · wip · validated · queue · worktree"),
+    ("Build and deliver work", "run · dispatch · drain · pause · resume · cancel · land · wip · validated · queue · worktree"),
     ("Manage stories and boards", "backlog-setup · board groom · board sync · story · candidates · gh-limit · gated"),
     ("Keep track of work", "status · status digest · status page · status publish · owner · decisions"),
     ("Manage your projects", "discover · init-fleet · fleet-sync · policy"),
