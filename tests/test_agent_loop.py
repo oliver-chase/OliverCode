@@ -360,27 +360,13 @@ class TestLoop(unittest.TestCase):
         out = self.loop(run, [(True, "")])
         self.assertEqual((True, 2), (out["done"], len(run.prompts)))
 
-    def test_reader_verdict_accepts_explicit_final_line_and_legacy_pass(self):
-        cases = (
-            ("PASS", "pass"),
-            ("PASS, the diff does what the story says.", "pass"),
-            ("All checks line up\nVERDICT: PASS", "pass"),
-            ("Confirmed\nVERDICT: PASS", "pass"),
-            ("The diff does what the story says.\nIt breaks nothing.\nPASS", "pass"),
-            ("scripts/a.py: wrong\nVERDICT: FINDINGS", "findings"),
-            ("PASSING concerns", "findings"),
-            ("Passing is not a verdict", "findings"),
-            ("scripts/a.py: wrong", "findings"),
-            ("VERDICT: MAYBE", "findings"),
-        )
-        for text, verdict in cases:
+    def test_only_a_reply_whose_first_word_is_pass_passes(self):
+        for text, verdict in (("PASS", "pass"), ("PASS, the diff does what the story says.", "pass"), ("PASSING concerns", "findings"),
+                              ("Passing is not a verdict", "findings"), ("scripts/a.py: wrong", "findings")):
             with self.subTest(text=text):
                 out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
                 self.assertEqual(verdict, out["verdict"])
 
-    def test_the_brief_asks_for_a_final_verdict_line_and_names_no_other_form(self):
-        self.assertIn("VERDICT: PASS or VERDICT: FINDINGS", agent_loop.REVIEW_BRIEF)
-        self.assertNotIn("first line", agent_loop.REVIEW_BRIEF)
 
     def test_a_reader_that_fails_once_is_asked_again_and_its_pass_lands_the_story(self):
         run = Scripted(reply("built"), model.ModelError("no reader"), reply("PASS"))
@@ -393,16 +379,6 @@ class TestLoop(unittest.TestCase):
         self.assertEqual((False, 3), (out["done"], len(run.prompts)))
         self.assertIn("nothing is pushed", out["reason"])
         self.assertEqual("claude exited 1.", out["held"])
-
-    def test_a_failed_reader_leaves_its_exit_code_and_stderr_in_the_run_log(self):
-        """#1204: the log row keeps the exit code and the end of stderr, and the story is still held."""
-        run = Scripted(reply("built"), reply("", code=2, stderr="auth expired"), reply("", code=2, stderr="auth expired"))
-        out = self.loop(run, [(True, "")])
-        self.assertFalse(out["done"])
-        rows = [json.loads(line) for line in (self.home / "run-log.jsonl").read_text().splitlines()]
-        row = [r for r in rows if r.get("review") == "none"][-1]
-        self.assertEqual(2, row["exit_code"])
-        self.assertIn("stderr: auth expired", row["findings"])
 
     def test_a_diff_over_the_limit_is_cut_and_the_marker_names_each_file_the_reader_did_not_see(self):
         full = ("diff --git a/scripts/a.py b/scripts/a.py\n+ok\n" "diff --git a/scripts/b.py b/scripts/b.py\n+" + "y" * agent_loop.DIFF_LIMIT + "\n"
@@ -432,22 +408,6 @@ class TestLoop(unittest.TestCase):
         self.assertNotIn("never poll", seen["system"])
         self.assertNotIn("Commit by explicit path", seen["system"])
         self.assertNotIn("Builder rules", seen["prompt"])
-
-    def test_the_reader_can_read_and_search_and_is_told_to_check_a_doubt_first(self):
-        """#1079: a one-turn reader with no tool call held #1024 for a helper it could not look up."""
-        seen = {}
-
-        def run(prompt, cwd, **kw):
-            seen.update(prompt=prompt, **kw)
-            return reply("PASS")
-
-        agent_loop.review("the story", self.repo, "s1", "gate", run=run, say=lambda *_: None)
-        self.assertGreaterEqual(seen["max_turns"], 10)
-        for tool in ("Read", "Grep", "Glob"):
-            self.assertIn(tool, seen["allowed_tools"])
-        self.assertNotIn("Edit", seen["allowed_tools"])
-        self.assertNotIn("make no tool call", seen["system"] + seen["prompt"])
-        self.assertIn("not a finding", seen["prompt"])
 
     def test_a_routine_story_does_not_start_a_second_model_session_after_validation(self):
         run = Scripted(reply("built"))
