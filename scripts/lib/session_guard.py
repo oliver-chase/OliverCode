@@ -190,13 +190,15 @@ def story_cost_unknown(story: int, repo: str = "") -> bool:
 
 def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25, repo_slug: str = "") -> Lease:
     """Hold a shared account slot and a story-scoped lock while checking spend and running the CLI."""
+    cap = max(1, local_config.max_builders())
+    slot_dir = failure_log.home() / "model-session-slots"
+    slot_dir.mkdir(parents=True, exist_ok=True)
     match = re.match(r"^story-(\d+)(?:-.+)?$", session)
     story_fd = None
     story = int(match.group(1)) if match else None
     if story is not None:
         repo_key = (repo_slug or Path(cwd).name).replace("/", "__")
-        story_path = failure_log.home() / "model-session-slots" / f"story-{repo_key}-{story}.lock"
-        story_path.parent.mkdir(parents=True, exist_ok=True)
+        story_path = slot_dir / f"story-{repo_key}-{story}.lock"
         while True:
             story_fd = os.open(story_path, os.O_CREAT | os.O_RDWR, 0o600)
             try:
@@ -217,34 +219,37 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
             os.close(story_fd)
             story_fd = None
             raise
-    cap = max(1, local_config.max_builders())
-    slot_dir = failure_log.home() / "model-session-slots"
-    slot_dir.mkdir(parents=True, exist_ok=True)
-    while True:
-        for n in range(cap):
-            path = slot_dir / f"slot-{n}.lock"
-            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                os.close(fd)
-                continue
-            started_epoch = time.time()
-            metadata = {"event": "session_start", "session": session, "session_id": session_id,
-                        "model": model or "", "repo": repo_slug or Path(cwd).name, "started_at": _stamp(),
-                        "slot": n, "cap": cap, "active_sessions": _active(slot_dir, cap),
-                        "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
-            if not _write_start(metadata):
-                fcntl.flock(fd, fcntl.LOCK_UN)
-                os.close(fd)
-                if story_fd is not None:
-                    fcntl.flock(story_fd, fcntl.LOCK_UN)
-                    os.close(story_fd)
-                raise RuntimeError("Claude session refused: durable session-start telemetry could not be written.")
-            lease = Lease(fd, metadata, story_fd)
-            lease.started_epoch = started_epoch
-            return lease
-        time.sleep(wait_seconds)
+    try:
+        while True:
+            for n in range(cap):
+                fd = os.open(slot_dir / f"slot-{n}.lock", os.O_CREAT | os.O_RDWR, 0o600)
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    os.close(fd)
+                    continue
+                try:
+                    started_epoch = time.time()
+                    metadata = {"event": "session_start", "session": session, "session_id": session_id,
+                                "model": model or "", "repo": repo_slug or Path(cwd).name, "started_at": _stamp(),
+                                "slot": n, "cap": cap, "active_sessions": _active(slot_dir, cap),
+                                "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
+                    if not _write_start(metadata):
+                        raise RuntimeError("Claude session refused: durable session-start telemetry could not be written.")
+                    lease = Lease(fd, metadata, story_fd)
+                    lease.started_epoch = started_epoch
+                    story_fd = None  # ownership transferred to the lease
+                    return lease
+                except Exception:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    os.close(fd)
+                    raise
+            time.sleep(wait_seconds)
+    except Exception:
+        if story_fd is not None:
+            fcntl.flock(story_fd, fcntl.LOCK_UN)
+            os.close(story_fd)
+        raise
 
 
 def story_has_unknown_cost(story: int, repo: str = "") -> bool:
