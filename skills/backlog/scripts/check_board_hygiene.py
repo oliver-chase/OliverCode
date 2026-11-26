@@ -240,9 +240,9 @@ def half_closes(items, states, repo, runner=gh_api):
 
 
 def check_close_gate(items, config, finished="Complete", runner=gh_api):
-    """The sweep's close-gate finding for each story `unproven_closes` names (#836, #1074), with the fix to run."""
-    return [f"#{number} \"{title[:50]}\": closed without complete_story.py. "
-            f"Fix: reopen #{number} and run complete_story.py --story {number} --config CONFIG --evidence TEXT"
+    """Report missing OliverCode completion evidence without directing anyone to reverse an owner closure."""
+    return [f"#{number} \"{title[:50]}\": closed without OliverCode completion evidence. "
+            "Owner decision is preserved; review the run evidence if OliverCode is expected to have completed this story."
             for number, title in unproven_closes(items, config, finished, runner)]
 
 
