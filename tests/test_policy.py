@@ -226,19 +226,16 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual("deny", policy.evaluate_path(rules, Path("/repo"), "/repo/docs/a.md").kind)
         self.assertIsNone(policy.evaluate_path(rules, Path("/repo"), "/repo/src/deep/a.py"))
 
-    def test_a_third_failed_attempt_at_one_gate_asks(self):
+    def test_three_gate_failures_do_not_stop_a_commit(self):
+        """#1275: a repeated gate failure is reported by the gate and never makes the policy ask."""
         log = temp_dir(self) / "failures.log"
         stamp = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        log.write_text("".join(f"{stamp}\tapp\tsecrets\tBLOCKED\n" for _ in range(2)))
+        log.write_text("".join(f"{stamp}\tapp\tsecrets\tBLOCKED\n" for _ in range(3)))
         with mock.patch.dict(os.environ, {"OLIVERCODE_FAILURE_LOG": str(log)}):
-            d = policy.evaluate_bash(policy.DEFAULT, "git commit -m x", "app")
-            self.assertEqual("triggers.gateFailures", d.rule)
-            self.assertIn("diagnosing-bugs", d.reason)
-            self.assertNotIn("tell the owner", d.reason)
-            self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "git commit -m x", "other"))
+            self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "git commit -m x", "app"))
+            self.assertNotIn("gateFailures", policy.DEFAULT["triggers"])
+            self.assertNotIn("gateFailures", (REPO_ROOT / ".olivercode" / "policy.json").read_text())
 
-
-class TestHook(unittest.TestCase):
     def setUp(self):
         self.tmp = temp_dir(self, resolve=True)
         self.repo = scratch_repo(self.tmp / "app")

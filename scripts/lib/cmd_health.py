@@ -137,12 +137,6 @@ def command_health(fleet_root: Path | None = None) -> int:
     for repo in [OC_ROOT, *(p for _n, _pr, p in _iter_fleet(load_repo_profiles(OC_ROOT)[0], fleet_root or OC_ROOT.parent))]:
         for line in main_checkout.drift(repo):
             t.warn(line)
-    from lib import story_outbox
-    unfiled = story_outbox.count()
-    if unfiled:
-        t.warn(f"{unfiled} story request(s) are unfiled in {story_outbox.outbox_file()}. Run `olivercode story outbox flush`")
-    else:
-        t.ok("no unfiled story requests")
 
     # 2. The optional local control plane (runtime/control-plane/, gitignored). A machine
     # without one has nothing to check here, so its absence is not counted as a skip.

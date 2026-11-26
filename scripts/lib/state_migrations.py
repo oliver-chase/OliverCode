@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from lib import failure_log, lessons
+from lib import failure_log
 
 
 @dataclass(frozen=True)
@@ -29,8 +29,6 @@ class Migration:
 
 
 MIGRATIONS: tuple[Migration, ...] = (
-    # docs/LESSONS.jsonl sat untracked in the checkout (#706); lessons now live under ~/.olivercode/lessons.
-    Migration(1, "checkout lesson log", lambda oc: oc / "docs" / "LESSONS.jsonl", lambda oc: lessons.path(oc), "jsonl"),
 )
 
 

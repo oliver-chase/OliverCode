@@ -30,9 +30,6 @@ MANAGED = (
     ("PostToolUse", "Bash", "gh_watch.py"),
     ("Stop", None, "early-stop-guard.py"),
     ("Stop", None, "wip_save.py"),
-    ("UserPromptSubmit", None, "lesson_capture.py"),
-    ("UserPromptSubmit", None, "owner_decision_capture.py"),
-    ("UserPromptSubmit", None, "error_paste.py"),
     ("UserPromptSubmit", None, "status_hint.py"),
 )
 TIMEOUT_S = 10
@@ -92,8 +89,7 @@ def automode_rules(oc_root: Path | None = None) -> dict:
             "through OliverCode's runner (olivercode dispatch and drain), each builder works one backlog story in its own "
             "worktree and ends with a commit, and the runner validates and lands that commit. The user has approved this standing workflow.",
             f"OliverCode's own repo is {root}. Its pre-push gate requires a passing scripts/validate.sh "
-            "run on the exact tree being pushed, and the untracked docs/LESSONS.jsonl file holds local lessons that are not "
-            "part of any commit.",
+            "run on the exact tree being pushed.",
         ),
         "allow": (
             "Starting, messaging, titling, pinning, detaching or stopping Claude Code desktop sessions "
@@ -101,8 +97,6 @@ def automode_rules(oc_root: Path | None = None) -> dict:
             "when the prompt names that story",
             "Listing Claude Code desktop sessions (mcp__ccd_session_mgmt__list_sessions) to find the session that runs "
             "a story's builder",
-            f"In {root}, temporarily moving the untracked docs/LESSONS.jsonl out of the tree to run "
-            "scripts/validate.sh and push validated commits to main, then moving it back",
         ),
     }
 

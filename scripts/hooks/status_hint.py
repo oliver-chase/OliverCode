@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import cmd_status, lesson_flags  # noqa: E402
+from lib import cmd_status  # noqa: E402
 
 CHARS = 1200  # the board line and the open list, about three hundred tokens, is what a status answer needs
 # A question about the board only: "status" alone, or "status" in a question or a status-of phrase. "the PR status is red" and "add a status field" are not questions.
@@ -31,8 +31,21 @@ FILLER = {"a", "about", "along", "and", "any", "are", "board", "done", "far", "f
 WORD_RE = re.compile(r"[a-z']+")
 
 
+# A prompt that starts like this came from another session or the system, so the owner did not type it.
+SKIP_PREFIXES = ("<cross-session-message", "[cross-session-message", "<system-notification", "[system-notification",
+                 "system-notification:", "<system-reminder", "<task-notification", "<side-sessions-event", "<ci-monitor-event",
+                 "[system notification", "another claude session sent a message", "<agent-message", "[subagent hand-back]",
+                 "<scheduled-task", "background (from the session that started this one)")
+
+
+def from_owner(prompt: str) -> bool:
+    """True when the owner typed the prompt: it is not a message from another session, a notification or a hand-back."""
+    text = (prompt or "").lstrip().lower()
+    return bool(text) and not text.startswith(SKIP_PREFIXES) and "another claude session sent a message" not in text[:300]
+
+
 def is_status_question(prompt: str) -> bool:
-    return lesson_flags.from_owner(prompt) and not ASK_RE.match(prompt) and bool(STATUS_RE.search(prompt))
+    return from_owner(prompt) and not ASK_RE.match(prompt) and bool(STATUS_RE.search(prompt))
 
 
 def is_status_only(prompt: str) -> bool:

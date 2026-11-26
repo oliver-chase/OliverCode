@@ -60,7 +60,7 @@ runtime/manifests/
 olivercode.local.json
 shared/repo-profiles.local.json
 docs/backlog-config.local.json
-# The checkout-local lesson log a migration moves to ~/.olivercode/lessons (#706, #762)
+# A local file an earlier release wrote into the checkout; nothing writes it now, and a copy that remains stays untracked
 docs/LESSONS.jsonl
 scratch/
 

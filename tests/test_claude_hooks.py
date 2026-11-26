@@ -353,6 +353,18 @@ class TestSettingsMerge(unittest.TestCase):
         self.assertFalse([c for c in commands if "/old/place/" in c])
         self.assertEqual(claude_settings.merge(moved, Path("/new/place/scripts/hooks")), moved)
 
+    def test_the_removed_learning_hooks_are_not_written_and_an_old_install_loses_them(self):
+        """#1275: lesson_capture, owner_decision_capture and error_paste are gone, and a settings file that still names them is cleaned on install."""
+        removed = ("lesson_capture.py", "owner_decision_capture.py", "error_paste.py")
+        self.assertFalse([s for _, _, s in claude_settings.MANAGED if s in removed])
+        old = json.loads(json.dumps(self.OWNER))
+        old["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": claude_settings._command(s, Path("/oc/scripts/hooks")), "timeout": 10}]} for s in removed]
+        merged = claude_settings.merge(old, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        for script in removed:
+            self.assertFalse([c for c in commands if script in c], script)
+        self.assertIn("~/mine.sh", commands)
+
     def test_a_settings_shape_the_merge_would_guess_at_is_refused_and_left_alone(self):
         tmp = temp_dir(self, "olivercode-settings-")
         path = tmp / "settings.json"

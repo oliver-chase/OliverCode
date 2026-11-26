@@ -10,11 +10,11 @@ What the harness covers today:
 - `olivercode drain` and `olivercode land`: a repo's open stories worked in priority order, each rebased, validated and pushed to main
 - Shared instructions, voice and design standards, and skills that install into `~/.claude`
 - Commit and push gates that refuse unsafe or incomplete work, with checks that the gates still run in every fleet repo
-- Fleet checks for layout, boards, ledgers, tests, research and machine health, plus scheduled jobs that groom boards, and sync repos with no model call
+- Fleet checks for layout, boards, ledgers, tests, research and machine health, plus scheduled jobs that report on boards and sync repos with no model call
 - A GitHub budget and a validation queue that every session shares
 - A decision ledger that keeps the owner's exact words for each decision
 
-Also in place: a check that policy cannot turn off silently, and a lessons log that `olivercode lesson add` appends to. Fresh-clone portability, second-device sync, honest token counts and a check for each lesson are tracked on the backlog.
+Also in place: a check that policy cannot turn off silently. Failures are reported, and none becomes a story, a gate or an issue edit by itself. Fresh-clone portability, second-device sync and honest token counts are tracked on the backlog.
 
 ## Install
 
@@ -55,12 +55,11 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 | The plate goes out and the ticket is spiked | Land and close | One commit on main, the test output attached and the story closed by script |
 | The health code posted on the wall | Commit gates | No secrets, no personal data, and every change tied to a ticket |
 | The manager who stops a cook from doing something dangerous | Tool guards | Refuse unsafe commands, unsafe pushes and overspending GitHub |
-| The suggestion box | The candidates list | Automatic checks drop ideas in, and nothing becomes a ticket until you pick it |
-| The nightly close-down checklist | Scheduled jobs | Health, maintenance and board grooming, with no model |
+| The nightly close-down checklist | Scheduled jobs | Health, maintenance and board reports, with no model |
 | The recipe binder every cook follows | Rules, voice and design files | Loaded into every session |
 | The training manuals | Skills | How to audit, file a story, plan and diagnose a bug |
 | The franchise inspection | Fleet checks | Checks every one of your repos against the same standard |
-| The incident log | Lessons and decisions | What went wrong, and what you decided |
+| The decision log | Decisions | What you decided, in your own words |
 
 Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
 
@@ -106,9 +105,8 @@ python3 scripts/olivercode conform
 | Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode maintain`, `olivercode limits` |
 | Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode land`, `olivercode wip`, `olivercode validated`, `olivercode queue` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
-| Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode story`, `olivercode candidates`, `olivercode gh-limit`, `olivercode gated` |
+| Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode gh-limit`, `olivercode gated` |
 | Owner and decisions | `olivercode owner`, `olivercode decisions` |
-| Learning | `olivercode lesson` |
 | Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode policy` |
 | Orientation | `olivercode guide` |
 

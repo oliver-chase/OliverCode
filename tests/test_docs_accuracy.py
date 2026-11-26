@@ -58,14 +58,13 @@ class TestDocsAccuracy(unittest.TestCase):
             "Land and close": ["scripts/lib/cmd_land.py"],
             "Commit gates": ["docs/GATES.md"],
             "Tool guards": ["scripts/hooks/pretool_guard.py"],
-            "The candidates list": ["scripts/lib/candidates.py"],
             "Scheduled jobs": ["scripts/lib/schedules.py"],
             "Rules, voice and design files": ["docs/RULES.md", "docs/VOICE.md", "docs/DESIGN.md"],
             "Skills": ["skills/INDEX.md"],
             "Fleet checks": ["scripts/lib/conform.py"],
-            "Lessons and decisions": ["scripts/lib/cmd_lesson.py", "scripts/lib/decisions.py"],
+            "Decisions": ["scripts/lib/decisions.py"],
         }
-        self.assertEqual(16, len(rows))
+        self.assertEqual(15, len(rows))
         self.assertEqual(set(parts), {cells[1] for cells in rows})
         self.assertTrue(all(len(cells) == 3 for cells in rows))
         missing = [path for paths in parts.values() for path in paths if not (REPO_ROOT / path).is_file()]

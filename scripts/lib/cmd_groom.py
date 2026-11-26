@@ -1,13 +1,11 @@
-"""Launcher command `board groom`: fixes drifted and missing board cards (#660) and fills the rest of the grooming (#724).
+"""Launcher command `board groom`: reads each board and reports what it found. It writes nothing to GitHub (#1275).
+
 `olivercode board groom [--config FILE | --all | --force]` calls no model; a repo unchanged since the last run costs no GraphQL call.
-
-Beyond drift it sets a blank Priority and Size from the story body, moves an unblocked Backlog story that has both to
-Ready, and queues one owner line for each pair of open stories that look like duplicates. It also does the work of the retired board sweep: it reads each board for drift, runs the intake check and files the repeated-blocker story (#982). `maintain --fix` runs it, the
-SessionStart hook starts it in the background when the last success is over 24 hours old, and `health` fails after 48.
-
-A story imported from a file (a `Source:` line naming one) carries a copied Priority, so groom labels it
-priority-not-reviewed and files one rerank story for all of them (#743). Once that story closes, the label on each story it
-covered becomes priority-reviewed.
+It reports drifted and missing cards, a blank Priority or Size, stories that name no files area, possible duplicate pairs, rename
+stories with no old name, name drift, imported priorities nobody reviewed, the intake check and the repeated gate failures.
+It changes no issue body, label, link, project status or field and no open or closed state, and it creates no issue or label.
+The findings go to the owner queue and to the groom state file in ~/.olivercode. `maintain --fix` runs it, the SessionStart hook
+starts it in the background when the last success is over 24 hours old, and `health` fails after 48.
 """
 
 import hashlib
@@ -15,7 +13,6 @@ import json
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -81,8 +78,8 @@ def size_of(story):
 
 
 def filled(items, stories, fixes, hold=frozenset()):
-    """Merge into `fixes` a Priority and Size for each open story that lacks one and a move to Ready for each unblocked Backlog story that `hold` does not name,
-    so a flagged story waits in Backlog for the owner (#1014)."""
+    """Merge into `fixes` a Priority and Size for each open story that lacks one and a move to Ready for each unblocked Backlog story that `hold` does not name.
+    The result is a report of what is missing and is never written to the board (#1275)."""
     import board_grooming
     by = {f["number"]: f for f in fixes}
     carded = {(i.get("content") or {}).get("number"): i for i in items}
@@ -105,71 +102,11 @@ def filled(items, stories, fixes, hold=frozenset()):
 
 IMPORTED = re.compile(r"\bSource:[^\n]*?[\w.-]+\.(?:md|txt|csv|json|ya?ml)\b", re.I)
 STATED = re.compile(r"\bPriority:\s*P[012]\b")
-FLAG, REVIEWED = "priority-not-reviewed", "priority-reviewed"
-RERANK = re.compile(r"^Rerank \d+ imported priorities against the code$")
-RERANK_TITLE = "Rerank {n} imported priorities against the code"
-RERANK_BODY = """**As the owner**, I want the priorities copied in from a file judged against the code, so that I never have to ask for it.
-
-```gherkin
-Feature: Have imported priorities judged against the code
-  Scenario: Main case
-    Given {n} open stories whose Priority was copied from a file: {numbers}
-    When each Priority is checked against the code and set on the story and its card
-    Then this story closes and groom replaces priority-not-reviewed with priority-reviewed on each
-```
-
-Epic: #{epic}
-Priority: P2. Size: S. Work type: Story.
-
-Existing coverage checked: groom already flags priority-not-reviewed, and this story reviews the flagged stories.
-"""
-
-
+REVIEWED = "priority-reviewed"
 def imported(stories):
     """Numbers of open stories whose Priority was copied from a file and has not been reviewed since."""
     return sorted(n for n, s in stories.items() if IMPORTED.search(s.get("body") or "") and STATED.search(s.get("body") or "")
-                  and REVIEWED not in (s.get("labels") or []) and not RERANK.match(s.get("title") or ""))
-
-
-def review_imported(slug, stories, mine, epic=1, run=gh, file=None):
-    """Flag each imported story priority-not-reviewed and file one rerank story; clear the flags its closing covers.
-    Returns an owner line, or "" when nothing changed. `mine["rerank"]` holds the numbers the rerank story covers."""
-    from lib import intake
-    file = file or intake.candidate
-
-    def edit(number, *args):
-        if run(["issue", "edit", str(number), "--repo", slug, *args]) is None:
-            raise RuntimeError(f"could not relabel #{number}")
-
-    def label(name, about):
-        run(["label", "create", name, "--repo", slug, "--force", "--color", "FBCA04", "--description", about])
-
-    lines, rerank = [], mine.get("rerank") or {}
-    open_rerank = any(RERANK.match(s.get("title") or "") for s in stories.values())
-    if rerank and open_rerank:
-        rerank["seen"] = True
-    if rerank.get("seen") and not open_rerank:
-        label(REVIEWED, "Priority judged against the code after an import")
-        done = [n for n in rerank.get("numbers", []) if n in stories]
-        for n in done:
-            edit(n, "--remove-label", FLAG, "--add-label", REVIEWED)
-            stories[n]["labels"] = [l for l in stories[n].get("labels") or [] if l != FLAG] + [REVIEWED]
-        mine.pop("rerank", None)
-        rerank = {}
-        lines.append(f"the rerank closed, so {len(done)} imported priorities are marked reviewed")
-    todo = imported(stories)
-    fresh = [n for n in todo if FLAG not in (stories[n].get("labels") or [])]
-    if fresh:
-        label(FLAG, "Priority copied from an import, not yet judged against the code")
-        for n in fresh:
-            edit(n, "--add-label", FLAG)
-            stories[n]["labels"] = list(stories[n].get("labels") or []) + [FLAG]
-        lines.append(f"{len(fresh)} imported priorities flagged as not reviewed")
-    if todo and not rerank and not open_rerank:
-        file(slug, RERANK_TITLE.format(n=len(todo)), RERANK_BODY.format(n=len(todo), numbers=", ".join(f"#{n}" for n in todo), epic=epic))
-        mine["rerank"] = {"numbers": todo, "seen": False}
-        lines.append(f"one rerank candidate added for {len(todo)}")
-    return "; ".join(lines)
+                  and REVIEWED not in (s.get("labels") or []))
 
 
 def duplicates(items):
@@ -196,7 +133,6 @@ def stale(hours, now=None, state=None, slugs=None):
 
 
 def groom_board(name: str, config: Path, force=False, now=None, run=gh):
-    import batch_project
     import board_rest
     import check_board_hygiene
     now = time.time() if now is None else now
@@ -227,8 +163,10 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         hold = set(found["rewrite"]) | set(found["waits"]) | pair_numbers(pairs)  # flagged stories stay in Backlog until the owner acts (#1014)
         fixes = filled(items, stories, [{"number": n, "fields": {"status": "Complete" if k == "close" else "Backlog"}}
                                 for n, k in check_board_hygiene.status_drift(items, states, slug)], hold)
-        if line := review_imported(slug, stories, mine, int(cfg.get("epic") or 1), run):
-            cmd_owner.note("groom", f"{name}: {line}")
+        todo = imported(stories)
+        if todo and json.dumps(todo) != mine.get("imported"):
+            cmd_owner.note("groom", f"{name}: {len(todo)} imported priorities have not been judged against the code: " + ", ".join(f"#{n}" for n in todo)[:400])
+        mine["imported"] = json.dumps(todo)
         if flagged and json.dumps(flagged) != mine.get("split"):
             cmd_owner.note("groom", f"{name}: {len(flagged)} story(ies) need a rewrite before dispatch: " + "; ".join(flagged)[:600])
         mine["split"] = json.dumps(flagged)
@@ -243,12 +181,9 @@ def groom_board(name: str, config: Path, force=False, now=None, run=gh):
         if names and json.dumps(names) != mine.get("names"):
             cmd_owner.note("groom", f"{name}: " + name_drift.summary(names)[:700])
         mine["names"] = json.dumps(names)
-        if fixes:
-            with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
-                json.dump({"issues": fixes}, f)
-                f.flush()
-                batch_project.main(["--config", str(config), "--input", f.name])
-            cmd_owner.note("groom", f"{name}: groom fixed {len(fixes)} card(s) that had drifted, were missing or lacked Priority, Size or Ready")
+        if fixes and json.dumps(fixes) != mine.get("cards"):
+            cmd_owner.note("groom", f"{name}: {len(fixes)} card(s) have drifted, are missing or lack Priority, Size or Ready: " + ", ".join(f"#{f['number']}" for f in fixes)[:400])
+        mine["cards"] = json.dumps(fixes)
         mine.update(ok=now, fp=fingerprint(slug, root, run), failed="")
         return True
     except (Exception, SystemExit) as exc:
@@ -341,13 +276,13 @@ def command_groom(argv):
 
 
 def check_intake(chosen, out=print) -> int:
-    """The board sweep's second half (#982): the repeated-blocker check on the first board's repo and the intake check on every board. Returns 1 on a finding."""
+    """The board sweep's second half (#982): the repeated-blocker report and the intake check on every board. Both only report. Returns 1 on a finding."""
     from lib import cmd_sweep, intake
     held = gh_budget.refusal() or gh_budget.points_refusal()
     if held:
         out("Intake check skipped: " + held.split(". ")[0])
         return 0
     fleet = cmd_sweep.repos(lambda: chosen)
-    for line in intake.prevention(*fleet[0][1:]) if fleet else []:
+    for line in intake.repeated_blockers():
         out(line)
     return intake.run(fleet)

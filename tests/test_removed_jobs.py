@@ -52,7 +52,7 @@ class TestRemovedJobs(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_gapsweep.py").exists())
         self.assertFalse((REPO_ROOT / "scripts" / "lib" / "cmd_burndown.py").exists())
 
-    def test_the_hourly_lesson_job_is_unloaded_and_deleted_and_its_command_is_gone(self):
+    def test_the_retired_hourly_job_is_unloaded_and_deleted_and_its_command_is_gone(self):
         label = "com.olivercode.lessons"
         self.assertIn(label, cmd_install.REMOVED_JOBS)
         (self.agents / f"{label}.plist").write_text("<plist/>")

@@ -122,7 +122,7 @@ class StoryFormat(unittest.TestCase):
         self.assertEqual([], sf.check_body(good.replace("Blocked by: none.", "Blocked by: o/r#1067"), blocker=True))
 
     def test_a_body_that_names_a_line_number_is_flagged(self):
-        flagged = body("story-good.body") + "\nThe call at scripts/hooks/error_paste.py:84 files the story.\n"
+        flagged = body("story-good.body") + "\nThe call at scripts/hooks/status_hint.py:84 files the story.\n"
         self.assertTrue(any(p.startswith("Line number") for p in parts_of(flagged, line_numbers=True)))
         prose = body("story-good.body") + "\nSee line 84 of the hook.\n"
         self.assertTrue(any(p.startswith("Line number") for p in parts_of(prose, line_numbers=True)))

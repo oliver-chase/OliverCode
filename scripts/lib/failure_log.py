@@ -62,7 +62,7 @@ def append_private(path: Path, text: str) -> None:
 
 @contextmanager
 def locked(path: Path):
-    """One writer at a time for a state file: hold an exclusive flock on a sibling .lock file (the pattern of candidates._locked)."""
+    """One writer at a time for a state file: hold an exclusive flock on a sibling .lock file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path.with_name(path.name + ".lock"), os.O_WRONLY | os.O_CREAT, 0o600)
     with os.fdopen(fd, "w") as fh:
