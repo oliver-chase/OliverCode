@@ -9,7 +9,6 @@ import fcntl
 import json
 import os
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -139,15 +138,17 @@ def story_has_unknown_cost(story: int, repo: str = "") -> bool:
     starts: dict[str, int] = {}
     ends: dict[str, list[dict]] = {}
     path = failure_log.home() / LOG
+    if not path.exists():
+        return False
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 try:
                     row = json.loads(line)
                 except (ValueError, TypeError):
-                    continue
+                    return True  # corruption makes the session/cost history incomplete
                 if not isinstance(row, dict):
-                    continue
+                    return True
                 name = str(row.get("session") or "")
                 if name != prefix and not name.startswith(prefix + "-"):
                     continue
@@ -156,13 +157,13 @@ def story_has_unknown_cost(story: int, repo: str = "") -> bool:
                     continue
                 sid = str(row.get("session_id") or "")
                 if not sid:
-                    continue
+                    return True
                 if row.get("event") == "session_start":
                     starts[sid] = starts.get(sid, 0) + 1
                 elif row.get("event") == "session_end":
                     ends.setdefault(sid, []).append(row)
     except OSError:
-        return False
+        return True
     for sid, count in starts.items():
         completions = ends.get(sid, [])
         if len(completions) < count:
