@@ -178,12 +178,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Georgia,"Time
 main{max-width:1040px;margin:0 auto;padding:32px 24px 76px}
 h1,h2,h3,.big,.flow strong{font-family:Georgia,"Times New Roman",serif;font-weight:500}
 h1{font-size:clamp(2rem,5vw,3rem);line-height:1.12;letter-spacing:-.035em;margin:0}
-h2{font-size:1.55rem;letter-spacing:-.02em;margin:44px 0 14px}
+h2{font-size:1.55rem;letter-spacing:-.02em;margin:52px 0 14px;padding-top:8px;border-top:1px solid var(--line)}
 h3{font-size:1.15rem;margin:0 0 8px}
 p{margin:8px 0}.sub,.label,.note,.summary-meta{color:var(--sub)}
 .lede{max-width:68ch;font-size:1.05rem;margin:12px 0 26px}.eyebrow{font-size:.74rem;text-transform:uppercase;letter-spacing:.13em;color:var(--sub);font-weight:650;margin-bottom:8px}
 .cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
-.card{background:#fff;border:1px solid var(--line);padding:18px;border-radius:4px}
+.card{background:var(--wash);border:1px solid var(--line);padding:18px;border-radius:8px}
 .big{font-size:2.4rem;line-height:1.12;letter-spacing:-.04em;margin:5px 0}
 .label{font-size:.82rem;font-weight:650}.note{font-size:.88rem;margin-top:6px}
 .pill{display:inline-block;border:1px solid var(--line);padding:3px 9px;border-radius:4px;font-size:.78rem;font-weight:650;color:var(--sub);background:#fff}
@@ -196,7 +196,7 @@ details{border-top:1px solid var(--line);padding:0}details:last-child{border-bot
 summary{cursor:pointer;list-style:none;padding:15px 4px;display:flex;align-items:flex-start;gap:12px;font-weight:650}
 summary::-webkit-details-marker{display:none}summary:after{content:"＋";color:var(--accent-strong);margin-left:auto;font-weight:400}details[open]>summary:after{content:"−"}summary:focus-visible{outline:2px solid var(--accent-strong);outline-offset:3px}
 .summary-title{flex:1;min-width:150px}.summary-meta{font-size:.88rem;font-weight:500}.expansion{padding:2px 16px 18px;color:var(--ink)}.expansion p{max-width:72ch}.expansion ul{margin:8px 0 0;padding-left:22px}.expansion li{padding:5px 0}
-.attention{border:1px solid var(--line);margin:0 0 9px;padding:0 12px;background:#fff;border-radius:4px}.attention summary{padding:13px 2px}.attention .expansion{padding:4px 2px 14px}
+.attention{border:1px solid var(--line);margin:0 0 9px;padding:0 12px;background:var(--wash);border-radius:7px}.attention summary{padding:13px 2px}.attention .expansion{padding:4px 2px 14px}
 .row{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}.row>div:first-child{flex:1}.row .sub{max-width:34ch;font-size:.9rem}
 .bars{display:flex;align-items:stretch;gap:10px;height:160px;margin:14px 0 6px}.chart-day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;color:var(--sub);font-size:.75rem}.chart-values{display:flex;justify-content:center;gap:8px;font-size:.72rem;font-variant-numeric:tabular-nums}.bar{display:flex;gap:4px;align-items:flex-end;justify-content:center;width:100%;height:112px}.bar i{display:block;width:35%;min-height:2px}.o{background:#d9dce4}.c{background:#b7a8f1}.chart-label{padding-top:2px}.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.84rem;color:var(--sub)}.legend span:before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;background:#d9dce4}.legend .delivered:before{background:#b7a8f1}
 .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.flow>div{padding:13px;background:var(--wash);border-left:3px solid var(--line)}.flow .positive{border-color:#b7dfca;background:var(--mint)}.flow .negative{border-color:#f0c5aa;background:var(--peach)}.flow strong{display:block;font-size:1.65rem;line-height:1.25}
@@ -311,16 +311,17 @@ def dashboard_html(snap: dict) -> str:
         f'<div class="eyebrow">OliverCode · Live operating picture</div><h1>OliverCode City</h1>'
         f'<p class="lede">{esc(summary_line(snap))} <span class="sub">Updated {esc(snap["now"].strftime("%A, %H:%M"))}.</span></p>'
         f'<div class="cards">{cards}</div>'
-        f'<section><h2>What needs your attention</h2><p class="section-intro">Owner decisions come first. They are the work only you can unblock.</p>{_attention_html(snap)}</section>'
+        f'<section><h2>Keep exploring</h2><p>{plural(snap["ideas"], "idea")} waiting for review. <code>olivercode candidates</code></p>'
+        f'<p class="term">Terminal view</p><p><code>cd {esc(CD_TARGET)}</code> then <code>olivercode status</code>.</p></section>'
         f'<section><h2>Work underway</h2><div class="card"><div>{pill} <b>{runner["building"]} of {allowed} builder slots in use</b></div>{meter}{load}'
         f'<p>{esc("Paused: no new stories will start." if runner.get("paused") else ("Nothing is building at the moment." if not runner["building"] else "Stories are moving through the runner."))}</p>{next_up}{latest}</div></section>'
-        f'<section><h2>Cost over time</h2>{_cost_html(snap)}</section>'
+        f'<!--REPOSITORIES-->'
+        f'<section><h2>What needs your attention</h2><p class="section-intro">Owner decisions come first. They are the work only you can unblock.</p>{_attention_html(snap)}</section>'
         f'<section><h2>Delivery pace</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>'
         f'{_bars(snap["days"])}<div class="legend"><span>Added</span><span class="delivered">Delivered</span></div>{flow}'
         f'<p class="note"><b>What the trend says:</b> {esc(reading)}</p><p class="note">{esc(pace)}. {esc(ratio)}. {esc(benchmark)}</p>'
         f'<details><summary><span class="summary-title">Daily breakdown</span><span class="summary-meta">7-day view</span></summary><div class="expansion"><ul>{daily}</ul></div></details>'
         f'<p class="note">Benchmark: deliveries need to stay ahead of incoming work to reduce backlog. This compares with your own queue, not an industry target.</p></div></section>'
+        f'<!--USAGE_ANALYTICS-->'
         f'<section><h2>System health</h2>{_health_html(snap)}</section>'
-        f'<section><h2>Keep exploring</h2><p>{plural(snap["ideas"], "idea")} waiting for review. <code>olivercode candidates</code></p>'
-        f'<p class="term">Terminal view</p><p><code>cd {esc(CD_TARGET)}</code> then <code>olivercode status</code>.</p></section>'
     )
