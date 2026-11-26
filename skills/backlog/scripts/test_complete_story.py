@@ -12,7 +12,8 @@ import unittest.mock
 from pathlib import Path
 
 # A machine's global git settings, such as a global core.hooksPath, must not reach the temp repos these tests commit in.
-os.environ.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
+# OLIVERCODE_LOCAL_CONFIG keeps a test from reading the machine's real olivercode.local.json (log_action reads engineBranch from it).
+os.environ.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "OLIVERCODE_LOCAL_CONFIG": os.devnull})
 
 import complete_story as cs  # noqa: E402
 
