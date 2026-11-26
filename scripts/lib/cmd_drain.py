@@ -569,12 +569,13 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if session_attempts >= max_attempts:
             io.comment(n, f"Parked: this story has reached its {max_attempts}-session attempt ceiling across runs and handoffs; no further model session will start.\\n"
                           "- Next: split the work or review the prior attempts, then raise maxStoryAttempts in olivercode.local.json and return it to Ready.")
-            io.backlog(n)
-            return False, tokens
+            raise CommitBlocked(tokens)
         ceiling, spent = local_config.max_story_spend(), story_spend(n, getattr(io, "slug", ""))
-        if spent > ceiling:
-            io.comment(n, f"Parked: this story has spent ${spent:.2f}, above its ${ceiling:.2f} ceiling, so no further builder round will start.\n"
-                          "- Next: split the work, or raise maxStorySpend in olivercode.local.json and return the story to Ready.")
+        unknown = story_cost_unknown(n, getattr(io, "slug", ""))
+        if unknown or spent >= ceiling:
+            detail = "a prior session's cost is unknown" if unknown else f"it has spent ${spent:.2f}, reaching its ${ceiling:.2f} ceiling"
+            io.comment(n, f"Parked: {detail}; no further model session will start.\\n"
+                          "- Next: reconcile the cost, split the work, or raise maxStorySpend in olivercode.local.json and return the story to Ready.")
             raise SpendCeilingParked(tokens)
         if state.get("api_error_stop"):
             return False, tokens
