@@ -56,6 +56,24 @@ class TestOwnerQueue(unittest.TestCase):
         self.assertIn("set_pinned for x9 with pinned=false", out)
 
 
+class TestRemovedJobItems(unittest.TestCase):
+    def test_items_from_removed_jobs_close_once_with_the_reason_and_the_rest_stay_open(self):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            cmd_owner.add("maintain", "maintain health: docs failed")
+            cmd_owner.add("maintain", "maintain tidy: 2 worktrees kept")
+            cmd_owner.add("maintain", "maintain queues: a denied step")
+            cmd_owner.add("fleet-sync", "Bring tesknota level with origin: 2 uncommitted file(s)", "git status --porcelain", "dirty")
+            cmd_owner.add("s1", "Pick a price")
+            self.assertEqual(["maintain queues: a denied step", "Pick a price"], [i["step"] for i in cmd_owner.open_items()])
+            self.assertEqual(3, cmd_owner.retire_removed())
+            self.assertEqual(0, cmd_owner.retire_removed())
+            closed = [i for i in cmd_owner.items() if i["status"] == "done"]
+            self.assertEqual(3, len(closed))
+            self.assertEqual({"the job that wrote it was removed"}, {i["reason"] for i in closed})
+            self.assertEqual(["maintain queues: a denied step", "Pick a price"], [i["step"] for i in cmd_owner.open_items()])
+
+
 if __name__ == "__main__":
     unittest.main()
 

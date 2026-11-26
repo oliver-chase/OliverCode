@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT
+from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_status  # noqa: E402
+from lib import cmd_owner, cmd_status  # noqa: E402
 
 NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
 
@@ -22,8 +22,8 @@ def stage(story: str, name: str, hhmm: str, seconds: int = 0, repo: str = "r") -
     return {"story": story, "repo": repo, "stage": name, "at": f"2026-11-22T{hhmm}:00Z", "seconds": seconds}
 
 
-def issue(created: str, closed: str | None = None) -> dict:
-    return {"created_at": created + "T00:00:00Z", "closed_at": closed + "T00:00:00Z" if closed else None}
+def issue(created: str, closed: str | None = None, reason: str = "completed") -> dict:
+    return {"created_at": created + "T00:00:00Z", "closed_at": closed + "T00:00:00Z" if closed else None, "state_reason": reason if closed else None}
 
 
 class TestStatus(unittest.TestCase):
@@ -61,13 +61,19 @@ class TestStatus(unittest.TestCase):
 
     def test_issues_outside_the_window_are_not_counted(self):
         _, text = self.status(5, [issue("2026-10-01", "2026-10-02")])
-        self.assertIn("0 closed and 0 opened", text)
+        self.assertIn("0 closed as completed and 0 opened", text)
 
-    def test_the_tokens_per_closed_story_average_the_run_log_of_the_stories_that_closed(self):
+    def test_an_issue_closed_as_not_planned_is_not_counted_as_landed(self):
+        rows = [issue("2026-11-01", "2026-11-20"), issue("2026-11-01", "2026-11-21", reason="not_planned")]
+        _, text = self.status(5, rows)
+        self.assertIn("1 closed as completed and 0 opened, so 0.1 stories landed per day.", text)
+
+    def test_the_tokens_per_closed_story_average_the_run_log_of_the_stories_that_recorded_tokens(self):
         rows = [dict(issue("2026-11-01", "2026-11-20"), number=4), dict(issue("2026-11-01", "2026-11-21"), number=5), dict(issue("2026-11-01"), number=6)]
         log = [{"story": "story-4", "input": 600, "output": 400}, {"story": "story-4", "input": 1000, "output": 0},
                {"story": "story-5", "input": 1000, "output": 0}, {"story": "story-6", "input": 9000, "output": 0}]
-        self.assertEqual("Tokens per closed story: 1,500 across 2 stories closed in the last 7 days.", cmd_status.tokens_per_story(rows, log))
+        self.assertEqual("Tokens per closed story: 1,500 across the 2 stories that recorded tokens, out of 2 closed in the last 7 days.",
+                         cmd_status.tokens_per_story(rows, log))
         self.assertIn("not recorded", cmd_status.tokens_per_story(rows, []))
 
     def test_status_prints_the_open_count_the_rate_the_tokens_and_the_zero_date(self):
@@ -93,6 +99,18 @@ class TestStatus(unittest.TestCase):
             returncode = 0
             stdout = '[[{"created_at": "a"}, {"created_at": "b", "pull_request": {}}]]'
         self.assertEqual([{"created_at": "a"}], cmd_status.recent("o/r", NOW, runner=lambda args: Done()))
+
+
+class TestWaitingLines(unittest.TestCase):
+    def test_waiting_lists_only_steps_whose_job_still_runs_and_closes_the_removed_ones_once(self):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            cmd_owner.add("maintain", "maintain health: docs failed")
+            cmd_owner.add("fleet-sync", "Bring tesknota level with origin: 2 uncommitted file(s)", "git status --porcelain", "dirty")
+            cmd_owner.add("s1", "Sign in to the mail host", "gh auth login", "refused")
+            self.assertEqual(["- #3 Sign in to the mail host"], cmd_status.waiting_lines())
+            self.assertEqual(0, cmd_owner.retire_removed())
+            self.assertEqual(["- #3 Sign in to the mail host"], cmd_status.waiting_lines())
 
 
 def decision(n: int, words: str = "Option A") -> dict:
@@ -148,7 +166,7 @@ class TestDigest(unittest.TestCase):
 
     def test_the_digest_lists_open_stories_by_priority_the_last_five_landed_and_what_waits(self):
         opened = [{"number": 3, "title": "Low", "body": "Priority: P2.", "labels": []}, {"number": 9, "title": "First", "body": "Priority: P0.", "labels": []}]
-        rows = [{"number": n, "title": f"Done {n}", "closed_at": f"2026-11-{10 + n}T00:00:00Z", "created_at": "2026-11-01T00:00:00Z"} for n in range(1, 8)]
+        rows = [{"number": n, "title": f"Done {n}", "closed_at": f"2026-11-{10 + n}T00:00:00Z", "state_reason": "completed", "created_at": "2026-11-01T00:00:00Z"} for n in range(1, 8)]
         _, _, target = self.write([], [], rows=rows, opened=opened, waiting=["- #4 Approve the push"])
         body = target.read_text(encoding="utf-8")
         self.assertLess(body.index("P0 #9 First"), body.index("P2 #3 Low"))

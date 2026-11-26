@@ -57,9 +57,9 @@ def summary(open_now: int, rows: list[dict], now: datetime, days: int = DAYS) ->
     """The status lines for an open count and the issues updated in the last `days`."""
     since = now - timedelta(days=days)
     opened = sum(1 for r in rows if _after(r.get("created_at"), since))
-    closed = sum(1 for r in rows if _after(r.get("closed_at"), since))
+    closed = sum(1 for r in rows if r.get("state_reason") == "completed" and _after(r.get("closed_at"), since))
     rate = closed / days
-    head = f"{open_now} open. In the last {days} days {closed} closed and {opened} opened, so {rate:.1f} stories landed per day."
+    head = f"{open_now} open. In the last {days} days {closed} closed as completed and {opened} opened, so {rate:.1f} stories landed per day."
     if open_now == 0:
         return head + " The backlog is at zero."
     if closed <= opened:
@@ -262,7 +262,8 @@ def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
     counted = [spent[f"story-{r.get('number')}"] for r in landed(rows) if spent.get(f"story-{r.get('number')}")]
     if not counted:
         return f"Tokens per closed story: not recorded for the last {DAYS} days."
-    return f"Tokens per closed story: {sum(counted) // len(counted):,} across {len(counted)} stories closed in the last {DAYS} days."
+    return (f"Tokens per closed story: {sum(counted) // len(counted):,} across the {len(counted)} stories that recorded tokens, "
+            f"out of {len(landed(rows))} closed in the last {DAYS} days.")
 
 
 def median(values: list[float]) -> float:
@@ -383,8 +384,8 @@ def _run_line(row: dict) -> str:
 
 
 def landed(rows: list[dict]) -> list[dict]:
-    """The issues closed in ROWS, newest close first."""
-    return sorted((r for r in rows if r.get("closed_at")), key=lambda r: r["closed_at"], reverse=True)
+    """The issues closed as completed in ROWS, newest close first. An issue closed as not planned did not land (#1246)."""
+    return sorted((r for r in rows if r.get("closed_at") and r.get("state_reason") == "completed"), key=lambda r: r["closed_at"], reverse=True)
 
 
 def _story_line(row: dict, closed: bool = False) -> str:
@@ -400,7 +401,8 @@ def open_lines(opened: list[dict]) -> list[str]:
 def waiting_lines() -> list[str]:
     """The owner-queue steps that are open, one line each."""
     try:
-        found = [i for i in cmd_owner.items() if i["status"] == "open"]
+        cmd_owner.retire_removed()  # a removed job's items close once, here, and are never listed again (#1246)
+        found = cmd_owner.open_items()
     except (OSError, ValueError, KeyError):
         return []
     return [f"- #{i['id']} {_text(i.get('step'), 120)}" for i in found[:DIGEST_ITEMS]] + ([f"- and {len(found) - DIGEST_ITEMS} more"] if len(found) > DIGEST_ITEMS else [])

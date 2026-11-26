@@ -99,8 +99,32 @@ def add(session: str, step: str, command: str = "", error: str = "", tab: str = 
     return item
 
 
-def close(item_id: int) -> None:
-    _append({"id": item_id, "status": "done", "closed": _now().isoformat(timespec="seconds")})
+def close(item_id: int, reason: str = "") -> None:
+    _append({"id": item_id, "status": "done", "closed": _now().isoformat(timespec="seconds"), "reason": reason})
+
+
+# The fleet jobs #1286 removes wrote these steps, and their open items no longer describe anything the machine still does (#1246).
+REMOVED_STEPS = ("maintain health:", "maintain tidy:", "maintain branches:", "maintain suite:")
+REMOVED_BRING = re.compile(r"Bring .+ level with origin: ")
+REMOVED_REASON = "the job that wrote it was removed"
+
+
+def _removed(item: dict) -> bool:
+    step = str(item.get("step", ""))
+    return step.startswith(REMOVED_STEPS) or bool(REMOVED_BRING.match(step))
+
+
+def open_items() -> list[dict]:
+    """The open steps whose job still runs. An item a removed job wrote is left out even before retire_removed closes it."""
+    return [i for i in items() if i["status"] == "open" and not _removed(i)]
+
+
+def retire_removed() -> int:
+    """Close each open item a removed job wrote, once, with the reason it was closed. Returns how many it closed (#1246)."""
+    gone = [i for i in items() if i["status"] == "open" and _removed(i)]
+    for item in gone:
+        close(item["id"], REMOVED_REASON)
+    return len(gone)
 
 
 def queue_denied(session: str, key: str, step: str, command: str, error: str, resolve: dict) -> dict | None:
