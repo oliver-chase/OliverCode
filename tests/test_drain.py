@@ -1194,6 +1194,36 @@ class CloseByScript(unittest.TestCase):
         self.assertEqual(1, len(lines))
         self.assertIn("#2", lines[0])
 
+    def test_a_failed_board_read_puts_the_qa_close_off_and_the_next_read_closes_before_a_claim(self):  # #1345
+        qa, new = dict(issue(1), status="QA"), issue(2)
+        io = FakeIo([qa, new])
+        io.staged = lambda: True
+        io.on_main = {1}
+        real, reads = io.list_open, []
+        def flaky():
+            reads.append(1)
+            return None if len(reads) == 1 else real()
+        io.list_open = flaky
+        lines = []
+        cmd_drain.close_waiting_in_qa(io, lines.append)
+        self.assertEqual(([], 1), (io.closed, len(lines)))
+        self.assertIn("Put off", lines[0])
+        cmd_drain.drain(io, state(), sleep=lambda s: None, say=lambda t: None)
+        self.assertEqual(1, io.closed[0])  # the QA story closes before the new story is built
+        self.assertEqual([2], io.started)
+
+    def test_the_drain_runs_the_qa_close_after_the_hold_wait(self):  # #1345
+        io = FakeIo([dict(issue(1), status="QA")])
+        io.staged = lambda: True
+        io.on_main = {1}
+        naps, offsets = [], [600, 0]
+        blocked = lambda resource="": time.time() + offsets.pop(0) if len(offsets) > 1 else 0.0
+        seen = []
+        io.list_open = lambda: seen.append(naps[:]) or []
+        with mock.patch.object(cmd_drain.gh_budget, "blocked_until", blocked), mock.patch.object(cmd_drain.agent_loop, "log_stage", lambda *a, **k: None):
+            quiet(cmd_drain.drain, io, state(), sleep=naps.append)
+        self.assertTrue(seen and seen[0])  # the first board read came after the sleep
+
     def test_drain_start_leaves_qa_stories_alone_in_a_repo_with_no_engine_branch(self):
         io = FakeIo([dict(issue(1), status="QA")])
         io.on_main = {1}

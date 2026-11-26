@@ -428,12 +428,17 @@ def finish(io, worktree: Path, n: int, why: str) -> None:
         raise CloseRefused(reason)
 
 
-def close_waiting_in_qa(io, say=print) -> None:
-    """At drain start on an engine repo, close each open story whose card waits in QA and whose commit is on the engine branch, through the same close
-    a fresh landing gets. A QA story with no commit there stays open and is named (#1330)."""
+def close_waiting_in_qa(io, say=print) -> bool:
+    """On an engine repo, close each open story whose card waits in QA and whose commit is on the engine branch, through the same close
+    a fresh landing gets. A QA story with no commit there stays open and is named (#1330). Returns False when the board read returned
+    nothing, so the drain tries again on its next read (#1345)."""
     if not io.staged():
-        return
-    for issue in io.list_open() or []:
+        return True
+    issues = io.list_open()
+    if issues is None:
+        say("Put off closing the stories waiting in QA: the open stories were not read.")
+        return False
+    for issue in issues:
         n = issue["number"]
         if issue.get("status") != "QA":
             continue
@@ -444,6 +449,7 @@ def close_waiting_in_qa(io, say=print) -> None:
             finish(io, io.repo, n, "already on the engine branch")
         except CloseRefused as exc:  # finish has commented and logged the refusal
             say(f"Left open #{n}: {exc}")
+    return True
 
 
 def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str] | None = None) -> tuple[bool | None, int]:
@@ -686,7 +692,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         io.beat([i["number"] for i in running.values()])
 
     try:
-        close_waiting_in_qa(io, say)
+        qa_closed = False  # the QA close waits for a board read, so a hold at start cannot skip it (#1345)
         while True:
             start_batch()  # before any hold or read failure ends the loop, so a committed story is never left waiting
             until = gh_budget.blocked_until()
@@ -709,6 +715,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 gh_budget.replay()  # the writes queued during the hold go first
                 continue
             hold_waited = False
+            if not qa_closed:
+                qa_closed = close_waiting_in_qa(io, say)
             issues = io.list_open()
             if issues is None:
                 if running or landing:  # builders and the batch in flight settle first, so no committed story is left claimed
