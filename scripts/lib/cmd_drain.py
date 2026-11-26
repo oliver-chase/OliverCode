@@ -430,6 +430,8 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         closed, used = _work_story(io, issue, state)
         if not closed:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
+            if n not in state.get("limited", []):  # the usage limit already sent its own notification
+                notify(f"Story #{n} stopped without landing: {getattr(io, 'said', {}).get(n) or 'no reason recorded'}")  # (#1325)
         return closed, used
     except CloseRefused:  # a refused close leaves the story with the gate's message and its one stopped row (#1011)
         return False, 0
@@ -585,8 +587,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     state["held"] = f"GitHub's rate-limit hold was still on after the reset it named, about {reset}"
                     agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "stopped", reason=state["held"])
                     say(f"Drain stopped: {state['held']}.")
+                    notify(f"Drain stopped for the GitHub hold: still on after the reset it named, about {reset}")
                     return 1
                 hold_waited = True
+                notify(f"Drain is waiting for GitHub's rate-limit reset and expects to resume at about {reset}")
                 agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "waiting", reason=f"GitHub's rate-limit hold lasts until about {reset}")
                 say(f"Waiting for GitHub's rate-limit reset at about {reset}.")
                 sleep(max(0.0, until - time.time()) + 1)

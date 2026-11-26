@@ -28,6 +28,7 @@ class FakeIo:
     def __init__(self, issues, cap=2, builds=None, land_ok=True, tokens=10, stops=None):
         self.agent, self.moved, self.released, self.already, self.kept, self.on_main = "drain", [], [], False, [], set()
         self.ghost_land = False
+        self.said = {}
         self.refuse_close = ""
         self.slug, self.issues, self.cap, self.builds, self.land_ok, self.tokens = "o/r", list(issues), cap, builds or {}, land_ok, tokens
         self.stops, self.owner = stops or {}, []  # story number -> the policy stop its builder hit; the owner-queue lines written
@@ -484,6 +485,41 @@ class DrainCase(unittest.TestCase):
             code, out = quiet(cmd_drain.drain, io, st, sleep=naps.append)
         self.assertEqual((code, io.started, len(naps), [r[0] for r in rows]), (1, [], 1, ["waiting", "stopped"]))
         self.assertIn("still on after the reset", st["held"])
+
+    def test_a_hold_notifies_once_when_the_wait_starts_and_once_when_the_run_quits(self):  # #1325
+        io = FakeIo([issue(1)])
+        naps, rows, blocked = self.hold_clock(io, [600])
+        with mock.patch.object(cmd_drain.gh_budget, "blocked_until", blocked), mock.patch.object(cmd_drain.gh_budget, "replay"), \
+                mock.patch.object(cmd_drain.agent_loop, "log_stage", lambda *a, **k: rows.append((a[2], k.get("reason", "")))), \
+                mock.patch.object(cmd_drain, "notify") as notify:
+            quiet(cmd_drain.drain, io, state(), sleep=naps.append)
+        texts = [c.args[0] for c in notify.call_args_list]
+        self.assertEqual(len(texts), 2)
+        self.assertIn("waiting", texts[0])
+        self.assertIn("resume at about", texts[0])
+        self.assertIn("stopped for the GitHub hold", texts[1])
+
+    def test_a_story_that_stops_without_landing_notifies_with_its_number_and_reason(self):  # #1325
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "review still failing"} for _ in range(4)]})
+        io.said[1] = "review still failing"
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            self.run_drain(io)
+        notify.assert_called_once()
+        self.assertIn("#1", notify.call_args.args[0])
+        self.assertIn("review still failing", notify.call_args.args[0])
+
+    def test_an_io_with_no_said_map_still_notifies_a_stopped_story(self):  # #1325, dispatch's RunIo has none
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "x"} for _ in range(4)]})
+        del io.said
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            self.run_drain(io)
+        self.assertIn("no reason recorded", notify.call_args.args[0])
+
+    def test_a_story_that_lands_sends_no_notification(self):  # #1325
+        io = FakeIo([issue(1)])
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            self.run_drain(io)
+        self.assertEqual((io.closed, [c.args[0] for c in notify.call_args_list if "stopped without" in c.args[0] or "waiting" in c.args[0]]), ([1], []))
 
     def test_no_hold_means_no_waiting_row(self):  # #1314
         io = FakeIo([issue(1)])
