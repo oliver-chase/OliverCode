@@ -437,7 +437,9 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             if review_mode == "none":
                 return {"done": True, "reason": "The repo's validation passes; routine story review is covered by validation and commit gates.",
                         "rounds": n, "tokens": tokens, "summary": summary}
-            if stop_check and stop_check():\n                return {"done": False, "cancelled": True, "reason": "Owner cancelled this story before review.", "rounds": n, "tokens": tokens, "summary": summary}\n            verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
+            if stop_check and stop_check():
+                return {"done": False, "cancelled": True, "reason": "Owner cancelled this story before review.", "rounds": n, "tokens": tokens, "summary": summary}
+            verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
                              max_turns=READER_TURNS, attempts=2, repo=repo)
             if verdict["verdict"] == "none":  # the reader gave no verdict twice, so the story is held for a retry and nothing lands (#1015)
                 return {"done": False, "held": verdict["text"], "reason": f"The fresh reader gave no verdict, so nothing is pushed: {verdict['text'][:300]}",
