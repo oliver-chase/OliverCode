@@ -192,14 +192,25 @@ def item_id(cfg, story, runner):
     for kind in ("users", "orgs"):
         done = runner(["-H", "X-GitHub-Api-Version: 2022-11-28", f"{kind}/{owner}/projectsV2/{number}/items?per_page=100",
                        "--paginate", "--jq", ITEM_JQ])
-        if done.returncode != 0:
-            continue
-        for line in done.stdout.splitlines():
-            row = json.loads(line) if line.strip() else {}
+        for line in done.stdout.splitlines():  # a paged read that broke partway still printed its early pages
+            try:
+                row = json.loads(line) if line.strip() else {}
+            except ValueError:
+                break
             if row.get("number") == story and (not row["repo"] or row["repo"].endswith("/" + repo)):
                 return row["id"]
-        return None
-    raise RuntimeError("the board's items could not be read through REST")
+        if done.returncode == 0:
+            return None
+    # REST could not read the whole board (a later page failed): the one-issue GraphQL lookup costs one call (#1304)
+    owner_name, name = cfg["repoOwner"], cfg["repoName"]
+    query = (f'{{ repository(owner: "{owner_name}", name: "{name}") {{ issue(number: {story}) '
+             "{ projectItems(first: 5) { nodes { id project { number } } } } } }")
+    data = json.loads(call(runner, ["graphql", "-f", f"query={query}"]))
+    issue = ((data.get("data") or {}).get("repository") or {}).get("issue") or {}
+    for node in (issue.get("projectItems") or {}).get("nodes") or []:
+        if node["project"]["number"] == number:
+            return node["id"]
+    return None
 
 
 def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit_pushed, live=live_check, oc=None):
@@ -262,7 +273,7 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
     try:
         item = item_id(cfg, args.story, runner)
         if not item:
-            print(f"complete_story: #{args.story} is not on the project board, so nothing changed", file=out)
+            print(f"complete_story: cannot find #{args.story} on the board: #{args.story} is not on the project board, so nothing changed", file=out)
             return 1
     except (RuntimeError, ValueError, KeyError) as exc:
         print(f"complete_story: cannot find #{args.story} on the board: {exc}", file=err)
