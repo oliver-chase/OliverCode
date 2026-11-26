@@ -185,7 +185,7 @@ def story_cost_unknown(story: int, repo: str = "") -> bool:
 
 def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25, repo_slug: str = "") -> Lease:
     """Wait for and hold one shared account slot; configured maxBuilders is the hard session cap."""
-    match = re.match(r"^story-(\\d+)(?:-.+)?$", session)
+    match = re.match(r"^story-(\d+)(?:-.+)?$", session)
     if match:
         story = int(match.group(1))
         ceiling = local_config.max_story_spend()
