@@ -21,7 +21,7 @@ from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, local_config, owner_decisions, policy, run_lock, status_report
+from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, session_guard, local_config, owner_decisions, policy, run_lock, status_report
 from lib.open_issues import Memo, fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -527,30 +527,13 @@ def policy_stop_comment(stop: dict) -> str:
 
 
 def story_spend(n: int, repo: str = "") -> float:
-    """Recorded spend for one story across its builder, reader and fix sessions; missing or malformed rows count as zero (#1218)."""
-    path = failure_log.home() / "run-log.jsonl"
-    prefix = f"story-{n}"
-    total = 0.0
-    try:
-        with path.open(encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    row = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-                if not isinstance(row, dict):
-                    continue
-                name = str(row.get("story") or "")
-                if name != prefix and not name.startswith(prefix + "-"):
-                    continue
-                if repo and row.get("repo") != repo:
-                    continue
-                cost = row.get("cost_usd")
-                if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
-                    total += float(cost)
-    except OSError:
-        pass
-    return total
+    """Recorded spend for a story, across model sessions and legacy rows."""
+    return session_guard.story_spend(n, repo)
+
+
+def story_cost_unknown(n: int, repo: str = "") -> bool:
+    """Whether the story has an unpriced or incomplete prior model invocation."""
+    return session_guard.story_cost_unknown(n, repo)
 
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
@@ -581,10 +564,18 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         return False, 0
     attempt, story_api_errors = 0, 0
     while attempt <= RESTARTS:
+        session_attempts = session_guard.story_attempts(n, getattr(io, "slug", ""))
+        max_attempts = local_config.max_story_attempts()
+        if session_attempts >= max_attempts:
+            io.comment(n, f"Parked: this story has reached its {max_attempts}-session attempt ceiling across runs and handoffs; no further model session will start.\n"
+                          "- Next: split the work or review the prior attempts, then raise maxStoryAttempts in olivercode.local.json and return it to Ready.")
+            raise CommitBlocked(tokens)
         ceiling, spent = local_config.max_story_spend(), story_spend(n, getattr(io, "slug", ""))
-        if spent > ceiling:
-            io.comment(n, f"Parked: this story has spent ${spent:.2f}, above its ${ceiling:.2f} ceiling, so no further builder round will start.\n"
-                          "- Next: split the work, or raise maxStorySpend in olivercode.local.json and return the story to Ready.")
+        unknown = story_cost_unknown(n, getattr(io, "slug", ""))
+        if unknown or spent >= ceiling:
+            detail = "a prior session's cost is unknown" if unknown else f"it has spent ${spent:.2f}, reaching its ${ceiling:.2f} ceiling"
+            io.comment(n, f"Parked: {detail}; no further model session will start.\n"
+                          "- Next: reconcile the cost, split the work, or raise maxStorySpend in olivercode.local.json and return the story to Ready.")
             raise SpendCeilingParked(tokens)
         if state.get("api_error_stop"):
             return False, tokens

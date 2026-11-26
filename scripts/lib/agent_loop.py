@@ -251,7 +251,10 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     failure, exit_code = "", None
     for attempt in range(1, attempts + 1):
         try:
-            reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=max_turns, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
+            call_kwargs = {"allowed_tools": READER_TOOLS, "max_turns": max_turns, "session": f"{session}-review", "system": READER_SYSTEM, "model": model_name}
+            if run is model.run_cli and repo:
+                call_kwargs["repo_slug"] = repo
+            reply = run(prompt, str(cwd), **call_kwargs)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
         else:
@@ -312,31 +315,40 @@ def start_size(session_id: str, projects: Path | None = None) -> int | None:
     return None
 
 
-def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "", repo: str = "") -> None:
-    """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost, stop reason and write time, and on a session's first round the tokens it started with (#878, #987).
-    `repo` names the repo the story belongs to, so the status page can total each repo's spend (#990). A log that cannot be written never stops a loop."""
+def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "", repo: str = "", attempt: int | None = None) -> None:
+    """Append a model invocation's usage and session metadata. No prompt or transcript content is retained."""
     usage = reply.get("usage") or {}
     row = {"story": story, "round": n, "model": model_name, "input": usage.get("input", 0), "output": usage.get("output", 0),
            "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0), "cost_usd": reply.get("cost_usd"),
            "stop": reply.get("stop", ""), "stderr_tail": reply.get("stderr", ""), "resumed": bool(reply.get("resumed")),
-           "settings": reply.get("settings", ""),  # which setup ran, so the two start sizes can be compared (#911)
-           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
+           "settings": reply.get("settings", ""), "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    for key in ("session_id", "started_at", "duration_s", "slot", "session_cap", "active_sessions", "session_attempt", "story_attempt"):
+        if reply.get(key) is not None:
+            row[key] = reply[key]
+    if attempt is not None:
+        row["attempt"] = attempt
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
-        row["route"] = why  # the rule that chose the model the build started on (#1026)
+        row["route"] = why
     if repo:
         row["repo"] = repo
     append_log(row)
 
-
-def log_api_error(story: str, model_name: str, cause: str, repo: str = "") -> None:
-    """Record an API stop without a round number, so it never burns story rounds or model-escalation thresholds."""
+def log_api_error(story: str, model_name: str, cause: str, repo: str = "", reply: dict | None = None) -> None:
+    """Record an API stop without a round number, preserving any usage/cost the CLI reported."""
+    reply = reply or {}
     row = {"story": story, "model": model_name, "stop": "api_error", "stderr_tail": cause[:300],
-           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "cost_usd": reply.get("cost_usd")}
+    if reply.get("session_id"):
+        row["session_id"] = reply["session_id"]
+    usage = reply.get("usage") or {}
+    row.update({"input": usage.get("input", 0), "output": usage.get("output", 0),
+                "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0)})
     if repo:
         row["repo"] = repo
     append_log(row)
+
 
 def append_log(row: dict) -> None:
     """Append one JSON line to the run log. A log that cannot be written never stops a loop."""
@@ -380,9 +392,12 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
         resumed = False
         while True:
             try:
-                reply = run(prompt, cwd, max_turns=max_turns, session=session, system=SYSTEM, model=model_name, resume=claude_session)
+                call_kwargs = {"max_turns": max_turns, "session": session, "system": SYSTEM, "model": model_name, "resume": claude_session}
+                if run is model.run_cli and repo:
+                    call_kwargs["repo_slug"] = repo
+                reply = run(prompt, cwd, **call_kwargs)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
-                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed}, why=why, repo=repo)
+                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed, "session_id": exc.session_id}, why=why, repo=repo, attempt=n)
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
@@ -397,11 +412,11 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             summary = reply["text"]
             if is_api_error(reply):
                 cause = api_error_cause(reply) or str(reply.get("text") or reply.get("stderr") or reply.get("stop") or "Unspecified API error")[:300]
-                log_api_error(session, model_name, cause, repo=repo)
+                log_api_error(session, model_name, cause, repo=repo, reply=reply)
                 say(f"API error: {cause}")
                 return {"done": False, "api_error": True, "api_error_cause": cause, "reason": f"API error: {cause}",
                         "rounds": n - 1, "tokens": tokens, "summary": summary}
-            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why, repo=repo)
+            log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why, repo=repo, attempt=n)
             say(f"Round {n}: {summary.strip()[:300]}")
             if reply["code"] != 0 and reply.get("stop") in RESUMABLE and not resumed and claude_session:
                 say(f"Round {n}: claude stopped on {reply['stop']}. Resuming the same session once.")

@@ -278,6 +278,12 @@ def max_builders() -> int:
     return saved_builders() or scaled_builders()
 
 
+def max_story_attempts() -> int:
+    """Maximum model invocations for one story across restarts/handoffs; safe default is eight."""
+    value = setting("maxStoryAttempts")
+    return int(value) if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 8
+
+
 def max_story_spend() -> float:
     """The maximum recorded Claude spend for one story, in dollars; invalid or missing values use the safe $6 default."""
     value = setting("maxStorySpend")
