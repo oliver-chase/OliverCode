@@ -132,27 +132,10 @@ class ParallelGates(unittest.TestCase):
     def test_validate_sh_lists_each_gate_once_and_runs_one_by_name(self):
         text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
         self.assertIn("GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)", text)
-        self.assertIn("for gate in precommit bypass smoke; do", text)
+        self.assertNotIn("--round", text)
         import subprocess
         done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--gate", "nonesuch"], capture_output=True, text=True)
         self.assertEqual(2, done.returncode)
-
-    def test_a_round_names_the_gates_it_ran_and_the_ones_it_left_to_the_landing(self):
-        import subprocess
-        done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--round-notice"], capture_output=True, text=True)
-        self.assertEqual(0, done.returncode)
-        self.assertIn("round check ran: precommit bypass smoke", done.stdout)
-        left = [line for line in done.stdout.splitlines() if "left out" in line][0]
-        for gate in ("fleet", "bloat", "quality", "refs", "docs", "limits", "hookstate"):
-            self.assertIn(gate, left)
-        for gate in ("precommit", "bypass", "smoke"):
-            self.assertNotIn(gate, left)
-        self.assertIn("when the story lands", left)
-
-    def test_a_full_validation_names_no_gate_as_left_out(self):
-        text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
-        full = text.split("run_gates() {", 1)[1].split("\n}\n", 1)[0]
-        self.assertNotIn("round_notice", full)
 
 
 class QueueBypassGate(unittest.TestCase):
@@ -251,25 +234,6 @@ class SmokeRunner(unittest.TestCase):
             self.assertEqual(3, smoke_runner.jobs())
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": "10"}):
             self.assertEqual(4, smoke_runner.jobs())
-
-    def test_changed_files_select_only_the_modules_that_cover_them(self):
-        """#1142: a round check narrows to the modules that import or name a changed file, and names which it picked."""
-        root = self.make("pass")
-        (root / "tests" / "test_b.py").write_text(
-            "import unittest\n\n\ndef helper():\n    return 'cmd_land'\n\n\nclass T(unittest.TestCase):\n    def test_y(self):\n        pass\n",
-            encoding="utf-8")
-        out = io.StringIO()
-        self.assertEqual(0, smoke_runner.run(root, out, changed=["scripts/lib/cmd_land.py"]))
-        text = out.getvalue()
-        self.assertIn("1 of 2 modules cover the changed files: test_b", text)
-        self.assertIn("Ran 1 tests across 1 modules, all passed", text)
-
-    def test_no_module_covering_the_changed_files_runs_the_full_suite(self):
-        """#1142: a changed file no test module names falls back to the whole suite. Prose is the one exception (#1168)."""
-        out = io.StringIO()
-        self.assertEqual(0, smoke_runner.run(self.make("pass"), out, changed=["docs/notes.json"]))
-        self.assertIn("running the full suite", out.getvalue())
-        self.assertIn("Ran 1 tests across 1 modules, all passed", out.getvalue())
 
 
 if __name__ == "__main__":
