@@ -187,8 +187,7 @@ def is_paused(slug: str) -> bool:
 def pause(slug: str) -> None:
     target = pause_path(slug)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("paused
-", encoding="utf-8")
+    target.write_text("paused\n", encoding="utf-8")
 
 
 def resume(slug: str) -> bool:
@@ -201,8 +200,7 @@ def resume(slug: str) -> bool:
 def request_cancel(slug: str, story: int) -> None:
     target = cancel_path(slug, story)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("cancel
-", encoding="utf-8")
+    target.write_text("cancel\n", encoding="utf-8")
 
 
 def cancel_requested(slug: str, story: int) -> bool:
