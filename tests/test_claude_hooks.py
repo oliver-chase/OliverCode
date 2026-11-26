@@ -195,6 +195,13 @@ class TestUpdateNotice(unittest.TestCase):
         self.addCleanup(env.stop)
         os.environ.pop("OLIVERCODE_HEADLESS", None)
 
+    def test_the_update_line_also_reaches_the_user_as_a_system_message(self):
+        line = "3 OliverCode updates are available. Run `olivercode update`."
+        out = session.payload(["OliverCode session check: " + line], [line])
+        self.assertEqual(line, out["systemMessage"])
+        self.assertIn(line, out["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("systemMessage", session.payload(["OliverCode session check: other"], ["other"]))
+
     def commit(self, repo, name):
         (repo / name).write_text(name)
         git(repo, "add", name)

@@ -195,8 +195,18 @@ def main() -> int:
     found = notes(cwd, Path.home() / ".claude", str(data.get("session_id") or ""))
     parts = (["OliverCode session check: " + " ".join(found)] if found else []) + run_notes(cwd) + digest_notes(cwd)
     if parts:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}))
+        print(json.dumps(payload(parts, found)))
     return 0
+
+
+def payload(parts: list[str], found: list[str]) -> dict:
+    """The hook's output: every note goes to the session as context, and the update line also goes to the user as a system message,
+    since context alone reaches only the model (#1285)."""
+    out: dict = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(parts)}}
+    update = next((n for n in found if "`olivercode update`" in n), "")
+    if update:
+        out["systemMessage"] = update
+    return out
 
 
 if __name__ == "__main__":
