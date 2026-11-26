@@ -684,8 +684,9 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
 
 
 def resolve_repo(name: str) -> Path | None:
-    """A path, or a repo folder under repoRoot or beside OliverCode, with a readable backlog config (#1298)."""
-    for path in (Path(name).expanduser(), placement_config().root / name, OC_ROOT.parent / name):
+    """A path, or a repo folder under repoRoot, repoRoot/_worktrees or beside OliverCode, with a readable backlog config (#1298, #1336)."""
+    root = placement_config().root
+    for path in (Path(name).expanduser(), root / name, root / "_worktrees" / name, OC_ROOT.parent / name):
         if has_backlog_config(path):
             return path.resolve()
     return None

@@ -585,6 +585,20 @@ class DrainCase(unittest.TestCase):
                 mock.patch.object(cmd_drain, "OC_ROOT", Path(root) / "_worktrees" / "oc-staging"):
             self.assertEqual(repo.resolve(), cmd_drain.resolve_repo("tesknota"))
 
+    def test_a_bare_repo_name_finds_a_worktree_and_prefers_repo_root(self):
+        """#1336: PATH runs a checkout directly under repoRoot, and `oc-staging` sits in repoRoot/_worktrees."""
+        root = Path(temp_dir(self))
+        made = {}
+        for key, rel in (("tree", "_worktrees/oc-staging"), ("top", "oc-staging")):
+            made[key] = root / rel
+            (made[key] / "docs").mkdir(parents=True)
+            (made[key] / "docs" / "backlog-config.json").write_text("{}")
+        with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(root=root)), mock.patch.object(cmd_drain, "OC_ROOT", root / "olivercode"):
+            self.assertEqual(made["top"].resolve(), cmd_drain.resolve_repo("oc-staging"))
+            (made["top"] / "docs" / "backlog-config.json").unlink()
+            self.assertEqual(made["tree"].resolve(), cmd_drain.resolve_repo("oc-staging"))
+            self.assertIsNone(cmd_drain.resolve_repo("missing-repo"))
+
     def test_a_drain_of_the_engine_repository_refuses_and_a_scratch_copy_does_not(self):
         """#1278, #1293: any OliverCode checkout is refused unless this machine's settings name an engineBranch."""
         code, out = quiet(cmd_drain.command_drain, [str(cmd_drain.OC_ROOT)])
