@@ -90,7 +90,7 @@ def _portfolio_html(now: float) -> str:
     total_queued = sum(len((state.get(s) or {}).get("queue") or []) for s in slugs)
     total_delivered = sum(len(status_report.history(log, s, now, days=7)) for s in slugs)
     return (
-        f'<section class="portfolio"><h2>Your repositories</h2>'
+        f'<section class="portfolio" id="repositories"><h2>Your repositories</h2>'
         f'<p class="section-intro">A fleet-wide view of recorded runner activity—not GitHub backlog counts. Open a project for its individual story and history.</p>'
         f'<div class="cards portfolio-totals"><div class="card"><div class="label">Building across projects</div><div class="big">{total_running}</div></div>'
         f'<div class="card"><div class="label">Queued in active runs</div><div class="big">{total_queued}</div></div>'
