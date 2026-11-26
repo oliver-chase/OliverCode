@@ -177,6 +177,83 @@ class TestCommitGuard(RepoCase):
         self.assertEqual((out.returncode, out.stdout), (0, ""))
 
 
+class TestUpdateNotice(unittest.TestCase):
+    """The session-start line that says the checkout trails its upstream branch (#1285)."""
+
+    def setUp(self):
+        self.tmp = temp_dir(self, "olivercode-update-", resolve=True)
+        origin = scratch_repo(self.tmp / "origin.git", bare=True, branch="main")
+        self.maker = scratch_repo(self.tmp / "maker", branch="main")
+        self.commit(self.maker, "base")
+        git(self.maker, "push", "-q", str(origin), "main")
+        git(self.tmp, "clone", "-q", str(origin), "checkout")
+        self.checkout = self.tmp / "checkout"
+        self.origin = origin
+        self.home = self.tmp / "home"
+        env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("OLIVERCODE_HEADLESS", None)
+
+    def commit(self, repo, name):
+        (repo / name).write_text(name)
+        git(repo, "add", name)
+        git(repo, "commit", "-q", "-m", name)
+
+    def push_and_fetch(self, count):
+        for n in range(count):
+            self.commit(self.maker, f"c{n}")
+        git(self.maker, "push", "-q", str(self.origin), "main")
+        git(self.checkout, "fetch", "-q")
+
+    def test_behind_prints_one_line_with_the_count(self):
+        self.push_and_fetch(3)
+        self.assertEqual(session.update_notes(self.checkout), ["3 OliverCode updates are available. Run `olivercode update`."])
+
+    def test_one_commit_behind_reads_singular(self):
+        self.push_and_fetch(1)
+        self.assertEqual(session.update_notes(self.checkout), ["1 OliverCode update is available. Run `olivercode update`."])
+
+    def test_level_prints_nothing(self):
+        self.assertEqual(session.update_notes(self.checkout), [])
+
+    def test_git_failure_or_no_upstream_prints_nothing(self):
+        self.assertEqual(session.update_notes(self.tmp / "missing"), [])
+        git(self.checkout, "branch", "--unset-upstream")
+        self.assertEqual(session.update_notes(self.checkout), [])
+        with mock.patch.object(session.subprocess, "run", side_effect=OSError("no git")):
+            self.assertEqual(session.update_notes(self.checkout), [])
+
+    def test_headless_session_prints_nothing_and_fetches_nothing(self):
+        self.push_and_fetch(2)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": "1"}), mock.patch.object(session, "start_fetch") as popen:
+            self.assertEqual(session.update_notes(self.checkout), [])
+        popen.assert_not_called()
+
+    def test_stale_fetch_starts_one_background_fetch_a_day(self):
+        fetch_head = self.checkout / ".git" / "FETCH_HEAD"
+        fetch_head.write_text("")
+        old = fetch_head.stat().st_mtime - 2 * 24 * 3600
+        os.utime(fetch_head, (old, old))
+        with mock.patch.object(session, "start_fetch") as popen:
+            session.update_notes(self.checkout)
+            session.update_notes(self.checkout)  # a second session within the day starts none
+        popen.assert_called_once_with(self.checkout)
+        self.assertTrue((self.home / "update-fetch-attempt").exists())
+
+    def test_start_fetch_detaches_a_quiet_fetch(self):
+        with mock.patch.object(session.subprocess, "Popen") as popen:
+            session.start_fetch(self.checkout)
+        self.assertEqual(popen.call_args.args[0][-2:], ["fetch", "--quiet"])
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
+
+    def test_fresh_fetch_starts_none(self):
+        (self.checkout / ".git" / "FETCH_HEAD").write_text("")
+        with mock.patch.object(session, "start_fetch") as popen:
+            session.update_notes(self.checkout)
+        popen.assert_not_called()
+
+
 class TestSessionCheck(RepoCase):
     def setUp(self):
         super().setUp()
