@@ -484,7 +484,7 @@ def _usage_analytics(log: list[dict], now: float) -> str:
              f'<div><span>Model types used</span><strong>{len(by_model)}</strong></div>'
              f'<div><span>Stories measured</span><strong>{len(measured_stories)}</strong></div></div>')
     charts = _bar_rows("Daily token use", daily_tokens, "Desktop chat and runner-builder input/context tokens, combined.")
-    charts += _bar_rows("Average cost per landed story", daily_cost, "Recorded runner cost only; work completed outside the runner is excluded.")
+    charts += _bar_rows("Cost over time", daily_cost, "Average recorded runner cost per landed story by day; work completed outside the runner is excluded.")
     charts += _bar_rows("Average elapsed time per landed story", daily_time, "Wall-clock build time recorded by the runner.")
     charts += _bar_rows("Model distribution by stories", top_models, "A story is counted once for every distinct model type used across its recorded rounds.")
     charts += _bar_rows("Tokens used by model", model_tokens, "Recorded builder input, output and cache tokens over the last seven days.")
@@ -549,6 +549,8 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
     waiting = _owner_steps()
     slugs = sorted(set(state) | {r["repo"] for r in log if r.get("outside")})  # a repo with a commit that landed outside the runner shows too (#996)
     body = "".join(f'<details class="repo-detail"><summary>{html.escape(slug)} · {len((state.get(slug) or _idle())["building"])} building · {len((state.get(slug) or _idle())["queue"])} queued</summary>{_repo_section(slug, state.get(slug) or _idle(), log, now)}</details>' for slug in slugs) or "<p>No run has started on this machine yet.</p>"
+    if "<!--USAGE_ANALYTICS-->" in panel:
+        panel = panel.replace("<!--USAGE_ANALYTICS-->", _usage_analytics(log, now))
     owner = _table(["Step only you can take"], [[f"#{i['id']} {i.get('step', '')}"] for i in waiting], "No owner step is open.")
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<meta http-equiv="refresh" content="{REFRESH_SECONDS}"><title>OliverCode status</title><style>:root {{ {vars_(light)} }}'
@@ -576,7 +578,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'
             f'{"" if panel else "<h1>OliverCode City</h1>"}<p id="published" class="warn"></p>'
-            f'{_usage_analytics(log, now)}'
+            f'{_usage_analytics(log, now) if "<!--USAGE_ANALYTICS-->" not in panel else ""}'
             f'<details class="owner-detail" style="margin-top:32px"><summary>Owner actions and system details</summary><p class="muted">This machine: {html.escape(platform.node())}. Last rewritten '
             f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body if not panel else ""}</details>{SCRIPT}</main></body></html>')
 
