@@ -21,7 +21,7 @@ from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, session_guard, local_config, owner_decisions, policy, run_lock, status_report
+from lib import agent_loop, builder_telemetry, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, intake, session_guard, local_config, owner_decisions, policy, run_lock, status_report
 from lib.open_issues import Memo, fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -391,6 +391,8 @@ class Io:
         now = time.time()
         cmd_dispatch._local_claim(self.slug, n, now, write=self.agent)
         self.claimed_at[n] = now
+        run_id = telemetry_run_id(self.slug)
+        builder_telemetry.record("story_claimed", self.slug, story=n, run_id=run_id, claim_id=f"{run_id}:{n}")
         if gh_budget.refusal() or gh_budget.reserve_write():
             cfg = backlog_config(self.repo)
             cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "In Progress"}}]}]))
@@ -436,23 +438,44 @@ def _event(io, kind: str, issue: dict | None = None, **info) -> str:
     return hook(kind, issue, **info) if hook else ""
 
 
+def telemetry_run_id(slug: str) -> str:
+    """A stable identifier for one live repo run, or a local fallback outside a managed run."""
+    record = run_lock.active(slug)
+    return f"{slug}:{record.get('pid', 'unknown')}:{record.get('since', 'unknown')}"
+
+
 def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit. Each builder takes one story, so no commit carries two stories' work (#988)."""
     n = issue["number"]
+    run_id = telemetry_run_id(io.slug)
+    worker_id = f"{run_id}:{os.getpid()}:{threading.get_ident()}"
+    claim_id = f"{run_id}:{n}"
+    started = time.time()
+    outcome, reason = "crashed", ""
+    builder_telemetry.record("builder_started", io.slug, story=n, run_id=run_id, worker_id=worker_id, claim_id=claim_id)
     try:
         closed, used = _work_story(io, issue, state)
         if not closed and n not in state.get("cancelled", []):
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
         _event(io, "land" if closed else "held", issue)
+        outcome = "landed" if closed else "held"
         return closed, used
     except CloseRefused:  # a landed story whose close the gate refused stays where it is, with the gate's message on it (#1011)
         _event(io, "held", issue)
+        outcome, reason = "close_refused", "The close gate refused a landed story."
         return False, 0
     except CommitBlocked as blocked:  # the same gate blocked each restart, or the turn limit stopped it twice, so the story waits in Backlog for the owner (#1096, #1123)
         io.backlog(n)
         _event(io, "held", issue)
+        outcome, reason = "blocked", type(blocked).__name__
         return False, blocked.tokens
+    except BaseException as exc:
+        outcome = "interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit)) else "crashed"
+        reason = type(exc).__name__
+        raise
     finally:
+        builder_telemetry.record("builder_finished", io.slug, story=n, run_id=run_id, worker_id=worker_id, claim_id=claim_id,
+                                 outcome=outcome, reason=reason, duration_s=round(time.time() - started, 3))
         for cleanup in (lambda: io.release(n), lambda: io.clear_cancel(n)):
             try:
                 cleanup()

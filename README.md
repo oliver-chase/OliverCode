@@ -78,9 +78,12 @@ Check current work and system health:
 
 ```bash
 olivercode status
+olivercode telemetry --hours 24
 olivercode health
 olivercode conform
 ```
+
+`olivercode telemetry` reports time-weighted active builders, peak overlap, claim-to-start wait and incomplete lifecycle records from private local metadata in `~/.olivercode/builder-events.jsonl`. It does not make a model or GitHub call.
 
 Dispatch and drain run isolated Claude Code sessions, validate changes and safely deliver completed work. Blocked or failed work is reported rather than treated as complete.
 
