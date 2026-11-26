@@ -604,6 +604,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
     has_usage_slot = "<!--USAGE_ANALYTICS-->" in panel
     if has_usage_slot:
         panel = panel.replace("<!--USAGE_ANALYTICS-->", _usage_analytics(log, now))
+    grid_close = "</div>" if 'class="city-grid"' in panel else ""
     owner = _table(["Step only you can take"], [[f"#{i['id']} {i.get('step', '')}"] for i in waiting], "No owner step is open.")
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<meta http-equiv="refresh" content="{REFRESH_SECONDS}"><title>OliverCode status</title><style>:root {{ {vars_(light)} }}'
@@ -644,7 +645,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             f'{"" if panel else "<h1>OliverCode City</h1>"}<p id="published" class="warn"></p>'
             f'{_usage_analytics(log, now) if not has_usage_slot else ""}'
             f'<details class="owner-detail" id="owner-details" style="margin-top:28px"><summary>Owner actions and system details</summary><p class="muted">This machine: {html.escape(platform.node())}. Last rewritten '
-            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body if not panel else ""}</details>{SCRIPT}</div></div></main></body></html>')
+            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body if not panel else ""}</details>{SCRIPT}{grid_close}</div></main></body></html>')
 
 
 def _owner_steps() -> list[dict]:
