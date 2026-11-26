@@ -338,37 +338,43 @@ def _fetch_points() -> dict:
     return {"remaining": int(out[0]), "reset": int(out[1]), "rest": int(out[2])}
 
 
-def points_reading(fetch=None, now: float | None = None) -> dict:
-    """The GraphQL points and REST requests left, from the reading cached for a minute in ~/.olivercode/gh-points.json, or a
-    fresh one saved over it. Every gh hook call reads this, so a minute holds one `gh api rate_limit` call however many calls
-    run. A failed read is saved as an empty reading for the same minute, so calls do not retry it. Fails open."""
+def points_reading(fetch=None, now: float | None = None, fresh: bool = False) -> dict:
+    """The GraphQL points and REST requests GitHub reports left, saved in ~/.olivercode/gh-points.json. A `fresh` reading asks
+    `gh api rate_limit` (which costs no points) and saves the answer. Without `fresh` the saved reading is used while it is under
+    POINTS_TTL old. A failed read falls back to the saved reading under that age, and with none it returns {}, so the caller
+    allows the call. OLIVERCODE_GH_PROBE=0 makes no rate-limit call at all, so a test or offline run uses only the saved reading.
+    Fails open."""
     now = now or time.time()
     path = home() / "gh-points.json"
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        saved = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        data = {}
-    if now - data.get("at", 0) > POINTS_TTL:
-        try:
-            data = {"at": now, **(fetch or _fetch_points)()}
-        except Exception:  # noqa: BLE001 -- fail open, and remember the failure for the same minute so every call does not retry it
-            data = {"at": now}
-        try:
-            home().mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data), encoding="utf-8")
-        except OSError:
-            pass
+        saved = {}
+    recent = now - saved.get("at", 0) <= POINTS_TTL
+    if os.environ.get("OLIVERCODE_GH_PROBE", "1") == "0":
+        return saved if recent else {}
+    if recent and not fresh:
+        return saved
+    try:
+        data = {"at": now, **(fetch or _fetch_points)()}
+    except Exception:  # noqa: BLE001 -- fail open: the last reading if it is under a minute old, else nothing to refuse on
+        return saved if recent else {}
+    try:
+        home().mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass
     return data
 
 
 def points_refusal(fetch=None, now: float | None = None) -> str:
-    """Stop gh calls while the account's GraphQL points are under the floor, before GitHub refuses them. It reads the cached
-    points reading, so a hook that runs on every call usually reads one file. Fails open."""
+    """Stop a GraphQL call while GitHub reports the account's GraphQL points under the floor, before GitHub refuses it. Each
+    call reads GitHub's own count, so agents outside this session that spend the points are seen. Fails open."""
     floor = int(os.environ.get("OLIVERCODE_GH_POINTS_FLOOR") or POINTS_FLOOR)
     if floor <= 0:
         return ""
     now = now or time.time()
-    data = points_reading(fetch, now)
+    data = points_reading(fetch, now, fresh=True)
     if data.get("remaining", floor) < floor and data.get("reset", 0) > now:
         when = time.strftime("%H:%M", time.localtime(data["reset"]))
         return (f"GitHub has {data['remaining']} GraphQL points left, under the shared reserve of {floor}, so gh calls hold "
@@ -465,14 +471,24 @@ def share_refusal(session: str, now: float | None = None) -> str:
             "active sessions, so it holds. See docs/RULES.md, Execution.")
 
 
-def report(now: float | None = None) -> str:
-    """GraphQL points and REST requests spent in the last hour, each on its own line, then by session and by command."""
-    rows = _read_rows(now or time.time(), 3600)
+def report(now: float | None = None, fetch=None) -> str:
+    """GitHub's own GraphQL count and reset first, then the points and REST requests this machine's hooks saw spent in the last
+    hour, each on its own line, then by session and by command."""
+    now = now or time.time()
+    left = points_reading(fetch, now, fresh=True)
+    if "remaining" in left:
+        when = time.strftime("%H:%M", time.localtime(left["reset"])) if left.get("reset") else "an unknown time"
+        head = f"GitHub has {left['remaining']:,} of its {GRAPHQL_HOURLY:,} GraphQL points left, and the hour resets at about {when}."
+    else:
+        head = "GitHub's GraphQL points could not be read just now."
+    rows = _read_rows(now, 3600)
     if not rows:
-        return "No gh calls were costed in the last hour."
+        return f"{head}\nNo gh calls were costed in the last hour."
     graphql = sum(r.get("points", 0) for r in rows)
     rest = sum(r.get("rest", 0) for r in rows)
-    out = [f"{len(rows)} gh calls were costed in the last hour.",
+    out = [head,
+           "Estimates below cover only the gh calls this machine's hooks saw, not drains, builders or other agents' calls.",
+           f"{len(rows)} gh calls were costed in the last hour.",
            f"GraphQL: {graphql} of the {GRAPHQL_HOURLY:,} hourly points, shared by gh project, gh issue and gh api graphql",
            f"REST: {rest} of the {REST_HOURLY:,} hourly requests, used by gh api repos/..."]
     for title, key in (("By session", "session"), ("By command", "cmd")):

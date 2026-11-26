@@ -97,45 +97,51 @@ class TestPointsReserve(Isolated):
             why = gh_budget.points_refusal(fetch=lambda: {"remaining": 120, "reset": time.time() + 600})
         self.assertIn("120", why)
 
-    def _points_above_the_floor_pass_and_the_reading_is_cached(self):
+    def _points_above_the_floor_pass_and_every_call_reads_github(self):
         calls = []
         fetch = lambda: calls.append(1) or {"remaining": 4000, "reset": time.time() + 600}
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             self.assertEqual("", gh_budget.points_refusal(fetch=fetch))
             self.assertEqual("", gh_budget.points_refusal(fetch=fetch))
-        self.assertEqual(1, len(calls))
-
-    def _a_reading_older_than_the_ttl_is_fetched_again(self):
-        calls = []
-        fetch = lambda: calls.append(1) or {"remaining": 4000, "reset": time.time() + 600}
-        with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
-            now = time.time()
-            gh_budget.points_refusal(fetch=fetch, now=now)
-            gh_budget.points_refusal(fetch=fetch, now=now + gh_budget.POINTS_TTL - 1)
-            self.assertEqual(1, len(calls))
-            gh_budget.points_refusal(fetch=fetch, now=now + gh_budget.POINTS_TTL + 1)
         self.assertEqual(2, len(calls))
 
-    def _a_failed_reading_fails_open(self):
+    def _another_agents_spend_is_seen_on_the_next_call(self):
+        readings = iter([{"remaining": 4000, "reset": time.time() + 600}, {"remaining": 120, "reset": time.time() + 600}])
+        with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
+            self.assertEqual("", gh_budget.points_refusal(fetch=lambda: next(readings)))
+            self.assertIn("120", gh_budget.points_refusal(fetch=lambda: next(readings)))
+
+    def _a_failed_read_uses_the_last_reading_under_a_minute_old(self):
+        def boom():
+            raise OSError("no gh")
+        now = time.time()
+        with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
+            gh_budget.points_refusal(fetch=lambda: {"remaining": 120, "reset": now + 600}, now=now)
+            self.assertIn("120", gh_budget.points_refusal(fetch=boom, now=now + gh_budget.POINTS_TTL - 1))
+            self.assertEqual("", gh_budget.points_refusal(fetch=boom, now=now + gh_budget.POINTS_TTL + 1))
+
+    def _a_failed_read_with_no_reading_allows_the_call(self):
         def boom():
             raise OSError("no gh")
         with mock.patch.dict(os.environ, {"OLIVERCODE_GH_POINTS_FLOOR": "500"}):
             self.assertEqual("", gh_budget.points_refusal(fetch=boom))
 
     def test_points_under_the_floor_hold_every_caller_until_the_reset(self):
-        for step in (self._points_under_the_floor_hold_every_caller_until_the_reset, self._points_above_the_floor_pass_and_the_reading_is_cached, self._a_reading_older_than_the_ttl_is_fetched_again, self._a_failed_reading_fails_open,):
+        for step in (self._points_under_the_floor_hold_every_caller_until_the_reset, self._points_above_the_floor_pass_and_every_call_reads_github,
+                     self._another_agents_spend_is_seen_on_the_next_call, self._a_failed_read_uses_the_last_reading_under_a_minute_old,
+                     self._a_failed_read_with_no_reading_allows_the_call,):
             self.setUp()
             step()
 
     def test_the_guard_denies_a_gh_call_when_the_cached_reading_is_low(self):
         (self.home / "gh-points.json").write_text(json.dumps({"at": time.time(), "remaining": 50, "reset": time.time() + 600}))
-        self.hook_env = {"OLIVERCODE_GH_POINTS_FLOOR": "500"}
+        self.hook_env = {"OLIVERCODE_GH_POINTS_FLOOR": "500", "OLIVERCODE_GH_PROBE": "0"}  # PROBE 0 reads the saved reading, not a live gh call
         out = self.hook(GUARD, {"tool_input": {"command": "gh issue list"}})
         self.assertIn("50 GraphQL points", out["permissionDecisionReason"])
 
     def test_a_rest_call_passes_the_points_hold_that_stops_a_graphql_call(self):
         (self.home / "gh-points.json").write_text(json.dumps({"at": time.time(), "remaining": 50, "reset": time.time() + 600}))
-        self.hook_env = {"OLIVERCODE_GH_POINTS_FLOOR": "500"}
+        self.hook_env = {"OLIVERCODE_GH_POINTS_FLOOR": "500", "OLIVERCODE_GH_PROBE": "0"}  # PROBE 0 reads the saved reading, not a live gh call
         self.assertIsNone(self.hook(GUARD, {"tool_input": {"command": "gh api repos/o/r/issues/1"}, "tool_use_id": "t"}))
         self.assertIsNone(self.hook(GUARD, {"tool_input": {"command": "gh api -X PATCH repos/o/r/issues/1 -f state=closed"}}))
         self.assertTrue(self.hook(GUARD, {"tool_input": {"command": "gh api graphql -f query=x"}}))
@@ -247,9 +253,25 @@ class TestCostLog(Isolated):
         patcher = mock.patch.object(gh_budget, "POINTS_TTL", 0)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The report asks GitHub for its own count, so a test that reads the report gives GitHub a figure too.
+        patcher = mock.patch.object(gh_budget, "_fetch_points", return_value={"remaining": 3950, "reset": time.time() + 600, "rest": 4900})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def points(self, left, rest=None):
         return lambda: {"remaining": left, "reset": 0, **({} if rest is None else {"rest": rest})}
+
+    def test_the_report_opens_with_github_remaining_points_and_reset(self):
+        gh_budget.note_before("a", fetch=self.points(4000), now=100)
+        gh_budget.note_after("a", "s1", "gh project item-list 15", fetch=self.points(3950), now=101)
+        lines = gh_budget.report(now=110).splitlines()
+        self.assertIn("GitHub has 3,950 of its 5,000 GraphQL points left", lines[0])
+        self.assertIn("resets at about", lines[0])
+        self.assertTrue(any("cover only the gh calls this machine's hooks saw" in l for l in lines[1:]), lines)
+
+    def test_the_report_says_when_github_cannot_be_read(self):
+        with mock.patch.object(gh_budget, "_fetch_points", side_effect=OSError("no gh")):
+            self.assertTrue(gh_budget.report(now=110).startswith("GitHub's GraphQL points could not be read just now."))
 
     def test_a_finished_call_logs_the_points_it_spent(self):
         gh_budget.note_before("k1", fetch=self.points(4000), now=100)
@@ -307,7 +329,7 @@ class TestCostLog(Isolated):
     def test_old_calls_do_not_count(self):
         gh_budget.note_before("a", fetch=self.points(5000), now=100)
         gh_budget.note_after("a", "s1", "gh x", fetch=self.points(4000), now=101)
-        self.assertEqual("No gh calls were costed in the last hour.", gh_budget.report(now=101 + 4000))
+        self.assertTrue(gh_budget.report(now=101 + 4000).endswith("\nNo gh calls were costed in the last hour."))
 
 
 class TestPointsReading(Isolated):
