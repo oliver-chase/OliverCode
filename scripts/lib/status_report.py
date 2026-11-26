@@ -644,7 +644,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             f'{"" if panel else "<h1>OliverCode City</h1>"}<p id="published" class="warn"></p>'
             f'{_usage_analytics(log, now) if not has_usage_slot else ""}'
             f'<details class="owner-detail" id="owner-details" style="margin-top:28px"><summary>Owner actions and system details</summary><p class="muted">This machine: {html.escape(platform.node())}. Last rewritten '
-            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body if not panel else ""}</details>{SCRIPT}</div></main></body></html>')
+            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body if not panel else ""}</details>{SCRIPT}</div></div></main></body></html>')
 
 
 def _owner_steps() -> list[dict]:
