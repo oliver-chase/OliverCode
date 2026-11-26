@@ -630,5 +630,21 @@ class TestRunCommand(unittest.TestCase):
             self.assertEqual(1, self.run_cmd(["x"])[0])
 
 
+
+class TestOwnerCancellation(unittest.TestCase):
+    def test_cancel_stops_after_the_current_model_session_before_validation(self):
+        repo = temp_dir(self)
+        (repo / "scripts").mkdir()
+        (repo / "scripts" / "validate.sh").write_text("exit 0\\n")
+        scripted = Scripted(reply("partial work"))
+        checks = []
+        stop = iter((False, True))
+        out = agent_loop.run_loop("task", repo, "story-42", run=scripted, check=lambda cwd: checks.append(cwd) or (True, ""),
+                                  review_mode="none", stop_check=lambda: next(stop))
+        self.assertTrue(out["cancelled"])
+        self.assertEqual(1, len(scripted.prompts))
+        self.assertEqual([], checks)
+        self.assertIn("partial work", out["summary"])
+
 if __name__ == "__main__":
     unittest.main()
