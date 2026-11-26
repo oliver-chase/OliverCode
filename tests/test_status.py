@@ -38,7 +38,34 @@ class TestStatus(unittest.TestCase):
         out = io.StringIO()
         cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"),
                        live=lambda now, count, rows: [], waiting=lambda: [f"- #7 {step}"])
-        self.assertIn("Waits on the owner:\n- #7 " + step, out.getvalue())
+        self.assertIn("Needs you:\n- #7 " + step, out.getvalue())
+
+    def test_the_owner_section_opens_the_page_and_says_nothing_when_no_item_waits(self):
+        code, text = self.status(14, [issue("2026-11-20")] * 3)
+        self.assertTrue(text.startswith("Needs you:\nNothing.\n"))
+        self.assertLess(text.index("Needs you:"), text.index("Pace:"))
+
+    def test_the_sections_follow_the_owner_then_building_then_landed_then_pace(self):
+        log = [stage("story-5", "claimed", "09:00"), stage("story-5", "landed", "09:17", 120)]
+        out = io.StringIO()
+        with mock.patch.object(cmd_status, "run_log", return_value=log), mock.patch.object(cmd_status, "live_claims", return_value={}), \
+                mock.patch.object(cmd_status, "runner_alive", return_value=False), mock.patch.object(cmd_status, "digest_path", return_value=Path("/none")):
+            cmd_status.run("o/r", count=lambda s, state: 0, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"), waiting=lambda: [])
+        text = out.getvalue()
+        order = [text.index(h) for h in ("Needs you:", "Building:", "Landed today:", "Pace:")]
+        self.assertEqual(order, sorted(order))
+        self.assertIn("Landed: #5 in r at 2026-11-22 09:17 UTC. Building took under a minute, validation under a minute, landing under a minute, 17 minutes in all.", text)
+
+    def test_an_unreadable_run_log_is_named_as_unknown_and_no_figure_is_guessed(self):
+        out = io.StringIO()
+        with mock.patch.object(cmd_status, "run_log", side_effect=OSError("Permission denied")):
+            code = cmd_status.run("o/r", count=lambda s, state: 2, fetch=lambda s, since: [issue("2026-11-20")], now=NOW,
+                                  out=lambda t: out.write(t + "\n"), waiting=lambda: [])
+        text = out.getvalue()
+        self.assertEqual(0, code)
+        self.assertIn("Building and landed today: unknown, because the run log could not be read (Permission denied).", text)
+        self.assertIn("Tokens and sizes: unknown, because the run log could not be read (Permission denied).", text)
+        self.assertNotIn("Runner idle", text)
 
     def test_a_falling_count_prints_the_rate_and_a_zero_date(self):
         rows = [issue("2026-11-01", "2026-11-20")] * 14 + [issue("2026-11-20")] * 7
@@ -86,10 +113,13 @@ class TestStatus(unittest.TestCase):
         for want in ("14 open", "2.0 stories landed per day", "Tokens per closed story: 150", "reaches zero on 2026-12-06"):
             self.assertIn(want, text)
 
-    def test_a_failed_read_exits_one(self):
+    def test_a_failed_read_prints_the_figures_as_unknown_and_exits_one(self):
         code, text = self.status(None, [])
         self.assertEqual(1, code)
-        self.assertIn("were not read", text)
+        self.assertIn("Open count, landing rate and finish date: unknown, because the issues of o/r were not read from GitHub.", text)
+        code, text = self.status(1, None)
+        self.assertEqual(1, code)
+        self.assertIn("Tokens per closed story: unknown, because the closed issues were not read from GitHub.", text)
 
     def test_no_origin_exits_one(self):
         self.assertEqual(1, self.status(1, [], slug=None)[0])
@@ -222,8 +252,8 @@ class TestDigest(unittest.TestCase):
         log = [stage("story-3", "claimed", "08:00"), stage("story-3", "landed", "08:20", 1200), stage("story-9", "claimed", "09:00"), stage("story-9", "stopped", "09:10", 600)]
         with mock.patch.object(cmd_status, "runner_alive", return_value=False), mock.patch.object(cmd_status, "run_log", return_value=log), \
                 mock.patch.object(cmd_status, "digest_path", return_value=Path(self.tmp.name) / "none.md"), mock.patch.object(cmd_status, "live_claims", return_value={}):
-            lines = cmd_status.live_lines(NOW, 1, [{"number": 9, "title": "Not planned", "closed_at": "2026-11-21T00:00:00Z"}])
-        landed = [l for l in lines if l.startswith("Last landed")]
+            lines = cmd_status.live_lines(NOW, 1)
+        landed = [l for l in lines if l.startswith("Landed: ")]
         self.assertEqual(1, len(landed))
         self.assertIn("#3 in r at 2026-11-22 08:20 UTC", landed[0])
         self.assertNotIn("#9", landed[0])

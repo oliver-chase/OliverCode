@@ -174,9 +174,9 @@ def landings(log: list[dict]) -> list[dict]:
     return sorted(found, key=lambda f: f["at"], reverse=True)
 
 
-def landing_line(row: dict, first: bool) -> str:
+def landing_line(row: dict, label: str) -> str:
     cost = f" and ${row['cost']:.2f}" if row["cost"] else ""
-    return (f"{'Last landed' if first else 'Landed before that'}: #{row['story'].rsplit('-', 1)[-1]} in {row['repo']} at {datetime.fromtimestamp(row['at'], timezone.utc):%Y-%m-%d %H:%M} UTC. "
+    return (f"{label}: #{row['story'].rsplit('-', 1)[-1]} in {row['repo']} at {datetime.fromtimestamp(row['at'], timezone.utc):%Y-%m-%d %H:%M} UTC. "
             f"Building took {minutes(row['build'])}{cost}, validation {minutes(row['check'])}, landing {minutes(row['land'])}, {minutes(row['total'])} in all.")
 
 
@@ -221,10 +221,16 @@ def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> i
     return 0
 
 
-def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, holder: dict | None = None) -> list[str]:
-    """The live status lines: one line for each story building (its stage, its time in that stage and its time in all), or the idle or running line, then the
-    last three landings from the run log's landed rows and the next Ready story, then a warning for a stalled builder, a claim with no runner and a last run
-    that did not stop cleanly (#987). `holder` is the live run that holds the repo, if any (#1076). It reads only what it is given."""
+def idle_text(open_now: int | None) -> str:
+    """The idle runner's line. The open count is left out when GitHub could not be read, so no figure is guessed (#1334)."""
+    count = "" if open_now is None else f" and {open_now} stories are open"
+    return f"Runner idle: no story is building{count}. Start it with `olivercode drain REPO`."
+
+
+def building_block(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, holder: dict | None = None) -> tuple[list[str], list[str]]:
+    """The Building lines and their warnings. One line for each story building (its stage, its time in that stage and its time in all), or the idle or running
+    line. A warning names a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). `holder` is the live run that holds the
+    repo, if any (#1076). It reads only what it is given (#1334)."""
     lines, warnings = [], []
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
@@ -238,19 +244,25 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
         else:
             lines.append(building_line(n, key.rsplit("#", 1)[0], float(mine.get("at", 0)), log, now))
     if not lines:
-        lines.append("The runner is running and no story is building." if alive else
-                     f"Runner idle: no story is building and {open_now} stories are open. Start it with `olivercode drain REPO`.")
+        lines.append("The runner is running and no story is building." if alive else idle_text(open_now))
+    if log and log[-1].get("stop", "") not in CLEAN_STOPS:
+        story = str(log[-1].get("story", ""))
+        resume = "" if holder else f" Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`."
+        warnings.append(f"Warning: the last run on {story} stopped with {log[-1].get('stop')}.{resume}")
+    return lines, warnings
+
+
+def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, ready: str, holder: dict | None = None) -> list[str]:
+    """The building lines, then the last three landings from the run log's landed rows and the next Ready story, then the warnings (#987). It reads only what
+    it is given."""
+    lines, warnings = building_block(now, claims, log, alive, open_now, holder)
     done = landings(log)[:3]
-    lines += [landing_line(row, i == 0) for i, row in enumerate(done)] or ["Last landed: none recorded yet."]
+    lines += [landing_line(row, "Last landed" if i == 0 else "Landed before that") for i, row in enumerate(done)] or ["Last landed: none recorded yet."]
     ended = [r for r in log if r.get("stage") == "run-end"]
     if ended:
         lines.append(run_end_line(ended[-1]))
     if ready:
         lines.append(f"Next Ready: {ready}.")
-    if log and log[-1].get("stop", "") not in CLEAN_STOPS:
-        story = str(log[-1].get("story", ""))
-        resume = "" if holder else f" Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`."
-        warnings.append(f"Warning: the last run on {story} stopped with {log[-1].get('stop')}.{resume}")
     return lines + warnings
 
 
@@ -298,17 +310,53 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
     return lines
 
 
-def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -> list[str]:
-    """The status lines for this machine right now, read from the claims, the run log, the process table, the run lock and the digest."""
+def landed_today(log: list[dict], now: float) -> list[dict]:
+    """The stories landed on today's UTC date, newest first (#1334)."""
+    today = datetime.fromtimestamp(now, timezone.utc).date()
+    return [f for f in landings(log) if datetime.fromtimestamp(f["at"], timezone.utc).date() == today]
+
+
+def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]:
+    """The Building and Landed today sections for this machine, read from the claims, the run log, the process table, the run lock and the digest (#1334).
+    A run log that cannot be read is named as unknown, and nothing is guessed from it."""
     stamp = now.timestamp()
-    log = run_log()
-    from lib import gated
+    try:
+        log = run_log()
+    except (OSError, ValueError) as err:
+        return [f"Building and landed today: unknown, because the run log could not be read ({err})."]
     holder = run_lock.active(slug, stamp) if slug else {}
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + size_lines(log, stamp) + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), holder)
+    building, warnings = building_block(stamp, live_claims(stamp), log, runner_alive(), open_now, holder)
+    ready = next_ready(digest_path())
+    found, last = landed_today(log, stamp), landings(log)
+    landed = [landing_line(row, "Landed") for row in found] or ["Nothing has landed today."]
+    if not found:
+        landed.append(landing_line(last[0], "Last landed") if last else "Last landed: none recorded yet.")
+    ended = [r for r in log if r.get("stage") == "run-end"]
+    lines = ["Building:"] + building + ([f"Next Ready: {ready}."] if ready else []) + warnings
+    return lines + ["", "Landed today:"] + landed + ([run_end_line(ended[-1])] if ended else [])
+
+
+def pace_lines(now: datetime, open_now: int | None, rows: list[dict] | None, slug: str) -> list[str]:
+    """The Pace section: the open count, the landing rate and the estimated finish from GitHub, then the tokens, the gate savings and the size medians from
+    the run log. A figure that cannot be read is named as unknown with why, and no figure is guessed (#1334)."""
+    from lib import gated
+    if open_now is None or rows is None:
+        lines = [f"Open count, landing rate and finish date: unknown, because the issues of {slug} were not read from GitHub."]
+    else:
+        lines = [f"{slug}: " + summary(open_now, rows, now),
+                 "The landing rate counts the stories closed as completed in the last 7 days, per day. The finish date divides the open count by the daily fall, so it is an estimate."]
+    try:
+        log = run_log()
+    except (OSError, ValueError) as err:
+        return ["Pace:"] + lines + [f"Tokens and sizes: unknown, because the run log could not be read ({err})."]
+    tokens_line = "Tokens per closed story: unknown, because the closed issues were not read from GitHub." if rows is None else tokens_per_story(rows, log)
+    return ["Pace:"] + lines + [tokens_line] + gated.savings_lines() + size_lines(log, now.timestamp())
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
         waiting=lambda: waiting_lines()) -> int:
+    """The status page: what needs the owner first, then what is building and what landed today, then the pace. A figure that cannot be read from GitHub
+    is printed as unknown, and the exit code is 1 (#1334)."""
     if not slug:
         out("Error: this repo has no GitHub origin.")
         return 1
@@ -319,21 +367,20 @@ def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: dat
     now = now or datetime.now(timezone.utc)
     open_now = count(slug, "open")
     rows = fetch(slug, now - timedelta(days=DAYS))
-    if open_now is None or rows is None:
-        out(f"Error: the issues of {slug} were not read.")
-        return 1
-    out(f"{slug}: " + summary(open_now, rows, now))
-    for line in (live(now, open_now, rows) if live else live_lines(now, open_now, rows, slug)):
-        out(line)
     steps = waiting()  # a story a policy ask stopped waits on the owner, with the gate's name in its step (#1058)
-    if steps:
-        out("Waits on the owner:")
-        for line in steps:
-            out(line)
+    out("Needs you:")
+    for line in steps or ["Nothing."]:
+        out(line)
+    out("")
+    for line in (live(now, open_now, rows) if live else live_lines(now, open_now, slug)):
+        out(line)
+    out("")
+    for line in pace_lines(now, open_now, rows, slug):
+        out(line)
     held = run_lock.active(slug, now.timestamp())
     if held:
         out("Run: " + run_lock.describe(held, now.timestamp()))
-    return 0
+    return 0 if open_now is not None and rows is not None else 1
 
 
 def tokens(text: str) -> int:
