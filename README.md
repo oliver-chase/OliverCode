@@ -128,6 +128,7 @@ Hooks enforce the rules that must block work. Instructions and skills guide the 
 | [VERSIONING.md](docs/VERSIONING.md) | Version and release rules |
 | [VOICE.md](docs/VOICE.md) | Writing standards |
 | [DESIGN.md](docs/DESIGN.md) | Visual design standards |
+| [SHARING.md](docs/SHARING.md) | Public forks, history and release copies |
 | [skills/INDEX.md](skills/INDEX.md) | Available skills |
 
 For all commands and options:

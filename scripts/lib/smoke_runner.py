@@ -108,7 +108,7 @@ def jobs() -> int:
             return n
     except ValueError:
         pass
-    return os.cpu_count() or 4
+    return min(4, os.cpu_count() or 4)
 
 
 def modules(root: Path) -> list[tuple[str, Path, str]]:
@@ -179,12 +179,15 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
         units = plan(mods, load_timings(), jobs())
         output_lock = threading.Lock()
 
-        def progress(message: str) -> None:
-            # Worker threads share the gate output stream; keep each event on one line.
-            with output_lock:
-                print(message, file=out, flush=True)
+        verbose = os.environ.get("OLIVERCODE_VALIDATE_VERBOSE") == "1"
 
-        progress(f"  Smoke progress: starting {len(units)} test unit(s) across {len(mods)} module(s), {jobs()} worker(s).")
+        def progress(message: str) -> None:
+            # Per-module output is opt-in; failures and the final summary are always shown.
+            if verbose:
+                with output_lock:
+                    print(message, file=out, flush=True)
+
+        print(f"  Running {len(units)} test unit(s) across {len(mods)} module(s), {jobs()} workers.", file=out, flush=True)
 
         def one(unit):
             name, module, folder, ids = unit

@@ -23,6 +23,8 @@ from pathlib import Path
 
 # A gate file that has no "Commit gates" row of its own: the commit-message gate has its own section, and a repo's local gate is a hook point.
 GATE_FILES_WITHOUT_ROW = {"commit-msg", "repo-local"}
+# Working records and audit evidence are not user-facing documentation.
+INTERNAL_DOCS = {"AUDIT-ACCEPTED.md", "BACKLOG.md", "CUT-LIST.md", "TEST-AUDIT.md", "USAGE-AUDIT-1221.md"}
 
 
 def read(root: Path, rel: str) -> str:
@@ -126,6 +128,8 @@ def check_readme(root: Path) -> list[str]:
     linked = set(re.findall(r"\]\((?:\./)?(docs/[^)#\s]+)", readme))
     problems = [f"readme: README.md links {p} and the file does not exist; fix the link" for p in sorted(linked) if not (root / p).exists()]
     for md in sorted(docs.glob("*.md")):
+        if md.name in INTERNAL_DOCS:
+            continue
         if f"docs/{md.name}" not in linked:
             problems.append(f"readme: docs/{md.name} is not linked from README.md; add a row to its Documentation table")
     return problems
