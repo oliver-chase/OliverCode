@@ -98,7 +98,7 @@ def _write_start(row: dict) -> bool:
                         if isinstance(previous, dict) and previous.get("event") == "session_start" and previous.get("session") == row.get("session"):
                             count += 1
             row["attempt"] = count + 1
-            failure_log.append_private(path, json.dumps(row, separators=(",", ":")) + "\\n")
+            failure_log.append_private(path, json.dumps(row, separators=(",", ":")) + "\n")
         return True
     except OSError:
         return False
