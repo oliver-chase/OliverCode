@@ -206,3 +206,8 @@ git -C <repo> config --unset core.hooksPath
 Run the second command in each managed repo. Then remove the checkout if you no longer need it.
 
 Uninstall removes OliverCode's changes to your Claude configuration and restores backups where possible. It doesn't delete your rules, skills, repo files, or fleet data.
+
+
+## Pause and cancel a run
+
+`olivercode pause REPO` stops new stories from starting while active builders finish. Use `olivercode resume REPO` to continue. To stop one active story, run `olivercode cancel REPO STORY`; its worktree and branch are kept for review, and the story returns to Backlog without landing.

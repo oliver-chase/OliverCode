@@ -241,7 +241,7 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
 
 
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
-           max_turns: int = READER_TURNS, attempts: int = 2, repo: str = "") -> dict:
+           max_turns: int = READER_TURNS, attempts: int = 2, repo: str = "", stop_check=None) -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Accepts an explicit final-line VERDICT: PASS/FINDINGS, a bare PASS as the
     reply's last line, plus the historical first-line PASS form (#1153, #1213).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
@@ -372,21 +372,23 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
+             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "", stop_check=None) -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
     finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
     `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode, repo)
+    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode, repo, stop_check)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full", repo="") -> dict:
+def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full", repo="", stop_check=None) -> dict:
     run, check = run or model.run_cli, check or validate
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
     start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
     while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
+        if stop_check and stop_check():
+            return {"done": False, "cancelled": True, "reason": "Owner cancelled this story before the next model session.", "rounds": n, "tokens": tokens, "summary": summary}
         n += 1
         fix_owed, model_name = False, escalate(start, failures)
         resumed = False
@@ -398,6 +400,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 reply = run(prompt, cwd, **call_kwargs)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
                 log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed, "session_id": exc.session_id}, why=why, repo=repo, attempt=n)
+                if stop_check and stop_check():
+                    return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its current model session timed out.", "rounds": n, "tokens": tokens, "summary": summary}
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
@@ -405,11 +409,15 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 claude_session, prompt, resumed = exc.session_id, CONTINUE.format(why="it ran past the time limit"), True
                 continue
             except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
+                if stop_check and stop_check():
+                    return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its model session failed.", "rounds": n - 1, "tokens": tokens, "summary": summary}
                 return {"done": False, "reason": str(exc), "rounds": n - 1, "tokens": tokens, "summary": summary}
             reply = {**reply, "resumed": resumed}
             tokens += reply["tokens"]
             claude_session = reply["session_id"] or claude_session
             summary = reply["text"]
+            if stop_check and stop_check():
+                return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its current model session.", "rounds": n, "tokens": tokens, "summary": summary}
             if is_api_error(reply):
                 cause = api_error_cause(reply) or str(reply.get("text") or reply.get("stderr") or reply.get("stop") or "Unspecified API error")[:300]
                 log_api_error(session, model_name, cause, repo=repo, reply=reply)
@@ -437,6 +445,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             if review_mode == "none":
                 return {"done": True, "reason": "The repo's validation passes; routine story review is covered by validation and commit gates.",
                         "rounds": n, "tokens": tokens, "summary": summary}
+            if stop_check and stop_check():
+                return {"done": False, "cancelled": True, "reason": "Owner cancelled this story before review.", "rounds": n, "tokens": tokens, "summary": summary}
             verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
                              max_turns=READER_TURNS, attempts=2, repo=repo)
             if verdict["verdict"] == "none":  # the reader gave no verdict twice, so the story is held for a retry and nothing lands (#1015)
