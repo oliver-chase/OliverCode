@@ -71,6 +71,16 @@ class TestSessionGuard(unittest.TestCase):
         self.assertEqual([0.1, 0.2], [r["cost_usd"] for r in ends])
         self.assertFalse(session_guard.story_has_unknown_cost(10, "Repo"))
 
+    def test_story_spend_ceiling_blocks_internal_fix_or_review_sessions(self):
+        (self.home / session_guard.LOG).write_text(
+            '{"event":"session_end","session":"story-7","session_id":"sid-7","repo":"o/r","cost_usd":6.0}\n',
+            encoding="utf-8")
+        with mock.patch.object(session_guard.local_config, "max_story_spend", return_value=6.0):
+            with self.assertRaisesRegex(RuntimeError, "reaching its"):
+                session_guard.acquire("story-7-fix", "sonnet", "/work/Repo-7", "sid-7-fix", repo_slug="o/r")
+        rows = [json.loads(line) for line in (self.home / session_guard.LOG).read_text().splitlines()]
+        self.assertEqual(1, len(rows), "no session-start event is written when the story is already at its ceiling")
+
     def test_start_telemetry_failure_refuses_to_launch_and_releases_slot(self):
         with mock.patch.object(session_guard, "_write", return_value=False):
             with self.assertRaisesRegex(RuntimeError, "durable session-start telemetry"):
