@@ -50,8 +50,8 @@ def _active(slot_dir: Path, cap: int) -> int:
 
 
 class Lease:
-    def __init__(self, fd: int, metadata: dict):
-        self.fd, self.metadata, self.finished = fd, metadata, False
+    def __init__(self, fd: int, metadata: dict, story_fd: int | None = None):
+        self.fd, self.metadata, self.finished, self.story_fd = fd, metadata, False, story_fd
 
     def finish(self, details: dict | None = None) -> None:
         if self.finished:
@@ -74,6 +74,11 @@ class Lease:
             fcntl.flock(self.fd, fcntl.LOCK_UN)
         finally:
             os.close(self.fd)
+        if self.story_fd is not None:
+            try:
+                fcntl.flock(self.story_fd, fcntl.LOCK_UN)
+            finally:
+                os.close(self.story_fd)
 
     def __enter__(self):
         return self
@@ -184,16 +189,34 @@ def story_cost_unknown(story: int, repo: str = "") -> bool:
 
 
 def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25, repo_slug: str = "") -> Lease:
-    """Wait for and hold one shared account slot; configured maxBuilders is the hard session cap."""
+    """Hold a shared account slot and a story-scoped lock while checking spend and running the CLI."""
     match = re.match(r"^story-(\d+)(?:-.+)?$", session)
-    if match:
-        story = int(match.group(1))
-        ceiling = local_config.max_story_spend()
-        spent = story_spend(story, repo_slug)
-        if story_cost_unknown(story, repo_slug):
-            raise RuntimeError(f"Claude session refused: story #{story} has an unknown prior session cost; reconcile it before starting another session.")
-        if spent >= ceiling:
-            raise RuntimeError("Claude session refused: story #%d has spent $%.2f, reaching its $%.2f ceiling." % (story, spent, ceiling))
+    story_fd = None
+    story = int(match.group(1)) if match else None
+    if story is not None:
+        repo_key = (repo_slug or Path(cwd).name).replace("/", "__")
+        story_path = failure_log.home() / "model-session-slots" / f"story-{repo_key}-{story}.lock"
+        story_path.parent.mkdir(parents=True, exist_ok=True)
+        while True:
+            story_fd = os.open(story_path, os.O_CREAT | os.O_RDWR, 0o600)
+            try:
+                fcntl.flock(story_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                os.close(story_fd)
+                time.sleep(wait_seconds)
+        try:
+            ceiling = local_config.max_story_spend()
+            spent = story_spend(story, repo_slug)
+            if story_cost_unknown(story, repo_slug):
+                raise RuntimeError(f"Claude session refused: story #{story} has an unknown prior session cost; reconcile it before starting another session.")
+            if spent >= ceiling:
+                raise RuntimeError("Claude session refused: story #%d has spent $%.2f, reaching its $%.2f ceiling." % (story, spent, ceiling))
+        except Exception:
+            fcntl.flock(story_fd, fcntl.LOCK_UN)
+            os.close(story_fd)
+            story_fd = None
+            raise
     cap = max(1, local_config.max_builders())
     slot_dir = failure_log.home() / "model-session-slots"
     slot_dir.mkdir(parents=True, exist_ok=True)
@@ -214,8 +237,11 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
             if not _write_start(metadata):
                 fcntl.flock(fd, fcntl.LOCK_UN)
                 os.close(fd)
+                if story_fd is not None:
+                    fcntl.flock(story_fd, fcntl.LOCK_UN)
+                    os.close(story_fd)
                 raise RuntimeError("Claude session refused: durable session-start telemetry could not be written.")
-            lease = Lease(fd, metadata)
+            lease = Lease(fd, metadata, story_fd)
             lease.started_epoch = started_epoch
             return lease
         time.sleep(wait_seconds)
