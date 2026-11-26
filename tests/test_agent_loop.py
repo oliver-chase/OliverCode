@@ -276,6 +276,19 @@ class TestLoop(unittest.TestCase):
         checks = iter(results)
         return agent_loop.run_loop("do it", self.repo, "s1", run=run, check=lambda cwd: next(checks), say=lambda *_: None, **kw)
 
+    def test_a_story_at_its_sizes_ceiling_starts_no_further_round_and_one_under_it_fixes(self):  # #1318
+        for key in ("s1",):
+            self.addCleanup(agent_loop.STORY_SIZE.pop, key, None)
+            self.addCleanup(agent_loop.SPEND.pop, key, None)
+        agent_loop.STORY_SIZE["s1"] = "XS"
+        costly = {**reply(), "cost_usd": 0.30}
+        agent = Scripted(costly, costly)
+        out = self.loop(agent, [(False, "fail"), (False, "fail")], rounds=3)
+        self.assertEqual(2, len(agent.prompts))  # $0.30 is under $0.50, so the fix round ran
+        self.assertTrue(out["capped"])  # $0.60 has reached it
+        self.assertIn("$0.60", out["reason"])
+        self.assertIn("$0.50", out["reason"])
+
     def test_the_model_follows_the_size_and_only_a_design_label_takes_the_largest(self):
         self.assertEqual(["haiku", "haiku", "sonnet", "sonnet", "opus"],
                          [agent_loop.model_for(s) for s in ("XS", "S", "M", "L")] + [agent_loop.model_for("M", [{"name": "design"}])])

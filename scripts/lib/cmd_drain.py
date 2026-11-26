@@ -383,6 +383,7 @@ class Io:
         self.claimed_at[n] = self.claim_start[n] = now
         if size:
             agent_loop.STORY_SIZE[f"story-{n}"] = size
+        agent_loop.SPEND.pop(f"story-{n}", None)
         agent_loop.log_stage(f"story-{n}", self.repo.name, "claimed")
         if gh_budget.refusal() or gh_budget.reserve_write():
             cfg = backlog_config(self.repo)
@@ -549,6 +550,9 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
             state.setdefault("limited", []).append(n)
             io.comment(n, f"Drain stopped: {out['reason']}")
             notify(f"Story #{n} hit the usage limit: {out['reason']}")
+            return False, tokens
+        if out.get("capped"):  # the story spent its size's ceiling, so no restart; the stopped row takes this comment as its reason (#1318)
+            io.comment(n, f"Drain stopped: {out['reason']}")
             return False, tokens
         if out.get("fatal"):  # a reason a restart cannot fix blocks the story and starts no new session (#1012)
             io.comment(n, f"Drain blocked: {out['reason']}")

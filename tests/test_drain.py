@@ -322,6 +322,14 @@ class DrainCase(unittest.TestCase):
         self.assertIn("usage limit", io.comments[0][1])
         self.assertIn("Drain stopped for the usage limit", out)
 
+    def test_a_story_at_its_ceiling_starts_no_restart_and_keeps_the_spend_in_its_comment(self):  # #1318
+        capped = {"done": False, "capped": True, "reason": "Spend $0.60 reached the ceiling of $0.50 for a XS story, so no further round starts."}
+        io = FakeIo([issue(1)], builds={1: [capped]})
+        _, _, st = self.run_drain(io)
+        self.assertEqual((io.started, io.kept, st["blocked"]), ([1], [1], [1]))
+        self.assertIn("$0.60", io.comments[0][1])
+        self.assertIn("$0.50", io.comments[0][1])
+
     def test_restarts_an_early_exit_then_lands(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "claude exited 1"}]})
         _, out, st = self.run_drain(io)

@@ -30,6 +30,7 @@ DIFF_LIMIT = 40_000
 VALIDATE_TIMEOUT = 3600
 DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment and cold review
 LADDER = ("haiku", "sonnet", "opus")
+COST_CEILING = {"XS": 0.50, "S": 1.00, "M": 2.00}  # dollars a story may spend, reader reviews included, before no further round starts (#1318); shortcut: L and XL have no ceiling, add one once their spend is measured
 RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round starts its next build one level up (#1015)
 READER = "sonnet"  # the least capable model that reads a commit: no story is read by anything weaker (#1015)
 RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py")  # landing, claims, gates and the loop itself (#1026)
@@ -308,6 +309,7 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
     if STORY_SIZE.get(story):
         row["size"] = STORY_SIZE[story]
+    SPEND[story.removesuffix("-review")] = SPEND.get(story.removesuffix("-review"), 0.0) + float(reply.get("cost_usd") or 0)
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
@@ -320,6 +322,7 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
 
 
 STORY_SIZE: dict[str, str] = {}  # story -> its board Size, set when the drain claims it, so every later row carries it (#1301)
+SPEND: dict[str, float] = {}  # story -> dollars its rounds and reader reviews have cost since the drain claimed it, across builder restarts (#1318)
 STAGE_START: dict[str, float] = {}  # story -> when its current stage began, so each row says how long the stage before it took (#1291)
 
 
@@ -370,6 +373,10 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
     checked = validation_command(cwd) is not None
     start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
     while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
+        ceiling, spent = COST_CEILING.get(STORY_SIZE.get(session, "")), SPEND.get(session, 0.0)
+        if ceiling is not None and spent >= ceiling:  # the story has spent its size's ceiling, so no further round starts (#1318)
+            return {"done": False, "capped": True, "reason": f"Spend ${spent:.2f} reached the ceiling of ${ceiling:.2f} for a {STORY_SIZE[session]} story, so no further round starts.",
+                    "rounds": n, "tokens": tokens, "summary": summary}
         n += 1
         if repo and n > 1:
             log_stage(session, repo, "building")  # a fix round is building time again (#1291)

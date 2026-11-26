@@ -269,7 +269,11 @@ class TestDigest(unittest.TestCase):
         """#1301."""
         log = [r for n in range(5) for r in self.sized(n, "XS", retry=n == 0)]
         self.assertEqual(["XS stories: 5 reached staging in the last 7 days. Median 10.0 minutes, 1 rounds, $0.10, 80% passed validation first time. "
-                          "Benchmark: 21 minutes and $0.14."], cmd_status.size_lines(log, NOW.timestamp()))
+                          "Benchmark: 21 minutes and $0.14. Ceiling: $0.50."], cmd_status.size_lines(log, NOW.timestamp()))
+
+    def test_a_size_without_a_ceiling_shows_none(self):
+        line = cmd_status.size_lines([r for n in range(5) for r in self.sized(n, "L")], NOW.timestamp())[0]
+        self.assertNotIn("Ceiling", line)
 
     def test_a_size_with_fewer_than_five_landings_says_it_is_too_few(self):
         log = [r for n in range(3) for r in self.sized(n, "S")]

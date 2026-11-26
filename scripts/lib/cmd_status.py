@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock
+from lib import agent_loop, cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -304,9 +304,10 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
             continue
         bench = BENCHMARKS.get(size)
         against = f" Benchmark: {bench[0]} minutes and ${bench[1]:.2f}." if bench else " No benchmark is set for this size."
+        ceiling = f" Ceiling: ${agent_loop.COST_CEILING[size]:.2f}." if size in agent_loop.COST_CEILING else ""
         lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days. Median {median([f['minutes'] for f in found]):.1f} minutes, "
                      f"{median([f['rounds'] for f in found]):g} rounds, ${median([f['cost'] for f in found]):.2f}, "
-                     f"{round(100 * sum(f['first'] for f in found) / len(found))}% passed validation first time.{against}")
+                     f"{round(100 * sum(f['first'] for f in found) / len(found))}% passed validation first time.{against}{ceiling}")
     return lines
 
 
