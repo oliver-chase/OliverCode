@@ -456,7 +456,11 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         _event(io, "held", issue)
         return False, blocked.tokens
     finally:
-        io.release(n)
+        for cleanup in (lambda: io.release(n), lambda: io.clear_cancel(n)):
+            try:
+                cleanup()
+            except Exception:
+                pass
 
 
 def budget_handoff(worktree: Path, out: dict) -> str:
@@ -589,6 +593,12 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
+        if out.get("cancelled"):
+            handoff = budget_handoff(worktree, out)
+            io.clear_cancel(n)
+            io.backlog(n)
+            io.comment(n, f"Cancelled by the owner before landing. The worktree and branch are kept for a handoff; nothing was pushed.\n- Next: review the handoff and return the story to Ready when you want to resume.\n{handoff}")
+            return False, tokens
         if out.get("api_error"):
             story_api_errors += 1
             cause = str(out.get("api_error_cause") or out.get("reason") or "Unspecified API error")[:300]
