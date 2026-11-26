@@ -160,6 +160,52 @@ def story_spend(story: int, repo: str = "") -> float:
     return total
 
 
+def story_attempts(story: int, repo: str = "") -> int:
+    """Number of recorded model invocations for a story, including legacy rounds and API stops."""
+    prefix = f"story-{story}"
+    count = 0
+    path = failure_log.home() / LOG
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(row, dict) or row.get("event") != "session_start":
+                    continue
+                name = str(row.get("session") or "")
+                if name != prefix and not name.startswith(prefix + "-"):
+                    continue
+                row_repo = str(row.get("repo") or "")
+                repo_name = Path(repo).name
+                if repo and row_repo and (row_repo != repo if "/" in row_repo or "/" in repo else row_repo != repo_name and not row_repo.startswith(repo_name + "-")):
+                    continue
+                count += 1
+    except OSError:
+        pass
+    legacy = failure_log.home() / "run-log.jsonl"
+    try:
+        with legacy.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(row, dict) or row.get("session_id"):
+                    continue
+                name = str(row.get("story") or "")
+                if name != prefix and not name.startswith(prefix + "-"):
+                    continue
+                if repo and row.get("repo") and row.get("repo") != repo:
+                    continue
+                if "round" in row or row.get("stop") == "api_error":
+                    count += 1
+    except OSError:
+        pass
+    return count
+
+
 def story_cost_unknown(story: int, repo: str = "") -> bool:
     """Unknown or corrupt cost history blocks another model session for this story."""
     path = failure_log.home() / "run-log.jsonl"
@@ -208,6 +254,10 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
                 os.close(story_fd)
                 time.sleep(wait_seconds)
         try:
+            attempts = story_attempts(story, repo_slug)
+            max_attempts = local_config.max_story_attempts()
+            if attempts >= max_attempts:
+                raise RuntimeError("Claude session refused: story #%d has reached its %d-session attempt ceiling." % (story, max_attempts))
             ceiling = local_config.max_story_spend()
             spent = story_spend(story, repo_slug)
             if story_cost_unknown(story, repo_slug):
