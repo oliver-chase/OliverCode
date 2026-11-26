@@ -37,7 +37,8 @@ def _dashboard(now: float, runner=None) -> str:
             numbers = cmd_status.four_numbers(when, open_now, rows, cmd_status.run_log(), OC_ROOT)
             snap = cmd_status.gather(slug, when, open_now, rows, numbers, cmd_status.owner_steps(slug), cmd_status._idea_count(), not cmd_status.city_gap())
             body = f"<style>{briefing.STYLE}</style>" + briefing.dashboard_html(snap)
-    from lib import status_report  # local import avoids the status-page/city cycle\n    href = status_report.page_path().as_uri()
+    from lib import status_report  # local import avoids the status-page/city cycle
+    href = status_report.page_path().as_uri()
     link = (f'<div style="margin:0 0 24px;padding:12px 0;border-bottom:1px solid var(--line,#ddd)">'
             f'<a href="{href}" style="display:inline-block;color:inherit;text-decoration:none;border:1px solid currentColor;padding:7px 10px;border-radius:3px;font-weight:600">Open the live local page ↗</a>'
             f'<span style="display:block;color:var(--sub,#666);font-size:.85rem;margin-top:6px">On this computer · refreshes every 60 seconds</span></div>')
