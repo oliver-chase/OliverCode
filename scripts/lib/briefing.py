@@ -135,7 +135,7 @@ def text(snap: dict) -> list[str]:
     else:
         out.append("Nothing needs you right now.")
     out += ["", RULE, "", "WORK", ""]
-    out.append(f"  Builders  {runner['building']} running, {runner['allowed']} allowed")
+    out.append(f"  Builders  {runner['building']} running, {runner['allowed']} allowed")\n    if runner.get("paused"):\n        out.append("  Runner    Paused — waiting for resume")
     if runner.get("load"):
         out.append(f"  Machine   {runner['load']}")
     out.append(f"  Open      {plural(snap['open'], 'story', 'stories')}")
@@ -220,8 +220,8 @@ def _health_html(snap: dict) -> str:
 def dashboard_html(snap: dict) -> str:
     """City's top half: four questions answered in order, then the terminal commands. Everything is escaped."""
     runner, nums = snap["runner"], snap["numbers"]
-    state = "Running" if runner["building"] else "Idle"
-    pill = f'<span class="pill {"good" if runner["building"] else ""}">{state}</span>'
+    state = "Paused" if runner.get("paused") else ("Running" if runner["building"] else "Idle")
+    pill = f'<span class="pill {"warn" if runner.get("paused") else ("good" if runner["building"] else "")}">{state}</span>'
     latest = f'<p>Most recent delivery: <b>#{esc(snap["latest"]["number"])} {esc(snap["latest"]["title"])}</b></p>' if snap.get("latest") else ""
     cost = (f'{_money(nums.get("cost_per_closed"))}', f'about {_millions(nums["tokens_per_closed"])} tokens each') if nums.get("tokens_per_closed") is not None else ("Not recorded", "no finished stories yet")
     load = f'<div class="label">{esc(runner["load"])}</div>' if runner.get("load") else ""
