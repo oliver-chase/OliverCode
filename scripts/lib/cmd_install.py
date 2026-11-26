@@ -10,15 +10,16 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from lib import launchd
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import OC_ROOT, design_file, local_path, voice_file
+from lib.local_config import DEFAULTS, OC_ROOT, design_file, local_path, voice_file
 
 from lib import claude_settings as _claude_settings
-from lib import cmd_guide
+from lib import cmd_guide, failure_log, placement, repo_state
 from lib import queue_shim as _queue_shim
 from lib import repo_gates as _repo_gates
 from lib.skills_catalog import skill_dirs
@@ -292,6 +293,73 @@ def _inherit_local_config(oc_root: Path, claude_dir: Path) -> None:
     print(f"  [COPIED] olivercode.local.json from {prior}")
 
 
+def _checkout_of(root: Path, name: str) -> Path | None:
+    """The main checkout under repoRoot whose GitHub origin is the repo `name`: where a repoPaths entry points once its folder has moved (#1295)."""
+    for path in sorted(placement.checkouts(root)):
+        slug = repo_state.origin(path)
+        if slug and slug.split("/")[1].lower() == name.lower() and not placement.is_worktree(path):
+            return path
+    return None
+
+
+def _converge_local_config() -> list[str]:
+    """Bring olivercode.local.json in line with this version (#1295). A key the version does not read is removed, a repoPaths
+    entry whose folder is gone points at the checkout of that repo under repoRoot or is removed, and a list names each repo once.
+    The file is copied to the backups folder before the first change. Returns one line per change, or none when nothing changed."""
+    path = local_path()
+    if str(path) == os.devnull or not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        return [f"[FAIL] {path} is not a JSON object, so it was left as it is ({exc})"]
+    if not isinstance(data, dict):
+        return [f"[FAIL] {path} is not a JSON object, so it was left as it is"]
+    lines = []
+    for key in [k for k in data if k not in DEFAULTS]:
+        del data[key]
+        lines.append(f"[REMOVED] {key} in olivercode.local.json: this version reads no such key")
+    paths = data.get("repoPaths")
+    if isinstance(paths, dict):
+        root = placement.config().root
+        for name, value in list(paths.items()):
+            if isinstance(value, str) and Path(value).expanduser().is_dir():
+                continue
+            moved = _checkout_of(root, name)
+            if moved:
+                paths[name] = str(moved)
+                lines.append(f"[MOVED] repoPaths.{name} now points at {moved}")
+            else:
+                del paths[name]
+                lines.append(f"[REMOVED] repoPaths.{name}: no folder at {value} and no checkout of {name} under {root}")
+    for key, value in list(data.items()):
+        if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            continue
+        seen, kept = set(), []
+        for item in value:
+            if item.lower() not in seen:
+                seen.add(item.lower())
+                kept.append(item)
+        if len(kept) < len(value):
+            data[key] = kept
+            lines.append(f"[DEDUPED] {key}: named more than once, now listed once each ({len(value) - len(kept)} repeat(s) dropped)")
+    if not lines:
+        return []
+    backups = failure_log.home() / "backups"
+    backups.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d%H%M%S")
+    backup = backups / f"{path.name}.{stamp}"
+    n = 1
+    while backup.exists():
+        n += 1
+        backup = backups / f"{path.name}.{stamp}.{n}"
+    shutil.copy2(path, backup)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return [*lines, f"previous olivercode.local.json kept at {backup}"]
+
+
 def registered_repos() -> list[tuple[str, Path]]:
     """OliverCode and each cloned repo in the fleet registry: the repos install gives a board (#994)."""
     from lib.repo_profiles import iter_fleet, load_repo_profiles
@@ -458,10 +526,9 @@ def command_install(oc_root: Path) -> int:
         print(f"  [REMOVED] links to skills this checkout no longer has: {', '.join(retired)}")
     from lib import failure_log  # the hooks log blocked commits only where this folder exists
     failure_log.home().mkdir(parents=True, exist_ok=True)
-    # A release that moves a state file moves the user's copy once, with a backup (#762).
-    from lib import state_migrations
-    for line in state_migrations.run(oc_root):
-        print(f"  [MIGRATED] {line}")
+    # The local file holds only the keys this version reads, each repo once, and repo paths that exist (#1295).
+    for line in _converge_local_config():
+        print(f"  {line}")
     expected = {k: oc_root / rel for k, rel in RULE_LINKS.items()}
     expected.update({f"skills/{name}": source for name, source in wanted.items()})
     _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, src in expected.items()

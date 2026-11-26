@@ -11,7 +11,6 @@
   "otherDeviceRepos": ["a-repo-that-lives-on-another-device"],
   "otherDeviceOwners": ["another-devices-github-org"],
   "allowedAuthors": ["your-github-login", "your-bot-login"],
-  "personalRepos": ["a-personal-repo"],
   "skillsRoot": "~/path/to/skills",
   "liveCopies": {
     "~/path/a-running-bot-reads": "~/path/to/its-agent-copy"

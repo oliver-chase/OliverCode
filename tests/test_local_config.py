@@ -1,6 +1,7 @@
 """Tests for scripts/lib/local_config.py: machine paths stay out of tracked files."""
 import json
 import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -8,7 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from _support import temp_dir  # noqa: E402
-from lib import local_config  # noqa: E402
+from lib import cmd_install, local_config  # noqa: E402
 
 
 class LocalConfig(unittest.TestCase):
@@ -65,3 +66,64 @@ class LocalConfig(unittest.TestCase):
     def test_repo_paths_expand_a_tilde(self):
         self.write({"repoPaths": {"alpha": "~/work/alpha"}})
         self.assertEqual(local_config.repo_paths(), {"alpha": Path.home() / "work" / "alpha"})
+
+
+class ConvergeLocalConfig(unittest.TestCase):
+    """#1295: install leaves the local file with the keys this version reads, each repo once, and repo paths that exist."""
+
+    def setUp(self):
+        self.root = temp_dir(self)
+        self.file = self.root / "olivercode.local.json"
+        self.fleet = self.root / "repos"
+        self.fleet.mkdir()
+        self.home = self.root / "home"
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(self.file), "OLIVERCODE_HOME": str(self.home)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def write(self, data):
+        self.file.write_text(json.dumps(data))
+
+    def read(self):
+        return json.loads(self.file.read_text())
+
+    def checkout(self, name, origin):
+        path = self.fleet / name
+        path.mkdir()
+        subprocess.run(["git", "init", "-q", str(path)], check=True)
+        subprocess.run(["git", "-C", str(path), "remote", "add", "origin", f"https://github.com/me/{origin}.git"], check=True)
+        return path
+
+    def test_a_key_the_version_no_longer_reads_is_removed_once_backed_up_and_named(self):
+        self.write({"pushRepos": ["old"], "maxBuilders": 3, "repoRoot": str(self.fleet)})
+        lines = cmd_install._converge_local_config()
+        self.assertEqual(self.read(), {"maxBuilders": 3, "repoRoot": str(self.fleet)})
+        self.assertTrue(any(line.startswith("[REMOVED] pushRepos") for line in lines), lines)
+        backups = list((self.home / "backups").iterdir())
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(json.loads(backups[0].read_text())["pushRepos"], ["old"])
+
+    def test_a_value_the_user_chose_is_kept(self):
+        self.write({"maxBuilders": 3, "repoRoot": str(self.fleet)})
+        self.assertEqual(cmd_install._converge_local_config(), [])
+        self.assertEqual(self.read(), {"maxBuilders": 3, "repoRoot": str(self.fleet)})
+
+    def test_a_repo_that_moved_points_at_its_checkout_and_one_with_no_checkout_is_removed(self):
+        moved = self.checkout("alpha", "alpha")
+        self.write({"repoRoot": str(self.fleet), "repoPaths": {"alpha": str(self.root / "gone-alpha"), "beta": str(self.root / "gone-beta")}})
+        lines = cmd_install._converge_local_config()
+        self.assertEqual(self.read()["repoPaths"], {"alpha": str(moved)})
+        self.assertTrue(any(line.startswith("[REMOVED] repoPaths.beta") for line in lines), lines)
+        self.assertTrue(any(line.startswith("[MOVED] repoPaths.alpha") for line in lines), lines)
+
+    def test_a_list_names_each_repo_once(self):
+        self.write({"repoRoot": str(self.fleet), "otherDeviceRepos": ["tesknota", "other", "Tesknota"]})
+        lines = cmd_install._converge_local_config()
+        self.assertEqual(self.read()["otherDeviceRepos"], ["tesknota", "other"])
+        self.assertTrue(any(line.startswith("[DEDUPED] otherDeviceRepos") for line in lines), lines)
+
+    def test_a_second_run_changes_nothing_and_writes_no_backup(self):
+        self.write({"pushRepos": [], "repoRoot": str(self.fleet)})
+        cmd_install._converge_local_config()
+        self.assertEqual(cmd_install._converge_local_config(), [])
+        self.assertEqual(len(list((self.home / "backups").iterdir())), 1)

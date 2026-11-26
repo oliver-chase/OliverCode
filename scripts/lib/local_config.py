@@ -25,8 +25,14 @@ def claude_dir() -> Path:
 LOCAL_FILE = OC_ROOT / "olivercode.local.json"
 REAL_LOCAL_FILE = LOCAL_FILE
 
-# A setting a release adds gets its default here. The saved value wins, so a default only fills a key the user never set.
-DEFAULTS: dict = {"allowOutside": [], "allowedAuthors": [], "personalRepos": [], "deleteMergedRemoteBranches": False}
+# Every key this version reads, with the default a release ships (None where the code finds its own, such as repoRoot).
+# Install removes any saved key not listed here (#1295), so a key the code starts reading is listed here in the same change.
+DEFAULTS: dict = {
+    "allowOutside": [], "allowedAuthors": [], "auditMode": None, "cityArtifact": None, "deleteMergedRemoteBranches": False,
+    "designFile": None, "engineBranch": None, "fleetRegistry": None, "liveCopies": {}, "maxBuilders": None,
+    "otherDeviceOwners": [], "otherDeviceRepos": [], "privateRepos": {}, "repoPaths": {}, "repoRoot": None, "schedules": {},
+    "skillsRoot": None, "voiceFile": None, "watchRoots": None,
+}
 BACKLOG_CONFIG = "docs/backlog-config.json"
 LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
 

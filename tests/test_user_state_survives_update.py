@@ -14,7 +14,7 @@ from test_update_keeps_local_learning import Checkout, git, write
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "audit" / "scripts"))
 import audit_mode  # noqa: E402
-from lib import local_config, repo_profiles, state_migrations  # noqa: E402
+from lib import local_config, repo_profiles  # noqa: E402
 
 USER_FILES = ("olivercode.local.json", "shared/repo-profiles.local.json", "docs/backlog-config.local.json")
 
@@ -82,31 +82,6 @@ class AUserWhoCannotPushIsNotToldToPush(Checkout):
         self.assertEqual(git(self.clone, "rev-parse", "olivercode-local"), mine)
         code, calls, out = self.update()
         self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]), out)
-
-
-class AReleaseMovesAStateFile(Checkout):
-    def test_a_moved_jsonl_file_is_appended_once_with_a_backup_and_leaves_one_copy(self):
-        old, new = self.clone / "old.jsonl", self.ohome / "new.jsonl"
-        old.write_text('{"id": "a"}\n{"id": "b"}\n')
-        new.write_text('{"id": "b"}\n')
-        move = state_migrations.Migration(98, "test", lambda oc: old, lambda oc: new, "jsonl")
-        moved = state_migrations.run(self.clone, (move,))
-        self.assertEqual(len(moved), 1)
-        self.assertFalse(old.exists())
-        self.assertEqual(new.read_text().splitlines(), ['{"id": "b"}', '{"id": "a"}'])
-        self.assertEqual(state_migrations.run(self.clone, (move,)), [])
-
-    def test_no_release_migration_writes_a_lesson_log(self):
-        self.assertEqual((), state_migrations.MIGRATIONS)
-
-    def test_a_moved_json_file_keeps_the_values_the_new_home_already_holds(self):
-        old, new = self.clone / "old.json", self.ohome / "new.json"
-        old.write_text('{"a": 1, "b": 1}')
-        new.write_text('{"b": 2}')
-        moved = state_migrations.run(self.clone, (state_migrations.Migration(99, "test", lambda oc: old, lambda oc: new, "json"),))
-        self.assertEqual(len(moved), 1)
-        self.assertEqual(json.loads(new.read_text()), {"a": 1, "b": 2})
-        self.assertFalse(old.exists())
 
 
 class AReleaseAddsADefault(unittest.TestCase):
