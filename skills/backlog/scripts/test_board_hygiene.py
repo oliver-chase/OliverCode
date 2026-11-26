@@ -1,4 +1,4 @@
-"""Test the sweep checks (status drift, required fields, duplicate cards, close gate), the REST reads and the config guards.
+"""Test the sweep checks (status drift, required fields, duplicate cards), the REST reads and the config guards.
 Run: python3 -m unittest discover -p "test_*.py"   (from this folder)
 """
 import contextlib
@@ -38,7 +38,6 @@ class DimensionScoping(unittest.TestCase):
             mock.patch.object(bh, "check_required_fields", spy("fields")),
             mock.patch.object(bh, "check_status_drift", spy("drift")),
             mock.patch.object(bh, "check_duplicate_cards", spy("duplicates")),
-            mock.patch.object(bh, "check_close_gate", spy("close-gate")),
             mock.patch.object(bh, "check_grooming", spy("groom")),
             mock.patch.object(bh, "check_board_reopens", spy("board-reopens")),
             mock.patch("sys.argv", ["check_board_hygiene.py", "--config", "x.json", *flags]),
@@ -50,7 +49,7 @@ class DimensionScoping(unittest.TestCase):
         return calls
 
     def test_no_flag_runs_every_dimension(self):
-        self.assertEqual({"fields", "drift", "duplicates", "close-gate", "board-reopens", "groom"},
+        self.assertEqual({"fields", "drift", "duplicates", "board-reopens", "groom"},
                          set(self.run_main()))
 
     def test_one_dimension_runs_alone(self):
@@ -278,58 +277,13 @@ class ListLimit(unittest.TestCase):
         self.assertIn("limit", str(raised.exception))
 
 
-class CloseGateDimension(unittest.TestCase):
-    CFG = {"repoOwner": "o", "repoName": "r", "closeGateFromIssue": 50}
-    BUILDER = {"body": "Agent action\n- Agent: claude\n- Role: builder\n- Result: built\n- Commit: abc1234"}
-
-    @staticmethod
-    def runner(comments_by_issue, reasons=None):
-        def run(args):
-            number = int(args[-1].split("/")[-2] if args[-1].endswith("/comments") else args[0].split("/")[-1])
-            if "--slurp" in args:
-                return subprocess.CompletedProcess([], 0, json.dumps([comments_by_issue.get(number, [])]), "")
-            if ".state_reason" in args:
-                return subprocess.CompletedProcess([], 0, f"{(reasons or {}).get(number, 'null')}\n", "")
-            return subprocess.CompletedProcess([], 0, "", "")
-        return run
-
-    def test_an_issue_closed_without_the_mark_is_flagged_with_its_number_and_fix(self):
-        items = [item(60, "Complete"), item(61, "Complete")]
-        found = bh.check_close_gate(items, self.CFG, runner=self.runner({61: [self.BUILDER, {"body": "done\n\nClosed by complete_story.py."}], 60: [self.BUILDER, {"body": "Closing."}]}))
-        self.assertEqual(1, len(found))
-        self.assertIn("#60", found[0])
-        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
-
-    def test_an_external_agent_close_without_an_olivercode_builder_entry_is_allowed(self):
-        comments = {60: [{"body": "Closed by external agent. No OliverCode action log."}]}
-        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments)))
-
-    def test_a_duplicate_closed_as_not_planned_is_not_flagged(self):
-        comments = {60: [{"body": "Duplicate of #70. Findings folded into #70."}]}
-        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "not_planned"})))
-
-    def test_a_completed_close_without_the_mark_is_still_flagged(self):
-        comments = {60: [self.BUILDER, {"body": "Closing."}]}
-        found = bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "completed"}))
-        self.assertEqual(1, len(found))
-        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
-
-    def test_a_comment_that_only_quotes_the_mark_does_not_count(self):
-        quoted = {60: [self.BUILDER, {"body": "> Closed by complete_story.py."}, {"body": "Closed by complete_story.py. is the mark\nthanks"}]}
-        self.assertEqual(1, len(bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(quoted))))
-
-    def test_older_and_open_items_and_a_null_key_are_not_read(self):
-        def boom(args):
-            raise AssertionError("read")
-        self.assertEqual([], bh.check_close_gate([item(49, "Complete"), item(70, "In Progress")], self.CFG, runner=boom))
-        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], dict(self.CFG, closeGateFromIssue=None), runner=boom))
-
-    def test_a_failed_read_stops_the_check_and_a_bad_key_is_refused(self):
-        bad = lambda args: subprocess.CompletedProcess([], 1, "", "boom")
-        with self.assertRaises(SystemExit):
-            bh.check_close_gate([item(60, "Complete")], self.CFG, runner=bad)
-        with self.assertRaises(SystemExit):
-            bh.check_close_gate([], dict(self.CFG, closeGateFromIssue="50"))
+def comments_runner(comments_by_issue):
+    def run(args):
+        number = int(args[-1].split("/")[-2] if args[-1].endswith("/comments") else args[0].split("/")[-1])
+        if "--slurp" in args:
+            return subprocess.CompletedProcess([], 0, json.dumps([comments_by_issue.get(number, [])]), "")
+        return subprocess.CompletedProcess([], 0, "", "")
+    return run
 
 
 class HalfDoneClose(unittest.TestCase):
@@ -337,7 +291,7 @@ class HalfDoneClose(unittest.TestCase):
     MARK = "Evidence.\n\nClosed by complete_story.py."
 
     def found(self, comments, status="In Progress", state="OPEN"):
-        run = CloseGateDimension.runner({61: comments})
+        run = comments_runner({61: comments})
         return bh.half_closes([item(61, status)], {61: state}, "o/r", run)
 
     def test_the_closing_line_as_the_last_comment_is_a_half_done_close(self):
