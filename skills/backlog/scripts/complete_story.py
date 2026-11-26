@@ -244,7 +244,7 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
         print(f"complete_story: #{args.story} not completed", file=out)
         return 1
     root = Path(args.config).resolve().parent.parent  # the config sits in <repo>/docs
-    for commit in builder_commits(flatten(data)):  # a story closes only on work that reached origin/main
+    for commit in builder_commits(flatten(data)):  # a story closes only on work that reached origin/main or the engine branch
         reason = pushed(commit, root)
         if reason:
             print(f"complete_story: #{args.story} not completed: {reason}", file=out)

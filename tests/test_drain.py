@@ -1070,16 +1070,29 @@ class CloseByScript(unittest.TestCase):
         self.assertEqual([(1, io.refuse_close)], io.stops_logged)  # #1291: the refusal is the stopped row's reason, and #1297: only one row
         self.assertEqual([], io.kept)  # keep_open would log a second stopped row
 
-    def test_an_engine_story_on_staging_moves_to_qa_and_stays_open(self):
+    def test_an_engine_story_on_staging_closes_like_any_landed_story(self):
         io = FakeIo([issue(1)])
         io.staged = lambda: True
-        io.parked = []
-        io.park_in_qa = io.parked.append
-        state = {"sessions": 0, "restarts": {}, "tokens": 0}
-        closed, _ = cmd_drain.work_story(io, issue(1), state)
-        self.assertFalse(closed)
-        self.assertEqual(([1], [], [], [1]), (io.parked, io.closed, io.kept, io.released))
-        self.assertEqual([1], state["parked"])  # #1320: the run-end count reads a parked story as landed
+        closed, _ = cmd_drain.work_story(io, issue(1), {"sessions": 0, "restarts": {}, "tokens": 0})
+        self.assertTrue(closed)
+        self.assertEqual(([1], [], [1]), (io.closed, io.kept, io.released))
+
+    def test_drain_start_closes_qa_stories_on_staging_and_names_the_rest(self):
+        a, b, c = dict(issue(1), status="QA"), dict(issue(2), status="QA"), dict(issue(3), status="Backlog")
+        io = FakeIo([a, b, c])
+        io.staged = lambda: True
+        io.on_main = {1}
+        lines = []
+        cmd_drain.close_waiting_in_qa(io, lines.append)
+        self.assertEqual([1], io.closed)
+        self.assertEqual(1, len(lines))
+        self.assertIn("#2", lines[0])
+
+    def test_drain_start_leaves_qa_stories_alone_in_a_repo_with_no_engine_branch(self):
+        io = FakeIo([dict(issue(1), status="QA")])
+        io.on_main = {1}
+        cmd_drain.close_waiting_in_qa(io, lambda _: None)
+        self.assertEqual([], io.closed)
 
     def test_a_landed_story_closes_by_script_without_a_second_session(self):
         io = FakeIo([issue(1)])

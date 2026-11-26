@@ -312,18 +312,8 @@ class Io:
         return False, (done.stdout + done.stderr).strip()[-500:]
 
     def staged(self) -> bool:
-        """True when this repo is OliverCode's own and lands on the owner's engineBranch, where complete_story.py refuses a close by design (#1297)."""
+        """True when this repo is OliverCode's own and lands on the owner's engineBranch, where a story closes on staging and main is a label (#1330)."""
         return bool(agent_loop.setting("engineBranch")) and agent_loop.is_engine_repo(self.repo)
-
-    def park_in_qa(self, n: int) -> None:
-        """An engine story that landed on the engine branch waits in QA with its issue open: a comment names the commit, the card moves, and the run log says landed (#1297)."""
-        branch = self.branch()
-        log = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--format=%H%x09%s"], capture_output=True, text=True)
-        sha = next((line.split("\t")[0] for line in log.stdout.splitlines() if f"(#{n})" in line), "")
-        self.comment(n, f"Landed on {branch} in commit {sha[:12] or 'unknown'}. The story stays open in QA until the owner promotes it.")
-        cfg = backlog_config(self.repo)
-        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "QA"}}]}]))
-        agent_loop.log_stage(f"story-{n}", self.repo.name, "landed")
 
     def stopped(self, n: int, reason: str) -> None:
         """Append the stopped row that says why a story left the status line (#1291)."""
@@ -405,10 +395,6 @@ class CloseRefused(RuntimeError):
     """complete_story.py refused the close of a landed story. The story stays open with the gate's message on it (#912)."""
 
 
-class Parked(RuntimeError):
-    """An engine story landed on the engine branch and waits in QA, so nothing more is done for it (#1297)."""
-
-
 def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
     """The sequence after a passing builder: land the worktree's new commits, or accept an earlier landing when the worktree has none, then close
     through complete_story.py with no model call. New commits land first, so an older commit on main that names the story never stands in for them (#1011).
@@ -428,17 +414,32 @@ def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
 
 
 def finish(io, worktree: Path, n: int, why: str) -> None:
-    """Close a landed story through complete_story.py. An engine story on the engine branch parks in QA instead and raises Parked (#1297).
+    """Close a landed story through complete_story.py, which accepts a commit on the engine branch as well as the default branch (#1330).
     A refused close comments the gate's message, logs its one stopped row and raises CloseRefused (#912, #1291)."""
-    if io.staged():
-        io.park_in_qa(n)
-        raise Parked(n)
     closed, reason = io.close_by_script(worktree, n, why)
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
         io.stopped(n, reason)  # the refusal is the reason status shows (#1291)
         notify(f"Story #{n} close refused: {reason}")
         raise CloseRefused(reason)
+
+
+def close_waiting_in_qa(io, say=print) -> None:
+    """At drain start on an engine repo, close each open story whose card waits in QA and whose commit is on the engine branch, through the same close
+    a fresh landing gets. A QA story with no commit there stays open and is named (#1330)."""
+    if not io.staged():
+        return
+    for issue in io.list_open() or []:
+        n = issue["number"]
+        if issue.get("status") != "QA":
+            continue
+        if not io.landed(io.repo, n):
+            say(f"Left open #{n}: its card is in QA and no commit for it is on the engine branch.")
+            continue
+        try:
+            finish(io, io.repo, n, "already on the engine branch")
+        except CloseRefused as exc:  # finish has commented and logged the refusal
+            say(f"Left open #{n}: {exc}")
 
 
 def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
@@ -452,9 +453,6 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
                 notify(f"Story #{n} stopped without landing: {getattr(io, 'said', {}).get(n) or 'no reason recorded'}")  # (#1325)
         return closed, used
     except CloseRefused:  # a refused close leaves the story with the gate's message and its one stopped row (#1011)
-        return False, 0
-    except Parked:  # a parked story waits in QA (#1297) and the run-end count calls it landed (#1320)
-        state.setdefault("parked", []).append(n)
         return False, 0
     finally:
         io.release(n)
@@ -528,7 +526,7 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if out["done"]:
             try:
                 closed, note = land_and_close(io, worktree, n)
-            except (CloseRefused, Parked):  # work_story ends the story and logs no second row (#1297), so the tokens are counted here
+            except CloseRefused:  # work_story ends the story and logs no second row (#1297), so the tokens are counted here
                 state["tokens"] += tokens
                 raise
             if closed:
@@ -591,13 +589,14 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     except Exception:
                         pass
             state["tokens"] += used
-            if closed or issue["number"] in state.get("parked", ()):
+            if closed:
                 state["closed"].append(issue["number"])
             elif issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
                 state["blocked"].append(issue["number"])
         io.beat([i["number"] for i in running.values()])
 
     try:
+        close_waiting_in_qa(io, say)
         while True:
             until = gh_budget.blocked_until()
             if until and until - time.time() <= HOLD_WAIT_MAX:  # a hold that ends within the hour is waited out, once (#1314)

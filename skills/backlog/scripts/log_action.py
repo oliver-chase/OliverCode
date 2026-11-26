@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "lib"))
 
 import repo_name_guard  # noqa: E402
+from lib import agent_loop  # noqa: E402
 
 ROLES = ("builder", "claim")
 CLAIM_HOURS = 2
@@ -37,7 +38,8 @@ def gh_api(args):
 
 
 def commit_pushed(commit, root=None):
-    """None when `commit` is on the repo's default branch at origin in the checkout at `root`, else the reason it is not (#533, #1012)."""
+    """None when `commit` is on the repo's default branch at origin, or on the owner's engineBranch for an OliverCode checkout, in the checkout at `root`,
+    else the reason it is not (#533, #1012, #1330)."""
     git = ["git"] + (["-C", str(root)] if root else [])
     done = subprocess.run(git + ["branch", "-r", "--contains", commit], capture_output=True, text=True)
     if done.returncode != 0:
@@ -45,7 +47,10 @@ def commit_pushed(commit, root=None):
     head = subprocess.run(git + ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True).stdout.strip()
     base = head or "origin/main"
     holds = {line.strip() for line in done.stdout.splitlines()}
-    if not (holds & ({base} if head else {"origin/main", "origin/master", "origin/develop"})):
+    accepted = {base} if head else {"origin/main", "origin/master", "origin/develop"}
+    if (engine := agent_loop.setting("engineBranch")) and agent_loop.is_engine_repo(root or "."):
+        accepted.add(f"origin/{engine}")
+    if not (holds & accepted):
         return f"commit {commit} is not on {base}; push it first: git push origin HEAD:{base.removeprefix('origin/')}"
     return None
 

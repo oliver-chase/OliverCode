@@ -151,6 +151,32 @@ class CompleteStory(unittest.TestCase):
             git("remote", "set-head", "origin", "master", cwd=work)
             self.assertIsNone(cs.commit_pushed(git("rev-parse", "HEAD", cwd=work), work))
 
+    def test_a_commit_on_the_engine_branch_counts_as_pushed_only_for_an_engine_checkout(self):
+        """#1330: a story closes on staging; a commit on no remote branch is still refused."""
+        import log_action
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t" + chr(64) + "t.test",
+                   "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t" + chr(64) + "t.test"}
+            def git(*a, cwd=tmp):
+                return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True, env=env, check=True).stdout.strip()
+            remote = os.path.join(tmp, "remote"); work = os.path.join(tmp, "work")
+            subprocess.run(["git", "init", "-q", "--bare", "-b", "main", remote], check=True)
+            subprocess.run(["git", "clone", "-q", remote, work], check=True, capture_output=True, env=env)
+            git("commit", "-q", "--allow-empty", "-m", "one", cwd=work)
+            git("push", "-q", "origin", "HEAD:main", cwd=work)
+            git("commit", "-q", "--allow-empty", "-m", "two", cwd=work)
+            git("push", "-q", "origin", "HEAD:staging", cwd=work)
+            staged = git("rev-parse", "HEAD", cwd=work)
+            git("commit", "-q", "--allow-empty", "-m", "three", cwd=work)
+            local = git("rev-parse", "HEAD", cwd=work)
+            git("fetch", "-q", "origin", cwd=work)
+            loop = log_action.agent_loop
+            with unittest.mock.patch.object(loop, "setting", return_value="staging"), unittest.mock.patch.object(loop, "is_engine_repo", return_value=True):
+                self.assertIsNone(cs.commit_pushed(staged, work))
+                self.assertIn("push it first", cs.commit_pushed(local, work))
+            with unittest.mock.patch.object(loop, "setting", return_value="staging"), unittest.mock.patch.object(loop, "is_engine_repo", return_value=False):
+                self.assertIn("push it first", cs.commit_pushed(staged, work))
+
     def test_a_board_whose_finished_lane_is_named_done_closes_to_done(self):
         code, _, calls = self.run_it("builder-only.json", extra={"fields": {"status": {"id": "F1", "options": {"Done": "OPT_FINISHED"}}}})
         self.assertEqual(code, 0)
