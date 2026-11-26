@@ -52,7 +52,7 @@ class TextCase(unittest.TestCase):
 
 
     def test_paused_state_is_plainly_reported_in_terminal_and_city(self):
-        terminal = "\\n".join(briefing.text(snap(paused=True)))
+        terminal = "\n".join(briefing.text(snap(paused=True)))
         city = briefing.dashboard_html(snap(paused=True))
         self.assertIn("Runner    Paused — waiting for resume", terminal)
         self.assertIn("The runner is paused.", terminal)
