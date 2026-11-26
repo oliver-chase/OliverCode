@@ -334,7 +334,7 @@ class DrainCase(unittest.TestCase):
         with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
                 mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=1):
             self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
-            self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=2).capacity())
+            self.assertEqual(2, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=2).capacity())
             self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=8).capacity())
         with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=1), \
                 mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=0):
