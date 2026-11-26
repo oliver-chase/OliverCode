@@ -244,10 +244,8 @@ def _changed_lines(diff: str) -> list[tuple[str, int, str, str]]:
 
 
 def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
-    """What in a commit weakens a test, each as `file:line reason` (#1073): a skip added to a test file, `|| true` added to a test or validation
-    file, or assertions removed from a test file net of the ones added to it. Assertions may go when the commit deletes more non-blank code
-    outside the tests than it adds there, since that is the code they covered. A one-line edit nets to zero, so it covers nothing."""
-    found, lost = [], {}
+    """What in a commit weakens a test, each as `file:line reason` (#1073, #1216): a skip, `|| true`, or assertions lost after matching exact assertion lines moved across test files."""
+    found, removed, added = [], {}, {}
     code = [sign for path, _, sign, text in rows if not TEST_FILE.search(path) and text.strip()]
     net_code = code.count("-") - code.count("+")
     for path, line, sign, text in rows:
@@ -257,12 +255,36 @@ def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
         if sign == "+" and (test or VALIDATION_FILE.search(path)) and OR_TRUE.search(text):
             found.append(f"{path}:{line} adds || true to a test command")
         if test and ASSERT.search(text):
-            first, net = lost.get(path, (None, 0))
-            if sign == "-" and first is None:
-                first = line
-            lost[path] = (first, net + (1 if sign == "-" else -1))
+            bucket = removed if sign == "-" else added
+            bucket.setdefault(path, []).append((line, text.strip()))
     if net_code <= 0:
-        found +=[f"{path}:{first} removes {net} assertion(s) without removing the code they cover" for path, (first, net) in lost.items() if net > 0]
+        excess_removed, excess_added = [], []
+        for path in dict.fromkeys((*removed, *added)):
+            old, new = list(removed.get(path, [])), list(added.get(path, []))
+            # Exact unchanged assertions are paired first. A remaining same-file
+            # edit keeps the previous net-count behavior (a one-for-one rewrite
+            # is not a weakening); only the excess can be considered moved/lost.
+            for item in list(old):
+                if item in new:
+                    old.remove(item)
+                    new.remove(item)
+            paired = min(len(old), len(new))
+            old, new = old[paired:], new[paired:]
+            excess_removed.extend((path, *item) for item in old)
+            excess_added.extend((path, *item) for item in new)
+        unmatched_by_text = {}
+        for path, line, text in excess_removed:
+            unmatched_by_text.setdefault(text, []).append((path, line))
+        for _, text in excess_added:
+            candidates = unmatched_by_text.get(text, [])
+            if candidates:
+                candidates.pop()
+        unmatched = {}
+        for remaining in unmatched_by_text.values():
+            for path, line in remaining:
+                unmatched.setdefault(path, []).append(line)
+        found += [f"{path}:{min(lines)} removes {len(lines)} assertion(s) without removing the code they cover"
+                  for path, lines in unmatched.items()]
     return found
 
 

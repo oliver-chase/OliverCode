@@ -705,6 +705,17 @@ class TestWeakenedTests(unittest.TestCase):
         product = cmd_land._changed_lines(self.diff("scripts/lib/a.py", "@@ -1,0 +2,1 @@", "+" + OR_TRUE_LINE))
         self.assertEqual([], cmd_land.weakened(product))
 
+    def test_assertions_moved_between_test_files_are_not_counted_as_lost(self):
+        diff = self.diff("tests/test_old.py", "@@ -1,2 +0,0 @@", "-        self.assertEqual(1, f())", "-        self.assertTrue(g())")
+        diff += self.diff("tests/test_new.py", "@@ -0,0 +1,2 @@", "+        self.assertEqual(1, f())", "+        self.assertTrue(g())")
+        self.assertEqual([], cmd_land.weakened(cmd_land._changed_lines(diff)))
+
+    def test_only_matching_moved_assertions_offset_removed_assertions(self):
+        diff = self.diff("tests/test_old.py", "@@ -1,2 +0,0 @@", "-        self.assertEqual(1, f())", "-        self.assertTrue(g())")
+        diff += self.diff("tests/test_new.py", "@@ -0,0 +1,1 @@", "+        self.assertEqual(1, f())")
+        self.assertEqual(["tests/test_old.py:2 removes 1 assertion(s) without removing the code they cover"],
+                         cmd_land.weakened(cmd_land._changed_lines(diff)))
+
     def test_a_deleted_test_file_counts_its_assertions_under_its_own_path(self):
         diff = ("diff --git a/tests/test_gone.py b/tests/test_gone.py\n--- a/tests/test_gone.py\n+++ /dev/null\n@@ -1,1 +0,0 @@\n"
                 "-        self.assertEqual(1, f())\n")

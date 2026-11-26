@@ -27,11 +27,23 @@ from lib import cmd_fleetsync, cmd_groom, cmd_install, cmd_owner, cmd_status, st
 NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
 
 
-def issue(created: str, closed: str | None = None) -> dict:
-    return {"created_at": created + "T00:00:00Z", "closed_at": closed + "T00:00:00Z" if closed else None}
+def issue(created: str, closed: str | None = None, reason: str | None = None) -> dict:
+    return {"created_at": created + "T00:00:00Z", "closed_at": closed + "T00:00:00Z" if closed else None,
+            "state_reason": reason}
 
 
 class TestStatus(unittest.TestCase):
+    def test_not_planned_closes_are_not_landed_but_missing_reason_still_counts(self):
+        rows = [
+            {"number": 10, "title": "Not planned", "closed_at": "2026-11-21T00:00:00Z", "state_reason": "not_planned"},
+            {"number": 9, "title": "Completed", "closed_at": "2026-11-20T00:00:00Z", "state_reason": "completed"},
+            {"number": 8, "title": "Legacy close", "closed_at": "2026-11-19T00:00:00Z"},
+        ]
+        self.assertEqual([9, 8], [row["number"] for row in cmd_status.landed(rows)])
+        log = [{"story": "story-9", "input": 100, "output": 50, "cost_usd": 1.0},
+               {"story": "story-10", "input": 200, "output": 100, "cost_usd": 2.0}]
+        self.assertEqual((150, 1, 1.0), cmd_status.tokens_per_closed(rows, log))
+
     def status(self, open_now, rows, slug="o/r"):
         out = io.StringIO()
         code = cmd_status.run(slug, count=lambda s, state: open_now, fetch=lambda s, since: rows, now=NOW, out=lambda t: out.write(t + "\n"),
