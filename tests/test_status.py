@@ -1266,8 +1266,7 @@ class TestUsageVisualization(unittest.TestCase):
         self.assertIn("Queue wait", section)
 
     def test_additional_details_sits_outside_the_dashboard_grid_at_full_width(self):
-        with mock.patch.object(status_report, "_usage_analytics", return_value=""), \\
-             mock.patch.object(status_report, "_owner_steps", return_value=[]):
+        with mock.patch.object(status_report, "_usage_analytics", return_value=""), mock.patch.object(status_report, "_owner_steps", return_value=[]):
             page = status_report.render({}, [], NOW, panel='<div class="city-grid">dashboard')
         self.assertIn('</div><p id="published"', page)
         self.assertIn('.owner-detail { display:block; width:100%; max-width:none;', page)
