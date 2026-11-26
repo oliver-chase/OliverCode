@@ -26,17 +26,23 @@ class LocalConfig(unittest.TestCase):
     def write(self, data):
         self.file.write_text(json.dumps(data))
 
-    def test_one_builder_and_story_limits_are_hard_caps_even_with_saved_overrides(self):
-        for saved in (None, 2, 6, 0, -2, "four", True, 2.5):
-            self.write({"maxBuilders": saved})
-            self.assertEqual(1, local_config.max_builders())
+    def test_builder_cap_is_configurable_but_never_exceeds_the_machine_ceiling(self):
+        self.assertEqual(1, local_config.max_builders())
+        self.write({"maxBuilders": 3})
+        with mock.patch.object(local_config, "builder_ceiling", return_value=2):
+            self.assertEqual(3, local_config.saved_builders())
+            self.assertEqual(2, local_config.max_builders())
+        for bad in (0, -2, "four", True, 2.5, None):
+            self.write({"maxBuilders": bad})
             self.assertEqual(1, local_config.saved_builders())
-        self.assertEqual(3.0, local_config.max_story_spend())
-        self.write({"maxStorySpend": 9.5})
-        self.assertEqual(3.0, local_config.max_story_spend())
-        self.assertEqual(4, local_config.max_story_attempts())
-        self.write({"maxStoryAttempts": 20})
-        self.assertEqual(4, local_config.max_story_attempts())
+
+    def test_story_attempts_default_to_eight_and_allow_an_explicit_override(self):
+        self.assertEqual(8, local_config.max_story_attempts())
+        self.write({"maxStoryAttempts": 12})
+        self.assertEqual(12, local_config.max_story_attempts())
+        for bad in (0, -1, "eight", True, 2.5, None):
+            self.write({"maxStoryAttempts": bad})
+            self.assertEqual(8, local_config.max_story_attempts())
 
     def test_story_spend_ceiling_defaults_to_six_dollars_and_accepts_an_owner_override(self):
         self.assertEqual(6.0, local_config.max_story_spend())
