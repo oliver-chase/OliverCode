@@ -230,14 +230,17 @@ class DrainCase(unittest.TestCase):
         self.assertIn("Drain done: 3 stories closed", out)
         self.assertEqual(code, 0)
 
-    def test_two_stories_on_one_file_build_at_the_same_time(self):
-        """#1080: a shared file no longer holds a story back; the landing's rebase is the guard. The barrier only opens with both builders live."""
-        gate = threading.Barrier(2, timeout=5)
-        io = FakeIo([issue(1, "Files area: scripts/lib/cmd_install.py"), issue(2, "Files area: scripts/lib/cmd_install.py")], cap=4)
+    def test_four_independent_stories_build_at_the_same_time(self):
+        """Four builders are genuinely concurrent when capacity is four and their Files areas do not overlap."""
+        gate = threading.Barrier(4, timeout=5)
+        stories = [issue(n, f"Files area: scripts/story_{n}.py") for n in range(1, 5)]
+        io = FakeIo(stories, cap=4)
         build = io.build
         io.build = lambda i, wt, note: (gate.wait(), build(i, wt, note))[1]
         self.run_drain(io)
-        self.assertEqual(sorted(io.closed), [1, 2])
+        self.assertEqual(sorted(io.closed), [1, 2, 3, 4])
+        self.assertEqual(4, max(map(len, io.peak_overlap)))
+
 
     def test_a_rebase_conflict_restarts_the_builder_with_the_fix_named(self):
         """#1080: the builder is told to rebase onto the default branch and keep both changes."""
