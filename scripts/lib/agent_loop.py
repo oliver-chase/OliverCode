@@ -251,7 +251,10 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     failure, exit_code = "", None
     for attempt in range(1, attempts + 1):
         try:
-            call_kwargs = {"allowed_tools": READER_TOOLS, "max_turns": max_turns, "session": f"{session}-review", "system": READER_SYSTEM, "model": model_name}\n            if run is model.run_cli and repo:\n                call_kwargs["repo_slug"] = repo\n            reply = run(prompt, str(cwd), **call_kwargs)
+            call_kwargs = {"allowed_tools": READER_TOOLS, "max_turns": max_turns, "session": f"{session}-review", "system": READER_SYSTEM, "model": model_name}
+            if run is model.run_cli and repo:
+                call_kwargs["repo_slug"] = repo
+            reply = run(prompt, str(cwd), **call_kwargs)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
         else:
@@ -382,7 +385,10 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
         resumed = False
         while True:
             try:
-                call_kwargs = {"max_turns": max_turns, "session": session, "system": SYSTEM, "model": model_name, "resume": claude_session}\n                if run is model.run_cli and repo:\n                    call_kwargs["repo_slug"] = repo\n                reply = run(prompt, cwd, **call_kwargs)
+                call_kwargs = {"max_turns": max_turns, "session": session, "system": SYSTEM, "model": model_name, "resume": claude_session}
+                if run is model.run_cli and repo:
+                    call_kwargs["repo_slug"] = repo
+                reply = run(prompt, cwd, **call_kwargs)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
                 log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed, "session_id": exc.session_id}, why=why, repo=repo, attempt=n)
                 if resumed or not exc.session_id:
