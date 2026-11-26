@@ -237,7 +237,7 @@ def dashboard_html(snap: dict) -> str:
         f'{_card("Delivered today", str(len(snap["today"])), f"{snap["today_tokens"]:,} tokens · {_money(snap["today_cost"])}")}</div>'
         f'<h2>What needs your attention</h2>{_attention_html(snap)}'
         f'<h2>What OliverCode is doing</h2><div class="card">{pill} <b>{esc(plural(runner["building"], "builder"))} running</b> of {allowed} allowed{meter}{load}'
-        f'<p>{esc("Paused: no new stories will start. " if runner.get("paused") else ("Nothing is building right now. " if not runner["building"] else ""))}{esc("Next up: " + snap["ready"] if snap["ready"] else ""}</p>{latest}</div>'
+        f'<p>{esc("Paused: no new stories will start. " if runner.get("paused") else ("Nothing is building right now. " if not runner["building"] else ""))}{esc("Next up: " + snap["ready"] if snap["ready"] else "")}</p>{latest}</div>'
         f'<h2>How work is going</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>{_bars(snap["days"])}'
         f'<div class="cards"><div><div class="label">Delivered</div><div class="big">{snap["closed"]}</div></div><div><div class="label">Added</div><div class="big">{snap["opened"]}</div></div></div>'
         f'<p class="sub">Work moved to a fresh session {plural(nums.get("handovers", 0), "time")}, and you stepped into {plural(nums.get("threads", 0), "thread")}. '
