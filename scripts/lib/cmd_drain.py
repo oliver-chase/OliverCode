@@ -208,6 +208,12 @@ class Io:
             raise RuntimeError("; ".join(problems))
         return path
 
+    def cancel_requested(self, n: int) -> bool:
+        return run_lock.cancel_requested(self.slug, n)
+
+    def clear_cancel(self, n: int) -> bool:
+        return run_lock.clear_cancel(self.slug, n)
+
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names and the owner's decisions, and the
         model is the one the brief names (#1015), with a small story getting a third round (#890)."""
@@ -219,7 +225,7 @@ class Io:
         review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, max_turns=intake.turns(size),
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.slug)
+                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.slug, stop_check=lambda: self.cancel_requested(n))
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
@@ -369,6 +375,7 @@ class Io:
     def release(self, n: int) -> None:
         """Drop the local claim and post the release comment, so no outcome leaves the story held (#877)."""
         self.claimed_at.pop(n, None)
+        run_lock.finish_story(self.slug, os.getpid(), n)
         cmd_dispatch._local_claim(self.slug, n, time.time(), clear=True)
         if gh_budget.refusal() or gh_budget.reserve_write():
             return
@@ -434,7 +441,7 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n = issue["number"]
     try:
         closed, used = _work_story(io, issue, state)
-        if not closed:
+        if not closed and n not in state.get("cancelled", []):
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
         _event(io, "land" if closed else "held", issue)
         return closed, used
@@ -446,7 +453,11 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         _event(io, "held", issue)
         return False, blocked.tokens
     finally:
-        io.release(n)
+        for cleanup in (lambda: io.release(n), lambda: io.clear_cancel(n)):
+            try:
+                cleanup()
+            except Exception:
+                pass
 
 
 def budget_handoff(worktree: Path, out: dict) -> str:
@@ -579,6 +590,14 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
+        if out.get("done") and io.cancel_requested(n):
+            out = {**out, "cancelled": True, "summary": out.get("summary") or out.get("reason") or ""}
+        if out.get("cancelled"):
+            handoff = budget_handoff(worktree, out)
+            io.backlog(n)
+            state.setdefault("cancelled", []).append(n)
+            io.comment(n, f"Cancelled by the owner before landing. The worktree and branch are kept for a handoff; nothing was pushed.\\n- Next: review the handoff and return the story to Ready when you want to resume.\\n{handoff}")
+            return False, tokens
         if out.get("api_error"):
             story_api_errors += 1
             cause = str(out.get("api_error_cause") or out.get("reason") or "Unspecified API error")[:300]
