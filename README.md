@@ -117,6 +117,24 @@ OliverCode surrounds execution with controls designed to prevent unsafe or incom
 
 Hooks enforce the rules that must block work. Instructions and skills guide the rest.
 
+## Validation
+
+Use the quick check while developing. Pass the paths you changed:
+
+```bash
+bash scripts/validate.sh --quick scripts/lib/example.py tests/test_example.py
+```
+
+It runs changed-file pre-commit checks, the smoke tests that cover those paths, and the queue-bypass check. It leaves whole-repository hygiene, documentation and the complete smoke suite for the full run.
+
+Before merge or landing, run the full validation:
+
+```bash
+bash scripts/validate.sh --tree
+```
+
+The full run remains the default when no option is supplied. Quick validation is a feedback loop, not a replacement for the full gate.
+
 ## Documentation
 
 | Document | Purpose |
@@ -141,12 +159,6 @@ python3 scripts/olivercode guide
 ## Requirements
 
 macOS or Linux. Git, Bash, Python 3 and Perl. GitHub CLI (`gh`) and `jq` are required for backlog tooling.
-
-Run the full validation suite:
-
-```bash
-bash scripts/validate.sh
-```
 
 ## License
 
