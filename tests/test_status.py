@@ -141,6 +141,18 @@ class TestStatus(unittest.TestCase):
         self.assertEqual(["haiku", "sonnet"], row["models"])
         self.assertEqual(2, row["rounds"])
 
+    def test_repository_history_shows_each_story_model_mix_and_model_type_count(self):
+        log = [
+            {"story": "story-7", "repo": "org/repo", "round": 1, "model": "haiku", "cost_usd": 0.10, "at": "2026-11-22T10:00:00Z"},
+            {"story": "story-7", "repo": "org/repo", "round": 2, "model": "sonnet", "cost_usd": 0.30, "at": "2026-11-22T10:10:00Z"},
+            {"story": "story-7", "repo": "org/repo", "landed": True, "minutes": 25, "at": "2026-11-22T10:30:00Z", "title": "A delivered story"},
+        ]
+        page = status_report._landed("org/repo", log, NOW.timestamp() + 86400)
+        self.assertIn("Models used", page)
+        self.assertIn("Model types", page)
+        self.assertIn("haiku, sonnet", page)
+        self.assertIn(">2</td>", page)
+
     def test_status_page_numbers_show_average_cost_per_closed_story(self):
         html = status_page.numbers_block({"tokens_per_closed": 1234, "cost_per_closed": 2.5, "handovers": 1, "threads": 2, "open": 3})
         self.assertIn("Tokens per closed story", html)
