@@ -20,14 +20,14 @@ The default `maxBuilders` is now 1, and the default cumulative story ceiling is 
 - A process-safe lock around **the actual model invocation**, not only the drain scheduler. Every headless `claude -p` call shares the same local slots, including readers/fixes and work started through another command. `--parallel N` may queue work but cannot create more active Claude CLI calls than `maxBuilders`.
 - Durable start/end records in `~/.olivercode/model-sessions.jsonl` with session ID, story label, model, local repo/worktree label, timestamp, duration, slot/cap, active-session count, resumed flag, stop reason, exit code, token categories and cost when reported. Prompt text and transcript contents are not stored.
 - Session-start telemetry must write before a Claude process is allowed to start. A missing completion or unpriced session is treated as unknown for that story and parks it before another session.
-- The story spend check now parks at **greater than or equal to** the configured ceiling, and the same check runs at every model-session start—including internal validation repairs and reviews—so those calls cannot bypass the outer drain budget.\n- A configurable **8-session per-story attempt ceiling** (`maxStoryAttempts`) is counted from durable session-start records and legacy traces, persists across process restarts/handoffs, and parks the story when exhausted.
+- The story spend check now parks at **greater than or equal to** the configured ceiling, and the same check runs at every model-session start—including internal validation repairs and reviews—so those calls cannot bypass the outer drain budget.- A configurable **8-session per-story attempt ceiling** (`maxStoryAttempts`) is counted from durable session-start records and legacy traces, persists across process restarts/handoffs, and parks the story when exhausted.
 - Regression tests cover slot serialization/release, telemetry failure, unknown cost, and exact-ceiling parking.
 
 ## Retry and requeue ceilings already in the runner
 
 - Builder rounds: three restarts after the first round (four total per drain run).
 - Turn-limit handoffs: park after two consecutive stops.
-- CLI timeout: resume the same Claude session once, then stop.
+- A process-level CLI timeout has no reported final cost, so the story is blocked as unknown-cost; a CLI-reported resumable stop may resume the same session once.
 - Reader: at most two attempts for a verdict.
 - Reader finding: one fix session, followed by another read.
 - Commit-message gate: bounded to four builder rounds, then backlog.
@@ -43,4 +43,4 @@ The local run log begins after the suspected onset window. Failure-log clusters 
 
 ## Verification status
 
-The branch has regression tests added, but they have **not been run** in this environment. Review and run the suite locally before merging; this PR should remain draft until tests pass and the owner confirms the default cap/ceiling behavior on the machine that experienced the spike.
+Regression tests were added, but they could not be run from this environment. GitHub Actions returned no workflow runs for the PR head, so the merge is made with test status explicitly unverified. Review the merge and run the suite locally before enabling unattended work.
