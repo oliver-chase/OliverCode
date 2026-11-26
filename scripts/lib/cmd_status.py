@@ -548,7 +548,7 @@ def gather(slug: str, now: datetime, open_now: int, rows: list[dict], numbers: d
     lines = _states(stamp, slug, claims, log, issues, holder, runner_alive(), commits) if claims else []
     ready = next_ready(digest_path(), held_numbers(stamp, slug))
     return briefing.snapshot(slug=slug, now=now, open_now=open_now, rows=rows, numbers=numbers, steps=steps, today=delivered, ready=re.sub(r"^Next Ready:\s*", "", ready),
-                             runner={"building": len(claims), "allowed": local_config.max_builders(), "load": load, "run": run_lock.describe(holder, stamp) if holder else "", "lines": lines}, ideas=ideas, city=city,
+                             runner={"building": len(claims), "allowed": local_config.max_builders(), "paused": run_lock.is_paused(slug), "load": load, "run": run_lock.describe(holder, stamp) if holder else "", "lines": lines}, ideas=ideas, city=city,
                              latest={"number": newest.get("number"), "title": _text(newest.get("title"), 70)} if newest else None)
 
 
