@@ -128,6 +128,13 @@ class TestDispatch(DispatchCase):
         self.assertEqual((0, [77, 78]), (code, [c.args[1]["number"] for c in w.call_args_list]))
         self.assertEqual({}, run_lock.active("o/r"))
 
+    def test_a_dispatch_against_the_engine_repository_refuses_with_one_line(self):
+        """#1278"""
+        io = RunIo()
+        code, out = quiet(cmd_dispatch.command_dispatch, ["77"], runner=runner_for(STORY, [], ()), busy=FREE, clock=lambda: NOW, repo=cmd_dispatch.OC_ROOT, io=io)
+        self.assertEqual((1, []), (code, io.steps))
+        self.assertEqual(["Refused: this is the OliverCode engine repository; engine changes go through the staging branch."], out.strip().splitlines())
+
     def test_dry_run_claims_and_builds_nothing(self):
         code, out, io = self.run_dispatch(argv=("77", "--dry-run"))
         self.assertEqual((0, []), (code, io.steps))

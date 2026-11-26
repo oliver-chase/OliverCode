@@ -142,6 +142,14 @@ def _parse(argv: list[str]):
     return (int(pos[0]), sid, dry) if len(pos) == 1 and pos[0].isdigit() and int(pos[0]) > 0 else None
 
 
+def is_engine(repo) -> bool:
+    """True when `repo` is the OliverCode checkout this launcher runs from (#1278). OLIVERCODE_ALLOW_SELF=1 turns the check off."""
+    return os.environ.get("OLIVERCODE_ALLOW_SELF") != "1" and Path(repo).resolve() == OC_ROOT
+
+
+ENGINE_REFUSAL = "Refused: this is the OliverCode engine repository; engine changes go through the staging branch."
+
+
 def _refuse(why: str) -> int:
     print(why if why.startswith("Refused") else f"Refused: {why}")
     return 1
@@ -217,7 +225,8 @@ def _plan(repo) -> int:
 
 def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=None, io=None) -> int:
     if argv == ["--plan"]:
-        return _plan(repo or _toplevel())
+        repo = repo or _toplevel()
+        return _refuse(ENGINE_REFUSAL) if is_engine(repo) else _plan(repo)
     parsed = _parse(argv)
     if not parsed:
         print(USAGE)
@@ -225,6 +234,8 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
     n, sid, dry = parsed
     clock = clock or time.time
     repo = repo or _toplevel()
+    if is_engine(repo):
+        return _refuse(ENGINE_REFUSAL)
     try:
         cfg = local_config.backlog_config(repo)
         slug = f"{cfg['repoOwner']}/{cfg['repoName']}"

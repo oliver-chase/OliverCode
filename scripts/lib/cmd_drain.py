@@ -581,6 +581,9 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     if repo is None:
         print(f"Refused: {rest[0]} is not a repo with docs/backlog-config.json.")
         return 1
+    if cmd_dispatch.is_engine(repo):
+        print(cmd_dispatch.ENGINE_REFUSAL)
+        return 1
     cfg = backlog_config(repo)
     slug = cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)
     io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
