@@ -62,6 +62,22 @@ The run log carries a time on each row from 09:43 on 23 Nov to 08:06 on 24 Nov. 
 - Lowest cost per landing: 24 Nov 02–04 and 06–08, 12 landings each at $0.43 and $0.59. Review sessions fell from 54–58 a window to 12–13 after small routine stories began landing on validation alone (#1111, on main at 23:04 on 23 Nov).
 - The average number of builder sessions running at once never passed 1.8 in any window.
 
+### 26 Nov, against this baseline
+
+One drain on staging with two builders, measured from the run log the same way.
+
+| Window | Landings | Build sessions | Review sessions | Cost | Cost per landing | Sessions per landing |
+|---|---:|---:|---:|---:|---:|---:|
+| 26 Nov 13–15 | 12 | 20 | 14 | $5.3 | $0.45 | 2.8 |
+| 26 Nov 15–17 | 5 | 12 | 7 | $6.7 | $1.34 | 3.8 |
+| 26 Nov 17–19 | 12 | 20 | 10 | $5.2 | $0.43 | 2.5 |
+
+- Cost per landing fell from $1.55 across 23 Nov 10–24 to $0.60, and sessions per landing from about 9 to 2.7
+- 11 of 34 stories needed a second round, against 39 of 62 on 23 Nov
+- Median time from claim to landed was 6 minutes, and 2.6 minutes for XS against the 21-minute XS benchmark
+- Validation took about 58 of the 150 builder minutes, so it is the slowest step
+- Median context read per session rose from 206,000 to 244,000 tokens
+
 ## How each drain run ended
 
 | Run ended | Last line |
