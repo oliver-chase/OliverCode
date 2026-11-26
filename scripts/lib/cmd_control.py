@@ -33,11 +33,9 @@ def command_control(argv: list[str]) -> int:
             print(USAGE)
             return 2
         story = int(argv[2])
-        holder = run_lock.active(slug)
-        if story not in (holder.get("building") or []):
+        if not run_lock.request_cancel(slug, story):
             print(f"Nothing written: story #{story} is not currently building in {slug}.")
             return 0
-        run_lock.request_cancel(slug, story)
         print(f"Cancellation requested for #{story}. It will stop after its current model session, keep the worktree, and return the card to Backlog without landing.")
         return 0
     if len(argv) != 2:
