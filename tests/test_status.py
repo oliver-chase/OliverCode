@@ -1180,5 +1180,20 @@ class TestEstimateAndLandedToday(unittest.TestCase):
         self.assertEqual([], cmd_status.landed_today_lines("o/other", self.NOW, self.log()))
 
 
+    def test_city_snapshot_does_not_depend_on_obsolete_builder_note(self):
+        with mock.patch.object(cmd_status, "run_log", return_value=[]), \
+             mock.patch.object(cmd_status, "live_claims", return_value={}), \
+             mock.patch.object(cmd_status, "closed_claims", return_value=set()), \
+             mock.patch.object(status_report, "history", return_value=[]), \
+             mock.patch.object(cmd_status.run_lock, "active", return_value={}), \
+             mock.patch.object(cmd_status.run_lock, "is_paused", return_value=False), \
+             mock.patch.object(cmd_status.run_lock, "describe", return_value=""), \
+             mock.patch.object(cmd_status, "next_ready", return_value="Next Ready: none"), \
+             mock.patch.object(cmd_status, "held_numbers", return_value=set()):
+            snap = cmd_status.gather("owner/repo", NOW, 0, [], {}, [], 0, True)
+        self.assertEqual(1, snap["runner"]["allowed"])
+        self.assertEqual("", snap["runner"]["load"])
+
+
 if __name__ == "__main__":
     unittest.main()
