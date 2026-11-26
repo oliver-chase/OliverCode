@@ -82,7 +82,7 @@ olivercode health
 olivercode conform
 ```
 
-Dispatch and drain run isolated Claude Code sessions, validate changes and safely deliver completed work. Blocked or failed work is reported rather than treated as complete.
+Dispatch and drain run isolated Claude Code sessions, validate changes and safely deliver completed work. Blocked or failed work is reported rather than treated as complete. Pause stops new claims while current builders finish; cancel stops one story after its current model session and preserves its worktree for handoff.
 
 ## How it works
 
