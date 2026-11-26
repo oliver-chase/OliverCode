@@ -53,7 +53,7 @@ SYSTEM = ("When you wait for a result, end your turn and never poll: every wait 
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
                  "and change nothing. Read or search the worktree only to settle a point the diff alone cannot.")
 READER_TOOLS = "Read"  # read-only, so the reader can open the file a diff calls into (#1079)
-READER_TURNS = 1  # enough for a few lookups and the answer; a one-turn reader could never open a file (#1079)
+READER_TURNS = 1  # one bounded review turn, matching the Nov 23 review budget
 
 
 NO_VALIDATION_FIX = "add scripts/validate.sh, or an npm validate or check script, and name it in the repo's CLAUDE.md."
