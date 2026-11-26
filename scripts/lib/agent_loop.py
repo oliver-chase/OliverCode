@@ -52,8 +52,8 @@ SYSTEM = ("When you wait for a result, end your turn and never poll: every wait 
           "change your approach and never look for a way around a gate. End with one short summary.")
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
                  "and change nothing. Read or search the worktree only to settle a point the diff alone cannot.")
-READER_TOOLS = "Read,Grep,Glob"  # read-only, so the reader can open the file a diff calls into (#1079)
-READER_TURNS = 10  # enough for a few lookups and the answer; a one-turn reader could never open a file (#1079)
+READER_TOOLS = "Read"  # read-only, so the reader can open the file a diff calls into (#1079)
+READER_TURNS = 1  # enough for a few lookups and the answer; a one-turn reader could never open a file (#1079)
 
 
 NO_VALIDATION_FIX = "add scripts/validate.sh, or an npm validate or check script, and name it in the repo's CLAUDE.md."
@@ -94,34 +94,18 @@ def default_branch(cwd: str | Path) -> str:
     return "main"
 
 
-def changed_files(cwd: str | Path) -> list[str]:
-    """The paths this story's branch touches against origin's default branch (#1142), the files a round check hands
-    validate.sh's smoke gate so it narrows to the tests that cover them. Empty when git has nothing to report, including
-    when the lookup itself fails -- a round check then falls back to the whole suite rather than crash the loop."""
-    try:
-        ran = subprocess.run(["git", "-C", str(cwd), "diff", "--name-only", f"origin/{default_branch(cwd)}...HEAD"],
-                             capture_output=True, text=True)
-    except (OSError, subprocess.SubprocessError):
-        return []
-    return [line for line in ran.stdout.splitlines() if line] if ran.returncode == 0 else []
-
-
 def validate(cwd: str | Path) -> tuple[bool, str]:
-    """(passed, the end of its output). It waits for a slot in the per-user validation queue. This is the runner's round
-    check (#1142): when the repo validates through its own scripts/validate.sh, it runs `--round` with the files this
-    story's branch changed, which narrows the smoke gate to the tests that cover them. `olivercode land` validates
-    separately (cmd_land.py), in full, so a story's landing still runs every test once."""
+    """(passed, the end of its output). It waits for a slot in the per-user validation queue."""
     command = validation_command(cwd)
     if command is None:
         return False, NO_VALIDATION
-    if command == ["bash", "scripts/validate.sh"]:
-        command = [*command, "--round", *changed_files(cwd)]
     argv = [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "queue", "run", "--", *command]
     try:
         ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
         return False, f"Validation ran past {VALIDATE_TIMEOUT} seconds and was stopped."
     return ran.returncode == 0, gate_tail(ran.stdout + ran.stderr)
+
 
 
 def gate_tail(output: str) -> str:
