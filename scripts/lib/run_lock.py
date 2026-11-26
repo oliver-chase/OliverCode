@@ -199,15 +199,30 @@ def resume(slug: str) -> bool:
         return existed
 
 
-def request_cancel(slug: str, story: int) -> None:
-    with _exclusive(slug):
-        target = cancel_path(slug, story)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("cancel\n", encoding="utf-8")
+def request_cancel(slug: str, story: int) -> bool:
+    with _exclusive(slug) as target:
+        rec = _read(target)
+        if not rec or dead_reason(rec, time.time()) or story not in (rec.get("building") or []):
+            return False
+        marker = cancel_path(slug, story)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("cancel\n", encoding="utf-8")
+        return True
 
 
 def cancel_requested(slug: str, story: int) -> bool:
     return cancel_path(slug, story).is_file()
+
+
+def finish_story(slug: str, pid: int, story: int) -> None:
+    """Atomically remove a finished story from the active list and discard any late cancel request."""
+    with _exclusive(slug) as target:
+        rec = _read(target)
+        if rec.get("pid") == pid:
+            rec["building"] = [n for n in (rec.get("building") or []) if n != story]
+            rec["beat"] = time.time()
+            _write(target, rec)
+        cancel_path(slug, story).unlink(missing_ok=True)
 
 
 def clear_cancel(slug: str, story: int) -> bool:
