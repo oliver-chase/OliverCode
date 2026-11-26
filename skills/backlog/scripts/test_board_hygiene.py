@@ -298,7 +298,7 @@ class CloseGateDimension(unittest.TestCase):
         found = bh.check_close_gate(items, self.CFG, runner=self.runner({61: [self.BUILDER, {"body": "done\n\nClosed by complete_story.py."}], 60: [self.BUILDER, {"body": "Closing."}]}))
         self.assertEqual(1, len(found))
         self.assertIn("#60", found[0])
-        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
+        self.assertIn("Owner decision is preserved", found[0])
 
     def test_an_external_agent_close_without_an_olivercode_builder_entry_is_allowed(self):
         comments = {60: [{"body": "Closed by external agent. No OliverCode action log."}]}
@@ -312,7 +312,7 @@ class CloseGateDimension(unittest.TestCase):
         comments = {60: [self.BUILDER, {"body": "Closing."}]}
         found = bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "completed"}))
         self.assertEqual(1, len(found))
-        self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
+        self.assertIn("Owner decision is preserved", found[0])
 
     def test_a_comment_that_only_quotes_the_mark_does_not_count(self):
         quoted = {60: [self.BUILDER, {"body": "> Closed by complete_story.py."}, {"body": "Closed by complete_story.py. is the mark\nthanks"}]}
