@@ -593,6 +593,8 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
+        if out.get("done") and io.cancel_requested(n):  # the model finished before its final stop check; honor a marker before landing
+            out = {**out, "cancelled": True, "summary": out.get("summary") or out.get("reason") or ""}
         if out.get("cancelled"):
             handoff = budget_handoff(worktree, out)
             io.backlog(n)
