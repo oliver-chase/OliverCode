@@ -176,23 +176,27 @@ def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[st
     return gone
 
 
-def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run) -> list[str]:
-    """Boot out and delete every com.olivercode.* launchd job this checkout can create, and any other com.olivercode.* plist
-    whose command runs this checkout's scripts/olivercode (a job from a newer version). Returns the labels it removed (#1272).
-    Cron and systemd entries are never written by this code, so there is nothing to remove off macOS."""
-    if not launchd.supported():
-        return []
+def _defined_labels() -> list[str]:
+    """The labels of the jobs this code creates."""
     from lib import cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain
-    folder = launchd.agents_dir(home)
+    return [m.LABEL for m in (cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain)]
+
+
+def _checkout_job_labels(oc_root: Path, folder: Path) -> list[str]:
+    """The labels of com.olivercode.* plists in folder whose command runs this checkout's scripts/olivercode."""
     launchers = {str(oc_root / "scripts" / "olivercode"), str(oc_root.resolve() / "scripts" / "olivercode")}
-    labels = [m.LABEL for m in (cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain)] + list(REMOVED_JOBS)
+    found = []
     for plist in sorted(folder.glob("com.olivercode.*.plist")) if folder.is_dir() else []:
         try:
             args = plistlib.loads(plist.read_bytes()).get("ProgramArguments", [])
         except (OSError, ValueError):
             continue
         if launchers & {str(a) for a in args}:
-            labels.append(plist.name[:-len(".plist")])
+            found.append(plist.name[:-len(".plist")])
+    return found
+
+
+def _boot_out(folder: Path, labels, run) -> list[str]:
     gone = []
     for label in dict.fromkeys(labels):
         plist = folder / f"{label}.plist"
@@ -203,6 +207,19 @@ def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run) -> 
         print(f"  [JOB] removed {label}")
         gone.append(label)
     return gone
+
+
+def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run, stale_only: bool = False) -> list[str]:
+    """Boot out and delete every com.olivercode.* launchd job this checkout can create, and any other com.olivercode.* plist
+    whose command runs this checkout's scripts/olivercode (a job from a newer or older version). Returns the labels it removed (#1272).
+    With stale_only, a job this code defines stays and only the others go, which is what install does (#1284).
+    Cron and systemd entries are never written by this code, so there is nothing to remove off macOS."""
+    if not launchd.supported():
+        return []
+    folder = launchd.agents_dir(home)
+    defined = _defined_labels()
+    labels = ([] if stale_only else defined) + list(REMOVED_JOBS) + _checkout_job_labels(oc_root, folder)
+    return _boot_out(folder, [label for label in labels if not (stale_only and label in defined)], run)
 
 
 def retire_removed_pages(home: Path | None = None) -> list[str]:
@@ -219,12 +236,13 @@ def retire_removed_pages(home: Path | None = None) -> list[str]:
     return gone
 
 
-def _retire_removed_jobs() -> None:
-    """Remove the jobs and pages of removed commands, under the same real-home rule as the replay job."""
+def _retire_removed_jobs(oc_root: Path) -> None:
+    """Remove the jobs and pages of removed commands, and any other job of this checkout the code no longer defines, under the same real-home rule as the replay job."""
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
     retire_removed_jobs()
+    remove_jobs(oc_root, stale_only=True)
     retire_removed_pages()
 
 
@@ -495,7 +513,7 @@ def command_install(oc_root: Path) -> int:
             print(f"  [WARN] {problem}; to fix it run `{fix}`")
 
     _schedule_replay()
-    _retire_removed_jobs()
+    _retire_removed_jobs(oc_root)
 
     broken = _broken_links(skills_dir)
     if broken:
@@ -596,7 +614,7 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
 
     broken_settings = False
     try:
-        result = _claude_settings.remove(claude_dir / "settings.json")
+        result = _claude_settings.remove(claude_dir / "settings.json", oc_root)
         print(f"  [{result.upper()}] Claude Code hooks in ~/.claude/settings.json")
     except ValueError as exc:
         print(f"  [FAIL] ~/.claude/settings.json could not be read ({exc}); left as it is, hooks not removed")

@@ -80,11 +80,13 @@ class TestRemovedJobs(unittest.TestCase):
 
     def test_install_runs_the_removal(self):
         with mock.patch.object(cmd_install, "retire_removed_jobs") as retired, \
+                mock.patch.object(cmd_install, "remove_jobs") as stale, \
                 mock.patch.object(cmd_install, "retire_removed_pages") as pages, \
                 mock.patch.object(cmd_install.sys, "platform", "darwin"), \
                 mock.patch.object(cmd_install.pwd, "getpwuid", return_value=mock.Mock(pw_dir=str(cmd_install.Path.home()))):
-            cmd_install._retire_removed_jobs()
+            cmd_install._retire_removed_jobs(cmd_install.Path('/oc'))
         retired.assert_called_once_with()
+        stale.assert_called_once_with(cmd_install.Path('/oc'), stale_only=True)
         pages.assert_called_once_with()
 
     def test_the_help_lists_no_city_command(self):
