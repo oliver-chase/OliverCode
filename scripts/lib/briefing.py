@@ -172,7 +172,7 @@ def text(snap: dict) -> list[str]:
 
 
 STYLE = """
-:root{--bg:#faf9f6;--card:#fff;--ink:#191820;--sub:#696772;--line:#e7e4e9;--accent:#C8BBD5;--accent-strong:#8E789F;--lavender:#C8BBD5;--wash:#faf9f6;--status-good-bg:#edf4ef;--status-good-line:#c9ddcf;--status-good-ink:#315b40;--status-warn-bg:#fbf2e7;--status-warn-line:#e8d2b2;--status-warn-ink:#80521f;--status-bad-bg:#f8eceb;--status-bad-line:#e5c4c1;--status-bad-ink:#8a3934;--status-neutral-bg:#f1f0f2;--status-neutral-line:#dfdce2;--status-neutral-ink:#5d5863}
+:root{--bg:#faf9f6;--card:#fff;--ink:#191820;--sub:#696772;--line:#e7e4e9;--accent:#C8BBD5;--accent-strong:#8E789F;--lavender:#C8BBD5;--wash:#faf9f6;--status-good-bg:#edf4ef;--status-good-line:#c9ddcf;--status-good-ink:#315b40;--status-warn-bg:#fbf2e7;--status-warn-line:#e8d2b2;--status-warn-ink:#80521f;--status-bad-bg:#f8eceb;--status-bad-line:#e5c4c1;--status-bad-ink:#8a3934;--status-neutral-bg:#EAE4EF;--status-neutral-line:#C8BBD5;--status-neutral-ink:#554565}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 Georgia,"Times New Roman",serif}
 h1,h2,h3,.big,.flow strong{font-family:Georgia,"Times New Roman",serif;font-weight:500;color:var(--ink)}
@@ -194,7 +194,8 @@ p{margin:8px 0}.sub,.label,.note,.summary-meta{color:var(--sub)}
 .pill.good{border-color:var(--status-good-line);background:var(--status-good-bg);color:var(--status-good-ink)}
 .pill.warn{border-color:var(--status-warn-line);background:var(--status-warn-bg);color:var(--status-warn-ink)}
 .pill.bad{border-color:var(--status-bad-line);background:var(--status-bad-bg);color:var(--status-bad-ink)}
-.pill.info,.pill.running{border-color:#B5A3C4;background:var(--lavender);color:#554565}
+.pill.info{border-color:#B5A3C4;background:var(--lavender);color:#554565}
+.pill.running{border-color:#8E789F;background:#8E789F;color:#fff}
 .pill.neutral,.pill.idle{border-color:var(--status-neutral-line);background:var(--status-neutral-bg);color:var(--status-neutral-ink)}
 .section-intro{max-width:70ch;color:var(--sub);margin:-2px 0 14px}
 .city-grid>section{min-width:0;min-height:0;height:auto;padding:17px 18px;background:#fff;border:1px solid var(--line);border-radius:5px}
