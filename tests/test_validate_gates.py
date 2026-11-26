@@ -120,9 +120,9 @@ class ParallelGates(unittest.TestCase):
         self.assertIn("never started before the budget: later", err)
         self.assertIn("stalled gate 'later'", out)
 
-    def test_the_gate_cap_defaults_to_the_core_count(self):
+    def test_the_gate_cap_defaults_to_four_and_can_be_overridden(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": ""}), mock.patch("os.cpu_count", return_value=8):
-            self.assertEqual(8, validate_gates.default_max_gates())
+            self.assertEqual(4, validate_gates.default_max_gates())
         self.assertFalse(hasattr(validate_gates, "default_retries"))
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": "3"}):
             self.assertEqual(3, validate_gates.default_max_gates())

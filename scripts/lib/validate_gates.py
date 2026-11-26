@@ -60,8 +60,8 @@ def default_timeout() -> float:
 
 
 def default_max_gates() -> int:
-    """How many gates run at once: OLIVERCODE_VALIDATE_GATES, or the core count."""
-    return max(1, int(_number("OLIVERCODE_VALIDATE_GATES", os.cpu_count() or 1)))
+    """How many gates run at once: OLIVERCODE_VALIDATE_GATES, or four to keep validation lightweight."""
+    return max(1, int(_number("OLIVERCODE_VALIDATE_GATES", min(4, os.cpu_count() or 1))))
 
 
 def _kill(proc: subprocess.Popen) -> None:

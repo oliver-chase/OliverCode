@@ -29,7 +29,7 @@ class TestSmokeProgress(unittest.TestCase):
 
         self.assertEqual(0, code)
         lines = output.getvalue().splitlines()
-        self.assertTrue(any("Smoke progress: starting 1 test unit" in line for line in lines))
+        self.assertTrue(any("Running 1 test unit" in line for line in lines))
         self.assertTrue(any("[RUN ] test_example" in line for line in lines))
         self.assertTrue(any("[ OK ] test_example (" in line for line in lines))
         self.assertTrue(any("all passed" in line for line in lines))

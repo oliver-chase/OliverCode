@@ -85,6 +85,15 @@ class TestDocsAccuracy(unittest.TestCase):
         missing = [path for paths in parts.values() for path in paths if not (REPO_ROOT / path).is_file()]
         self.assertEqual([], missing)
 
+    def test_internal_audit_records_do_not_need_to_clutter_the_readme_index(self):
+        root = temp_dir(self)
+        (root / "docs").mkdir()
+        (root / "README.md").write_text("[SETUP](docs/SETUP.md)\\n", encoding="utf-8")
+        (root / "docs" / "SETUP.md").write_text("# Setup\\n", encoding="utf-8")
+        for name in docs_check.INTERNAL_DOCS:
+            (root / "docs" / name).write_text("# Internal record\\n", encoding="utf-8")
+        self.assertEqual([], docs_check.check_readme(root))
+
     def test_a_doc_that_names_a_command_the_launcher_lacks_fails_the_docs_check(self):
         root = temp_dir(self)
         (root / "scripts" / "lib").mkdir(parents=True)
