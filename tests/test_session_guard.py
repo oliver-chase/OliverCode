@@ -19,7 +19,7 @@ class TestSessionGuard(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.cap = mock.patch.object(session_guard.local_config, "max_builders", return_value=1)
+        self.cap = mock.patch.object(session_guard.local_config, "max_builders", return_value=4)
         self.cap.start()
         self.addCleanup(self.cap.stop)
 

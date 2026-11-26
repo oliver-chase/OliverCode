@@ -236,7 +236,7 @@ def story_cost_unknown(story: int, repo: str = "") -> bool:
 
 def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25, repo_slug: str = "") -> Lease:
     """Hold a shared account slot and a story-scoped lock while checking spend and running the CLI."""
-    cap = max(1, local_config.max_builders())
+    cap = 1  # Temporary account-protection cap; local config and --parallel cannot raise it
     slot_dir = failure_log.home() / "model-session-slots"
     slot_dir.mkdir(parents=True, exist_ok=True)
     match = re.match(r"^story-(\d+)(?:-.+)?$", session)

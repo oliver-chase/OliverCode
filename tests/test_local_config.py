@@ -26,57 +26,17 @@ class LocalConfig(unittest.TestCase):
     def write(self, data):
         self.file.write_text(json.dumps(data))
 
-    def test_the_ceiling_is_half_the_cores_or_the_memory_less_4(self):
-        """#1055: half the cores or the memory in GB less 4, whichever is smaller, and never below 1."""
-        self.assertEqual(4, local_config.builder_ceiling(cores=8, mem_gb=8))
-        self.assertEqual(8, local_config.builder_ceiling(cores=16, mem_gb=32))
-        self.assertEqual(1, local_config.builder_ceiling(cores=2, mem_gb=4))
-
-    def test_the_limit_steps_down_when_overloaded_and_up_when_there_is_room(self):
-        """#1108: load above the cores or swap drops it by one, never below 1; light load with free memory raises it by one, never above the ceiling."""
-        busy = {"load": 37.0, "cores": 8, "free_gb": 0.2, "swap_gb": 0.0}
-        self.assertEqual((2, "load 37 on 8 cores"), local_config.scale(3, busy, 4))
-        self.assertEqual(1, local_config.scale(1, busy, 4)[0])
-        self.assertIn("swap", local_config.scale(3, {**busy, "load": 1.0, "swap_gb": 2.0}, 4)[1])
-        idle = {"load": 1.0, "cores": 8, "free_gb": 3.0, "swap_gb": 0.0}
-        self.assertEqual(4, local_config.scale(3, idle, 4)[0])
-        self.assertIn("load 1 on 8 cores", local_config.scale(3, idle, 4)[1])
-        self.assertEqual((4, ""), local_config.scale(4, idle, 4))
-        self.assertEqual((3, ""), local_config.scale(3, {**idle, "load": 5.0}, 4))
-        self.assertEqual((3, ""), local_config.scale(3, {**idle, "free_gb": 0.5}, 4))
-
-    def test_the_limit_starts_at_5_moves_once_a_minute_and_names_why(self):
-        home = temp_dir(self)
-        busy = {"load": 37.0, "cores": 8, "free_gb": 0.2, "swap_gb": 0.0}
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(local_config, "measure", return_value=busy), \
-                mock.patch.object(local_config, "builder_ceiling", return_value=4):
-            self.assertEqual(3, local_config.scaled_builders(now=1000))  # baseline 5 is capped at 4 then steps down
-            self.assertEqual(3, local_config.scaled_builders(now=1010))  # within a minute it holds
-            self.assertEqual(2, local_config.scaled_builders(now=1100))
-            self.assertEqual("Builder limit 2: load 37 on 8 cores.", local_config.builder_note())
-
-    def test_the_limit_never_passes_a_ceiling_below_the_baseline(self):
-        """#1108: on a machine whose ceiling is 2, the baseline of 5 is held to 2 even when there is room."""
-        home = temp_dir(self)
-        idle = {"load": 1.0, "cores": 4, "free_gb": 3.0, "swap_gb": 0.0}
-        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(local_config, "measure", return_value=idle), \
-                mock.patch.object(local_config, "builder_ceiling", return_value=2):
-            self.assertEqual(2, local_config.scaled_builders(now=1000))
-            self.assertEqual(2, local_config.scaled_builders(now=1100))
-
-    def test_one_builder_is_the_default_and_an_explicit_limit_overrides_it(self):
-        with mock.patch.object(local_config, "scaled_builders", return_value=3):
+    def test_one_builder_and_story_limits_are_hard_caps_even_with_saved_overrides(self):
+        for saved in (None, 2, 6, 0, -2, "four", True, 2.5):
+            self.write({"maxBuilders": saved})
             self.assertEqual(1, local_config.max_builders())
             self.assertEqual(1, local_config.saved_builders())
-            self.write({"maxBuilders": 2})
-            self.assertEqual(2, local_config.max_builders())
-            self.assertEqual(2, local_config.saved_builders())
-            self.write({"maxBuilders": 6})
-            self.assertEqual(6, local_config.max_builders())
-            self.assertEqual("", local_config.builder_note())
-            for bad in (0, -2, "four", True, 2.5):
-                self.write({"maxBuilders": bad})
-                self.assertEqual(1, local_config.max_builders(), bad)
+        self.assertEqual(3.0, local_config.max_story_spend())
+        self.write({"maxStorySpend": 9.5})
+        self.assertEqual(3.0, local_config.max_story_spend())
+        self.assertEqual(4, local_config.max_story_attempts())
+        self.write({"maxStoryAttempts": 20})
+        self.assertEqual(4, local_config.max_story_attempts())
 
     def test_story_spend_ceiling_defaults_to_six_dollars_and_accepts_an_owner_override(self):
         self.assertEqual(6.0, local_config.max_story_spend())

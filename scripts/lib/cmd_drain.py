@@ -174,8 +174,9 @@ class Io:
             return None
 
     def limit(self) -> int:
-        """Pool ceiling: --parallel N, else saved limit or machine ceiling. Capacity scales separately (#1108)."""
-        return self.parallel or local_config.saved_builders() or local_config.builder_ceiling()
+        """Temporary Claude-account safety cap: one model session at a time."""
+        return 1
+
 
     def event(self, kind: str, issue: dict | None = None, queue=(), waiting=()) -> str:
         """Rewrite the status page for a run event and publish it to City on the smallest model (#990). A failure here never stops a run."""
@@ -186,14 +187,9 @@ class Io:
             return ""
 
     def capacity(self) -> int:
-        """Builders this run may hold now: --parallel N, else scaled limit less other repos' builders."""
-        return self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
+        """Only one builder may hold a model slot across the local fleet."""
+        return max(0, 1 - run_lock.building_elsewhere(self.slug))
 
-    def limit_note(self) -> str:
-        """The reason the adaptive machine limit last moved, once per change (#1108)."""
-        note = "" if self.parallel else local_config.builder_note()
-        said, self.said_limit = self.said_limit, note
-        return note if note != said else ""
 
     def holders(self) -> list[str]:
         """The other repos whose runs hold the builders (#1111)."""
@@ -697,6 +693,13 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             for issue in ([] if state.get("restart") or state.get("api_error_stop") else todo):  # stop starting work after runner changes or repeated API failure
                 if len(running) >= io.capacity():
                     break
+                area = intake.files_area(issue.get("body") or "")
+                if any(intake.overlaps(area, intake.files_area(active.get("body") or "")) for active in running.values()):
+                    marker = (issue["number"], "shared-files")
+                    if marker not in reported:
+                        reported.add(marker)
+                        say(f"Skipped #{issue['number']}: its Files area overlaps a story already building.")
+                    continue
                 if io.claimed(issue):
                     continue
                 io.claim(issue["number"])

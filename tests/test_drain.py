@@ -330,24 +330,27 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], st["blocked"])
         self.assertIn("Fix the thing (#976)", io.comments[0][1])
 
-    def test_the_default_drain_fills_the_machine_limit_and_parallel_overrides_it(self):
-        """#1055: with no flag a drain runs up to maxBuilders less what other repos build; --parallel N wins; a bad N is refused."""
+    def test_drain_capacity_is_hard_capped_at_one_even_with_parallel_or_config(self):
         with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
-                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=3):
+                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=0):
             self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
-            self.assertEqual(3, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
-        with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
-                mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=6):
+            self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=3).capacity())
+        with mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=1):
             self.assertEqual(0, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
-        seen = []
-        factory = lambda repo, slug, parallel=None: seen.append(parallel) or FakeIo([])
-        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/nonexistent")), mock.patch.object(cmd_drain, "backlog_config",
-                                                                                                             return_value={"repoOwner": "o", "repoName": "r"}):
-            quiet(cmd_drain.command_drain, ["r"], factory, lambda s: None)
-            quiet(cmd_drain.command_drain, ["r", "--parallel", "2"], factory, lambda s: None)
-            code, _ = quiet(cmd_drain.command_drain, ["r", "--parallel", "0"], factory, lambda s: None)
-        self.assertEqual([None, 2], seen)
-        self.assertEqual(2, code)
+
+    def test_ready_stories_sharing_files_are_serialized_even_with_parallel_capacity(self):
+        stories = [issue(1, "Files area: shared.py"), issue(2, "Files area: shared.py")]
+
+        class Slow(FakeIo):
+            def build(self, story, worktree, note):
+                if story["number"] == 1:
+                    time.sleep(0.08)
+                return super().build(story, worktree, note)
+
+        io = Slow(stories, cap=2)
+        self.run_drain(io)
+        self.assertEqual([1, 2], io.started)
+        self.assertEqual(1, max(map(len, io.peak_overlap)))
 
     def test_a_story_whose_files_area_names_a_folder_is_skipped_and_the_rest_run(self):
         """#1077: a folder-wide area overlapped every story and held a 4-builder drain to 1."""

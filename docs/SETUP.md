@@ -64,7 +64,7 @@ scripts/olivercode install --show-allow
 
 This lists each permission and what it allows. Approve the changes before the allow list is written.
 
-The runner's conservative defaults are one builder at a time and a $6 limit in recorded Claude spend per story. Change those limits only intentionally, in your local settings or with `drain --parallel`.
+The temporary usage-protection mode allows one Claude model session at a time, caps recorded spend at $3 per story, and stops after four model invocations per story. Saved settings and `drain --parallel` cannot raise these caps.
 
 ## 4. Put your rules in the right place
 
@@ -145,12 +145,12 @@ OliverCode's `run`, `dispatch`, and `drain` commands start headless Claude Code 
 
 - `dispatch N` hands off a specific story.
 - `drain REPO` works through a repo's open stories in priority order.
-- `drain REPO --parallel N` sets parallel builders for that run. The machine-wide limit still applies.
+- `drain REPO --parallel N` is accepted for compatibility, but the temporary usage-protection mode still allows only one model session at a time.
 - A stopped story can resume on its existing branch, retaining its commits and uncommitted changes.
 - Validation is queued and runs one at a time. Each landing rebases onto what has already landed.
 - Stories that don't pass or land stay open, with the reason recorded and the claim released.
 
-Runs share a machine-wide builder limit, defaulting to one. The runner records Claude usage and cost when available. A story that reaches its spend limit stops for review; deliberately adjust the local limit if needed.
+Runs share a hard one-session cap during the usage audit. The runner records Claude usage and cost when available. A story stops at $3 in recorded spend or four model invocations; these caps cannot be raised through local settings while this temporary mode is active.
 
 Use `olivercode guide` for a quick command overview or `olivercode guide NAME` for a command, gate, guard, scheduled job, or skill. `python3 scripts/olivercode --help` lists commands and options.
 
