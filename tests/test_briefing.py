@@ -19,10 +19,10 @@ STEPS = [
 ]
 
 
-def snap(steps=STEPS, building=0, city=True, ideas=20):
+def snap(steps=STEPS, building=0, city=True, ideas=20, cost_days=None):
     return briefing.snapshot(slug="o/r", now=NOW, open_now=7, rows=[], numbers={"tokens_per_closed": 9_115_088, "cost_per_closed": 3.43, "handovers": 9, "threads": 7, "open": 7},
                              steps=steps, today=[{"story": "1209", "title": "City opens on what needs you", "tokens": 100, "cost": 1.0}], ready="P1 #461 Morning run",
-                             runner={"building": building, "allowed": 2, "load": "load 11 on 10 cores"}, ideas=ideas, city=city, latest={"number": 1209, "title": "City opens"})
+                             runner={"building": building, "allowed": 2, "load": "load 11 on 10 cores"}, ideas=ideas, city=city, latest={"number": 1209, "title": "City opens"}, cost_days=cost_days)
 
 
 class GroupingCase(unittest.TestCase):
@@ -65,7 +65,21 @@ class DashboardCase(unittest.TestCase):
         self.assertIn("olivercode status", page)
         self.assertNotIn("oc-term", page)
 
-    def test_a_step_cannot_inject_markup(self):
+
+    def test_cost_trend_shows_daily_average_and_flags_a_large_outlier(self):
+        page = briefing.dashboard_html(snap(cost_days=[
+            {"day": "Mon", "stories": 2, "cost": 2.0},
+            {"day": "Tue", "stories": 1, "cost": 3.0},
+            {"day": "Wed", "stories": 1, "cost": 9.0},
+        ]))
+        self.assertIn("Cost over time", page)
+        self.assertIn("$2.00/story", page)
+        self.assertIn("$9.00/story · unusually high", page)
+
+    def test_cost_trend_says_when_costs_are_not_recorded(self):
+        page = briefing.dashboard_html(snap(cost_days=[]))
+        self.assertIn("No cost data for finished stories yet.", page)
+\n    def test_a_step_cannot_inject_markup(self):
         page = briefing.dashboard_html(snap(steps=[{"id": 1, "session": "maintain", "step": "<script>steal()</script> approve"}]))
         self.assertNotIn("<script>steal()</script>", page)
 
