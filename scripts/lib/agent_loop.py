@@ -319,7 +319,7 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0), "cost_usd": reply.get("cost_usd"),
            "stop": reply.get("stop", ""), "stderr_tail": reply.get("stderr", ""), "resumed": bool(reply.get("resumed")),
            "settings": reply.get("settings", ""), "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-    for key in ("session_id", "started_at", "duration_s", "slot", "session_cap", "active_sessions"):
+    for key in ("session_id", "started_at", "duration_s", "slot", "session_cap", "active_sessions", "session_attempt"):
         if reply.get(key) is not None:
             row[key] = reply[key]
     if attempt is not None:
