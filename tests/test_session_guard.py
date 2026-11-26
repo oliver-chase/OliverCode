@@ -107,7 +107,7 @@ class TestSessionGuard(unittest.TestCase):
         for n in range(8):
             rows.append({"event": "session_start", "session": "story-8", "session_id": f"sid-{n}", "repo": "o/r"})
             rows.append({"event": "session_end", "session": "story-8", "session_id": f"sid-{n}", "repo": "o/r", "cost_usd": 0.1})
-        (self.home / session_guard.LOG).write_text("\\n".join(json.dumps(row) for row in rows) + "\\n", encoding="utf-8")
+        (self.home / session_guard.LOG).write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
         with mock.patch.object(session_guard.local_config, "max_story_attempts", return_value=8):
             with self.assertRaisesRegex(RuntimeError, "attempt ceiling"):
                 session_guard.acquire("story-8-fix", "sonnet", "/work/Repo-8", "sid-next", repo_slug="o/r")
