@@ -713,21 +713,25 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     say(message)
             started = False
             paused = run_lock.is_paused(io.slug)
+            for issue in ([] if paused or state.get("restart") or state.get("api_error_stop") else todo):
+                with run_lock.claim_guard(io.slug) as allowed:
+                    if not allowed:
+                        paused = True
+                        break
+                    if len(running) >= io.capacity():
+                        break
+                    if io.claimed(issue):
+                        continue
+                    io.claim(issue["number"])
+                    running[pool.submit(work_story, io, issue, state)] = issue
+                    started = True
+                _event(io, "start", issue, queue=[t for t in todo if t is not issue and t not in running.values()], waiting=waiting)
             run_lock.set_paused(io.slug, os.getpid(), paused)
             if paused and "paused" not in reported:
                 say("Runner paused. Existing builders are finishing; no new story will start. Run olivercode resume REPO to continue.")
                 reported.add("paused")
             if not paused:
                 reported.discard("paused")
-            for issue in ([] if paused or state.get("restart") or state.get("api_error_stop") else todo):
-                if len(running) >= io.capacity():
-                    break
-                if io.claimed(issue):
-                    continue
-                io.claim(issue["number"])
-                _event(io, "start", issue, queue=[t for t in todo if t is not issue and t not in running.values()], waiting=waiting)
-                running[pool.submit(work_story, io, issue, state)] = issue
-                started = True
             io.beat([i["number"] for i in running.values()])
             if not running:
                 if state.get("restart") or state.get("api_error_stop"):
