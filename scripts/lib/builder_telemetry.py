@@ -128,6 +128,7 @@ def summarize(hours: float = 24, now: float | None = None, path: Path | None = N
     observed_times = [stamp for row in rows if (stamp := _epoch(row.get("at"))) is not None and stamp <= now]
     coverage_start = max(start_window, min(observed_times)) if observed_times else now
     coverage_seconds = max(0.0, now - coverage_start)
+    unmatched_starts = len(starts)
     complete_history = not (unmatched_starts or unmatched_ends or malformed)
     average = duration / coverage_seconds if coverage_seconds > 0 and complete_history else None
     points = []
@@ -139,7 +140,6 @@ def summarize(hours: float = 24, now: float | None = None, path: Path | None = N
         peak = max(peak, active)
     recent_starts = sum(1 for row in rows if row.get("event") == "builder_started"
                         and start_window <= (_epoch(row.get("at")) or 0) <= now)
-    unmatched_starts = len(starts)
     return {
         "hours": float(hours),
         "builder_starts": recent_starts,

@@ -447,12 +447,14 @@ def telemetry_run_id(slug: str) -> str:
 def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit. Each builder takes one story, so no commit carries two stories' work (#988)."""
     n = issue["number"]
-    run_id = telemetry_run_id(io.slug)
+    slug = str(getattr(io, "slug", "") or "")
+    run_id = telemetry_run_id(slug) if slug else f"local:{os.getpid()}:{threading.get_ident()}"
+    repo_label = slug or "unknown"
     worker_id = f"{run_id}:{os.getpid()}:{threading.get_ident()}"
     claim_id = f"{run_id}:{n}"
     started = time.time()
     outcome, reason = "crashed", ""
-    builder_telemetry.record("builder_started", io.slug, story=n, run_id=run_id, worker_id=worker_id, claim_id=claim_id)
+    builder_telemetry.record("builder_started", repo_label, story=n, run_id=run_id, worker_id=worker_id, claim_id=claim_id)
     try:
         closed, used = _work_story(io, issue, state)
         if not closed and n not in state.get("cancelled", []):
@@ -474,7 +476,7 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         reason = type(exc).__name__
         raise
     finally:
-        builder_telemetry.record("builder_finished", io.slug, story=n, run_id=run_id, worker_id=worker_id, claim_id=claim_id,
+        builder_telemetry.record("builder_finished", repo_label, story=n, run_id=run_id, worker_id=worker_id, claim_id=claim_id,
                                  outcome=outcome, reason=reason, duration_s=round(time.time() - started, 3))
         for cleanup in (lambda: io.release(n), lambda: io.clear_cancel(n)):
             try:
@@ -613,7 +615,8 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
-        if out.get("done") and io.cancel_requested(n):
+        cancel_requested = getattr(io, "cancel_requested", None)
+        if out.get("done") and cancel_requested and cancel_requested(n):
             out = {**out, "cancelled": True, "summary": out.get("summary") or out.get("reason") or ""}
         if out.get("cancelled"):
             handoff = budget_handoff(worktree, out)
