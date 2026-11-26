@@ -1,7 +1,9 @@
-"""Install makes the fleet folder a local git repo with one commit, offers a private GitHub copy once, and health repairs a loose folder (#993)."""
+"""Install asks nothing and makes no fleet repo, a local fleet folder passes health only as a repo, and init-fleet reuses it (#993, #1282)."""
 
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -26,30 +28,16 @@ class FleetRepo(unittest.TestCase):
         done = subprocess.run(["git", "-C", str(dest), "rev-list", "--count", "HEAD"], capture_output=True, text=True)
         return int(done.stdout.strip()) if done.returncode == 0 else 0
 
+    def local_repo(self, dest: Path, scaffold: bool = False) -> None:
+        """A fleet folder that is already a git repo with one commit, as an earlier install left it."""
+        if scaffold:
+            shutil.copytree(cmd_initfleet.TEMPLATE, dest)
+        for step in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "--allow-empty", "-m", "Start"]):
+            subprocess.run(["git", "-C", str(dest), *step], check=True, capture_output=True)
+
     def test_the_template_holds_config_only_and_no_board_config(self):
         names = {p.name for p in cmd_initfleet.TEMPLATE.iterdir()}
         self.assertEqual(names, {"repo-profiles.json", "owner-rules.json", "owner-queue.jsonl", "review-config.json", "CLAUDE.md"})
-
-    def test_a_first_install_makes_one_commit_and_asks_once_before_any_push(self):
-        dest = temp_dir(self) / "fleet"
-        pushed = []
-        asked = []
-        ask = lambda question: asked.append(question) or "n"  # noqa: E731
-        error, _ = quiet(cmd_install.fleet_repo_step, dest, ask, lambda argv: pushed.append(argv) or 0)
-        self.assertEqual("", error)
-        self.assertEqual(1, self.commits(dest))
-        self.assertEqual(1, len(asked))
-        self.assertEqual([], pushed)
-
-    def test_a_yes_pushes_through_init_fleet_and_outside_a_terminal_nothing_is_asked(self):
-        dest = temp_dir(self) / "fleet"
-        pushed = []
-        quiet(cmd_install.fleet_repo_step, dest, lambda q: "y", lambda argv: pushed.append(argv) or 0)
-        self.assertEqual([["--dir", str(dest)]], pushed)
-        other = temp_dir(self) / "other"
-        quiet(cmd_install.fleet_repo_step, other, None, lambda argv: pushed.append(argv) or 0)
-        self.assertEqual(1, len(pushed))
-        self.assertEqual(1, self.commits(other))
 
     def test_a_loose_folder_fails_health_and_stays_untouched_until_made_a_repo(self):
         dest = temp_dir(self) / "fleet"
@@ -58,20 +46,20 @@ class FleetRepo(unittest.TestCase):
         self.assertEqual((0, 1, 0), quiet(health_checks._check_fleet_repo, dest)[0])
         self.assertEqual('{"repos": []}', (dest / "repo-profiles.json").read_text())
         self.assertFalse((dest / ".git").exists())
-        cmd_initfleet.make_local_repo(dest)
+        self.local_repo(dest)
         self.assertEqual((1, 0, 0), quiet(health_checks._check_fleet_repo, dest)[0])
         self.assertEqual(1, self.commits(dest))
 
     def test_a_local_fleet_repo_takes_the_owner_and_name_in_its_placeholders(self):
         dest = temp_dir(self) / "fleet"
-        cmd_initfleet.scaffold_local(dest)
+        shutil.copytree(cmd_initfleet.TEMPLATE, dest)
         self.assertTrue(cmd_initfleet.fill_placeholders(dest, "me", "fleet"))
         self.assertIn('"me/fleet"', (dest / "review-config.json").read_text())
         self.assertFalse(cmd_initfleet.fill_placeholders(dest, "me", "fleet"))
 
     def test_init_fleet_on_the_local_repo_adds_a_remote_and_nests_no_repo(self):
         dest = temp_dir(self) / "fleet"
-        quiet(cmd_install.fleet_repo_step, dest, None, None)
+        self.local_repo(dest, scaffold=True)
         calls = []
 
         def runner(args):
@@ -171,32 +159,13 @@ class WhoBuilds(unittest.TestCase):
 
 
 class DesignFile(unittest.TestCase):
-    """Install asks once for the owner's design file, the guide names it, and a repo that follows it passes health (#995)."""
+    """The guide names the design file, and a repo that follows it passes health (#995)."""
 
     def setUp(self):
         self.config = temp_dir(self) / "olivercode.local.json"
         patch = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(self.config)})
         patch.start()
         self.addCleanup(patch.stop)
-
-    def test_install_asks_once_and_a_path_is_saved_as_the_design_file(self):
-        from lib import local_config
-        own = temp_dir(self) / "mine.md"
-        own.write_text("mine\n")
-        asked = []
-        quiet(cmd_install.design_step, lambda q: asked.append(q) or str(own))
-        quiet(cmd_install.design_step, lambda q: asked.append(q) or str(own))
-        self.assertEqual(str(own), local_config.load_local()["designFile"])
-        self.assertEqual(1, len(asked))
-
-    def test_a_blank_answer_keeps_the_shipped_design_and_is_not_asked_again(self):
-        from lib import local_config
-        asked = []
-        quiet(cmd_install.design_step, lambda q: asked.append(q) or "")
-        quiet(cmd_install.design_step, lambda q: asked.append(q) or "")
-        self.assertNotIn("designFile", local_config.load_local())
-        self.assertTrue(local_config.load_local()["designAsked"])
-        self.assertEqual(1, len(asked))
 
     def test_the_guide_names_design_file_and_the_relink_command(self):
         from lib import cmd_guide
@@ -233,89 +202,76 @@ class DesignFile(unittest.TestCase):
 
 
 
-def _commits(dest: Path) -> int:
-    done = subprocess.run(["git", "-C", str(dest), "rev-list", "--count", "HEAD"], capture_output=True, text=True)
-    return int(done.stdout.strip()) if done.returncode == 0 else 0
 
-
-class FleetStep(unittest.TestCase):
-    """Install connects the one fleet repo beside the checkout, merges other copies into it and names it as fleetRegistry (#1057)."""
+class InstallAsksNothing(unittest.TestCase):
+    """Install reads no input, links the design file the config names, makes no fleet repo and copies the settings of the checkout installed before (#1282)."""
 
     def setUp(self):
-        self.root = temp_dir(self)
-        self.checkout = self.root / "OliverCode"
-        self.checkout.mkdir()
-        self.home = self.root / "home"
-        self.config = self.root / "olivercode.local.json"
-        patch = mock.patch.dict(os.environ, {**IDENTITY, "HOME": str(self.home), "OLIVERCODE_LOCAL_CONFIG": str(self.config)})
+        root = temp_dir(self)
+        self.claude = root / ".claude"
+        self.config = root / "olivercode.local.json"
+        self.prior = root / "prior"
+        self.prior.mkdir()
+        (self.prior / "CLAUDE.md").write_text("prior rules\n")
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(self.config)})
         patch.start()
         self.addCleanup(patch.stop)
-        os.environ.pop("OLIVERCODE_FLEET_DIR", None)
-        self.fleet = self.root / "olivercode-fleet"
+        self.root = root
 
-    def saved(self) -> dict:
-        return json.loads(self.config.read_text()) if self.config.is_file() else {}
+    def install(self, terminal: bool = True) -> str:
+        with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
+                mock.patch.object(cmd_install, "owner_terminal", return_value=terminal), \
+                mock.patch.object(cmd_install, "_schedule_replay"), mock.patch.object(cmd_install, "_queue_shim"), \
+                mock.patch.object(cmd_install, "board_step"), \
+                mock.patch("builtins.input", side_effect=AssertionError("install read input")), \
+                mock.patch("sys.stdin", io.StringIO("")):
+            _, out = quiet(cmd_install.command_install, REPO_ROOT)
+        return out
 
-    def test_a_first_install_names_the_fleet_olivercode_fleet_beside_the_checkout(self):
-        error, _ = quiet(cmd_install.fleet_step, self.checkout)
-        self.assertEqual("", error)
-        self.assertTrue((self.fleet / "repo-profiles.json").is_file())
-        self.assertEqual(1, _commits(self.fleet))
-        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
-        self.assertFalse((self.home / ".olivercode" / "fleet").exists())
+    def test_install_with_a_terminal_and_empty_stdin_finishes_and_links_the_shipped_design(self):
+        out = self.install()
+        self.assertEqual((REPO_ROOT / "docs" / "DESIGN.md").resolve(), (self.claude / "DESIGN.md").resolve())
+        self.assertNotIn("designAsked", self.config.read_text() if self.config.is_file() else "")
+        self.assertNotIn("Path to your own design file", out)
 
-    def test_a_clone_beside_the_checkout_is_used_and_no_folder_is_made_under_olivercode(self):
-        cmd_initfleet.scaffold_local(self.fleet)
-        cmd_initfleet.make_local_repo(self.fleet)
-        _, out = quiet(cmd_install.fleet_step, self.checkout)
-        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
-        self.assertIn(str(self.fleet), out)
-        self.assertFalse((self.home / ".olivercode" / "fleet").exists())
-        self.assertEqual(1, _commits(self.fleet))
+    def test_a_design_file_in_the_config_is_linked_and_a_leftover_designAsked_is_tolerated(self):
+        own = self.root / "mine.md"
+        own.write_text("mine\n")
+        self.config.write_text(json.dumps({"designFile": str(own), "designAsked": True}))
+        self.install()
+        self.assertEqual(own.resolve(), (self.claude / "DESIGN.md").resolve())
 
-    def test_other_copies_merge_into_olivercode_fleet_and_the_other_copy_is_removed(self):
-        cmd_initfleet.scaffold_local(self.fleet)
-        cmd_initfleet.make_local_repo(self.fleet)
-        (self.checkout / "shared-profiles.json").write_text("{}")
-        other = self.home / ".olivercode" / "fleet"
-        other.mkdir(parents=True)
-        (other / "repo-profiles.json").symlink_to(self.checkout / "shared-profiles.json")
-        (other / "owner-rules.json").write_text('{"from": "other"}')
-        (other / "review-config.json").write_text('{"old": true}')
-        (other / "notes.md").write_text("only in the other copy")
-        self.config.write_text(json.dumps({"fleetRegistry": str(other / "repo-profiles.json")}))
-        owner_rules = (self.fleet / "owner-rules.json").read_text()
+    def test_install_makes_no_fleet_repo_and_writes_no_fleet_registry(self):
+        beside = REPO_ROOT.parent / "olivercode-fleet"
+        existed = beside.exists()
+        out = self.install()
+        self.assertEqual(existed, beside.exists())
+        self.assertNotIn("Fleet repo", out)
+        self.assertNotIn("fleetRegistry", self.config.read_text() if self.config.is_file() else "")
 
-        _, out = quiet(cmd_install.fleet_step, self.checkout)
+    def test_a_second_checkout_copies_the_settings_of_the_one_the_claude_link_names(self):
+        self.claude.mkdir()
+        (self.claude / "CLAUDE.md").symlink_to(self.prior / "CLAUDE.md")
+        (self.prior / "olivercode.local.json").write_text('{"maxBuilders": 3}')
+        out = self.install()
+        self.assertEqual({"maxBuilders": 3}, json.loads(self.config.read_text()))
+        self.assertEqual(1, out.count("[COPIED]"))
+        self.assertEqual((REPO_ROOT / "CLAUDE.md").resolve(), (self.claude / "CLAUDE.md").resolve())
 
-        self.assertEqual("only in the other copy", (self.fleet / "notes.md").read_text())
-        self.assertEqual(owner_rules, (self.fleet / "owner-rules.json").read_text())
-        self.assertFalse((self.fleet / "repo-profiles.json").is_symlink())
-        self.assertFalse(other.exists())
-        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
-        self.assertEqual(2, _commits(self.fleet))
-        for line in ("moved notes.md", "kept owner-rules.json", "kept review-config.json", "dropped repo-profiles.json"):
-            self.assertIn(line, out)
+    def test_an_existing_settings_file_is_never_overwritten(self):
+        self.claude.mkdir()
+        (self.claude / "CLAUDE.md").symlink_to(self.prior / "CLAUDE.md")
+        (self.prior / "olivercode.local.json").write_text('{"maxBuilders": 3}')
+        self.config.write_text('{"maxBuilders": 1}')
+        out = self.install()
+        self.assertEqual({"maxBuilders": 1}, json.loads(self.config.read_text()))
+        self.assertNotIn("[COPIED]", out)
 
-    def test_nothing_else_found_prints_the_path_once_and_changes_nothing(self):
-        cmd_initfleet.scaffold_local(self.fleet)
-        cmd_initfleet.make_local_repo(self.fleet)
-        self.config.write_text(json.dumps({"fleetRegistry": str(self.fleet / "repo-profiles.json")}))
-        before = self.config.read_text()
-        _, out = quiet(cmd_install.fleet_step, self.checkout)
-        self.assertEqual(before, self.config.read_text())
-        self.assertEqual(1, out.count("Fleet repo:"))
-        self.assertEqual(1, _commits(self.fleet))
-
-    def test_a_github_copy_is_cloned_on_yes_and_no_repo_is_created(self):
-        with mock.patch("lib.cmd_initfleet.github_login", return_value=("me", "")), \
-                mock.patch("lib.cmd_initfleet.github_repo_kind", return_value=("fleet", "")), \
-                mock.patch("lib.cmd_initfleet.connect_fleet", return_value=0) as connect:
-            error, _ = quiet(cmd_install.fleet_step, self.checkout, lambda question: "y")
-        self.assertEqual("", error)
-        connect.assert_called_once_with(self.fleet, "me", "olivercode-fleet")
-        self.assertFalse(self.fleet.exists())
-        self.assertEqual(str(self.fleet / "repo-profiles.json"), self.saved()["fleetRegistry"])
+    def test_nothing_is_copied_when_the_link_names_this_checkout_or_the_other_has_no_settings(self):
+        self.claude.mkdir()
+        (self.claude / "CLAUDE.md").symlink_to(self.prior / "CLAUDE.md")
+        self.assertNotIn("[COPIED]", self.install())
+        self.assertFalse(self.config.is_file())
 
 
 if __name__ == "__main__":

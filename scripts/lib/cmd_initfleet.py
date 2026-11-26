@@ -2,19 +2,17 @@
 
 `olivercode init-fleet [--owner LOGIN] [--name REPO] [--dir PATH]` copies the template into PATH (default: the folder of the
 fleet registry path), creates a private GitHub repo through gh REST, confirms it is private with no collaborators and only then pushes.
-Install makes that folder a local git repo first (#993), so the push reuses its commit and fills in the owner and repo name.
+A folder that is already a local git repo keeps its commit, and the push fills in the owner and repo name.
 A name already taken on GitHub is never created over: a fleet repo there is cloned instead, and any other repo stops the command (#1057).
 """
 
 from __future__ import annotations
 
 import json
-import os
-import shutil
 import subprocess
 from pathlib import Path
 
-from lib.local_config import FLEET_NAME, OC_ROOT, fleet_home, fleet_registry_path
+from lib.local_config import OC_ROOT, fleet_registry_path
 
 TEMPLATE = OC_ROOT / "core" / "templates" / "fleet"
 USAGE = "Usage: olivercode init-fleet [--owner LOGIN] [--name REPO] [--dir PATH]"
@@ -30,26 +28,6 @@ def scaffold(dest: Path, owner: str, name: str) -> None:
     for src in sorted(TEMPLATE.iterdir()):
         text = src.read_text(encoding="utf-8").replace("{{OWNER}}", owner).replace("{{REPO}}", name)
         (dest / src.name).write_text(text, encoding="utf-8")
-
-
-def scaffold_local(dest: Path) -> None:
-    """Copies the template into dest as it ships, placeholders and all, until the owner and repo name are known (#993). A file that is already there stays."""
-    dest.mkdir(parents=True, exist_ok=True)
-    for src in sorted(TEMPLATE.iterdir()):
-        if not (dest / src.name).exists():
-            (dest / src.name).write_bytes(src.read_bytes())
-
-
-def make_local_repo(dest: Path) -> tuple[bool, str]:
-    """Makes dest a git repo with its files in one commit (#993). Returns (made, error); a folder that is already a repo is left alone."""
-    if (dest / ".git").exists():
-        return False, ""
-    dest.mkdir(parents=True, exist_ok=True)
-    for step in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "--allow-empty", "-m", "Start the fleet repo from the OliverCode template"]):
-        rc, out = run(["git", "-C", str(dest), *step])
-        if rc:
-            return False, f"git {step[0]} failed: {out}"
-    return True, ""
 
 
 def fill_placeholders(dest: Path, owner: str, name: str) -> bool:
@@ -87,72 +65,6 @@ def connect_fleet(dest: Path, owner: str, name: str, runner=run) -> int:
         return 1
     print(f"Connected to the existing fleet repo {owner}/{name} in {dest}. Registry: {dest / REGISTRY}")
     return 0
-
-
-def _origin_name(folder: Path) -> str:
-    """The repo name at the end of folder's origin URL, or "" when it has none."""
-    if not (folder / ".git").exists():
-        return ""
-    rc, out = run(["git", "-C", str(folder), "remote", "get-url", "origin"])
-    return "" if rc else out.strip().removesuffix(".git").rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1]
-
-
-def is_fleet(folder: Path) -> bool:
-    """A fleet repo by content: a repo-profiles.json beside owner-rules.json or the fleet CLAUDE.md, or an origin named olivercode-fleet (#1057)."""
-    if (folder / REGISTRY).is_file() and ((folder / "owner-rules.json").is_file() or (folder / "CLAUDE.md").is_file()):
-        return True
-    return _origin_name(folder) == FLEET_NAME
-
-
-def fleet_copies(oc_root: Path = OC_ROOT) -> list[Path]:
-    """Other fleet repos on this machine: folders under ~/.olivercode and the repo root, and the folder fleetRegistry names. The checkout,
-    olivercode-fleet, hidden folders and symlinks are left out (#1057)."""
-    dest = fleet_home(oc_root).resolve()
-    seen = {dest, Path(oc_root).resolve()}
-    candidates = []
-    for root in (Path.home() / ".olivercode", dest.parent):
-        if root.is_dir():
-            candidates += sorted(p for p in root.iterdir() if not p.name.startswith("."))
-    candidates.append(fleet_registry_path().parent)
-    found = []
-    for folder in candidates:
-        if folder.is_symlink() or not folder.is_dir() or folder.name.startswith(".") or folder.resolve() in seen:
-            continue
-        seen.add(folder.resolve())
-        if is_fleet(folder):
-            found.append(folder)
-    return found
-
-
-def merge_fleet_copies(dest: Path, copies: list[Path], oc_root: Path = OC_ROOT) -> list[str]:
-    """Moves each file found only in another fleet copy into dest and keeps dest's copy where both have one. A link into the OliverCode checkout
-    is dropped, and each other copy is removed once its files are moved. A change to dest is committed when dest is already a git repo (#1057).
-    Returns one line per entry for the output."""
-    dest.mkdir(parents=True, exist_ok=True)
-    checkout = Path(oc_root).resolve()
-    lines, moved = [], False
-    for copy in copies:
-        for entry in sorted(copy.iterdir()):
-            if entry.name == ".git":
-                continue
-            target = dest / entry.name
-            if entry.is_symlink() and Path(os.path.realpath(entry)).is_relative_to(checkout):
-                lines.append(f"  dropped {entry.name}: a link into the OliverCode checkout")
-            elif target.exists() or target.is_symlink():
-                lines.append(f"  kept {entry.name}: {dest} already has it")
-            else:
-                shutil.move(str(entry), str(target))
-                moved = True
-                lines.append(f"  moved {entry.name} from {copy}")
-        shutil.rmtree(copy)
-        lines.append(f"Removed the other fleet copy {copy}")
-    if moved and (dest / ".git").exists():
-        for step in (["add", "-A"], ["commit", "-q", "-m", "Bring the files of another fleet copy into olivercode-fleet"]):
-            rc, out = run(["git", "-C", str(dest), *step])
-            if rc and "nothing to commit" not in out:
-                lines.append(f"git {step[0]} failed in {dest}: {out}")
-                break
-    return lines
 
 
 def command_init_fleet(argv: list[str], runner=run) -> int:

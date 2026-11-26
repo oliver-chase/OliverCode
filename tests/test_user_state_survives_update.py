@@ -61,7 +61,6 @@ class UntrackedFilesDoNotBlockTheUpdate(WithIgnore):
         self.assertEqual((self.clone / "skills" / "shipped" / "SKILL.md").read_text(), "shipped v2")
         self.assertEqual((self.clone / "notes.txt").read_text(), "mine")
         settings = json.loads((self.clone / "olivercode.local.json").read_text())
-        self.assertEqual(settings.pop("fleetRegistry"), str(Path(os.environ["OLIVERCODE_FLEET_DIR"]) / "repo-profiles.json"))
         self.assertEqual(settings, {"auditMode": "gated"})
         self.assertIn('{"id": "L-old"}', lessons.path(self.clone).read_text())
 

@@ -65,7 +65,7 @@ Start from `core/templates/project/CLAUDE.md`, keep only what is specific to the
 
 ## Step 5: register your fleet
 
-`install` makes your fleet repo `olivercode-fleet` beside the OliverCode checkout, a local git repo from the template, and names its `repo-profiles.json` as `fleetRegistry`. When your GitHub account already holds `olivercode-fleet`, install offers to clone it into that folder. Every install and update also merges any other fleet copy on this machine into that folder and removes the copy, keeping the folder's own file wherever both have one. It offers a private GitHub copy once. Run `scripts/olivercode init-fleet` to push that copy when you decline it at install, then run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads, with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none.
+`install` makes no fleet repo and asks nothing. Run `scripts/olivercode init-fleet` to scaffold your private `olivercode-fleet` and push it, or clone the one your GitHub account already holds. Then run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads, with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none.
 
 Your fleet's own stories, registry, owner-rule carriers and owner queue live in that private fleet repo and never in this one. File a story about one of your repos there, and keep this repo's issues to the engine.
 
@@ -158,7 +158,7 @@ scripts/olivercode health     --root /path/to/where/your/repos/live
 
 Machine paths go in `olivercode.local.json` at the OliverCode root, which is gitignored. Copy `olivercode.local.example.json` and fill in:
 
-- `fleetRegistry`: the path of the fleet registry file. `install` sets it to `olivercode-fleet/repo-profiles.json` beside the checkout, and `~/.olivercode/fleet/repo-profiles.json` is the default when unset. With no registry at that path or under `privateRepos`, the fleet commands say no fleet is set and name `olivercode init-fleet`
+- `fleetRegistry`: the path of the fleet registry file. `init-fleet` names the registry it makes, and `~/.olivercode/fleet/repo-profiles.json` is the default when unset. With no registry at that path or under `privateRepos`, the fleet commands say no fleet is set and name `olivercode init-fleet`
 - `privateRepos`: private repos that get the private hook variant and a hook check
 - `skillsRoot`: the folder for personal skills, which the skill checks read
 - `repoRoot`: the one folder that holds every repo, `~/Developer/Repos` in the example. Any folder outside the synced ones works. Worktrees go in `_worktrees` and backups in `_archive` under it. It must sit outside every synced folder

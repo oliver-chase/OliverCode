@@ -35,10 +35,6 @@ REAL_HOME = os.environ.get("HOME")
 TEST_HOME = tempfile.mkdtemp(prefix="olivercode-test-home-")
 atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
 os.environ["HOME"] = TEST_HOME
-# Install keeps the fleet repo beside the checkout, which for this checkout is the owner's real repo root. A test that installs gets a scratch folder instead (#1057).
-TEST_FLEET_ROOT = tempfile.mkdtemp(prefix="olivercode-test-fleet-")
-atexit.register(shutil.rmtree, TEST_FLEET_ROOT, ignore_errors=True)
-os.environ["OLIVERCODE_FLEET_DIR"] = str(Path(TEST_FLEET_ROOT) / "olivercode-fleet")
 
 # No test reaches the real gh, claude or osascript (#1271). A guard directory comes first on PATH, and each guard
 # names the call on stderr and exits 97. A test that needs one puts its own fake ahead of this directory.
