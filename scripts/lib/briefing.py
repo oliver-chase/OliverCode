@@ -168,20 +168,23 @@ def text(snap: dict) -> list[str]:
 
 
 STYLE = """
-:root{--bg:#fff;--card:#fff;--ink:#14161a;--sub:#5b6472;--line:#e3e6eb;--good:#1a7f4b;--warn:#b26b00;--bad:#b3261e;--accent:#4f46e5;--soft:#eef0ff}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1114;--card:#171a1f;--ink:#f1f3f6;--sub:#9aa3b2;--line:#2a2f37;--good:#4cc38a;--warn:#e9a23b;--bad:#f2766e;--accent:#8b86ff;--soft:#1e2140}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,'Segoe UI',sans-serif}
-main{max-width:1000px;margin:0 auto;padding:24px 16px 64px}h1{font-size:1.9rem;margin:0}h2{font-size:1.25rem;margin:36px 0 12px}
-.sub{color:var(--sub)}.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}.big{font-size:2.2rem;font-weight:650;line-height:1.1}.label{color:var(--sub);font-size:.9rem}
-.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.8rem;font-weight:600;background:var(--soft);color:var(--accent)}
-.pill.good{color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)}.pill.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}.pill.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
-.bars{display:flex;align-items:flex-end;gap:10px;height:120px;margin-top:8px}.bars div{flex:1;text-align:center;font-size:.75rem;color:var(--sub);display:flex;flex-direction:column;justify-content:flex-end;height:100%}
-.bar{display:flex;gap:2px;align-items:flex-end;justify-content:center;flex:1}.bar i{display:block;width:45%;border-radius:4px 4px 0 0;min-height:2px}.o{background:var(--line)}.c{background:var(--accent)}
-.meter{height:10px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:8px}.meter i{display:block;height:100%;background:var(--accent)}
-details{border-top:1px solid var(--line);padding:8px 0}summary{cursor:pointer;font-weight:600}code{font:.9em ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 6px;border-radius:6px}
-ul{margin:6px 0 0;padding-left:20px}.row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding:10px 0}
-.term{margin-top:32px;color:var(--sub);font-size:.95rem}
+:root{--bg:#fff;--card:#fff;--ink:#17191d;--sub:#5c6470;--line:#dfe3e8;--good:#176b45;--warn:#986000;--bad:#a72d25;--accent:#5b50b8;--soft:#f3f2fa;--wash:#f7f8fa}
+@media (prefers-color-scheme:dark){:root{--bg:#101216;--card:#171a20;--ink:#f0f2f5;--sub:#a4acb8;--line:#303640;--good:#59c58c;--warn:#e5ad50;--bad:#ef8177;--accent:#aaa2ff;--soft:#25243b;--wash:#1c2027}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,'Segoe UI',sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 22px 72px}h1{font-size:clamp(1.8rem,4vw,2.5rem);line-height:1.15;letter-spacing:-.035em;margin:0}h2{font-size:1.3rem;letter-spacing:-.02em;margin:42px 0 14px}h3{font-size:1.05rem;margin:0 0 8px}p{margin:8px 0}.sub,.label{color:var(--sub)}
+.lede{max-width:68ch;font-size:1.04rem;margin:10px 0 24px}.eyebrow{font-size:.75rem;text-transform:uppercase;letter-spacing:.12em;color:var(--sub);font-weight:650;margin-bottom:8px}
+.cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}.card{background:var(--card);border:1px solid var(--line);padding:18px}.big{font-size:2.15rem;font-weight:680;line-height:1.12;letter-spacing:-.04em;margin:5px 0}.label{font-size:.82rem;font-weight:600}.note{font-size:.88rem;color:var(--sub);margin-top:6px}
+.pill{display:inline-block;border:1px solid var(--line);padding:2px 8px;border-radius:3px;font-size:.78rem;font-weight:650;color:var(--sub)}.pill.good{border-color:var(--good);color:var(--good)}.pill.warn{border-color:var(--warn);color:var(--warn)}.pill.bad{border-color:var(--bad);color:var(--bad)}
+.section-intro{max-width:70ch;color:var(--sub);margin:-4px 0 14px}details{border-top:1px solid var(--line);padding:0}details:last-child{border-bottom:1px solid var(--line)}
+summary{cursor:pointer;list-style:none;padding:14px 4px;display:flex;align-items:flex-start;gap:12px;font-weight:650}summary::-webkit-details-marker{display:none}summary:after{content:"＋";color:var(--sub);margin-left:auto;font-weight:400}details[open]>summary:after{content:"−"}summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.summary-title{flex:1;min-width:150px}.summary-meta{color:var(--sub);font-size:.88rem;font-weight:500}.expansion{padding:2px 16px 18px 16px;color:var(--ink)}.expansion p{max-width:72ch}.expansion ul{margin:8px 0 0;padding-left:22px}.expansion li{padding:4px 0}
+.attention{border:1px solid var(--line);margin:0 0 8px;padding:0 12px;background:var(--card)}.attention summary{padding:13px 2px}.attention .expansion{padding:4px 2px 14px}
+.row{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}.row>div:first-child{flex:1}.row .sub{max-width:34ch;font-size:.9rem}
+.bars{display:flex;align-items:flex-end;gap:10px;height:132px;margin:14px 0 6px}.bars>div{flex:1;min-width:0;text-align:center;font-size:.75rem;color:var(--sub);display:flex;flex-direction:column;justify-content:flex-end;height:100%}.bar{display:flex;gap:3px;align-items:flex-end;justify-content:center;flex:1}.bar i{display:block;width:42%;min-height:2px}.o{background:#aeb5bf}.c{background:var(--accent)}.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.84rem;color:var(--sub)}.legend span:before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;background:#aeb5bf}.legend .delivered:before{background:var(--accent)}
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.flow>div{padding:12px;background:var(--wash);border-left:2px solid var(--line)}.flow .positive{border-color:var(--good)}.flow .negative{border-color:var(--warn)}.flow strong{display:block;font-size:1.45rem;line-height:1.25}
+.meter{height:6px;background:var(--line);margin:12px 0 4px}.meter i{display:block;height:100%;background:var(--accent)}.health-list{margin-top:8px}.health-list .row{padding:14px 0}.health-list .fix{max-width:35ch;color:var(--sub);font-size:.9rem}
+code{font:.9em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:2px 5px}
+@media(max-width:600px){main{padding:20px 15px 52px}.row{display:block}.row .sub,.row .fix{margin-top:6px;max-width:none}.flow{grid-template-columns:1fr}.bars{gap:5px}.summary-meta{width:100%}}
 """
 
 
@@ -198,48 +201,60 @@ def _bars(days: list[dict]) -> str:
 
 def _attention_html(snap: dict) -> str:
     if not snap["waiting"]:
-        return '<div class="card">Nothing needs you right now.</div>'
+        return '<div class="card">Nothing needs you right now. The queue is clear of owner decisions.</div>'
     blocks = []
     for g in snap["groups"]:
-        items = "".join(f"<li>#{esc(i.get('id'))} {esc(str(i.get('step', '')).splitlines()[0][:160])}</li>" for i in g["steps"][:8])
-        more = f"<li>and {len(g['steps']) - 8} more</li>" if len(g["steps"]) > 8 else ""
-        blocks.append(f'<details><summary>{esc(g["name"])} · {len(g["steps"])} <span class="sub">{esc(g["means"])}</span></summary><ul>{items}{more}</ul></details>')
-    return (f'<div class="card"><p><b>{plural(snap["waiting"], "thing")} {"is" if snap["waiting"] == 1 else "are"} waiting.</b> '
-            f'See them all with <code>olivercode owner list</code>.</p>{"".join(blocks)}</div>')
-
+        items = "".join(f'<li><b>#{esc(i.get("id"))}</b> {esc(str(i.get("step", "")).splitlines()[0][:160])}</li>' for i in g["steps"][:8])
+        more = f'<li class="sub">And {len(g["steps"]) - 8} more in this group.</li>' if len(g["steps"]) > 8 else ""
+        blocks.append(f'<details class="attention"><summary><span class="summary-title">{esc(g["name"])}</span><span class="summary-meta">{len(g["steps"])} · {esc(g["means"])}</span></summary><div class="expansion"><ul>{items}{more}</ul></div></details>')
+    return f'<p class="section-intro">{plural(snap["waiting"], "decision")} or fix is holding work. Open a group to see exactly what is waiting.</p>{"".join(blocks)}<p class="note">Full list: <code>olivercode owner list</code></p>'
 
 def _health_html(snap: dict) -> str:
     bad = {s["area"] for s in snap["setup"]}
-    marks = "".join(f'<span class="pill {"warn" if a in bad else "good"}">{esc(a)}: {"needs attention" if a in bad else "good"}</span> ' for a in AREAS)
-    rows = "".join(f'<div class="row"><div><b>{esc(s["headline"])}</b><div class="sub">{esc(s["meaning"])}</div></div><div class="sub">{esc(s["fix"])}</div></div>' for s in snap["setup"])
-    lead = (f"{plural(len(snap['setup']), 'thing')} to fix. OliverCode is working, but a few things could get in its way." if snap["setup"]
-            else "Everything checks out.")
-    return f'<div class="card"><p><b>{esc(lead)}</b></p><p>{marks}</p>{rows}</div>'
-
+    marks = "".join(f'<span class="pill {"warn" if a in bad else "good"}">{esc(a)} · {"needs attention" if a in bad else "clear"}</span> ' for a in AREAS)
+    rows = "".join(f'<div class="row"><div><b>{esc(s["headline"])}</b><div class="sub">{esc(s["meaning"])}</div></div><div class="fix">{esc(s["fix"])}</div></div>' for s in snap["setup"])
+    lead = "A few things could slow the work down. Each includes what it means and the next step." if snap["setup"] else "All six checks are clear. Nothing in the setup is flagged."
+    return f'<div class="card"><p><b>{esc(lead)}</b></p><div class="cards">{marks}</div><div class="health-list">{rows}</div></div>'
 
 def dashboard_html(snap: dict) -> str:
-    """City's top half: four questions answered in order, then the terminal commands. Everything is escaped."""
+    """City: a narrative operating view, readable expansions and grounded comparisons."""
     runner, nums = snap["runner"], snap["numbers"]
     state = "Running" if runner["building"] else "Idle"
     pill = f'<span class="pill {"good" if runner["building"] else ""}">{state}</span>'
-    latest = f'<p>Most recent delivery: <b>#{esc(snap["latest"]["number"])} {esc(snap["latest"]["title"])}</b></p>' if snap.get("latest") else ""
-    cost = (f'{_money(nums.get("cost_per_closed"))}', f'about {_millions(nums["tokens_per_closed"])} tokens each') if nums.get("tokens_per_closed") is not None else ("Not recorded", "no finished stories yet")
-    load = f'<div class="label">{esc(runner["load"])}</div>' if runner.get("load") else ""
+    latest = f'<p class="note">Latest delivery: <b>#{esc(snap["latest"]["number"])} {esc(snap["latest"]["title"])}</b></p>' if snap.get("latest") else ""
+    if nums.get("tokens_per_closed") is not None:
+        cost = (_money(nums.get("cost_per_closed")), f"~{_millions(nums['tokens_per_closed'])} tokens per delivered story")
+    else:
+        cost = ("Not recorded", "No completed stories in this window")
+    load = f'<p class="note">{esc(runner["load"])}</p>' if runner.get("load") else ""
     allowed = max(int(runner["allowed"]) or 1, 1)
-    meter = f'<div class="meter"><i style="width:{min(100, runner["building"] / allowed * 100):.0f}%"></i></div>'
+    meter = f'<div class="meter" aria-label="{runner["building"]} of {allowed} builder slots in use"><i style="width:{min(100, runner["building"] / allowed * 100):.0f}%"></i></div>'
+    net = snap["closed"] - snap["opened"]
+    net_label = "Net backlog reduction" if net > 0 else ("Net backlog growth" if net < 0 else "No net change")
+    ratio = "No new work arrived" if not snap["opened"] else f'{snap["closed"] / snap["opened"]:.1f} deliveries per story added'
+    pace = f'{snap["closed"] / 7:.1f} delivered/day · {snap["opened"] / 7:.1f} added/day'
+    benchmark = f'To shrink the queue, delivery must exceed incoming work ({snap["opened"]} added this week; at least {snap["opened"] + 1} deliveries).' if snap["opened"] else "No new stories arrived this week; any delivery reduces the queue."
+    daily = "".join(f'<li>{esc(d["day"])}: {d["closed"]} delivered · {d["opened"]} added</li>' for d in snap["days"])
+    next_up = f'<p><b>Next up:</b> {esc(snap["ready"])}</p>' if snap["ready"] else ""
     return (
-        f'<h1>OliverCode City</h1><p class="sub">{esc(summary_line(snap))} Updated {esc(snap["now"].strftime("%A %H:%M"))}.</p>'
-        f'<div class="cards">{_card("Stories open", str(snap["open"]), f"{len(snap["today"])} delivered today")}'
-        f'{_card("Waiting on you", str(snap["waiting"]), "approvals, fixes and decisions")}'
-        f'{_card("Cost per finished story", cost[0], cost[1])}'
+        f'<div class="eyebrow">OliverCode · Live operating picture</div><h1>OliverCode City</h1>'
+        f'<p class="lede">{esc(summary_line(snap))} <span class="sub">Updated {esc(snap["now"].strftime("%A, %H:%M"))}.</span></p>'
+        f'<div class="cards">{_card("Stories in the queue", str(snap["open"]), f"{len(snap["today"])} delivered today")}'
+        f'{_card("Waiting on you", str(snap["waiting"]), "decisions, approvals or fixes")}'
+        f'{_card("Cost per delivery", cost[0], cost[1])}'
         f'{_card("Delivered today", str(len(snap["today"])), f"{snap["today_tokens"]:,} tokens · {_money(snap["today_cost"])}")}</div>'
-        f'<h2>What needs your attention</h2>{_attention_html(snap)}'
-        f'<h2>What OliverCode is doing</h2><div class="card">{pill} <b>{esc(plural(runner["building"], "builder"))} running</b> of {allowed} allowed{meter}{load}'
-        f'<p>{esc("Nothing is building right now. " if not runner["building"] else "")}{esc("Next up: " + snap["ready"] if snap["ready"] else "")}</p>{latest}</div>'
-        f'<h2>How work is going</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>{_bars(snap["days"])}'
-        f'<div class="cards"><div><div class="label">Delivered</div><div class="big">{snap["closed"]}</div></div><div><div class="label">Added</div><div class="big">{snap["opened"]}</div></div></div>'
-        f'<p class="sub">Work moved to a fresh session {plural(nums.get("handovers", 0), "time")}, and you stepped into {plural(nums.get("threads", 0), "thread")}. '
-        f'{plural(snap["ideas"], "idea")} waiting for review (<code>olivercode candidates</code>).</p></div>'
-        f'<h2>How the system is doing</h2>{_health_html(snap)}'
-        f'<p class="term">To see this in a terminal: <code>cd {esc(CD_TARGET)}</code> then <code>olivercode status</code>.</p>'
+        f'<section><h2>What needs your attention</h2><p class="section-intro">Owner decisions come first. They are the work only you can unblock.</p>{_attention_html(snap)}</section>'
+        f'<section><h2>Work underway</h2><div class="card"><div>{pill} <b>{runner["building"]} of {allowed} builder slots in use</b></div>{meter}{load}'
+        f'<p>{esc("Nothing is building at the moment." if not runner["building"] else "Stories are moving through the runner.")}</p>{next_up}{latest}</div></section>'
+        f'<section><h2>Delivery pace</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>'
+        f'{_bars(snap["days"])}<div class="legend"><span>Added</span><span class="delivered">Delivered</span></div>'
+        f'<div class="flow"><div><span class="label">Delivered</span><strong>{snap["closed"]}</strong><span class="note">this week</span></div>'
+        f'<div><span class="label">Added</span><strong>{snap["opened"]}</strong><span class="note">this week</span></div>'
+        f'<div class="{"positive" if net >= 0 else "negative"}"><span class="label">{esc(net_label)}</span><strong>{net:+}</strong><span class="note">stories · 7 days</span></div></div>'
+        f'<p class="note">{esc(pace)}. {esc(ratio)}. {esc(benchmark)}</p>'
+        f'<details><summary><span class="summary-title">Daily breakdown</span><span class="summary-meta">7-day view</span></summary><div class="expansion"><ul>{daily}</ul></div></details>'
+        f'<p class="note">Benchmark: deliveries need to stay ahead of incoming work to reduce backlog. This compares with your own queue, not an industry target.</p></div></section>'
+        f'<section><h2>System health</h2>{_health_html(snap)}</section>'
+        f'<section><h2>Keep exploring</h2><p>{plural(snap["ideas"], "idea")} waiting for review. <code>olivercode candidates</code></p>'
+        f'<p class="term">Terminal view</p><p><code>cd {esc(CD_TARGET)}</code> then <code>olivercode status</code>.</p></section>'
     )
