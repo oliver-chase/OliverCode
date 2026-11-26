@@ -50,6 +50,27 @@ class TestSessionGuard(unittest.TestCase):
         self.assertEqual({"sid-1", "sid-2"}, {r["session_id"] for r in ends})
         self.assertTrue(all(r["cost_usd"] is not None for r in ends))
 
+    def test_same_story_sessions_serialize_even_when_account_cap_is_two(self):
+        self.cap.stop()
+        cap_two = mock.patch.object(session_guard.local_config, "max_builders", return_value=2)
+        cap_two.start()
+        self.addCleanup(cap_two.stop)
+        first = session_guard.acquire("story-12", "sonnet", "/work/Repo-12", "sid-a", repo_slug="owner/repo")
+        entered = threading.Event()
+        def second_call():
+            lease = session_guard.acquire("story-12-fix", "sonnet", "/work/Repo-12", "sid-b", repo_slug="owner/repo")
+            entered.set()
+            lease.finish({"cost_usd": 0.1, "stop_reason": "completed"})
+            lease.release()
+        thread = threading.Thread(target=second_call)
+        thread.start()
+        time.sleep(0.08)
+        self.assertFalse(entered.is_set(), "same-story lock should serialize even with spare account slots")
+        first.finish({"cost_usd": 0.1, "stop_reason": "completed"})
+        first.release()
+        thread.join(timeout=2)
+        self.assertTrue(entered.is_set())
+
     def test_unknown_or_unfinished_story_session_cost_fails_closed(self):
         lease = session_guard.acquire("story-9", "sonnet", "/work/Repo-9", "sid-9")
         self.assertTrue(session_guard.story_has_unknown_cost(9, "Repo"))
