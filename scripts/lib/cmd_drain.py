@@ -16,7 +16,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections import Counter
+from collections import Counter, deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
@@ -283,6 +283,10 @@ class Io:
             self.claim_start.pop(n, None)  # land keeps a lone older commit's committer date, so a resumed branch's commit would fail the since-claim filter (#1306)
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
+    def stack(self, items: list[tuple[Path, int]]) -> bool:
+        """Validate several committed stories once as a stack, so each one's land reuses the pass (#1317)."""
+        return cmd_land.stack([(wt, str(n)) for wt, n in items])
+
     def comment(self, n: int, body: str) -> None:
         self.said[n] = body
         self.gh(["api", "-X", "POST", f"repos/{self.slug}/issues/{n}/comments", "-f", f"body={body}"])
@@ -442,12 +446,14 @@ def close_waiting_in_qa(io, say=print) -> None:
             say(f"Left open #{n}: {exc}")
 
 
-def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
-    """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit. Each builder takes one story, so no commit carries two stories' work (#988)."""
-    n = issue["number"]
+def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str] | None = None) -> tuple[bool | None, int]:
+    """Drive one story to landed, restarting its builder on the same worktree. Returns (closed, tokens used here). A story that did not land is left open on Ready, and the claim is released on every exit. Each builder takes one story, so no commit carries two stories' work (#988).
+    With `queue`, the builder's slot ends at its commit: the story is handed to the landing queue, closed comes back None and the claim stays until the queue settles it. `resume` is (attempt, note) for a fix round after a failed landing (#1317)."""
+    n, handed = issue["number"], False
     try:
-        closed, used = _work_story(io, issue, state)
-        if not closed:
+        closed, used = _work_story(io, issue, state, queue, resume)
+        handed = closed is None
+        if closed is False:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
             if n not in state.get("limited", []):  # the usage limit already sent its own notification
                 notify(f"Story #{n} stopped without landing: {getattr(io, 'said', {}).get(n) or 'no reason recorded'}")  # (#1325)
@@ -455,7 +461,8 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     except CloseRefused:  # a refused close leaves the story with the gate's message and its one stopped row (#1011)
         return False, 0
     finally:
-        io.release(n)
+        if not handed:
+            io.release(n)
 
 
 def held_comment(worktree: Path, finding: str) -> str:
@@ -490,16 +497,31 @@ def policy_stop_comment(stop: dict) -> str:
             "- Next: run the diagnosing-bugs loop on the gate's finding, then return this story to Ready.")
 
 
-def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
-    n, tokens, note = issue["number"], 0, ""
-    lead = io.landed_lead(issue)
+def stops_here(io, n: int, worktree: Path, note: str, landing: bool) -> bool:
+    """True when a failed round must not restart the builder, after commenting why: a refused push is not the builder's to fix (#1296), and a policy ask
+    answers a headless builder with no one to answer it, so a restart would hit the same ask (#1058)."""
+    if landing and "push-failed" in note:
+        io.comment(n, f"Drain blocked: {note}")
+        return True
+    stop = io.policy_stop(n, worktree)
+    if stop:
+        io.comment(n, policy_stop_comment(stop))
+        io.queue_owner(n, stop)
+        return True
+    return False
+
+
+def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str] | None = None) -> tuple[bool | None, int]:
+    n, tokens = issue["number"], 0
+    first, note = resume or (0, "")
+    lead = None if resume else io.landed_lead(issue)
     if lead:  # the work landed under another story, so a fresh build would repeat it on main; the owner decides (#988)
         io.comment(n, f"Not built: commit {lead[0][:12]} ({lead[1]}) on the default branch changed this story's files, so its work most likely landed under that story. The owner decides whether this story closes.")
         return False, 0
-    if not io.pending(n) and io.landed(io.repo, n):  # its commit is on the default branch and no unlanded work waits in its worktree, so it closes through the script and no builder starts (#1011)
+    if not resume and not io.pending(n) and io.landed(io.repo, n):  # its commit is on the default branch and no unlanded work waits in its worktree, so it closes through the script and no builder starts (#1011)
         finish(io, io.repo, n, "already on the default branch")
         return True, 0
-    if io.validation() is None:  # no builder starts in a repo that nothing can validate (#1012)
+    if not resume and io.validation() is None:  # no builder starts in a repo that nothing can validate (#1012)
         io.comment(n, f"Drain blocked: {agent_loop.NO_VALIDATION}")
         return False, 0
     try:
@@ -507,7 +529,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     except RuntimeError as exc:
         io.comment(n, f"Drain blocked: the worktree was not created: {exc}")
         return False, 0
-    for attempt in range(RESTARTS + 1):
+    if resume and stops_here(io, n, worktree, note, True):  # the failed landing was the last round's
+        return False, 0
+    for attempt in range(first, RESTARTS + 1):
         state["sessions"] += 1
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
@@ -524,6 +548,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             io.comment(n, f"Drain blocked: {out['reason']}")
             return False, tokens
         if out["done"]:
+            if queue is not None and io.commits(worktree) > 0:  # the slot ends at the commit, and the landing queue validates and lands it (#1317)
+                queue(issue, worktree, attempt)
+                return None, tokens
             try:
                 closed, note = land_and_close(io, worktree, n)
             except CloseRefused:  # work_story ends the story and logs no second row (#1297), so the tokens are counted here
@@ -531,15 +558,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
                 raise
             if closed:
                 return True, tokens
-            if "push-failed" in note:  # a refused push is not the builder's to fix, so no session is restarted for it (#1296)
-                io.comment(n, f"Drain blocked: {note}")
-                return False, tokens
         else:
             note = out["reason"]
-        stop = io.policy_stop(n, worktree)
-        if stop:  # a policy ask answers a headless builder with no one to answer it, so a restart would hit the same ask (#1058)
-            io.comment(n, policy_stop_comment(stop))
-            io.queue_owner(n, stop)
+        if stops_here(io, n, worktree, note, bool(out["done"])):
             return False, tokens
     saved = io.save_work(worktree, n)
     if saved:  # the one comment names where the work is, so a split starts from it (#1328)
@@ -547,6 +568,23 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     else:
         io.comment(n, f"Drain blocked after {RESTARTS} restarts of the builder on {worktree}. Last reason: {note}")
     return False, tokens
+
+
+def land_batch(io, batch: list[tuple[dict, Path, int]], say=print) -> list[tuple[dict, Path, int, str, str]]:
+    """Validate and land the committed stories of one batch, one batch at a time (#1317). Two or more first stack and pass one quick validation, which
+    each story's own land reuses. A batch that fails that validation lands each story on its own, so each is validated alone and only the failing one fails.
+    One story lands as it always did. Returns (issue, worktree, attempt, "closed" | "failed" | "refused", note) per story."""
+    if len(batch) > 1:
+        io.stack([(wt, issue["number"]) for issue, wt, _ in batch])
+    rows = []
+    for issue, wt, attempt in batch:
+        n = issue["number"]
+        try:
+            closed, note = land_and_close(io, wt, n)
+            rows.append((issue, wt, attempt, "closed" if closed else "failed", note))
+        except CloseRefused:  # the refusal is already on the story with its one stopped row
+            rows.append((issue, wt, attempt, "refused", ""))
+    return rows
 
 
 def stop_builders(io, running: dict) -> None:
@@ -570,9 +608,59 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     the claims of the stories it was building and returns to Ready without waiting for their builders (#1076)."""
     running: dict = {}
     pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
+    lander = ThreadPoolExecutor(max_workers=1)  # one batch validates and lands at a time, so validation load stays bounded (#1317)
+    waiting: deque = deque()  # committed stories the queue has not taken yet
+    committed: dict = {}  # number -> issue of each story committed and not yet landed or sent back to a builder
+    landing: dict = {}  # the one batch in flight: its future -> its stories
     waits, reported, filled = 0, set(), set()
     stopped = False
     hold_waited = False
+
+    def enqueue(issue: dict, worktree: Path, attempt: int) -> None:
+        committed[issue["number"]] = issue
+        waiting.append((issue, worktree, attempt))
+
+    def settle(fut) -> None:
+        batch = landing.pop(fut)
+        try:
+            rows = fut.result()
+        except Exception as exc:  # a crashed queue blocks the stories it held and the run goes on
+            say(f"The landing queue crashed: {exc!r}")
+            rows = [(issue, wt, attempt, "crashed", repr(exc)) for issue, wt, attempt in batch]
+        for issue, wt, attempt, status, note in rows:
+            n = issue["number"]
+            committed.pop(n, None)
+            if status == "failed":  # only the failing story goes back to a builder, as a fix round on the same worktree
+                running[pool.submit(work_story, io, issue, state, enqueue, (attempt + 1, note))] = issue
+                continue
+            if status == "closed":
+                state["closed"].append(n)
+            else:
+                state["blocked"].append(n)
+            if status == "crashed":
+                for effect in (lambda: io.comment(n, f"Drain blocked: the landing queue crashed with {note}."), lambda: io.keep_open(n)):
+                    try:
+                        effect()
+                    except Exception:
+                        pass
+            try:
+                io.release(n)
+            except Exception:
+                pass
+
+    def start_batch() -> None:
+        """Hand every committed story that waits to the queue, when no batch is in flight."""
+        if waiting and not landing:
+            batch = [waiting.popleft() for _ in range(len(waiting))]
+            landing[lander.submit(land_batch, io, batch, say)] = batch
+
+    def step() -> None:
+        """Wait for a builder or the batch to finish, and take in what finished."""
+        done, _ = wait([*running, *landing], return_when=FIRST_COMPLETED)
+        reap([f for f in done if f in running])
+        for fut in [f for f in done if f in landing]:
+            settle(fut)
+        io.beat([i["number"] for i in running.values()])
 
     def reap(finished) -> None:
         for fut in finished:
@@ -589,6 +677,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     except Exception:
                         pass
             state["tokens"] += used
+            if closed is None:  # committed: its slot is free and the landing queue has the story (#1317)
+                continue
             if closed:
                 state["closed"].append(issue["number"])
             elif issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
@@ -598,10 +688,11 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     try:
         close_waiting_in_qa(io, say)
         while True:
+            start_batch()  # before any hold or read failure ends the loop, so a committed story is never left waiting
             until = gh_budget.blocked_until()
             if until and until - time.time() <= HOLD_WAIT_MAX:  # a hold that ends within the hour is waited out, once (#1314)
-                if running:  # builders finish first, and their board writes are already queued by the hold
-                    reap(wait(running, return_when=FIRST_COMPLETED)[0])
+                if running or landing:  # builders and the batch in flight finish first, and their board writes are already queued by the hold
+                    step()
                     continue
                 reset = time.strftime("%H:%M", time.localtime(until))
                 if hold_waited:
@@ -620,13 +711,16 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             hold_waited = False
             issues = io.list_open()
             if issues is None:
+                if running or landing:  # builders and the batch in flight settle first, so no committed story is left claimed
+                    step()
+                    continue
                 if unread := getattr(io, "unread", ""):
                     agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "stopped", reason=unread)
                     say(f"Drain stopped: {unread}.")
                     return 1
                 say("Drain stopped: the open stories were not read.")
                 return 1
-            skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()}
+            skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()} | set(committed)
             todo = []
             for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
                 why = skip_reason(issue, io.repo)
@@ -649,7 +743,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
                     continue
                 todo.append(issue)
-            busy = [intake.files_area(i.get("body") or "") for i in running.values()]  # one overlap rule, shared with the planner (#1014)
+            busy = [intake.files_area(i.get("body") or "") for i in [*running.values(), *committed.values()]]  # a story building, validating or landing holds its files; one overlap rule, shared with the planner (#1014)
             started = False
             for issue in todo:
                 if state.get("limited") or len(running) >= io.capacity():  # no builder starts once one has hit the usage limit (#1299)
@@ -658,25 +752,39 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
                     continue
                 io.claim(issue["number"], issue.get("size") or "")
-                running[pool.submit(work_story, io, issue, state)] = issue
+                running[pool.submit(work_story, io, issue, state, enqueue)] = issue
                 busy.append(areas)
                 started = True
+            start_batch()
             io.beat([i["number"] for i in running.values()])
-            if not running:
+            if not running and not landing:
                 if todo and not started and waits < FULL_WAITS and io.capacity() == 0 and not state.get("limited"):
                     waits += 1
                     sleep(300)
                     continue
                 break
-            finished, _ = wait(running, return_when=FIRST_COMPLETED)
-            reap(finished)
+            step()
     except BaseException:  # Ctrl-C or SIGTERM (#1076): the stories in flight go back to Ready and their claims go, then the stop goes on
         stopped = True
-        stop_builders(io, running)
-        say(f"Drain stopped: {len(running)} building stories released to Ready. Their builders are not waited for.")
+        unfinished = {i["number"]: i for i in [*running.values(), *committed.values()]}
+        for fut, batch in landing.items():  # the batch in flight is waited for, so a story it lands is not put back on Ready
+            try:
+                rows = fut.result()
+            except BaseException:
+                rows = [(issue, wt, attempt, "crashed", "") for issue, wt, attempt in batch]
+            for issue, _, _, status, _ in rows:
+                if status == "closed":
+                    unfinished.pop(issue["number"], None)
+                    try:
+                        io.release(issue["number"])
+                    except Exception:
+                        pass
+        stop_builders(io, unfinished)
+        say(f"Drain stopped: {len(unfinished)} building stories released to Ready. Their builders are not waited for.")
         raise
     finally:
         pool.shutdown(wait=not stopped)
+        lander.shutdown(wait=not stopped)
     if state.get("limited"):
         say(f"Drain stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}, so no new builder started.")
     say(f"Drain done: {len(state['closed'])} stories closed, {len(state['blocked'])} blocked, {state['sessions']} sessions, {state['tokens']:,} tokens.")

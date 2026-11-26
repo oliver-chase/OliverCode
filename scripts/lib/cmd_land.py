@@ -352,6 +352,45 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
 
 
+def stack(items: list[tuple[Path, str]], say=print) -> bool:
+    """Stack the commits of several finished stories on the landing branch in a scratch worktree, run the repo's quick validation once on the stack,
+    and record that pass for the tree after each story, so each story's own land reuses it and validates nothing again (#1317). The stories' worktrees are
+    never touched. A story whose commits conflict with the stack is left out and lands alone. Returns True when two or more stories stacked and the
+    stack passed. On False nothing is recorded, so each land validates its own story.
+    shortcut: a pass is recorded for each intermediate tree without running it, since the tip's pass covers them, and a story that breaks only a
+    middle tree lands anyway; upgrade when the landing branch must pass at every commit."""
+    main, base = _main_checkout(items[0][0]), default_branch(items[0][0])
+    if not main:
+        return False
+    scratch = Path(tempfile.mkdtemp(prefix="land-stack-"))
+    _git(main, "fetch", "-q", "origin")
+    if _git(main, "worktree", "add", "--detach", str(scratch), f"origin/{base}").returncode:
+        shutil.rmtree(scratch, ignore_errors=True)
+        return False
+    try:
+        trees: list[str] = []
+        for wt, story in items:
+            first = _git(wt, "merge-base", "HEAD", f"origin/{base}").stdout.strip()
+            head = _git(wt, "rev-parse", "HEAD").stdout.strip()
+            if not first or not head or _git(scratch, "cherry-pick", f"{first}..{head}").returncode:
+                _git(scratch, "cherry-pick", "--abort")
+                say(f"Story #{story} does not stack on the others, so it lands alone.")
+                continue
+            trees.append(_git(scratch, "rev-parse", "HEAD^{tree}").stdout.strip())
+        if len(trees) < 2:
+            return False
+        link_venv(main, scratch)
+        passed, tail = agent_loop.validate(scratch, quick=True)
+        say(f"A batch of {len(trees)} stories {'passed' if passed else 'failed'} its one validation." + ("" if passed else f"\n{tail}"))
+        if passed:
+            for tree in trees[:-1]:
+                validated.record(scratch, tree)
+        return passed
+    finally:
+        _git(main, "worktree", "remove", "--force", str(scratch))
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def cleanup(wt: Path) -> list[str]:
     """Delete a landed story's worktree, local branch and remote branch. Returns one line per thing removed or kept and why.
     Nothing is removed while the worktree has uncommitted changes or a commit that is not on origin/main, and main is never touched."""

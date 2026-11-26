@@ -237,6 +237,45 @@ class TestLandSquash(Base):
         self.assertEqual(before + 10, int(git(self.main, "rev-list", "--count", "origin/main").stdout))
 
 
+class TestLandStack(Base):
+    """Committed stories stack in a scratch worktree and validate once (#1317)."""
+
+    def second(self, name="c.txt", text="c"):
+        wt = self.root / f"wt-{name}"
+        git(self.main, "worktree", "add", "-q", "-b", f"story/{name}", str(wt), "origin/main")
+        (wt / name).write_text(text)
+        git(wt, "add", "."); git(wt, "commit", "-q", "-m", f"Add {name} (#{len(name)})")
+        return wt
+
+    def stacked(self, items, passed=True):
+        with mock.patch.object(cmd_land.agent_loop, "validate", return_value=(passed, "tail")) as ran, mock.patch.object(cmd_land.validated, "record") as record:
+            result = quiet(cmd_land.stack, items)
+        return result, ran, record
+
+    def test_two_stories_stack_validate_once_and_record_the_tree_after_the_first(self):
+        other = self.second()
+        heads = [git(w, "rev-parse", "HEAD").stdout.strip() for w in (self.wt, other)]
+        (ok, _), ran, record = self.stacked([(self.wt, "9"), (other, "1")])
+        self.assertTrue(ok)
+        ran.assert_called_once()
+        self.assertEqual(1, record.call_count)
+        self.assertEqual(heads, [git(w, "rev-parse", "HEAD").stdout.strip() for w in (self.wt, other)])  # the stories' worktrees are untouched
+        self.assertNotIn("land-stack", git(self.main, "worktree", "list").stdout)
+
+    def test_a_failed_stack_records_nothing(self):
+        other = self.second()
+        (ok, _), ran, record = self.stacked([(self.wt, "9"), (other, "1")], passed=False)
+        self.assertFalse(ok)
+        record.assert_not_called()
+
+    def test_a_story_that_conflicts_with_the_stack_lands_alone(self):
+        other = self.second("b.txt", "different")
+        (ok, out), ran, _ = self.stacked([(self.wt, "9"), (other, "5")])
+        self.assertFalse(ok)  # one story stacked, so nothing is shared
+        ran.assert_not_called()
+        self.assertIn("Story #5 does not stack", out)
+
+
 class TestLand(Base):
     def test_a_fresh_worktree_gets_the_main_checkouts_venv_before_validation(self):
         (self.main / ".venv").mkdir()

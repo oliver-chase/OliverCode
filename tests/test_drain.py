@@ -81,6 +81,10 @@ class FakeIo:
         return {"tokens": self.tokens, **out}
 
     def commits(self, wt): return 1
+    def stack(self, items):
+        self.stacked = getattr(self, "stacked", []) + [[n for _, n in items]]
+        return self.stack_ok
+    stack_ok = True
     def land(self, wt, n):
         if self.land_ok and not self.ghost_land:
             self.on_main.add(n)
@@ -110,6 +114,85 @@ class DrainCase(unittest.TestCase):
         st = st or state()
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
         return code, out, st
+
+    def test_a_builder_that_commits_frees_its_slot_for_the_next_story_while_the_queue_lands(self):  # #1317
+        order = []
+        io = FakeIo([issue(1), issue(2), issue(3)], cap=1)
+        real_land = io.land
+        def slow_land(wt, n):
+            for _ in range(200):  # the next builder's thread logs its start a moment after the queue takes the story
+                if len(io.started) > 1:
+                    break
+                time.sleep(0.01)
+            order.append(("land", n, list(io.started)))
+            return real_land(wt, n)
+        io.land = slow_land
+        _, _, st = self.run_drain(io)
+        self.assertEqual([1, 2, 3], sorted(st["closed"]))
+        self.assertIn(2, order[0][2])  # story 2 was building when story 1 was landing
+
+    def test_a_story_whose_files_overlap_a_story_waiting_to_land_does_not_start(self):  # #1317
+        io = FakeIo([issue(1, "Files area: scripts/x.py"), issue(2, "Files area: scripts/x.py")], cap=2)
+        _, _, st = self.run_drain(io)
+        self.assertEqual([1, 2], st["closed"])
+        self.assertEqual([1, 2], io.started)
+        self.assertEqual([], getattr(io, "stacked", []))
+
+    def test_committed_stories_stack_validate_once_and_land_together(self):  # #1317
+        io = FakeIo([issue(1), issue(2), issue(3)], cap=3)
+        real_land = io.land
+        def land(wt, n):
+            for _ in range(200):  # the first land holds the queue until the other builders have started and committed
+                if len(io.started) == 3:
+                    break
+                time.sleep(0.01)
+            time.sleep(0.1)
+            return real_land(wt, n)
+        io.land = land
+        _, _, st = self.run_drain(io)
+        self.assertEqual([1, 2, 3], sorted(st["closed"]))
+        self.assertTrue(io.stacked)  # a batch of two or more stacked, and a lone story never does
+        self.assertTrue(all(len(batch) >= 2 for batch in io.stacked))
+        self.assertLessEqual(len(io.stacked), 2)  # one validation per batch, not per story
+        self.assertEqual(len(io.moved), 3)
+
+    def test_a_committed_story_is_landed_when_github_cannot_be_read_after_it_commits(self):  # #1317
+        io = FakeIo([issue(1)], cap=1)
+        reads = iter([[issue(1)]])
+        io.list_open = lambda: next(reads, None)
+        code, _, st = self.run_drain(io)
+        self.assertEqual(1, code)
+        self.assertEqual([1], st["closed"])
+        self.assertEqual([1], io.released)
+
+    def test_a_failed_batch_validation_lands_the_passing_stories_and_restarts_only_the_failing_one(self):  # #1317
+        io = FakeIo([issue(1), issue(2)], cap=2)
+        io.stack_ok = False
+        real_land = io.land
+        def land(wt, n):
+            if n == 2 and not io.on_main & {2} and io.started.count(2) == 1:
+                return False, "RESULT validate-failed"
+            return real_land(wt, n)
+        io.land = land
+        gate = threading.Event()
+        real_build = io.build
+        def build(i, wt, note):
+            if i["number"] == 1:
+                gate.wait(0.3)
+            return real_build(i, wt, note)
+        io.build = build
+        _, _, st = self.run_drain(io)
+        self.assertEqual([1, 2], sorted(st["closed"]))
+        self.assertEqual(1, io.started.count(1))
+        self.assertEqual(2, io.started.count(2))
+        self.assertEqual({2: 1}, {n: r for n, r in st["restarts"].items() if r})
+
+    def test_one_committed_story_lands_with_no_stack(self):  # #1317
+        io = FakeIo([issue(1)], cap=1)
+        _, _, st = self.run_drain(io)
+        self.assertEqual([1], st["closed"])
+        self.assertEqual([], getattr(io, "stacked", []))
+        self.assertEqual([1], io.released)
 
     def test_a_story_that_stops_with_saved_work_gets_one_comment_naming_branch_files_and_reason(self):
         """#1328"""
