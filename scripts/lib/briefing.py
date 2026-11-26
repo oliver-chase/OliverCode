@@ -217,13 +217,26 @@ def _bars(days: list[dict]) -> str:
 
 def _attention_html(snap: dict) -> str:
     if not snap["waiting"]:
-        return '<div class="card">Nothing needs you right now. The queue is clear of owner decisions.</div>'
+        return '<div class="card">Nothing needs you right now. Work can move without an owner decision.</div>'
+    explanations = {
+        "Stories to split": ("These stories are too large to finish in one run. Breaking them into smaller pieces gives the runner clearer checkpoints.", "Review the story and split it into smaller, independently deliverable pieces."),
+        "Approvals": ("Work is paused until you approve a change. OliverCode will not make this decision for you.", "Read the proposed change and approve or decline it."),
+        "Failed checks": ("A required check did not pass, so the story is not ready to land. A failure is evidence to investigate, not automatically a code defect.", "Open the story and inspect the failed check before deciding what to do."),
+        "Cleanup": ("Leftover branches or worktrees can make it harder to tell which changes are current and safe to keep.", "Review the named branch or worktree; keep useful work and remove only what is confirmed obsolete."),
+        "Setup": ("A local configuration or environment issue may prevent the runner from doing reliable work.", "Follow the specific fix below, then rerun the health check."),
+        "Other": ("This item did not fit a known category. Read its details before taking action.", "Review the item and decide whether it needs you or can be returned to the queue."),
+    }
     blocks = []
     for g in snap["groups"]:
-        items = "".join(f'<li><b>#{esc(i.get("id"))}</b> {esc(str(i.get("step", "")).splitlines()[0][:160])}</li>' for i in g["steps"][:8])
+        why, next_step = explanations.get(g["name"], explanations["Other"])
+        items = "".join(f'<li><b>#{esc(i.get("id"))}</b><div>{esc(str(i.get("step", "")).splitlines()[0][:160])}</div></li>' for i in g["steps"][:8])
         more = f'<li class="sub">And {len(g["steps"]) - 8} more in this group.</li>' if len(g["steps"]) > 8 else ""
-        blocks.append(f'<details class="attention"><summary><span class="summary-title">{esc(g["name"])}</span><span class="summary-meta">{len(g["steps"])} · {esc(g["means"])}</span></summary><div class="expansion"><ul>{items}{more}</ul></div></details>')
-    return f'<p class="section-intro">{plural(snap["waiting"], "decision")} or fix is holding work. Open a group to see exactly what is waiting.</p>{"".join(blocks)}<p class="note">Full list: <code>olivercode owner list</code></p>'
+        blocks.append(
+            f'<details class="attention"><summary><span class="summary-title">{esc(g["name"])}</span><span class="summary-meta">{len(g["steps"])} · {esc(g["means"])}</span></summary>'
+            f'<div class="expansion"><p><b>Why it matters</b><br>{esc(why)}</p><p><b>What to do</b><br>{esc(next_step)}</p>'
+            f'<ul>{items}{more}</ul></div></details>'
+        )
+    return f'<p class="section-intro">{plural(snap["waiting"], "item")} is holding work. Each group explains why it matters and what action is appropriate.</p>{"".join(blocks)}<p class="note">Full list: <code>olivercode owner list</code></p>'
 
 def _health_html(snap: dict) -> str:
     bad = {s["area"] for s in snap["setup"]}
