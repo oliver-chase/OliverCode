@@ -8,6 +8,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,8 +104,96 @@ def _write_start(row: dict) -> bool:
         return False
 
 
+def story_spend(story: int, repo: str = "") -> float:
+    """Cumulative priced model spend, including session telemetry and pre-telemetry rows."""
+    prefix = f"story-{story}"
+    total = 0.0
+    sessions = failure_log.home() / LOG
+    try:
+        with sessions.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(row, dict) or row.get("event") != "session_end":
+                    continue
+                name = str(row.get("session") or "")
+                if name != prefix and not name.startswith(prefix + "-"):
+                    continue
+                row_repo = str(row.get("repo") or "")
+                repo_name = Path(repo).name
+                if repo and row_repo and (row_repo != repo if "/" in row_repo or "/" in repo else row_repo != repo_name and not row_repo.startswith(repo_name + "-")):
+                    continue
+                cost = row.get("cost_usd")
+                if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
+                    total += float(cost)
+    except OSError:
+        pass
+    path = failure_log.home() / "run-log.jsonl"
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("story") or "")
+                if name != prefix and not name.startswith(prefix + "-"):
+                    continue
+                if repo and row.get("repo") and row.get("repo") != repo:
+                    continue
+                if row.get("session_id"):
+                    continue
+                cost = row.get("cost_usd")
+                if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost > 0:
+                    total += float(cost)
+    except OSError:
+        pass
+    return total
+
+
+def story_cost_unknown(story: int, repo: str = "") -> bool:
+    """Unknown or corrupt cost history blocks another model session for this story."""
+    path = failure_log.home() / "run-log.jsonl"
+    prefix = f"story-{story}"
+    if path.exists():
+        try:
+            with path.open(encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    try:
+                        row = json.loads(line)
+                    except (ValueError, TypeError):
+                        return True
+                    if not isinstance(row, dict):
+                        return True
+                    name = str(row.get("story") or "")
+                    if name != prefix and not name.startswith(prefix + "-"):
+                        continue
+                    if repo and row.get("repo") and row.get("repo") != repo:
+                        continue
+                    if "round" in row and row.get("cost_usd") is None:
+                        return True
+                    if row.get("stop") == "api_error" and row.get("cost_usd") is None:
+                        return True
+        except OSError:
+            return True
+    return story_has_unknown_cost(story, repo)
+
+
 def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25, repo_slug: str = "") -> Lease:
     """Wait for and hold one shared account slot; configured maxBuilders is the hard session cap."""
+    match = re.match(r"^story-(\\d+)(?:-.+)?$", session)
+    if match:
+        story = int(match.group(1))
+        ceiling = local_config.max_story_spend()
+        spent = story_spend(story, repo_slug)
+        if story_cost_unknown(story, repo_slug):
+            raise RuntimeError(f"Claude session refused: story #{story} has an unknown prior session cost; reconcile it before starting another session.")
+        if spent >= ceiling:
+            raise RuntimeError("Claude session refused: story #%d has spent $%.2f, reaching its $%.2f ceiling." % (story, spent, ceiling))
     cap = max(1, local_config.max_builders())
     slot_dir = failure_log.home() / "model-session-slots"
     slot_dir.mkdir(parents=True, exist_ok=True)
