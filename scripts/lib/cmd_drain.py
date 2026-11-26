@@ -83,6 +83,7 @@ class Io:
         self.claim_start: dict[int, float] = {}  # story number -> when this run claimed it, never refreshed (#1306)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.said: dict[int, str] = {}  # story number -> its last comment, which is the reason a stopped row records (#1291)
+        self.saved: set[int] = set()  # stories whose stopped builder's work was committed to story/N, so their card goes to Backlog (#1328)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
@@ -337,7 +338,24 @@ class Io:
         if done.returncode == 0 and done.stdout.strip() == "closed":
             self.gh(["api", "-X", "PATCH", f"repos/{self.slug}/issues/{n}", "-f", "state=open"])
         cfg = backlog_config(self.repo)
-        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "Ready"}}]}]))
+        status = "Backlog" if n in self.saved else "Ready"  # saved work waits for a split, not a rebuild (#1328)
+        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": status}}]}]))
+
+    def save_work(self, worktree: Path, n: int) -> list[str]:
+        """Commit and push what a stopped builder left uncommitted in its worktree to story/N, and return the files changed. A clean worktree
+        makes no commit and returns []. The push is the branch only, so nothing lands until a story built from it passes validation and review (#1328).
+        shortcut: --no-verify, since partial work cannot pass the commit hooks, and the landing runs validation and review before anything reaches main."""
+        status = subprocess.run(["git", "-C", str(worktree), "status", "--porcelain"], capture_output=True, text=True)
+        files = [line[3:].strip() for line in status.stdout.splitlines() if line.strip()] if status.returncode == 0 else []
+        if not files:
+            return []
+        steps = (["add", "-A"], ["commit", "-q", "--no-verify", "-m", f"Partial work from a stopped builder (#{n})"], ["push", "--no-verify", "origin", f"HEAD:refs/heads/story/{n}"])
+        for step in steps:
+            done = subprocess.run(["git", "-C", str(worktree), *step], capture_output=True, text=True)
+            if done.returncode != 0:
+                return []
+        self.saved.add(n)
+        return files
 
     def refresh_claims(self, now: float | None = None) -> None:
         """While this run is alive, renew each claim it holds: the local claim every call, and the claim comment once a quarter of the
@@ -525,7 +543,11 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             io.comment(n, policy_stop_comment(stop))
             io.queue_owner(n, stop)
             return False, tokens
-    io.comment(n, f"Drain blocked after {RESTARTS} restarts of the builder on {worktree}. Last reason: {note}")
+    saved = io.save_work(worktree, n)
+    if saved:  # the one comment names where the work is, so a split starts from it (#1328)
+        io.comment(n, f"Builder stopped without landing, and its work is kept on branch story/{n}, which no drain lands by itself.\n- Files changed: {', '.join(saved)}\n- Stop reason: {note}")
+    else:
+        io.comment(n, f"Drain blocked after {RESTARTS} restarts of the builder on {worktree}. Last reason: {note}")
     return False, tokens
 
 

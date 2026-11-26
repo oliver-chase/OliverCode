@@ -94,6 +94,8 @@ class FakeIo:
         return True, ""
     def release(self, n): self.released.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
+    def save_work(self, wt, n): return self.saves.get(n, [])
+    saves = {}  # story number -> the files its stopped builder's work was saved with (#1328)
     def landed(self, wt, n): return self.already or (n in self.on_main)
     def policy_stop(self, n, wt): return self.stops.get(n)
     def queue_owner(self, n, stop): self.owner.append((n, stop))
@@ -108,6 +110,22 @@ class DrainCase(unittest.TestCase):
         st = st or state()
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
         return code, out, st
+
+    def test_a_story_that_stops_with_saved_work_gets_one_comment_naming_branch_files_and_reason(self):
+        """#1328"""
+        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "max_turns"}] * 5})
+        io.saves = {1: ["a.py", "b.py"]}
+        self.run_drain(io)
+        body = "\n".join(b for _, b in io.comments)
+        self.assertEqual(1, len(io.comments))
+        self.assertIn("story/1", body)
+        self.assertIn("a.py, b.py", body)
+        self.assertIn("max_turns", body)
+
+    def test_a_story_that_stops_with_a_clean_worktree_keeps_todays_comment(self):
+        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "max_turns"}] * 5})
+        self.run_drain(io)
+        self.assertTrue(io.comments[0][1].startswith("Drain blocked after"))
 
     def test_orders_p0_first_and_skips_epics_claimed_and_owner_gated(self):
         io = FakeIo([issue(1, "Priority: P2"), issue(2, "Priority: P0"), issue(3, "Work type: Epic"), issue(4, labels=["owner-gate"]), issue(5), issue(6, "Priority: P1")], cap=1)
@@ -819,6 +837,27 @@ class TestRealIo(unittest.TestCase):
         self.assertTrue(any("PATCH" in c and "state=open" in c for c in calls))
         self.assertTrue(any("claude exited 1" in " ".join(c) for c in calls))
         self.assertEqual([{"cfg": cfg, "issues": [{"number": 9, "fields": {"status": "Ready"}}]}], queued)
+
+    def test_a_stopped_builders_uncommitted_work_is_committed_and_pushed_to_its_branch(self):
+        """#1328: the changes go to story/N by one commit that names the story, and the card then moves to Backlog."""
+        remote = scratch_repo(temp_dir(self), bare=True)
+        git(self.repo, "remote", "add", "origin", str(remote))
+        (self.repo / "half.py").write_text("x = 1\n")
+        self.assertEqual(["half.py"], self.io.save_work(self.repo, 7))
+        self.assertIn("Partial work from a stopped builder (#7)", git(self.repo, "log", "-1", "--format=%s").stdout)
+        self.assertIn("refs/heads/story/7", git(remote, "for-each-ref").stdout)
+        self.assertEqual("", git(self.repo, "status", "--porcelain").stdout.strip())
+        queued = []
+        with mock.patch.object(cmd_drain.cmd_dispatch, "gh", lambda a: subprocess.CompletedProcess(a, 0, "open\n", "")), mock.patch.object(cmd_drain, "backlog_config", lambda repo: {}), \
+                mock.patch.object(cmd_drain.cmd_dispatch.batch_project, "with_queue", lambda fn: queued.extend(fn([])[1])):
+            self.io.keep_open(7)
+        self.assertEqual("Backlog", queued[0]["issues"][0]["fields"]["status"])
+
+    def test_a_clean_worktree_makes_no_commit(self):
+        before = git(self.repo, "rev-parse", "HEAD").stdout
+        self.assertEqual([], self.io.save_work(self.repo, 7))
+        self.assertEqual(before, git(self.repo, "rev-parse", "HEAD").stdout)
+        self.assertNotIn(7, self.io.saved)
 
     def test_each_stage_of_a_story_appends_a_row_to_the_run_log_with_the_story_id_the_rounds_use(self):
         """#1291: claimed, building, landing, landed and stopped come from the real Io, one row each."""
