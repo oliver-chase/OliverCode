@@ -79,14 +79,14 @@ class _HealthTally:
         return f"HEALTHY — {self.passed} checks passed"
 
 
-# A registered repo's folder, GitHub and registry names agree, or the owner has said which to keep (#1034).
-# The answer is kept in `repoNames` in olivercode.local.json, keyed by registry name with the two names it was given for.
-
-NAME_CHOICES = ("folder", "github")
+# A local checkout directory and its GitHub repository name are independent.
+# A clone may be placed in any directory; a difference is informational, not a repair
+# decision. In particular, health and conform must never stop to ask the user to rename
+# either side (#1034).
 
 
 def repo_names_mismatches(profiles: dict, fleet_root: Path) -> list[tuple[str, str, str]]:
-    """(registry name, folder name, GitHub name) for each cloned repo whose three names are not one."""
+    """(registry name, folder name, GitHub name) for each cloned repo whose names differ."""
     out = []
     for name, _profile, path in _iter_fleet(profiles, fleet_root, skip_archived=False):
         slug = _repo_state.origin(path) if (path / ".git").exists() else None
@@ -98,41 +98,14 @@ def repo_names_mismatches(profiles: dict, fleet_root: Path) -> list[tuple[str, s
     return out
 
 
-def repo_names_answered(name: str, folder: str, github: str) -> str | None:
-    """The kept side ("folder" or "github") the owner chose for exactly these names, else None."""
-    saved = _local_config.load_local().get("repoNames", {}).get(name)
-    if isinstance(saved, dict) and saved.get("folder") == folder and saved.get("github") == github and saved.get("keep") in NAME_CHOICES:
-        return saved["keep"]
-    return None
-
-
-def repo_names_record(name: str, folder: str, github: str, keep: str) -> None:
-    kept = dict(_local_config.load_local().get("repoNames", {}))
-    kept[name] = {"folder": folder, "github": github, "keep": keep}
-    _local_config.save_local({"repoNames": kept})
-
-
-def repo_names_check(profiles: dict, fleet_root: Path, ask=input, interactive: bool | None = None, out=print) -> tuple[int, int, int]:
-    """Show both names of each unanswered mismatch and ask which to keep. Returns (passed, failed, skipped); a question left open is a warning, not a failure."""
-    interactive = sys.stdin.isatty() if interactive is None else interactive
+def repo_names_check(profiles: dict, fleet_root: Path, out=print) -> tuple[int, int, int]:
+    """Report differing names for context; never prompt, persist a choice, or require a rename."""
     found = repo_names_mismatches(profiles, fleet_root)
-    open_ones = [m for m in found if not repo_names_answered(*m)]
-    unresolved = 0
-    for name, folder, github in open_ones:
-        out(f"  [WARN] {name}: the folder is '{folder}' and the GitHub repo is '{github}'")
-        if not interactive:
-            out("         Run `olivercode health` or `olivercode conform` in a terminal to say which to keep")
-            unresolved += 1
-            continue
-        reply = ""
-        while reply not in NAME_CHOICES:
-            reply = ask("         Keep which name? (folder/github): ").strip().lower()
-        repo_names_record(name, folder, github, reply)
-        out(f"         recorded: keep the {reply} name")
+    for registry, folder, github in found:
+        out(f"  [INFO] {registry}: local folder '{folder}', GitHub repo '{github}'. Both names are kept; no rename is needed.")
     if not found:
         out("  [OK] every registered repo's folder, GitHub and registry names agree")
-    return (len(found) - unresolved if found else 1), 0, unresolved
-
+    return 1, 0, 0
 
 def command_health(fleet_root: Path | None = None) -> int:
     """Run health checks on this machine's setup: Claude Code hooks, control plane, skill links, remotes.
