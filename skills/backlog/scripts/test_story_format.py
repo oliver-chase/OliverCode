@@ -171,6 +171,15 @@ class StoryFormat(unittest.TestCase):
         self.assertEqual([], sf.overlap_problems(text, {6: {"title": "Other", "body": "Files area: scripts/lib/cmd_groom.py"}}))
         self.assertEqual([], sf.overlap_problems(text, {7: {"title": "Word", "body": "Files area: new, cmd"}}))
 
+    def test_open_stories_parses_each_issue_gh_prints_and_refuses_a_failed_read(self):
+        from unittest import mock
+        lines = '{"number": 7, "title": "Word", "body": "Files area: a.py"}\n\n{"number": 9, "title": "Other", "body": ""}\n'
+        with mock.patch.object(sf.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, lines, "")):
+            self.assertEqual({7: "Word", 9: "Other"}, {n: o["title"] for n, o in sf.open_stories(".").items()})
+        with mock.patch.object(sf.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "HTTP 403")):
+            with self.assertRaises(RuntimeError):
+                sf.open_stories(".")
+
     def test_an_unreadable_issue_list_is_a_problem_and_the_offline_flag_skips_it(self):
         import contextlib
         import io

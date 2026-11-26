@@ -8,6 +8,7 @@ missing part with its fix and exits 1 when any part is missing, 0 when the body 
 with it, read once through gh; `--offline` skips that read (#1274).
 """
 import argparse
+import json
 import re
 import subprocess
 import sys
