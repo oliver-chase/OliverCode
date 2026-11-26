@@ -68,7 +68,7 @@ class DashboardCase(unittest.TestCase):
         self.assertIn("Benchmark:", page)
         self.assertIn("expansion", page)
         self.assertIn("this week", page)
-        self.assertIn("within $6.00 budget", page)
+        self.assertIn("within $6.00 budget", page)\n        self.assertIn("--accent:#a99be8", briefing.STYLE)\n        self.assertIn("--lavender:#f0edff", briefing.STYLE)\n        self.assertNotIn("prefers-color-scheme:dark", briefing.STYLE)\n        self.assertIn("Why it matters", page)\n        self.assertIn("What to do", page)
 
     def test_a_step_cannot_inject_markup(self):
         page = briefing.dashboard_html(snap(steps=[{"id": 1, "session": "maintain", "step": "<script>steal()</script> approve"}]))
