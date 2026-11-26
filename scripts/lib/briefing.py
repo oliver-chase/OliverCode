@@ -313,7 +313,7 @@ def dashboard_html(snap: dict) -> str:
         f'<div class="cards">{cards}</div>'
         f'<section><h2>What needs your attention</h2><p class="section-intro">Owner decisions come first. They are the work only you can unblock.</p>{_attention_html(snap)}</section>'
         f'<section><h2>Work underway</h2><div class="card"><div>{pill} <b>{runner["building"]} of {allowed} builder slots in use</b></div>{meter}{load}'
-        f'<p>{esc("Nothing is building at the moment." if not runner["building"] else "Stories are moving through the runner.")}</p>{next_up}{latest}</div></section>'
+        f'<p>{esc("Paused: no new stories will start." if runner.get("paused") else ("Nothing is building at the moment." if not runner["building"] else "Stories are moving through the runner."))}</p>{next_up}{latest}</div></section>'
         f'<section><h2>Cost over time</h2>{_cost_html(snap)}</section>'
         f'<section><h2>Delivery pace</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>'
         f'{_bars(snap["days"])}<div class="legend"><span>Added</span><span class="delivered">Delivered</span></div>{flow}'
