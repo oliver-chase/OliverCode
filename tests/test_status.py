@@ -109,7 +109,7 @@ class TestStatus(unittest.TestCase):
         page = status_report.render({}, [], NOW.timestamp(), panel="<h1>OliverCode City</h1>")
         self.assertNotIn("prefers-color-scheme: dark", page)
         self.assertIn("Georgia, 'Times New Roman', serif", page)
-        self.assertIn("--accent: #a99be8", page)
+        self.assertIn("--accent: #C8BBD5", page)
 
     def test_city_usage_analytics_are_visible_without_opening_owner_details(self):
         log = [
