@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from lib import backlog_setup, failure_log, intake, gh_budget, local_config, open_issues, run_lock
+from lib import agent_loop, backlog_setup, failure_log, intake, gh_budget, local_config, open_issues, run_lock
 from lib.local_config import OC_ROOT
 from lib.placement import config as placement_config
 
@@ -42,7 +42,11 @@ def headless_brief(n: int, story: dict, agent: str, worktree=None, extras: str =
     """The one brief a headless builder gets, for `dispatch` and `drain` alike (#877): the story, what it names, and rules that end at the commit.
     `extras` is text between the story and the rules (code excerpts, owner decisions) and `note` says why an earlier builder stopped."""
     builder, reader, why = intake.models(story, f"story-{n}")  # the same names the runner starts (#1015), and the rule that chose the builder (#1026)
-    model = f"Run on {builder.capitalize()} ({why}), and a fresh {reader.capitalize()} reader reads the commit before it lands"
+    from lib import cmd_groom
+    review = agent_loop.review_mode(cmd_groom.size_of(story), story.get("labels") or (), intake.files_area(story.get("body") or ""), cmd_groom.priority_of(story))
+    review_note = (f"a fresh {reader.capitalize()} reader reads the commit before it lands" if review == "full"
+                   else "repository validation and commit gates check the commit before it lands")
+    model = f"Run on {builder.capitalize()} ({why}), and {review_note}"
     body = (story.get("body") or "").strip()
     extras = extras.replace(" and validate before the last commit. `olivercode land` then lands the branch and each story is closed.", ". The runner validates and lands the branch and closes each story.")
     text = f"Story #{n}: {story['title']}\n\n{body}\n\n{extras + chr(10) if extras else ''}{HEADLESS_RULES.format(n=n, model=model, agent=agent)}\n"
@@ -138,6 +142,14 @@ def _parse(argv: list[str]):
     return (int(pos[0]), sid, dry) if len(pos) == 1 and pos[0].isdigit() and int(pos[0]) > 0 else None
 
 
+def is_engine(repo) -> bool:
+    """True when `repo` is the OliverCode checkout this launcher runs from (#1278). OLIVERCODE_ALLOW_SELF=1 turns the check off."""
+    return os.environ.get("OLIVERCODE_ALLOW_SELF") != "1" and Path(repo).resolve() == OC_ROOT
+
+
+ENGINE_REFUSAL = "Refused: this is the OliverCode engine repository; engine changes go through the staging branch."
+
+
 def _refuse(why: str) -> int:
     print(why if why.startswith("Refused") else f"Refused: {why}")
     return 1
@@ -213,7 +225,8 @@ def _plan(repo) -> int:
 
 def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=None, io=None) -> int:
     if argv == ["--plan"]:
-        return _plan(repo or _toplevel())
+        repo = repo or _toplevel()
+        return _refuse(ENGINE_REFUSAL) if is_engine(repo) else _plan(repo)
     parsed = _parse(argv)
     if not parsed:
         print(USAGE)
@@ -221,6 +234,8 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
     n, sid, dry = parsed
     clock = clock or time.time
     repo = repo or _toplevel()
+    if is_engine(repo):
+        return _refuse(ENGINE_REFUSAL)
     try:
         cfg = local_config.backlog_config(repo)
         slug = f"{cfg['repoOwner']}/{cfg['repoName']}"

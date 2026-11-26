@@ -390,6 +390,15 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(quiet(cmd_drain.command_drain, [])[0], 2)
         self.assertEqual(quiet(cmd_drain.command_drain, ["/nonexistent-repo-xyz"])[0], 1)
 
+    def test_a_drain_of_the_engine_repository_refuses_and_a_scratch_copy_does_not(self):
+        """#1278: the checkout the launcher runs from is never built by the runner; OLIVERCODE_ALLOW_SELF=1 opts in."""
+        code, out = quiet(cmd_drain.command_drain, [str(cmd_drain.OC_ROOT)])
+        self.assertEqual(1, code)
+        self.assertIn("engine changes go through the staging branch", out)
+        self.assertFalse(cmd_drain.cmd_dispatch.is_engine(temp_dir(self)))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_ALLOW_SELF": "1"}):
+            self.assertFalse(cmd_drain.cmd_dispatch.is_engine(cmd_drain.OC_ROOT))
+
 
 class TestDrainClaims(unittest.TestCase):
     """#710: the real Io skips a live claim and writes its claim before a builder starts."""

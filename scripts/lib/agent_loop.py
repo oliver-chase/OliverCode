@@ -128,6 +128,19 @@ def risky_paths(files) -> list[str]:
     return hits
 
 
+def review_mode(size: str, labels=(), files=(), priority: str = "") -> str:
+    """Return the safe review lane: full for substantial or risky work, none for routine XS/S work (#1015).
+
+    Every story still runs repository validation and commit gates. A fresh reader is required for medium-or-larger work,
+    design and P0 work, and changes to the runner's safety boundary. Keeping this decision here gives every runner caller
+    the same conservative policy.
+    """
+    names = {(l.get("name") if isinstance(l, dict) else l or "").lower() for l in labels or []}
+    if size not in ("XS", "S") or "design" in names or priority == "P0" or risky_paths(files):
+        return "full"
+    return "none"
+
+
 def route(size: str, labels=(), files=(), priority: str = "") -> tuple[str, str]:
     """(model, reason) a story starts on (#890, #1026). Only a story labeled design takes the largest. M and L take the middle. XS and S take the
     smallest unless their Files area touches landing, claims, gates or hooks, or their priority is P0, which take the middle. The reason names the rule."""
@@ -193,16 +206,17 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
     return FIX_BRIEF.format(task=task, diff=branch_diff(cwd), finding=finding)
 
 
-def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER) -> dict:
+def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
+           max_turns: int = READER_TURNS, attempts: int = 2) -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
     prompt = REVIEW_BRIEF.format(task=task, diff=branch_diff(cwd), tail=tail)
     failure = ""
-    for attempt in (1, 2):
+    for attempt in range(1, attempts + 1):
         try:
-            reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=READER_TURNS, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
+            reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=max_turns, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
         else:
@@ -282,14 +296,15 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print, why: str = "") -> dict:
+             run=None, check=None, say=print, why: str = "", review_mode: str = "full") -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
     finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
-    `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026)."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why)
+    `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
+    `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
+    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="") -> dict:
+def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full") -> dict:
     run, check = run or model.run_cli, check or validate
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
@@ -333,7 +348,11 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                     "rounds": n, "tokens": tokens, "summary": summary}
         passed, tail = check(cwd)
         if passed:
-            verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name))
+            if review_mode == "none":
+                return {"done": True, "reason": "The repo's validation passes; routine story review is covered by validation and commit gates.",
+                        "rounds": n, "tokens": tokens, "summary": summary}
+            verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
+                             max_turns=READER_TURNS, attempts=2)
             if verdict["verdict"] == "none":  # the reader gave no verdict twice, so the story is held for a retry and nothing lands (#1015)
                 return {"done": False, "held": verdict["text"], "reason": f"The fresh reader gave no verdict, so nothing is pushed: {verdict['text'][:300]}",
                         "rounds": n, "tokens": tokens, "summary": summary}

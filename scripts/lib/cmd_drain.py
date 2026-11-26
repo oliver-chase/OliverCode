@@ -156,9 +156,11 @@ class Io:
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree), owner_decisions.brief_section(n)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
         builder, _reader, why = intake.models(issue, f"story-{n}")
+        files = intake.files_area(issue.get("body") or "")
+        review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0))
+                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
@@ -578,6 +580,9 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     repo = resolve_repo(rest[0])
     if repo is None:
         print(f"Refused: {rest[0]} is not a repo with docs/backlog-config.json.")
+        return 1
+    if cmd_dispatch.is_engine(repo):
+        print(cmd_dispatch.ENGINE_REFUSAL)
         return 1
     cfg = backlog_config(repo)
     slug = cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)
