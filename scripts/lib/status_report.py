@@ -443,6 +443,8 @@ def _usage_analytics(log: list[dict], now: float) -> str:
     model_mix = {}
     for story in landed:
         models = story.get("models") or ([story["model"]] if story.get("model") else [])
+        if not models:
+            continue
         model_mix[len(models)] = model_mix.get(len(models), 0) + 1
         for model_name in models:
             model_story_counts[model_name] = model_story_counts.get(model_name, 0) + 1
