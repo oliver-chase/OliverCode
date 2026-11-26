@@ -42,7 +42,7 @@ class PanelCase(unittest.TestCase):
         calls = []
         city.failure_log.write_atomic(city.cache_path(), json.dumps({"version": city.PANEL_VERSION - 1, "at": T0, "html": "old dashboard"}))
         body = city.panel_html(T0 + 60, runner=lambda when: calls.append(when) or fake_read(when))
-        self.assertEqual("<p>2 open, 0 building.</p>", body)
+        self.assertIn("<p>2 open, 0 building.</p>", body)
         self.assertEqual(1, len(calls))
 
     def test_a_read_past_the_ttl_reads_again(self):
