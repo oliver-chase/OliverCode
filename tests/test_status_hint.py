@@ -109,9 +109,9 @@ class LongThread(unittest.TestCase):
 
     def test_a_long_thread_is_flagged_once_per_session(self):
         self.write(260_000)
-        self.assertIn("write a handoff", self.run_hook())
+        self.assertIn("olivercode handoff write", self.run_hook())
         self.assertEqual("", self.run_hook())
-        self.assertIn("write a handoff", self.run_hook(session="s2"))
+        self.assertIn("olivercode handoff write", self.run_hook(session="s2"))
 
     def test_a_short_thread_and_a_headless_builder_get_nothing(self):
         self.write(200_000)

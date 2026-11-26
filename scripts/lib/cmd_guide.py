@@ -69,7 +69,7 @@ COMMAND_SETS = (
     ("Check and maintain your setup", "health · maintain · limits · place · clean"),
     ("Build and deliver work", "run · dispatch · drain · watch · land · promote · wip · validated · queue · worktree"),
     ("Manage stories and boards", "backlog-setup · board groom · board sync · gh-limit · gated"),
-    ("Keep track of work", "status · status digest · owner · decisions"),
+    ("Keep track of work", "status · status digest · owner · decisions · handoff"),
     ("Releases and documentation", "version-cut · docs-check · commit-check · guide"),
 )
 WHEN_TO_USE = (

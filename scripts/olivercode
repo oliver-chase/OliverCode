@@ -50,6 +50,7 @@ from lib.gated import command_gated  # noqa: E402
 from lib.cmd_fleetsync import command_fleet_sync  # noqa: E402
 from lib.cmd_initfleet import command_init_fleet  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
+from lib.cmd_handoff import command_handoff  # noqa: E402
 from lib.cmd_owner import command_owner  # noqa: E402
 from lib.cmd_rule import command_rule  # noqa: E402
 from lib.decisions import command_decisions  # noqa: E402
@@ -149,6 +150,8 @@ def main() -> int:
         return command_decisions(argv)
     if cmd == "fleet-sync":
         return command_fleet_sync(argv)
+    if cmd == "handoff":
+        return command_handoff(argv)
     if cmd == "limits":
         return command_limits(argv)
     if cmd == "init-fleet":
