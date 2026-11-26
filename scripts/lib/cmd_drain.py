@@ -212,7 +212,13 @@ class Io:
             raise RuntimeError("; ".join(problems))
         return path
 
-    def cancel_requested(self, n: int) -> bool:\n        return run_lock.cancel_requested(self.slug, n)\n\n    def clear_cancel(self, n: int) -> bool:\n        return run_lock.clear_cancel(self.slug, n)\n\n    def build(self, issue: dict, worktree: Path, note: str) -> dict:
+    def cancel_requested(self, n: int) -> bool:
+        return run_lock.cancel_requested(self.slug, n)
+
+    def clear_cancel(self, n: int) -> bool:
+        return run_lock.clear_cancel(self.slug, n)
+
+    def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names and the owner's decisions, and the
         model is the one the brief names (#1015), with a small story getting a third round (#890)."""
         n, size = issue["number"], cmd_groom.size_of(issue)
@@ -694,7 +700,14 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if message:
                     say(message)
             started = False
-            paused = run_lock.is_paused(io.slug)\n            run_lock.set_paused(io.slug, os.getpid(), paused)\n            if paused and not reported.intersection({"paused"}):\n                say("Runner paused. Existing builders are finishing; no new story will start. Run olivercode resume REPO to continue.")\n                reported.add("paused")\n            if not paused:\n                reported.discard("paused")\n            for issue in ([] if paused or state.get("restart") or state.get("api_error_stop") else todo):  # stop starting work after runner changes or repeated API failure
+            paused = run_lock.is_paused(io.slug)
+            run_lock.set_paused(io.slug, os.getpid(), paused)
+            if paused and "paused" not in reported:
+                say("Runner paused. Existing builders are finishing; no new story will start. Run olivercode resume REPO to continue.")
+                reported.add("paused")
+            if not paused:
+                reported.discard("paused")
+            for issue in ([] if paused or state.get("restart") or state.get("api_error_stop") else todo):
                 if len(running) >= io.capacity():
                     break
                 if io.claimed(issue):
