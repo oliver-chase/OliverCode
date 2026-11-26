@@ -219,8 +219,7 @@ def _health_html(snap: dict) -> str:
 def dashboard_html(snap: dict) -> str:
     """City: a narrative operating view, readable expansions and grounded comparisons."""
     runner, nums = snap["runner"], snap["numbers"]
-    state = "Running" if runner["building"] else "Idle"
-    pill = f'<span class="pill {"good" if runner["building"] else ""}">{state}</span>'
+    pill = f'<span class="pill {"good" if runner["building"] else ""}">{"Running" if runner["building"] else "Idle"}</span>'
     latest = f'<p class="note">Latest delivery: <b>#{esc(snap["latest"]["number"])} {esc(snap["latest"]["title"])}</b></p>' if snap.get("latest") else ""
     if nums.get("tokens_per_closed") is not None:
         cost = (_money(nums.get("cost_per_closed")), f"~{_millions(nums['tokens_per_closed'])} tokens per delivered story")
@@ -236,21 +235,26 @@ def dashboard_html(snap: dict) -> str:
     benchmark = f'To shrink the queue, delivery must exceed incoming work ({snap["opened"]} added this week; at least {snap["opened"] + 1} deliveries).' if snap["opened"] else "No new stories arrived this week; any delivery reduces the queue."
     daily = "".join(f'<li>{esc(d["day"])}: {d["closed"]} delivered · {d["opened"]} added</li>' for d in snap["days"])
     next_up = f'<p><b>Next up:</b> {esc(snap["ready"])}</p>' if snap["ready"] else ""
+    cards = "".join([
+        _card("Stories in the queue", str(snap["open"]), f'{len(snap["today"])} delivered today'),
+        _card("Waiting on you", str(snap["waiting"]), "decisions, approvals or fixes"),
+        _card("Cost per delivery", cost[0], cost[1]),
+        _card("Delivered today", str(len(snap["today"])), f'{snap["today_tokens"]:,} tokens · {_money(snap["today_cost"])}'),
+    ])
+    flow = (
+        f'<div class="flow"><div><span class="label">Delivered</span><strong>{snap["closed"]}</strong><span class="note">this week</span></div>'
+        f'<div><span class="label">Added</span><strong>{snap["opened"]}</strong><span class="note">this week</span></div>'
+        f'<div class="{"positive" if net >= 0 else "negative"}"><span class="label">{esc(net_label)}</span><strong>{net:+}</strong><span class="note">stories · 7 days</span></div></div>'
+    )
     return (
         f'<div class="eyebrow">OliverCode · Live operating picture</div><h1>OliverCode City</h1>'
         f'<p class="lede">{esc(summary_line(snap))} <span class="sub">Updated {esc(snap["now"].strftime("%A, %H:%M"))}.</span></p>'
-        f'<div class="cards">{_card("Stories in the queue", str(snap["open"]), f"{len(snap["today"])} delivered today")}'
-        f'{_card("Waiting on you", str(snap["waiting"]), "decisions, approvals or fixes")}'
-        f'{_card("Cost per delivery", cost[0], cost[1])}'
-        f'{_card("Delivered today", str(len(snap["today"])), f"{snap["today_tokens"]:,} tokens · {_money(snap["today_cost"])}")}</div>'
+        f'<div class="cards">{cards}</div>'
         f'<section><h2>What needs your attention</h2><p class="section-intro">Owner decisions come first. They are the work only you can unblock.</p>{_attention_html(snap)}</section>'
         f'<section><h2>Work underway</h2><div class="card"><div>{pill} <b>{runner["building"]} of {allowed} builder slots in use</b></div>{meter}{load}'
         f'<p>{esc("Nothing is building at the moment." if not runner["building"] else "Stories are moving through the runner.")}</p>{next_up}{latest}</div></section>'
         f'<section><h2>Delivery pace</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>'
-        f'{_bars(snap["days"])}<div class="legend"><span>Added</span><span class="delivered">Delivered</span></div>'
-        f'<div class="flow"><div><span class="label">Delivered</span><strong>{snap["closed"]}</strong><span class="note">this week</span></div>'
-        f'<div><span class="label">Added</span><strong>{snap["opened"]}</strong><span class="note">this week</span></div>'
-        f'<div class="{"positive" if net >= 0 else "negative"}"><span class="label">{esc(net_label)}</span><strong>{net:+}</strong><span class="note">stories · 7 days</span></div></div>'
+        f'{_bars(snap["days"])}<div class="legend"><span>Added</span><span class="delivered">Delivered</span></div>{flow}'
         f'<p class="note">{esc(pace)}. {esc(ratio)}. {esc(benchmark)}</p>'
         f'<details><summary><span class="summary-title">Daily breakdown</span><span class="summary-meta">7-day view</span></summary><div class="expansion"><ul>{daily}</ul></div></details>'
         f'<p class="note">Benchmark: deliveries need to stay ahead of incoming work to reduce backlog. This compares with your own queue, not an industry target.</p></div></section>'
