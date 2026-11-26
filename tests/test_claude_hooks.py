@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -326,6 +326,42 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertFalse(any("denial_watch" in c for c in commands))
         self.assertNotIn("denial_watch.py", [n for _, _, n in claude_settings.MANAGED])
         self.assertTrue((claude_settings.HOOKS_DIR / "denial_watch.py").is_file())
+
+    def test_a_missing_script_exits_0_silently_and_a_present_one_runs_as_before(self):
+        root = temp_dir(self, "olivercode-failopen-", resolve=True)
+        hooks = root / "dir with space" / "scripts" / "hooks"
+        hooks.mkdir(parents=True)
+        script = hooks / "gh_watch.py"
+        script.write_text("import sys\nprint('got ' + sys.stdin.read())\nsys.exit(3)\n")
+        cmd = claude_settings._command("gh_watch.py", hooks)
+        run = lambda: subprocess.run(cmd, shell=True, input="hello", capture_output=True, text=True)
+        ran = run()
+        self.assertEqual((3, "got hello\n"), (ran.returncode, ran.stdout))
+        script.unlink()
+        gone = run()
+        self.assertEqual((0, "", ""), (gone.returncode, gone.stdout, gone.stderr))
+
+    def test_an_old_form_entry_is_recognised_and_replaced_not_duplicated(self):
+        hooks = Path("/oc/scripts/hooks")
+        old = {"type": "command", "command": 'python3 "/oc/scripts/hooks/gh_watch.py"'}
+        merged = claude_settings.merge({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [old]}]}}, hooks)
+        commands = [h["command"] for g in merged["hooks"]["PostToolUse"] for h in g["hooks"]]
+        self.assertEqual([claude_settings._command("gh_watch.py", hooks)], commands)
+        self.assertIn("gh_watch.py", claude_settings.missing(Path("/nowhere.json"), hooks))
+        self.assertEqual([], claude_settings.missing_for(merged, hooks) if hasattr(claude_settings, "missing_for") else [])
+        self.assertEqual(claude_settings.without(merged).get("hooks"), None)
+
+    def test_dead_names_a_new_form_entry_and_health_reports_it_without_the_instruction_link(self):
+        from lib import cmd_health
+        home = temp_dir(self, "olivercode-deadhome-", resolve=True)
+        (home / ".claude").mkdir()
+        cmd = claude_settings._command("session_check.py", home / "scripts" / "hooks")
+        (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": cmd}]}]}}))
+        self.assertEqual([cmd], claude_settings.dead(home / ".claude" / "settings.json"))
+        with mock.patch.object(Path, "home", staticmethod(lambda: home)), mock.patch.dict(os.environ, {"HOME": str(home)}):
+            out = quiet(cmd_health.command_health)[1]
+        self.assertFalse((home / ".claude" / "CLAUDE.md").exists())
+        self.assertRegex(out, r"\[FAIL\].*do not exist.*session_check\.py")
 
     def test_dead_names_a_managed_entry_whose_script_does_not_exist(self):
         root = temp_dir(self, "olivercode-dead-", resolve=True)

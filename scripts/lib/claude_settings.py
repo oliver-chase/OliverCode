@@ -121,14 +121,19 @@ def automode_block() -> str:
     return json.dumps({"autoMode": {k: [DEFAULTS, *v] for k, v in AUTOMODE.items()}}, indent=2)
 
 
+# The runner every entry uses: exit 0 and do nothing when the script file is gone, since python's exit 2 on a missing
+# file would block the prompt or tool call it hooks (#1270). Otherwise exec python3, so stdin, stdout and the exit code pass through.
+_RUN = """sh -c 'test -f "$0" || exit 0; exec python3 "$0"'"""
+
+
 def _command(script: str, hooks_dir: Path) -> str:
-    return f'python3 "{hooks_dir / script}"'
+    return f'{_RUN} "{hooks_dir / script}"'
 
 
-# The exact form _command() writes, from any checkout path. It is the only form install has
-# ever written, so nothing looser is needed to recognise an older install.
+# The form _command() writes, or the older `python3 "<path>"` an earlier install wrote, from any checkout path.
+_RUNNER = rf'(?:{re.escape(_RUN)}|python3)'
 _MANAGED_COMMAND = re.compile(
-    r'python3 "(.+)/scripts/hooks/(' + "|".join(re.escape(s) for s in [m[2] for m in MANAGED] + list(RETIRED)) + r')"')
+    _RUNNER + r' "(.+)/scripts/hooks/(' + "|".join(re.escape(s) for s in [m[2] for m in MANAGED] + list(RETIRED)) + r')"')
 
 
 def _is_managed(handler: dict) -> bool:
@@ -149,12 +154,13 @@ def _check_shape(settings) -> None:
 
 
 def _is_dead(handler: dict, hooks_dir: Path) -> bool:
-    """True for an entry in the exact form `_command()` writes for this checkout whose script is gone."""
+    """True for an entry in either form `_command()` has written for this checkout whose script is gone."""
     cmd = handler.get("command", "") if isinstance(handler, dict) else ""
-    prefix = f'python3 "{hooks_dir}/'
-    if not (isinstance(cmd, str) and cmd.startswith(prefix) and cmd.endswith('"')):
+    m = re.fullmatch(_RUNNER + r' "(.*)"', cmd) if isinstance(cmd, str) else None
+    prefix = f"{hooks_dir}/"
+    if not (m and m.group(1).startswith(prefix)):
         return False
-    script = cmd[len(prefix):-1]
+    script = m.group(1)[len(prefix):]
     return bool(script) and "/" not in script and '"' not in script and not (hooks_dir / script).exists()
 
 
@@ -246,7 +252,7 @@ def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
         current = {}
     present = {h.get("command") for groups in (current.get("hooks") or {}).values()
                for g in groups for h in g.get("hooks", []) if isinstance(h, dict)}
-    return [script for _, _, script in MANAGED if _command(script, hooks_dir) not in present]
+    return [script for _, _, script in MANAGED if _command(script, hooks_dir) not in present]  # an old-form entry counts as missing, so install rewrites it
 
 
 def install(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> str:
