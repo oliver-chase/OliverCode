@@ -161,6 +161,14 @@ class TestDispatch(DispatchCase):
         self.assertEqual((code, io.steps), (1, []))
         self.assertIn("names the folder scripts/lib", out)
 
+    def test_it_refuses_an_l_or_xl_story_for_splitting(self):
+        """#1307: a large story is split into S and M stories before dispatch builds it."""
+        for size in ("L", "XL"):
+            code, out, io = self.run_dispatch(story={**STORY, "body": f"Do it.\nSize: {size}.\nFiles area: scripts/lib/x.py"})
+            self.assertEqual(1, code)
+            self.assertIn("needs splitting into S and M stories", out)
+            self.assertEqual([], io.steps)
+
     def test_it_refuses_a_closed_story_and_a_claimed_story(self):
         code, out, io = self.run_dispatch(story={**STORY, "state": "CLOSED"})
         self.assertEqual((code, io.steps), (1, []))

@@ -33,6 +33,7 @@ HEADLESS_RULES = """Builder rules:
 - Read an issue and its comments over REST with `gh api repos/OWNER/REPO/issues/N` and `.../issues/N/comments`, which spend no GraphQL points. `gh issue` and `gh project` spend the shared 5,000-point GraphQL hour
 - {model}. When you wait for a result, end your turn and never poll
 - Reuse before you write: check in order whether the code needs to exist, already exists here, is in the standard library, is in an installed dependency, or fits one line. Write the minimum only after that
+- Extend the function or file the story names, remove what the change makes dead, and add no module, command, file or config the story does not ask for
 - A deliberate shortcut gets a comment `shortcut: <limit>, <when to upgrade>`, which the audit lists as debt and never flags as over-engineering
 - Report the branch and the commits
 - Start no session. When you need a decision, choose the option you recommend and write the reason in the commit message"""
@@ -245,6 +246,8 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
         return _refuse(f"story #{n} names no files area, so it is not dispatched. Rewrite it with a `Files area:` line.")
     if wide := intake.folders(intake.files_area(story.get("body") or ""), repo):
         return _refuse(f"story #{n}'s Files area names the folder {wide[0]}, which would hold every other story back. Rewrite it with the files it changes.")
+    if _too_large(story):
+        return _refuse(f"story #{n} {_too_large(story)}.")
     agent = sid or "dispatch"
     worktree = placement_config().worktrees / f"{repo.name}-{n}"
     if dry:
@@ -268,13 +271,20 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
                 queued = run_lock.release(slug, pid)  # stories other threads queued meanwhile run next, in priority order
                 if not queued:
                     break
-                stories = [st for st, why in (read_story(runner, slug, q) for q in queued) if not why and st.get("state", "").upper() == "OPEN"]
+                stories = [st for st, why in (read_story(runner, slug, q) for q in queued) if not why and st.get("state", "").upper() == "OPEN" and not _too_large(st)]
                 for nxt in sorted(stories, key=open_issues.rank):
                     if not live_claim(runner, slug, nxt["number"], nxt, clock()):
                         _build(io, cmd_drain, nxt, nxt["number"], placement_config().worktrees / f"{repo.name}-{nxt['number']}")
             return code
     finally:
         run_lock.release(slug, pid)
+
+
+def _too_large(story: dict) -> str:
+    """Why an L or XL story is not built (#1307), or '' when its size allows it."""
+    from lib import cmd_groom
+    size = cmd_groom.size_of(story)
+    return f"has Size {size}, so it needs splitting into S and M stories" if size in ("L", "XL") else ""
 
 
 def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> int:

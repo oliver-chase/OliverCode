@@ -43,6 +43,8 @@ def skip_reason(issue: dict, repo: Path | None = None) -> str:
         return f"its board Status is {issue.get('status') or 'empty'}, not Ready"
     if not issue.get("size"):
         return "it has no Size on the board"
+    if str(issue["size"]).strip().upper() in ("L", "XL"):
+        return f"its Size is {issue['size']}, so it needs splitting into S and M stories"
     area = intake.files_area(issue.get("body") or "")
     if not area:
         return "it names no Files area"
