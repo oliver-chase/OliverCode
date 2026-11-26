@@ -82,22 +82,26 @@ class Lease:
         self.release()
 
 
-def _attempt(session: str) -> int:
-    """The invocation count for this session label, persisted across runner restarts."""
-    count = 0
+def _write_start(row: dict) -> bool:
+    """Atomically assign an invocation number and persist its start record."""
     path = failure_log.home() / LOG
     try:
-        with path.open(encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    row = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-                if isinstance(row, dict) and row.get("event") == "session_start" and row.get("session") == session:
-                    count += 1
+        with failure_log.locked(path):
+            count = 0
+            if path.is_file():
+                with path.open(encoding="utf-8", errors="replace") as fh:
+                    for line in fh:
+                        try:
+                            previous = json.loads(line)
+                        except (ValueError, TypeError):
+                            continue
+                        if isinstance(previous, dict) and previous.get("event") == "session_start" and previous.get("session") == row.get("session"):
+                            count += 1
+            row["attempt"] = count + 1
+            failure_log.append_private(path, json.dumps(row, separators=(",", ":")) + "\\n")
+        return True
     except OSError:
-        pass
-    return count + 1
+        return False
 
 
 def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool = False, wait_seconds: float = 0.25) -> Lease:
@@ -117,9 +121,9 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
             started_epoch = time.time()
             metadata = {"event": "session_start", "session": session, "session_id": session_id,
                         "model": model or "", "repo": Path(cwd).name, "started_at": _stamp(),
-                        "slot": n, "cap": cap, "attempt": _attempt(session), "active_sessions": _active(slot_dir, cap),
+                        "slot": n, "cap": cap, "active_sessions": _active(slot_dir, cap),
                         "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
-            if not _write(metadata):
+            if not _write_start(metadata):
                 fcntl.flock(fd, fcntl.LOCK_UN)
                 os.close(fd)
                 raise RuntimeError("Claude session refused: durable session-start telemetry could not be written.")
