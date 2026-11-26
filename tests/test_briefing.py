@@ -71,6 +71,8 @@ class DashboardCase(unittest.TestCase):
         self.assertIn("within $6.00 budget", page)
         self.assertIn("--accent:#a99be8", briefing.STYLE)
         self.assertIn("--lavender:#f0edff", briefing.STYLE)
+        self.assertIn('font:16px/1.65 Georgia,"Times New Roman",serif', briefing.STYLE)
+        self.assertNotIn("-apple-system", briefing.STYLE)
         self.assertNotIn("prefers-color-scheme:dark", briefing.STYLE)
         self.assertIn("Why it matters", page)
         self.assertIn("What to do", page)
