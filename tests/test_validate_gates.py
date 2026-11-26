@@ -126,6 +126,8 @@ class ParallelGates(unittest.TestCase):
         self.assertFalse(hasattr(validate_gates, "default_retries"))
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": "3"}):
             self.assertEqual(3, validate_gates.default_max_gates())
+        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": "10"}):
+            self.assertEqual(4, validate_gates.default_max_gates())
 
     def test_validate_sh_lists_each_gate_once_and_runs_one_by_name(self):
         text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
@@ -244,9 +246,11 @@ class SmokeRunner(unittest.TestCase):
 
     def test_parallelism_comes_from_the_core_count_and_can_be_overridden(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": ""}), mock.patch("os.cpu_count", return_value=12):
-            self.assertEqual(12, smoke_runner.jobs())
+            self.assertEqual(4, smoke_runner.jobs())
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": "3"}):
             self.assertEqual(3, smoke_runner.jobs())
+        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_JOBS": "10"}):
+            self.assertEqual(4, smoke_runner.jobs())
 
     def test_changed_files_select_only_the_modules_that_cover_them(self):
         """#1142: a round check narrows to the modules that import or name a changed file, and names which it picked."""
