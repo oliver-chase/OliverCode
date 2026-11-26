@@ -52,8 +52,8 @@ SYSTEM = ("When you wait for a result, end your turn and never poll: every wait 
           "change your approach and never look for a way around a gate. End with one short summary.")
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
                  "and change nothing. Read or search the worktree only to settle a point the diff alone cannot.")
-READER_TOOLS = "Read"  # read-only, so the reader can open the file a diff calls into (#1079)
-READER_TURNS = 1  # one bounded review turn, matching the Nov 23 review budget
+READER_TOOLS = "Read,Grep,Glob"  # read-only, so the reader can open the file a diff calls into (#1079)
+READER_TURNS = 10  # enough for a few lookups and the answer; a one-turn reader could never open a file (#1079)
 
 
 NO_VALIDATION_FIX = "add scripts/validate.sh, or an npm validate or check script, and name it in the repo's CLAUDE.md."
@@ -105,7 +105,6 @@ def validate(cwd: str | Path) -> tuple[bool, str]:
     except subprocess.TimeoutExpired:
         return False, f"Validation ran past {VALIDATE_TIMEOUT} seconds and was stopped."
     return ran.returncode == 0, gate_tail(ran.stdout + ran.stderr)
-
 
 
 def gate_tail(output: str) -> str:
