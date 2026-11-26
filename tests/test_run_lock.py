@@ -37,6 +37,26 @@ class LockCase(unittest.TestCase):
 
 
 class TestRunLock(LockCase):
+
+    def test_pause_and_resume_markers_are_persistent_and_idempotent(self):
+        slug = "o/r"
+        self.assertFalse(run_lock.is_paused(slug))
+        run_lock.pause(slug)
+        self.assertTrue(run_lock.is_paused(slug))
+        self.assertTrue(run_lock.resume(slug))
+        self.assertFalse(run_lock.resume(slug))
+        self.assertFalse(run_lock.is_paused(slug))
+
+    def test_cancel_marker_can_be_requested_checked_and_cleared_per_story(self):
+        slug = "o/r"
+        self.assertFalse(run_lock.cancel_requested(slug, 7))
+        run_lock.request_cancel(slug, 7)
+        self.assertTrue(run_lock.cancel_requested(slug, 7))
+        self.assertTrue(run_lock.clear_cancel(slug, 7))
+        self.assertFalse(run_lock.clear_cancel(slug, 7))
+        self.assertFalse(run_lock.cancel_requested(slug, 7))
+        self.assertFalse(run_lock.cancel_requested(slug, 8))
+
     def test_a_second_run_starts_no_builder_and_its_stories_join_the_queue(self):
         self.assertEqual(({}, {}, ""), self.acquire("drain r", 111))
         run_lock.beat("o/r", 111, NOW + 5, [42])
