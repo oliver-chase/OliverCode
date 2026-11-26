@@ -463,8 +463,9 @@ def _usage_analytics(log: list[dict], now: float) -> str:
     mix_rows = [(f"{count} model type{'s' if count != 1 else ''}", amount, str(amount) + " stories")
                 for count, amount in sorted(model_mix.items())]
     top_models = [(name, count, f"{count} stories") for name, count in model_distribution]
+    avg_time_label = "not recorded" if avg_time is None else f"{avg_time:.0f} min"
     cards = (f'<div class="usage-kpis"><div><span>Average cost per story</span><strong>{_money(avg_cost)}</strong></div>'
-             f'<div><span>Average elapsed time</span><strong>{"not recorded" if avg_time is None else f"{avg_time:.0f} min"}</strong></div>'
+             f'<div><span>Average elapsed time</span><strong>{avg_time_label}</strong></div>'
              f'<div><span>Model types used</span><strong>{len(by_model)}</strong></div>'
              f'<div><span>Stories measured</span><strong>{len(landed)}</strong></div></div>')
     charts = _bar_rows("Daily token use", daily_tokens, "Desktop chat and runner-builder input/context tokens, combined.")
@@ -560,7 +561,7 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             f'{"" if panel else "<h1>OliverCode City</h1>"}<p id="published" class="warn"></p>'
             f'{_usage_analytics(log, now)}'
             f'<details class="owner-detail" style="margin-top:32px"><summary>Owner actions and system details</summary><p class="muted">This machine: {html.escape(platform.node())}. Last rewritten '
-            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body}</details>{SCRIPT}</main></body></html>')
+            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body if not panel else ""}</details>{SCRIPT}</main></body></html>')
 
 
 def _owner_steps() -> list[dict]:
