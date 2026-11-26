@@ -4,7 +4,7 @@
 
 Usage:
     check_board_hygiene.py --config path/to/backlog-config.json                       # every dimension
-    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, close-gate, board-reopens, groom
+    check_board_hygiene.py --config CFG --dimension X [--dimension Y]  # only these: fields, drift, duplicates, board-reopens, groom
     check_board_hygiene.py --config CFG --verify-config  # stop after the fork and placeholder checks, touching nothing
     check_board_hygiene.py --config CFG --verify-baseline [--fields-file F]  # compare the board's fields with shared/kanban-baseline.json
 The config is the `docs/backlog-config.json` of the repo whose board you check. This script only reads.
@@ -173,53 +173,6 @@ def check_duplicate_cards(items):
     return problems
 
 
-def closed_as_not_planned(repo, number, runner):
-    """True when GitHub records the issue as closed not planned. A duplicate is closed that way once its findings moved
-    to a surviving story, so it has no evidence comment by design (#1074). Raises RuntimeError on a failed read."""
-    result = runner([f"repos/{repo}/issues/{number}", "--jq", ".state_reason"])
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or "gh api failed").strip())
-    return result.stdout.strip() == "not_planned"
-
-
-def unproven_closes(items, config, finished="Complete", runner=gh_api):
-    """[(number, title)] for each finished item of the config's own repo numbered at or above `closeGateFromIssue` that
-    has no comment holding the line complete_story.py ends its evidence with. A story closed through the REST API,
-    `gh issue close` or the web has none, and skipped the QA, live and hook or job checks (#836). An issue closed as not
-    planned is a duplicate whose findings moved to a surviving story, so it is skipped (#1074). A null or absent key
-    switches the check off, and a failed read exits so a cut-short read can never pass as clean."""
-    start = config.get("closeGateFromIssue")
-    if start is None:
-        return []
-    if isinstance(start, bool) or not isinstance(start, int):
-        sys.exit(f"closeGateFromIssue must be an issue number or null, not {start!r}")
-    own = f"{config['repoOwner']}/{config['repoName']}"
-    found = []
-    for i in items:
-        c = i.get("content", {})
-        number = c.get("number")
-        if i.get("status") != finished or not number or number < start:
-            continue
-        if (c.get("repository") or own).lower() != own.lower():
-            continue
-        if field(i, "work type") == "Epic":  # groom closes an epic once its stories close, with no evidence of its own (#1105)
-            continue
-        try:
-            if closed_as_not_planned(own, number, runner):
-                continue
-            data, _ = cs.fetch(own, number, runner)
-        except (RuntimeError, ValueError) as exc:
-            sys.exit(f"cannot read #{number} to check how it closed: {exc}")
-        bodies = cs.flatten(data)
-        # The OliverCode close protocol applies only to work claimed by an OliverCode builder.
-        # External agents may close issues without OliverCode's action log or completion marker.
-        if not any((action := cs.parse_action(body)) and action[1] == "builder" for body in bodies):
-            continue
-        if not cs.closed_by_script(data):
-            found.append((number, c.get("title", "")))
-    return found
-
-
 def half_closes(items, states, repo, runner=gh_api):
     """[number] of each OPEN story whose card is In Progress and whose last comment ends with the line complete_story.py closes with (#1202).
     complete_story.py died after that comment and before the close, so the sweep finishes the close. A comment that only quotes the line
@@ -238,12 +191,6 @@ def half_closes(items, states, repo, runner=gh_api):
             found.append(number)
     return found
 
-
-def check_close_gate(items, config, finished="Complete", runner=gh_api):
-    """Report missing OliverCode completion evidence without directing anyone to reverse an owner closure."""
-    return [f"#{number} \"{title[:50]}\": closed without OliverCode completion evidence. "
-            "Owner decision is preserved; review the run evidence if OliverCode is expected to have completed this story."
-            for number, title in unproven_closes(items, config, finished, runner)]
 
 
 EPIC_CHUNK = 25
@@ -387,7 +334,7 @@ def load_config(path):
     return config
 
 
-DIMENSIONS = ["fields", "drift", "duplicates", "groom", "close-gate", "board-reopens"]
+DIMENSIONS = ["fields", "drift", "duplicates", "groom", "board-reopens"]
 
 
 def wanted(selected, name):
@@ -431,8 +378,6 @@ def main():
         checks.append(("status-drift", lambda: check_status_drift(items, config, finished)))
     if wanted(args.dimension, "duplicates"):
         checks.append(("duplicate-cards", lambda: check_duplicate_cards(items)))
-    if wanted(args.dimension, "close-gate"):
-        checks.append(("close-gate", lambda: check_close_gate(items, config, finished)))
     if wanted(args.dimension, "board-reopens"):
         checks.append(("board-reopens", lambda: check_board_reopens(config)))
     if wanted(args.dimension, "groom"):
