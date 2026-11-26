@@ -260,11 +260,18 @@ def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
     if net_code <= 0:
         excess_removed, excess_added = [], []
         for path in set(removed) | set(added):
-            old, new = removed.get(path, []), added.get(path, [])
-            if len(old) > len(new):
-                excess_removed.extend((path, *item) for item in old[len(new):])
-            elif len(new) > len(old):
-                excess_added.extend((path, *item) for item in new[len(old):])
+            old, new = list(removed.get(path, [])), list(added.get(path, []))
+            # Exact unchanged assertions are paired first. A remaining same-file
+            # edit keeps the previous net-count behavior (a one-for-one rewrite
+            # is not a weakening); only the excess can be considered moved/lost.
+            for item in list(old):
+                if item in new:
+                    old.remove(item)
+                    new.remove(item)
+            paired = min(len(old), len(new))
+            old, new = old[paired:], new[paired:]
+            excess_removed.extend((path, *item) for item in old)
+            excess_added.extend((path, *item) for item in new)
         unmatched_by_text = {}
         for path, line, text in excess_removed:
             unmatched_by_text.setdefault(text, []).append((path, line))
@@ -279,6 +286,7 @@ def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
         found += [f"{path}:{min(lines)} removes {len(lines)} assertion(s) without removing the code they cover"
                   for path, lines in unmatched.items()]
     return found
+
 def _scope_refusal(wt: Path, base: str, area: list[str], story: str, log) -> str:
     """The result word when the commit must not land because it weakens a test, or "" when it may (#1073). A file outside the story's Files area
     is named in the log and on the story and still lands: a refusal made every restart repeat the same edit until the story ran out of restarts,
