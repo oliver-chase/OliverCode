@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,8 @@ session_check = load_script("scripts/hooks/session_check.py", "session_check_lan
 from lib import cmd_land, maintain, validated  # noqa: E402
 
 REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
+
+REAL_RUN = subprocess.run
 
 
 class Base(unittest.TestCase):
@@ -661,6 +664,101 @@ class TestWeakenedTests(unittest.TestCase):
         diff = ("diff --git a/tests/test_gone.py b/tests/test_gone.py\n--- a/tests/test_gone.py\n+++ /dev/null\n@@ -1,1 +0,0 @@\n"
                 "-        self.assertEqual(1, f())\n")
         self.assertEqual(["tests/test_gone.py:1 removes 1 assertion(s) without removing the code they cover"], cmd_land.weakened(cmd_land._changed_lines(diff)))
+
+
+class TestPromote(Base):
+    """`olivercode promote` squashes staging onto main after one validation, merges main back and labels the stories (#1305)."""
+
+    def setUp(self):
+        super().setUp()
+        git(self.main, "push", "-q", "origin", "main:staging")
+        git(self.main, "checkout", "-q", "-b", "stg", "origin/staging")
+        for n in ("5", "6"):
+            (self.main / f"s{n}.txt").write_text(n)
+            git(self.main, "add", "."); git(self.main, "commit", "-q", "-m", f"Story {n} (#{n})")
+        git(self.main, "push", "-q", "origin", "stg:staging")
+        self.results, self.labels, self.runs = [True, True, True], [], []
+
+        def validate(wt, quick=False):
+            self.runs.append(quick)
+            return self.results.pop(0), "gate 'tests' failed"
+
+        def run(argv, *a, **kw):
+            if argv[:2] == ["gh", "api"]:
+                self.labels.append(argv[2])
+                return mock.Mock(returncode=0, stdout="", stderr="")
+            return REAL_RUN(argv, *a, **kw)
+
+        for p in (mock.patch.object(cmd_land.local_config, "setting", return_value="staging"),
+                  mock.patch.object(cmd_land.agent_loop, "is_engine_repo", return_value=True),
+                  mock.patch.object(cmd_land.agent_loop, "validate", side_effect=validate),
+                  mock.patch.object(cmd_land.run_lock, "active", return_value={}),
+                  mock.patch.object(cmd_land, "_story_slug", return_value="o/r"),
+                  mock.patch.object(cmd_land.subprocess, "run", side_effect=run)):
+            p.start(); self.addCleanup(p.stop)
+
+    def promote(self, staging_seconds=10):
+        ticks = iter([0, 10, 10, 10 + staging_seconds])
+        with mock.patch.object(cmd_land.time, "monotonic", side_effect=lambda: next(ticks)):
+            return quiet(cmd_land.promote, self.main)
+
+    def sha(self, ref):
+        return git(self.main, "rev-parse", ref).stdout.strip()
+
+    def test_promote_pushes_one_commit_merges_back_and_labels(self):
+        before = self.sha("origin/main")
+        code, out = self.promote()
+        git(self.main, "fetch", "-q", "origin")
+        self.assertEqual(0, code, out)
+        self.assertEqual([before], git(self.main, "rev-list", "--parents", "-n1", "origin/main").stdout.split()[1:])
+        self.assertIn("(#5)", git(self.main, "log", "-1", "--format=%B", "origin/main").stdout.replace("Story 5 (#5)", "(#5)"))
+        subject = git(self.main, "log", "-1", "--format=%s", "origin/main").stdout
+        self.assertIn("#5, #6", subject)
+        self.assertEqual("", git(self.main, "diff", "origin/main", "origin/staging").stdout)
+        self.assertEqual(0, git(self.main, "merge-base", "--is-ancestor", "origin/main", "origin/staging", check=False).returncode)
+        self.assertEqual(["repos/o/r/issues/5/labels", "repos/o/r/issues/6/labels"], self.labels)
+        self.assertEqual([True, True, False], self.runs)
+
+    def test_second_promote_names_only_new_stories(self):
+        self.assertEqual(0, self.promote()[0])
+        self.assertEqual(0, self.promote()[0])  # nothing new, so nothing pushed
+        self.assertEqual(2, len(self.labels))
+        git(self.main, "fetch", "-q", "origin")
+        git(self.main, "checkout", "-q", "-B", "stg", "origin/staging")
+        (self.main / "s7.txt").write_text("7")
+        git(self.main, "add", "."); git(self.main, "commit", "-q", "-m", "Story 7 (#7)")
+        git(self.main, "push", "-q", "origin", "stg:staging")
+        self.results = [True, True, True]
+        code, out = self.promote()
+        git(self.main, "fetch", "-q", "origin")
+        self.assertEqual(0, code, out)
+        self.assertIn("#7", git(self.main, "log", "-1", "--format=%s", "origin/main").stdout)
+        self.assertNotIn("#5", git(self.main, "log", "-1", "--format=%s", "origin/main").stdout)
+        self.assertEqual(["repos/o/r/issues/5/labels", "repos/o/r/issues/6/labels", "repos/o/r/issues/7/labels"], self.labels)
+
+    def test_failed_validation_changes_nothing(self):
+        main, staging = self.sha("origin/main"), self.sha("origin/staging")
+        self.results = [True, True, False]
+        code, out = self.promote()
+        git(self.main, "fetch", "-q", "origin")
+        self.assertEqual(1, code)
+        self.assertIn("gate 'tests' failed", out)
+        self.assertEqual((main, staging, []), (self.sha("origin/main"), self.sha("origin/staging"), self.labels))
+
+    def test_slower_staging_promotes_nothing_and_prints_both_times(self):
+        main = self.sha("origin/main")
+        code, out = self.promote(staging_seconds=12.5)
+        self.assertEqual(1, code)
+        self.assertIn("staging took 12s", out)
+        self.assertIn("main took 10s", out)
+        self.assertEqual(([True, True], main, []), (self.runs, self.sha("origin/main"), self.labels))
+
+    def test_a_running_drain_refuses(self):
+        with mock.patch.object(cmd_land.run_lock, "active", return_value={"pid": 1}):
+            code, out = quiet(cmd_land.promote, self.main)
+        self.assertEqual(1, code)
+        self.assertIn("drain is running", out)
+        self.assertEqual([], self.runs)
 
 
 if __name__ == "__main__":

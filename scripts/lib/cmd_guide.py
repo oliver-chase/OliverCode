@@ -67,7 +67,7 @@ def city_url() -> str:
 COMMAND_SETS = (
     ("Install and keep things up to date", "install · uninstall · update · bootstrap · sync-hooks"),
     ("Check and maintain your setup", "health · maintain · limits · place · clean"),
-    ("Build and deliver work", "run · dispatch · drain · watch · land · wip · validated · queue · worktree"),
+    ("Build and deliver work", "run · dispatch · drain · watch · land · promote · wip · validated · queue · worktree"),
     ("Manage stories and boards", "backlog-setup · board groom · board sync · gh-limit · gated"),
     ("Keep track of work", "status · status digest · owner · decisions"),
     ("Releases and documentation", "version-cut · docs-check · commit-check · guide"),

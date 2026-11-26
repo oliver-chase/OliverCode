@@ -43,7 +43,7 @@ from lib.cmd_dispatch import command_dispatch  # noqa: E402
 from lib.cmd_drain import command_drain  # noqa: E402
 from lib.cmd_board import command_board  # noqa: E402
 from lib.cmd_version import command_docs_check, command_version_cut  # noqa: E402
-from lib.cmd_land import command_land  # noqa: E402
+from lib.cmd_land import command_land, command_promote  # noqa: E402
 from lib.cmd_run import command_run  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.gated import command_gated  # noqa: E402
@@ -128,6 +128,8 @@ def main() -> int:
         return command_gated(argv)
     if cmd == "land":
         return command_land(argv)
+    if cmd == "promote":
+        return command_promote(argv)
     if cmd == "board":
         return command_board(argv)
     if cmd == "version-cut":
