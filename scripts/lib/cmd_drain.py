@@ -30,7 +30,8 @@ sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))  # the board
 
 USAGE = "Usage: olivercode drain REPO [--parallel N] [--foreground]"
 RESTARTS = 3
-FULL_WAITS = 12  # five-minute waits for another repo's run to free a builder before a full machine ends the drain (#1055)
+HOLD_WAIT_MAX = 3600  # a GitHub hold that ends within this many seconds is waited out instead of ending the run (#1314)
+FULL_WAITS = 12 # five-minute waits for another repo's run to free a builder before a full machine ends the drain (#1055)
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
 
 
@@ -500,8 +501,47 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
     waits, reported = 0, set()
     stopped = False
+    hold_waited = False
+
+    def reap(finished) -> None:
+        for fut in finished:
+            issue = running.pop(fut)
+            try:
+                closed, used = fut.result()
+            except Exception as exc:  # one crashed worker blocks its own story and the run goes on (#1011)
+                closed, used = False, 0
+                n = issue["number"]
+                say(f"Story #{n} crashed: {exc!r}")
+                for effect in (lambda: io.comment(n, f"Drain blocked: the worker crashed with {exc!r}."), lambda: io.keep_open(n), lambda: io.release(n)):
+                    try:
+                        effect()
+                    except Exception:
+                        pass
+            state["tokens"] += used
+            if closed or issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
+                (state["closed"] if closed else state["blocked"]).append(issue["number"])
+        io.beat([i["number"] for i in running.values()])
+
     try:
         while True:
+            until = gh_budget.blocked_until()
+            if until and until - time.time() <= HOLD_WAIT_MAX:  # a hold that ends within the hour is waited out, once (#1314)
+                if running:  # builders finish first, and their board writes are already queued by the hold
+                    reap(wait(running, return_when=FIRST_COMPLETED)[0])
+                    continue
+                reset = time.strftime("%H:%M", time.localtime(until))
+                if hold_waited:
+                    state["held"] = f"GitHub's rate-limit hold was still on after the reset it named, about {reset}"
+                    agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "stopped", reason=state["held"])
+                    say(f"Drain stopped: {state['held']}.")
+                    return 1
+                hold_waited = True
+                agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "waiting", reason=f"GitHub's rate-limit hold lasts until about {reset}")
+                say(f"Waiting for GitHub's rate-limit reset at about {reset}.")
+                sleep(max(0.0, until - time.time()) + 1)
+                gh_budget.replay()  # the writes queued during the hold go first
+                continue
+            hold_waited = False
             issues = io.list_open()
             if issues is None:
                 say("Drain stopped: the open stories were not read.")
@@ -540,23 +580,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     continue
                 break
             finished, _ = wait(running, return_when=FIRST_COMPLETED)
-            for fut in finished:
-                issue = running.pop(fut)
-                try:
-                    closed, used = fut.result()
-                except Exception as exc:  # one crashed worker blocks its own story and the run goes on (#1011)
-                    closed, used = False, 0
-                    n = issue["number"]
-                    say(f"Story #{n} crashed: {exc!r}")
-                    for effect in (lambda: io.comment(n, f"Drain blocked: the worker crashed with {exc!r}."), lambda: io.keep_open(n), lambda: io.release(n)):
-                        try:
-                            effect()
-                        except Exception:
-                            pass
-                state["tokens"] += used
-                if closed or issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
-                    (state["closed"] if closed else state["blocked"]).append(issue["number"])
-            io.beat([i["number"] for i in running.values()])
+            reap(finished)
     except BaseException:  # Ctrl-C or SIGTERM (#1076): the stories in flight go back to Ready and their claims go, then the stop goes on
         stopped = True
         stop_builders(io, running)
@@ -678,7 +702,8 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         run_lock.release(slug, pid)
         if ran:
             agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
-                                **({"reason": f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}."} if state.get("limited") else {}))
+                                **({"reason": f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}."} if state.get("limited")
+                                   else {"reason": f"The run stopped: {state['held']}."} if state.get("held") else {}))
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)

@@ -399,6 +399,50 @@ class DrainCase(unittest.TestCase):
         code, out, _ = self.run_drain(FakeIo([]))
         self.assertEqual(out.strip(), "Drain done: 0 stories closed, 0 blocked, 0 sessions, 0 tokens.")
 
+    def hold_clock(self, io, holds):
+        """Patch the hold: `holds` is the list of epoch offsets blocked_until returns in turn (0 = free). Returns the sleeps and logged rows."""
+        naps, rows = [], []
+        offsets = list(holds)
+        def blocked(resource=""):
+            off = offsets.pop(0) if len(offsets) > 1 else offsets[0]
+            return time.time() + off if off else 0.0
+        return naps, rows, blocked
+
+    def test_a_hold_before_the_board_is_read_waits_for_the_reset_then_builds(self):  # #1314
+        io = FakeIo([issue(1)])
+        naps, rows, blocked = self.hold_clock(io, [600, 0])
+        with mock.patch.object(cmd_drain.gh_budget, "blocked_until", blocked), mock.patch.object(cmd_drain.gh_budget, "replay") as replay, \
+                mock.patch.object(cmd_drain.agent_loop, "log_stage", lambda *a, **k: rows.append((a[2], k.get("reason", "")))):
+            code, out = quiet(cmd_drain.drain, io, state(), sleep=naps.append)
+        self.assertEqual((code, io.started, [r[0] for r in rows if r[0] == "waiting"]), (0, [1], ["waiting"]))
+        self.assertTrue(590 < naps[0] < 620)
+        replay.assert_called_once()
+
+    def test_a_hold_that_starts_mid_run_lets_builders_finish_then_waits(self):  # #1314
+        io = FakeIo([issue(1), issue(2)], cap=1)
+        naps, rows, blocked = self.hold_clock(io, [0, 600, 0])
+        with mock.patch.object(cmd_drain.gh_budget, "blocked_until", blocked), mock.patch.object(cmd_drain.gh_budget, "replay"), \
+                mock.patch.object(cmd_drain.agent_loop, "log_stage", lambda *a, **k: rows.append((a[2], k.get("reason", "")))):
+            code, out = quiet(cmd_drain.drain, io, state(), sleep=naps.append)
+        self.assertEqual((code, sorted(io.started), len(naps)), (0, [1, 2], 1))
+
+    def test_a_hold_still_on_after_the_wait_stops_the_run_and_names_it(self):  # #1314
+        io = FakeIo([issue(1)])
+        naps, rows, blocked = self.hold_clock(io, [600])
+        st = state()
+        with mock.patch.object(cmd_drain.gh_budget, "blocked_until", blocked), mock.patch.object(cmd_drain.gh_budget, "replay"), \
+                mock.patch.object(cmd_drain.agent_loop, "log_stage", lambda *a, **k: rows.append((a[2], k.get("reason", "")))):
+            code, out = quiet(cmd_drain.drain, io, st, sleep=naps.append)
+        self.assertEqual((code, io.started, len(naps), [r[0] for r in rows]), (1, [], 1, ["waiting", "stopped"]))
+        self.assertIn("still on after the reset", st["held"])
+
+    def test_no_hold_means_no_waiting_row(self):  # #1314
+        io = FakeIo([issue(1)])
+        naps, rows, blocked = self.hold_clock(io, [0])
+        with mock.patch.object(cmd_drain.gh_budget, "blocked_until", blocked), mock.patch.object(cmd_drain.agent_loop, "log_stage", lambda *a, **k: rows.append(a[2])):
+            quiet(cmd_drain.drain, io, state(), sleep=naps.append)
+        self.assertEqual((naps, "waiting" in rows), ([], False))
+
     def test_unreadable_board_stops(self):
         io = FakeIo([])
         io.list_open = lambda: None
