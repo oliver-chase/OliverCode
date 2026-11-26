@@ -153,7 +153,8 @@ def story_has_unknown_cost(story: int, repo: str = "") -> bool:
                 if name != prefix and not name.startswith(prefix + "-"):
                     continue
                 repo_name = Path(repo).name
-                if repo and row.get("repo") and row.get("repo") != repo_name and not row.get("repo", "").startswith(repo_name + "-"):
+                row_repo = str(row.get("repo") or "")
+                if repo and row_repo and (row_repo != repo if "/" in row_repo or "/" in repo else row_repo != repo_name and not row_repo.startswith(repo_name + "-")):
                     continue
                 sid = str(row.get("session_id") or "")
                 if not sid:
