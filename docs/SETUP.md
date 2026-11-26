@@ -150,6 +150,10 @@ Machine-specific settings belong in the git-ignored `olivercode.local.json`; pri
 
 Clone OliverCode and your fleet repos, restore your local settings, and run the install, hook, and verification steps again. Rules and registry come back with the repos; machine paths, authentication, permissions, and plugins need to be set up on the new machine.
 
+## More detail
+
+The deeper configuration options, command behavior, runner internals, and troubleshooting notes are kept in [REFERENCE.md](REFERENCE.md) so this setup guide stays focused.
+
 ## Remove it
 
 ```bash
