@@ -1237,5 +1237,25 @@ class TestEstimateAndLandedToday(unittest.TestCase):
         self.assertEqual("", snap["runner"]["load"])
 
 
+class TestUsageVisualization(unittest.TestCase):
+    def test_chart_is_self_contained_accessible_and_keeps_exact_values(self):
+        chart = status_report._viz_chart(
+            "Cost over time",
+            [("Mon", 0.42, "$0.42"), ("Tue", None, "not recorded")],
+            "Recorded runner cost only.",
+        )
+        self.assertIn('<svg class="viz-svg"', chart)
+        self.assertIn('role="img"', chart)
+        self.assertIn("View exact values", chart)
+        self.assertIn("$0.42", chart)
+        self.assertIn("not recorded", chart)
+        self.assertIn('class="viz-missing"', chart)
+
+    def test_chart_without_recorded_values_explains_the_gap(self):
+        chart = status_report._viz_chart("Cost over time", [("Mon", None, "not recorded")])
+        self.assertIn("Not enough recorded data yet.", chart)
+        self.assertNotIn("<svg", chart)
+
+
 if __name__ == "__main__":
     unittest.main()

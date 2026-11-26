@@ -420,6 +420,58 @@ def _bar_rows(title: str, rows: list[tuple[str, float | None, str]], note: str =
     return ''.join(parts)
 
 
+
+def _viz_chart(title: str, rows: list[tuple[str, float | None, str]], note: str = "", kind: str = "line") -> str:
+    """Responsive inline-SVG chart with an exact-value table; no external assets or JavaScript."""
+    known = [float(value) for _, value, _ in rows if value is not None]
+    if not known:
+        return (f'<section class="viz-card"><h3>{html.escape(title)}</h3>'
+                f'<p class="viz-note">{html.escape(note)}</p>'
+                '<p class="viz-empty">Not enough recorded data yet.</p></section>')
+    width, height, left, right, top, bottom = 720, 236, 48, 16, 16, 42
+    plot_w, plot_h = width - left - right, height - top - bottom
+    maximum = max(known) or 1.0
+    count = len(rows)
+    step = plot_w / max(1, count - 1) if kind == "line" else plot_w / max(1, count)
+    coords = []
+    marks = []
+    for i, (label, value, shown) in enumerate(rows):
+        x = left + (i * step if kind == "line" else (i + .5) * step)
+        y = top + plot_h - (float(value) / maximum * plot_h) if value is not None else top + plot_h
+        coords.append((x, y))
+        if kind == "line":
+            if value is not None:
+                marks.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" class="viz-point"><title>{html.escape(label)}: {html.escape(shown)}</title></circle>')
+        elif value is not None:
+            bar_w = min(34, step * .48)
+            marks.append(f'<rect x="{x-bar_w/2:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{top+plot_h-y:.1f}" rx="5" class="viz-column"><title>{html.escape(label)}: {html.escape(shown)}</title></rect>')
+        else:
+            marks.append(f'<circle cx="{x:.1f}" cy="{top+plot_h-2:.1f}" r="3" class="viz-missing"/>')
+    grid = "".join(
+        f'<line x1="{left}" y1="{top + plot_h*j/3:.1f}" x2="{width-right}" y2="{top + plot_h*j/3:.1f}" class="viz-grid"/>'
+        for j in range(4)
+    )
+    labels = "".join(
+        f'<text x="{(left + (i*step if kind == "line" else (i+.5)*step)):.1f}" y="{height-12}" text-anchor="middle" class="viz-axis">{html.escape(label)}</text>'
+        for i, (label, _, _) in enumerate(rows)
+    )
+    if kind == "line":
+        valid = [(x, y) for (x, y), row in zip(coords, rows) if row[1] is not None]
+        path = " ".join(("M" if i == 0 else "L") + f" {x:.1f} {y:.1f}" for i, (x, y) in enumerate(valid))
+        area = (f'<path d="{path} L {valid[-1][0]:.1f} {top+plot_h} L {valid[0][0]:.1f} {top+plot_h} Z" class="viz-area"/>'
+                if len(valid) > 1 else "")
+        series = area + (f'<path d="{path}" class="viz-line"/>' if path else "") + "".join(marks)
+    else:
+        series = "".join(marks)
+    svg = (f'<svg class="viz-svg" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}. '
+           f'{html.escape("; ".join(f"{label}: {shown}" for label, value, shown in rows))}">'
+           f'<title>{html.escape(title)}</title>{grid}{series}{labels}</svg>')
+    data = _table(["Period", "Recorded value"], [[label, shown] for label, _, shown in rows], "No values recorded.")
+    return (f'<section class="viz-card"><div class="viz-heading"><h3>{html.escape(title)}</h3>'
+            f'<span class="viz-kind">{"TREND" if kind == "line" else "DAILY TOTAL"}</span></div>'
+            f'<p class="viz-note">{html.escape(note)}</p>{svg}'
+            f'<details class="viz-data"><summary>View exact values</summary>{data}</details></section>')
+
 def _usage_analytics(log: list[dict], now: float) -> str:
     """First-class usage and delivery view, built only from local transcripts and run-log records."""
     try:
@@ -483,15 +535,15 @@ def _usage_analytics(log: list[dict], now: float) -> str:
              f'<div><span>Average elapsed time</span><strong>{avg_time_label}</strong></div>'
              f'<div><span>Model types used</span><strong>{len(by_model)}</strong></div>'
              f'<div><span>Stories measured</span><strong>{len(measured_stories)}</strong></div></div>')
-    charts = _bar_rows("Daily token use", daily_tokens, "Desktop chat and runner-builder input/context tokens, combined.")
-    charts += _bar_rows("Cost over time", daily_cost, "Average recorded runner cost per landed story by day; work completed outside the runner is excluded.")
-    charts += _bar_rows("Average elapsed time per landed story", daily_time, "Wall-clock build time recorded by the runner.")
+    charts = _viz_chart("Daily token use", daily_tokens, "Combined desktop-chat and runner-builder tokens. This is activity volume, not a count of unique work.", "column")
+    charts += _viz_chart("Cost over time", daily_cost, "Average recorded runner cost per landed story by day. Work completed outside the runner is excluded.")
+    charts += _viz_chart("Average elapsed time per landed story", daily_time, "Wall-clock build time recorded by the runner; missing days are shown as unrecorded.")
     charts += _bar_rows("Model distribution by stories", top_models, "A story is counted once for every distinct model type used across its recorded rounds.")
     charts += _bar_rows("Tokens used by model", model_tokens, "Recorded builder input, output and cache tokens over the last seven days.")
     charts += _bar_rows("Average cost per builder round", model_cost, "Per-model round cost, not a per-story attribution.")
     charts += _bar_rows("Average model round duration", model_duration, "Recorded elapsed time per model invocation; not whole-story duration.")
     charts += _bar_rows("Model types used per story", mix_rows, "Distinct model types recorded across each landed story's rounds.")
-    parts = [f'<section class="usage"><h2>Usage &amp; delivery</h2><p class="section-intro">How much work the system is doing, what it costs, and which models are doing it. Figures reflect recorded activity; missing data stays unreported.</p>',
+    parts = [f'<section class="usage"><div class="usage-header"><div><p class="usage-kicker">SYSTEM ECONOMICS</p><h2>Usage &amp; delivery</h2><p class="section-intro">A closer look at activity, delivery efficiency and model mix. The charts show recorded patterns; the breakdown below retains the operational detail.</p></div><div class="usage-window">LAST {DAYS} DAYS<br><span>Recorded activity</span></div></div>',
              cards, '<div class="usage-charts">', charts, '</div>']
     parts.append('<details class="usage-breakdown"><summary>Daily usage details</summary>')
     pct = lambda v: "not recorded" if v is None else f"{v * 100:.0f}%"
@@ -572,6 +624,17 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             ".bar-row { display:grid; grid-template-columns:minmax(90px,1.1fr) minmax(70px,2fr) auto; gap:10px; align-items:center; margin:10px 0; font:12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
             ".bar-label { overflow-wrap:anywhere; color:var(--muted); } .bar-track { height:9px; background:#f0edf8; border-radius:8px; overflow:hidden; } .bar-fill { display:block; height:100%; background:#a99be8; border-radius:8px; } .bar-missing { display:block; width:100%; border-top:1px dashed #aaa; }"
             ".bar-row strong { font-weight:600; white-space:nowrap; } .usage-breakdown { margin-top:20px; border-top:1px solid var(--line); }"
+            ".usage { margin:42px 0 52px; padding:30px; border:1px solid #e7e2f2; border-radius:18px; background:linear-gradient(145deg,#fff 0%,#fbfaff 100%); box-shadow:0 14px 40px rgba(49,35,91,.045); }"
+            ".usage-header { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; margin-bottom:22px; } .usage-header h2 { margin:0 0 8px; font-size:clamp(28px,3vw,36px); letter-spacing:-.035em; }"
+            ".usage-kicker { margin:0 0 8px; color:#7663bd; font:700 10px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; letter-spacing:.16em; } .usage-window { flex:none; padding:9px 12px; border:1px solid #e7e2f2; border-radius:9px; color:#65549d; font:700 10px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; letter-spacing:.08em; text-align:right; } .usage-window span { color:var(--muted); font-weight:500; letter-spacing:0; }"
+            ".usage-kpis { gap:0; border:1px solid #e9e5f1; border-radius:12px; overflow:hidden; background:#fff; } .usage-kpis>div { padding:16px 18px; border-top:0; border-right:1px solid #eeeaf4; } .usage-kpis>div:last-child { border-right:0; } .usage-kpis strong { font-size:29px; letter-spacing:-.04em; }"
+            ".usage-charts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:18px; } .viz-card,.chart { min-width:0; padding:18px 18px 14px; border:1px solid #e9e5f1; border-radius:13px; background:#fff; } .viz-card h3,.chart h3 { margin:0; font-size:19px; letter-spacing:-.02em; }"
+            ".viz-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; } .viz-kind { color:#7563b8; font:700 9px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; letter-spacing:.12em; } .viz-note { min-height:34px; margin:6px 0 8px; color:var(--muted); font:12px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".viz-svg { display:block; width:100%; height:auto; overflow:visible; } .viz-grid { stroke:#eeeaf4; stroke-width:1; } .viz-axis { fill:#777181; font:11px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; } .viz-line { fill:none; stroke:#7864c8; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; } .viz-area { fill:#f0edfa; opacity:.9; } .viz-point { fill:#7864c8; stroke:#fff; stroke-width:2; } .viz-column { fill:#8c79d0; } .viz-missing { fill:#fff; stroke:#b7b1c4; stroke-dasharray:2 2; }"
+            ".viz-data { margin-top:8px; border-top:1px solid #f0edf5; } .viz-data summary { padding:9px 0 2px; color:#65549d; font:600 11px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; } .viz-data table { font:12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; } .viz-empty { padding:20px 0; color:var(--muted); }"
+            ".usage .chart { border-top:1px solid #e9e5f1; padding:18px; } .usage .chart .muted { font-size:12px; } .usage .bar-track { height:8px; background:#f0edf8; } .usage .bar-fill { background:#8c79d0; } .usage-breakdown { margin-top:22px; padding-top:4px; } .usage-breakdown>summary { color:#4f456b; font-size:15px; }"
+            "@media(max-width:720px){.usage{padding:18px 14px;margin:28px 0}.usage-header{display:block}.usage-window{display:inline-block;margin-top:8px;text-align:left}.usage-charts{grid-template-columns:1fr}.usage-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.usage-kpis>div:nth-child(2){border-right:0}.usage-kpis>div:nth-child(-n+2){border-bottom:1px solid #eeeaf4}}"
+            "@media(prefers-reduced-motion:no-preference){.viz-card,.chart{transition:box-shadow .18s ease,transform .18s ease}.viz-card:hover,.chart:hover{box-shadow:0 10px 28px rgba(49,35,91,.07);transform:translateY(-1px)}}"
             ".repo-detail, .repo-card { border-top:1px solid var(--line); } .repo-detail summary, .repo-card summary { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }"
             ".repo-card summary { padding:16px 0; } .repo-name { font-size:18px; } .repo-stats { color:var(--muted); font:12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
             ".repo-expanded { padding:0 0 20px 16px; } .repo-expanded h2 { margin-top:18px; } .owner-detail { border-top:1px solid var(--line); }"
