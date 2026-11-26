@@ -23,19 +23,25 @@ def cache_path() -> Path:
 
 
 def _dashboard(now: float, runner=None) -> str:
-    """The dashboard fragment for the OliverCode checkout itself, or a short plain note when GitHub could not be read. `runner` stands in for the whole read."""
+    """Dashboard fragment with a direct link to this machine's continuously refreshed page."""
     when = datetime.fromtimestamp(now, timezone.utc)
     if runner is not None:
-        return runner(when)
-    slug = repo_state.origin(OC_ROOT)
-    rows = cmd_status.recent(slug, when - timedelta(days=cmd_status.DAYS)) if slug else None
-    open_now = cmd_status.issue_count.count_issues(slug, "open") if slug else None
-    if rows is None or open_now is None:
-        return '<p style="color:#5b6472">City could not read GitHub just now, so the figures may be out of date.</p>'
-    numbers = cmd_status.four_numbers(when, open_now, rows, cmd_status.run_log(), OC_ROOT)
-    snap = cmd_status.gather(slug, when, open_now, rows, numbers, cmd_status.owner_steps(slug), cmd_status._idea_count(), not cmd_status.city_gap())
-    return f"<style>{briefing.STYLE}</style>" + briefing.dashboard_html(snap)
-
+        body = runner(when)
+    else:
+        slug = repo_state.origin(OC_ROOT)
+        rows = cmd_status.recent(slug, when - timedelta(days=cmd_status.DAYS)) if slug else None
+        open_now = cmd_status.issue_count.count_issues(slug, "open") if slug else None
+        if rows is None or open_now is None:
+            body = '<p class="sub">City could not read GitHub just now, so the figures may be out of date.</p>'
+        else:
+            numbers = cmd_status.four_numbers(when, open_now, rows, cmd_status.run_log(), OC_ROOT)
+            snap = cmd_status.gather(slug, when, open_now, rows, numbers, cmd_status.owner_steps(slug), cmd_status._idea_count(), not cmd_status.city_gap())
+            body = f"<style>{briefing.STYLE}</style>" + briefing.dashboard_html(snap)
+    href = status_report.page_path().as_uri()
+    link = (f'<div style="margin:0 0 24px;padding:12px 0;border-bottom:1px solid var(--line,#ddd)">'
+            f'<a href="{href}" style="display:inline-block;color:inherit;text-decoration:none;border:1px solid currentColor;padding:7px 10px;border-radius:3px;font-weight:600">Open the live local page ↗</a>'
+            f'<span style="display:block;color:var(--sub,#666);font-size:.85rem;margin-top:6px">On this computer · refreshes every 60 seconds</span></div>')
+    return link + body
 
 def _load_cache() -> dict:
     try:
