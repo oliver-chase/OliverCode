@@ -379,6 +379,7 @@ class Io:
     def release(self, n: int) -> None:
         """Drop the local claim and post the release comment, so no outcome leaves the story held (#877)."""
         self.claimed_at.pop(n, None)
+        run_lock.finish_story(self.slug, os.getpid(), n)
         cmd_dispatch._local_claim(self.slug, n, time.time(), clear=True)
         if gh_budget.refusal() or gh_budget.reserve_write():
             return
