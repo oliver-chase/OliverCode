@@ -41,7 +41,7 @@ def _dashboard(now: float, runner=None) -> str:
     href = status_report.page_path().as_uri()
     link = (f'<div style="margin:0 0 24px;padding:12px 0;border-bottom:1px solid var(--line,#ddd)">'
             f'<a href="{href}" style="display:inline-block;color:inherit;text-decoration:none;border:1px solid currentColor;padding:7px 10px;border-radius:3px;font-weight:600">Open the live local page ↗</a>'
-            f'<span style="display:block;color:var(--sub,#666);font-size:.85rem;margin-top:6px">Local file: <code>{status_report.page_path()}</code> · refreshes every 60 seconds</span></div>')
+            f'<span style="display:block;color:var(--sub,#666);font-size:.85rem;margin-top:6px">Local file: <code>{html_escape(str(status_report.page_path()))}</code> · refreshes every 60 seconds</span></div>')
     return link + body
 
 def _load_cache() -> dict:
