@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Check that an issue body follows references/story-template.md.
 
-Usage: check_story_format.py [BODY_FILE|-] [--kind story|epic]
+Usage: check_story_format.py [BODY_FILE|-] [--kind story|epic] [--offline]
 Reads the body from BODY_FILE, or from stdin when the file is omitted or "-". Prints each
 missing part with its fix and exits 1 when any part is missing, 0 when the body is complete,
-2 on a usage error. Offline: reads only the body it is given.
+2 on a usage error. A story also lists each open story whose Files area shares a file or folder
+with it, read once through gh; `--offline` skips that read (#1274).
 """
 import argparse
 import re
@@ -23,6 +24,7 @@ WORK_TYPE = re.compile(r"\bWork type:\s*(\w+)", re.I)
 PLACEHOLDER = re.compile(r"<[A-Za-z][A-Za-z /|-]*>")
 COVERAGE_LINE = re.compile(r"^\s*(?:[-*]\s*)?Existing coverage checked:\s*\S", re.I | re.M)
 STEP = re.compile(r"^\s*(Given|When|Then|And|But)\b", re.I)
+COVERAGE_TEXT = re.compile(r"^\s*(?:[-*]\s*)?Existing coverage checked:(.*)$", re.I | re.M)
 AREA = re.compile(r"^\W*Files area:\W*(.+)$", re.I | re.M)
 
 PRIORITIES = ("P0", "P1", "P2")
@@ -62,18 +64,71 @@ def gherkin_problems(body):
     return problems
 
 
-def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False, root=None):
+def kind_of(body, kind=None):
+    """The kind a body is checked as: the one asked for, else its Work type line, else a story."""
+    wt = WORK_TYPE.search(body)
+    return (kind or (wt.group(1) if wt else "Story")).capitalize()
+
+
+def files_of(body):
+    """The entries on the Files area line, Markdown punctuation stripped."""
+    area = AREA.search(body)
+    return [e for e in (t.strip("`.,;*()") for t in re.split(r"[,;\s]+", area.group(1))) if e] if area else []
+
+
+def shares_files(mine, theirs):
+    """True when a path in `mine` is a path in `theirs`, or one is a folder that holds the other (#1274).
+    A word with no slash or dot is not a path, so it never overlaps another story."""
+    paths = lambda entries: [x.rstrip("/") for x in entries if re.search(r"[/.]", x)]  # noqa: E731
+    for a in paths(mine):
+        for b in paths(theirs):
+            if a == b or a.startswith(b + "/") or b.startswith(a + "/"):
+                return True
+    return False
+
+
+def open_stories(root):
+    """{number: {"title", "body"}} of the open issues of the repo at `root`, read once through gh REST (#1274).
+    Raises RuntimeError when gh cannot read them."""
+    try:
+        done = subprocess.run(["gh", "api", "repos/{owner}/{repo}/issues?state=open&per_page=100", "--paginate", "--jq",
+                               '.[] | select(has("pull_request") | not) | {number, title, body}'],
+                              capture_output=True, text=True, cwd=root, timeout=120)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(str(e) or e.__class__.__name__) from e
+    if done.returncode:
+        raise RuntimeError(done.stderr.strip()[:120] or "gh api failed")
+    return {o["number"]: o for o in (json.loads(line) for line in done.stdout.splitlines() if line.strip())}
+
+
+def overlap_problems(body, stories):
+    """(part, fix) for each open story in `stories` ({number: {"title", "body"}}) that shares a Files area path with the body.
+    The body passes an overlap only when its Existing coverage checked line names that story's number (#1274)."""
+    mine = files_of(body)
+    coverage = COVERAGE_TEXT.search(body)
+    named = set(re.findall(r"#(\d+)", coverage.group(1))) if coverage else set()
+    problems = []
+    for number, story in sorted(stories.items()):
+        if str(number) in named or not shares_files(mine, files_of(story.get("body") or "")):
+            continue
+        problems.append((f"Open story #{number} \"{story.get('title') or ''}\" touches the same files",
+                         f"add the new scenarios to #{number}, or name #{number} in `Existing coverage checked:` and say why this work is separate"))
+    return problems
+
+
+def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False, root=None, files=False):
     """Return a list of (missing part, fix) for the body. An empty list means it is complete.
 
     `coverage=False` skips the Existing coverage checked line, for a scan of stories filed before it was required.
     `blocker=True` requires the Blocked by line and `line_numbers=True` flags a line number; the command sets both,
     and the library default leaves them off so intake's scan and the generated bodies are judged as they were.
+    `files=True` requires the Files area line of a story, which dispatch needs; the command sets it (#1274).
     `root` is the repo the story changes, so a Files area entry that is a folder there is named.
     """
     problems = []
     wt = WORK_TYPE.search(body)
     work_type = wt.group(1).capitalize() if wt else None
-    kind = (kind or (work_type or "Story")).capitalize()
+    kind = kind_of(body, kind)
 
     if not STORY_SENTENCE.search(body.replace("*", "")):
         problems.append(("User story sentence",
@@ -105,9 +160,10 @@ def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False
     elif work_type != kind:
         problems.append((f"Work type is {work_type} but this body is checked as a {kind.lower()}",
                          f"set `Work type: {kind}`"))
-    area = AREA.search(body)
-    for entry in [t.strip("`.,;*()") for t in re.split(r"[,;\s]+", area.group(1))] if area else []:
-        if entry and (entry.endswith("/") or (root is not None and (Path(root) / entry).is_dir())):
+    if files and kind == "Story" and not AREA.search(body):
+        problems.append(("Files area", "add a `Files area:` line naming the files the story changes, not a folder, as in " + TEMPLATE))
+    for entry in files_of(body):
+        if entry.endswith("/") or (root is not None and (Path(root) / entry).is_dir()):
             problems.append((f"Files area names the folder {entry}",
                              "name the files the story changes, because a folder holds back every story that touches a file inside it"))
     ln = LINE_NUMBER.search(FENCE.sub("", body)) if line_numbers else None
@@ -124,6 +180,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("body_file", nargs="?", default="-", help="issue body file, or - for stdin")
     ap.add_argument("--kind", choices=("story", "epic"), help="check as this kind; default reads Work type")
+    ap.add_argument("--offline", action="store_true", help="skip the read of open stories that lists the overlaps")
     args = ap.parse_args(argv)
     try:
         body = sys.stdin.read() if args.body_file == "-" else open(args.body_file, encoding="utf-8").read()
@@ -134,8 +191,14 @@ def main(argv=None):
         print("The body is empty. Write it from " + TEMPLATE + ".", file=sys.stderr)
         return 1
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
-    problems = check_body(body, args.kind, blocker=True, line_numbers=True,
-                          root=(top.stdout.strip() or None) if top.returncode == 0 else None)
+    root = (top.stdout.strip() or None) if top.returncode == 0 else None
+    problems = check_body(body, args.kind, blocker=True, line_numbers=True, files=True, root=root)
+    if not args.offline and kind_of(body, args.kind) == "Story":
+        try:
+            problems += overlap_problems(body, open_stories(root))
+        except RuntimeError as e:
+            problems.append(("Overlap check", f"the open stories could not be read ({e}), so this story cannot be checked against them; "
+                                              "run it again once gh can reach GitHub"))
     for part, fix in problems:
         print(f"MISSING {part}. Fix: {fix}")
     if problems:

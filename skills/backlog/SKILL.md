@@ -29,7 +29,7 @@ Every owner request that changes files becomes a story before any work starts, s
    `gh api -X GET search/issues -f q="repo:$REPO is:issue is:closed reason:\"not planned\" <topic>" --jq '.items[] | "\(.number) \(.title)"'`
    A match is shown to the owner with its number, title and the closing comment that gives the reason. File nothing until the owner decides whether the new request overturns it.
 2. **Write the body** from the template, and pick the open epic whose goal the request serves. When none fits, file an epic first with `Work type: Epic`: the container whose body lists its stories and carries no `Epic:` line.
-3. **Check the body** with `python3 scripts/check_story_format.py BODY_FILE` and fix every part it prints.
+3. **Check the body** with `python3 scripts/check_story_format.py BODY_FILE` and fix every part it prints. A story needs a `Files area:` line, and the check lists each open story that names one of the same files (number and title, read once through gh). Add the new scenarios to that story, or name its number in `Existing coverage checked:` and say why the work is separate. `--offline` skips that read and is for a scan with no network only.
    In OliverCode, also run `python3 scripts/lib/repo_name_guard.py --text-file BODY_FILE` before any post: a story or comment never names the owner's other repos, and `--scan-issues` lists the issue numbers that already do.
 4. **File it** as below. A request the owner wants now goes in `Ready`, and the session starts it after filing.
 5. **A mid-task request is filed and queued.** The order changes only on "stop", "do this first" or "drop that".

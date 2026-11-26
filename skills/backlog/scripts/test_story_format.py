@@ -111,7 +111,7 @@ class StoryFormat(unittest.TestCase):
         self.assertEqual(["Blocked by line"], [p for p, _ in sf.check_body(body("story-good.body"), blocker=True)])
         self.assertIn("Blocked by: none.", sf.check_body(body("story-good.body"), blocker=True)[0][1])
         completed = subprocess.run([sys.executable, str(HERE / "check_story_format.py"),
-                                    str(HERE / "fixtures" / "story-good.body")],
+                                    str(HERE / "fixtures" / "story-good.body"), "--offline"],
                                    capture_output=True, text=True)
         self.assertEqual(1, completed.returncode)
         self.assertIn("MISSING Blocked by line. Fix:", completed.stdout)
@@ -141,11 +141,57 @@ class StoryFormat(unittest.TestCase):
         self.assertIn('is:closed reason:\\"not planned\\"', skill)
         self.assertRegex(skill, r"(?i)file nothing until the owner decides")
 
+    def test_a_story_without_a_files_area_is_rejected_and_an_epic_needs_none(self):
+        """#1274: dispatch needs the files a story changes, so the check names the missing line; an epic changes no files."""
+        text = re.sub(r"^Files area:.*\n", "", body("story-good.body"), flags=re.M)
+        self.assertEqual([], parts_of(text))
+        self.assertEqual(["Files area"], parts_of(text, files=True))
+        self.assertEqual([], parts_of(body("epic-good.body"), files=True))
+
+    def test_an_open_story_on_the_same_file_is_listed_by_number_and_title(self):
+        """#1274: the new story is listed with the open story that names scripts/lib/cmd_status.py, and the fix offers both ways out."""
+        text = body("story-good.body").replace("skills/backlog/scripts/check_story_format.py", "scripts/lib/cmd_status.py")
+        stories = {412: {"title": "Show the status of a run", "body": "Files area: scripts/lib/cmd_status.py, docs/a.md"}}
+        [(part, fix)] = sf.overlap_problems(text, stories)
+        self.assertEqual('Open story #412 "Show the status of a run" touches the same files', part)
+        self.assertIn("add the new scenarios to #412", fix)
+        self.assertIn("Existing coverage checked:", fix)
+
+    def test_naming_the_overlapping_story_in_existing_coverage_passes_that_overlap(self):
+        text = body("story-good.body").replace(
+            "Existing coverage checked: a search of the repo for this behavior finds none.",
+            "Existing coverage checked: #412 shows the status; this adds the exit code, so it is separate.").replace(
+            "Files area: skills/backlog/scripts/check_story_format.py", "Files area: scripts/lib/cmd_status.py")
+        stories = {412: {"title": "Show the status", "body": "Files area: scripts/lib/cmd_status.py"}}
+        self.assertEqual([], sf.overlap_problems(text, stories))
+
+    def test_a_folder_holding_a_file_overlaps_and_an_unrelated_file_does_not(self):
+        text = "Files area: scripts/lib/cmd_status.py\n"
+        self.assertEqual(1, len(sf.overlap_problems(text, {5: {"title": "Folder", "body": "Files area: scripts/lib/"}})))
+        self.assertEqual([], sf.overlap_problems(text, {6: {"title": "Other", "body": "Files area: scripts/lib/cmd_groom.py"}}))
+        self.assertEqual([], sf.overlap_problems(text, {7: {"title": "Word", "body": "Files area: new, cmd"}}))
+
+    def test_an_unreadable_issue_list_is_a_problem_and_the_offline_flag_skips_it(self):
+        import contextlib
+        import io
+        from unittest import mock
+        path = str(HERE / "fixtures" / "story-good.body")
+        with mock.patch.object(sf, "open_stories", side_effect=RuntimeError("no network")) as read:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(1, sf.main([path]))
+            self.assertIn("MISSING Overlap check.", out.getvalue())
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                sf.main([path, "--offline"])
+            self.assertEqual(1, read.call_count)
+            self.assertNotIn("Overlap check", out.getvalue())
+
     def test_the_command_reads_stdin_and_sets_the_exit_status(self):
         script = str(HERE / "check_story_format.py")
-        good = subprocess.run([sys.executable, script], input=with_blocker(body("story-good.body")),
+        good = subprocess.run([sys.executable, script, "--offline"], input=with_blocker(body("story-good.body")),
                               capture_output=True, text=True)
-        bad = subprocess.run([sys.executable, script, str(HERE / "fixtures" / "story-no-gherkin.body")],
+        bad = subprocess.run([sys.executable, script, str(HERE / "fixtures" / "story-no-gherkin.body"), "--offline"],
                              capture_output=True, text=True)
         self.assertEqual(0, good.returncode)
         self.assertEqual(1, bad.returncode)
