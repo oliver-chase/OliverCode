@@ -10,6 +10,7 @@ read like a broken build. A module that would run longer than an even share of t
 $OLIVERCODE_HOME/validate-timings.json, or its test count when none are recorded) is split into up to MAX_CHUNKS processes by test
 id, so the longest module no longer sets the length of the gate. Exit 0 when every module passes, 1 otherwise. OLIVERCODE_VALIDATE_TIMES=1 also prints the ten slowest
 modules, which is where to look when the smoke gate slows down.
+Every full validation includes tests/test_drain_canary.py, the end-to-end drain test, because it is one of the tests/test_*.py modules (#1273).
 """
 
 from __future__ import annotations

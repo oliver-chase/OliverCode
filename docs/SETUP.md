@@ -268,4 +268,4 @@ Use the relative `.githooks` and never an absolute path, because an absolute one
 
 ### `run-tests.sh` ends with an import error on a module name
 
-`scripts/run-tests.sh` runs every test module in its own process through `scripts/lib/smoke_runner.py`, as `validate.sh` does, so two modules that share a name, such as `test_sweep` in `tests/` and in `skills/audit/scripts/`, no longer collide. `tests/test_run_tests_snapshot.py` covers it.
+`scripts/run-tests.sh` runs every test module in its own process through `scripts/lib/smoke_runner.py`, as `validate.sh` does, so two modules that share a name, such as `test_sweep` in `tests/` and in `skills/audit/scripts/`, no longer collide. `tests/test_run_tests_snapshot.py` covers it. `tests/test_drain_canary.py` is one of those modules, so every full validation sends a fake story through the real drain, landing and close (#1118, #1273).

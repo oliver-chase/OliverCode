@@ -1,6 +1,10 @@
 name: OliverCode Framework CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [main]
 
 # Least privilege: these jobs only read the repo and run checks. Without an explicit
 # grant GITHUB_TOKEN inherits the repository default, which on many repos is
