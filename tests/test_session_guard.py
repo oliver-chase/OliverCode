@@ -57,6 +57,20 @@ class TestSessionGuard(unittest.TestCase):
         lease.release()
         self.assertFalse(session_guard.story_has_unknown_cost(9, "Repo"))
 
+    def test_resumed_invocations_keep_cost_and_attempts_separate(self):
+        first = session_guard.acquire("story-10", "sonnet", "/work/Repo-10", "sid-10")
+        first.finish({"cost_usd": 0.1, "stop_reason": "timeout"})
+        first.release()
+        second = session_guard.acquire("story-10", "sonnet", "/work/Repo-10", "sid-10", resumed=True)
+        second.finish({"cost_usd": 0.2, "stop_reason": "completed", "resumed": True})
+        second.release()
+        rows = [json.loads(line) for line in (self.home / session_guard.LOG).read_text().splitlines()]
+        starts = [r for r in rows if r["event"] == "session_start"]
+        ends = [r for r in rows if r["event"] == "session_end"]
+        self.assertEqual([1, 2], [r["attempt"] for r in starts])
+        self.assertEqual([0.1, 0.2], [r["cost_usd"] for r in ends])
+        self.assertFalse(session_guard.story_has_unknown_cost(10, "Repo"))
+
     def test_start_telemetry_failure_refuses_to_launch_and_releases_slot(self):
         with mock.patch.object(session_guard, "_write", return_value=False):
             with self.assertRaisesRegex(RuntimeError, "durable session-start telemetry"):
