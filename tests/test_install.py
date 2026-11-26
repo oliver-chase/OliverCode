@@ -149,11 +149,13 @@ class WhoBuilds(unittest.TestCase):
             self.assertIn(self.RULE, (REPO_ROOT / path).read_text(encoding="utf-8"), path)
         self.assertIn(self.RULE, " ".join(cmd_guide.HOW_WORK_RUNS))
 
-    def test_the_first_steps_end_on_building_a_story_in_install_and_the_guide(self):
-        from lib import cmd_guide
+    def test_the_first_steps_end_on_building_a_story_in_install(self):
         self.assertIn("3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`", cmd_install.INTRODUCTION)
+        # The approved archive copy has no first-story line; its How it works steps name dispatch and drain instead.
+        from lib import cmd_guide
         _, out = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("3. File your first story: say what you want in Claude Code, then build it with olivercode dispatch N, or olivercode drain REPO", out)
+        self.assertIn("olivercode dispatch 42", out)
+        self.assertIn("olivercode drain REPO", out)
 
 
 
@@ -170,7 +172,7 @@ class DesignFile(unittest.TestCase):
     def test_the_guide_names_design_file_and_the_relink_command(self):
         from lib import cmd_guide
         from lib.local_config import OC_ROOT
-        _, out = quiet(cmd_guide.command_guide, OC_ROOT)
+        _, out = quiet(cmd_guide.command_guide, OC_ROOT, "design")
         line = next(l for l in out.splitlines() if "designFile" in l)
         self.assertIn("olivercode install", line)
         self.assertIn("~/.claude/DESIGN.md", line)

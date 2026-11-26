@@ -175,7 +175,7 @@ class TestInstall(HomeCase):
         self.assertEqual(rc, 0)
         intro = out[out.index("How OliverCode works"):].strip()
         self.assertLessEqual(len(intro.splitlines()), 20)
-        for habit in ("Work in one thread per topic", "Never start a builder in a chat"):
+        for habit in ("Use interactive Claude Code for thinking", "Keep owner decisions for genuine trade-offs"):
             self.assertIn(habit, intro)
         for phrase in ("one thread", "each request becomes a story", "olivercode dispatch N",
                        "olivercode drain REPO", "validates", "olivercode status"):
