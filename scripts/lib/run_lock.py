@@ -185,22 +185,25 @@ def is_paused(slug: str) -> bool:
 
 
 def pause(slug: str) -> None:
-    target = pause_path(slug)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("paused\n", encoding="utf-8")
+    with _exclusive(slug):
+        target = pause_path(slug)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("paused\n", encoding="utf-8")
 
 
 def resume(slug: str) -> bool:
-    target = pause_path(slug)
-    existed = target.exists()
-    target.unlink(missing_ok=True)
-    return existed
+    with _exclusive(slug):
+        target = pause_path(slug)
+        existed = target.exists()
+        target.unlink(missing_ok=True)
+        return existed
 
 
 def request_cancel(slug: str, story: int) -> None:
-    target = cancel_path(slug, story)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("cancel\n", encoding="utf-8")
+    with _exclusive(slug):
+        target = cancel_path(slug, story)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("cancel\n", encoding="utf-8")
 
 
 def cancel_requested(slug: str, story: int) -> bool:
@@ -208,10 +211,18 @@ def cancel_requested(slug: str, story: int) -> bool:
 
 
 def clear_cancel(slug: str, story: int) -> bool:
-    target = cancel_path(slug, story)
-    existed = target.exists()
-    target.unlink(missing_ok=True)
-    return existed
+    with _exclusive(slug):
+        target = cancel_path(slug, story)
+        existed = target.exists()
+        target.unlink(missing_ok=True)
+        return existed
+
+
+@contextmanager
+def claim_guard(slug: str):
+    """Hold the control-file lock while the drain decides whether to claim a story."""
+    with _exclusive(slug):
+        yield not pause_path(slug).is_file()
 
 
 def set_paused(slug: str, pid: int, value: bool) -> None:
