@@ -49,8 +49,11 @@ class TestRunLock(LockCase):
 
     def test_cancel_marker_can_be_requested_checked_and_cleared_per_story(self):
         slug = "o/r"
+        now = time.time()
+        run_lock.acquire(slug, "drain", now, pid=111, alive=lambda p: self.alive.get(p, False))
+        run_lock.beat(slug, 111, now, [7])
         self.assertFalse(run_lock.cancel_requested(slug, 7))
-        run_lock.request_cancel(slug, 7)
+        self.assertTrue(run_lock.request_cancel(slug, 7))
         self.assertTrue(run_lock.cancel_requested(slug, 7))
         self.assertTrue(run_lock.clear_cancel(slug, 7))
         self.assertFalse(run_lock.clear_cancel(slug, 7))
