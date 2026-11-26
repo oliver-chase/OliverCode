@@ -17,6 +17,7 @@ from lib import briefing, cmd_status, failure_log, repo_state
 from lib.local_config import OC_ROOT
 
 PANEL_TTL = 1800  # seconds a cached dashboard serves a rewrite before it is read again; matches status_report.REWRITE_MINUTES
+PANEL_VERSION = 3  # bump whenever the dashboard markup or visual language changes
 
 
 def cache_path() -> Path:
@@ -102,11 +103,11 @@ def panel_html(now: float | None = None, runner=None) -> str:
     """The dashboard. Cached for PANEL_TTL seconds, so the page's frequent automatic rewrites (#990) spend no extra GitHub reads between them."""
     now = time.time() if now is None else now
     cached = _load_cache()
-    if cached.get("html") and now - float(cached.get("at", 0)) < PANEL_TTL:
+    if cached.get("version") == PANEL_VERSION and cached.get("html") and now - float(cached.get("at", 0)) < PANEL_TTL:
         return cached["html"]
     body = _dashboard(now, runner)
     try:
-        failure_log.write_atomic(cache_path(), json.dumps({"at": now, "html": body}))
+        failure_log.write_atomic(cache_path(), json.dumps({"version": PANEL_VERSION, "at": now, "html": body}))
     except OSError:
         pass
     return body

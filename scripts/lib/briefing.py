@@ -196,7 +196,7 @@ summary::-webkit-details-marker{display:none}summary:after{content:"＋";color:v
 .summary-title{flex:1;min-width:150px}.summary-meta{font-size:.88rem;font-weight:500}.expansion{padding:2px 16px 18px;color:var(--ink)}.expansion p{max-width:72ch}.expansion ul{margin:8px 0 0;padding-left:22px}.expansion li{padding:5px 0}
 .attention{border:1px solid var(--line);margin:0 0 9px;padding:0 12px;background:#fff;border-radius:4px}.attention summary{padding:13px 2px}.attention .expansion{padding:4px 2px 14px}
 .row{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}.row>div:first-child{flex:1}.row .sub{max-width:34ch;font-size:.9rem}
-.bars{display:flex;align-items:flex-end;gap:10px;height:136px;margin:14px 0 6px}.bars>div{flex:1;min-width:0;text-align:center;font-size:.75rem;color:var(--sub);display:flex;flex-direction:column;justify-content:flex-end;height:100%}.bar{display:flex;gap:3px;align-items:flex-end;justify-content:center;flex:1}.bar i{display:block;width:42%;min-height:2px}.o{background:#d9dce4}.c{background:#b7a8f1}.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.84rem;color:var(--sub)}.legend span:before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;background:#d9dce4}.legend .delivered:before{background:#b7a8f1}
+.bars{display:flex;align-items:stretch;gap:10px;height:160px;margin:14px 0 6px}.chart-day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;color:var(--sub);font-size:.75rem}.chart-values{display:flex;justify-content:center;gap:8px;font-size:.72rem;font-variant-numeric:tabular-nums}.bar{display:flex;gap:4px;align-items:flex-end;justify-content:center;width:100%;height:112px}.bar i{display:block;width:35%;min-height:2px}.o{background:#d9dce4}.c{background:#b7a8f1}.chart-label{padding-top:2px}.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.84rem;color:var(--sub)}.legend span:before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;background:#d9dce4}.legend .delivered:before{background:#b7a8f1}
 .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.flow>div{padding:13px;background:var(--wash);border-left:3px solid var(--line)}.flow .positive{border-color:#b7dfca;background:var(--mint)}.flow .negative{border-color:#f0c5aa;background:var(--peach)}.flow strong{display:block;font-size:1.65rem;line-height:1.25}
 .meter{height:7px;background:#eeeaf7;margin:12px 0 4px;border-radius:8px;overflow:hidden}.meter i{display:block;height:100%;background:#b7a8f1;border-radius:8px}.health-list{margin-top:8px}.health-list .row{padding:14px 0}.health-list .fix{max-width:35ch;color:var(--sub);font-size:.9rem}
 code{font:.9em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--lavender);padding:2px 5px;border-radius:3px}\n.portfolio{margin-top:44px}.portfolio-row{padding:14px 0;border-top:1px solid var(--line);display:flex;gap:16px;align-items:center;justify-content:space-between}.portfolio-name{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.portfolio-stats{display:flex;gap:14px;flex-wrap:wrap;color:var(--sub);font-size:.88rem}.portfolio-totals{margin:14px 0}.portfolio-list{border-bottom:1px solid var(--line)}
@@ -210,9 +210,8 @@ def _card(label: str, big: str, note: str = "") -> str:
 
 def _bars(days: list[dict]) -> str:
     top = max([d["opened"] for d in days] + [d["closed"] for d in days] + [1])
-    cols = "".join(f'<div><span class="bar"><i class="o" style="height:{d["opened"] / top * 100:.0f}%" title="{d["opened"]} added"></i>'
-                   f'<i class="c" style="height:{d["closed"] / top * 100:.0f}%" title="{d["closed"]} delivered"></i></span>{esc(d["day"])}</div>' for d in days)
-    return f'<div class="bars" role="img" aria-label="Stories added and delivered each day">{cols}</div><p class="sub">Grey: added. Purple: delivered.</p>'
+    cols = "".join(f'<div class="chart-day"><div class="chart-values"><span>{d["opened"]}</span><span>{d["closed"]}</span></div><span class="bar"><i class="o" style="height:{max(2, d["opened"] / top * 100):.0f}%" title="{d["opened"]} added"></i><i class="c" style="height:{max(2, d["closed"] / top * 100):.0f}%" title="{d["closed"]} delivered"></i></span><span class="chart-label">{esc(d["day"])}</span></div>' for d in days)
+    return f'<div class="bars" role="img" aria-label="Daily stories added and delivered; values are printed above each pair of bars">{cols}</div><p class="sub">Each day shows stories added and delivered. Values are printed above the bars; the scale is shared across the week.</p>'
 
 
 def _attention_html(snap: dict) -> str:
@@ -267,6 +266,12 @@ def dashboard_html(snap: dict) -> str:
     net_label = "Net backlog reduction" if net > 0 else ("Net backlog growth" if net < 0 else "No net change")
     ratio = "No new work arrived" if not snap["opened"] else f'{snap["closed"] / snap["opened"]:.1f} deliveries per story added'
     pace = f'{snap["closed"] / 7:.1f} delivered/day · {snap["opened"] / 7:.1f} added/day'
+    if net > 0:
+        reading = f'Delivery exceeded incoming work by {net} stories this week. The open queue is moving in the right direction.'
+    elif net < 0:
+        reading = f'Incoming work exceeded delivery by {abs(net)} stories this week. The open queue grew, so capacity or intake needs a closer look.'
+    else:
+        reading = "Delivery matched incoming work this week. The queue held steady."
     benchmark = f'To shrink the queue, delivery must exceed incoming work ({snap["opened"]} added this week; at least {snap["opened"] + 1} deliveries).' if snap["opened"] else "No new stories arrived this week; any delivery reduces the queue."
     daily = "".join(f'<li>{esc(d["day"])}: {d["closed"]} delivered · {d["opened"]} added</li>' for d in snap["days"])
     next_up = f'<p><b>Next up:</b> {esc(snap["ready"])}</p>' if snap["ready"] else ""
@@ -290,7 +295,7 @@ def dashboard_html(snap: dict) -> str:
         f'<p>{esc("Nothing is building at the moment." if not runner["building"] else "Stories are moving through the runner.")}</p>{next_up}{latest}</div></section>'
         f'<section><h2>Delivery pace</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>'
         f'{_bars(snap["days"])}<div class="legend"><span>Added</span><span class="delivered">Delivered</span></div>{flow}'
-        f'<p class="note">{esc(pace)}. {esc(ratio)}. {esc(benchmark)}</p>'
+        f'<p class="note"><b>What the trend says:</b> {esc(reading)}</p><p class="note">{esc(pace)}. {esc(ratio)}. {esc(benchmark)}</p>'
         f'<details><summary><span class="summary-title">Daily breakdown</span><span class="summary-meta">7-day view</span></summary><div class="expansion"><ul>{daily}</ul></div></details>'
         f'<p class="note">Benchmark: deliveries need to stay ahead of incoming work to reduce backlog. This compares with your own queue, not an industry target.</p></div></section>'
         f'<section><h2>System health</h2>{_health_html(snap)}</section>'

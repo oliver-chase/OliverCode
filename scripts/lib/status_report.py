@@ -445,7 +445,7 @@ SCRIPT = """<script>
 
 def render(state: dict, log: list[dict], now: float, published: float = 0.0, panel: str = "") -> str:
     """The whole page as one HTML string. It reads only its arguments. `panel` is City's terminal panel (#1097), already rendered HTML."""
-    light, dark = design_tokens(), {**DARK_TOKENS}
+    light = {"bg": "#ffffff", "text": "#17151b", "muted": "#687080", "accent": "#a99be8", "line": "rgb(0 0 0 / 0.10)"}
     vars_ = lambda t: "".join(f"--{k}: {v}; " for k, v in t.items())  # noqa: E731
     state = {k: v for k, v in state.items() if isinstance(v, dict)}  # the `_publish` key holds a word, not a repo
     active = any(e["active"] for e in state.values())
@@ -457,13 +457,16 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
     spend = f"Publishing City today: {tokens:,} tokens, {_money(cost)}."
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<meta http-equiv="refresh" content="{REFRESH_SECONDS}"><title>OliverCode status</title><style>:root {{ {vars_(light)} }}'
-            f'@media (prefers-color-scheme: dark) {{ :root {{ {vars_(dark)} }} }}'
-            "body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }"
-            "main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }"
-            "h1, h2, h3, h4 { font-weight: 500; margin: 32px 0 8px; } h1 { font-size: 28px; margin-top: 0; } h2 { font-size: 22px; } h3 { font-size: 18px; } h4 { font-size: 16px; }"
+            "body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 Georgia, 'Times New Roman', serif; }"
+            "main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 76px; }"
+            "h1, h2, h3, h4 { color: #17151b; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; line-height: 1.2; } h1 { font-size: clamp(32px, 5vw, 48px); margin: 0 0 12px; } h2 { font-size: 28px; margin: 48px 0 14px; } h3 { font-size: 21px; } h4 { font-size: 17px; }"
+            "a { color: #7864c8; } a:focus-visible, summary:focus-visible { outline: 2px solid #a99be8; outline-offset: 3px; }"
             "p { margin: 8px 0; } .muted { color: var(--muted); } .warn { color: var(--accent); }"
             "table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; } th, td { text-align: left; padding: 8px 12px 8px 0; vertical-align: top; border-bottom: 1px solid var(--line); }"
             "th { font-weight: 500; color: var(--muted); }"
+            "table { font-size: 14px; } td, th { border-color: var(--line); }"
+            "summary { cursor: pointer; padding: 12px 0; color: var(--text); }"
+            ".muted, #published { color: var(--muted); } #published { font-size: 13px; }"
             "@media (max-width: 640px) { thead { display: none; } tr, td { display: block; } tr { padding: 8px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; }"
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'

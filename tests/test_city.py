@@ -38,6 +38,13 @@ class PanelCase(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(1, len(calls))
 
+    def test_a_stale_renderer_version_is_rebuilt_even_inside_the_ttl(self):
+        calls = []
+        city.failure_log.write_atomic(city.cache_path(), json.dumps({"version": city.PANEL_VERSION - 1, "at": T0, "html": "old dashboard"}))
+        body = city.panel_html(T0 + 60, runner=lambda when: calls.append(when) or fake_read(when))
+        self.assertIn("<p>2 open, 0 building.</p>", body)
+        self.assertEqual(1, len(calls))
+
     def test_a_read_past_the_ttl_reads_again(self):
         calls = []
 
@@ -58,7 +65,8 @@ class PanelCase(unittest.TestCase):
         self.assertEqual(body, cached["html"])
         self.assertIn("Open the live local page", cached["html"])
         self.assertEqual(T0, cached["at"])
-        self.assertEqual({"at", "html"}, set(cached))
+        self.assertEqual({"version", "at", "html"}, set(cached))
+        self.assertEqual(city.PANEL_VERSION, cached["version"])
 
     def test_portfolio_lists_multiple_registered_repositories_and_qualifies_the_metrics(self):
         state = {

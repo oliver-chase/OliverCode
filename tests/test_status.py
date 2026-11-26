@@ -105,6 +105,12 @@ class TestStatus(unittest.TestCase):
         self.assertEqual("Tokens per closed story: 1,750 across 2 stories closed in the last 7 days, average cost $1.25.", cmd_status.tokens_per_story(rows, log))
         self.assertIn("not recorded", cmd_status.tokens_per_story(rows, []))
 
+    def test_city_outer_page_stays_light_and_uses_editorial_serif_type(self):
+        page = status_report.render({}, [], NOW.timestamp(), panel="<h1>OliverCode City</h1>")
+        self.assertNotIn("prefers-color-scheme: dark", page)
+        self.assertIn("Georgia, 'Times New Roman', serif", page)
+        self.assertIn("--accent: #a99be8", page)
+
     def test_status_page_numbers_show_average_cost_per_closed_story(self):
         html = status_page.numbers_block({"tokens_per_closed": 1234, "cost_per_closed": 2.5, "handovers": 1, "threads": 2, "open": 3})
         self.assertIn("Tokens per closed story", html)
