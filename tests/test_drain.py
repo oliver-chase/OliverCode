@@ -338,6 +338,20 @@ class DrainCase(unittest.TestCase):
         with mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=1):
             self.assertEqual(0, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
 
+    def test_ready_stories_sharing_files_are_serialized_even_with_parallel_capacity(self):
+        stories = [issue(1, "Files area: shared.py"), issue(2, "Files area: shared.py")]
+
+        class Slow(FakeIo):
+            def build(self, story, worktree, note):
+                if story["number"] == 1:
+                    time.sleep(0.08)
+                return super().build(story, worktree, note)
+
+        io = Slow(stories, cap=2)
+        self.run_drain(io)
+        self.assertEqual([1, 2], io.started)
+        self.assertEqual(1, max(map(len, io.peak_overlap)))
+
     def test_a_story_whose_files_area_names_a_folder_is_skipped_and_the_rest_run(self):
         """#1077: a folder-wide area overlapped every story and held a 4-builder drain to 1."""
         repo = temp_dir(self)
