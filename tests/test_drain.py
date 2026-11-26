@@ -88,7 +88,7 @@ class FakeIo:
         self.closed.append(n)
         self.moved.append(n)
         return True, ""
-    def release(self, n): self.released.append(n)
+    def release(self, n): self.released.append(n)\n    def clear_cancel(self, n): self.cleared = getattr(self, "cleared", []) + [n]
     def ready(self, n): self.readied.append(n)
     def keep_open(self, n, reason=""): self.kept.append(n)
     def backlog(self, n): self.parked = getattr(self, "parked", []) + [n]
@@ -545,6 +545,28 @@ class DrainCase(unittest.TestCase):
         io = FakeIo([issue(1), issue(2)], cap=1, builds={2: [{"done": False, "reason": "out of budget"} for _ in range(4)]})
         self.run_drain(io)
         self.assertEqual((io.closed, io.moved, sorted(io.released)), ([1], [1], [1, 2]))
+
+
+    def test_cancelled_story_keeps_handoff_returns_to_backlog_and_never_lands(self):
+        io = FakeIo([issue(42)], builds={42: [{"cancelled": True, "summary": "unfinished changes", "reason": "owner cancelled", "tokens": 12}]})
+        code, out, st = self.run_drain(io)
+        self.assertEqual(0, code)
+        self.assertEqual([], io.closed)
+        self.assertEqual([42], io.released)
+        self.assertEqual([42], io.parked)
+        self.assertEqual([42], io.cleared)
+        self.assertTrue(any("Cancelled by the owner" in comment and "unfinished changes" in comment for _, comment in io.comments))
+        self.assertFalse(any(n == 42 for n in io.moved))
+
+    def test_pause_prevents_claiming_until_resumed(self):
+        io = FakeIo([issue(1)])
+        pauses = iter((True, False))
+        with mock.patch.object(cmd_drain.run_lock, "is_paused", side_effect=lambda slug: next(pauses)), \
+                mock.patch.object(cmd_drain.run_lock, "set_paused"):
+            code, out, st = self.run_drain(io)
+        self.assertEqual(0, code)
+        self.assertEqual([1], io.started)
+        self.assertTrue(any("Runner paused" in line for line in out))
 
     def test_empty_board_prints_one_summary_line(self):
         code, out, _ = self.run_drain(FakeIo([]))
