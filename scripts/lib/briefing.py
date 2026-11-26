@@ -172,7 +172,7 @@ def text(snap: dict) -> list[str]:
 
 
 STYLE = """
-:root{--bg:#faf9f6;--card:#fff;--ink:#191820;--sub:#696772;--line:#e7e4e9;--accent:#C8BBD5;--accent-strong:#8E789F;--lavender:#C8BBD5;--wash:#faf9f6;--mint:#f2eef5;--mint-line:#c8bbd5;--mint-ink:#554565;--peach:#f2eef5;--peach-line:#c8bbd5;--peach-ink:#554565;--rose:#f2eef5;--rose-line:#c8bbd5;--rose-ink:#554565;--blue:#f5f3f7;--blue-line:#e7e4e9;--blue-ink:#595360}
+:root{--bg:#faf9f6;--card:#fff;--ink:#191820;--sub:#696772;--line:#e7e4e9;--accent:#C8BBD5;--accent-strong:#8E789F;--lavender:#C8BBD5;--wash:#faf9f6;--status-good-bg:#edf4ef;--status-good-line:#c9ddcf;--status-good-ink:#315b40;--status-warn-bg:#fbf2e7;--status-warn-line:#e8d2b2;--status-warn-ink:#80521f;--status-bad-bg:#f8eceb;--status-bad-line:#e5c4c1;--status-bad-ink:#8a3934;--status-neutral-bg:#f1f0f2;--status-neutral-line:#dfdce2;--status-neutral-ink:#5d5863}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 Georgia,"Times New Roman",serif}
 h1,h2,h3,.big,.flow strong{font-family:Georgia,"Times New Roman",serif;font-weight:500;color:var(--ink)}
@@ -191,11 +191,11 @@ p{margin:8px 0}.sub,.label,.note,.summary-meta{color:var(--sub)}
 .label{font:600 .76rem/1.4 Arial,sans-serif;letter-spacing:.015em}
 .note{font-size:.82rem;margin-top:6px}
 .pill{display:inline-block;border:1px solid var(--line);padding:3px 8px;border-radius:3px;font:600 .72rem/1.4 Arial,sans-serif;color:var(--sub);background:#fff}
-.pill.good{border-color:var(--mint-line);background:var(--mint);color:var(--mint-ink)}
-.pill.warn{border-color:var(--peach-line);background:var(--peach);color:var(--peach-ink)}
-.pill.bad{border-color:var(--rose-line);background:var(--rose);color:var(--rose-ink)}
-.pill.info{border-color:#B5A3C4;background:var(--lavender);color:#352344}
-.pill.neutral{border-color:var(--blue-line);background:var(--blue);color:var(--blue-ink)}
+.pill.good{border-color:var(--status-good-line);background:var(--status-good-bg);color:var(--status-good-ink)}
+.pill.warn{border-color:var(--status-warn-line);background:var(--status-warn-bg);color:var(--status-warn-ink)}
+.pill.bad{border-color:var(--status-bad-line);background:var(--status-bad-bg);color:var(--status-bad-ink)}
+.pill.info,.pill.running{border-color:#B5A3C4;background:var(--lavender);color:#554565}
+.pill.neutral,.pill.idle{border-color:var(--status-neutral-line);background:var(--status-neutral-bg);color:var(--status-neutral-ink)}
 .section-intro{max-width:70ch;color:var(--sub);margin:-2px 0 14px}
 .city-grid>section{min-width:0;min-height:0;height:auto;padding:17px 18px;background:#fff;border:1px solid var(--line);border-radius:5px}
 .city-grid>section.keep{grid-column:span 5;display:flex;flex-direction:column}
@@ -217,12 +217,12 @@ summary::-webkit-details-marker{display:none}summary:after{content:none}summary:
 .bars{display:flex;align-items:stretch;gap:10px;height:148px;margin:14px 0 6px;border-bottom:1px solid var(--line)}.chart-day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;color:var(--sub);font:11px/1.3 Arial,sans-serif}.chart-values{display:flex;justify-content:center;gap:8px;font-size:10px;font-variant-numeric:tabular-nums}.bar{display:flex;gap:4px;align-items:flex-end;justify-content:center;width:100%;height:105px}.bar i{display:block;width:35%;min-height:2px}.o{background:var(--accent)}.c{background:#8E789F}.chart-label{padding-top:2px}.legend{display:flex;gap:16px;flex-wrap:wrap;font:11px/1.4 Arial,sans-serif;color:var(--sub)}.legend span:before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;background:var(--accent)}.legend .delivered:before{background:#8E789F}
 .flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:15px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.flow>div{padding:12px 14px 12px 0;border-right:1px solid var(--line);min-width:0}.flow>div+div{padding-left:14px}.flow>div:last-child{border-right:0}.flow .positive,.flow .negative{background:#f5f3f7}.flow strong{display:block;font-size:1.55rem;line-height:1.25}
 .meter{height:6px;background:#eeeae4;margin:12px 0 4px;border-radius:0;overflow:hidden}.meter i{display:block;height:100%;background:var(--accent);border-radius:0}.health-list{margin-top:8px}.health-list .row{padding:12px 0}.health-list .fix{max-width:35ch;color:var(--sub);font-size:.86rem}
-code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1eee8;padding:2px 5px;border-radius:2px;overflow-wrap:anywhere}
+code{font:600 .86em ui-monospace,SFMono-Regular,Menlo,monospace;background:#eee8f3;border:1px solid #d7c9e2;color:#554565;padding:2px 6px;border-radius:3px;overflow-wrap:anywhere}
 .portfolio{margin:0!important}.portfolio h2{margin:0 0 10px}.portfolio-row{padding:12px 0;border-top:1px solid var(--line);display:flex;gap:16px;align-items:center;justify-content:space-between}.portfolio-name{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.portfolio-stats{display:flex;gap:14px;flex-wrap:wrap;color:var(--sub);font:11px/1.5 Arial,sans-serif}.portfolio-totals{margin:12px 0}.portfolio-list{border-bottom:1px solid var(--line)}
 @media(max-width:900px){.city-grid>details.owner-detail{grid-column:1/-1}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.city-grid>section.keep,.city-grid>section.work,.city-grid>section.attention-panel,.city-grid>section.health,.city-grid>section.portfolio,.city-grid>section.delivery,.city-grid>details.owner-detail{grid-column:1/-1}}
 @media(max-width:600px){.city-grid{gap:12px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.city-grid>section{padding:15px 14px}.portfolio-row{display:block}.portfolio-stats{margin-top:8px}.row{display:block}.row .sub,.row .fix{margin-top:6px;max-width:none}.flow{grid-template-columns:1fr}.flow>div,.flow>div+div{padding:9px 0;border-right:0;border-bottom:1px solid var(--line)}.flow>div:last-child{border-bottom:0}.bars{gap:5px}}
 @media(max-width:380px){.cards{grid-template-columns:1fr}.card{padding:15px}.chart-values{gap:4px}}
-"""""
+"""
 
 
 def _card(label: str, big: str, note: str = "") -> str:
@@ -278,7 +278,8 @@ def _cost_html(snap: dict) -> str:
 
 def _health_html(snap: dict) -> str:
     bad = {s["area"] for s in snap["setup"]}
-    marks = "".join(f'<span class="pill {"warn" if a in bad else "good"}">{esc(a)} · {"needs attention" if a in bad else "clear"}</span> ' for a in AREAS)
+    severity = {"Installation": "bad", "Validation": "bad", "Projects": "warn", "Project locations": "warn", "Background work": "warn", "Context": "warn"}
+    marks = "".join(f'<span class="pill {severity[a] if a in bad else "good"}">{esc(a)} · {"needs attention" if a in bad else "clear"}</span> ' for a in AREAS)
     rows = "".join(f'<div class="row"><div><b>{esc(s["headline"])}</b><div class="sub">{esc(s["meaning"])}</div></div><div class="fix">{esc(s["fix"])}</div></div>' for s in snap["setup"])
     lead = "A few things could slow the work down. Each includes what it means and the next step." if snap["setup"] else "All six checks are clear. Nothing in the setup is flagged."
     return f'<div class="card"><p><b>{esc(lead)}</b></p><div class="cards">{marks}</div><div class="health-list">{rows}</div></div>'
@@ -287,7 +288,8 @@ def dashboard_html(snap: dict) -> str:
     """City: a narrative operating view, readable expansions and grounded comparisons."""
     runner, nums = snap["runner"], snap["numbers"]
     state = "Paused" if runner.get("paused") else ("Running" if runner["building"] else "Idle")
-    pill = f'<span class="pill {"warn" if runner.get("paused") else ("good" if runner["building"] else "")}">{state}</span>'
+    state_class = "warn" if runner.get("paused") else ("running" if runner["building"] else "idle")
+    pill = f'<span class="pill {state_class}">{state}</span>'
     latest = f'<p class="note">Latest delivery: <b>#{esc(snap["latest"]["number"])} {esc(snap["latest"]["title"])}</b></p>' if snap.get("latest") else ""
     budget = local_config.max_story_spend()
     if nums.get("tokens_per_closed") is not None:
