@@ -497,7 +497,7 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     issues = {str(i.get("number")): i for i in (open_issues.fetch(slug) or [])} if slug and claims else {}
     commits = {n: t for n in (key.rsplit("#", 1)[-1] for key in claims) if (t := last_commit(slug, n))}
     states = _states(stamp, slug, claims, log, issues, holder, alive, commits)
-    building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + ([note] if (note := local_config.builder_note()) else []) + stale  # why the builder limit moved (#1158)
+    building = ["", "Building:"] + (states or [idle_line(alive, open_now)]) + stale  # why the builder limit moved (#1158)
     building += [line] if (line := estimate_line(slug, stamp)) else []  # when the run finishes, or why nothing says (#1189)
     held = claim_lines(stamp, claims, github_claims(in_progress(stamp)))  # every live claim, with its holder (#1188)
     building += ["", "Claims:"] + held if held else []
@@ -536,8 +536,8 @@ def gather(slug: str, now: datetime, open_now: int, rows: list[dict], numbers: d
     stamp, log = now.timestamp(), run_log()
     claims = live_claims(stamp)
     claims = {k: v for k, v in claims.items() if k not in closed_claims(claims, slug, rows)}
-    note = local_config.builder_note() or ""
-    load = re.sub(r"^Builder limit \d+:\s*", "", note).rstrip(".")
+    # The current hard cap has no adaptive load explanation to report.
+    load = ""
     today = datetime.fromtimestamp(stamp).date()
     delivered = [{"story": str(r["story"]).rsplit("-", 1)[-1], "title": _text(r.get("title"), 60), "tokens": r["tokens"], "cost": r["cost"]}
                  for r in status_report.history(log, slug, stamp, days=2) if datetime.fromtimestamp(status_report._epoch(r.get("at"))).date() == today]
