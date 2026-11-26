@@ -70,8 +70,8 @@ class PanelCase(unittest.TestCase):
 
     def test_portfolio_lists_multiple_registered_repositories_and_qualifies_the_metrics(self):
         state = {
-            "org/alpha": {"active": True, "building": {"1": {}}, "queue": [{"n": 2}]},
-            "org/beta": {"active": False, "building": {}, "queue": []},
+            "org/alpha": {"active": True, "builders": 1, "building": {"1": {"at": T0, "n": 1, "title": "Building"}}, "queue": [{"n": 2, "title": "Queued"}], "held": [], "waiting": []},
+            "org/beta": {"active": False, "builders": 1, "building": {}, "queue": [], "held": [], "waiting": []},
         }
         with mock.patch.object(status_report, "fleet_repos", return_value=[("org/alpha", Path("/alpha")), ("org/beta", Path("/beta"))]), \
              mock.patch.object(status_report, "load_state", return_value=state), \
