@@ -37,12 +37,12 @@ class ControlCommands(unittest.TestCase):
 
     def test_cancel_only_writes_when_the_story_is_in_the_active_run(self):
         self.setup_repo()
-        with mock.patch.object(run_lock, "active", return_value={"building": [42]}), mock.patch.object(run_lock, "request_cancel") as cancel:
+        with mock.patch.object(run_lock, "request_cancel", return_value=True) as cancel:
             code, text = quiet(cmd_control.command_control, ["cancel", "sample", "42"])
             self.assertEqual(0, code)
             cancel.assert_called_once_with("owner/sample", 42)
             self.assertIn("Cancellation requested", text)
-        with mock.patch.object(run_lock, "active", return_value={"building": [7]}), mock.patch.object(run_lock, "request_cancel") as cancel:
+        with mock.patch.object(run_lock, "request_cancel", return_value=False) as cancel:
             code, text = quiet(cmd_control.command_control, ["cancel", "sample", "42"])
             self.assertEqual(0, code)
             cancel.assert_not_called()
