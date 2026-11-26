@@ -175,6 +175,16 @@ class TestExitOne(unittest.TestCase):
         self.assertEqual("claude exited 1 in round 1, stop reason error_during_execution. stderr: auth expired", out["reason"])
         self.assertEqual(("error_during_execution", "auth expired"), (self.rows()[0]["stop"], self.rows()[0]["stderr_tail"]))
 
+    def test_a_usage_limit_error_is_not_resumed_and_is_flagged(self):  # #1299
+        run = Scripted({**reply("Claude AI usage limit reached|1700000000", code=1), "stop": "", "stderr": ""})
+        out = self.loop(run)
+        self.assertEqual((1, False, True), (len(run.prompts), out["done"], out["usage_limit"]))
+        self.assertIn("usage limit", out["reason"])
+
+    def test_another_error_is_not_flagged_as_the_usage_limit(self):  # #1299
+        out = self.loop(Scripted({**reply("", code=1), "stop": "error_during_execution", "stderr": "auth expired"}))
+        self.assertNotIn("usage_limit", out)
+
 
 class TestRunLog(unittest.TestCase):
     """#878, #909, #976: a run-log line holds the CLI's usage, cost and stop reason and the start size, which is the first call's context and never the session's total."""

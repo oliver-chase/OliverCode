@@ -175,6 +175,14 @@ class DrainCase(unittest.TestCase):
         code, out, st = self.run_drain(io)
         self.assertEqual((io.started, st["blocked"], st["sessions"]), ([1], [1], 1))
 
+    def test_a_usage_limit_starts_no_new_builder_and_releases_the_story_unblocked(self):  # #1299
+        limit = {"done": False, "usage_limit": True, "reason": "Claude usage limit reached: claude exited 1"}
+        io = FakeIo([issue(1), issue(2)], cap=1, builds={1: [limit]})
+        code, out, st = self.run_drain(io)
+        self.assertEqual((io.started, io.kept, io.released, st["blocked"], st["sessions"]), ([1], [1], [1], [], 1))
+        self.assertIn("usage limit", io.comments[0][1])
+        self.assertIn("Drain stopped for the usage limit", out)
+
     def test_restarts_an_early_exit_then_lands(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "claude exited 1"}]})
         _, out, st = self.run_drain(io)

@@ -440,6 +440,10 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
             io.comment(n, held_comment(worktree, out["held"]))
             return False, tokens
+        if out.get("usage_limit"):  # the story goes back to Ready unblocked, and the drain starts no new builder (#1299)
+            state.setdefault("limited", []).append(n)
+            io.comment(n, f"Drain stopped: {out['reason']}")
+            return False, tokens
         if out.get("fatal"):  # a reason a restart cannot fix blocks the story and starts no new session (#1012)
             io.comment(n, f"Drain blocked: {out['reason']}")
             return False, tokens
@@ -511,7 +515,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             busy = [intake.files_area(i.get("body") or "") for i in running.values()]  # one overlap rule, shared with the planner (#1014)
             started = False
             for issue in todo:
-                if len(running) >= io.capacity():
+                if state.get("limited") or len(running) >= io.capacity():  # no builder starts once one has hit the usage limit (#1299)
                     break
                 areas = intake.files_area(issue.get("body") or "")
                 if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
@@ -522,7 +526,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 started = True
             io.beat([i["number"] for i in running.values()])
             if not running:
-                if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
+                if todo and not started and waits < FULL_WAITS and io.capacity() == 0 and not state.get("limited"):
                     waits += 1
                     sleep(300)
                     continue
@@ -542,7 +546,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         except Exception:
                             pass
                 state["tokens"] += used
-                (state["closed"] if closed else state["blocked"]).append(issue["number"])
+                if closed or issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
+                    (state["closed"] if closed else state["blocked"]).append(issue["number"])
             io.beat([i["number"] for i in running.values()])
     except BaseException:  # Ctrl-C or SIGTERM (#1076): the stories in flight go back to Ready and their claims go, then the stop goes on
         stopped = True
@@ -551,6 +556,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         raise
     finally:
         pool.shutdown(wait=not stopped)
+    if state.get("limited"):
+        say(f"Drain stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}, so no new builder started.")
     say(f"Drain done: {len(state['closed'])} stories closed, {len(state['blocked'])} blocked, {state['sessions']} sessions, {state['tokens']:,} tokens.")
     return 0
 
@@ -662,7 +669,8 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     finally:
         run_lock.release(slug, pid)
         if ran:
-            agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]))
+            agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
+                                **({"reason": f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}."} if state.get("limited") else {}))
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)
