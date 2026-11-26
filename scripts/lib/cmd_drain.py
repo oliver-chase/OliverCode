@@ -444,7 +444,7 @@ def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
     n = issue["number"]
     try:
         closed, used = _work_story(io, issue, state)
-        if not closed:
+        if not closed and n not in state.get("cancelled", []):
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
         _event(io, "land" if closed else "held", issue)
         return closed, used
@@ -597,6 +597,7 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
             handoff = budget_handoff(worktree, out)
             io.clear_cancel(n)
             io.backlog(n)
+            state.setdefault("cancelled", []).append(n)
             io.comment(n, f"Cancelled by the owner before landing. The worktree and branch are kept for a handoff; nothing was pushed.\n- Next: review the handoff and return the story to Ready when you want to resume.\n{handoff}")
             return False, tokens
         if out.get("api_error"):
