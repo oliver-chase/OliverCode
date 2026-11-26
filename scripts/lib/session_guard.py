@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import failure_log, local_config
+from lib import failure_log, local_config, run_lock
 
 LOG = "model-sessions.jsonl"
 
@@ -282,8 +282,11 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
                     continue
                 try:
                     started_epoch = time.time()
+                    run_record = run_lock.active(repo_slug) if repo_slug else {}
+                    run_id = f"{repo_slug}:{run_record.get('pid', 'unknown')}:{run_record.get('since', 'unknown')}" if run_record else ""
                     metadata = {"event": "session_start", "session": session, "session_id": session_id,
                                 "model": model or "", "repo": repo_slug or Path(cwd).name, "started_at": _stamp(),
+                                **({"run_id": run_id} if run_id else {}),
                                 "slot": n, "cap": cap, "story_attempt": story_attempt, "active_sessions": _active(slot_dir, cap),
                                 "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
                     if not _write_start(metadata):

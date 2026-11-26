@@ -441,7 +441,7 @@ def _event(io, kind: str, issue: dict | None = None, **info) -> str:
 def telemetry_run_id(slug: str) -> str:
     """A stable identifier for one live repo run, or a local fallback outside a managed run."""
     record = run_lock.active(slug)
-    return f"{slug}:{record.get('pid', 'unknown')}:{record.get('started', 'unknown')}"
+    return f"{slug}:{record.get('pid', 'unknown')}:{record.get('since', 'unknown')}"
 
 
 def work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
