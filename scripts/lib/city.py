@@ -73,10 +73,16 @@ def _portfolio_html(now: float) -> str:
         state_label = "Running" if active and running else ("Queued" if queued else ("Active" if active else "Idle"))
         state_class = "good" if active and running else ("info" if queued else "")
         recent = f"{count} delivered in 7 days" if count else "No deliveries recorded this week"
+        costs = [float(r["cost"]) for r in delivered if r.get("cost") is not None and not r.get("outside")]
+        times = [float(r["minutes"]) for r in delivered if isinstance(r.get("minutes"), (int, float)) and not r.get("outside")]
+        average_cost = f"${sum(costs) / len(costs):.2f}/story" if costs else "cost not recorded"
+        average_time = f"{sum(times) / len(times):.0f} min/story" if times else "time not recorded"
+        detail = status_report._repo_section(slug, entry or status_report._idle(), log, now)
         rows.append(
-            f'<div class="portfolio-row"><div class="portfolio-name"><b>{html_escape(slug)}</b>'
-            f'<span class="pill {state_class}">{state_label}</span></div>'
-            f'<div class="portfolio-stats"><span>{running} building</span><span>{queued} queued</span><span>{recent}</span></div></div>'
+            f'<details class="repo-card"><summary><span class="repo-name">{html_escape(slug)}</span>'
+            f'<span class="pill {state_class}">{state_label}</span>'
+            f'<span class="repo-stats">{running} building · {queued} queued · {recent} · {average_cost} · {average_time}</span></summary>'
+            f'<div class="repo-expanded">{detail}</div></details>'
         )
     total_running = sum(len((state.get(s) or {}).get("building") or {}) for s in slugs)
     total_queued = sum(len((state.get(s) or {}).get("queue") or []) for s in slugs)

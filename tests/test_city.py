@@ -70,8 +70,8 @@ class PanelCase(unittest.TestCase):
 
     def test_portfolio_lists_multiple_registered_repositories_and_qualifies_the_metrics(self):
         state = {
-            "org/alpha": {"active": True, "building": {"1": {}}, "queue": [{"n": 2}]},
-            "org/beta": {"active": False, "building": {}, "queue": []},
+            "org/alpha": {"active": True, "builders": 1, "building": {"1": {"at": T0, "n": 1, "title": "Building"}}, "queue": [{"n": 2, "title": "Queued"}], "held": [], "waiting": []},
+            "org/beta": {"active": False, "builders": 1, "building": {}, "queue": [], "held": [], "waiting": []},
         }
         with mock.patch.object(status_report, "fleet_repos", return_value=[("org/alpha", Path("/alpha")), ("org/beta", Path("/beta"))]), \
              mock.patch.object(status_report, "load_state", return_value=state), \
@@ -84,6 +84,20 @@ class PanelCase(unittest.TestCase):
         self.assertIn("not GitHub backlog counts", page)
         self.assertIn("1 building", page)
         self.assertIn("1 queued", page)
+
+    def test_each_repository_expands_into_its_own_story_and_history(self):
+        state = {"org/alpha": {"active": False, "builders": 1, "building": {}, "queue": [], "held": [], "waiting": []}}
+        log = [{"repo": "org/alpha", "story": "story-9", "landed": True, "title": "Alpha delivery", "at": "2026-11-25T10:00:00Z", "minutes": 12, "model": "haiku"}]
+        with (
+            mock.patch.object(status_report, "fleet_repos", return_value=[("org/alpha", Path("/alpha"))]),
+            mock.patch.object(status_report, "load_state", return_value=state),
+            mock.patch.object(city.cmd_status, "run_log", return_value=log),
+        ):
+            page = city._portfolio_html(1795600000.0)
+        self.assertIn('<details class="repo-card">', page)
+        self.assertIn("org/alpha", page)
+        self.assertIn("Alpha delivery", page)
+        self.assertIn("12 min/story", page)
 
     def test_a_dashboard_that_could_not_read_github_says_so_in_plain_words(self):
         with mock.patch.object(city.cmd_status, "recent", return_value=None), mock.patch.object(city.repo_state, "origin", return_value="o/r"):

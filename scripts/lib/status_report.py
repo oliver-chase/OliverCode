@@ -94,8 +94,10 @@ def history(log: list[dict], slug: str, now: float, days: int = DAYS) -> list[di
     for land in landings:
         mine = [r for r in rows if str(r.get("story", "")) in (land["story"], land["story"] + "-review") and not r.get("landed") and _epoch(r.get("at")) <= _epoch(land.get("at"))]
         priced = [r["cost_usd"] for r in mine if isinstance(r.get("cost_usd"), (int, float))]
+        models = sorted({str(r.get("model")) for r in mine if r.get("model")})
         out.append({**land, "tokens": sum(int(r.get("input") or 0) + int(r.get("output") or 0) for r in mine),
-                    "cost": sum(priced) if priced else None, "model": land.get("model") or next((r.get("model") for r in reversed(mine) if r.get("model")), "")})
+                    "cost": sum(priced) if priced else None, "model": land.get("model") or next((r.get("model") for r in reversed(mine) if r.get("model")), ""),
+                    "models": models, "rounds": len(mine)})
     return sorted(out, key=lambda r: _epoch(r.get("at")), reverse=True)
 
 
@@ -394,32 +396,120 @@ def spend_days(log: list[dict], now: float, chats: dict | None = None, validatio
     return rows
 
 
-def _spend_panel(log: list[dict], now: float) -> str:
-    """The spend panel: for each day the tokens desktop chats and runner builders read with each one's share, the cost per landed story, median start sizes, the share of
-    rounds that stopped on the turn limit or an API error, the median validation time and the day's three costliest chats (#1150)."""
+def _bar_rows(title: str, rows: list[tuple[str, float | None, str]], note: str = "") -> str:
+    """An accessible horizontal bar chart. None values stay visibly unrecorded, never become zero."""
+    known = [value for _, value, _ in rows if value is not None]
+    maximum = max(known, default=0)
+    parts = [f'<section class="chart"><h3>{html.escape(title)}</h3>']
+    if note:
+        parts.append(f'<p class="muted">{html.escape(note)}</p>')
+    if not rows or not known:
+        parts.append('<p class="muted">Not enough recorded data yet.</p>')
+    else:
+        for label, value, shown in rows:
+            width = max(0, min(100, value / maximum * 100)) if value is not None and maximum else 0
+            bar = f'<span class="bar-fill" style="width:{width:.1f}%"></span>' if value is not None else '<span class="bar-missing"></span>'
+            parts.append(f'<div class="bar-row"><span class="bar-label">{html.escape(label)}</span><span class="bar-track">{bar}</span><strong>{html.escape(shown)}</strong></div>')
+    parts.append('</section>')
+    return ''.join(parts)
+
+
+def _usage_analytics(log: list[dict], now: float) -> str:
+    """First-class usage and delivery view, built only from local transcripts and run-log records."""
     try:
         days = spend_days(log, now)
     except (OSError, ValueError):
-        return ""
-    pct = lambda v: "none" if v is None else f"{v * 100:.0f}%"  # noqa: E731
-    count = lambda v: "none" if v is None else f"{v:,.0f}"  # noqa: E731
-    parts = ["<h2>Spend by day</h2>"]
-    for d in days:
-        label = datetime.strptime(d["day"], "%Y-%m-%d").strftime("%A %d %B")
-        if not d["total"] and not d["top"]:
-            parts.append(f"<h3>{label}: No activity</h3>")
+        days = []
+    slugs = sorted({str(r.get("repo")) for r in log if r.get("repo")})
+    landed = [row for slug in slugs for row in history(log, slug, now)]
+    measured_cost = [float(r["cost"]) for r in landed if r.get("cost") is not None and not r.get("outside")]
+    measured_time = [float(r["minutes"]) for r in landed if isinstance(r.get("minutes"), (int, float)) and not r.get("outside")]
+    measured_stories = [r for r in landed if not r.get("outside")]
+    avg_cost = sum(measured_cost) / len(measured_cost) if measured_cost else None
+    avg_time = sum(measured_time) / len(measured_time) if measured_time else None
+
+    model_rows = [r for r in log if isinstance(r.get("round"), int) and r.get("model") and _epoch(r.get("at")) >= now - DAYS * 86400]
+    by_model = {}
+    for row in model_rows:
+        model_name = str(row["model"])
+        bucket = by_model.setdefault(model_name, {"rounds": 0, "tokens": 0, "costs": [], "durations": []})
+        bucket["rounds"] += 1
+        bucket["tokens"] += sum(int(row.get(k) or 0) for k in ("input", "output", "cache_read", "cache_write"))
+        if isinstance(row.get("cost_usd"), (int, float)):
+            bucket["costs"].append(float(row["cost_usd"]))
+        if isinstance(row.get("duration_s"), (int, float)):
+            bucket["durations"].append(float(row["duration_s"]))
+    model_story_counts = {}
+    model_mix = {}
+    for story in landed:
+        models = story.get("models") or ([story["model"]] if story.get("model") else [])
+        if not models:
             continue
-        share = lambda n: pct(n / d["total"]) if d["total"] else "none"  # noqa: E731
-        parts.append(f"<h3>{label}: {d['total']:,} tokens read</h3>")
-        parts.append(_table(["Who", "Tokens read", "Share of the day", "Median start tokens"],
-                            [["Desktop chats", f"{d['chat']:,}", share(d["chat"]), count(d["chat_start"])],
-                             ["Runner builders", f"{d['builder']:,}", share(d["builder"]), count(d["builder_start"])]], ""))
-        parts.append(f"<p>Cost per landed story: {_money(d['cost_per_story'])}. Builder rounds stopped on the turn limit: {pct(d['limit_share'])}, on an API error: {pct(d['api_share'])}. "
-                     f"Median validation time: {'none' if d['validation'] is None else f'{d['validation']:.0f} seconds'}.</p>")
+        model_mix[len(models)] = model_mix.get(len(models), 0) + 1
+        for model_name in models:
+            model_story_counts[model_name] = model_story_counts.get(model_name, 0) + 1
+
+    daily_cost, daily_time, daily_tokens = [], [], []
+    for day in reversed(days):
+        label = datetime.strptime(day["day"], "%Y-%m-%d").strftime("%a")
+        rows = [r for r in landed if time.strftime("%Y-%m-%d", time.localtime(_epoch(r.get("at")))) == day["day"] and not r.get("outside")]
+        costs = [float(r["cost"]) for r in rows if r.get("cost") is not None]
+        minutes = [float(r["minutes"]) for r in rows if isinstance(r.get("minutes"), (int, float))]
+        daily_cost.append((label, sum(costs) / len(costs) if costs else None, f"${sum(costs) / len(costs):.2f}" if costs else "not recorded"))
+        daily_time.append((label, sum(minutes) / len(minutes) if minutes else None, f"{sum(minutes) / len(minutes):.0f} min" if minutes else "not recorded"))
+        daily_tokens.append((label, day["total"], f"{day['total']:,}"))
+
+    model_distribution = sorted(model_story_counts.items(), key=lambda item: (-item[1], item[0]))
+    model_cost, model_tokens, model_duration = [], [], []
+    for name, bucket in sorted(by_model.items(), key=lambda item: (-item[1]["tokens"], item[0])):
+        costs = bucket["costs"]
+        model_cost.append((name, sum(costs) / len(costs) if costs else None,
+                           f"${sum(costs) / len(costs):.2f}/round" if costs else "not recorded"))
+        durations = bucket["durations"]
+        model_duration.append((name, sum(durations) / len(durations) / 60 if durations else None,
+                               f"{sum(durations) / len(durations) / 60:.1f} min/round" if durations else "not recorded"))
+        model_tokens.append((name, bucket["tokens"], f"{bucket['tokens']:,} tokens"))
+    mix_rows = [(f"{count} model type{'s' if count != 1 else ''}", amount, str(amount) + " stories")
+                for count, amount in sorted(model_mix.items())]
+    top_models = [(name, count, f"{count} stories") for name, count in model_distribution]
+    avg_time_label = "not recorded" if avg_time is None else f"{avg_time:.0f} min"
+    cards = (f'<div class="usage-kpis"><div><span>Average cost per story</span><strong>{_money(avg_cost)}</strong></div>'
+             f'<div><span>Average elapsed time</span><strong>{avg_time_label}</strong></div>'
+             f'<div><span>Model types used</span><strong>{len(by_model)}</strong></div>'
+             f'<div><span>Stories measured</span><strong>{len(measured_stories)}</strong></div></div>')
+    charts = _bar_rows("Daily token use", daily_tokens, "Desktop chat and runner-builder input/context tokens, combined.")
+    charts += _bar_rows("Average cost per landed story", daily_cost, "Recorded runner cost only; work completed outside the runner is excluded.")
+    charts += _bar_rows("Average elapsed time per landed story", daily_time, "Wall-clock build time recorded by the runner.")
+    charts += _bar_rows("Model distribution by stories", top_models, "A story is counted once for every distinct model type used across its recorded rounds.")
+    charts += _bar_rows("Tokens used by model", model_tokens, "Recorded builder input, output and cache tokens over the last seven days.")
+    charts += _bar_rows("Average cost per builder round", model_cost, "Per-model round cost, not a per-story attribution.")
+    charts += _bar_rows("Average model round duration", model_duration, "Recorded elapsed time per model invocation; not whole-story duration.")
+    charts += _bar_rows("Model types used per story", mix_rows, "Distinct model types recorded across each landed story's rounds.")
+    parts = [f'<section class="usage"><h2>Usage &amp; delivery</h2><p class="section-intro">How much work the system is doing, what it costs, and which models are doing it. Figures reflect recorded activity; missing data stays unreported.</p>',
+             cards, '<div class="usage-charts">', charts, '</div>']
+    parts.append('<details class="usage-breakdown"><summary>Daily usage details</summary>')
+    pct = lambda v: "not recorded" if v is None else f"{v * 100:.0f}%"
+    for d in reversed(days):
+        if not d["total"] and not d["top"]:
+            continue
+        share = lambda n: pct(n / d["total"]) if d["total"] else "not recorded"
+        label = datetime.strptime(d["day"], "%Y-%m-%d").strftime("%A %d %B")
+        parts.append(f'<h4>{label}: {d["total"]:,} tokens read</h4>')
+        parts.append(_table(["Source", "Tokens read", "Share", "Median start tokens"],
+                            [["Desktop chats", f'{d["chat"]:,}', share(d["chat"]), "not recorded" if d["chat_start"] is None else f'{d["chat_start"]:,.0f}'],
+                             ["Runner builders", f'{d["builder"]:,}', share(d["builder"]), "not recorded" if d["builder_start"] is None else f'{d["builder_start"]:,.0f}']], ""))
+        validation_label = "not recorded" if d["validation"] is None else f'{d["validation"]:.0f} seconds'
+        parts.append(f'<p>Cost per landed story: {_money(d["cost_per_story"])}. Turn-limit stops: {pct(d["limit_share"])}. API-error stops: {pct(d["api_share"])}. Median validation: {validation_label}.</p>')
         if d["top"]:
             parts.append(_table(["Costliest chats", "Tokens read", "Calls", "Average context"],
                                 [[name[:8], f"{tokens:,}", f"{calls:,}", f"{tokens // max(1, calls):,}"] for name, tokens, calls in d["top"]], ""))
-    return "".join(parts)
+    parts.append('</details></section>')
+    return ''.join(parts)
+
+
+def _spend_panel(log: list[dict], now: float) -> str:
+    """Compatibility name for the first-class usage and delivery section."""
+    return _usage_analytics(log, now)
 
 
 SCRIPT = """<script>
@@ -452,9 +542,8 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
     tokens, cost = publish_total(log, now)
     waiting = _owner_steps()
     slugs = sorted(set(state) | {r["repo"] for r in log if r.get("outside")})  # a repo with a commit that landed outside the runner shows too (#996)
-    body = "".join(_repo_section(slug, state.get(slug) or _idle(), log, now) for slug in slugs) or "<p>No run has started on this machine yet.</p>"
+    body = "".join(f'<details class="repo-detail"><summary>{html.escape(slug)} · {len((state.get(slug) or _idle())["building"])} building · {len((state.get(slug) or _idle())["queue"])} queued</summary>{_repo_section(slug, state.get(slug) or _idle(), log, now)}</details>' for slug in slugs) or "<p>No run has started on this machine yet.</p>"
     owner = _table(["Step only you can take"], [[f"#{i['id']} {i.get('step', '')}"] for i in waiting], "No owner step is open.")
-    spend = f"Publishing City today: {tokens:,} tokens, {_money(cost)}."
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<meta http-equiv="refresh" content="{REFRESH_SECONDS}"><title>OliverCode status</title><style>:root {{ {vars_(light)} }}'
             "body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 Georgia, 'Times New Roman', serif; }"
@@ -467,12 +556,23 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "table { font-size: 14px; } td, th { border-color: var(--line); }"
             "summary { cursor: pointer; padding: 12px 0; color: var(--text); }"
             ".muted, #published { color: var(--muted); } #published { font-size: 13px; }"
+            ".usage { margin: 34px 0 46px; } .usage-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:18px 0 24px; }"
+            ".usage-kpis > div { border-top:1px solid var(--line); padding:12px 10px 10px 0; } .usage-kpis span { display:block; color:var(--muted); font:12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".usage-kpis strong { display:block; font:26px/1.2 Georgia,serif; margin-top:6px; } .usage-charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:12px 28px; }"
+            ".chart { border-top:1px solid var(--line); padding:8px 0 14px; min-width:0; } .chart h3 { margin:10px 0 4px; } .chart .muted { font:12px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".bar-row { display:grid; grid-template-columns:minmax(90px,1.1fr) minmax(70px,2fr) auto; gap:10px; align-items:center; margin:10px 0; font:12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".bar-label { overflow-wrap:anywhere; color:var(--muted); } .bar-track { height:9px; background:#f0edf8; border-radius:8px; overflow:hidden; } .bar-fill { display:block; height:100%; background:#a99be8; border-radius:8px; } .bar-missing { display:block; width:100%; border-top:1px dashed #aaa; }"
+            ".bar-row strong { font-weight:600; white-space:nowrap; } .usage-breakdown { margin-top:20px; border-top:1px solid var(--line); }"
+            ".repo-detail, .repo-card { border-top:1px solid var(--line); } .repo-detail summary, .repo-card summary { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }"
+            ".repo-card summary { padding:16px 0; } .repo-name { font-size:18px; } .repo-stats { color:var(--muted); font:12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".repo-expanded { padding:0 0 20px 16px; } .repo-expanded h2 { margin-top:18px; } .owner-detail { border-top:1px solid var(--line); }"
             "@media (max-width: 640px) { thead { display: none; } tr, td { display: block; } tr { padding: 8px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; }"
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'
-            f'{"" if panel else "<h1>OliverCode City</h1>"}<p id="published" class="warn"></p>'  # the dashboard leads: what needs the owner comes first (#1209, #1177)
-            f'<details style="margin-top:32px"><summary>Details by project</summary><p class="muted">This machine: {html.escape(platform.node())}. Last rewritten '
-            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. {html.escape(spend)}</p><h3>Every step waiting on you</h3>{owner}{body}{_spend_panel(log, now)}</details>{SCRIPT}</main></body></html>')
+            f'{"" if panel else "<h1>OliverCode City</h1>"}<p id="published" class="warn"></p>'
+            f'{_usage_analytics(log, now)}'
+            f'<details class="owner-detail" style="margin-top:32px"><summary>Owner actions and system details</summary><p class="muted">This machine: {html.escape(platform.node())}. Last rewritten '
+            f'{datetime.fromtimestamp(now):%A %d %B %H:%M}. Publishing City today: {tokens:,} tokens, {_money(cost)}.</p><h3>Every step waiting on you</h3>{owner}{body if not panel else ""}</details>{SCRIPT}</main></body></html>')
 
 
 def _owner_steps() -> list[dict]:

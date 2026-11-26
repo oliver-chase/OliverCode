@@ -111,6 +111,36 @@ class TestStatus(unittest.TestCase):
         self.assertIn("Georgia, 'Times New Roman', serif", page)
         self.assertIn("--accent: #a99be8", page)
 
+    def test_city_usage_analytics_are_visible_without_opening_owner_details(self):
+        log = [
+            {"story": "story-7", "repo": "org/repo", "round": 1, "model": "haiku", "input": 100, "output": 20, "cost_usd": 0.10, "at": "2026-11-22T10:00:00Z"},
+            {"story": "story-7", "repo": "org/repo", "round": 2, "model": "sonnet", "input": 200, "output": 30, "cost_usd": 0.30, "at": "2026-11-22T10:10:00Z"},
+            {"story": "story-7", "repo": "org/repo", "landed": True, "minutes": 25, "at": "2026-11-22T10:30:00Z", "title": "A delivered story"},
+        ]
+        with mock.patch.object(status_report, "spend_days", return_value=[
+            {"day": "2026-11-22", "total": 320, "chat": 0, "builder": 320, "cost_per_story": 0.40,
+             "chat_start": None, "builder_start": 100, "limit_share": 0.0, "api_share": 0.0, "validation": 8, "top": []}
+        ]):
+            page = status_report.render({}, log, NOW.timestamp(), panel="<h1>OliverCode City</h1>")
+        self.assertIn("Usage &amp; delivery", page)
+        self.assertIn("Average cost per landed story", page)
+        self.assertIn("Average elapsed time per landed story", page)
+        self.assertIn("Model distribution by stories", page)
+        self.assertIn("Model types used per story", page)
+        self.assertIn("haiku", page)
+        self.assertIn("sonnet", page)
+        self.assertLess(page.index("Usage &amp; delivery"), page.index("Owner actions and system details"))
+
+    def test_history_records_all_model_types_used_by_a_story(self):
+        log = [
+            {"story": "story-7", "repo": "org/repo", "round": 1, "model": "haiku", "cost_usd": 0.10, "at": "2026-11-22T10:00:00Z"},
+            {"story": "story-7", "repo": "org/repo", "round": 2, "model": "sonnet", "cost_usd": 0.30, "at": "2026-11-22T10:10:00Z"},
+            {"story": "story-7", "repo": "org/repo", "landed": True, "minutes": 25, "at": "2026-11-22T10:30:00Z"},
+        ]
+        row = status_report.history(log, "org/repo", NOW.timestamp() + 86400)[0]
+        self.assertEqual(["haiku", "sonnet"], row["models"])
+        self.assertEqual(2, row["rounds"])
+
     def test_status_page_numbers_show_average_cost_per_closed_story(self):
         html = status_page.numbers_block({"tokens_per_closed": 1234, "cost_per_closed": 2.5, "handovers": 1, "threads": 2, "open": 3})
         self.assertIn("Tokens per closed story", html)
