@@ -165,14 +165,14 @@ def text(snap: dict) -> list[str]:
     if snap["ideas"]:
         out += ["", RULE, "", "IDEAS", "", f"  {snap['ideas']} waiting for review.", "  Run `olivercode candidates`."]
     if snap["setup"]:
-        out += ["", RULE, "", "YOUR SETUP", ""] + [f"  ⚠ {s['headline']}" for s in snap["setup"]] + ["", "Run `olivercode health` for details."]
+        out += ["", RULE, "", "YOUR SETUP", ""] + [f"  {s['headline']}" for s in snap["setup"]] + ["", "Run `olivercode health` for details."]
     if not snap["city"]:
         out += ["", RULE, "", "CITY", "", "  Not connected to Claude Desktop.", '  Say "Set up OliverCode City" to finish.']
     return out
 
 
 STYLE = """
-:root{--bg:#faf9f6;--card:#fff;--ink:#191820;--sub:#696772;--line:#e7e4e9;--accent:#DFC5FE;--accent-strong:#49335f;--lavender:#DFC5FE;--wash:#faf9f6;--mint:#eaf2ed;--mint-line:#d1e0d5;--mint-ink:#466b56;--peach:#f7eee6;--peach-line:#ead8c8;--peach-ink:#8a6042;--rose:#f7eeee;--rose-line:#e6cfd1;--rose-ink:#8b555a;--blue:#edf1f3;--blue-line:#d8e0e5;--blue-ink:#586c79}
+:root{--bg:#faf9f6;--card:#fff;--ink:#191820;--sub:#696772;--line:#e7e4e9;--accent:#C8BBD5;--accent-strong:#8E789F;--lavender:#C8BBD5;--wash:#faf9f6;--mint:#eaf2ed;--mint-line:#d1e0d5;--mint-ink:#466b56;--peach:#f7eee6;--peach-line:#ead8c8;--peach-ink:#8a6042;--rose:#f7eeee;--rose-line:#e6cfd1;--rose-ink:#8b555a;--blue:#edf1f3;--blue-line:#d8e0e5;--blue-ink:#586c79}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 Georgia,"Times New Roman",serif}
 h1,h2,h3,.big,.flow strong{font-family:Georgia,"Times New Roman",serif;font-weight:500;color:var(--ink)}
@@ -194,7 +194,7 @@ p{margin:8px 0}.sub,.label,.note,.summary-meta{color:var(--sub)}
 .pill.good{border-color:var(--mint-line);background:var(--mint);color:var(--mint-ink)}
 .pill.warn{border-color:var(--peach-line);background:var(--peach);color:var(--peach-ink)}
 .pill.bad{border-color:var(--rose-line);background:var(--rose);color:var(--rose-ink)}
-.pill.info{border-color:#c8a5ed;background:var(--lavender);color:#352344}
+.pill.info{border-color:#B5A3C4;background:var(--lavender);color:#352344}
 .pill.neutral{border-color:var(--blue-line);background:var(--blue);color:var(--blue-ink)}
 .section-intro{max-width:70ch;color:var(--sub);margin:-2px 0 14px}
 .city-grid>section{min-width:0;min-height:0;height:auto;padding:17px 18px;background:#fff;border:1px solid var(--line);border-radius:5px}
@@ -214,7 +214,7 @@ summary::-webkit-details-marker{display:none}summary:after{content:"＋";color:v
 .summary-title{flex:1;min-width:0}.summary-meta{font-size:.84rem;font-weight:500}.expansion{padding:2px 14px 16px;color:var(--ink)}.expansion p{max-width:72ch}.expansion ul{margin:8px 0 0;padding-left:22px}.expansion li{padding:5px 0}
 .attention{border:1px solid var(--line);margin:0 0 8px;padding:0 11px;background:#fff;border-radius:4px}.attention summary{padding:11px 2px}.attention .expansion{padding:4px 2px 12px}
 .row{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}.row>div:first-child{flex:1;min-width:0}.row .sub{max-width:34ch;font-size:.86rem}
-.bars{display:flex;align-items:stretch;gap:10px;height:148px;margin:14px 0 6px;border-bottom:1px solid var(--line)}.chart-day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;color:var(--sub);font:11px/1.3 Arial,sans-serif}.chart-values{display:flex;justify-content:center;gap:8px;font-size:10px;font-variant-numeric:tabular-nums}.bar{display:flex;gap:4px;align-items:flex-end;justify-content:center;width:100%;height:105px}.bar i{display:block;width:35%;min-height:2px}.o{background:var(--accent)}.c{background:#b9d8c4}.chart-label{padding-top:2px}.legend{display:flex;gap:16px;flex-wrap:wrap;font:11px/1.4 Arial,sans-serif;color:var(--sub)}.legend span:before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;background:var(--accent)}.legend .delivered:before{background:#29232f}
+.bars{display:flex;align-items:stretch;gap:10px;height:148px;margin:14px 0 6px;border-bottom:1px solid var(--line)}.chart-day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;color:var(--sub);font:11px/1.3 Arial,sans-serif}.chart-values{display:flex;justify-content:center;gap:8px;font-size:10px;font-variant-numeric:tabular-nums}.bar{display:flex;gap:4px;align-items:flex-end;justify-content:center;width:100%;height:105px}.bar i{display:block;width:35%;min-height:2px}.o{background:var(--accent)}.c{background:#8E789F}.chart-label{padding-top:2px}.legend{display:flex;gap:16px;flex-wrap:wrap;font:11px/1.4 Arial,sans-serif;color:var(--sub)}.legend span:before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;background:var(--accent)}.legend .delivered:before{background:#8E789F}
 .flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:15px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.flow>div{padding:12px 14px 12px 0;border-right:1px solid var(--line);min-width:0}.flow>div+div{padding-left:14px}.flow>div:last-child{border-right:0}.flow .positive{background:var(--mint)}.flow .negative{background:var(--rose)}.flow strong{display:block;font-size:1.55rem;line-height:1.25}
 .meter{height:6px;background:#eeeae4;margin:12px 0 4px;border-radius:0;overflow:hidden}.meter i{display:block;height:100%;background:var(--accent);border-radius:0}.health-list{margin-top:8px}.health-list .row{padding:12px 0}.health-list .fix{max-width:35ch;color:var(--sub);font-size:.86rem}
 code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1eee8;padding:2px 5px;border-radius:2px;overflow-wrap:anywhere}
