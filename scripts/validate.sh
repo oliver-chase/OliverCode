@@ -221,7 +221,7 @@ main() {
       echo "                         skills' own script tests, if present) and fleet conformance, in"
       echo "                         parallel inside one queue slot, printing each gate as it starts and finishes"
       echo "                         OLIVERCODE_VALIDATE_TIMEOUT (seconds) is the run's budget and"
-      echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: cores);"
+      echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: 4, maximum: 4);"
       echo "                         OLIVERCODE_VALIDATE_JOBS sets the smoke test parallelism"
       echo "  --tree                 Same as no args (the pre-commit gates always scan every tracked file)"
       echo "  --round FILE...        Fast per-round check: changed-file precommit, validation-slot bypass and"
