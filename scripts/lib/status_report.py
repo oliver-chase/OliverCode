@@ -339,10 +339,16 @@ def _landed(slug: str, log: list[dict], now: float) -> str:
         total = (f"{len(mine)} landed, {sum(r['tokens'] for r in mine):,} tokens, {_money(sum(priced) if priced else None)}" if mine else "nothing landed")
         parts.append(f"<h4>{day:%A %d %B}: {total}</h4>")
         if mine:
-            parts.append(_table(["Story", "Started by", "Model", "Tokens", "Cost"],
-                                [[f"#{str(r['story']).rsplit('-', 1)[-1]} {r.get('title', '')}", r.get("origin") or "unrecorded",
-                                  OUTSIDE if r.get("outside") else r.get("model") or "unknown",
-                                  "not recorded" if r.get("outside") else f"{r['tokens']:,}", OUTSIDE if r.get("outside") else _money(r["cost"])] for r in mine], ""))
+            table_rows = []
+            for row in mine:
+                models = row.get("models") or ([row["model"]] if row.get("model") else [])
+                model_names = ", ".join(models) if models and not row.get("outside") else (OUTSIDE if row.get("outside") else "not recorded")
+                model_count = str(len(models)) if models and not row.get("outside") else "not recorded"
+                table_rows.append([f"#{str(row['story']).rsplit('-', 1)[-1]} {row.get('title', '')}",
+                                   row.get("origin") or "unrecorded", model_names, model_count,
+                                   "not recorded" if row.get("outside") else f"{row['tokens']:,}",
+                                   OUTSIDE if row.get("outside") else _money(row["cost"])])
+            parts.append(_table(["Story", "Started by", "Models used", "Model types", "Tokens", "Cost"], table_rows, ""))
     return "".join(parts)
 
 
