@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -120,18 +121,38 @@ def run(root: Path, out=sys.stdout) -> int:
     with tempfile.TemporaryDirectory(prefix="olivercode-smoke-") as tmp:
         log_dir = Path(tmp)
         units = plan(mods, load_timings(), jobs())
+        output_lock = threading.Lock()
+
+        verbose = os.environ.get("OLIVERCODE_VALIDATE_VERBOSE", "1") != "0"
+
+        def progress(message: str) -> None:
+            # Per-module output is opt-in; failures and the final summary are always shown.
+            if verbose:
+                with output_lock:
+                    print(message, file=out, flush=True)
+
+        print(f"  Running {len(units)} test unit(s) across {len(mods)} module(s), {jobs()} workers.", file=out, flush=True)
 
         def one(unit):
             name, module, folder, ids = unit
             began = time.monotonic()
-            with open(log_dir / f"{name}.log", "w", encoding="utf-8") as log:
-                code = subprocess.run([sys.executable, "-m", "unittest", "-b", *(ids or [module])], cwd=folder, stdout=log,
-                                      stderr=subprocess.STDOUT).returncode
-            return name, code, time.monotonic() - began
+            progress(f"  [RUN ] {name}")
+            try:
+                with open(log_dir / f"{name}.log", "w", encoding="utf-8") as log:
+                    code = subprocess.run([sys.executable, "-m", "unittest", "-b", *(ids or [module])], cwd=folder, stdout=log,
+                                          stderr=subprocess.STDOUT).returncode
+            except OSError as exc:
+                code = 1
+                (log_dir / f"{name}.log").write_text(f"Could not start test module: {exc}\n", encoding="utf-8")
+            took = time.monotonic() - began
+            label = "FAIL" if code else " OK "
+            progress(f"  [{label}] {name} ({took:.1f}s)")
+            return name, code, took
 
+        run_began = time.monotonic()
         with ThreadPoolExecutor(max_workers=jobs()) as pool:
             results = list(pool.map(one, units))
-        if os.environ.get("OLIVERCODE_VALIDATE_TIMES"):
+        if os.environ.get("OLIVERCODE_VALIDATE_TIMES") or time.monotonic() - run_began >= SHOW_SLOWEST_AFTER:  # a long run names its slowest modules without being asked (#1180)
             print("  slowest units: " + ", ".join(f"{n} {t:.0f}s" for n, _, t in sorted(results, key=lambda r: -r[2])[:10]), file=out)
         ran = 0
         for name, _, _ in results:
@@ -151,6 +172,9 @@ def run(root: Path, out=sys.stdout) -> int:
         save_timings(spent)
         print(f"  Ran {ran} tests across {len(mods)} modules, all passed", file=out)
     return 0
+
+
+SHOW_SLOWEST_AFTER = 30  # seconds a run takes before it prints its ten slowest units unasked
 
 
 def main(argv: list[str]) -> int:
