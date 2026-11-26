@@ -11,7 +11,7 @@ import re
 from urllib.parse import parse_qs, urlparse
 
 VERSION = ["-H", "X-GitHub-Api-Version: 2022-11-28"]
-WANT = ("Title", "Status", "Priority", "Size", "Work Type", "Area", "Repository")
+WANT = ("Status", "Priority", "Size", "Work Type", "Area")
 ISSUE_FILTER = '.[] | select(has("pull_request") | not) | {number, state, title}'
 
 
@@ -23,15 +23,16 @@ def shape(item: dict) -> dict:
     """One REST board item as `gh project item-list --format json` spells it: a field is keyed by its name with a
     lower-case first letter, and `content.repository` is `owner/name`."""
     content = item.get("content") or {}
-    out = {"content": {"number": content.get("number"), "title": content.get("title"), "type": item.get("content_type")}}
+    out = {"title": content.get("title"),
+           "content": {"number": content.get("number"), "title": content.get("title"), "type": item.get("content_type")}}
+    # The Title and Repository fields break the REST items endpoint, so both come from the content.
+    repo = (content.get("repository") or {}).get("full_name") or "/".join((content.get("repository_url") or "").split("/")[-2:])
+    if repo:
+        out["content"]["repository"] = repo
     for field in item.get("fields") or []:
         value, name = field.get("value"), field["name"]
-        if field["data_type"] == "title":
-            out["title"] = (value or {}).get("raw")
-        elif field["data_type"] == "single_select":
+        if field["data_type"] == "single_select":
             out[name[0].lower() + name[1:]] = ((value or {}).get("name") or {}).get("raw")
-        elif field["data_type"] == "repository" and value:
-            out["content"]["repository"] = value.get("full_name")
     return out
 
 

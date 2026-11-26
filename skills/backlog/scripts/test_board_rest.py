@@ -5,13 +5,12 @@ import unittest
 import board_rest as br
 
 ITEM = {
-    "archived_at": None, "content_type": "Issue", "content": {"number": 7, "title": "A story", "state": "open"},
+    "archived_at": None, "content_type": "Issue", "content": {"number": 7, "title": "A story", "state": "open",
+                                                                  "repository_url": "https://api.github.com/repos/o/r"},
     "fields": [
-        {"name": "Title", "data_type": "title", "value": {"raw": "A story"}},
         {"name": "Status", "data_type": "single_select", "value": {"name": {"raw": "Ready"}}},
         {"name": "Work Type", "data_type": "single_select", "value": {"name": {"raw": "Story"}}},
         {"name": "Area", "data_type": "single_select", "value": None},
-        {"name": "Repository", "data_type": "repository", "value": {"full_name": "o/r"}},
     ],
 }
 
@@ -48,6 +47,8 @@ class ProjectItems(unittest.TestCase):
         items = br.project_items(self.CFG, run)
         self.assertEqual(1, len(items))
         self.assertIn("fields=11", calls[1][-1])
+        self.assertEqual("A story", items[0]["title"])
+        self.assertEqual("o/r", items[0]["content"]["repository"])
         self.assertNotIn("12", calls[1][-1].split("fields=")[1])
 
     def test_a_field_name_spelled_with_other_capitals_is_read(self):
