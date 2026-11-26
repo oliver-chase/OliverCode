@@ -385,13 +385,22 @@ class DrainCase(unittest.TestCase):
     def test_an_l_or_xl_story_is_skipped_for_splitting_and_the_rest_run(self):
         """#1307: a large story is split into S and M stories before it costs anything."""
         for size in ("L", "XL"):
-            self.assertIn("needs splitting into S and M stories", cmd_drain.skip_reason(issue(1, size=size)))
+            self.assertIn("needs splitting into S and M stories", cmd_drain.skip_reason(issue(1, f"Size: {size}", size=size)))
         for size in ("XS", "S", "M"):
-            self.assertEqual("", cmd_drain.skip_reason(issue(2, size=size)))
-        io = FakeIo([issue(1, size="XL"), issue(2)], cap=4)
+            self.assertEqual("", cmd_drain.skip_reason(issue(2, f"Size: {size}", size=size)))
+        io = FakeIo([issue(1, "Size: XL", size="XL"), issue(2)], cap=4)
         _, out, _ = self.run_drain(io)
         self.assertEqual([2], io.started)
         self.assertIn("Skipped #1", out)
+
+    def test_the_text_size_decides_the_refusal_and_a_mismatch_is_logged_once(self):
+        """#1342: the card says XL and the text says M, so the story builds; text L refuses; no Size line falls back to the body length."""
+        io = FakeIo([issue(1, "Size: M", size="XL")], cap=4)
+        _, out, _ = self.run_drain(io)
+        self.assertEqual([1], io.started)
+        self.assertEqual(1, out.count("its card says Size XL but its text says M"))
+        self.assertIn("needs splitting", cmd_drain.skip_reason(issue(2, "Size: L", size="S")))
+        self.assertEqual("", cmd_drain.skip_reason(issue(3, size="XL")))  # a short body with no Size line reads as XS
 
     def test_a_full_machine_waits_for_a_free_builder_and_never_reads_the_load(self):
         """#1055: no free builder means wait, then start; the load average plays no part."""

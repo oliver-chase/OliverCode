@@ -55,8 +55,8 @@ def skip_reason(issue: dict, repo: Path | None = None) -> str:
         return f"its board Status is {issue.get('status') or 'empty'}, not Ready"
     if not issue.get("size"):
         return "it has no Size on the board"
-    if str(issue["size"]).strip().upper() in ("L", "XL"):
-        return f"its Size is {issue['size']}, so it needs splitting into S and M stories"
+    if (size := cmd_groom.size_of(issue)) in ("L", "XL"):  # the text's Size routes the builder, so it also decides the refusal (#1342)
+        return f"its Size is {size}, so it needs splitting into S and M stories"
     area = intake.files_area(issue.get("body") or "")
     if not area:
         return NO_AREA
@@ -612,7 +612,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     waiting: deque = deque()  # committed stories the queue has not taken yet
     committed: dict = {}  # number -> issue of each story committed and not yet landed or sent back to a builder
     landing: dict = {}  # the one batch in flight: its future -> its stories
-    waits, reported, filled = 0, set(), set()
+    waits, reported, filled, mismatched = 0, set(), set(), set()
     stopped = False
     hold_waited = False
 
@@ -737,6 +737,9 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         if owner_gated(issue):
                             notify(f"Story #{issue['number']} is owner-gated and waits for you")
                     continue
+                if re.search(r"Size:\s*(XS|S|M|L|XL)\b", issue.get("body") or "") and (text_size := cmd_groom.size_of(issue)) != str(issue["size"]).strip().upper() and issue["number"] not in mismatched:
+                    mismatched.add(issue["number"])
+                    say(f"#{issue['number']}: its card says Size {issue['size']} but its text says {text_size}; drain uses {text_size} (#1342).")
                 if held := io.blockers(issue):  # a story waits until every blocker is closed, and the skip names the blocker (#1064)
                     if (issue["number"], tuple(held)) not in reported:
                         reported.add((issue["number"], tuple(held)))
