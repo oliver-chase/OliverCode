@@ -103,6 +103,11 @@ def state():
 
 
 class DrainCase(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_drain(self, io, st=None):
         st = st or state()
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
