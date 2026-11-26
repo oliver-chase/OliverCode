@@ -581,15 +581,17 @@ def story_cost_unknown(n: int, repo: str = "") -> bool:
     """True when a previous model call for this story has no trustworthy cost record."""
     path = failure_log.home() / "run-log.jsonl"
     prefix = f"story-{n}"
+    if not path.exists():
+        return session_guard.story_has_unknown_cost(n, repo)
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 try:
                     row = json.loads(line)
                 except (ValueError, TypeError):
-                    continue
+                    return True
                 if not isinstance(row, dict):
-                    continue
+                    return True
                 name = str(row.get("story") or "")
                 if name != prefix and not name.startswith(prefix + "-"):
                     continue
@@ -600,7 +602,7 @@ def story_cost_unknown(n: int, repo: str = "") -> bool:
                 if row.get("stop") == "api_error" and row.get("cost_usd") is None:
                     return True
     except OSError:
-        pass
+        return True
     return session_guard.story_has_unknown_cost(n, repo)
 
 def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
