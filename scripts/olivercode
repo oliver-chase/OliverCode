@@ -144,7 +144,7 @@ def main() -> int:
     if cmd == "drain":
         return command_drain(argv)
     if cmd in {"pause", "resume", "cancel"}:
-        return command_control([cmd, *argv]
+        return command_control([cmd, *argv])
     if cmd == "decisions":
         return command_decisions(argv)
     if cmd == "fleet-sync":
