@@ -212,7 +212,7 @@ class Io:
             raise RuntimeError("; ".join(problems))
         return path
 
-    def build(self, issue: dict, worktree: Path, note: str) -> dict:
+    def cancel_requested(self, n: int) -> bool:\n        return run_lock.cancel_requested(self.slug, n)\n\n    def clear_cancel(self, n: int) -> bool:\n        return run_lock.clear_cancel(self.slug, n)\n\n    def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names and the owner's decisions, and the
         model is the one the brief names (#1015), with a small story getting a third round (#890)."""
         n, size = issue["number"], cmd_groom.size_of(issue)
@@ -223,7 +223,7 @@ class Io:
         review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, max_turns=intake.turns(size),
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.slug)
+                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.slug, stop_check=lambda: self.cancel_requested(n))
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
@@ -694,7 +694,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if message:
                     say(message)
             started = False
-            for issue in ([] if state.get("restart") or state.get("api_error_stop") else todo):  # stop starting work after runner changes or repeated API failure
+            paused = run_lock.is_paused(io.slug)\n            run_lock.set_paused(io.slug, os.getpid(), paused)\n            if paused and not reported.intersection({"paused"}):\n                say("Runner paused. Existing builders are finishing; no new story will start. Run olivercode resume REPO to continue.")\n                reported.add("paused")\n            if not paused:\n                reported.discard("paused")\n            for issue in ([] if paused or state.get("restart") or state.get("api_error_stop") else todo):  # stop starting work after runner changes or repeated API failure
                 if len(running) >= io.capacity():
                     break
                 if io.claimed(issue):
