@@ -8,6 +8,7 @@ PANEL_TTL seconds so the page's frequent automatic rewrites (#990) do not repeat
 from __future__ import annotations
 
 import json
+from html import escape as html_escape
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
