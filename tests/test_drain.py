@@ -1029,10 +1029,6 @@ class RestartCase(unittest.TestCase):
         self.assertTrue(any("#1106" in line and "restarting" in line for line in lines))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class FullMachineCase(unittest.TestCase):
     def test_a_drain_waits_at_most_twenty_minutes_then_stops_naming_the_holder(self):
         class Full(FakeIo):
