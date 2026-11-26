@@ -50,8 +50,25 @@ class StatusOnly(unittest.TestCase):
         self.assertIn("5 hours old. Run `olivercode status`", hint.age_note(self.digest, now + 5 * 3600 + 60))
         self.assertIn("3 days old", hint.age_note(self.digest, now + 3 * 86400))
         os.utime(self.digest, (now - 7200, now - 7200))
-        self.assertIn("2 hours old", hint.context("what is building?", self.digest))
-        self.assertIn("2 hours old", hint.block_reason(self.digest))
+        stale = hint.context("what is building?", self.digest)
+        self.assertIn("2 hours old", stale)
+        self.assertIn("Run `olivercode status` before answering", stale)
+        self.assertNotIn("Board:", stale)
+
+    def test_a_fresh_digest_is_added_with_its_time_and_never_says_to_skip_a_check(self):
+        text = hint.context("what is building?", self.digest)
+        self.assertIn("Board: owner/repo: 3 open stories.", text)
+        self.assertRegex(text, r"written \d{4}-\d\d-\d\d \d\d:\d\d UTC")
+        self.assertIn("Confirm any figure", text)
+        self.assertNotIn("no tool call", text)
+
+    def test_a_status_only_prompt_over_a_stale_digest_goes_through(self):
+        old = self.digest.stat().st_mtime - 7200
+        os.utime(self.digest, (old, old))
+        out = json.loads(self.run_hook("what is building?").stdout)
+        self.assertNotIn("decision", out)
+        self.assertIn("stale", out["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("Board:", out["hookSpecificOutput"]["additionalContext"])
 
     def test_an_ask_prefix_passes_a_status_question_through_unchanged(self):
         for prompt in ("ask: what is building?", "Ask: status?"):

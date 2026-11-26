@@ -2,7 +2,7 @@
 """Claude Code UserPromptSubmit hook: a status question is answered from the status digest, with no model turn (#991, #1000).
 
 When the owner's prompt asks what is building, what is left or when something finishes, the hook reads the board line and the open stories from
-status-digest.md (cmd_status.digest_path). A message that is only a status question is blocked, and those lines are the block reason, so no model
+status-digest.md (cmd_status.digest_path). A message that is only a status question is blocked when the digest is fresh, and those lines are the block reason, so no model
 turn runs and the message never enters the thread. A mixed message goes through with the lines added as context. Every other prompt, a prompt that
 starts with "ask:", and every message from another session or a notification, gets nothing. The hook fails open on its own error.
 
@@ -93,8 +93,12 @@ def context(prompt: str, path: Path | None = None) -> str:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return f"No status digest is written yet at {path}. Say so and offer to write it with `olivercode status digest`."
-    return (f"Status from the status file {path}:\n{age_note(path)}{open_part(text)}\n"
-            f"Answer from these lines with no tool call. The full status file is {path}, and the owner can read it there.")
+    stale = age_note(path)
+    if stale:  # a stale digest gives no figures, so none can be recalled (#1329)
+        return f"The status digest at {path} is stale, so none of its figures are given. {stale}Run `olivercode status` before answering."
+    written = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(path.stat().st_mtime))
+    return (f"Status from the status file {path}, written {written}:\n{open_part(text)}\n"
+            f"Confirm any figure your answer gives with a command before stating it. The full status file is {path}, and the owner can read it there.")
 
 
 def context_tokens(transcript: Path) -> int:
@@ -138,7 +142,7 @@ def block_reason(path: Path) -> str:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return f"No status digest is written yet at {path}. Write it with `olivercode status digest`."
-    return f"Status from the status file {path}:\n{age_note(path)}{open_part(text)}"
+    return f"Status from the status file {path}:\n{open_part(text)}"
 
 
 def main() -> int:
@@ -149,7 +153,8 @@ def main() -> int:
     if not isinstance(data, dict):
         return 0
     prompt = str(data.get("prompt") or "")
-    if is_status_only(prompt):
+    # A status-only prompt over a stale digest goes through to the session instead of being answered from old figures (#1329).
+    if is_status_only(prompt) and not age_note(cmd_status.digest_path()):
         # The block ends the turn, so the context beside it is never read; it keeps the #991 output shape for a status-only prompt.
         print(json.dumps({"decision": "block", "reason": block_reason(cmd_status.digest_path()),
                           "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context(prompt)}}))

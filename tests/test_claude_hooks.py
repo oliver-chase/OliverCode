@@ -629,7 +629,7 @@ class StatusHint(unittest.TestCase):
             self.assertIn("Board: owner/repo: 3 open stories.", text, prompt)
             self.assertIn("#991 P1", text, prompt)
             self.assertIn(str(self.digest), text, prompt)
-            self.assertIn("no tool call", text, prompt)
+            self.assertIn("Confirm any figure", text, prompt)
             self.assertNotIn("## Landed", text, prompt)
 
     def test_any_other_message_gets_nothing(self):
