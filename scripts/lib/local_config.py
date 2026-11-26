@@ -171,123 +171,26 @@ def setting(key: str):
     return settings().get(key)
 
 
-BASELINE_BUILDERS = 5  # where the limit starts with no saved value; it then follows the machine (#1108)
-RESCALE_SECONDS = 60  # the limit moves at most one step in this long, so a burst of calls never walks it to the floor
-
-
-def builder_ceiling(cores: int | None = None, mem_gb: int | None = None) -> int:
-    """The most builders the machine may reach: half the cores or the memory in GB less 4, whichever is smaller, never below 1.
-    A builder session holds 150 to 350 MB and mostly waits on the model, and 4 GB stays free for the system and the one validation run (#1055)."""
-    cores = cores or os.cpu_count() or 1
-    if mem_gb is None:
-        try:
-            mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") // 2**30
-        except (ValueError, OSError, AttributeError):  # a platform without sysconf gets the 8 GB this ceiling was measured on
-            mem_gb = 8
-    return max(1, min(cores // 2, mem_gb - 4))
-
-
-def measure() -> dict:
-    """The machine now: load average, cores, memory in GB, free memory in GB and swap in use in GB. A figure that cannot be read is 0, so it never
-    triggers a change on its own."""
-    import subprocess
-    out = {"load": 0.0, "cores": os.cpu_count() or 1, "free_gb": 0.0, "swap_gb": 0.0}
-    try:
-        out["load"] = os.getloadavg()[0]
-    except (OSError, AttributeError):
-        pass
-    try:
-        if sys.platform == "darwin":
-            vm = subprocess.run(["vm_stat"], capture_output=True, text=True, timeout=5).stdout
-            size = int(vm.split("page size of ")[1].split()[0])
-            pages = lambda name: int(vm.split(name + ":")[1].split()[0].rstrip("."))
-            out["free_gb"] = size * (pages("Pages free") + pages("Pages inactive") + pages("Pages speculative")) / 2**30
-            swap = subprocess.run(["sysctl", "-n", "vm.swapusage"], capture_output=True, text=True, timeout=5).stdout
-            out["swap_gb"] = float(swap.split("used = ")[1].split("M")[0]) / 1024
-        else:
-            info = {l.split(":")[0]: int(l.split()[1]) for l in Path("/proc/meminfo").read_text().splitlines() if ":" in l}
-            out["free_gb"] = info["MemAvailable"] / 2**20
-            out["swap_gb"] = (info["SwapTotal"] - info["SwapFree"]) / 2**20
-    except (OSError, ValueError, IndexError, KeyError, subprocess.SubprocessError):
-        pass
-    return out
-
-
-def scale(current: int, m: dict, ceiling: int) -> tuple[int, str]:
-    """The next builder limit and the reason. Overloaded (load above the cores, or 1 GB or more of swap) drops it by one, never below 1. Room (load under
-    half the cores and free memory for one more builder) raises it by one, never above the ceiling. Anything between holds it and gives no reason."""
-    load, cores, free, swap = m["load"], m["cores"], m["free_gb"], m["swap_gb"]
-    if load > cores or swap >= 1:
-        why = f"load {load:.0f} on {cores} cores" if load > cores else f"{swap:.1f} GB of swap in use"
-        return max(1, current - 1), why
-    if load < cores / 2 and free >= 1 and current < ceiling:
-        return current + 1, f"load {load:.0f} on {cores} cores and {free:.1f} GB free"
-    return current, ""
-
-
-def _limit_file() -> Path:
-    from lib import failure_log
-    return failure_log.home() / "builder-limit.json"
-
-
-def builder_state() -> dict:
-    """The last scaled limit as {limit, reason, at}, or {} when none was saved."""
-    try:
-        return json.loads(_limit_file().read_text())
-    except (OSError, ValueError):
-        return {}
-
-
-def scaled_builders(now: float | None = None) -> int:
-    """The scaled limit, shared by drain and dispatch through one file in the OliverCode home: it starts at BASELINE_BUILDERS and, once RESCALE_SECONDS
-    have passed, moves one step by the machine's load. A step that changed it saves its reason for the drain output and the status page."""
-    import time
-    now = time.time() if now is None else now
-    state = builder_state()
-    limit = state.get("limit") if isinstance(state.get("limit"), int) else BASELINE_BUILDERS
-    if now - state.get("at", 0) < RESCALE_SECONDS and state:
-        return limit
-    ceiling = builder_ceiling()
-    new, why = scale(min(limit, ceiling), measure(), ceiling)  # a baseline above this machine's ceiling starts at the ceiling
-    record = {"limit": new, "at": now, "reason": why or state.get("reason", "")}
-    try:
-        tmp = _limit_file().with_suffix(".tmp")
-        tmp.write_text(json.dumps(record))
-        tmp.replace(_limit_file())
-    except OSError:
-        pass  # shortcut: an unwritable home leaves the limit unsaved, so it restarts at the baseline each call; upgrade if that ever shows
-    return new
-
-
-def builder_note() -> str:
-    """The reason the limit last moved, such as "limit 2: load 37 on 8 cores", or "" when it never moved or the owner set maxBuilders."""
-    if saved_builders():
-        return ""
-    state = builder_state()
-    return f"Builder limit {state['limit']}: {state['reason']}." if state.get("reason") and isinstance(state.get("limit"), int) else ""
-
-
-def saved_builders() -> int | None:
-    """The owner's maxBuilders when valid, else the safe one-builder default."""
-    saved = setting("maxBuilders")
-    return saved if isinstance(saved, int) and not isinstance(saved, bool) and saved >= 1 else 1
+def saved_builders() -> int:
+    """Temporary hard cap: saved configuration cannot raise Claude concurrency above one."""
+    return 1
 
 
 def max_builders() -> int:
-    """The machine-wide builder limit drain and dispatch share: maxBuilders in the local file as it stands, else the limit scaled by the machine."""
-    return saved_builders() or scaled_builders()
+    """Temporary hard cap for every OliverCode model invocation."""
+    return 1
 
 
 def max_story_attempts() -> int:
-    """Maximum model invocations for one story across restarts/handoffs; safe default is eight."""
+    """Temporary ceiling: no more than four model invocations per story, regardless of saved overrides."""
     value = setting("maxStoryAttempts")
-    return int(value) if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 8
+    return min(value, 4) if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 4
 
 
 def max_story_spend() -> float:
-    """The maximum recorded Claude spend for one story, in dollars; invalid or missing values use the safe $6 default."""
+    """Temporary ceiling: recorded spend cannot exceed $3 per story, regardless of saved overrides."""
     value = setting("maxStorySpend")
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 6.0
+    return min(float(value), 3.0) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 3.0
 
 
 def _overlay(base: dict, top: dict) -> dict:
