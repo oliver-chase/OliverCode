@@ -391,20 +391,61 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertEqual(claude_settings.without(settings),
                          {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mine]}]}})
 
-    def test_install_removes_the_retired_manager_entries_from_any_checkout(self):
-        retired = [{"type": "command", "command": f'python3 "/old/checkout/scripts/hooks/{n}"'} for n in claude_settings.RETIRED]
+    def test_install_removes_entries_for_scripts_the_version_no_longer_ships(self):
+        names = ("start_guard.py", "ask_guard.py", "context_guard.py", "never_heard_of_it.py")
+        gone = [{"type": "command", "command": f'python3 "/old/olivercode/scripts/hooks/{n}"'} for n in names]
         mine = {"type": "command", "command": "~/mine.sh"}
-        settings = {"hooks": {"PreToolUse": [{"hooks": retired}, {"matcher": "Bash", "hooks": [mine]}],
-                              "UserPromptSubmit": [{"hooks": [retired[3]]}]}}
+        settings = {"hooks": {"PreToolUse": [{"hooks": gone}, {"matcher": "Bash", "hooks": [mine]}]}}
         merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
-        for name in claude_settings.RETIRED:
+        for name in names:
             self.assertFalse(any(name in c for c in commands), name)
         self.assertIn("~/mine.sh", commands)
-        self.assertFalse({n for _, _, n in claude_settings.MANAGED} & set(claude_settings.RETIRED))
+
+    def test_an_entry_of_a_checkout_with_scripts_olivercode_goes_in_either_form(self):
+        root = temp_dir(self, "olivercode-other-", resolve=True)
+        (root / "scripts").mkdir()
+        (root / "scripts" / "olivercode").write_text("")
+        new = claude_settings._command("cut_script.py", root / "scripts" / "hooks")
+        old = f'python3 "{root}/scripts/hooks/cut_script.py"'
+        settings = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c}]} for c in (new, old)]}}
+        merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        self.assertFalse(any("cut_script" in c for c in commands))
+
+    def test_an_entry_from_an_existing_checkout_without_scripts_olivercode_is_kept(self):
+        root = temp_dir(self, "olivercode-theirs-", resolve=True)
+        (root / "scripts" / "hooks").mkdir(parents=True)
+        theirs = [claude_settings._command("session_check.py", root / "scripts" / "hooks"),
+                  f'python3 "{root}/scripts/hooks/their_hook.py"']
+        settings = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c} for c in theirs]}]}}
+        merged = claude_settings.merge(settings, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        for c in theirs:
+            self.assertIn(c, commands)
+
+    def test_a_script_outside_a_scripts_hooks_folder_is_never_removed(self):
+        mine = [{"type": "command", "command": c} for c in (
+            'python3 "/old/olivercode/scripts/other/start_guard.py"',
+            'python3 "/old/olivercode/hooks/session_check.py"',
+            'python3 "/old/olivercode/scripts/hooks/sub/session_check.py"',
+            claude_settings._command("mine.py", Path("/home/me/bin")))]
+        merged = claude_settings.merge({"hooks": {"Stop": [{"hooks": mine}]}}, Path("/oc/scripts/hooks"))
+        commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
+        for h in mine:
+            self.assertIn(h["command"], commands)
+
+    def test_installing_twice_leaves_one_entry_per_managed_hook(self):
+        path = self.path
+        hooks_dir = Path("/oc/scripts/hooks")
+        path.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": 'python3 "/gone/olivercode/scripts/hooks/cut.py"'}]}]}}))
+        claude_settings.install(path, hooks_dir)
+        self.assertEqual("already", claude_settings.install(path, hooks_dir))
+        commands = [h["command"] for groups in json.loads(path.read_text())["hooks"].values() for g in groups for h in g["hooks"]]
+        self.assertEqual(sorted(claude_settings._command(n, hooks_dir) for _, _, n in claude_settings.MANAGED), sorted(commands))
 
     def test_install_drops_the_denial_watch_entry_and_leaves_its_script(self):
-        entry = {"type": "command", "command": 'python3 "/old/checkout/scripts/hooks/denial_watch.py"'}
+        entry = {"type": "command", "command": 'python3 "/old/olivercode/scripts/hooks/denial_watch.py"'}
         merged = claude_settings.merge({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [entry]}]}}, Path("/oc/scripts/hooks"))
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertFalse(any("denial_watch" in c for c in commands))
@@ -439,6 +480,8 @@ class TestSettingsRemove(unittest.TestCase):
         from lib import cmd_health
         home = temp_dir(self, "olivercode-deadhome-", resolve=True)
         (home / ".claude").mkdir()
+        (home / "scripts").mkdir()
+        (home / "scripts" / "olivercode").write_text("")
         cmd = claude_settings._command("session_check.py", home / "scripts" / "hooks")
         (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": cmd}]}]}}))
         self.assertEqual([cmd], claude_settings.dead(home / ".claude" / "settings.json"))
@@ -451,6 +494,7 @@ class TestSettingsRemove(unittest.TestCase):
         root = temp_dir(self, "olivercode-dead-", resolve=True)
         (root / "scripts" / "hooks").mkdir(parents=True)
         (root / "scripts" / "hooks" / "here.py").write_text("")
+        (root / "scripts" / "olivercode").write_text("")
         cmds = [f'python3 "{root}/scripts/hooks/{n}"' for n in ("session_check.py", "gh_watch.py")]
         path = root / "settings.json"
         path.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": c}]} for c in cmds]}}))
@@ -467,11 +511,12 @@ class TestSettingsRemove(unittest.TestCase):
         self.assertNotIn(cut["command"], commands)
 
     def test_install_drops_an_entry_whose_script_is_gone_and_keeps_the_rest(self):
-        hooks_dir = temp_dir(self, "olivercode-hooksdir-", resolve=True)
+        hooks_dir = temp_dir(self, "olivercode-hooksdir-", resolve=True) / "scripts" / "hooks"
+        hooks_dir.mkdir(parents=True)
         (hooks_dir / "still_here.py").write_text("")
         gone = {"type": "command", "command": f'python3 "{hooks_dir}/gone.py"'}
         kept = [{"type": "command", "command": c} for c in (
-            f'python3 "{hooks_dir}/still_here.py"',  # the script exists, so it stays
+            f'python3 "{hooks_dir}/still_here.py"',  # an unmanaged script of this checkout
             'python3 "/elsewhere/scripts/hooks/gone.py"',  # another checkout's folder
             f'python3 "{hooks_dir}/gone.py" --flag',  # not the form install writes
             "~/mine.sh")]
@@ -479,6 +524,8 @@ class TestSettingsRemove(unittest.TestCase):
         merged = claude_settings.merge(settings, hooks_dir)
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertNotIn(gone["command"], commands)
+        self.assertNotIn(kept[0]["command"], commands)  # the script exists but this version does not manage it, so it goes
+        kept = kept[1:]
         self.assertTrue(all(h["command"] in commands for h in kept))
         self.assertEqual(merged["hooks"]["PostToolUse"][0], {"matcher": "Bash", "hooks": kept})
 
@@ -606,4 +653,5 @@ class TestRetiredDesignHook(unittest.TestCase):
         self.assertEqual((0, "", ""), (ran.returncode, ran.stdout, ran.stderr))
 
     def test_install_strips_its_entry(self):
-        self.assertIn("design_hook.py", claude_settings.RETIRED)
+        entry = {"type": "command", "command": f'python3 "{REPO_ROOT}/scripts/hooks/design_hook.py"'}
+        self.assertEqual({}, claude_settings.without({"hooks": {"Stop": [{"hooks": [entry]}]}}))

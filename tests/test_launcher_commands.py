@@ -366,6 +366,18 @@ class TestUninstall(HomeCase):
         self.assertEqual(len(labels), out.count("[JOB] removed"))
         self.assertIn(f"{len(labels)} scheduled job(s) removed", out.strip().splitlines()[-1])
 
+    def test_install_removes_a_job_of_this_checkout_the_code_does_not_define(self):
+        from lib import cmd_boardsweep
+        stale = self._plist("com.olivercode.dropped-job", self.root)
+        kept = self._plist(cmd_boardsweep.LABEL, self.root)
+        other = self._plist("com.olivercode.other-checkout", self.tmp / "elsewhere")
+        ran = mock.Mock()
+        with mock.patch.object(cmd_install.launchd, "supported", return_value=True):
+            gone, _ = quiet(cmd_install.remove_jobs, self.root, self.tmp, ran, stale_only=True)
+        self.assertEqual(["com.olivercode.dropped-job"], gone)
+        self.assertEqual((False, True, True), (stale.exists(), kept.exists(), other.exists()))
+        self.assertEqual(["gui/%d/com.olivercode.dropped-job" % os.getuid()], [c.args[0][2] for c in ran.call_args_list])
+
     def test_nothing_to_remove_exits_0_without_calling_launchctl(self):
         ran = mock.Mock()
         with mock.patch.object(cmd_install.launchd, "supported", return_value=True):
