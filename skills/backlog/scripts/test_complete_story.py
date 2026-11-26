@@ -81,6 +81,15 @@ class CompleteStory(unittest.TestCase):
         self.assertIn("updateProjectV2ItemFieldValue", queued)
         self.assertIn("OPT_DONE", queued)
 
+    def test_a_held_graphql_share_queues_the_archive_after_the_status_move(self):
+        import gh_budget
+        gh_budget.note_limit(resources=("graphql",), fetch=lambda: {})
+        self.run_it("builder-only.json")
+        rows = (Path(os.environ["OLIVERCODE_HOME"]) / gh_budget.QUEUE).read_text().splitlines()
+        self.assertEqual(2, len(rows))
+        self.assertIn("updateProjectV2ItemFieldValue", rows[0])
+        self.assertIn("archiveProjectV2Item", rows[1])
+
     def test_the_evidence_comment_ends_with_the_close_mark_the_sweep_reads(self):
         code, _, calls = self.run_it("builder-only.json")
         self.assertEqual(code, 0)
@@ -157,7 +166,8 @@ class CompleteStory(unittest.TestCase):
         joined = "\n".join(calls)
         for wanted in ("-f i=PVTI_1","-f v=OPT_DONE", "-f body=3 files, validate.sh exits 0", "state=closed"):
             self.assertIn(wanted, joined)
-        self.assertEqual(1, joined.count("graphql"))  # one GraphQL call completes a story; the item lookup is REST
+        self.assertEqual(2, joined.count("graphql"))  # a status move and an archive complete a story; the item lookup is REST
+        self.assertIn("archiveProjectV2Item", joined)
         writes = lambda cs: [c for c in cs if "PATCH" in c or "mutation" in c or "-f body" in c]
         code, text, calls = self.run_it("builder-only.json")  # a builder entry closes the story, and no QA comment is asked for
         self.assertEqual(code, 0)

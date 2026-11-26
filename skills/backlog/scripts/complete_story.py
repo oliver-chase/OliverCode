@@ -4,8 +4,8 @@
 Usage: complete_story.py --story N --config CONFIG --evidence TEXT
 A story needs a builder entry and every builder commit on origin/main. On a refusal it prints the reason and
 changes nothing. On success it finds the story's project item through the REST items list, posts TEXT as a
-comment and closes the issue through REST, then sets Status to Complete by the config's ids (the only GraphQL
-call, queued for the reset replay while GraphQL is held). A story in the OliverCode repo also closes only
+comment and closes the issue through REST, then sets Status to Complete by the config's ids and archives the card (the only GraphQL
+calls, queued for the reset replay while GraphQL is held). A story in the OliverCode repo also closes only
 once the installed checkout at $OC holds its commits (live_check, run after `olivercode update` when the checkout is
 behind) and the hook entry or launchd job the story's files define or schedule is loaded; the evidence comment names that proof.
 Exits 0 when all three writes succeeded or queued, 1 on a refusal or a
@@ -32,6 +32,7 @@ from log_action import commit_pushed, gh_api  # noqa: E402  one gh runner for th
 ITEM_JQ = '.[] | select(.content.number != null) | {number: .content.number, id: .node_id, repo: (.content.repository_url // "")}'
 MOVE = ("mutation($p:ID!,$i:ID!,$f:ID!,$v:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,"
         "itemId:$i,fieldId:$f,value:{singleSelectOptionId:$v}}){projectV2Item{id}}}")
+ARCHIVE = ("mutation($p:ID!,$i:ID!){archiveProjectV2Item(input:{projectId:$p,itemId:$i}){item{id}}}")
 COMMIT = re.compile(r"^\s*-?\s*Commit:\s*([0-9a-f]{7,40})\b", re.M)
 CLOSE_MARKER = "Closed by complete_story.py."  # the last line of the evidence comment complete_story.py posts (#836)
 
@@ -305,11 +306,25 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
                 return 1
             gh_budget.note_limit(who="complete_story", resources=gh_budget.limit_resources("gh api graphql", str(exc)))
             queued = "GraphQL hit its limit"
+    archive = ["graphql", "-f", f"query={ARCHIVE}", "-f", f"p={cfg['projectId']}", "-f", f"i={item}"]
     if queued:
         gh_budget.enqueue(["gh", "api", *move])
-        print(f"#{args.story} is commented and closed; its Complete status is queued for the GraphQL reset", file=out)
+        gh_budget.enqueue(["gh", "api", *archive])  # the card leaves the board after its move, in the same replay
+        print(f"#{args.story} is commented and closed; its Complete status and archive are queued for the GraphQL reset", file=out)
         return 0
-    print(f"#{args.story} is Complete, commented and closed", file=out)
+    try:
+        call(runner, archive)  # a closed story's card leaves the board, so every board read covers open work only (#1323)
+        board_mirror.invalidate()
+    except (RuntimeError, ValueError) as exc:
+        if not gh_budget.is_limit(str(exc)):
+            print(f"complete_story: #{args.story}: archive write failed ({exc}); already done: "
+                  "evidence comment posted, issue closed, status Complete", file=err)
+            return 1
+        gh_budget.note_limit(who="complete_story", resources=gh_budget.limit_resources("gh api graphql", str(exc)))
+        gh_budget.enqueue(["gh", "api", *archive])
+        print(f"#{args.story} is Complete, commented and closed; its archive is queued for the GraphQL reset", file=out)
+        return 0
+    print(f"#{args.story} is Complete, commented, closed and archived", file=out)
     return 0
 
 

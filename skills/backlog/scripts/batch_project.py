@@ -117,6 +117,33 @@ def mutation_updates(cfg, updates):
     return f"mutation{{{' '.join(bits)}}}"
 
 
+def mutation_archive(project, items):
+    bits = " ".join(f"d{n}:archiveProjectV2Item(input:{{projectId:\"{project}\",itemId:\"{item}\"}}){{item{{id}}}}"
+                    for n, item in enumerate(items))
+    return f"mutation{{{bits}}}"
+
+
+def closed_items(cfg, runner):
+    """The ids of the board's cards whose issue is closed, read a page of 100 at a time."""
+    found, after = [], ""
+    while True:
+        query = (f"query{{node(id:\"{cfg['projectId']}\"){{... on ProjectV2{{items(first:100{after}){{pageInfo{{hasNextPage endCursor}} "
+                 "nodes{id content{... on Issue{state} ... on PullRequest{state}}}}}}}")
+        items = request(runner, query, write=False)["data"]["node"]["items"]
+        found += [n["id"] for n in items["nodes"] if (n.get("content") or {}).get("state") in ("CLOSED", "MERGED")]
+        if not items["pageInfo"]["hasNextPage"]:
+            return found
+        after = f",after:\"{items['pageInfo']['endCursor']}\""
+
+
+def archive_closed(cfg, runner):
+    """Archive each card whose issue is closed. The issue keeps its state, comments and history."""
+    ids = closed_items(cfg, runner)
+    for start in range(0, len(ids), CHUNK):
+        request(runner, mutation_archive(cfg["projectId"], ids[start:start + CHUNK]))
+    return len(ids)
+
+
 # GitHub's answer when a number is no issue in the repo, which no retry changes.
 PERMANENT = re.compile(r"Could not resolve to an? (Issue|PullRequest)|NOT_FOUND")
 
@@ -155,8 +182,20 @@ def merge_issues(issues):
 def main(argv=None, runner=run_gh, out=sys.stdout, err=sys.stderr):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
-    parser.add_argument("--input", required=True, help="JSON file, or - for stdin, containing issue numbers and named fields")
+    parser.add_argument("--input", help="JSON file, or - for stdin, containing issue numbers and named fields")
+    parser.add_argument("--archive-closed", action="store_true", help="archive every card whose issue is closed, once per board")
     args = parser.parse_args(argv)
+    if args.archive_closed:
+        try:
+            count = archive_closed(load(args.config), runner)
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+            print(f"batch_project: archive-closed failed: {exc}", file=err)
+            return 1
+        board_mirror.invalidate()
+        print(f"batch_project: archived {count} closed card(s)", file=out)
+        return 0
+    if not args.input:
+        parser.error("--input is required unless --archive-closed is given")
     try:
         cfg = load(args.config)
         data = json.load(sys.stdin) if args.input == "-" else load(args.input)
