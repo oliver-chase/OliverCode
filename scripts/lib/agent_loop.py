@@ -34,7 +34,7 @@ RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round st
 READER = "sonnet"  # the least capable model that reads a commit: no story is read by anything weaker (#1015)
 RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py")  # landing, claims, gates and the loop itself (#1026)
 RISKY_DIRS = ("core/hooks", "scripts/hooks")
-SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
+SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Before you commit, run every test file that imports a module you changed and fix any failure. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
                  "and change nothing. Read or search the worktree only to settle a point the diff alone cannot.")

@@ -528,6 +528,7 @@ class TestLoop(unittest.TestCase):
         self.assertEqual("sonnet", seen["model"])
         self.assertIn("never poll", seen["system"])
         self.assertIn("run neither", seen["system"])
+        self.assertIn("run every test file that imports a module you changed and fix any failure", seen["system"])
         with mock.patch.dict(os.environ, {"OLIVERCODE_MODEL": "haiku"}):
             self.loop(run, [(True, "")])
         self.assertEqual("haiku", seen["model"])
