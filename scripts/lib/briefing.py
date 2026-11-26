@@ -120,7 +120,7 @@ def snapshot(*, slug: str, now: datetime, open_now: int, rows: list[dict], numbe
 
 def summary_line(snap: dict) -> str:
     waiting, runner = snap["waiting"], snap["runner"]
-    work = "Work is running." if runner["building"] else ("There is work ready, but nothing is running." if snap["open"] else "Nothing is waiting to be built.")
+    work = "The runner is paused." if runner.get("paused") else ("Work is running." if runner["building"] else ("There is work ready, but nothing is running." if snap["open"] else "Nothing is waiting to be built."))
     return f"{work} {plural(waiting, 'thing')} {'needs' if waiting == 1 else 'need'} your attention." if waiting else f"{work} Nothing needs your attention."
 
 
