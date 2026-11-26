@@ -179,7 +179,7 @@ def run(root: Path, out=sys.stdout, changed: list[str] | None = None) -> int:
         units = plan(mods, load_timings(), jobs())
         output_lock = threading.Lock()
 
-        verbose = os.environ.get("OLIVERCODE_VALIDATE_VERBOSE") == "1"
+        verbose = os.environ.get("OLIVERCODE_VALIDATE_VERBOSE", "1") != "0"
 
         def progress(message: str) -> None:
             # Per-module output is opt-in; failures and the final summary are always shown.
