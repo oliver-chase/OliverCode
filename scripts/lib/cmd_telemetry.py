@@ -22,9 +22,10 @@ def command_telemetry(argv: list[str]) -> int:
     print(f"Builder telemetry · last {hours:g} hours")
     print(f"Builder starts: {data['builder_starts']}")
     print(f"Completed: {data['completed']} · held or interrupted: {data['not_landed']}")
+    print(f"Measured coverage: {data['coverage_seconds'] / 3600:.2f} of {hours:g} hours")
     if data["average_active"] is None:
-        print("Average active builders: not enough complete lifecycle records yet.")
-        print("Peak overlap: not recorded.")
+        print("Average active builders: unavailable (history is incomplete or has no observed coverage).")
+        print("Peak overlap: unavailable.")
     else:
         print(f"Average active builders: {data['average_active']:.2f}")
         print(f"Peak overlap: {data['peak_active']}")

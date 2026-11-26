@@ -35,10 +35,22 @@ class TestBuilderTelemetry(unittest.TestCase):
         ])
         now = self.base.replace(minute=2, second=59).timestamp()
         result = builder_telemetry.summarize(hours=1, now=now, path=self.path)
-        self.assertAlmostEqual(40 / 3600, result["average_active"])
+        self.assertAlmostEqual(40 / 179, result["average_active"])
+        self.assertEqual(179, result["coverage_seconds"])
         self.assertEqual(2, result["peak_active"])
         self.assertEqual(1, result["completed"])
         self.assertEqual(1, result["not_landed"])
+
+    def test_a_quiet_fully_observed_window_reports_zero_not_missing(self):
+        old = self.base.replace(day=23)
+        self.write([
+            {"event": "builder_started", "at": old.isoformat(), "worker_id": "old", "repo": "o/r"},
+            {"event": "builder_finished", "at": old.replace(second=10).isoformat(), "worker_id": "old", "repo": "o/r", "outcome": "landed"},
+        ])
+        now = self.base.replace(minute=10).timestamp()
+        result = builder_telemetry.summarize(hours=1, now=now, path=self.path)
+        self.assertEqual(0.0, result["average_active"])
+        self.assertEqual(0, result["peak_active"])
 
     def test_queue_wait_is_correlated_by_claim_id(self):
         self.write([

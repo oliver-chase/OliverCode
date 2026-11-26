@@ -125,7 +125,11 @@ def summarize(hours: float = 24, now: float | None = None, path: Path | None = N
     clipped = [(max(a, start_window), min(b, now)) for a, b in recent_intervals]
     clipped = [(a, b) for a, b in clipped if b > a]
     duration = sum(b - a for a, b in clipped)
-    average = duration / window if window > 0 and clipped else None
+    observed_times = [stamp for row in rows if (stamp := _epoch(row.get("at"))) is not None and stamp <= now]
+    coverage_start = max(start_window, min(observed_times)) if observed_times else now
+    coverage_seconds = max(0.0, now - coverage_start)
+    complete_history = not (unmatched_starts or unmatched_ends or malformed)
+    average = duration / coverage_seconds if coverage_seconds > 0 and complete_history else None
     points = []
     for a, b in clipped:
         points.extend(((a, 1), (b, -1)))
@@ -135,19 +139,19 @@ def summarize(hours: float = 24, now: float | None = None, path: Path | None = N
         peak = max(peak, active)
     recent_starts = sum(1 for row in rows if row.get("event") == "builder_started"
                         and start_window <= (_epoch(row.get("at")) or 0) <= now)
-    unmatched_starts = sum(1 for row in starts.values()
-                           if start_window <= (_epoch(row.get("at")) or 0) <= now)
+    unmatched_starts = len(starts)
     return {
         "hours": float(hours),
         "builder_starts": recent_starts,
         "completed": completed,
         "not_landed": failed,
         "average_active": average,
-        "peak_active": peak if clipped else None,
+        "peak_active": peak if coverage_seconds > 0 and complete_history else None,
         "average_queue_wait_s": (sum(queue_waits) / len(queue_waits)) if queue_waits else None,
         "matched_intervals": len(recent_intervals),
         "unmatched_starts": unmatched_starts,
         "unmatched_ends": unmatched_ends,
         "malformed_events": malformed,
         "window_seconds": window,
+        "coverage_seconds": coverage_seconds,
     }
