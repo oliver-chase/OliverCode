@@ -194,8 +194,8 @@ SMALL_TURNS, FULL_TURNS = 40, 60  # a builder's turn budget by story size (#1113
 
 
 def turns(size: str) -> int:
-    """The turns a builder gets: the small budget for an XS or S story, the full budget for any other (#1113)."""
-    return SMALL_TURNS if size in SMALL else FULL_TURNS
+    """Temporary pre-Nov-23 baseline: every story gets the same 30-turn builder budget."""
+    return 30
 
 
 def _listed(line: re.Pattern, body: str) -> list[str]:
