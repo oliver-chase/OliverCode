@@ -115,10 +115,8 @@ class TestPrevention(unittest.TestCase):
 
 
 class TestTurnBudget(unittest.TestCase):
-    def test_budget_grows_with_story_size(self):
-        """#1203: a small story gets 40 turns and a larger one 60, so fewer rounds end on the cap and restart."""
-        self.assertEqual((40, 40), (intake.turns("S"), intake.turns("XS")))
-        self.assertEqual((60, 60), (intake.turns("M"), intake.turns("L")))
+    def test_every_story_returns_to_the_same_30_turn_baseline(self):
+        self.assertEqual((30, 30, 30, 30), tuple(intake.turns(size) for size in ("XS", "S", "M", "L")))
 
 
 if __name__ == "__main__":
