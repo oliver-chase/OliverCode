@@ -171,6 +171,18 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], io.parked)
         self.assertIn("reaching its $6.00 ceiling", io.comments[-1][1])
 
+    def test_attempt_ceiling_parks_story_across_runner_restarts(self):
+        io = FakeIo([issue(1)], cap=1)
+        with mock.patch.object(cmd_drain.session_guard, "story_attempts", return_value=8), \
+             mock.patch.object(cmd_drain.local_config, "max_story_attempts", return_value=8), \
+             mock.patch.object(cmd_drain, "story_spend", return_value=0.0), \
+             mock.patch.object(cmd_drain, "story_cost_unknown", return_value=False):
+            closed, _ = cmd_drain.work_story(io, issue(1), state())
+        self.assertFalse(closed)
+        self.assertEqual([], io.started)
+        self.assertEqual([1], io.parked)
+        self.assertIn("8-session attempt ceiling", io.comments[-1][1])
+
     def test_unknown_cost_parks_story_before_any_new_builder(self):
         home = temp_dir(self)
         (home / "run-log.jsonl").write_text(
