@@ -11,7 +11,7 @@ You work with Claude Code normally when you want to think, explore or collaborat
 ## What it does
 
 - **Executes work:** Runs Claude Code on tasks and delegated stories in isolated worktrees.
-- **Coordinates work:** Plans execution, manages dependencies, prioritizes tasks and runs compatible work in parallel.
+- **Coordinates work:** Plans execution, manages dependencies and prioritizes tasks. Temporary usage-protection mode serializes model sessions.
 - **Validates changes:** Runs repository-specific checks and feeds failures back into subsequent rounds.
 - **Recovers from failures:** Diagnoses problems and attempts bounded repairs when safe.
 - **Delivers work:** Integrates validated changes, pushes completed work and reports blockers.
@@ -108,6 +108,7 @@ OliverCode surrounds execution with controls designed to prevent unsafe or incom
 - Shared policy and execution rules
 - Isolated worktrees
 - Bounded recovery and execution
+- Temporary one-session concurrency and per-story spend/attempt caps
 - Fleet-wide safeguard checks
 - Decision records and usage controls
 
