@@ -541,6 +541,20 @@ def gather(slug: str, now: datetime, open_now: int, rows: list[dict], numbers: d
     today = datetime.fromtimestamp(stamp).date()
     delivered = [{"story": str(r["story"]).rsplit("-", 1)[-1], "title": _text(r.get("title"), 60), "tokens": r["tokens"], "cost": r["cost"]}
                  for r in status_report.history(log, slug, stamp, days=2) if datetime.fromtimestamp(status_report._epoch(r.get("at"))).date() == today]
+    cost_rows = status_report.history(log, slug, stamp, days=7)
+    cost_by_day = {}
+    for item in cost_rows:
+        day = datetime.fromtimestamp(status_report._epoch(item.get("at"))).date()
+        bucket = cost_by_day.setdefault(day, {"costs": [], "stories": 0})
+        bucket["stories"] += 1
+        if item.get("cost") is not None:
+            bucket["costs"].append(float(item["cost"]))
+    cost_days = []
+    for back in range(6, -1, -1):
+        day = (now - timedelta(days=back)).date()
+        bucket = cost_by_day.get(day, {"costs": [], "stories": 0})
+        cost_days.append({"day": day.strftime("%a"), "stories": bucket["stories"],
+                          "cost": sum(bucket["costs"]) / len(bucket["costs"]) if bucket["costs"] else None})
     newest = (landed(rows) or [None])[0]
     holder = run_lock.active(slug, stamp)
     issues = {str(i.get("number")): i for i in (open_issues.fetch(slug) or [])} if claims else {}
@@ -549,7 +563,7 @@ def gather(slug: str, now: datetime, open_now: int, rows: list[dict], numbers: d
     ready = next_ready(digest_path(), held_numbers(stamp, slug))
     return briefing.snapshot(slug=slug, now=now, open_now=open_now, rows=rows, numbers=numbers, steps=steps, today=delivered, ready=re.sub(r"^Next Ready:\s*", "", ready),
                              runner={"building": len(claims), "allowed": local_config.max_builders(), "load": load, "run": run_lock.describe(holder, stamp) if holder else "", "lines": lines}, ideas=ideas, city=city,
-                             latest={"number": newest.get("number"), "title": _text(newest.get("title"), 70)} if newest else None)
+                             latest={"number": newest.get("number"), "title": _text(newest.get("title"), 70)} if newest else None, cost_days=cost_days)
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, steps=None, ideas=None,

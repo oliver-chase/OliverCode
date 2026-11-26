@@ -108,7 +108,7 @@ def trend(opened: int, closed: int, open_now: int, days: int = 7) -> tuple[str, 
 
 
 def snapshot(*, slug: str, now: datetime, open_now: int, rows: list[dict], numbers: dict, steps: list[dict], today: list[dict], ready: str,
-             runner: dict, ideas: int, city: bool, latest: dict | None) -> dict:
+             runner: dict, ideas: int, city: bool, latest: dict | None, cost_days: list[dict] | None = None) -> dict:
     """Everything the briefing shows. `today` is [{story, title, tokens, cost}] delivered today; `runner` is {building, allowed, state, load}."""
     since = now - timedelta(days=7)
     opened = sum(1 for r in rows if r.get("created_at") and datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")) >= since)
@@ -117,7 +117,7 @@ def snapshot(*, slug: str, now: datetime, open_now: int, rows: list[dict], numbe
     priced = [t["cost"] for t in today if t.get("cost") is not None]
     return {"slug": slug, "now": now, "open": open_now, "opened": opened, "closed": closed, "days": week(rows, now), "trend": (headline, detail), "numbers": numbers,
             "groups": attention(steps), "waiting": len(steps), "setup": setup_items(steps), "today": today, "today_cost": sum(priced) if priced else None,
-            "today_tokens": sum(int(t.get("tokens") or 0) for t in today), "ready": ready, "runner": runner, "ideas": ideas, "city": city, "latest": latest}
+            "today_tokens": sum(int(t.get("tokens") or 0) for t in today), "cost_days": cost_days or [], "ready": ready, "runner": runner, "ideas": ideas, "city": city, "latest": latest}
 
 
 def summary_line(snap: dict) -> str:
@@ -237,6 +237,24 @@ def _attention_html(snap: dict) -> str:
         )
     return f'<p class="section-intro">{plural(snap["waiting"], "item")} is holding work. Each group explains why it matters and what action is appropriate.</p>{"".join(blocks)}<p class="note">Full list: <code>olivercode owner list</code></p>'
 
+def _cost_html(snap: dict) -> str:
+    days = snap.get("cost_days") or []
+    priced = [d for d in days if d.get("cost") is not None and d.get("stories")]
+    if not priced:
+        return '<div class="card">No cost data for finished stories yet.</div>'
+    from statistics import median
+    typical = median(float(d["cost"]) for d in priced)
+    rows = []
+    for day in days:
+        if day.get("cost") is None or not day.get("stories"):
+            label = "No stories finished" if not day.get("stories") else "Cost not recorded"
+            rows.append(f'<div class="row"><span>{esc(day["day"])}</span><span class="sub">{label}</span></div>')
+            continue
+        high = typical > 0 and float(day["cost"]) > typical * 2
+        flag = " · unusually high" if high else ""
+        rows.append(f'<div class="row"><span>{esc(day["day"])} · {day["stories"]} finished</span><b>{_money(day["cost"])}/story{flag}</b></div>')
+    return '<div class="card">' + ''.join(rows) + '</div>'
+
 def _health_html(snap: dict) -> str:
     bad = {s["area"] for s in snap["setup"]}
     marks = "".join(f'<span class="pill {"warn" if a in bad else "good"}">{esc(a)} · {"needs attention" if a in bad else "clear"}</span> ' for a in AREAS)
@@ -293,6 +311,7 @@ def dashboard_html(snap: dict) -> str:
         f'<section><h2>What needs your attention</h2><p class="section-intro">Owner decisions come first. They are the work only you can unblock.</p>{_attention_html(snap)}</section>'
         f'<section><h2>Work underway</h2><div class="card"><div>{pill} <b>{runner["building"]} of {allowed} builder slots in use</b></div>{meter}{load}'
         f'<p>{esc("Nothing is building at the moment." if not runner["building"] else "Stories are moving through the runner.")}</p>{next_up}{latest}</div></section>'
+        f'<section><h2>Cost over time</h2>{_cost_html(snap)}</section>'
         f'<section><h2>Delivery pace</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>'
         f'{_bars(snap["days"])}<div class="legend"><span>Added</span><span class="delivered">Delivered</span></div>{flow}'
         f'<p class="note"><b>What the trend says:</b> {esc(reading)}</p><p class="note">{esc(pace)}. {esc(ratio)}. {esc(benchmark)}</p>'
