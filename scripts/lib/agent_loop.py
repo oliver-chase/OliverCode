@@ -387,6 +387,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
     checked = validation_command(cwd) is not None
     start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
     while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
+        if stop_check and stop_check():
+            return {"done": False, "cancelled": True, "reason": "Owner cancelled this story before the next model session.", "rounds": n, "tokens": tokens, "summary": summary}
         n += 1
         fix_owed, model_name = False, escalate(start, failures)
         resumed = False
@@ -398,6 +400,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 reply = run(prompt, cwd, **call_kwargs)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
                 log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed, "session_id": exc.session_id}, why=why, repo=repo, attempt=n)
+                if stop_check and stop_check():
+                    return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its current model session timed out.", "rounds": n, "tokens": tokens, "summary": summary}
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
@@ -405,11 +409,15 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 claude_session, prompt, resumed = exc.session_id, CONTINUE.format(why="it ran past the time limit"), True
                 continue
             except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
+                if stop_check and stop_check():
+                    return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its model session failed.", "rounds": n - 1, "tokens": tokens, "summary": summary}
                 return {"done": False, "reason": str(exc), "rounds": n - 1, "tokens": tokens, "summary": summary}
             reply = {**reply, "resumed": resumed}
             tokens += reply["tokens"]
             claude_session = reply["session_id"] or claude_session
             summary = reply["text"]
+            if stop_check and stop_check():
+                return {"done": False, "cancelled": True, "reason": "Owner cancelled this story after its current model session.", "rounds": n, "tokens": tokens, "summary": summary}
             if is_api_error(reply):
                 cause = api_error_cause(reply) or str(reply.get("text") or reply.get("stderr") or reply.get("stop") or "Unspecified API error")[:300]
                 log_api_error(session, model_name, cause, repo=repo, reply=reply)
