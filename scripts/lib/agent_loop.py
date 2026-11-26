@@ -372,7 +372,7 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
+             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "", stop_check=None) -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
     finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
