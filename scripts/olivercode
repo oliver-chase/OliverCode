@@ -41,6 +41,7 @@ from lib.cmd_fleet import (  # noqa: E402
 )
 from lib.cmd_dispatch import command_dispatch  # noqa: E402
 from lib.cmd_drain import command_drain  # noqa: E402
+from lib.cmd_control import command_control  # noqa: E402
 from lib.cmd_board import command_board  # noqa: E402
 from lib.cmd_version import command_docs_check, command_version_cut  # noqa: E402
 from lib.cmd_land import command_land  # noqa: E402
@@ -142,6 +143,8 @@ def main() -> int:
         return command_dispatch(argv)
     if cmd == "drain":
         return command_drain(argv)
+    if cmd in {"pause", "resume", "cancel"}:
+        return command_control([cmd, *argv])
     if cmd == "decisions":
         return command_decisions(argv)
     if cmd == "fleet-sync":
