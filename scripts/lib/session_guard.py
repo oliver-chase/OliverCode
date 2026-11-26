@@ -282,7 +282,7 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
                     started_epoch = time.time()
                     metadata = {"event": "session_start", "session": session, "session_id": session_id,
                                 "model": model or "", "repo": repo_slug or Path(cwd).name, "started_at": _stamp(),
-                                "slot": n, "cap": cap, "active_sessions": _active(slot_dir, cap),
+                                "slot": n, "cap": cap, "story_attempt": story_attempt, "active_sessions": _active(slot_dir, cap),
                                 "reason_started": ("independent review" if session.endswith("-review") else "repair session" if session.endswith("-fix") else "story builder" if session.startswith("story-") else "delegated model task"), "resumed": bool(resumed)}
                     if not _write_start(metadata):
                         raise RuntimeError("Claude session refused: durable session-start telemetry could not be written.")
