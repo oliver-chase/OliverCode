@@ -122,7 +122,7 @@ def snapshot(*, slug: str, now: datetime, open_now: int, rows: list[dict], numbe
 
 def summary_line(snap: dict) -> str:
     waiting, runner = snap["waiting"], snap["runner"]
-    work = "Work is running." if runner["building"] else ("There is work ready, but nothing is running." if snap["open"] else "Nothing is waiting to be built.")
+    work = "The runner is paused." if runner.get("paused") else ("Work is running." if runner["building"] else ("There is work ready, but nothing is running." if snap["open"] else "Nothing is waiting to be built."))
     return f"{work} {plural(waiting, 'thing')} {'needs' if waiting == 1 else 'need'} your attention." if waiting else f"{work} Nothing needs your attention."
 
 
@@ -138,6 +138,8 @@ def text(snap: dict) -> list[str]:
         out.append("Nothing needs you right now.")
     out += ["", RULE, "", "WORK", ""]
     out.append(f"  Builders  {runner['building']} running, {runner['allowed']} allowed")
+    if runner.get("paused"):
+        out.append("  Runner    Paused — waiting for resume")
     if runner.get("load"):
         out.append(f"  Machine   {runner['load']}")
     out.append(f"  Open      {plural(snap['open'], 'story', 'stories')}")
@@ -265,7 +267,8 @@ def _health_html(snap: dict) -> str:
 def dashboard_html(snap: dict) -> str:
     """City: a narrative operating view, readable expansions and grounded comparisons."""
     runner, nums = snap["runner"], snap["numbers"]
-    pill = f'<span class="pill {"good" if runner["building"] else ""}">{"Running" if runner["building"] else "Idle"}</span>'
+    state = "Paused" if runner.get("paused") else ("Running" if runner["building"] else "Idle")
+    pill = f'<span class="pill {"warn" if runner.get("paused") else ("good" if runner["building"] else "")}">{state}</span>'
     latest = f'<p class="note">Latest delivery: <b>#{esc(snap["latest"]["number"])} {esc(snap["latest"]["title"])}</b></p>' if snap.get("latest") else ""
     budget = local_config.max_story_spend()
     if nums.get("tokens_per_closed") is not None:
