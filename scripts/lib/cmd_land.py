@@ -287,6 +287,7 @@ def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
                   for path, lines in unmatched.items()]
     return found
 
+
 def _scope_refusal(wt: Path, base: str, area: list[str], story: str, log) -> str:
     """The result word when the commit must not land because it weakens a test, or "" when it may (#1073). A file outside the story's Files area
     is named in the log and on the story and still lands: a refusal made every restart repeat the same edit until the story ran out of restarts,
