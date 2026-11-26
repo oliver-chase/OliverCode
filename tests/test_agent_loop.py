@@ -48,6 +48,38 @@ class TestValidateTimeout(unittest.TestCase):
         self.assertIn("ran past", tail)
 
 
+class TestValidateOnce(unittest.TestCase):
+    """#1290: the runner's pass is recorded so land never repeats it, and every story runs the repo's --quick validation when it has one."""
+
+    def setUp(self):
+        self.repo = temp_dir(self)
+        (self.repo / "scripts").mkdir()
+        self.script = self.repo / "scripts" / "validate.sh"
+        self.script.write_text("exit 0\n")
+
+    def argv(self, quick, code=0):
+        ran = agent_loop.subprocess.CompletedProcess([], code, "ok", "")
+        with mock.patch.object(agent_loop.subprocess, "run", return_value=ran) as run, mock.patch.object(agent_loop.validated, "record") as record:
+            agent_loop.validate(self.repo, quick=quick)
+        return run.call_args.args[0], record
+
+    def test_a_pass_is_recorded_for_the_worktree_and_a_failure_is_not(self):
+        self.assertEqual(1, self.argv(False)[1].call_count)
+        self.assertEqual(0, self.argv(False, code=1)[1].call_count)
+
+    def test_quick_adds_the_flag_only_when_the_script_offers_it(self):
+        self.assertNotIn("--quick", self.argv(True)[0])
+        self.script.write_text('if [[ "$1" == "--quick" ]]; then exit 0; fi\n')
+        self.assertEqual("--quick", self.argv(True)[0][-1])
+        self.assertNotIn("--quick", self.argv(False)[0])
+
+    def test_every_story_validates_quick_whatever_its_review(self):
+        for mode in ("none", "full"):
+            with self.subTest(mode=mode), mock.patch.object(agent_loop, "validate", return_value=(False, "bad")) as check:
+                agent_loop.run_loop("do it", self.repo, "s1", run=Scripted(reply("built")), say=lambda *_: None, rounds=1, review_mode=mode)
+            check.assert_called_once_with(str(self.repo), quick=True)
+
+
 class TestValidationCommand(unittest.TestCase):
     """#1012: the repo's own validation runs, whatever it is called."""
 

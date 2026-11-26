@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import failure_log, model, usage_sessions
+from lib import failure_log, model, usage_sessions, validated
 from lib.local_config import OC_ROOT
 
 MAX_ROUNDS = 2  # the builder session and one short fix session (#888)
@@ -77,16 +77,31 @@ def default_branch(cwd: str | Path) -> str:
     return "main"
 
 
-def validate(cwd: str | Path) -> tuple[bool, str]:
-    """(passed, the end of its output). It waits for a slot in the per-user validation queue."""
+def offers_quick(command: list[str], cwd: str | Path) -> bool:
+    """True when the command is scripts/validate.sh and that script takes --quick (#1290)."""
+    try:
+        return command[-1] == "scripts/validate.sh" and "--quick" in (Path(cwd) / "scripts" / "validate.sh").read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def validate(cwd: str | Path, quick: bool = False) -> tuple[bool, str]:
+    """(passed, the end of its output). It waits for a slot in the per-user validation queue.
+
+    `quick` runs the repo's `validate.sh --quick` when the script offers it (#1290). A pass is recorded for the worktree's tree, so land reuses
+    it and never runs the same validation again."""
     command = validation_command(cwd)
     if command is None:
         return False, NO_VALIDATION
+    if quick and offers_quick(command, cwd):
+        command = [*command, "--quick"]
     argv = [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "queue", "run", "--", *command]
     try:
         ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
         return False, f"Validation ran past {VALIDATE_TIMEOUT} seconds and was stopped."
+    if ran.returncode == 0:
+        validated.record(Path(cwd))
     return ran.returncode == 0, gate_tail(ran.stdout + ran.stderr)
 
 
@@ -305,7 +320,7 @@ def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, mode
 
 
 def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full") -> dict:
-    run, check = run or model.run_cli, check or validate
+    run, check = run or model.run_cli, check or (lambda c: validate(c, quick=True))  # every story runs quick validation, which widens to the full suite itself when a change needs it (#1290)
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
