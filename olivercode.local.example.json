@@ -5,7 +5,8 @@
   "auditMode": "gated",
   "cityArtifact": "https://claude.ai/artifact/your-city-artifact-id",
   "maxBuilders": 1,
-  "maxStorySpend": 6,\n  "maxStoryAttempts": 8,
+  "maxStorySpend": 6,
+  "maxStoryAttempts": 8,
   "fleetRegistry": "~/.olivercode/fleet/repo-profiles.json",
   "privateRepos": {
     "notes": "~/path/to/a-private-repo"
