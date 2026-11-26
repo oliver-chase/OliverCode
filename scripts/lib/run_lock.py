@@ -166,7 +166,9 @@ def describe(rec: dict, now: float) -> str:
     building = ", ".join(f"#{n}" for n in rec.get("building") or [])
     return (f"{rec.get('who', 'A run')} (process {rec.get('pid')}) holds the run since {since}, "
             f"{'building ' + building if building else 'building nothing yet'}." + (f" Status page: {rec['page']}" if rec.get("page") else ""))
-\n\ndef control_dir(slug: str) -> Path:
+
+
+def control_dir(slug: str) -> Path:
     return gh_budget.home() / "controls" / slug.replace("/", "__")
 
 
@@ -185,7 +187,8 @@ def is_paused(slug: str) -> bool:
 def pause(slug: str) -> None:
     target = pause_path(slug)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("paused\\n", encoding="utf-8")
+    target.write_text("paused
+", encoding="utf-8")
 
 
 def resume(slug: str) -> bool:
@@ -198,7 +201,8 @@ def resume(slug: str) -> bool:
 def request_cancel(slug: str, story: int) -> None:
     target = cancel_path(slug, story)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("cancel\\n", encoding="utf-8")
+    target.write_text("cancel
+", encoding="utf-8")
 
 
 def cancel_requested(slug: str, story: int) -> bool:
