@@ -629,8 +629,9 @@ def _run_line(row: dict) -> str:
 
 
 def landed(rows: list[dict]) -> list[dict]:
-    """The issues closed in ROWS, newest close first."""
-    return sorted((r for r in rows if r.get("closed_at")), key=lambda r: r["closed_at"], reverse=True)
+    """Issues closed as completed (or with no reason recorded), newest close first (#1217)."""
+    return sorted((r for r in rows if r.get("closed_at") and r.get("state_reason") != "not_planned"),
+                  key=lambda r: r["closed_at"], reverse=True)
 
 
 def _story_line(row: dict, closed: bool = False) -> str:
