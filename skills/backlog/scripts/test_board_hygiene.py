@@ -280,6 +280,7 @@ class ListLimit(unittest.TestCase):
 
 class CloseGateDimension(unittest.TestCase):
     CFG = {"repoOwner": "o", "repoName": "r", "closeGateFromIssue": 50}
+    BUILDER = {"body": "Agent action\\n- Agent: claude\\n- Role: builder\\n- Result: built\\n- Commit: abc1234"}
 
     @staticmethod
     def runner(comments_by_issue, reasons=None):
@@ -299,12 +300,16 @@ class CloseGateDimension(unittest.TestCase):
         self.assertIn("#60", found[0])
         self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
 
+    def test_an_external_agent_close_without_an_olivercode_builder_entry_is_allowed(self):
+        comments = {60: [{"body": "Closed by external agent. No OliverCode action log."}]}
+        self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments)))
+
     def test_a_duplicate_closed_as_not_planned_is_not_flagged(self):
         comments = {60: [{"body": "Duplicate of #70. Findings folded into #70."}]}
         self.assertEqual([], bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "not_planned"})))
 
     def test_a_completed_close_without_the_mark_is_still_flagged(self):
-        comments = {60: [{"body": "Closing."}]}
+        comments = {60: [self.BUILDER, {"body": "Closing."}]}
         found = bh.check_close_gate([item(60, "Complete")], self.CFG, runner=self.runner(comments, {60: "completed"}))
         self.assertEqual(1, len(found))
         self.assertIn("reopen #60 and run complete_story.py --story 60", found[0])
