@@ -222,7 +222,8 @@ class DrainCase(unittest.TestCase):
         seen = []
         factory = lambda repo, slug, parallel=None: seen.append(parallel) or FakeIo([])
         with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/nonexistent")), mock.patch.object(cmd_drain, "backlog_config",
-                                                                                                             return_value={"repoOwner": "o", "repoName": "r"}):
+                                                                                                             return_value={"repoOwner": "o", "repoName": "r"}), \
+                mock.patch("lib.cmd_status.write_digest"):
             quiet(cmd_drain.command_drain, ["r", "--foreground"], factory, lambda s: None)
             quiet(cmd_drain.command_drain, ["r", "--parallel", "2", "--foreground"], factory, lambda s: None)
             code, _ = quiet(cmd_drain.command_drain, ["r", "--parallel", "0", "--foreground"], factory, lambda s: None)
@@ -799,6 +800,8 @@ class StoppedRun(unittest.TestCase):
         patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
         patcher.start()
         self.addCleanup(patcher.stop)
+        mock.patch("lib.cmd_status.write_digest").start()
+        self.addCleanup(mock.patch.stopall)
 
     def test_a_stop_releases_the_stories_in_flight_and_returns_them_to_ready(self):
         """#1076: Ctrl-C or SIGTERM releases the claim on every story the run was building and does not wait for their builders."""
@@ -855,6 +858,8 @@ class DetachedRun(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
         self.home = home
+        self.digest = mock.patch("lib.cmd_status.write_digest").start()
+        self.addCleanup(mock.patch.stopall)
         for target, value in (("resolve_repo", Path("/x/r")), ("backlog_config", {"repoOwner": "o", "repoName": "r"})):
             p = mock.patch.object(cmd_drain, target, return_value=value)
             p.start()
@@ -889,6 +894,16 @@ class DetachedRun(unittest.TestCase):
         from lib import cmd_status
         lines = cmd_status.activity(time.time(), {}, self.rows(), False, 0, "")
         self.assertRegex(lines[2], r"^Last run ended \d{4}-\d\d-\d\d \d\d:\d\d UTC: 2 stories landed, 1 stopped\.$")
+
+    def test_a_run_end_rewrites_the_status_digest_for_the_repo_and_a_failed_write_still_ends_the_run(self):
+        with mock.patch.object(cmd_drain, "drain", return_value=0):
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
+        self.assertEqual("o/r", self.digest.call_args.args[0])
+        self.digest.side_effect = RuntimeError("no network")
+        with mock.patch.object(cmd_drain, "drain", return_value=0):
+            code, _ = quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
+        self.assertEqual(0, code)
+        self.assertEqual("run-end", self.rows()[-1]["stage"])
 
     def test_a_run_end_sends_one_notification_with_the_counts(self):
         def work(io, st, sleep=None):

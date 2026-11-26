@@ -12,13 +12,15 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import cmd_status  # noqa: E402
 
-CHARS = 1200  # the board line and the open list, about three hundred tokens, is what a status answer needs
+STALE_SECONDS = 3600  # a digest older than this is labeled with its age
+CHARS = 1200 # the board line and the open list, about three hundred tokens, is what a status answer needs
 # A question about the board only: "status" alone, or "status" in a question or a status-of phrase. "the PR status is red" and "add a status field" are not questions.
 STATUS_RE = re.compile(r"\bwhat(?:'s| is| are)\s+(?:the\s+)?status\b|\bstatus\s+(?:of|on)\b|^\s*(?:any\s+|the\s+)?status\s*\??\s*$"
                        r"|\bwhat(?:'s| is| are)\s+(?:still\s+)?(?:building|left|running|in progress|open)\b|\bhow far\b"
@@ -61,6 +63,19 @@ def open_part(text: str) -> str:
     return head.strip()[:CHARS]
 
 
+def age_note(path: Path, now: float | None = None) -> str:
+    """'' for a digest written within the hour, else how old it is and that `olivercode status` gives the current figures (#1313)."""
+    try:
+        age = (now or time.time()) - path.stat().st_mtime
+    except OSError:
+        return ""
+    if age <= STALE_SECONDS:
+        return ""
+    hours = int(age // 3600)
+    old = f"{hours // 24} days" if hours >= 48 else f"{hours} hours"
+    return f"This digest is {old} old. Run `olivercode status` for the current figures.\n"
+
+
 def context(prompt: str, path: Path | None = None) -> str:
     """The digest's board and open lines for a status question, or '' for any other prompt."""
     if not is_status_question(prompt):
@@ -70,7 +85,7 @@ def context(prompt: str, path: Path | None = None) -> str:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return f"No status digest is written yet at {path}. Say so and offer to write it with `olivercode status digest`."
-    return (f"Status from the status file {path}:\n{open_part(text)}\n"
+    return (f"Status from the status file {path}:\n{age_note(path)}{open_part(text)}\n"
             f"Answer from these lines with no tool call. The full status file is {path}, and the owner can read it there.")
 
 
@@ -80,7 +95,7 @@ def block_reason(path: Path) -> str:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return f"No status digest is written yet at {path}. Write it with `olivercode status digest`."
-    return f"Status from the status file {path}:\n{open_part(text)}"
+    return f"Status from the status file {path}:\n{age_note(path)}{open_part(text)}"
 
 
 def main() -> int:

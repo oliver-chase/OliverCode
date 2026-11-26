@@ -44,6 +44,15 @@ class StatusOnly(unittest.TestCase):
         self.assertFalse(hint.is_status_only(prompt))
         self.assertIn("Board: owner/repo: 3 open stories.", hint.context(prompt, self.digest))
 
+    def test_a_digest_older_than_an_hour_says_how_old_it_is_and_points_to_olivercode_status(self):
+        now = self.digest.stat().st_mtime
+        self.assertEqual("", hint.age_note(self.digest, now + 600))
+        self.assertIn("5 hours old. Run `olivercode status`", hint.age_note(self.digest, now + 5 * 3600 + 60))
+        self.assertIn("3 days old", hint.age_note(self.digest, now + 3 * 86400))
+        os.utime(self.digest, (now - 7200, now - 7200))
+        self.assertIn("2 hours old", hint.context("what is building?", self.digest))
+        self.assertIn("2 hours old", hint.block_reason(self.digest))
+
     def test_an_ask_prefix_passes_a_status_question_through_unchanged(self):
         for prompt in ("ask: what is building?", "Ask: status?"):
             self.assertFalse(hint.is_status_only(prompt), prompt)

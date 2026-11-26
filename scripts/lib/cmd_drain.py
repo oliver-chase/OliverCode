@@ -729,6 +729,11 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
             agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
                                 **({"reason": f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}."} if state.get("limited")
                                    else {"reason": f"The run stopped: {state['held']}."} if state.get("held") else {}))
+            try:
+                from lib import cmd_status
+                cmd_status.write_digest(slug, out=lambda _text: None)  # the digest is current when a run ends (#1313)
+            except Exception as exc:  # noqa: BLE001 -- a digest bug never hides the run's end
+                print(f"drain: status digest failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
             notify(f"Drain ended: {len(state['closed'])} landed, {len(state['blocked'])} stopped")
         if on_main:
             signal.signal(signal.SIGTERM, previous)
