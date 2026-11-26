@@ -9,7 +9,7 @@ from unittest import mock
 from _support import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import city  # noqa: E402
+from lib import city, status_report  # noqa: E402
 
 T0 = 1732460000.0
 
@@ -51,9 +51,12 @@ class PanelCase(unittest.TestCase):
 
     def test_the_cached_dashboard_is_written_to_the_home_folder_and_holds_what_was_read(self):
         body = city.panel_html(T0, runner=fake_read)
-        self.assertEqual("<p>2 open, 0 building.</p>", body)
+        self.assertIn("<p>2 open, 0 building.</p>", body)
+        self.assertIn(f'href="{status_report.page_path().as_uri()}"', body)
+        self.assertIn("refreshes every 60 seconds", body)
         cached = city._load_cache()
         self.assertEqual(body, cached["html"])
+        self.assertIn("Open the live local page", cached["html"])
         self.assertEqual(T0, cached["at"])
         self.assertEqual({"at", "html"}, set(cached))
 
