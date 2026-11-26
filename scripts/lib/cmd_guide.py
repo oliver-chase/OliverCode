@@ -56,6 +56,7 @@ GROUPS = (
         ("run", "Run one task in a fresh headless Claude session and validate it"),
         ("dispatch", "Build one story in its own session and land it"),
         ("drain", "Build every open story in a repo, one after another"),
+        ("watch", "Follow a running drain one line at a time"),
         ("land", "Put a finished story on main"),
         ("wip", "Save uncommitted work without touching the working tree"),
         ("validated", "Record or check that a commit passed full validation"),

@@ -122,7 +122,7 @@ class TestTakeRun(LockCase):
         run_lock.acquire("o/r", "drain r", __import__("time").time(), pid=os.getpid())
         with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
                 mock.patch.object(cmd_drain, "drain", side_effect=AssertionError("a second run started")), mock.patch.object(run_lock.os, "getpid", return_value=os.getpid() + 1):
-            code, out = quiet(cmd_drain.command_drain, ["r"], factory)
+            code, out = quiet(cmd_drain.command_drain, ["r", "--foreground"], factory)
         self.assertEqual(0, code)
         self.assertIn("No second run starts", out)
         self.assertIn("every open story joins its queue in priority order", out)

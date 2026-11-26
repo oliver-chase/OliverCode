@@ -79,16 +79,37 @@ def _reuses_pass(wt: Path, log) -> bool:
 
 
 def link_venv(main: Path, wt: Path) -> bool:
-    """Link the main checkout's .venv into a new worktree so validation finds the repo's interpreter (#752). Returns True when it linked.
-    A repo with no .venv, or a worktree that already has one, is left alone."""
-    source, target = main / ".venv", wt / ".venv"
-    if not source.is_dir() or target.exists() or target.is_symlink():
-        return False
+    """Link the main checkout's .venv and node_modules into a new worktree so validation finds the repo's interpreter (#752) and
+    dependencies (#1294). Returns True when it linked either. A repo without a folder, or a worktree that already has one, is left alone."""
+    linked = False
+    for name in (".venv", "node_modules"):
+        source, target = main / name, wt / name
+        if not source.is_dir() or target.exists() or target.is_symlink():
+            continue
+        try:
+            target.symlink_to(source, target_is_directory=True)
+        except OSError:
+            continue
+        linked = True
+        _ignore_link(wt, name)
+    return linked
+
+
+def _ignore_link(wt: Path, name: str) -> None:
+    """Keep a linked folder out of `git status` and `git add -A` when the repo's .gitignore matches directories only (`node_modules/`),
+    which a symlink is not, by adding it to the checkout's info/exclude. A worktree that is no git checkout is left alone."""
+    if _git(wt, "check-ignore", "-q", name).returncode != 1:
+        return
+    exclude = _git(wt, "rev-parse", "--git-path", "info/exclude").stdout.strip()
+    if not exclude:
+        return
+    path = wt / exclude
     try:
-        target.symlink_to(source, target_is_directory=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as f:
+            f.write(f"/{name}\n")
     except OSError:
-        return False
-    return True
+        pass
 
 
 def prepare_worktree(wt: Path, main: Path | None = None) -> list[str]:
@@ -287,7 +308,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         return word, ""
     main = _main_checkout(wt)
     if main and main != wt and link_venv(main, wt):
-        log.write(f"linked {main / '.venv'} into {wt}\n")
+        log.write(f"linked the dependency folders of {main} into {wt}\n")
     base = default_branch(wt)
     body = story_body(wt, story)
     if body is None:
@@ -315,7 +336,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         _run(wt, log, "git", "fetch", "-q", "origin")
         if not _run(wt, log, "git", "merge-base", "--is-ancestor", f"origin/{base}", "HEAD"):
             continue
-        if _run(wt, log, "git", "push", "origin", f"HEAD:{base}"):
+        if _run(wt, log, "git", "push", "origin", f"HEAD:{base}", env={**os.environ, "ALLOW_BRANCH_PUSH": "1"}):  # land pushes only its own landing branch, which may be the owner's engineBranch (#1293)
             sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=wt, capture_output=True, text=True).stdout.strip()
             return "pushed", sha
         _run(wt, log, "git", "fetch", "-q", "origin")

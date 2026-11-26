@@ -427,6 +427,33 @@ class TestLoop(unittest.TestCase):
         self.assertNotIn("make no tool call", seen["system"] + seen["prompt"])
         self.assertIn("not a finding", seen["prompt"])
 
+    def stage_rows(self):
+        return [r for r in (json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()) if "stage" in r]
+
+    def test_a_loop_with_a_repo_logs_validating_and_one_building_row_per_fix_round_each_with_the_seconds_of_the_stage_before(self):
+        """#1291: stage rows carry story, repo, stage, at and seconds, and the story id is the one the round rows use."""
+        agent_loop.STAGE_START["s1"] = 1000.0
+        with mock.patch.object(agent_loop.time, "time", return_value=1090.0):
+            self.loop(Scripted(reply(), reply()), [(False, "a"), (True, "")], review_mode="none", repo="r")
+        rows = self.stage_rows()
+        self.assertEqual(["validating", "building", "validating"], [r["stage"] for r in rows])
+        self.assertEqual({"s1"}, {r["story"] for r in rows})
+        self.assertEqual({"r"}, {r["repo"] for r in rows})
+        self.assertEqual(90, rows[0]["seconds"])
+        self.assertRegex(rows[0]["at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+
+    def test_a_loop_with_no_repo_logs_no_stage_rows(self):
+        self.loop(Scripted(reply()), [(True, "")], review_mode="none")
+        self.assertEqual([], self.stage_rows())
+
+    def test_a_stopped_stage_row_carries_its_reason_and_a_claimed_row_starts_at_zero_seconds(self):
+        agent_loop.log_stage("s2", "r", "claimed")
+        agent_loop.log_stage("s2", "r", "stopped", reason="validation failed")
+        claimed, stopped = self.stage_rows()
+        self.assertEqual(0, claimed["seconds"])
+        self.assertEqual("validation failed", stopped["reason"])
+        self.assertNotIn("reason", claimed)
+
     def test_a_routine_story_does_not_start_a_second_model_session_after_validation(self):
         run = Scripted(reply("built"))
         out = self.loop(run, [(True, "all green")], review_mode="none")

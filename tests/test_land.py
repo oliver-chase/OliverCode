@@ -264,17 +264,48 @@ class TestLand(Base):
         (wt / ".venv").mkdir(); (wt / ".venv" / "x").write_text("x")
         self.assertNotIn(".venv", git(wt, "status", "--porcelain").stdout)
 
-    def test_the_symlink_test_fails_with_only_the_directory_pattern(self):
+    def test_a_linked_venv_is_ignored_even_with_only_the_directory_pattern(self):
         main, wt = self.root / "omain", self._repo_with_gitignore("owt", ".venv/\n")
         (main / ".venv").mkdir(parents=True)
         cmd_land.link_venv(main, wt)
-        self.assertIn(".venv", git(wt, "status", "--porcelain").stdout)
+        self.assertNotIn(".venv", git(wt, "status", "--porcelain").stdout)
+
+    def test_a_node_repo_gets_node_modules_linked_and_an_existing_one_is_left_alone(self):
+        main, wt = self.root / "nmain", self.root / "nwt"
+        (main / "node_modules").mkdir(parents=True); wt.mkdir()
+        self.assertTrue(cmd_land.link_venv(main, wt))
+        self.assertTrue((wt / "node_modules").is_symlink())
+        own = self.root / "nwt2"
+        (own / "node_modules").mkdir(parents=True)
+        self.assertFalse(cmd_land.link_venv(main, own))
+        self.assertFalse((own / "node_modules").is_symlink())
+
+    def test_a_linked_node_modules_symlink_is_ignored_with_either_gitignore_pattern(self):
+        for i, pattern in enumerate(("node_modules/\n", "node_modules\n", "\n")):
+            main, wt = self.root / f"gmain{i}", self._repo_with_gitignore(f"gwt{i}", pattern)
+            (main / "node_modules").mkdir(parents=True)
+            self.assertTrue(cmd_land.link_venv(main, wt))
+            self.assertNotIn("node_modules", git(wt, "status", "--porcelain").stdout, pattern)
+            git(wt, "add", "-A")
+            self.assertNotIn("node_modules", git(wt, "diff", "--cached", "--name-only").stdout, pattern)
 
     def test_a_repo_without_a_venv_links_nothing_and_raises_nothing(self):
         self.assertFalse(cmd_land.link_venv(self.main, self.wt))
         self.assertFalse((self.wt / ".venv").exists())
         code, out = self.land()
         self.assertEqual(0, code, out)
+
+    def test_the_landing_push_is_allowed_past_the_default_branch_gate(self):
+        """#1293: land pushes only its own landing branch, which may be the owner's engineBranch, so the pre-push gate lets it through."""
+        real, pushes = cmd_land._run, []
+        def spy(wt, log, *cmd, env=None):
+            if cmd[:2] == ("git", "push"):
+                pushes.append((env or {}).get("ALLOW_BRANCH_PUSH"))
+            return real(wt, log, *cmd, env=env)
+        with mock.patch.object(cmd_land, "_run", spy):
+            code, _ = self.land()
+        self.assertEqual(0, code)
+        self.assertEqual(["1"], pushes[:1])
 
     def test_a_landing_pushes_and_fast_forwards_a_clean_main_checkout(self):
         code, out = self.land()

@@ -28,7 +28,7 @@ from lib.placement import config as placement_config
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))  # the board copy's reader lives beside the backlog skill (#1014)
 
-USAGE = "Usage: olivercode drain REPO [--parallel N]"
+USAGE = "Usage: olivercode drain REPO [--parallel N] [--foreground]"
 RESTARTS = 3
 FULL_WAITS = 12  # five-minute waits for another repo's run to free a builder before a full machine ends the drain (#1055)
 EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
@@ -66,6 +66,7 @@ class Io:
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
+        self.said: dict[int, str] = {}  # story number -> its last comment, which is the reason a stopped row records (#1291)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
@@ -74,7 +75,7 @@ class Io:
 
     def branch(self) -> str:
         """The repo's default branch, which every ancestry and count check reads (#877)."""
-        return cmd_dispatch._default_branch(self.repo)
+        return agent_loop.default_branch(self.repo)
 
     def validation(self) -> list[str] | None:
         """The repo's own validation command, which a story needs before a builder starts (#1012)."""
@@ -159,8 +160,9 @@ class Io:
         files = intake.files_area(issue.get("body") or "")
         review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
+        agent_loop.log_stage(f"story-{n}", self.repo.name, "building")
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review)
+                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.repo.name)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
@@ -225,10 +227,12 @@ class Io:
         return lead if refused else None
 
     def land(self, worktree: Path, n: int) -> tuple[bool, str]:
+        agent_loop.log_stage(f"story-{n}", self.repo.name, "landing")
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
     def comment(self, n: int, body: str) -> None:
+        self.said[n] = body
         self.gh(["api", "-X", "POST", f"repos/{self.slug}/issues/{n}/comments", "-f", f"body={body}"])
 
     def close_by_script(self, worktree: Path, n: int, why: str) -> tuple[bool, str]:
@@ -251,11 +255,17 @@ class Io:
         done = subprocess.run([sys.executable, str(scripts / "complete_story.py"), "--story", str(n), "--config", str(config), "--evidence", evidence],
                               capture_output=True, text=True, cwd=self.repo)
         if done.returncode == 0:
+            agent_loop.log_stage(f"story-{n}", self.repo.name, "landed")
             return True, ""
         return False, (done.stdout + done.stderr).strip()[-500:]
 
+    def stopped(self, n: int, reason: str) -> None:
+        """Append the stopped row that says why a story left the status line (#1291)."""
+        agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=reason)
+
     def keep_open(self, n: int, reason: str = "") -> None:
         """After a builder that did not land: say why on the story, reopen it when something closed it, and put its card back to Ready (#877)."""
+        self.stopped(n, reason or self.said.get(n, ""))
         if reason:
             self.comment(n, f"Builder stopped without landing: {reason}")
         done = self.gh(["api", f"repos/{self.slug}/issues/{n}", "--jq", ".state"])
@@ -294,6 +304,7 @@ class Io:
         now = time.time()
         cmd_dispatch._local_claim(self.slug, n, now, write=self.agent)
         self.claimed_at[n] = now
+        agent_loop.log_stage(f"story-{n}", self.repo.name, "claimed")
         if gh_budget.refusal() or gh_budget.reserve_write():
             cfg = backlog_config(self.repo)
             cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "In Progress"}}]}]))
@@ -326,6 +337,7 @@ def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
     closed, reason = io.close_by_script(worktree, n, why)
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
+        io.stopped(n, reason)  # the refusal is the reason status shows (#1291)
         raise CloseRefused(reason)
     return True, why
 
@@ -386,6 +398,7 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
         closed, reason = io.close_by_script(io.repo, n, "already on the default branch")
         if not closed:
             io.comment(n, f"Close refused by complete_story.py: {reason}")
+            io.stopped(n, reason)  # the refusal is the reason status shows (#1291)
             raise CloseRefused(reason)
         return True, 0
     if io.validation() is None:  # no builder starts in a repo that nothing can validate (#1012)
@@ -414,6 +427,9 @@ def _work_story(io, issue: dict, state: dict) -> tuple[bool, int]:
                 return False, tokens
             if closed:
                 return True, tokens
+            if "push-failed" in note:  # a refused push is not the builder's to fix, so no session is restarted for it (#1296)
+                io.comment(n, f"Drain blocked: {note}")
+                return False, tokens
         else:
             note = out["reason"]
         stop = io.policy_stop(n, worktree)
@@ -562,12 +578,30 @@ def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) 
     return True
 
 
-def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit) -> int:
-    """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055). One run holds a repo at a time (#992)."""
-    args, parallel, rest = list(argv), None, []
+def slug_of(repo: Path) -> str:
+    cfg = backlog_config(repo)
+    return cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)
+
+
+def detach(argv: list[str], repo: Path, spawn=subprocess.Popen) -> int:
+    """Start this drain again as its own session with its output in a log, so it outlives the chat or terminal that started it (#1276)."""
+    log = failure_log.home() / "logs"
+    log.mkdir(mode=0o700, exist_ok=True)
+    with open(log / f"drain-{repo.name}.log", "a", encoding="utf-8") as out:
+        spawn([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "drain", *argv, "--foreground"], stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
+    print(f"Drain started for {repo.name} in its own process. Log: {out.name}. Follow it with `olivercode watch {repo.name}`.")
+    return 0
+
+
+def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit, spawn=subprocess.Popen) -> int:
+    """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055), detached unless `--foreground` is given (#1276).
+    One run holds a repo at a time (#992). When the run ends it logs one run-end row with the stories it landed and stopped."""
+    args, parallel, rest, foreground = list(argv), None, [], False
     while args:
         arg = args.pop(0)
-        if arg == "--parallel":
+        if arg == "--foreground":
+            foreground = True
+        elif arg == "--parallel":
             if not args or not args[0].isdigit() or int(args[0]) < 1:
                 print(USAGE)
                 return 2
@@ -584,16 +618,17 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     if cmd_dispatch.is_engine(repo):
         print(cmd_dispatch.ENGINE_REFUSAL)
         return 1
-    cfg = backlog_config(repo)
-    slug = cmd_dispatch.origin_slug(repo, f"{cfg['repoOwner']}/{cfg['repoName']}")  # a fork reads its own origin, as dispatch does (#1012)
+    if not foreground:
+        return detach(argv, repo, spawn)
+    slug = slug_of(repo)
     io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
     on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
     previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
-    code = 0
+    code, state, ran = 0, new_state(), False
     try:
         if not take_run(io, slug, f"drain {repo.name}"):
             return 0
-        state = new_state()
+        ran = True
         with run_lock.Heartbeat(slug, pid, also=getattr(io, "refresh_claims", None)):
             code = drain(io, state, sleep=sleep)
             while code == 0 and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
@@ -602,6 +637,8 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         code = 130
     finally:
         run_lock.release(slug, pid)
+        if ran:
+            agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]))
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)

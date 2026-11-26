@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -123,10 +124,105 @@ def stall_line(n: str, mine: dict, minutes: int, holder: dict | None) -> str:
             f"Stop that run with `kill {pid}`: its SIGTERM releases the claim and the run lock, and the story goes back to Ready. Then `olivercode drain REPO` builds it again.")
 
 
-def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, landed_row: dict | None, holder: dict | None = None) -> list[str]:
-    """The live status lines: one line for each story building (its minutes, its round), or the idle or running line, then the last landing and the next
-    Ready story, then a warning for a stalled builder, a claim with no runner and a last run that did not stop cleanly (#987). `holder` is the live run
-    that holds the repo, if any (#1076). It reads only what it is given."""
+def minutes(seconds: float) -> str:
+    """SECONDS as whole minutes in words, never negative."""
+    count = int(max(0, seconds) // 60)
+    return "under a minute" if count == 0 else f"{count} minute{'' if count == 1 else 's'}"
+
+
+def _story_rows(log: list[dict], story: str, upto: str = "") -> list[dict]:
+    """The log rows of one story (its builder and reader rounds and its stage rows) from its latest claimed row, so an earlier attempt is not counted. `upto`
+    ends them at the story's latest row of that stage."""
+    rows = [r for r in log if r.get("story") in (story, f"{story}-review")]
+    if upto:
+        rows = rows[: max(i for i, r in enumerate(rows) if r.get("stage") == upto) + 1]
+    return rows[max((i for i, r in enumerate(rows) if r.get("stage") == "claimed"), default=0):]
+
+
+def _cost(rows: list[dict]) -> float:
+    return sum(float(r.get("cost_usd") or 0) for r in rows if "round" in r)
+
+
+def building_line(n: str, slug: str, claim_at: float, log: list[dict], now: float) -> str:
+    """'#7 in repo: validating for 3 minutes, 5 minutes in all' from the story's stage rows. The stage time runs from the latest stage row and the total from the
+    claimed row, and a claim with no stage rows yet counts as claimed at the claim's own time (#1291)."""
+    rows = _story_rows(log, f"story-{n}")
+    stages = [r for r in rows if r.get("stage")]
+    stage, repo, since = (stages[-1]["stage"], stages[-1].get("repo"), _epoch(stages[-1]["at"])) if stages else ("claimed", "", claim_at)
+    began = _epoch(stages[0]["at"]) if stages and stages[0]["stage"] == "claimed" else claim_at
+    spent = _cost(rows)
+    return (f"#{n} in {repo or slug.rsplit('/', 1)[-1]}: {stage} for {minutes(now - since)}, {minutes(now - began)} in all" + (f", ${spent:.2f} so far." if spent else "."))
+
+
+def landings(log: list[dict]) -> list[dict]:
+    """The stories the runner landed, newest first, each as {story, repo, at, build, check, land, total, cost}. A stage's time is the `seconds` of the row after
+    it, summed when the story built or validated more than once, and the cost is the log's rounds between the claim and the landing (#1291)."""
+    found = []
+    for story in dict.fromkeys(str(r.get("story")) for r in log if r.get("stage") == "landed"):
+        rows = _story_rows(log, story, upto="landed")
+        done = rows[-1]
+        took = {"building": 0, "validating": 0, "landing": 0}
+        stages = [r for r in rows if r.get("stage")]
+        for before, row in zip(stages, stages[1:]):
+            if before["stage"] in took:
+                took[before["stage"]] += int(row.get("seconds") or 0)
+        first = stages[0]
+        found.append({"story": story, "repo": done.get("repo", ""), "at": _epoch(done.get("at")), "build": took["building"], "check": took["validating"],
+                      "land": took["landing"], "total": _epoch(done.get("at")) - _epoch(first.get("at")), "cost": _cost(rows)})
+    return sorted(found, key=lambda f: f["at"], reverse=True)
+
+
+def landing_line(row: dict, first: bool) -> str:
+    cost = f" and ${row['cost']:.2f}" if row["cost"] else ""
+    return (f"{'Last landed' if first else 'Landed before that'}: #{row['story'].rsplit('-', 1)[-1]} in {row['repo']} at {datetime.fromtimestamp(row['at'], timezone.utc):%Y-%m-%d %H:%M} UTC. "
+            f"Building took {minutes(row['build'])}{cost}, validation {minutes(row['check'])}, landing {minutes(row['land'])}, {minutes(row['total'])} in all.")
+
+
+def run_end_line(row: dict) -> str:
+    """'Last run ended 2026-01-02 03:04 UTC: 3 stories landed, 1 stopped.' from a drain's run-end row (#1276)."""
+    return f"Last run ended {datetime.fromtimestamp(_epoch(row.get('at')), timezone.utc):%Y-%m-%d %H:%M} UTC: {row.get('landed', 0)} {'story' if row.get('landed', 0) == 1 else 'stories'} landed, {row.get('stopped', 0)} stopped."
+
+
+def watch_line(row: dict, log: list[dict]) -> str:
+    """One plain line for a new stage row, reusing the status formatting: '#7 in repo: validating', '#7 landed in 3 minutes, $0.03' (#1276)."""
+    if row["stage"] == "run-end":
+        return run_end_line(row)
+    n = str(row.get("story")).rsplit("-", 1)[-1]
+    if row["stage"] == "landed":
+        done = next((f for f in landings(log) if f["story"] == row["story"]), None)
+        return f"#{n} landed" + (f" in {minutes(done['total'])}" + (f", ${done['cost']:.2f}" if done["cost"] else "") if done else "")
+    return f"#{n} in {row.get('repo')}: {row['stage']}" + (f" ({row['reason']})" if row.get("reason") else "")
+
+
+def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> int:
+    """`watch [REPO]` prints one line per stage row added to the run log from now on, and ends with the run-end row or when no drain holds the repo's
+    run lock for three checks in a row. It reads the log only: no model and no GitHub call (#1276)."""
+    from lib import cmd_drain
+    repo = cmd_drain.resolve_repo(argv[0]) if argv else None
+    if (argv and not repo) or len(argv) > 1:
+        out("Usage: olivercode watch [REPO]")
+        return 1
+    slug = cmd_drain.slug_of(repo) if repo else ""
+    alive = alive or (lambda: bool(run_lock.active(slug, time.time())) if slug else runner_alive())
+    seen, idle = len(run_log()), 0
+    while idle < 3:
+        log = run_log()
+        for row in log[seen:]:
+            if row.get("stage") and (not repo or row.get("repo") == repo.name):
+                out(watch_line(row, log))
+                if row["stage"] == "run-end":
+                    return 0
+        seen = len(log)
+        idle = 0 if alive() else idle + 1
+        sleep(2)
+    out("No drain is running" + (f" for {repo.name}" if repo else "") + ".")
+    return 0
+
+
+def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int, ready: str, holder: dict | None = None) -> list[str]:
+    """The live status lines: one line for each story building (its stage, its time in that stage and its time in all), or the idle or running line, then the
+    last three landings from the run log's landed rows and the next Ready story, then a warning for a stalled builder, a claim with no runner and a last run
+    that did not stop cleanly (#987). `holder` is the live run that holds the repo, if any (#1076). It reads only what it is given."""
     lines, warnings = [], []
     for key, mine in sorted(claims.items()):
         n = key.rsplit("#", 1)[-1]
@@ -138,15 +234,17 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
         elif (now - progress) / 60 > STALL_MINUTES:
             warnings.append(stall_line(n, mine, int((now - progress) // 60), holder))
         else:
-            lines.append(f"Building #{n} for {int((now - float(mine.get('at', 0))) // 60)} minutes on round {rows[-1].get('round', 0) if rows else 0}.")
+            lines.append(building_line(n, key.rsplit("#", 1)[0], float(mine.get("at", 0)), log, now))
     if not lines:
         lines.append("The runner is running and no story is building." if alive else
                      f"Runner idle: no story is building and {open_now} stories are open. Start it with `olivercode drain REPO`.")
-    if landed_row:
-        last = f"Last landed: #{landed_row.get('number')} {_text(landed_row.get('title'), 90)}."
-    else:
-        last = f"Last landed: none in the last {DAYS} days."
-    lines.append(last + (f" Next Ready: {ready}." if ready else ""))
+    done = landings(log)[:3]
+    lines += [landing_line(row, i == 0) for i, row in enumerate(done)] or ["Last landed: none recorded yet."]
+    ended = [r for r in log if r.get("stage") == "run-end"]
+    if ended:
+        lines.append(run_end_line(ended[-1]))
+    if ready:
+        lines.append(f"Next Ready: {ready}.")
     if log and log[-1].get("stop", "") not in CLEAN_STOPS:
         story = str(log[-1].get("story", ""))
         resume = "" if holder else f" Resume it with `olivercode dispatch {story.rsplit('-', 1)[-1]}`."
@@ -171,8 +269,7 @@ def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -
     log = run_log()
     from lib import gated
     holder = run_lock.active(slug, stamp) if slug else {}
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()),
-                                                                           (landed(rows) or [None])[0], holder)
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), holder)
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
@@ -275,10 +372,11 @@ def waiting_lines() -> list[str]:
     return [f"- #{i['id']} {_text(i.get('step'), 120)}" for i in found[:DIGEST_ITEMS]] + ([f"- and {len(found) - DIGEST_ITEMS} more"] if len(found) > DIGEST_ITEMS else [])
 
 
-def session_lines(slug: str, open_now: int, rows: list[dict], path: Path) -> list[str]:
-    """The three lines a new session prints: the open count, the last story landed and the digest to read."""
-    last = landed(rows)
-    done = f"Last story landed: #{last[0].get('number')} {_text(last[0].get('title'), 90)}." if last else f"No story landed in the last {DAYS} days."
+def session_lines(slug: str, open_now: int, log: list[dict], path: Path) -> list[str]:
+    """The three lines a new session prints: the open count, the last story landed and the digest to read. The landing is the run log's latest landed row (#1291)."""
+    last = landings(log)
+    done = (f"Last story landed: #{last[0]['story'].rsplit('-', 1)[-1]} in {last[0]['repo']} at {datetime.fromtimestamp(last[0]['at'], timezone.utc):%Y-%m-%d %H:%M} UTC."
+            if last else "No story landing is recorded in the run log yet.")
     return [f"{slug}: {open_now} open stories.", done, f"Read {path} before acting."]
 
 
@@ -300,7 +398,7 @@ def build_digest(board: str, decisions: list[dict], runs: list[dict], now: datet
     head += _section("Landed, the last five", [_story_line(r, True) for r in landed(rows or [])[:DIGEST_ITEMS]], f"None in the last {DAYS} days.")
     head += _section("Waits on the owner", waiting or [], "Nothing.")
     dec = [_decision_line(r) for r in decisions[-DIGEST_ITEMS:]]
-    run = [_run_line(r) for r in runs[-DIGEST_ITEMS:]]
+    run = [_run_line(r) for r in [r for r in runs if "stage" not in r][-DIGEST_ITEMS:]]
     text = _render(head, dec, len(decisions), run, len(runs))
     while tokens(text) > DIGEST_TOKENS and (dec or run):
         if len(dec) >= len(run):
@@ -329,13 +427,14 @@ def write_digest(slug: str | None, count=issue_count.count_issues, fetch=recent,
         out(f"Error: the issues of {slug} were not read.")
         return None
     path = target or digest_path()
-    text = build_digest(f"{slug}: " + summary(open_now, rows, now), decisions(), runs(), now, stories, rows, waiting())
+    log = runs()
+    text = build_digest(f"{slug}: " + summary(open_now, rows, now), decisions(), log, now, stories, rows, waiting())
     try:
         path.write_text(text, encoding="utf-8")
     except OSError as err:
         out(f"Error: the digest could not be written to {path}: {err}")
         return None
-    return path, text, session_lines(slug, open_now, rows, path)
+    return path, text, session_lines(slug, open_now, log, path)
 
 
 def digest(slug: str | None, out=print, **kw) -> int:

@@ -111,12 +111,6 @@ def _toplevel() -> Path:
     return Path(done.stdout.strip()) if done.returncode == 0 and done.stdout.strip() else OC_ROOT
 
 
-def _default_branch(repo) -> str:
-    done = subprocess.run(["git", "-C", str(repo), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
-                          capture_output=True, text=True)
-    return done.stdout.strip().removeprefix("origin/") if done.returncode == 0 and done.stdout.strip() else "main"
-
-
 def origin_slug(repo, slug: str) -> str:
     """The repo whose issues are read: a fork inherits upstream's config file, so the origin remote names it (#754, #1012)."""
     origin = backlog_setup.origin_owner_name(repo)
@@ -143,11 +137,11 @@ def _parse(argv: list[str]):
 
 
 def is_engine(repo) -> bool:
-    """True when `repo` is the OliverCode checkout this launcher runs from (#1278). OLIVERCODE_ALLOW_SELF=1 turns the check off."""
-    return os.environ.get("OLIVERCODE_ALLOW_SELF") != "1" and Path(repo).resolve() == OC_ROOT
+    """True when the runner must refuse `repo`: any OliverCode checkout, unless this machine's settings name an engineBranch (#1278, #1293)."""
+    return not local_config.setting("engineBranch") and agent_loop.is_engine_repo(repo)
 
 
-ENGINE_REFUSAL = "Refused: this is the OliverCode engine repository; engine changes go through the staging branch."
+ENGINE_REFUSAL = "Refused: this is the OliverCode engine repository. Engine changes are the owner's and land on staging."
 
 
 def _refuse(why: str) -> int:

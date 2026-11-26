@@ -13,11 +13,12 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from lib import failure_log, model, usage_sessions, validated
-from lib.local_config import OC_ROOT
+from lib.local_config import OC_ROOT, setting
 
 MAX_ROUNDS = 2  # the builder session and one short fix session (#888)
 RESUMABLE = ("max_turns", "timeout")  # stops that leave a healthy session worth one more round (#877)
@@ -66,8 +67,24 @@ def validation_command(cwd: str | Path) -> list[str] | None:
     return None
 
 
+def origin_of(path: str | Path) -> str:
+    """'owner/name' of a checkout's origin remote, lower-cased, or '' when it has none."""
+    ran = subprocess.run(["git", "-C", str(path), "remote", "get-url", "origin"], capture_output=True, text=True)
+    url = ran.stdout.strip().removesuffix(".git") if ran.returncode == 0 else ""
+    return url.replace(":", "/").split("github.com/")[-1].lower() if url else ""
+
+
+def is_engine_repo(path: str | Path) -> bool:
+    """True when `path` is any checkout of the repository OliverCode runs from (#1293)."""
+    found = origin_of(path)
+    return bool(found) and found == origin_of(OC_ROOT)
+
+
 def default_branch(cwd: str | Path) -> str:
-    """The repo's default branch as origin names it: origin/HEAD, else the first of main, master and develop that origin holds, else main."""
+    """The branch a story starts from and lands on: the owner's engineBranch for an OliverCode checkout (#1293), else origin/HEAD, else the first of
+    main, master and develop that origin holds, else main."""
+    if (engine := setting("engineBranch")) and is_engine_repo(cwd):
+        return engine
     ran = subprocess.run(["git", "-C", str(cwd), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True)
     if ran.returncode == 0 and ran.stdout.strip():
         return ran.stdout.strip().removeprefix("origin/")
@@ -298,6 +315,26 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
         pass
 
 
+STAGE_START: dict[str, float] = {}  # story -> when its current stage began, so each row says how long the stage before it took (#1291)
+
+
+def log_stage(story: str, repo: str, stage: str, started_at: float | None = None, reason: str = "", **extra) -> None:
+    """Append one stage row to the run log: claimed, building, validating, landing, landed, stopped or run-end (a drain's last row, with `extra` counts). `at` is when the stage began and `seconds` is how long the
+    stage before it took, counted from `started_at` (default: when this story's previous stage began). Status reads these rows for what is building (#1291)."""
+    now = time.time()
+    began = now if stage == "claimed" else (started_at if started_at is not None else STAGE_START.get(story, now))
+    STAGE_START[story] = now
+    row = {"story": story, "repo": repo, "stage": stage, "at": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": int(max(0, now - began))}
+    if reason:
+        row["reason"] = reason[:300]
+    row.update(extra)
+    try:
+        with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except OSError:
+        pass
+
+
 def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
     """Why a round ended in a non-zero exit, with the CLI's own stop reason and the tail of its stderr, so the run log and the story comment can be diagnosed (#877)."""
     why = f"claude exited {reply['code']} in round {n}"
@@ -311,15 +348,15 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
-             run=None, check=None, say=print, why: str = "", review_mode: str = "full") -> dict:
+             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
     finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
     `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode)
+    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode, repo)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full") -> dict:
+def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full", repo="") -> dict:
     run, check = run or model.run_cli, check or (lambda c: validate(c, quick=True))  # every story runs quick validation, which widens to the full suite itself when a change needs it (#1290)
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
@@ -327,6 +364,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
     start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
     while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
         n += 1
+        if repo and n > 1:
+            log_stage(session, repo, "building")  # a fix round is building time again (#1291)
         fix_owed, model_name = False, escalate(start, failures)
         resumed = False
         while True:
@@ -361,6 +400,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
         if validation_command(cwd) is None and not Path(cwd).exists():  # the builder landed the story and its worktree is gone, so there is nothing left to validate (#877)
             return {"done": True, "reason": "The story landed during the round, so its worktree is gone and validation is skipped.",
                     "rounds": n, "tokens": tokens, "summary": summary}
+        if repo:
+            log_stage(session, repo, "validating")
         passed, tail = check(cwd)
         if passed:
             if review_mode == "none":

@@ -133,7 +133,7 @@ class TestDispatch(DispatchCase):
         io = RunIo()
         code, out = quiet(cmd_dispatch.command_dispatch, ["77"], runner=runner_for(STORY, [], ()), busy=FREE, clock=lambda: NOW, repo=cmd_dispatch.OC_ROOT, io=io)
         self.assertEqual((1, []), (code, io.steps))
-        self.assertEqual(["Refused: this is the OliverCode engine repository; engine changes go through the staging branch."], out.strip().splitlines())
+        self.assertEqual([cmd_dispatch.ENGINE_REFUSAL], out.strip().splitlines())
 
     def test_dry_run_claims_and_builds_nothing(self):
         code, out, io = self.run_dispatch(argv=("77", "--dry-run"))

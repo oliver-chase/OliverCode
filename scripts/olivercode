@@ -56,7 +56,7 @@ from lib.decisions import command_decisions  # noqa: E402
 from lib.maintain import command_maintain  # noqa: E402
 from lib.validated import command as command_validated  # noqa: E402
 from lib.cmd_health import command_health  # noqa: E402
-from lib.cmd_status import command_status  # noqa: E402
+from lib.cmd_status import command_status, command_watch  # noqa: E402
 from lib.cmd_commit_check import command_commit_check  # noqa: E402
 from lib.wip import command_wip  # noqa: E402
 from lib.cmd_install import command_install, command_uninstall  # noqa: E402
@@ -116,6 +116,8 @@ def main() -> int:
         return command_health(root)
     if cmd == "status":
         return command_status(argv)
+    if cmd == "watch":
+        return command_watch(argv)
     if cmd == "validated":
         return command_validated(argv)
     if cmd == "queue":

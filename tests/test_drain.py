@@ -37,6 +37,7 @@ class FakeIo:
         self.leads = {}  # story number -> (sha, subject) of the lead commit its work landed under (#988)
 
     def landed_lead(self, i): return self.leads.get(i["number"])
+    def stopped(self, n, reason): self.stops_logged = getattr(self, "stops_logged", []) + [(n, reason)]
 
     def blockers(self, i):
         """The blockers of a story that are still open, as GitHub's dependency link would name them."""
@@ -213,9 +214,9 @@ class DrainCase(unittest.TestCase):
         factory = lambda repo, slug, parallel=None: seen.append(parallel) or FakeIo([])
         with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/nonexistent")), mock.patch.object(cmd_drain, "backlog_config",
                                                                                                              return_value={"repoOwner": "o", "repoName": "r"}):
-            quiet(cmd_drain.command_drain, ["r"], factory, lambda s: None)
-            quiet(cmd_drain.command_drain, ["r", "--parallel", "2"], factory, lambda s: None)
-            code, _ = quiet(cmd_drain.command_drain, ["r", "--parallel", "0"], factory, lambda s: None)
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], factory, lambda s: None)
+            quiet(cmd_drain.command_drain, ["r", "--parallel", "2", "--foreground"], factory, lambda s: None)
+            code, _ = quiet(cmd_drain.command_drain, ["r", "--parallel", "0", "--foreground"], factory, lambda s: None)
         self.assertEqual([None, 2], seen)
         self.assertEqual(2, code)
 
@@ -250,6 +251,15 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], [n for n, _ in io.comments])
         self.assertIn("scripts/a.py: no test", io.comments[0][1])
         self.assertIn("nothing was pushed", io.comments[0][1])
+
+    def test_a_refused_push_starts_no_second_builder_and_says_why(self):
+        """#1296: a push the repo refused is not the builder's to fix, so the story stops after one build with the push error."""
+        io = FakeIo([issue(1)], land_ok=False)
+        io.land = lambda wt, n: (False, "RESULT push-failed")
+        _, _, st = self.run_drain(io)
+        self.assertEqual(io.started, [1])
+        self.assertEqual(st["blocked"], [1])
+        self.assertIn("push-failed", io.comments[-1][1])
 
     def test_a_policy_stopped_builder_is_not_restarted_and_the_owner_hears_once(self):
         stop = {"rule": "triggers.deleteFiles", "gate": "Owner identifiers", "finding": "scripts/lib/x.py:4 owner identifier", "file": "scripts/lib/x.py"}
@@ -391,13 +401,20 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(quiet(cmd_drain.command_drain, ["/nonexistent-repo-xyz"])[0], 1)
 
     def test_a_drain_of_the_engine_repository_refuses_and_a_scratch_copy_does_not(self):
-        """#1278: the checkout the launcher runs from is never built by the runner; OLIVERCODE_ALLOW_SELF=1 opts in."""
+        """#1278, #1293: any OliverCode checkout is refused unless this machine's settings name an engineBranch."""
         code, out = quiet(cmd_drain.command_drain, [str(cmd_drain.OC_ROOT)])
         self.assertEqual(1, code)
-        self.assertIn("engine changes go through the staging branch", out)
+        self.assertIn("Engine changes are the owner's", out)
         self.assertFalse(cmd_drain.cmd_dispatch.is_engine(temp_dir(self)))
-        with mock.patch.dict(os.environ, {"OLIVERCODE_ALLOW_SELF": "1"}):
+        self.assertEqual("main", cmd_drain.agent_loop.default_branch(cmd_drain.OC_ROOT))
+
+    def test_the_owners_engine_branch_allows_the_build_and_lands_it_on_staging(self):
+        settings = temp_dir(self) / "olivercode.local.json"
+        settings.write_text('{"engineBranch": "staging"}')
+        with mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(settings)}):
             self.assertFalse(cmd_drain.cmd_dispatch.is_engine(cmd_drain.OC_ROOT))
+            self.assertEqual("staging", cmd_drain.agent_loop.default_branch(cmd_drain.OC_ROOT))
+            self.assertNotEqual("staging", cmd_drain.agent_loop.default_branch(temp_dir(self)))
 
 
 class TestDrainClaims(unittest.TestCase):
@@ -616,6 +633,36 @@ class TestRealIo(unittest.TestCase):
         self.assertTrue(any("claude exited 1" in " ".join(c) for c in calls))
         self.assertEqual([{"cfg": cfg, "issues": [{"number": 9, "fields": {"status": "Ready"}}]}], queued)
 
+    def test_each_stage_of_a_story_appends_a_row_to_the_run_log_with_the_story_id_the_rounds_use(self):
+        """#1291: claimed, building, landing, landed and stopped come from the real Io, one row each."""
+        def rows():
+            return [json.loads(l) for l in (Path(os.environ["OLIVERCODE_HOME"]) / "run-log.jsonl").read_text().splitlines()]
+        with mock.patch.object(cmd_drain.gh_budget, "refusal", return_value="held"), mock.patch.object(cmd_drain, "backlog_config", lambda repo: {}), \
+                mock.patch.object(cmd_drain.cmd_dispatch.batch_project, "with_queue", lambda fn: None), mock.patch.object(cmd_drain.cmd_dispatch, "gh", lambda a: subprocess.CompletedProcess(a, 0, "", "")):
+            self.io.claim(7)
+            with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as loop:
+                self.io.build(issue(7, "Do it."), Path("/wt/7"), "")
+            self.assertEqual(self.repo.name, loop.call_args.kwargs["repo"])
+            with mock.patch.object(cmd_drain.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")):
+                self.io.land(Path("/wt/7"), 7)
+            self.io.comment(7, "Drain blocked: validation failed.")
+            self.io.keep_open(7)
+        stages = [(r["story"], r["repo"], r["stage"]) for r in rows()]
+        self.assertEqual([("story-7", self.repo.name, s) for s in ("claimed", "building", "landing", "stopped")], stages)
+        self.assertEqual("Drain blocked: validation failed.", rows()[-1]["reason"])
+
+    def test_a_close_that_succeeds_appends_the_landed_row_and_a_refused_close_does_not(self):
+        git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        real_run = subprocess.run
+        for code, expected in ((1, []), (0, ["landed"])):
+            def scripts(args, **kwargs):
+                return subprocess.CompletedProcess(args, code if str(args[1]).endswith("complete_story.py") else 0, "", "") if len(args) > 1 and str(args[1]).endswith(("log_action.py", "complete_story.py")) else real_run(args, **kwargs)
+            with mock.patch.object(cmd_drain.subprocess, "run", scripts):
+                self.io.close_by_script(self.repo, 7, "pushed")
+            log = Path(os.environ["OLIVERCODE_HOME"]) / "run-log.jsonl"
+            self.assertEqual(expected, [json.loads(l)["stage"] for l in log.read_text().splitlines()] if log.exists() else [])
+
     def test_release_drops_the_local_claim(self):
         cmd_drain.cmd_dispatch._local_claim("o/r", 7, cmd_drain.time.time(), write="drain")
         with mock.patch.object(cmd_drain.cmd_dispatch.gh_budget, "refusal", return_value="held"):
@@ -659,7 +706,7 @@ class StoppedRun(unittest.TestCase):
         previous = signal.getsignal(signal.SIGTERM)
         with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
                 mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", side_effect=stopped):
-            code, _ = quiet(cmd_drain.command_drain, ["r"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
+            code, _ = quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
         self.assertEqual([130], ended)
         self.assertFalse(run_lock.path("o/r").exists())
         self.assertEqual(previous, signal.getsignal(signal.SIGTERM))
@@ -682,8 +729,72 @@ class StoppedRun(unittest.TestCase):
         ended = []
         with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x")), mock.patch.object(cmd_drain, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
                 mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", return_value=0):
-            code, _ = quiet(cmd_drain.command_drain, ["r"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
+            code, _ = quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
         self.assertEqual((0, []), (code, ended))
+
+
+class DetachedRun(unittest.TestCase):
+    """#1276: a drain starts as its own process, logs how it ended and can be watched."""
+
+    def setUp(self):
+        home = temp_dir(self)
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.home = home
+        for target, value in (("resolve_repo", Path("/x/r")), ("backlog_config", {"repoOwner": "o", "repoName": "r"})):
+            p = mock.patch.object(cmd_drain, target, return_value=value)
+            p.start()
+            self.addCleanup(p.stop)
+        p = mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def rows(self):
+        return [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
+
+    def test_a_drain_starts_in_its_own_session_with_a_log_and_returns(self):
+        spawned = []
+        code, out = quiet(cmd_drain.command_drain, ["r", "--parallel", "2"], spawn=lambda cmd, **kw: spawned.append((cmd, kw)))
+        cmd, kw = spawned[0]
+        self.assertEqual(0, code)
+        self.assertTrue(kw["start_new_session"])
+        self.assertEqual(["drain", "r", "--parallel", "2", "--foreground"], cmd[-5:])
+        self.assertTrue((self.home / "logs" / "drain-r.log").is_file())
+        self.assertIn("olivercode watch r", out)
+        self.assertEqual(1, out.count("\n"))
+
+    def test_the_run_end_row_counts_the_stories_landed_and_stopped_and_status_shows_it_with_its_time(self):
+        def work(io, st, sleep=None):
+            st["closed"] += [1, 2]
+            st["blocked"].append(3)
+            return 0
+        with mock.patch.object(cmd_drain, "drain", side_effect=work):
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
+        end = self.rows()[-1]
+        self.assertEqual(("run-end", 2, 1), (end["stage"], end["landed"], end["stopped"]))
+        from lib import cmd_status
+        lines = cmd_status.activity(time.time(), {}, self.rows(), False, 0, "")
+        self.assertRegex(lines[2], r"^Last run ended \d{4}-\d\d-\d\d \d\d:\d\d UTC: 2 stories landed, 1 stopped\.$")
+
+    def test_watch_prints_each_new_stage_row_and_ends_with_the_run(self):
+        from lib import cmd_status
+        from lib.agent_loop import log_stage
+        log_stage("story-168", "r", "building")  # already in the log before watch starts
+        steps = iter([lambda: (log_stage("story-169", "r", "claimed"), log_stage("story-169", "r", "validating")),
+                      lambda: (log_stage("story-169", "r", "landed"), log_stage("run-r", "r", "run-end", landed=1, stopped=0))])
+        lines = []
+        code = cmd_status.command_watch(["r"], sleep=lambda s: next(steps)(), out=lines.append, alive=lambda: True)
+        self.assertEqual(0, code)
+        self.assertEqual(["#169 in r: claimed", "#169 in r: validating", "#169 landed in under a minute"], lines[:3])
+        self.assertTrue(lines[3].endswith("1 story landed, 0 stopped."))
+
+    def test_watch_exits_when_no_drain_holds_the_run_lock_and_leaves_the_drain_alone(self):
+        from lib import cmd_status
+        lines = []
+        with mock.patch.object(cmd_status.run_lock, "active", return_value={}):
+            code = cmd_status.command_watch(["r"], sleep=lambda s: None, out=lines.append)
+        self.assertEqual((0, ["No drain is running for r."]), (code, lines))
 
 
 if __name__ == "__main__":
@@ -701,6 +812,7 @@ class CloseByScript(unittest.TestCase):
         comments = [body for n, body in io.comments if n == 1]
         self.assertEqual(1, len(comments))
         self.assertIn("no run output", comments[0])
+        self.assertEqual([(1, io.refuse_close)], io.stops_logged)  # #1291: the refusal is the stopped row's reason
 
     def test_a_landed_story_closes_by_script_without_a_second_session(self):
         io = FakeIo([issue(1)])
