@@ -416,7 +416,6 @@ def _bar_rows(title: str, rows: list[tuple[str, float | None, str]], note: str =
 
 def _usage_analytics(log: list[dict], now: float) -> str:
     """First-class usage and delivery view, built only from local transcripts and run-log records."""
-    from lib import usage_sessions
     try:
         days = spend_days(log, now)
     except (OSError, ValueError):
@@ -487,7 +486,8 @@ def _usage_analytics(log: list[dict], now: float) -> str:
         parts.append(_table(["Source", "Tokens read", "Share", "Median start tokens"],
                             [["Desktop chats", f'{d["chat"]:,}', share(d["chat"]), "not recorded" if d["chat_start"] is None else f'{d["chat_start"]:,.0f}'],
                              ["Runner builders", f'{d["builder"]:,}', share(d["builder"]), "not recorded" if d["builder_start"] is None else f'{d["builder_start"]:,.0f}']], ""))
-        parts.append(f'<p>Cost per landed story: {_money(d["cost_per_story"])}. Turn-limit stops: {pct(d["limit_share"])}. API-error stops: {pct(d["api_share"])}. Median validation: {"not recorded" if d["validation"] is None else f"{d["validation"]:.0f} seconds"}.</p>')
+        validation_label = "not recorded" if d["validation"] is None else f'{d["validation"]:.0f} seconds'
+        parts.append(f'<p>Cost per landed story: {_money(d["cost_per_story"])}. Turn-limit stops: {pct(d["limit_share"])}. API-error stops: {pct(d["api_share"])}. Median validation: {validation_label}.</p>')
         if d["top"]:
             parts.append(_table(["Costliest chats", "Tokens read", "Calls", "Average context"],
                                 [[name[:8], f"{tokens:,}", f"{calls:,}", f"{tokens // max(1, calls):,}"] for name, tokens, calls in d["top"]], ""))
@@ -544,6 +544,16 @@ def render(state: dict, log: list[dict], now: float, published: float = 0.0, pan
             "table { font-size: 14px; } td, th { border-color: var(--line); }"
             "summary { cursor: pointer; padding: 12px 0; color: var(--text); }"
             ".muted, #published { color: var(--muted); } #published { font-size: 13px; }"
+            ".usage { margin: 34px 0 46px; } .usage-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:18px 0 24px; }"
+            ".usage-kpis > div { border-top:1px solid var(--line); padding:12px 10px 10px 0; } .usage-kpis span { display:block; color:var(--muted); font:12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".usage-kpis strong { display:block; font:26px/1.2 Georgia,serif; margin-top:6px; } .usage-charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:12px 28px; }"
+            ".chart { border-top:1px solid var(--line); padding:8px 0 14px; min-width:0; } .chart h3 { margin:10px 0 4px; } .chart .muted { font:12px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".bar-row { display:grid; grid-template-columns:minmax(90px,1.1fr) minmax(70px,2fr) auto; gap:10px; align-items:center; margin:10px 0; font:12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".bar-label { overflow-wrap:anywhere; color:var(--muted); } .bar-track { height:9px; background:#f0edf8; border-radius:8px; overflow:hidden; } .bar-fill { display:block; height:100%; background:#a99be8; border-radius:8px; } .bar-missing { display:block; width:100%; border-top:1px dashed #aaa; }"
+            ".bar-row strong { font-weight:600; white-space:nowrap; } .usage-breakdown { margin-top:20px; border-top:1px solid var(--line); }"
+            ".repo-detail, .repo-card { border-top:1px solid var(--line); } .repo-detail summary, .repo-card summary { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }"
+            ".repo-card summary { padding:16px 0; } .repo-name { font-size:18px; } .repo-stats { color:var(--muted); font:12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }"
+            ".repo-expanded { padding:0 0 20px 16px; } .repo-expanded h2 { margin-top:18px; } .owner-detail { border-top:1px solid var(--line); }"
             "@media (max-width: 640px) { thead { display: none; } tr, td { display: block; } tr { padding: 8px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; }"
             "td::before { content: attr(data-label) \": \"; color: var(--muted); } }"
             f'</style></head><body data-published="{published:.0f}" data-active="{1 if active else 0}" data-stale="{run_lock.STALL_MINUTES}"><main>{panel}'
