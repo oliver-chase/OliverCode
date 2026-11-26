@@ -242,6 +242,7 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
     match = re.match(r"^story-(\d+)(?:-.+)?$", session)
     story_fd = None
     story = int(match.group(1)) if match else None
+    story_attempt = None
     if story is not None:
         repo_key = (repo_slug or Path(cwd).name).replace("/", "__")
         story_path = slot_dir / f"story-{repo_key}-{story}.lock"
@@ -255,6 +256,7 @@ def acquire(session: str, model: str, cwd: str, session_id: str, resumed: bool =
                 time.sleep(wait_seconds)
         try:
             attempts = story_attempts(story, repo_slug)
+            story_attempt = attempts + 1
             max_attempts = local_config.max_story_attempts()
             if attempts >= max_attempts:
                 raise RuntimeError("Claude session refused: story #%d has reached its %d-session attempt ceiling." % (story, max_attempts))
