@@ -557,5 +557,6 @@ class TestOwnerCancellation(unittest.TestCase):
         self.assertEqual([], checks)
         self.assertIn("partial work", out["summary"])
 
+
 if __name__ == "__main__":
     unittest.main()
