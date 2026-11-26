@@ -91,6 +91,19 @@ olivercode conform
 
 Dispatch and drain run isolated Claude Code sessions, validate changes and safely deliver completed work. Blocked or failed work is reported rather than treated as complete. Pause stops new claims while current builders finish; cancel stops one story after its current model session and preserves its worktree for handoff.
 
+## Command reference
+
+| Job | Commands |
+| --- | --- |
+| Install and update | `olivercode install` · `olivercode uninstall` · `olivercode update` · `olivercode bootstrap` · `olivercode sync-hooks` · `olivercode place` · `olivercode clean` · `olivercode worktree` · `olivercode commit-check` |
+| Check a machine or a repo | `olivercode health` · `olivercode status` · `olivercode status digest` · `olivercode status page` · `olivercode status publish` · `olivercode conform` · `olivercode maintain` · `olivercode limits` |
+| Run and land work | `olivercode run` · `olivercode dispatch` · `olivercode drain` · `olivercode pause` · `olivercode resume` · `olivercode cancel` · `olivercode land` · `olivercode wip` · `olivercode validated` · `olivercode queue` |
+| Version and docs | `olivercode version-cut` · `olivercode docs-check` |
+| Backlog and boards | `olivercode backlog-setup` · `olivercode board groom` · `olivercode board sync` · `olivercode story` · `olivercode candidates` · `olivercode gh-limit` · `olivercode gated` |
+| Owner and decisions | `olivercode owner` · `olivercode decisions` |
+| Fleet and policy | `olivercode discover` · `olivercode init-fleet` · `olivercode fleet-sync` · `olivercode policy` |
+| Orientation | `olivercode guide` |
+
 ## How it works
 
 Delegated work moves through a continuous execution cycle:
