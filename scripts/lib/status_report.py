@@ -543,7 +543,7 @@ def _usage_analytics(log: list[dict], now: float) -> str:
     charts += _bar_rows("Average cost per builder round", model_cost, "Per-model round cost, not a per-story attribution.")
     charts += _bar_rows("Average model round duration", model_duration, "Recorded elapsed time per model invocation; not whole-story duration.")
     charts += _bar_rows("Model types used per story", mix_rows, "Distinct model types recorded across each landed story's rounds.")
-    parts = [f'<section class="usage"><div class="usage-header"><div><p class="usage-kicker">SYSTEM ECONOMICS</p><h2>Usage &amp; delivery</h2><p class="section-intro">A closer look at activity, delivery efficiency and model mix. The charts show recorded patterns; the breakdown below retains the operational detail.</p></div><div class="usage-window">LAST {DAYS} DAYS<br><span>Recorded activity</span></div></div>',
+    parts = [f'<section class="usage" id="usage"><div class="usage-header"><div><p class="usage-kicker">SYSTEM ECONOMICS</p><h2>Usage &amp; delivery</h2><p class="section-intro">A closer look at activity, delivery efficiency and model mix. The charts show recorded patterns; the breakdown below retains the operational detail.</p></div><div class="usage-window">LAST {DAYS} DAYS<br><span>Recorded activity</span></div></div>',
              cards, '<div class="usage-charts">', charts, '</div>']
     parts.append('<details class="usage-breakdown"><summary>Daily usage details</summary>')
     pct = lambda v: "not recorded" if v is None else f"{v * 100:.0f}%"
