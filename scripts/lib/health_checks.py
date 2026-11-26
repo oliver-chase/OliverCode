@@ -604,3 +604,29 @@ def _check_launcher(oc_root: Path, launcher: Path | None = None) -> tuple[int, i
         return 0, 1, 0
     print(f"  [OK] {launcher} reaches an existing launcher")
     return 1, 0, 0
+
+
+def _check_path_checkout(claude_md: Path | None = None) -> tuple[int, int, int]:
+    """The `olivercode` first on PATH must run the checkout that ~/.claude/CLAUDE.md links to.
+
+    Two checkouts on PATH run two versions of the code, so a test of one is a run of the other.
+    No CLAUDE.md link or no `olivercode` on PATH is a skip; the activation and launcher checks report those.
+    """
+    claude_md = claude_md or _claude_dir() / "CLAUDE.md"
+    print("\nOne active checkout:")
+    first = shutil.which("olivercode")
+    if not claude_md.is_symlink() or not claude_md.exists() or not first:
+        print("  [INFO] no CLAUDE.md link or no olivercode on PATH — not checked")
+        return 0, 0, 1
+    real = Path(first).resolve()
+    if real.name != "olivercode" or real.parent.name != "scripts":
+        print(f"  [INFO] `olivercode` on PATH is {first}, which is not a checkout launcher — not checked")
+        return 0, 0, 1
+    linked = claude_md.resolve().parent
+    runs = real.parent.parent
+    if linked == runs:
+        print(f"  [OK] `olivercode` on PATH runs the checkout CLAUDE.md links to: {linked}")
+        return 1, 0, 0
+    print(f"  [FAIL] `olivercode` on PATH runs {runs}, but ~/.claude/CLAUDE.md links to {linked}, so tests run one version and the session runs another. "
+          f"Put {linked / 'scripts'} before {runs / 'scripts'} on PATH, or remove {runs / 'scripts'} from PATH")
+    return 0, 1, 0

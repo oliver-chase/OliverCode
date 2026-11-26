@@ -31,6 +31,7 @@ class TestCleanCloneInstall(unittest.TestCase):
 
     def launcher(self, *args):
         env = git_env(HOME=str(self.home), OLIVERCODE_HOME=str(self.home / ".olivercode"), OLIVERCODE_LOCAL_CONFIG=os.devnull, OLIVERCODE_LAUNCHER=str(self.home / "no-launcher"))
+        env["PATH"] = f"{self.clone / 'scripts'}{os.pathsep}{env.get('PATH', os.defpath)}"  # the clone is the one active checkout, not the owner's
         return subprocess.run(["python3", str(self.clone / "scripts" / "olivercode"), *args], capture_output=True, text=True, env=env)
 
     def test_install_then_health_exit_zero_with_no_local_config(self):

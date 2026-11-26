@@ -125,6 +125,18 @@ class TestHealth(PathCase):
         line = self.lines(self.health())[0]
         self.assertTrue(line.lstrip().startswith("[FAIL]") and "not on the PATH" in line and "olivercode install" in line, line)
 
+    def test_a_path_on_another_checkout_than_the_link_fails(self):
+        main, staging = self.home / "main", self.home / "staging"
+        for checkout in (main, staging):
+            (checkout / "scripts").mkdir(parents=True)
+            (checkout / "scripts" / "olivercode").write_text("#!/usr/bin/env python3\n")
+            (checkout / "scripts" / "olivercode").chmod(0o755)
+        (staging / "CLAUDE.md").write_text("rules\n")
+        (self.home / ".claude").mkdir()
+        (self.home / ".claude" / "CLAUDE.md").symlink_to(staging / "CLAUDE.md")
+        self.enterContext(mock.patch.dict(os.environ, {"PATH": f"{main / 'scripts'}:{BASE_PATH}"}))
+        self.assertIn(f"[FAIL] `olivercode` on PATH runs {main}, but ~/.claude/CLAUDE.md links to {staging}", self.health())
+
 
 if __name__ == "__main__":
     unittest.main()

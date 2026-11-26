@@ -267,6 +267,56 @@ class LauncherLink(HealthBase):
         self.assertIn("old/scripts/olivercode", out)
 
 
+class PathCheckout(HealthBase):
+    def setUp(self):
+        super().setUp()
+        self.main = self.root / "main"
+        self.staging = self.root / "staging"
+        for checkout in (self.main, self.staging):
+            (checkout / "scripts").mkdir(parents=True)
+            (checkout / "scripts" / "olivercode").write_text("#!/usr/bin/env python3\n")
+        (self.staging / "CLAUDE.md").write_text("rules\n")
+        self.claude_md = self.root / "home" / "CLAUDE.md"
+        self.claude_md.parent.mkdir()
+        self.claude_md.symlink_to(self.staging / "CLAUDE.md")
+
+    def check(self, which_path):
+        with mock.patch.object(health.shutil, "which", return_value=which_path):
+            return quiet(health._check_path_checkout, self.claude_md)
+
+    def test_path_on_another_checkout_fails_naming_both(self):
+        result, out = self.check(str(self.main / "scripts" / "olivercode"))
+        self.assertEqual(result, (0, 1, 0))
+        self.assertIn(str(self.main), out)
+        self.assertIn(str(self.staging), out)
+        self.assertIn("PATH", out)
+
+    def test_path_on_the_linked_checkout_passes(self):
+        result, _ = self.check(str(self.staging / "scripts" / "olivercode"))
+        self.assertEqual(result, (1, 0, 0))
+
+    def test_a_symlink_on_path_to_the_linked_checkout_passes(self):
+        launcher = self.root / "bin" / "olivercode"
+        launcher.parent.mkdir()
+        launcher.symlink_to(self.staging / "scripts" / "olivercode")
+        result, _ = self.check(str(launcher))
+        self.assertEqual(result, (1, 0, 0))
+
+    def test_a_symlink_on_path_to_another_checkout_fails(self):
+        launcher = self.root / "bin" / "olivercode"
+        launcher.parent.mkdir()
+        launcher.symlink_to(self.main / "scripts" / "olivercode")
+        self.assertEqual(self.check(str(launcher))[0], (0, 1, 0))
+
+    def test_no_olivercode_on_path_is_skipped(self):
+        self.assertEqual(self.check(None)[0], (0, 0, 1))
+
+    def test_no_claude_md_link_is_skipped(self):
+        self.claude_md.unlink()
+        self.claude_md.write_text("rules\n")
+        self.assertEqual(self.check(str(self.main / "scripts" / "olivercode"))[0], (0, 0, 1))
+
+
 class GhAuth(unittest.TestCase):
     """`olivercode health` names a signed-out gh. A fake runner stands in for `gh auth status`, so no live call is made."""
 
