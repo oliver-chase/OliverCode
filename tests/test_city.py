@@ -88,10 +88,11 @@ class PanelCase(unittest.TestCase):
     def test_each_repository_expands_into_its_own_story_and_history(self):
         state = {"org/alpha": {"active": False, "builders": 1, "building": {}, "queue": [], "held": [], "waiting": []}}
         log = [{"repo": "org/alpha", "story": "story-9", "landed": True, "title": "Alpha delivery", "at": "2026-11-25T10:00:00Z", "minutes": 12, "model": "haiku"}]
-        with mock.patch.object(status_report, "fleet_repos", return_value=[("org/alpha", Path("/alpha"))]), \\
-             mock.patch.object(status_report, "load_state", return_value=state), \\
-             mock.patch.object(city.cmd_status, "run_log", return_value=log), \\
-             mock.patch.object(status_report, "history", wraps=status_report.history):
+        with (
+            mock.patch.object(status_report, "fleet_repos", return_value=[("org/alpha", Path("/alpha"))]),
+            mock.patch.object(status_report, "load_state", return_value=state),
+            mock.patch.object(city.cmd_status, "run_log", return_value=log),
+        ):
             page = city._portfolio_html(1795600000.0)
         self.assertIn('<details class="repo-card">', page)
         self.assertIn("org/alpha", page)
