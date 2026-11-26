@@ -65,6 +65,7 @@ class Io:
     def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int | None = None):
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
+        self.claim_start: dict[int, float] = {}  # story number -> when this run claimed it, never refreshed (#1306)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.said: dict[int, str] = {}  # story number -> its last comment, which is the reason a stopped row records (#1291)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
@@ -186,12 +187,17 @@ class Io:
         path = placement_config().worktrees / f"{self.repo.name}-{n}"
         return path.is_dir() and self.commits(path) > 0
 
+    def since_claim(self, n: int) -> list[str]:
+        """The git log filter that keeps only commits made after the drain claimed story n, so an older commit that names it never stands in for
+        the claim's own work (#1306). A story with no claim in this run is not filtered."""
+        return [f"--since={int(self.claim_start[n])}"] if n in self.claim_start else []
+
     def landed(self, worktree: Path, n: int) -> bool:
-        """True when a commit that names the story is on origin's default branch (#877). It reads the main checkout, so a builder that landed and
+        """True when a commit made after this claim that names the story is on origin's default branch (#877, #1306). It reads the main checkout, so a builder that landed and
         removed its worktree still counts, and it fetches first so a landing made by another process is seen."""
         branch = self.branch()
         subprocess.run(["git", "-C", str(self.repo), "fetch", "-q", "origin", branch], capture_output=True, text=True)
-        ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--format=%s"], capture_output=True, text=True)
+        ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", *self.since_claim(n), "--format=%s"], capture_output=True, text=True)
         return ran.returncode == 0 and any(f"(#{n})" in line for line in ran.stdout.splitlines())
 
     def landed_lead(self, issue: dict) -> tuple[str, str] | None:
@@ -229,6 +235,8 @@ class Io:
     def land(self, worktree: Path, n: int) -> tuple[bool, str]:
         agent_loop.log_stage(f"story-{n}", self.repo.name, "landing")
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
+        if out.returncode == 0:
+            self.claim_start.pop(n, None)  # land keeps a lone older commit's committer date, so a resumed branch's commit would fail the since-claim filter (#1306)
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
     def comment(self, n: int, body: str) -> None:
@@ -239,7 +247,7 @@ class Io:
         """Log the builder entry for the commit that names the story on origin's default branch, then close the story through complete_story.py
         with the landing's output as its Run output (#912). Returns (closed, the refusal when the close was not made)."""
         branch = self.branch()
-        log = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", "--format=%H%x09%s"], capture_output=True, text=True)
+        log = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", *self.since_claim(n), "--format=%H%x09%s"], capture_output=True, text=True)
         sha = next((line.split("\t")[0] for line in log.stdout.splitlines() if f"(#{n})" in line), "")
         if not sha:
             return False, f"no commit for (#{n}) is on origin/{branch}"
@@ -317,7 +325,7 @@ class Io:
         """Write the claim, locally and as a comment, before the builder starts. While the GitHub budget is held, the comment waits and the card's move to In Progress is queued."""
         now = time.time()
         cmd_dispatch._local_claim(self.slug, n, now, write=self.agent)
-        self.claimed_at[n] = now
+        self.claimed_at[n] = self.claim_start[n] = now
         agent_loop.log_stage(f"story-{n}", self.repo.name, "claimed")
         if gh_budget.refusal() or gh_budget.reserve_write():
             cfg = backlog_config(self.repo)

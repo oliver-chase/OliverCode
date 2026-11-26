@@ -213,7 +213,7 @@ class ClaimIo(RunIo):
     def __init__(self, repo, runner):
         super().__init__()
         self.repo, self.slug, self.runner = repo, "o/r", runner
-        self.claimed_at = {}
+        self.claimed_at, self.claim_start = {}, {}
 
     gh = cmd_drain.Io.gh
     claim = cmd_drain.Io.claim

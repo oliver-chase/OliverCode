@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, quiet, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, git_env, quiet, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_drain, run_lock  # noqa: E402
@@ -607,6 +607,18 @@ class TestRealIo(unittest.TestCase):
         self.assertTrue(self.io.landed(self.repo, 7))
         self.assertFalse(self.io.landed(self.repo, 8))
         self.assertEqual(self.io.commits(self.repo), 0)
+
+    def test_a_commit_made_before_the_claim_is_not_landed_and_one_after_it_is(self):
+        """#1306: an older commit that names the story does not close it; a commit made after the claim does."""
+        subprocess.run(["git", "-C", str(self.repo), "commit", "--allow-empty", "-qm", "Part of the thing (#7)"],
+                       env=git_env(GIT_COMMITTER_DATE="2020-01-01T00:00:00Z"), check=True, capture_output=True)
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.io.claim_start[7] = time.time()
+        self.assertFalse(self.io.landed(self.repo, 7))
+        self.io.claim_start[7] = time.time() - 3600
+        git(self.repo, "commit", "--allow-empty", "-qm", "Rest of the thing (#7)")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertTrue(self.io.landed(self.repo, 7))
 
     def test_head_ahead_of_the_default_branch_is_not_landed(self):
         git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
