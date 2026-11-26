@@ -106,7 +106,7 @@ def trend(opened: int, closed: int, open_now: int, days: int = 7) -> tuple[str, 
 
 
 def snapshot(*, slug: str, now: datetime, open_now: int, rows: list[dict], numbers: dict, steps: list[dict], today: list[dict], ready: str,
-             runner: dict, ideas: int, city: bool, latest: dict | None) -> dict:
+             runner: dict, ideas: int, city: bool, latest: dict | None, cost_days: list[dict] | None = None) -> dict:
     """Everything the briefing shows. `today` is [{story, title, tokens, cost}] delivered today; `runner` is {building, allowed, state, load}."""
     since = now - timedelta(days=7)
     opened = sum(1 for r in rows if r.get("created_at") and datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")) >= since)
@@ -115,7 +115,7 @@ def snapshot(*, slug: str, now: datetime, open_now: int, rows: list[dict], numbe
     priced = [t["cost"] for t in today if t.get("cost") is not None]
     return {"slug": slug, "now": now, "open": open_now, "opened": opened, "closed": closed, "days": week(rows, now), "trend": (headline, detail), "numbers": numbers,
             "groups": attention(steps), "waiting": len(steps), "setup": setup_items(steps), "today": today, "today_cost": sum(priced) if priced else None,
-            "today_tokens": sum(int(t.get("tokens") or 0) for t in today), "ready": ready, "runner": runner, "ideas": ideas, "city": city, "latest": latest}
+            "today_tokens": sum(int(t.get("tokens") or 0) for t in today), "cost_days": cost_days or [], "ready": ready, "runner": runner, "ideas": ideas, "city": city, "latest": latest}
 
 
 def summary_line(snap: dict) -> str:
@@ -208,6 +208,23 @@ def _attention_html(snap: dict) -> str:
             f'See them all with <code>olivercode owner list</code>.</p>{"".join(blocks)}</div>')
 
 
+def _cost_html(snap: dict) -> str:
+    days = snap.get("cost_days") or []
+    priced = [d for d in days if d.get("cost") is not None and d.get("stories")]
+    if not priced:
+        return '<div class="card">No cost data for finished stories yet.</div>'
+    values = [float(d["cost"]) for d in priced]
+    median = sorted(values)[len(values) // 2]
+    rows = []
+    for d in days:
+        if d.get("cost") is None or not d.get("stories"):
+            rows.append(f'<div class="row"><span>{esc(d["day"])}</span><span class="sub">No recorded cost</span></div>')
+            continue
+        outlier = median > 0 and d["cost"] > median * 2
+        rows.append(f'<div class="row"><span>{esc(d["day"])} · {d["stories"]} finished</span><b>{_money(d["cost"])}/story{ " · unusually high" if outlier else ""}</b></div>')
+    return '<div class="card">' + ''.join(rows) + '</div>'
+
+
 def _health_html(snap: dict) -> str:
     bad = {s["area"] for s in snap["setup"]}
     marks = "".join(f'<span class="pill {"warn" if a in bad else "good"}">{esc(a)}: {"needs attention" if a in bad else "good"}</span> ' for a in AREAS)
@@ -236,7 +253,7 @@ def dashboard_html(snap: dict) -> str:
         f'<h2>What needs your attention</h2>{_attention_html(snap)}'
         f'<h2>What OliverCode is doing</h2><div class="card">{pill} <b>{esc(plural(runner["building"], "builder"))} running</b> of {allowed} allowed{meter}{load}'
         f'<p>{esc("Nothing is building right now. " if not runner["building"] else "")}{esc("Next up: " + snap["ready"] if snap["ready"] else "")}</p>{latest}</div>'
-        f'<h2>How work is going</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>{_bars(snap["days"])}'
+        f'<h2>Cost over time</h2>{_cost_html(snap)}<h2>How work is going</h2><div class="card"><b>{esc(snap["trend"][0])}</b><p class="sub">{esc(snap["trend"][1])}</p>{_bars(snap["days"])}'
         f'<div class="cards"><div><div class="label">Delivered</div><div class="big">{snap["closed"]}</div></div><div><div class="label">Added</div><div class="big">{snap["opened"]}</div></div></div>'
         f'<p class="sub">Work moved to a fresh session {plural(nums.get("handovers", 0), "time")}, and you stepped into {plural(nums.get("threads", 0), "thread")}. '
         f'{plural(snap["ideas"], "idea")} waiting for review (<code>olivercode candidates</code>).</p></div>'
