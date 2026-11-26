@@ -709,26 +709,41 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if message:
                     say(message)
             started = False
-            for issue in ([] if state.get("restart") or state.get("api_error_stop") else todo):  # stop starting work after runner changes or repeated API failure
-                if len(running) >= io.capacity():
-                    break
-                area = intake.files_area(issue.get("body") or "")
-                if any(intake.overlaps(area, intake.files_area(active.get("body") or "")) for active in running.values()):
-                    marker = (issue["number"], "shared-files")
-                    if marker not in reported:
-                        reported.add(marker)
-                        say(f"Skipped #{issue['number']}: its Files area overlaps a story already building.")
-                    continue
-                if io.claimed(issue):
-                    continue
-                io.claim(issue["number"])
+            paused = run_lock.is_paused(io.slug)
+            for issue in ([] if paused or state.get("restart") or state.get("api_error_stop") else todo):
+                with run_lock.claim_guard(io.slug) as allowed:
+                    if not allowed:
+                        paused = True
+                        break
+                    if len(running) >= io.capacity():
+                        break
+                    area = intake.files_area(issue.get("body") or "")
+                    if any(intake.overlaps(area, intake.files_area(active.get("body") or "")) for active in running.values()):
+                        marker = (issue["number"], "shared-files")
+                        if marker not in reported:
+                            reported.add(marker)
+                            say(f"Skipped #{issue['number']}: its Files area overlaps a story already building.")
+                        continue
+                    if io.claimed(issue):
+                        continue
+                    io.claim(issue["number"])
+                    running[pool.submit(work_story, io, issue, state)] = issue
+                    started = True
                 _event(io, "start", issue, queue=[t for t in todo if t is not issue and t not in running.values()], waiting=waiting)
-                running[pool.submit(work_story, io, issue, state)] = issue
-                started = True
+            run_lock.set_paused(io.slug, os.getpid(), paused)
+            if paused and "paused" not in reported:
+                say("Runner paused. Existing builders are finishing; no new story will start. Run olivercode resume REPO to continue.")
+                reported.add("paused")
+            if not paused:
+                reported.discard("paused")
             io.beat([i["number"] for i in running.values()])
             if not running:
                 if state.get("restart") or state.get("api_error_stop"):
                     break
+                if paused:
+                    sleep(2)
+                    issues = None
+                    continue
                 if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
                     waits += 1
                     sleep(300)
