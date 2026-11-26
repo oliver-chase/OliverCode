@@ -335,13 +335,20 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
         row["repo"] = repo
     append_log(row)
 
-def log_api_error(story: str, model_name: str, cause: str, repo: str = "") -> None:
-    """Record an API stop without a round number, so it never burns story rounds or model-escalation thresholds."""
+def log_api_error(story: str, model_name: str, cause: str, repo: str = "", reply: dict | None = None) -> None:
+    """Record an API stop without a round number, preserving any usage/cost the CLI reported."""
+    reply = reply or {}
     row = {"story": story, "model": model_name, "stop": "api_error", "stderr_tail": cause[:300],
-           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "cost_usd": reply.get("cost_usd")}
+    if reply.get("session_id"):
+        row["session_id"] = reply["session_id"]
+    usage = reply.get("usage") or {}
+    row.update({"input": usage.get("input", 0), "output": usage.get("output", 0),
+                "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0)})
     if repo:
         row["repo"] = repo
     append_log(row)
+
 
 def append_log(row: dict) -> None:
     """Append one JSON line to the run log. A log that cannot be written never stops a loop."""
@@ -405,7 +412,7 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             summary = reply["text"]
             if is_api_error(reply):
                 cause = api_error_cause(reply) or str(reply.get("text") or reply.get("stderr") or reply.get("stop") or "Unspecified API error")[:300]
-                log_api_error(session, model_name, cause, repo=repo)
+                log_api_error(session, model_name, cause, repo=repo, reply=reply)
                 say(f"API error: {cause}")
                 return {"done": False, "api_error": True, "api_error_cause": cause, "reason": f"API error: {cause}",
                         "rounds": n - 1, "tokens": tokens, "summary": summary}
