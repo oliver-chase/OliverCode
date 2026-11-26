@@ -730,6 +730,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             if not running:
                 if state.get("restart") or state.get("api_error_stop"):
                     break
+                if paused:
+                    sleep(2)
+                    issues = None
+                    continue
                 if todo and not started and waits < FULL_WAITS and io.capacity() == 0:
                     waits += 1
                     sleep(300)
