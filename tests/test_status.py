@@ -210,6 +210,29 @@ class TestDigest(unittest.TestCase):
         self.assertIn("#3 in r at 2026-11-22 08:20 UTC", landed[0])
         self.assertNotIn("#9", landed[0])
 
+    def sized(self, n: int, size: str | None, retry: bool = False) -> list[dict]:
+        row = stage(f"story-{n}", "claimed", "09:00")
+        if size:
+            row["size"] = size
+        rows = [row, stage(f"story-{n}", "validating", "09:05"), {"story": f"story-{n}", "round": 1, "cost_usd": 0.10, "at": "2026-11-22T09:04:00Z"}]
+        return rows + ([stage(f"story-{n}", "validating", "09:08")] if retry else []) + [stage(f"story-{n}", "landed", "09:10")]
+
+    def test_a_size_with_five_landings_shows_its_medians_beside_the_benchmark(self):
+        """#1301."""
+        log = [r for n in range(5) for r in self.sized(n, "XS", retry=n == 0)]
+        self.assertEqual(["XS stories: 5 reached staging in the last 7 days. Median 10.0 minutes, 1 rounds, $0.10, 80% passed validation first time. "
+                          "Benchmark: 21 minutes and $0.14."], cmd_status.size_lines(log, NOW.timestamp()))
+
+    def test_a_size_with_fewer_than_five_landings_says_it_is_too_few(self):
+        log = [r for n in range(3) for r in self.sized(n, "S")]
+        self.assertEqual(["S stories: 3 reached staging in the last 7 days, too few to compare."], cmd_status.size_lines(log, NOW.timestamp()))
+
+    def test_rows_from_before_sizes_were_logged_count_as_no_size(self):
+        self.assertEqual([], cmd_status.size_lines([r for n in range(6) for r in self.sized(n, None)], NOW.timestamp()))
+
+    def test_a_landing_older_than_the_window_is_left_out(self):
+        self.assertEqual([], cmd_status.size_lines([r for n in range(6) for r in self.sized(n, "XS")], NOW.timestamp() + 8 * 86400))
+
     def test_a_stage_row_is_not_listed_as_a_round_in_the_digest(self):
         text = cmd_status.build_digest("b", [], [stage("story-1", "claimed", "09:00")], NOW)
         self.assertNotIn("story-1", text)

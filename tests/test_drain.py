@@ -51,7 +51,7 @@ class FakeIo:
     def capacity(self):
         return self.cap.pop(0) if isinstance(self.cap, list) and len(self.cap) > 1 else (self.cap[0] if isinstance(self.cap, list) else self.cap)
     def limit(self): return 4
-    def claim(self, n): pass
+    def claim(self, n, size=""): pass
     def beat(self, building): self.beats = getattr(self, "beats", []) + [list(building)]
     def worktree(self, n): return Path(f"/wt/{n}")
     repo = Path("/repo")
@@ -537,6 +537,14 @@ class TestRealIo(unittest.TestCase):
             with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
                 self.io.build(issue(7, f"Do it.\nSize: {size}", labels=labels), Path("/wt/7"), "")
             self.assertEqual((model_name, rounds), (run_loop.call_args.kwargs["model_name"], run_loop.call_args.kwargs["rounds"]), size)
+
+    def test_the_claimed_row_and_each_round_row_carry_the_board_size(self):
+        """#1301: the claim registers the story's size, so its claimed row and its round rows carry it."""
+        self.addCleanup(cmd_drain.agent_loop.STORY_SIZE.pop, "story-7", None)
+        self.io.claim(7, "XS")
+        cmd_drain.agent_loop.log_round("story-7", 1, "haiku", {})
+        rows = [json.loads(l) for l in (Path(os.environ["OLIVERCODE_HOME"]) / "run-log.jsonl").read_text().splitlines()]
+        self.assertEqual([("claimed", "XS"), (None, "XS")], [(r.get("stage"), r.get("size")) for r in rows])
 
     def test_the_brief_carries_the_resume_note_and_names_no_other_story(self):
         lead = issue(7, "Do it.\nSize: XS")

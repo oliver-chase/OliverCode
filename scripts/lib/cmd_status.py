@@ -31,6 +31,8 @@ DIGEST_TOKENS = 1500
 DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four, and ids, paths and code run shorter, so three keeps the digest under the limit
 OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
 DIGEST_ITEMS = 5  # the latest decisions and the latest run-log rows the digest keeps before it trims to the limit
+MIN_SIZED = 5  # stories of one size that must reach staging in the window before status compares them (#1301)
+BENCHMARKS = {"XS": (21, 0.14)}  # size -> (minutes, dollars) from the 23 Nov baseline in #1246; shortcut: only XS is measured, add a size once its baseline is set
 USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR]"
 
 
@@ -263,13 +265,45 @@ def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
     return f"Tokens per closed story: {sum(counted) // len(counted):,} across {len(counted)} stories closed in the last {DAYS} days."
 
 
+def median(values: list[float]) -> float:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
+    """One line per story size that reached staging (a landed row) in the last `days`: the median minutes from claim, rounds and cost, and the share that
+    passed validation first time, beside the size's benchmark, or the count and 'too few' under MIN_SIZED. Rows with no size are left out (#1301)."""
+    by_size: dict[str, list[dict]] = {}
+    for story in dict.fromkeys(str(r.get("story")) for r in log if r.get("stage") == "landed"):
+        rows = _story_rows(log, story, upto="landed")
+        claimed = rows[0] if rows and rows[0].get("stage") == "claimed" else None
+        if not claimed or not claimed.get("size") or _epoch(rows[-1].get("at")) < now - days * 86400:
+            continue
+        by_size.setdefault(claimed["size"], []).append({
+            "minutes": (_epoch(rows[-1].get("at")) - _epoch(claimed.get("at"))) / 60, "rounds": sum(1 for r in rows if "round" in r and "stage" not in r),
+            "cost": _cost(rows), "first": sum(1 for r in rows if r.get("stage") == "validating") <= 1})
+    lines = []
+    for size in sorted(by_size, key=lambda k: ["XS", "S", "M", "L", "XL"].index(k) if k in ("XS", "S", "M", "L", "XL") else 9):
+        found = by_size[size]
+        if len(found) < MIN_SIZED:
+            lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days, too few to compare.")
+            continue
+        bench = BENCHMARKS.get(size)
+        against = f" Benchmark: {bench[0]} minutes and ${bench[1]:.2f}." if bench else " No benchmark is set for this size."
+        lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days. Median {median([f['minutes'] for f in found]):.1f} minutes, "
+                     f"{median([f['rounds'] for f in found]):g} rounds, ${median([f['cost'] for f in found]):.2f}, "
+                     f"{round(100 * sum(f['first'] for f in found) / len(found))}% passed validation first time.{against}")
+    return lines
+
+
 def live_lines(now: datetime, open_now: int, rows: list[dict], slug: str = "") -> list[str]:
     """The status lines for this machine right now, read from the claims, the run log, the process table, the run lock and the digest."""
     stamp = now.timestamp()
     log = run_log()
     from lib import gated
     holder = run_lock.active(slug, stamp) if slug else {}
-    return [tokens_per_story(rows, log)] + gated.savings_lines() + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), holder)
+    return [tokens_per_story(rows, log)] + gated.savings_lines() + size_lines(log, stamp) + activity(stamp, live_claims(stamp), log, runner_alive(), open_now, next_ready(digest_path()), holder)
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,

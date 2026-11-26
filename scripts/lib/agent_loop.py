@@ -306,6 +306,8 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "stop": reply.get("stop", ""), "stderr_tail": reply.get("stderr", ""), "resumed": bool(reply.get("resumed")),
            "settings": reply.get("settings", ""),  # which setup ran, so the two start sizes can be compared (#911)
            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
+    if STORY_SIZE.get(story):
+        row["size"] = STORY_SIZE[story]
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
@@ -317,6 +319,7 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
         pass
 
 
+STORY_SIZE: dict[str, str] = {}  # story -> its board Size, set when the drain claims it, so every later row carries it (#1301)
 STAGE_START: dict[str, float] = {}  # story -> when its current stage began, so each row says how long the stage before it took (#1291)
 
 
@@ -329,6 +332,8 @@ def log_stage(story: str, repo: str, stage: str, started_at: float | None = None
     row = {"story": story, "repo": repo, "stage": stage, "at": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": int(max(0, now - began))}
     if reason:
         row["reason"] = reason[:300]
+    if STORY_SIZE.get(story):
+        row["size"] = STORY_SIZE[story]
     row.update(extra)
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:

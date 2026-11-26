@@ -322,11 +322,13 @@ class Io:
         except RuntimeError:
             pass
 
-    def claim(self, n: int) -> None:
+    def claim(self, n: int, size: str = "") -> None:
         """Write the claim, locally and as a comment, before the builder starts. While the GitHub budget is held, the comment waits and the card's move to In Progress is queued."""
         now = time.time()
         cmd_dispatch._local_claim(self.slug, n, now, write=self.agent)
         self.claimed_at[n] = self.claim_start[n] = now
+        if size:
+            agent_loop.STORY_SIZE[f"story-{n}"] = size
         agent_loop.log_stage(f"story-{n}", self.repo.name, "claimed")
         if gh_budget.refusal() or gh_budget.reserve_write():
             cfg = backlog_config(self.repo)
@@ -568,7 +570,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 areas = intake.files_area(issue.get("body") or "")
                 if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
                     continue
-                io.claim(issue["number"])
+                io.claim(issue["number"], issue.get("size") or "")
                 running[pool.submit(work_story, io, issue, state)] = issue
                 busy.append(areas)
                 started = True
