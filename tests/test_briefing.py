@@ -68,7 +68,11 @@ class DashboardCase(unittest.TestCase):
         self.assertIn("Benchmark:", page)
         self.assertIn("expansion", page)
         self.assertIn("this week", page)
-        self.assertIn("within $6.00 budget", page)\n        self.assertIn("--accent:#a99be8", briefing.STYLE)\n        self.assertIn("--lavender:#f0edff", briefing.STYLE)\n        self.assertNotIn("prefers-color-scheme:dark", briefing.STYLE)\n        self.assertIn("Why it matters", page)\n        self.assertIn("What to do", page)
+        self.assertIn("within $6.00 budget", page)
+        self.assertIn("--accent:#a99be8", briefing.STYLE)
+        self.assertIn("--lavender:#f0edff", briefing.STYLE)
+        self.assertNotIn("prefers-color-scheme:dark", briefing.STYLE)\n        self.assertIn("Why it matters", page)\n        self.assertIn("What to do", page)
+        self.assertIn("What the trend says:", page)
         self.assertIn("chart-values", page)
         self.assertIn("Daily stories added and delivered", page)
 
