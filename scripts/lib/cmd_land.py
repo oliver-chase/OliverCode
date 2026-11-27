@@ -381,7 +381,7 @@ def stack(items: list[tuple[Path, str]], say=print) -> bool:
         if len(trees) < 2:
             return False
         link_venv(main, scratch)
-        passed, tail = agent_loop.validate(scratch, quick=True)
+        passed, tail = agent_loop.validate(scratch)
         say(f"A batch of {len(trees)} stories {'passed' if passed else 'failed'} its one validation." + ("" if passed else f"\n{tail}"))
         if passed:
             for tree in trees[:-1]:
@@ -543,7 +543,7 @@ def _timed_quick(wt: Path, ref: str, label: str) -> tuple[bool, float, str]:
     """(passed, seconds, output tail) of one quick validation of ref's tree in wt (#1305)."""
     _git(wt, "checkout", "-q", "--detach", ref)
     began = time.monotonic()
-    passed, tail = agent_loop.validate(wt, quick=True)
+    passed, tail = agent_loop.validate(wt)
     return passed, time.monotonic() - began, f"{label} quick validation:\n{tail}"
 
 

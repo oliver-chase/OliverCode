@@ -718,8 +718,8 @@ class TestPromote(Base):
         git(self.main, "push", "-q", "origin", "stg:staging")
         self.results, self.labels, self.runs = [True, True, True], [], []
 
-        def validate(wt, quick=False):
-            self.runs.append(quick)
+        def validate(wt):
+            self.runs.append(True)  # one entry per validation run
             return self.results.pop(0), "gate 'tests' failed"
 
         self.ci = [{"name": "ci", "status": "completed", "conclusion": "success"}]
@@ -761,7 +761,7 @@ class TestPromote(Base):
         self.assertEqual(1, len(git(self.main, "rev-list", "--parents", "-n1", "origin/main").stdout.split()) - 1)  # no merge commit
         self.assertEqual(["Story 5 (#5)", "Story 6 (#6)"], git(self.main, "log", "--reverse", "--format=%s", "-2", "origin/main").stdout.splitlines())
         self.assertEqual(["repos/o/r/issues/5/labels", "repos/o/r/issues/6/labels"], self.labels)
-        self.assertEqual([True, True, False], self.runs)
+        self.assertEqual([True, True, True], self.runs)
 
     def test_second_promote_has_nothing_to_do(self):
         self.assertEqual(0, self.promote()[0])

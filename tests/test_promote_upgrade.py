@@ -29,7 +29,7 @@ class TestPromoteUpgrade(test_land.TestPromote):
         git(self.main, "fetch", "-q", "origin", "--tags")
         self.assertEqual(0, code, out)
         self.assertEqual([stg], self.rehearsed)
-        self.assertEqual([True, True, False], self.runs)
+        self.assertEqual([True, True, True], self.runs)
         self.assertEqual(old, self.sha("refs/tags/archive/main-" + time.strftime("%Y-%m-%d")))
         self.assertEqual(stg, self.sha("origin/main"))
 

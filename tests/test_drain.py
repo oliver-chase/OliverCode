@@ -820,16 +820,40 @@ class TestRealIo(unittest.TestCase):
         root = temp_dir(self)
         seen = []
         for passed, expected in ((True, ""), (False, "boom")):
-            def validate(wt, quick=False):
+            def validate(wt):
                 seen.append(Path(wt).parent)
-                return passed, "boom"
-            with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(worktrees=root / "_worktrees")), \
-                    mock.patch.object(cmd_drain.cmd_land, "prepare_worktree"), \
-                    mock.patch.object(cmd_drain.agent_loop, "validation_command", return_value=["true"]), \
-                    mock.patch.object(cmd_drain.agent_loop, "validate", validate):
-                self.assertEqual(expected, self.io.base_failure())
+                return (0 if passed else 1), "boom"
+            self.assertEqual(expected, self.base(validate, root / "_worktrees"))
             self.assertNotIn("-base-", git(self.repo, "worktree", "list").stdout)
         self.assertEqual([root / "_worktrees"] * 2, seen)
+
+    def base(self, validate, folder=None, recorded=False):
+        """The base check's result with validation replaced by `validate` and a recorded pass for the tree when `recorded`."""
+        with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(worktrees=folder or temp_dir(self) / "_worktrees")), \
+                mock.patch.object(cmd_drain.cmd_land, "prepare_worktree"), \
+                mock.patch.object(cmd_drain.agent_loop, "validation_command", return_value=["true"]), \
+                mock.patch.object(cmd_drain.validated, "is_validated", return_value=recorded), \
+                mock.patch.object(cmd_drain.agent_loop, "validate_code", validate):
+            return self.io.base_failure()
+
+    def test_a_tree_with_a_recorded_pass_is_not_validated_again(self):
+        """#1436: land's recorded pass for origin's tree answers the base check, and a tree with none is validated once."""
+        git(self.repo, "remote", "add", "origin", str(self.repo))
+        runs = []
+        self.assertEqual("", self.base(lambda wt: runs.append(1) or (1, "boom"), recorded=True))
+        self.assertEqual([], runs)
+        self.assertEqual("boom", self.base(lambda wt: runs.append(1) or (1, "boom")))
+        self.assertEqual([1], runs)
+
+    def test_a_timeout_is_rerun_once_and_two_read_as_unknown(self):
+        """#1436: exit 124 is rerun; a pass on the rerun is a pass, two timeouts log one line and build everything, and a real failure still filters."""
+        git(self.repo, "remote", "add", "origin", str(self.repo))
+        for results, expected, said in (([(124, "slow"), (0, "ok")], "", False), ([(124, "slow"), (124, "slow")], "", True), ([(124, "slow"), (1, "boom")], "boom", False)):
+            queue = list(results)
+            with mock.patch("builtins.print") as out:
+                self.assertEqual(expected, self.base(lambda wt: queue.pop(0)))
+            self.assertEqual([], queue)
+            self.assertEqual(said, any("timed out twice" in str(c) for c in out.call_args_list))
 
     def test_the_brief_is_built_by_the_real_rules_without_a_missing_key(self):
         seen = {}

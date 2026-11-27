@@ -95,31 +95,27 @@ def default_branch(cwd: str | Path) -> str:
     return "main"
 
 
-def offers_quick(command: list[str], cwd: str | Path) -> bool:
-    """True when the command is scripts/validate.sh and that script takes --quick (#1290)."""
-    try:
-        return command[-1] == "scripts/validate.sh" and "--quick" in (Path(cwd) / "scripts" / "validate.sh").read_text(encoding="utf-8")
-    except OSError:
-        return False
+TIMED_OUT = 124  # the exit validate_gates.py gives when a run passes its time budget, and the code a runner timeout gets here (#1436)
 
 
-def validate(cwd: str | Path, quick: bool = False) -> tuple[bool, str]:
-    """(passed, the end of its output).
-
-    `quick` runs the repo's `validate.sh --quick` when the script offers it (#1290). A pass is recorded for the worktree's tree, so land reuses
-    it and never runs the same validation again."""
+def validate_code(cwd: str | Path) -> tuple[int, str]:
+    """(exit code, the end of its output). A pass is recorded for the worktree's tree, so land reuses it and never runs the same validation again."""
     command = validation_command(cwd)
     if command is None:
-        return False, NO_VALIDATION
-    if quick and offers_quick(command, cwd):
-        command = [*command, "--quick"]
+        return 1, NO_VALIDATION
     try:
         ran = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
-        return False, f"Validation ran past {VALIDATE_TIMEOUT} seconds and was stopped."
+        return TIMED_OUT, f"Validation ran past {VALIDATE_TIMEOUT} seconds and was stopped."
     if ran.returncode == 0:
         validated.record(Path(cwd))
-    return ran.returncode == 0, gate_tail(ran.stdout + ran.stderr)
+    return ran.returncode, gate_tail(ran.stdout + ran.stderr)
+
+
+def validate(cwd: str | Path) -> tuple[bool, str]:
+    """(passed, the end of its output)."""
+    code, tail = validate_code(cwd)
+    return code == 0, tail
 
 
 def gate_tail(output: str) -> str:
@@ -400,7 +396,7 @@ def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, mode
 
 
 def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full", repo="") -> dict:
-    run, check = run or model.run_cli, check or (lambda c: validate(c, quick=True))  # every story runs quick validation, which widens to the full suite itself when a change needs it (#1290)
+    run, check = run or model.run_cli, check or (validate)
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None

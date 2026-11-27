@@ -22,7 +22,7 @@ from collections import Counter, deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_land, cmd_owner, failure_log, gh_budget, gitfiles, intake, local_config, model, policy, run_lock
+from lib import agent_loop, cmd_dispatch, cmd_land, cmd_owner, failure_log, gh_budget, gitfiles, intake, local_config, model, policy, run_lock, validated
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -104,7 +104,7 @@ class Io:
         return agent_loop.validation_command(self.repo)
 
     def base_failure(self) -> str:
-        """The last line of the quick validation's output when it fails on a worktree of origin's default branch, else "" (#1431).
+        """The last line of the validation's output when it fails on a worktree of origin's default branch, else "" (#1431). A tree with a recorded pass is not validated again, and a timeout is rerun once and then read as unknown (#1436).
         shortcut: a base that cannot be fetched or checked out counts as passing, upgrade when a drain needs to stop on an unreadable base."""
         git = ["git", "-C", str(self.repo)]
         if subprocess.run([*git, "fetch", "-q", "origin", self.branch()], capture_output=True, text=True).returncode:
@@ -118,8 +118,15 @@ class Io:
             cmd_land.prepare_worktree(wt, self.repo)
             if agent_loop.validation_command(wt) is None:
                 return ""
-            passed, tail = agent_loop.validate(wt, quick=True)
-            return "" if passed else (tail.strip().splitlines() or ["validation failed"])[-1]
+            if validated.is_validated(validated.working_tree(wt)):  # land recorded a full pass for this tree, so nothing is learned by running it again (#1436)
+                return ""
+            code, tail = agent_loop.validate_code(wt)
+            if code == agent_loop.TIMED_OUT:  # a slow machine is not a red staging: rerun once, then build everything
+                code, tail = agent_loop.validate_code(wt)
+                if code == agent_loop.TIMED_OUT:
+                    print("Base validation timed out twice, so staging is unknown and stories of every priority build (#1436).")
+                    return ""
+            return "" if code == 0 else (tail.strip().splitlines() or ["validation failed"])[-1]
         finally:
             subprocess.run([*git, "worktree", "remove", "--force", str(wt)], capture_output=True, text=True)
             shutil.rmtree(wt, ignore_errors=True)
