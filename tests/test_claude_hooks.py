@@ -456,13 +456,12 @@ class TestSettingsRemove(unittest.TestCase):
         commands = [h["command"] for groups in json.loads(path.read_text())["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertEqual(sorted(claude_settings._command(n, hooks_dir) for _, _, n in claude_settings.MANAGED), sorted(commands))
 
-    def test_install_drops_the_denial_watch_entry_and_leaves_its_script(self):
+    def test_install_drops_the_denial_watch_entry(self):
         entry = {"type": "command", "command": 'python3 "/old/olivercode/scripts/hooks/denial_watch.py"'}
         merged = claude_settings.merge({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [entry]}]}}, Path("/oc/scripts/hooks"))
         commands = [h["command"] for groups in merged["hooks"].values() for g in groups for h in g["hooks"]]
         self.assertFalse(any("denial_watch" in c for c in commands))
         self.assertNotIn("denial_watch.py", [n for _, _, n in claude_settings.MANAGED])
-        self.assertTrue((claude_settings.HOOKS_DIR / "denial_watch.py").is_file())
 
     def test_a_missing_script_exits_0_silently_and_a_present_one_runs_as_before(self):
         root = temp_dir(self, "olivercode-failopen-", resolve=True)
@@ -660,12 +659,7 @@ class StatusHint(unittest.TestCase):
 
 
 class TestRetiredDesignHook(unittest.TestCase):
-    """A settings file written by a later install can name design_hook.py, so the script stays as a no-op that install strips."""
-
-    def test_the_script_exits_0_and_prints_nothing(self):
-        script = str(REPO_ROOT / "scripts" / "hooks" / "design_hook.py")
-        ran = subprocess.run([sys.executable, script], input='{"tool_name": "Edit"}', capture_output=True, text=True)
-        self.assertEqual((0, "", ""), (ran.returncode, ran.stdout, ran.stderr))
+    """A settings file can still name design_hook.py, which is gone, so install strips its entry."""
 
     def test_install_strips_its_entry(self):
         entry = {"type": "command", "command": f'python3 "{REPO_ROOT}/scripts/hooks/design_hook.py"'}

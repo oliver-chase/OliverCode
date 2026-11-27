@@ -1,8 +1,6 @@
 """A step the classifier denied is queued once with its exact command and closed when the owner ran it (#781, #787)."""
 
-import json
 import os
-import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -12,7 +10,6 @@ from _support import REPO_ROOT, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_owner, denials  # noqa: E402
 
-HOOK = REPO_ROOT / "scripts" / "hooks" / "denial_watch.py"
 DENIED = "Permission for this action has been denied by the auto mode classifier."
 LOAD = "launchctl bootstrap gui/501 /Users/me/Library/LaunchAgents/com.olivercode.maintain.plist"
 
@@ -46,14 +43,6 @@ class TestDeniedJob(unittest.TestCase):
         with mock.patch.object(denials, "_run", return_value="state = running"):
             self.assertEqual(1, denials.close_resolved())
         self.assertEqual([], self.open_lines())
-
-    def test_the_hook_queues_from_a_post_tool_use_payload(self):
-        env = {**os.environ, "OLIVERCODE_HOME": str(self.home), "HOME": str(self.home)}
-        payload = {"tool_input": {"command": LOAD}, "tool_response": {"stderr": DENIED}, "session_id": "s1", "cwd": "/"}
-        done = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env, input=json.dumps(payload))
-        self.assertEqual(0, done.returncode, done.stderr)
-        self.assertIn(LOAD, done.stdout)
-        self.assertEqual(1, len(self.open_lines()))
 
     def test_a_denied_git_push_merge_hard_reset_or_rebase_abort_queues_one_line_each(self):
         for verb in ("push origin main", "merge story/1", "reset --hard origin/main", "rebase --abort"):

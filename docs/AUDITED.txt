@@ -59,7 +59,6 @@ a83eca02c27139ede7bbd6c821b0281ce9b05804 olivercode.local.example.json
 93077c54a9c3c7e7e5dc15c797f3dca9533f1a34 scripts/build-hooks.py
 791e9569c3df365dbb86bbfd34515b3233c66077 scripts/hooks/archived_guard.py
 fd8c816774afa1925c5da63e223a9065f14217b7 scripts/hooks/commit_guard.py
-c58f5ed661afb3d6bcbfe1287b6a7bacf6bbb243 scripts/hooks/denial_watch.py
 803898be878ca96df9c4dc4cbc4c504d8729fdd0 scripts/hooks/early-stop-guard.py
 0c73c5d6ad13e5077a0d3effc9278515304cc465 scripts/hooks/error_paste.py
 50df1a61aa8fd7ac1c2fc7d8cb6e1740f8b24f0e scripts/hooks/gh_guard.py
