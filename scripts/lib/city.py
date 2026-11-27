@@ -3,7 +3,7 @@
 `olivercode status page [--fetch] [--open] [--root DIR]` writes `city.html` to the OliverCode home, and --open shows it in the default browser. Every write reads the run log, the owner queue, the board copy
 that `board sync` keeps and `city-github.json`. Only `--fetch` calls GitHub: it reads the opened and closed counts and the check results once and saves them
 to `city-github.json` with the time read. The frame is a nav (Today, Delivery, Cost, Health) and a status band that gives the run state, the builder count,
-the needs-you count, the Updated time and a Refresh control. The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
+the needs-you count, the Updated time, an Open on phone link when `cityArtifact` is set (#1362) and a Refresh control. The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
 their own module. The Live rail shows a card for each working builder, the queue, and Needs you with the latest owner decision (#1357). The Today section opens with the date, a headline, a paragraph and four answers (#1361).
 """
 
@@ -42,7 +42,7 @@ a{color:var(--accent)}.small{font-size:14px;color:var(--muted)}
 .b-run{background:var(--asoft)}.b-idle{background:var(--idlebg)}.b-wait{background:var(--warnbg)}.b-fail{background:var(--failbg)}
 .band{border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}.band .pill{align-self:flex-start}
 .btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:999px;border:0;font:500 15px Inter,system-ui,sans-serif;
-background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);cursor:pointer}
+background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);cursor:pointer;text-decoration:none}
 .body{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:32px;align-items:flex-start;padding-block:32px 64px}
 .rail{flex:1 1 340px;max-width:420px;min-width:0;display:flex;flex-direction:column;gap:16px}
 .main{flex:999 1 600px;min-width:0;display:flex;flex-direction:column;gap:48px}
@@ -180,7 +180,8 @@ def gather(slug: str, now: datetime, steps: list[dict], log: list[dict] | None, 
     return {"slug": slug, "now": now, "steps": steps, "building": building, "warnings": warnings, "busy": busy, "builders": len(claims) if busy else 0,
             "cards": cards, "landed": cmd_status.landed_today(log, stamp) if log is not None else None,
             "ready": None if stories is None else status_count(stories, "ready"), "backlog": None if stories is None else status_count(stories, "backlog"),
-            "next": next_up(stories or []), "decision": decision, "github": github, "log": log, "until": gh_budget.blocked_until("")}
+            "next": next_up(stories or []), "decision": decision, "github": github, "log": log, "until": gh_budget.blocked_until(""),
+            "artifact": str(local_config.setting("cityArtifact") or "")}
 
 
 def state(data: dict) -> tuple[str, str, str]:
@@ -393,13 +394,14 @@ def render(data: dict) -> str:
     now, steps = data["now"], data["steps"]
     chips = f'<span>{data["builders"]} builder{"" if data["builders"] == 1 else "s"}</span>' + (f'<a href="#needs">{len(steps)} need you</a>' if steps else "")
     start = command("olivercode drain REPO") if css == "idle" else ""
+    phone = f'<a class="btn" href="{html.escape(data["artifact"], quote=True)}">Open on phone</a>' if data.get("artifact") else ""
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<meta http-equiv="refresh" content="60"><title>OliverCode City</title>'
             f'<style>{STYLE}</style></head><body data-written="{int(now.timestamp())}"><div class="city"><header class="bar"><div class="wrap barin">'
             '<span class="brand">OliverCode City</span><nav class="nav" aria-label="Sections"><a href="#today">Today</a><a href="#delivery">Delivery</a>'
             '<a href="#cost">Cost</a><a href="#health">Health</a></nav>'
             f'<div class="status" aria-label="System status"><span class="pill c-{css}"><i></i>{word}</span>{chips}<span>Updated {now:%H:%M} UTC</span>'
-            '<button class="btn" id="refresh">Refresh</button></div></div></header>'
+            f'{phone}<button class="btn" id="refresh">Refresh</button></div></div></header>'
             f'<div class="wrap"><div class="band b-{css}" style="margin-top:16px"><span class="pill c-{css}"><i></i>{word}</span><p>{esc(sentence)}</p>{start}</div>'
             '<div class="band b-wait" id="stale" hidden style="margin-top:16px"><span class="pill c-wait"><i></i>Out of date</span><p></p>'
             f'{command("olivercode status page")}</div></div>'

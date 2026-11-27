@@ -36,6 +36,20 @@ class TestCity(unittest.TestCase):
         for part in ("2 builders", "2 need you", "Updated 12:00 UTC", ">Refresh</button>"):
             self.assertIn(part, page)
 
+    def test_the_top_right_links_the_pinned_artifact_when_city_artifact_is_set(self):
+        url = "https://claude.ai/artifact/abc"
+        with mock.patch("lib.local_config.setting", return_value=url):
+            found = city.gather("o/r", NOW, [], [], {}, False, None, None, None)
+        self.assertEqual(found["artifact"], url)
+        page = city.render(data(artifact=url))
+        self.assertIn(f'<a class="btn" href="{url}">Open on phone</a>', page)
+
+    def test_no_link_shows_when_city_artifact_is_not_set(self):
+        with mock.patch("lib.local_config.setting", return_value=None):
+            found = city.gather("o/r", NOW, [], [], {}, False, None, None, None)
+        self.assertEqual(found["artifact"], "")
+        self.assertNotIn("Open on phone", city.render(found))
+
     def test_the_band_shows_each_states_word_and_sentence(self):
         cases = {
             "Building": (data(busy=True, builders=2), "2 builders are working"),
