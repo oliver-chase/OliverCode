@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from _support import REPO_ROOT, temp_dir
@@ -18,8 +18,13 @@ DONE = {"story": "story-7", "repo": "r", "at": NOW.timestamp() - 600, "total": 3
 
 def data(**kw):
     base = {"slug": "o/r", "now": NOW, "steps": [], "building": ["Runner idle: no story is building."], "warnings": [], "busy": False, "builders": 0,
-            "landed": [], "ready": 0, "github": None, "log": [], "until": 0}
+            "cards": [], "landed": [], "ready": 0, "backlog": 0, "next": "", "decision": None, "github": None, "log": [], "until": 0}
     return {**base, **kw}
+
+
+def ago(minutes: int) -> str:
+    """A run-log stamp the given minutes before NOW, in the form the runner writes."""
+    return (NOW - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class TestCity(unittest.TestCase):
@@ -126,6 +131,63 @@ class TestCity(unittest.TestCase):
         got = city.read_github("o/r", NOW, count=lambda s, st: 4, fetch=lambda s, since: rows, runner=lambda args: done)
         self.assertEqual((got["open"], got["opened"], got["closed"], got["checks"]), (4, 1, 1, [{"name": "ci", "conclusion": "failure"}]))
 
+    def live(self, log, claims, stories=None, steps=None, decision=None):
+        """The page's Live rail from gather, with the runner alive and no GitHub hold."""
+        with mock.patch("lib.gh_budget.blocked_until", return_value=0):
+            found = city.gather("o/r", NOW, steps or [], log, claims, True, None, stories, None, decision)
+        return city.render(found)
+
+    def test_a_builder_card_shows_its_number_track_times_model_cost_and_tokens(self):
+        log = [{"story": "story-7", "stage": "claimed", "repo": "r", "at": ago(10), "size": "S"}, {"story": "story-7", "stage": "building", "repo": "r", "at": ago(8)},
+               {"story": "story-7", "stage": "validating", "repo": "r", "at": ago(2)},
+               {"story": "story-7", "round": 1, "model": "sonnet", "route": "size S", "cache_read": 900, "cache_write": 70, "cost_usd": 0.33, "stop": "end_turn"}]
+        stories = [{"status": "In progress", "size": "S", "priority": "P0", "content": {"number": 7, "title": "A story", "repository": "o/r"}}]
+        page = self.live(log, {"o/r#7": {"agent": "sonnet", "at": NOW.timestamp() - 600}}, stories)
+        for part in ('id="live"', "#7", "A story", '<li class="now">Validating</li>', "2 minutes in validating, 10 minutes in all", "Sonnet, round 1. Chosen because size S.",
+                     "$0.33 of the $1.00 S limit, review included", "width:33%", "70 written to cache, 900 read from cache", ">S</span>", ">P0</span>"):
+            self.assertIn(part, page)
+
+    def test_a_builder_card_says_what_the_files_do_not_hold(self):
+        page = self.live([], {"o/r#7": {"agent": "sonnet", "at": NOW.timestamp() - 60}})
+        for part in ("Title not recorded, because the board copy was not read.", "size not recorded", "priority not recorded", "Not recorded yet, because no round has run."):
+            self.assertIn(part, page)
+
+    def test_the_queue_names_the_next_ready_story_and_both_counts(self):
+        stories = [{"status": "Ready", "priority": "P1", "content": {"number": 9, "title": "Later", "repository": "o/r"}},
+                   {"status": "Ready", "priority": "P0", "content": {"number": 12, "title": "Urgent", "repository": "o/r"}},
+                   {"status": "Backlog", "content": {"number": 13, "title": "Idea", "repository": "o/r"}}]
+        page = self.live([], {}, stories)
+        self.assertIn("Next: #12 Urgent (P0).", page)
+        self.assertIn("2 Ready and 1 in Backlog.", page)
+        self.assertIn("Queue: not recorded", city.render(data(ready=None)))
+
+    def test_needs_you_shows_each_step_with_its_age_source_and_copyable_command(self):
+        steps = [{"id": 4, "step": "Fix the board groom", "created": "2026-11-22T00:00:00+00:00", "session": "maintain", "command": "olivercode board groom",
+                  "error": "boom", "status": "open"}]
+        page = self.live([], {}, steps=steps)
+        for part in ("#4 Fix the board groom", "12 h ago · from maintain", "The error: boom", '<code>olivercode board groom</code>', 'data-copy="olivercode board groom"'):
+            self.assertIn(part, page)
+
+    def test_needs_you_shows_the_latest_decision_with_its_date_and_the_owners_words(self):
+        decision = {"decision": "D-1", "choice": "Option A", "created": "2026-11-21T09:00:00-05:00", "words": "Go ahead with the tab"}
+        page = self.live([], {}, decision=decision)
+        for part in ("Latest decision: D-1", "2026-11-21 · chose Option A", "Your words: Go ahead with the tab"):
+            self.assertIn(part, page)
+        self.assertNotIn("Latest decision", city.render(data()))
+
+    def test_an_age_is_read_from_its_stamp_or_named_as_not_recorded(self):
+        self.assertEqual(city.ago("2026-11-22T11:30:00+00:00", NOW), "30 min ago")
+        self.assertEqual(city.ago("2026-11-19T12:00:00+00:00", NOW), "3 days ago")
+        self.assertEqual(city.ago(None, NOW), "age not recorded")
+
+    def test_a_round_after_the_first_says_why_it_runs(self):
+        log = [{"story": "story-7", "stage": "claimed", "at": ago(30)}, {"story": "story-7", "round": 1, "model": "sonnet", "stop": "end_turn"},
+               {"story": "story-7", "review": "findings", "findings": "FAIL"}, {"story": "story-7", "round": 2, "model": "sonnet", "stop": "end_turn"}]
+        facts = cmd_status.builder_facts("7", NOW.timestamp() - 1800, log, NOW.timestamp())
+        self.assertEqual((facts["round"], facts["why"]), (2, "The reviewer found defects in round 1."))
+        first = cmd_status.builder_facts("7", NOW.timestamp() - 1800, log[:2], NOW.timestamp())
+        self.assertEqual(first["why"], "The first round of the build.")
+
     def test_the_ready_count_comes_from_the_board_copy(self):
         home, root = temp_dir(self), temp_dir(self)
         (root / "docs").mkdir()
@@ -133,8 +195,8 @@ class TestCity(unittest.TestCase):
         items = [{"status": "Ready", "content": {"repository": "o/r"}}, {"status": "Ready", "content": {"repository": "o/other"}}, {"status": "Backlog", "content": {}}]
         (home / "board-me-3.json").write_text(json.dumps(items), encoding="utf-8")
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
-            self.assertEqual(city.board_ready(root, "o/r"), 1)
-            self.assertIsNone(city.board_ready(temp_dir(self), "o/r"))
+            self.assertEqual(city.status_count(city.board_stories(root, "o/r"), "ready"), 1)
+            self.assertIsNone(city.board_stories(temp_dir(self), "o/r"))
 
 
 if __name__ == "__main__":

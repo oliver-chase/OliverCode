@@ -145,15 +145,52 @@ def _cost(rows: list[dict]) -> float:
     return sum(float(r.get("cost_usd") or 0) for r in rows if "round" in r)
 
 
+def story_stage(n: str, claim_at: float, log: list[dict]) -> tuple[str, str | None, float, float]:
+    """(stage, repo, since, began) for story N from its stage rows: `since` is when its latest stage began and `began` when it was claimed. A claim with no
+    stage rows yet counts as claimed at the claim's own time (#1291)."""
+    stages = [r for r in _story_rows(log, f"story-{n}") if r.get("stage")]
+    if not stages:
+        return "claimed", None, claim_at, claim_at
+    began = _epoch(stages[0]["at"]) if stages[0]["stage"] == "claimed" else claim_at
+    return stages[-1]["stage"], stages[-1].get("repo"), _epoch(stages[-1]["at"]), began
+
+
 def building_line(n: str, slug: str, claim_at: float, log: list[dict], now: float) -> str:
     """'#7 in repo: validating for 3 minutes, 5 minutes in all' from the story's stage rows. The stage time runs from the latest stage row and the total from the
-    claimed row, and a claim with no stage rows yet counts as claimed at the claim's own time (#1291)."""
-    rows = _story_rows(log, f"story-{n}")
-    stages = [r for r in rows if r.get("stage")]
-    stage, repo, since = (stages[-1]["stage"], stages[-1].get("repo"), _epoch(stages[-1]["at"])) if stages else ("claimed", "", claim_at)
-    began = _epoch(stages[0]["at"]) if stages and stages[0]["stage"] == "claimed" else claim_at
-    spent = _cost(rows)
+    claimed row (#1291)."""
+    stage, repo, since, began = story_stage(n, claim_at, log)
+    spent = _cost(_story_rows(log, f"story-{n}"))
     return (f"#{n} in {repo or slug.rsplit('/', 1)[-1]}: {stage} for {minutes(now - since)}, {minutes(now - began)} in all" + (f", ${spent:.2f} so far." if spent else "."))
+
+
+STAGES = ("claimed", "building", "validating", "landing", "landed")  # the five stages a builder card's track shows, in order (#1357)
+
+
+def builder_facts(n: str, claim_at: float, log: list[dict], now: float) -> dict:
+    """What a builder card shows for story N, from its run-log rows since its claim: the stage and its place on the track, the time in that stage and in all,
+    the model and route of its latest builder round, that round and why it runs, the spend with reader reviews, the size, and the tokens written to and read
+    from cache. A figure the log does not hold is None, and the reason for a round is None until a round after the first has run (#1357)."""
+    rows = _story_rows(log, f"story-{n}")
+    own = [r for r in rows if r.get("story") == f"story-{n}"]
+    rounds = [r for r in own if "round" in r]
+    reviews = [r for r in own if "review" in r]
+    stage, _, since, began = story_stage(n, claim_at, log)
+    latest = rounds[-1] if rounds else {}
+    current = latest.get("round") if isinstance(latest.get("round"), int) else None
+    if current is None:
+        why = None
+    elif current == 1:
+        why = "The first round of the build."
+    elif reviews and reviews[-1]["review"] == "findings":
+        why = f"The reviewer found defects in round {current - 1}."
+    elif len(rounds) > 1 and rounds[-2].get("stop") not in CLEAN_STOPS:
+        why = f"Round {current - 1} stopped with {rounds[-2]['stop']}."
+    else:
+        why = "The run log holds no reason for this round."
+    return {"stage": stage, "place": STAGES.index(stage) if stage in STAGES else 0, "in_stage": minutes(now - since), "in_all": minutes(now - began),
+            "model": latest.get("model"), "route": latest.get("route"), "round": current, "why": why, "cost": _cost(rows),
+            "size": next((r["size"] for r in rows if r.get("size")), None),
+            "written": sum(int(r.get("cache_write") or 0) for r in rows if "round" in r), "read": sum(int(r.get("cache_read") or 0) for r in rows if "round" in r)}
 
 
 def landings(log: list[dict]) -> list[dict]:
