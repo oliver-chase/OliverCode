@@ -140,18 +140,13 @@ scripts/olivercode uninstall                          # removes everything insta
 
 `uninstall` removes what install wrote in `~/.claude`, the Desktop City shortcut, the launchd jobs and the queue shim. It unsets `core.hooksPath` in this checkout and each private repo where sync-hooks set it to `.githooks`; any other value stays. It moves the OliverCode home (`~/.olivercode`, the run log, City, the owner queue and the decision ledger) to the Trash, where it can still be restored. It keeps everything of yours in `~/.claude` and lists any backup it could not restore.
 
-The checkout itself is yours to delete. OliverCode writes no system config and no shell profile, and files `bootstrap` stamped into a repo belong to that repo.
+The checkout itself is yours to delete. OliverCode writes no system config. When `~/.local/bin` is not on your PATH, install adds one PATH block to `~/.zshenv`, `~/.bashrc` and the first bash login file that exists (or `~/.bash_profile`), and `uninstall` removes it. Files `bootstrap` stamped into a repo belong to that repo.
 
 ## Folder structure
 
 `sync-hooks` and `health` look for your private repos at the paths `privateRepos` names.
 
-When your repos share a parent that is not OliverCode's, pass `--root`:
-
-```bash
-scripts/olivercode sync-hooks --root /path/to/where/your/repos/live
-scripts/olivercode health     --root /path/to/where/your/repos/live
-```
+When your repos share a parent that is not OliverCode's, set `repoRoot` and name each private repo under `privateRepos`.
 
 Machine paths go in `olivercode.local.json` at the OliverCode root, which is gitignored. Copy `olivercode.local.example.json` and fill in:
 
@@ -168,7 +163,7 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 - `voiceFile`: the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of `docs/VOICE.md`
 - `designFile`: your own design file, which `install` links as `~/.claude/DESIGN.md` in place of `docs/DESIGN.md`. `install` keeps a `~/.claude/VOICE.md` or `DESIGN.md` you already have and prints `[KEPT]`
 
-`OLIVERCODE_SKILLS_ROOT` overrides `skillsRoot`. A layout the scripts cannot resolve degrades to WARN and skips, and a WARN is no coverage. If `sync-hooks` reports every repo as skipped, your `--root` is wrong.
+`OLIVERCODE_SKILLS_ROOT` overrides `skillsRoot`. A layout the scripts cannot resolve degrades to WARN and skips, and a WARN is no coverage. If `sync-hooks` reports every repo as skipped, `privateRepos` or `repoRoot` is wrong.
 
 ## What a headless run costs
 
@@ -188,7 +183,7 @@ Clone OliverCode and each fleet repo side by side, copy `olivercode.local.exampl
 
 `python3 scripts/olivercode --help` prints every command and its arguments, and `olivercode guide` prints how work runs, the first steps and every command grouped by the job it does, one plain line each. `olivercode guide NAME` says what one command, gate, guard, scheduled job or skill does and where it lives.
 
-In a repo with commit gates, a new interactive session refreshes `status-digest.md` through the session-start hook, with no model call, and prints three lines: the open count, the last story landed and the path to read before acting. A headless builder session gets none of them. The digest holds the open stories in priority order, the last five landed, what waits on the owner, the latest decisions and the run log, within 1,500 tokens. `--root DIR` overrides where fleet repos are looked for (the default is the parent of this checkout), and unknown arguments exit non-zero.
+In a repo with commit gates, a new interactive session refreshes `status-digest.md` through the session-start hook, with no model call, and prints three lines: the open count, the last story landed and the path to read before acting. A headless builder session gets none of them. The digest holds the open stories in priority order, the last five landed, what waits on the owner, the latest decisions and the run log, within 1,500 tokens. Unknown arguments exit non-zero.
 
 - `version-cut` reads the commits on main for one day, picks MAJOR, MINOR or PATCH from `docs/VERSIONING.md`, sets `VERSION` and writes that version's `CHANGELOG.md` section. `--commit` commits the two files with `OLIVERCODE_VERSION_CUT=1`, which the `version-files` gate requires
 - `board sync` keeps each board in step with its issues, because GitHub has no API for the built-in "Item closed" and "Auto-add to project" workflows. It reads each board and its repo's issues through REST, moves the card of every closed issue to Status Complete and adds every open issue that has no card with Status Backlog, through `batch_project.py`, which queues the writes while GraphQL is on hold. `--dry-run` reports without writing, `--schedule` loads the `com.olivercode.board-sweep` launchd job that runs it every thirty minutes

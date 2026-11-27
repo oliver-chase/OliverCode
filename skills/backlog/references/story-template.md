@@ -42,6 +42,8 @@ Blocked by: none.
 Priority: P1. Size: S. Work type: Story.
 
 Existing coverage checked: a search of the repo for `backup alert` finds none. The nightly backup job exits non-zero on failure and nothing reads that status.
+
+Files area: scripts/nightly_backup.sh, scripts/backup_alert.py
 ````
 
 ## Worked example: an epic

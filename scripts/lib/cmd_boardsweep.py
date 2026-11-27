@@ -1,7 +1,7 @@
 """Launcher command `board sync`: keeps every board in step with its issues through the API (#798).
 
 GitHub offers no API to switch on a board's built-in "Item closed" and "Auto-add to project" workflows, so this sweep does
-their work. For each board with a backlog config (the boards `olivercode board sweep` reads) it reads the board once and the
+their work. For each board with a backlog config (the boards the backlog skill reads) it reads the board once and the
 repo's issues through REST, which spends no GraphQL points, then queues two kinds of change through `batch_project.py`:
 a card whose issue is closed moves to Status Complete, and an open issue with no card is added with Status Backlog.
 `batch_project.py` queues the writes while GraphQL is on hold and applies them in aliased mutations after the reset.

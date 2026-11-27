@@ -38,6 +38,7 @@ class StoryFormat(unittest.TestCase):
             (root / "scripts" / "lib").mkdir(parents=True)
             (root / "scripts" / "olivercode").write_text("#!/bin/sh\n")
             base = re.findall(r"````markdown\n(.*?)````", TEMPLATE.read_text(encoding="utf-8"), re.S)[0]
+            base = re.sub(r"\n*Files area:.*\n", "\n", base)
             folder = base + "\nFiles area: scripts/lib, scripts/olivercode\n"
             slash = base + "\nFiles area: docs/\n"
             files = base + "\nFiles area: scripts/olivercode, scripts/lib/intake.py\n"

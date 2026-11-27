@@ -72,7 +72,7 @@ Pick the node whose `project.number` equals `projectNumber` in the config. Read 
 
 Each dimension's `--dimension` name is in brackets.
 
-- **Required fields** (`fields`): every open item has Priority and Size, plus Work Type and Area where the config defines them
+- **Required fields** (`fields`): every open item has Priority and Size, plus Work Type where the config defines it
 - **Status drift** (`drift`): the finished column, such as `Complete` or `Done`, holds only closed issues, and no open column holds one. The board's own column names decide. Every open issue of the config's own repo is on the board
 - **Duplicate cards** (`duplicates`): no issue has more than one card on the board, counted per repo and number, so the same number in two repos is two issues
 - **Close gate** (`close-gate`): every Complete item numbered at or above the config's `closeGateFromIssue` has a comment ending in `Closed by complete_story.py.`, which only `complete_story.py` writes. A story closed through the API, `gh issue close` or the web has none and is listed with the fix: reopen it and run `complete_story.py`. A null or absent key switches the dimension off

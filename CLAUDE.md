@@ -17,8 +17,8 @@ It applies to every reply and file, and skill messages and drafted documents go 
 
 ## Rules
 - Something broken, failing or slow: run the `diagnosing-bugs` loop before changing code
-- Asked to update OliverCode: run `olivercode update`, then `olivercode health`, `olivercode place` and `bash scripts/validate.sh`, and report each result. Run `olivercode conform` too when a fleet is registered, naming each failure's fix
+- Asked to update OliverCode: run `olivercode update`, then `olivercode health`, `olivercode place` and `bash scripts/validate.sh`, and report each result.
 - Before committing, run the repo's own validation (`scripts/validate.sh` or an npm `validate` or `check`, per its `CLAUDE.md`), never OliverCode's
-- `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `olivercode conform` finds stopped hooks, and `$OC/docs/GATES.md` lists the gates
+- `.githooks/pre-commit` is the only layer git enforces, and it fails open when `core.hooksPath` is unset. `olivercode health` finds stopped hooks, and `$OC/docs/GATES.md` lists the gates
 - A request that changes files is filed as a story and built and merged unasked, per `$OC/docs/RULES.md` ("The backlog"). The `audit` skill runs only when named. Read the rest of RULES.md only for OliverCode's own structure
 - A chat never builds a board story by hand: the runner builds it through `olivercode dispatch N` or `olivercode drain REPO`. Asked to build one in a desktop chat, offer that command instead

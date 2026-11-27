@@ -6,6 +6,7 @@ source does not exist in the repo is skipped, so one file serves OliverCode and 
 
     python3 scripts/docs_check.py [ROOT]
 
+- named commands: every `olivercode NAME` in README.md, docs/SETUP.md and CLAUDE.md is in the launcher's table
 - usage: every command in the launcher's COMMANDS table (scripts/lib/cli.py) is named in README.md or docs/SETUP.md
 - gates: the "Commit gates" table in docs/GATES.md lists exactly the gates in core/hooks/gates/
 - gate runners: each script docs/GATES.md names as a gate, written "gate (`path`)", exists and a shell script under scripts/
@@ -47,7 +48,7 @@ def check_named_commands(root: Path) -> list[str]:
         return []
     names = set(re.findall(r'^\s*\("olivercode ([a-z][a-z-]*)', cli, re.M))
     problems = []
-    for rel in ("README.md", "docs/SETUP.md"):
+    for rel in ("README.md", "docs/SETUP.md", "CLAUDE.md"):
         for first, second in dict.fromkeys(re.findall(r"`olivercode ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?", read(root, rel))):
             if first in names or (second and f"{first}-{second}" in names):
                 continue

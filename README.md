@@ -104,7 +104,7 @@ python3 scripts/olivercode health
 | Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode watch`, `olivercode land`, `olivercode promote`, `olivercode wip`, `olivercode validated` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board fit`, `olivercode board sync`, `olivercode gh-limit`, `olivercode gated` |
-| Owner and decisions | `olivercode owner`, `olivercode decisions`, `olivercode handoff` |
+| Owner and decisions | `olivercode owner`, `olivercode decisions`, `olivercode handoff`, `olivercode rule` |
 | Fleet and policy | `olivercode discover`, `olivercode policy` |
 | Orientation | `olivercode guide` |
 
@@ -131,7 +131,7 @@ Hooks enforce the rules that must block work. The standards and skills guide the
 | `skills/` | Reusable engineering and framework skills |
 | `shared/` | Example registries and bootstrap data |
 | `.githooks/` | OliverCode's own Git hooks |
-| `.github/` | The framework CI workflow, paused while Actions billing is off |
+| `.github/` | The framework CI workflow, which runs on each push to main or staging and on pull requests to main |
 | `.claude/` | The adoption skill link, so a fresh clone opened in Claude Code can set itself up |
 | `.olivercode/` | This repo's permission policy (`olivercode policy init`) |
 | `scripts/olivercode` | Command-line entry point |

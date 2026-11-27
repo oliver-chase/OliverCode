@@ -61,10 +61,10 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
 - **Step 5, find the repos.** Run `olivercode discover --root DIR`, name each private repo in `privateRepos`, and note each repo's confirmed validation command
 - **Step 6, enforcement.** Tell the user plainly when hook enforcement fails open (`docs/GATES.md`), and point at `docs/SETUP.md` ("Troubleshooting")
-- **Step 6c, board sync.** A new board needs no web toggles. Filing a story adds its card, and closing it sets Status to Complete. Run `olivercode board sync --schedule` so the sweep keeps every board in step with its issues. On Linux it prints the crontab line to add and exits 1, because launchd needs macOS
+- **Launcher commands, board sync.** A new board needs no web toggles. Filing a story adds its card, and closing it sets Status to Complete. Run `olivercode board sync --schedule` so the sweep keeps every board in step with its issues. On Linux it prints the crontab line to add and exits 1, because launchd needs macOS
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed
-- **Step 3b, sleep.** Apply the sleep line `olivercode health` prints, because a Mac that sleeps stops every session while the owner is away. Name the System Settings path or the `caffeinate -dimsu` command it gives
 - **Step 8, reconcile.** Ask before deleting any backup
+- **Keep the machine awake.** Apply the sleep line `olivercode health` prints, because a Mac that sleeps stops every session while the owner is away. Name the System Settings path or the `caffeinate -dimsu` command it gives
 
 ## Output
 

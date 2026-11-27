@@ -17,7 +17,7 @@ The gates guard against honest mistakes and careless agents. A commit that rewri
 
 `bash scripts/validate.sh` is the one entry point, and a validation starts at once and takes no slot. `maxBuilders` is the one control on how much runs together, and `olivercode land`, the builders, the audit's done check and health all start validation through it.
 
-- The gates that share no state (pre-commit, fleet names, bloat, code quality, references, docs, size limits, smoke tests and hook state) run in parallel, at most `OLIVERCODE_VALIDATE_GATES` at once (default: the core count). A `=== validate: gate ... ===` line prints as each gate starts and as it finishes with its seconds, and `olivercode land` shows the same lines while its full log fills. Their output replays in the order above with the same `=== validate: ... ===` lines, and any failing gate fails the run with that gate's exit code. The smoke tests run one process per test module, `OLIVERCODE_VALIDATE_JOBS` at a time (default: the core count)
+- The gates that share no state (pre-commit, fleet names, bloat, code quality, references, docs, size limits, smoke tests) run in parallel, at most `OLIVERCODE_VALIDATE_GATES` at once (default: the core count). A `=== validate: gate ... ===` line prints as each gate starts and as it finishes with its seconds, and `olivercode land` shows the same lines while its full log fills. Their output replays in the order above with the same `=== validate: ... ===` lines, and any failing gate fails the run with that gate's exit code. The smoke tests run one process per test module, `OLIVERCODE_VALIDATE_JOBS` at a time (default: the core count)
 - A run keeps a time budget of `OLIVERCODE_VALIDATE_TIMEOUT` seconds (default 5 minutes, set from measured runs with headroom and scaled up to twice by the machine's load per core). Past it, the run stops the gates still running and fails with exit 124 and a line that names each one, its seconds and the load, with the command that reruns that gate alone
 - The docs check fails when a gate script this file names has no script or hook that runs it
 
@@ -38,7 +38,7 @@ Each row gives the gate's number in OliverCode's hook, in an adopted repo's hook
 | Owner identifiers | A staged file that names an identifier the gate derives from git and config, described below. Markdown and tests are scanned. It names the file and line, and skips where nothing can be derived | 3 | 3 | 2 |
 | Version files | A staged `VERSION` or `CHANGELOG.md`. The daily cut (`olivercode version-cut`) sets `OLIVERCODE_VERSION_CUT=1` for its own commit, and `validate.sh --tree` skips the gate because it stages nothing (`docs/VERSIONING.md`) | after 3 | after 3 | after 2 |
 
-`sync-hooks` deploys `core/templates/project/pre-commit` to OliverCode, and `core/templates/project/pre-commit-private` to every repo in `privateRepos` in `olivercode.local.json`.
+`sync-hooks` deploys `core/templates/project/pre-commit-private` to every repo in `privateRepos` in `olivercode.local.json`. It does not touch OliverCode's own hook, which `install`, `bootstrap` and `validate.sh` build.
 
 The private variant drops the PII gate because a private repo holds personal data by design. `build-hooks.py` generates OliverCode's own hook and the two templates and never a variant repo's hook.
 

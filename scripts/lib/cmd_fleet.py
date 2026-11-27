@@ -173,7 +173,7 @@ def _sync_one(name: str, repo_path: Path, failed: list[str], install, ok_line: s
 
 
 def command_sync_hooks(oc_root: Path, commit: bool = False, story: str | None = None) -> int:
-    """Converge hooks + core.hooksPath in OliverCode and every private repo.
+    """Converge hooks + core.hooksPath in every private repo (OliverCode itself is not walked).
 
     With commit=True each repo's changed hook files are then committed by path under `story`
     (see _commit_synced). The default writes files and commits nothing.
