@@ -157,6 +157,12 @@ class Io:
             subprocess.run([*git, "worktree", "remove", "--force", str(wt)], capture_output=True, text=True)
             shutil.rmtree(wt, ignore_errors=True)
 
+    def ci_failure(self) -> str:
+        """The newest completed CI run on origin's default branch when it failed, named by its address, else "" (#1482).
+        shortcut: a run that cannot be read counts as passing, upgrade when a story is seen to land on red CI after a failed read."""
+        run = intake.failed_ci_run(self.slug, lambda args: self.gh(["api", *args]), self.branch())
+        return f"CI run {run.get('html_url', '')} failed" if run else ""
+
     def list_open(self) -> list[dict] | None:
         """The open stories, each with its board Status and Size attached, or None when either read fails (#1014)."""
         issues = fetch_open(self.slug)
@@ -756,7 +762,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     skipped = state.setdefault("skipped", {})  # story number -> why the run did not start it (#1456)
     stopped = False
     hold_waited = False
-    checked, red, red_told = None, "", False  # closed count at the last base check, its failing line, whether the owner was told
+    checked, base_red, told = None, "", ""  # closed count at the last base check, its failing line, the red lines last said
     state.setdefault("head", io.code_head())  # the code this run started on (#1480)
 
     def halted() -> bool:
@@ -926,17 +932,18 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     continue
                 skipped.pop(issue["number"], None)  # a story that starts was not skipped at the run's end
                 todo.append(issue)
-            if todo and checked != len(state["closed"]):  # the base is checked once per run and again after each landing (#1431)
-                checked = len(state["closed"])
-                red = io.base_failure()
-                if not red:
-                    red_told = False
-                elif not red_told:
-                    red_told = True
+            if todo:
+                if checked != len(state["closed"]):  # the base is checked once per run and again after each landing (#1431)
+                    checked = len(state["closed"])
+                    base_red = io.base_failure()
+                red = "; ".join(filter(None, (base_red, io.ci_failure())))  # CI ends on its own time, so each batch of picks reads it (#1482)
+                if red and red != told:
                     say(f"Staging fails validation: {red}. Only P0 stories build until it passes.")
-                    notify(f"Staging fails validation ({red}). Routine stories wait until staging passes.")
-            if red:
-                todo = [i for i in todo if intake.priority_of(i) == "P0"]
+                    if not told:
+                        notify(f"Staging fails validation ({red}). Routine stories wait until staging passes.")
+                told = red
+                if red:
+                    todo = [i for i in todo if intake.priority_of(i) == "P0"]
             busy = [intake.files_area(i.get("body") or "") for i in [*running.values(), *committed.values()]]  # a story building, validating or landing holds its files; one overlap rule, shared with the planner (#1014)
             started = False
             for issue in todo:

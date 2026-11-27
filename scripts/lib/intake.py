@@ -282,24 +282,33 @@ def hook_candidates(repo: str = "") -> list[dict]:
             for when, where, gate, reason in failure_log.entries() if gate == "hook-crash" and (not repo or where == repo)]
 
 
+def api_json(gh, path: str) -> dict:
+    """The JSON object at a REST path, or {} when the read fails."""
+    done = gh([path])
+    try:
+        return json.loads(done.stdout) if done.returncode == 0 else {}
+    except ValueError:
+        return {}
+
+
+def failed_ci_run(slug: str, gh, branch: str = "staging") -> dict:
+    """The newest completed CI run on the branch when it failed, else {}. A failed read is {} too."""
+    runs = api_json(gh, f"repos/{slug}/actions/runs?branch={branch}&status=completed&per_page=1").get("workflow_runs") or []
+    return runs[0] if runs and runs[0].get("conclusion") == "failure" else {}
+
+
 def ci_candidate(slug: str, gh, branch: str = "staging") -> dict | None:
     """The newest completed CI run on the repo's engine branch when it failed, keyed by its failing job and step."""
-    def get(path):
-        done = gh([path])
-        try:
-            return json.loads(done.stdout) if done.returncode == 0 else {}
-        except ValueError:
-            return {}
-    runs = get(f"repos/{slug}/actions/runs?branch={branch}&status=completed&per_page=1").get("workflow_runs") or []
-    if not runs or runs[0].get("conclusion") != "failure":
+    run = failed_ci_run(slug, gh, branch)
+    if not run:
         return None
-    bad = next((j for j in get(f"repos/{slug}/actions/runs/{runs[0]['id']}/jobs").get("jobs") or [] if j.get("conclusion") == "failure"), {})
+    bad = next((j for j in api_json(gh, f"repos/{slug}/actions/runs/{run['id']}/jobs").get("jobs") or [] if j.get("conclusion") == "failure"), {})
     step = next((s.get("name") for s in bad.get("steps") or [] if s.get("conclusion") == "failure"), "")
     key = f"{slug} {bad.get('name', 'unknown')} / {step or 'unknown'}"
     log = gh([f"repos/{slug}/actions/jobs/{bad['id']}/logs"]) if bad.get("id") else None
     tail = "\n".join(log.stdout.splitlines()[-LOG_LINES:]) if log and log.returncode == 0 else ""
-    return {"sig": signature("ci", key), "at": runs[0].get("created_at", ""), "branch": branch,
-            "text": f"CI on {branch} failed ({runs[0].get('html_url', '')}).\n- Job: {bad.get('name', 'unknown')}\n- Failing step: {step or 'unknown'}\n\n"
+    return {"sig": signature("ci", key), "at": run.get("created_at", ""), "branch": branch,
+            "text": f"CI on {branch} failed ({run.get('html_url', '')}).\n- Job: {bad.get('name', 'unknown')}\n- Failing step: {step or 'unknown'}\n\n"
                     f"The last {LOG_LINES} lines of the job's log:\n{tail or '(the log could not be read)'}"}
 
 

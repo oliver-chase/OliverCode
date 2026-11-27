@@ -71,6 +71,10 @@ class FakeIo:
     def base_failure(self):
         self.base_checks = getattr(self, "base_checks", 0) + 1
         return self.red.pop(0) if self.red else ""
+    ci = []  # the failed CI run each read returns, "" once the list is spent (#1482)
+    def ci_failure(self):
+        self.ci_reads = getattr(self, "ci_reads", 0) + 1
+        return self.ci.pop(0) if self.ci else ""
     def validation(self): return None if self.no_validation else ["bash", "scripts/validate.sh"]
     moves_on_land = False  # True makes each landed story move OliverCode's head (#1480)
     def code_head(self): return f"head{len(self.on_main) if self.moves_on_land else 0}"
@@ -135,6 +139,33 @@ class DrainCase(unittest.TestCase):
         notify.assert_called_once()
         self.assertIn("FAIL: tests/test_x.py", notify.call_args.args[0])
         self.assertIn("wait until staging passes", notify.call_args.args[0])
+
+    def test_a_failed_ci_run_builds_only_p0_stories_and_logs_the_run(self):  # #1482
+        io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1)
+        io.ci = ["CI run https://ci.test/9 failed"] * 3
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            _, out, st = self.run_drain(io)
+        self.assertEqual([2], io.started)
+        self.assertEqual([2], st["closed"])
+        self.assertEqual(1, out.count("https://ci.test/9"))
+        notify.assert_called_once()
+
+    def test_a_passing_ci_run_restores_the_usual_order_without_a_landing(self):  # #1482
+        io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1, builds={2: [{"done": False, "fatal": True, "reason": "x"}]})
+        io.ci = ["CI run https://ci.test/9 failed"]  # failed on the first pick, passed on the next
+        with mock.patch.object(cmd_drain, "notify"):
+            _, _, st = self.run_drain(io)
+        self.assertEqual([2, 1], io.started)
+        self.assertEqual([1], st["closed"])
+
+    def test_the_real_ci_read_names_a_failed_run_on_the_default_branch_in_one_call(self):  # #1482
+        for conclusion, expected in (("failure", "CI run https://ci.test/9 failed"), ("success", "")):
+            calls = []
+            reply = json.dumps({"workflow_runs": [{"id": 9, "conclusion": conclusion, "html_url": "https://ci.test/9"}]})
+            io = cmd_drain.Io(Path("/repo"), "o/r", runner=lambda args: calls.append(args) or subprocess.CompletedProcess(args, 0, reply, ""))
+            with mock.patch.object(io, "branch", return_value="staging"):
+                self.assertEqual(expected, io.ci_failure())
+            self.assertEqual([["api", "repos/o/r/actions/runs?branch=staging&status=completed&per_page=1"]], calls)
 
     def test_every_priority_builds_again_once_the_base_passes_after_a_landing(self):  # #1431
         io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1)
