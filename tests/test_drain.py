@@ -66,6 +66,10 @@ class FakeIo:
     repo = Path("/repo")
     def pending(self, n): return False
     no_validation = False
+    red = []  # the failing line the base check returns on each call, "" once the list is spent (#1431)
+    def base_failure(self):
+        self.base_checks = getattr(self, "base_checks", 0) + 1
+        return self.red.pop(0) if self.red else ""
     def validation(self): return None if self.no_validation else ["bash", "scripts/validate.sh"]
 
     def build(self, i, wt, note):
@@ -117,6 +121,32 @@ class DrainCase(unittest.TestCase):
         st = st or state()
         code, out = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
         return code, out, st
+
+    def test_a_red_base_builds_only_p0_stories_and_posts_one_notification(self):  # #1431
+        io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1)
+        io.red = ["FAIL: tests/test_x.py"] * 3
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            _, _, st = self.run_drain(io)
+        self.assertEqual([2], io.started)
+        self.assertEqual([2], st["closed"])
+        notify.assert_called_once()
+        self.assertIn("FAIL: tests/test_x.py", notify.call_args.args[0])
+        self.assertIn("wait until staging passes", notify.call_args.args[0])
+
+    def test_every_priority_builds_again_once_the_base_passes_after_a_landing(self):  # #1431
+        io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1)
+        io.red = ["FAIL: gate"]  # red at the start, green on the check after story 2 lands
+        with mock.patch.object(cmd_drain, "notify"):
+            _, _, st = self.run_drain(io)
+        self.assertEqual([2, 1], io.started)
+        self.assertEqual([2, 1], st["closed"])
+
+    def test_a_passing_base_builds_every_story_without_a_notification(self):  # #1431
+        io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1)
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            _, _, st = self.run_drain(io)
+        self.assertEqual([2, 1], io.started)
+        notify.assert_not_called()
 
     def test_a_builder_that_commits_frees_its_slot_for_the_next_story_while_the_queue_lands(self):  # #1317
         order = []

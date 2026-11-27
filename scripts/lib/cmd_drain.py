@@ -11,9 +11,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import Counter, deque
@@ -99,6 +101,25 @@ class Io:
     def validation(self) -> list[str] | None:
         """The repo's own validation command, which a story needs before a builder starts (#1012)."""
         return agent_loop.validation_command(self.repo)
+
+    def base_failure(self) -> str:
+        """The last line of the quick validation's output when it fails on a worktree of origin's default branch, else "" (#1431).
+        shortcut: a base that cannot be fetched or checked out counts as passing, upgrade when a drain needs to stop on an unreadable base."""
+        git = ["git", "-C", str(self.repo)]
+        if subprocess.run([*git, "fetch", "-q", "origin", self.branch()], capture_output=True, text=True).returncode:
+            return ""
+        wt = Path(tempfile.mkdtemp(prefix=f"{self.repo.name}-base-"))
+        try:
+            if subprocess.run([*git, "worktree", "add", "--detach", "-f", str(wt), f"origin/{self.branch()}"], capture_output=True, text=True).returncode:
+                return ""
+            cmd_land.prepare_worktree(wt, self.repo)
+            if agent_loop.validation_command(wt) is None:
+                return ""
+            passed, tail = agent_loop.validate(wt, quick=True)
+            return "" if passed else (tail.strip().splitlines() or ["validation failed"])[-1]
+        finally:
+            subprocess.run([*git, "worktree", "remove", "--force", str(wt)], capture_output=True, text=True)
+            shutil.rmtree(wt, ignore_errors=True)
 
     def list_open(self) -> list[dict] | None:
         """The open stories, each with its board Status and Size attached, or None when either read fails (#1014)."""
@@ -647,6 +668,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     waits, reported, filled, mismatched, unparked = 0, set(), set(), set(), set()
     stopped = False
     hold_waited = False
+    checked, red, red_told = None, "", False  # closed count at the last base check, its failing line, whether the owner was told
 
     def enqueue(issue: dict, worktree: Path, attempt: int) -> None:
         committed[issue["number"]] = issue
@@ -788,6 +810,17 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
                     continue
                 todo.append(issue)
+            if todo and checked != len(state["closed"]):  # the base is checked once per run and again after each landing (#1431)
+                checked = len(state["closed"])
+                red = io.base_failure()
+                if not red:
+                    red_told = False
+                elif not red_told:
+                    red_told = True
+                    say(f"Staging fails validation: {red}. Only P0 stories build until it passes.")
+                    notify(f"Staging fails validation ({red}). Routine stories wait until staging passes.")
+            if red:
+                todo = [i for i in todo if intake.priority_of(i) == "P0"]
             busy = [intake.files_area(i.get("body") or "") for i in [*running.values(), *committed.values()]]  # a story building, validating or landing holds its files; one overlap rule, shared with the planner (#1014)
             started = False
             for issue in todo:
