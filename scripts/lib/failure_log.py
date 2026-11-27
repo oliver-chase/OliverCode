@@ -14,10 +14,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def home_path() -> Path:
+    """Where the OliverCode home is, whether or not it exists yet."""
+    return Path(os.environ.get("OLIVERCODE_HOME") or Path.home() / ".olivercode")
+
+
 def home() -> Path:
     """The OliverCode home. It holds the owner's words and repo names, so only its user can read it:
     the folder is made mode 700 and every file in it is tightened to 600."""
-    path = Path(os.environ.get("OLIVERCODE_HOME") or Path.home() / ".olivercode")
+    path = home_path()
     try:
         if not path.is_dir() or (path.stat().st_mode & 0o777) != 0o700:  # a folder already private was walked on an earlier call
             path.mkdir(mode=0o700, parents=True, exist_ok=True)

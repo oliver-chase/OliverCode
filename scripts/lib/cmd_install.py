@@ -16,7 +16,7 @@ from pathlib import Path
 from lib import launchd
 from lib import live_copy as _live_copy
 from lib.local_config import claude_dir as _claude_dir
-from lib.local_config import DEFAULTS, OC_ROOT, design_file, local_path, voice_file
+from lib.local_config import DEFAULTS, OC_ROOT, design_file, local_path, private_repos, voice_file
 
 from lib import claude_settings as _claude_settings
 from lib import cmd_guide, failure_log, placement, repo_state
@@ -645,8 +645,43 @@ def command_install(oc_root: Path) -> int:
     return 1 if broken or broken_settings else 0
 
 
+def _trash_dir() -> Path:
+    """The macOS Trash of the real home, resolved at call time so a test that sets HOME gets its own."""
+    return Path.home() / ".Trash"
+
+
+def _trash(path: Path) -> Path:
+    """Move path into the Trash under its own name, numbered when that name is taken, and return where it landed."""
+    trash = _trash_dir()
+    trash.mkdir(exist_ok=True)
+    dest, n = trash / path.name, 2
+    while dest.exists() or dest.is_symlink():
+        dest, n = trash / f"{path.name} {n}", n + 1
+    shutil.move(str(path), dest)
+    return dest
+
+
+def _unset_hooks(repos: list[tuple[str, Path]]) -> tuple[list[str], bool]:
+    """Unset core.hooksPath in each repo where it still names OliverCode's `.githooks`, the value sync-hooks sets.
+    Any other value is the owner's and stays. Returns the lines to print and whether a unset failed."""
+    lines, failed = [], False
+    for name, repo in repos:
+        value = subprocess.run(["git", "-C", str(repo), "config", "--get", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
+        ours = {".githooks", "./.githooks", str(repo / ".githooks"), str((repo / ".githooks").resolve())}
+        if not value:
+            lines.append(f"  [ABSENT] {name}: core.hooksPath")
+        elif value not in ours:
+            lines.append(f"  [KEPT] {name}: core.hooksPath is {value}, which is not OliverCode's")
+        elif subprocess.run(["git", "-C", str(repo), "config", "--unset", "core.hooksPath"], capture_output=True).returncode:
+            lines.append(f"  [FAIL] {name}: core.hooksPath could not be unset; run git -C {repo} config --unset core.hooksPath")
+            failed = True
+        else:
+            lines.append(f"  [OK] {name}: core.hooksPath unset")
+    return lines, failed
+
+
 def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
-    """Undo `install`: remove what it wrote in ~/.claude and nothing else.
+    """Undo `install`: remove what it wrote in ~/.claude and nothing else, then move the OliverCode home to the Trash.
 
     A link is removed when it points into this checkout, or when it dangles and an
     OliverCode install wrote it (a checkout that moved), by the install record or, for an
@@ -656,8 +691,9 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     free, and any older one is listed. The hook entries come out of settings.json by the
     same rule install uses to replace them, and every other key stays. Idempotent.
 
-    `core.hooksPath` and each repo's `.githooks/` come from `sync-hooks`,
-    so they stay; docs/SETUP.md "Backing out" covers them.
+    `core.hooksPath` is unset in this checkout and each private repo where it names `.githooks`,
+    the value sync-hooks set; a value the owner set elsewhere stays. The home folder (run log, City,
+    owner queue, decision ledger) goes last, to the Trash, so it can still be restored.
     """
     claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"
@@ -736,6 +772,10 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     for line in _queue_shim.uninstall_launcher(oc_root):
         print(line)
 
+    hook_lines, broken_hooks = _unset_hooks([("OliverCode", oc_root)] + list(private_repos().items()))
+    for line in hook_lines:
+        print(line)
+
     leftovers = [b for name in RULE_LINKS for b in _backups(claude_dir / name)]
     leftovers += _backups(_queue_shim.shim_path()) + _backups(_queue_shim.launcher_path())
     if skills_dir.is_dir():
@@ -744,13 +784,23 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     print()
     if leftovers:
         print("Older backups left in place. An earlier install made each one, or something")
-        print("now sits at its original path. Merge them back deliberately:")
+        print("now sits at its original path:")
         for b in leftovers:
             print(f"  {b}")
         print()
     if (claude_dir / f"skills{BACKUP_SUFFIX}").exists():
         print(f"~/.claude/skills{BACKUP_SUFFIX} is your own copy from docs/SETUP.md Step 2; uninstall leaves it.")
         print()
-    print("Next: unset core.hooksPath in each governed repo (docs/SETUP.md \"Backing out\").")
     print(f"Uninstall finished: {len(jobs)} scheduled job(s) removed.")
-    return 1 if broken_settings else 0
+    home = failure_log.home_path()
+    broken_home = False
+    if home.is_symlink() or home.exists():
+        try:
+            trashed = _trash(home)
+            print(f"OliverCode home moved to the Trash: {trashed}")
+        except OSError as exc:
+            print(f"  [FAIL] {home} could not be moved to the Trash ({exc}); left as it is")
+            broken_home = True
+    else:
+        print(f"  [ABSENT] OliverCode home {home}")
+    return 1 if broken_settings or broken_hooks or broken_home else 0

@@ -364,7 +364,7 @@ class TestUninstall(HomeCase):
         booted = sorted(c.args[0][2].split("/")[-1] for c in ran.call_args_list if c.args[0][1] == "bootout")
         self.assertEqual(sorted(labels), booted)
         self.assertEqual(len(labels), out.count("[JOB] removed"))
-        self.assertIn(f"{len(labels)} scheduled job(s) removed", out.strip().splitlines()[-1])
+        self.assertIn(f"{len(labels)} scheduled job(s) removed", out)
 
     def test_install_removes_a_job_of_this_checkout_the_code_does_not_define(self):
         from lib import cmd_boardsweep
@@ -384,7 +384,7 @@ class TestUninstall(HomeCase):
             code, out = quiet(cmd_install.command_uninstall, self.root, ran)
         self.assertEqual(0, code)
         ran.assert_not_called()
-        self.assertIn("0 scheduled job(s) removed", out.strip().splitlines()[-1])
+        self.assertIn("0 scheduled job(s) removed", out)
 
     def test_removes_managed_and_retired_hook_entries_from_any_checkout(self):
         def entry(script, root):

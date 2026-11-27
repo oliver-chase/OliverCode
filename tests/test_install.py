@@ -262,6 +262,8 @@ class CityShortcut(unittest.TestCase):
     def uninstall(self) -> str:
         with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
                 mock.patch.object(cmd_install, "_desktop", return_value=self.desktop), \
+                mock.patch.object(cmd_install, "_trash_dir", return_value=self.home.parent / "Trash"), \
+                mock.patch.object(cmd_install, "_unset_hooks", return_value=([], False)), \
                 mock.patch.object(cmd_install, "_queue_shim"), mock.patch.object(cmd_install, "_claude_settings"), \
                 mock.patch.object(cmd_install, "remove_jobs", return_value=[]):
             _, out = quiet(cmd_install.command_uninstall, REPO_ROOT)
@@ -347,6 +349,78 @@ class CityShortcut(unittest.TestCase):
                 mock.patch("lib.city.webbrowser.open") as opened:
             city.command_page([])
         opened.assert_not_called()
+
+
+class UninstallLeavesNothing(unittest.TestCase):
+    """Uninstall unsets the hooksPath sync-hooks set in OliverCode and each private repo, and moves the OliverCode home to the Trash last (#1375)."""
+
+    def setUp(self):
+        self.root = temp_dir(self, resolve=True)
+        self.claude, self.desktop, self.trash = self.root / ".claude", self.root / "Desktop", self.root / "Trash"
+        self.desktop.mkdir()
+        self.home = self.root / "oc-home"
+        self.home.mkdir()
+        (self.home / "run.log").write_text("ran\n")
+        self.oc = self.git("oc", ".githooks")
+        self.mine = self.git("private", ".githooks")
+        self.theirs = self.git("theirs", "custom-hooks")
+        (self.root / "local.json").write_text(json.dumps({"privateRepos": {"private": str(self.mine), "theirs": str(self.theirs)}}))
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_LOCAL_CONFIG": str(self.root / "local.json")})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def git(self, name, hooks_path):
+        repo = self.root / name
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "core.hooksPath", hooks_path], check=True)
+        return repo
+
+    def hooks_path(self, repo) -> str:
+        return subprocess.run(["git", "-C", str(repo), "config", "--get", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
+
+    def uninstall(self) -> str:
+        with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
+                mock.patch.object(cmd_install, "_desktop", return_value=self.desktop), \
+                mock.patch.object(cmd_install, "_trash_dir", return_value=self.trash), \
+                mock.patch.object(cmd_install, "_queue_shim"), mock.patch.object(cmd_install, "_claude_settings"), \
+                mock.patch.object(cmd_install, "remove_jobs", return_value=[]):
+            _, out = quiet(cmd_install.command_uninstall, self.oc)
+        return out
+
+    def test_the_hooks_path_sync_hooks_set_is_unset_in_olivercode_and_each_private_repo(self):
+        out = self.uninstall()
+        self.assertEqual("", self.hooks_path(self.oc))
+        self.assertEqual("", self.hooks_path(self.mine))
+        self.assertIn("[OK] OliverCode: core.hooksPath unset", out)
+
+    def test_a_hooks_path_the_owner_set_elsewhere_stays(self):
+        out = self.uninstall()
+        self.assertEqual("custom-hooks", self.hooks_path(self.theirs))
+        self.assertIn("[KEPT] theirs: core.hooksPath is custom-hooks", out)
+
+    def test_the_home_moves_to_the_trash_and_the_last_line_names_it(self):
+        out = self.uninstall()
+        self.assertFalse(self.home.exists())
+        self.assertEqual("ran\n", (self.trash / "oc-home" / "run.log").read_text())
+        self.assertEqual(f"OliverCode home moved to the Trash: {self.trash / 'oc-home'}", out.splitlines()[-1])
+
+    def test_a_home_already_in_the_trash_is_kept_and_the_new_one_gets_a_number(self):
+        (self.trash / "oc-home").mkdir(parents=True)
+        out = self.uninstall()
+        self.assertTrue((self.trash / "oc-home 2" / "run.log").is_file())
+        self.assertTrue((self.trash / "oc-home").is_dir())
+        self.assertIn(str(self.trash / "oc-home 2"), out.splitlines()[-1])
+
+    def test_nothing_is_left_for_the_owner_to_do(self):
+        out = self.uninstall()
+        self.assertNotIn("Next:", out)
+        self.assertNotIn("Merge", out)
+
+    def test_a_second_uninstall_finds_the_home_already_gone(self):
+        self.uninstall()
+        out = self.uninstall()
+        self.assertIn("[ABSENT] OliverCode home", out.splitlines()[-1])
 
 
 if __name__ == "__main__":

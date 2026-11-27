@@ -135,11 +135,12 @@ A checkout that already holds a commit origin lacks is named by `olivercode heal
 ## Backing out
 
 ```bash
-scripts/olivercode uninstall                          # removes what install wrote in ~/.claude and restores its backups
-git -C <repo> config --unset core.hooksPath           # per governed repo; .githooks/ can stay or go
+scripts/olivercode uninstall                          # removes everything install put on this machine
 ```
 
-Then delete the checkout. `uninstall` keeps everything of yours in `~/.claude` and lists any backup it could not restore. OliverCode writes no system config and no shell profile, and files `bootstrap` stamped into a repo belong to that repo.
+`uninstall` removes what install wrote in `~/.claude`, the Desktop City shortcut, the launchd jobs and the queue shim. It unsets `core.hooksPath` in this checkout and each private repo where sync-hooks set it to `.githooks`; any other value stays. It moves the OliverCode home (`~/.olivercode`, the run log, City, the owner queue and the decision ledger) to the Trash, where it can still be restored. It keeps everything of yours in `~/.claude` and lists any backup it could not restore.
+
+The checkout itself is yours to delete. OliverCode writes no system config and no shell profile, and files `bootstrap` stamped into a repo belong to that repo.
 
 ## Folder structure
 

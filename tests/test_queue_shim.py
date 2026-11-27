@@ -16,6 +16,7 @@ class HomeCase(unittest.TestCase):
         self.home = temp_dir(self, "oc-shim-home-", resolve=True)
         self.enterContext(mock.patch.object(Path, "home", staticmethod(lambda: self.home)))
         self.enterContext(mock.patch.dict(os.environ, {"HOME": str(self.home)}))
+        self.enterContext(mock.patch.object(cmd_install, "_unset_hooks", return_value=([], False)))  # REPO_ROOT keeps its own core.hooksPath
         self.shim = self.home / ".local" / "bin" / "validate-queue"
 
     def install(self):

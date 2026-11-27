@@ -34,6 +34,8 @@ REAL_HOME = os.environ.get("HOME")
 TEST_HOME = tempfile.mkdtemp(prefix="olivercode-test-home-")
 atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
 os.environ["HOME"] = TEST_HOME
+# uninstall moves the OliverCode home to the Trash, so no test may reach the owner's real one.
+os.environ["OLIVERCODE_HOME"] = os.path.join(TEST_HOME, ".olivercode")
 
 # No test reaches the real gh, claude or osascript (#1271). A guard directory comes first on PATH, and each guard
 # names the call on stderr and exits 97. A test that needs one puts its own fake ahead of this directory.
