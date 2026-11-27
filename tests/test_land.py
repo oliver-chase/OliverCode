@@ -706,7 +706,7 @@ class TestWeakenedTests(unittest.TestCase):
 
 
 class TestPromote(Base):
-    """`olivercode promote` squashes staging onto main after one validation, merges main back and labels the stories (#1305)."""
+    """`olivercode promote` fast-forwards main to staging after CI and one validation, and labels the stories (#1305)."""
 
     def setUp(self):
         super().setUp()
@@ -722,7 +722,11 @@ class TestPromote(Base):
             self.runs.append(quick)
             return self.results.pop(0), "gate 'tests' failed"
 
+        self.ci = [{"name": "ci", "status": "completed", "conclusion": "success"}]
+
         def run(argv, *a, **kw):
+            if argv[:2] == ["gh", "api"] and "check-runs" in argv[2]:
+                return mock.Mock(returncode=0, stdout=json.dumps({"check_runs": self.ci}), stderr="")
             if argv[:2] == ["gh", "api"]:
                 self.labels.append(argv[2])
                 return mock.Mock(returncode=0, stdout="", stderr="")
@@ -744,36 +748,41 @@ class TestPromote(Base):
     def sha(self, ref):
         return git(self.main, "rev-parse", ref).stdout.strip()
 
-    def test_promote_pushes_one_commit_merges_back_and_labels(self):
-        before = self.sha("origin/main")
+    def test_promote_fast_forwards_and_labels(self):
+        stg = self.sha("origin/staging")
         code, out = self.promote()
         git(self.main, "fetch", "-q", "origin")
         self.assertEqual(0, code, out)
-        self.assertEqual([before], git(self.main, "rev-list", "--parents", "-n1", "origin/main").stdout.split()[1:])
-        self.assertIn("(#5)", git(self.main, "log", "-1", "--format=%B", "origin/main").stdout.replace("Story 5 (#5)", "(#5)"))
-        subject = git(self.main, "log", "-1", "--format=%s", "origin/main").stdout
-        self.assertIn("#5, #6", subject)
-        self.assertEqual("", git(self.main, "diff", "origin/main", "origin/staging").stdout)
-        self.assertEqual(0, git(self.main, "merge-base", "--is-ancestor", "origin/main", "origin/staging", check=False).returncode)
+        self.assertEqual((stg, stg), (self.sha("origin/main"), self.sha("origin/staging")))
+        self.assertEqual(1, len(git(self.main, "rev-list", "--parents", "-n1", "origin/main").stdout.split()) - 1)  # no merge commit
+        self.assertEqual(["Story 5 (#5)", "Story 6 (#6)"], git(self.main, "log", "--reverse", "--format=%s", "-2", "origin/main").stdout.splitlines())
         self.assertEqual(["repos/o/r/issues/5/labels", "repos/o/r/issues/6/labels"], self.labels)
         self.assertEqual([True, True, False], self.runs)
 
-    def test_second_promote_names_only_new_stories(self):
+    def test_second_promote_has_nothing_to_do(self):
         self.assertEqual(0, self.promote()[0])
-        self.assertEqual(0, self.promote()[0])  # nothing new, so nothing pushed
+        self.assertEqual(0, self.promote()[0])
         self.assertEqual(2, len(self.labels))
-        git(self.main, "fetch", "-q", "origin")
-        git(self.main, "checkout", "-q", "-B", "stg", "origin/staging")
-        (self.main / "s7.txt").write_text("7")
-        git(self.main, "add", "."); git(self.main, "commit", "-q", "-m", "Story 7 (#7)")
-        git(self.main, "push", "-q", "origin", "stg:staging")
-        self.results = [True, True, True]
+
+    def test_main_ahead_of_staging_pushes_nothing(self):
+        git(self.main, "checkout", "-q", "-B", "m", "origin/main")
+        (self.main / "m.txt").write_text("m")
+        git(self.main, "add", "."); git(self.main, "commit", "-q", "-m", "Main only (#9)")
+        git(self.main, "push", "-q", "origin", "m:main")
+        main = self.sha("origin/main")
         code, out = self.promote()
+        self.assertEqual(1, code)
+        self.assertIn("Merge main into staging first", out)
         git(self.main, "fetch", "-q", "origin")
-        self.assertEqual(0, code, out)
-        self.assertIn("#7", git(self.main, "log", "-1", "--format=%s", "origin/main").stdout)
-        self.assertNotIn("#5", git(self.main, "log", "-1", "--format=%s", "origin/main").stdout)
-        self.assertEqual(["repos/o/r/issues/5/labels", "repos/o/r/issues/6/labels", "repos/o/r/issues/7/labels"], self.labels)
+        self.assertEqual((main, [], []), (self.sha("origin/main"), self.runs, self.labels))
+
+    def test_pending_ci_names_the_check_and_pushes_nothing(self):
+        self.ci = [{"name": "unit", "status": "in_progress", "conclusion": None}]
+        main = self.sha("origin/main")
+        code, out = self.promote()
+        self.assertEqual(1, code)
+        self.assertIn("unit is in_progress", out)
+        self.assertEqual((main, [], []), (self.sha("origin/main"), self.runs, self.labels))
 
     def test_failed_validation_changes_nothing(self):
         main, staging = self.sha("origin/main"), self.sha("origin/staging")

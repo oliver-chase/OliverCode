@@ -11,6 +11,7 @@ stays in its worktree, gets a handover file ~/.olivercode/land/handover-REPO-N.m
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -546,10 +547,25 @@ def _timed_quick(wt: Path, ref: str, label: str) -> tuple[bool, float, str]:
     return passed, time.monotonic() - began, f"{label} quick validation:\n{tail}"
 
 
+def _ci_refusal(slug: str, sha: str) -> str:
+    """The check and its state when CI has not passed on sha, else "" (#1305)."""
+    try:
+        got = subprocess.run(["gh", "api", f"repos/{slug}/commits/{sha}/check-runs?per_page=100"], capture_output=True, text=True, timeout=60)
+        runs = json.loads(got.stdout)["check_runs"] if got.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError):
+        runs = None
+    if runs is None:
+        return f"Refused: CI on {sha[:8]} could not be read, so nothing was promoted."
+    for r in runs:
+        if r.get("status") != "completed" or r.get("conclusion") not in ("success", "neutral", "skipped"):
+            return f"Refused: CI check {r.get('name')} is {r.get('conclusion') or r.get('status')} on {sha[:8]}, so nothing was promoted."
+    return "" if runs else f"Refused: CI has no check on {sha[:8]}, so nothing was promoted."
+
+
 def promote(repo: Path, say=print) -> int:
-    """Move staging to main as one squashed commit naming every story, after one validation, merge main back into staging with no force push, and label each
-    story it carries `on-main`. The stories closed when they landed on staging, so none is reopened or closed again (#1305). Everything that can refuse runs
-    before the first push, so a refusal leaves main, staging and every label as they were."""
+    """Fast-forward main to staging's head after CI and one validation, so every story keeps its own commit, and label each story it carries `on-main`.
+    The stories closed when they landed on staging, so none is reopened or closed again (#1305). Everything that can refuse runs before the push, so a
+    refusal leaves main, staging and every label as they were."""
     staging, slug = local_config.setting("engineBranch") or "", _story_slug(repo)
     why = _promote_refusal(repo, staging, slug)
     if why:
@@ -559,13 +575,18 @@ def promote(repo: Path, say=print) -> int:
         say("Refused: git fetch origin failed, so staging and main are unknown.")
         return 1
     main = "main"  # shortcut: promote targets main by name, the story's own word for it; upgrade when a repo promotes to another branch
-    # The squash is not an ancestor of staging's own commits, so only the work after the last merge-back is new (#1305).
-    since = _git(repo, "log", "-1", "--merges", "--format=%H", "--grep", "after promotion", f"origin/{staging}").stdout.strip()
-    base = f"{since}..origin/{staging}" if since else f"origin/{main}..origin/{staging}"
-    ahead = _git(repo, "log", "--reverse", "--no-merges", "--format=%s", base).stdout.splitlines()
-    if not ahead or not _git(repo, "diff", "--quiet", f"origin/{main}", f"origin/{staging}").returncode:
+    if _git(repo, "merge-base", "--is-ancestor", f"origin/{main}", f"origin/{staging}").returncode:
+        say(f"Refused: origin/{main} has a commit origin/{staging} lacks, so nothing was pushed. Merge {main} into {staging} first.")
+        return 1
+    ahead = _git(repo, "log", "--reverse", "--no-merges", "--format=%s", f"origin/{main}..origin/{staging}").stdout.splitlines()
+    if not ahead:
         say(f"origin/{staging} holds nothing that origin/{main} lacks, so nothing was promoted.")
         return 0
+    head = _git(repo, "rev-parse", f"origin/{staging}").stdout.strip()
+    why = _ci_refusal(slug, head)
+    if why:
+        say(why)
+        return 1
     stories = list(dict.fromkeys(m.group(1) for s in ahead if (m := re.search(r"\(#(\d+)\)\s*$", s))))
     wt = Path(tempfile.mkdtemp(prefix="olivercode-promote-"))
     try:
@@ -577,7 +598,7 @@ def promote(repo: Path, say=print) -> int:
         if not ok_main:
             say(f"Refused: {tail}")
             return 1
-        ok_stg, stg_s, tail = _timed_quick(wt, f"origin/{staging}", staging)
+        ok_stg, stg_s, tail = _timed_quick(wt, head, staging)
         if not ok_stg:
             say(f"Refused: {tail}")
             return 1
@@ -588,18 +609,12 @@ def promote(repo: Path, say=print) -> int:
         if not passed:
             say(f"Refused: the repo's validation failed on {staging}, so nothing was promoted. Failing gate output:\n{tail}")
             return 1
-        names = ", ".join(f"#{n}" for n in stories) or "no numbered story"
-        message = f"Promote {staging} to {main}: {names}\n\n" + "\n".join(f"- {s}" for s in ahead)
-        made = _git(wt, "commit-tree", f"origin/{staging}^{{tree}}", "-p", f"origin/{main}", "-m", message)
-        new = made.stdout.strip()
-        if made.returncode or not new:
-            say(f"Refused: the squash commit could not be made: {made.stderr.strip()}")
-            return 1
         env = {**os.environ, "ALLOW_BRANCH_PUSH": "1"}
-        if subprocess.run(["git", "-C", str(wt), "push", "origin", f"{new}:refs/heads/{main}"], env=env, capture_output=True, text=True).returncode:
+        if subprocess.run(["git", "-C", str(wt), "push", "origin", f"{head}:refs/heads/{main}"], env=env, capture_output=True, text=True).returncode:
             say(f"Refused: origin/{main} moved or rejected the push, so nothing was promoted. Run promote again.")
             return 1
-        say(f"{main} now holds {new[:8]}, which carries {names}.")
+        names = ", ".join(f"#{n}" for n in stories) or "no numbered story"
+        say(f"{main} fast-forwarded to {head[:8]}, which carries {names}.")
         unlabeled = []
         for n in stories:
             try:
@@ -608,16 +623,10 @@ def promote(repo: Path, say=print) -> int:
                 done = False
             if not done:
                 unlabeled.append(n)
-        _git(wt, "checkout", "-q", "--detach", f"origin/{staging}")
-        merged = _git(wt, "merge", "--no-edit", "-m", f"Merge {main} into {staging} after promotion", new)
-        pushed = merged.returncode == 0 and subprocess.run(["git", "-C", str(wt), "push", "origin", f"HEAD:refs/heads/{staging}"], env=env, capture_output=True, text=True).returncode == 0
-        if not pushed:
-            say(f"{main} was promoted and labeled, but {staging} could not be merged back from {main} without a force push. Merge origin/{main} into {staging} by hand.")
-            return 1
         if unlabeled:
-            say(f"{staging} merged back from {main}, but these stories lack on-main (GitHub may be rate limited; queue with `olivercode gh-limit queue -- gh ...`): " + ", ".join(f"#{n}" for n in unlabeled))
+            say("These stories lack on-main (GitHub may be rate limited; queue with `olivercode gh-limit queue -- gh ...`): " + ", ".join(f"#{n}" for n in unlabeled))
             return 1
-        say(f"{staging} merged back from {main} with no force push, and {len(stories)} stories carry on-main.")
+        say(f"{len(stories)} stories carry on-main.")
         return 0
     finally:
         _git(repo, "worktree", "remove", "--force", str(wt))

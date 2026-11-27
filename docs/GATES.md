@@ -27,7 +27,7 @@ Hook drift fails validation: OliverCode's hook, the public template and the priv
 
 `validate.sh` also reports fleet hook state through `olivercode conform --offline --hooks-only`. That report is advisory, because hook enforcement fails open: a repo with an unset or broken `core.hooksPath` runs no gates and prints nothing.
 
-`.github/workflows/framework-ci.yml` runs health, `validate.sh` and the install rehearsal on every push to main and on every pull request into main, never on a push to staging, so a failed-run email reaches the owner once per release, as one required check. `validate.sh` includes `tests/test_drain_canary.py` through the smoke tests, so each run drives a fake story through the drain. Until the owner turns the workflow on in GitHub Actions, the local commands are the enforcement.
+`.github/workflows/framework-ci.yml` runs health, `validate.sh` and the install rehearsal on every push to main or staging and on every pull request into main, so `olivercode promote` finds a passing check on staging's head before it fast-forwards main to it. `validate.sh` includes `tests/test_drain_canary.py` through the smoke tests, so each run drives a fake story through the drain. Until the owner turns the workflow on in GitHub Actions, the local commands are the enforcement.
 
 ## Commit gates
 
