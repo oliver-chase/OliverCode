@@ -324,6 +324,8 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
 STORY_SIZE: dict[str, str] = {}  # story -> its board Size, set when the drain claims it, so every later row carries it (#1301)
 SPEND: dict[str, float] = {}  # story -> dollars its rounds and reader reviews have cost since the drain claimed it, across builder restarts (#1318)
 STAGE_START: dict[str, float] = {}  # story -> when its current stage began, so each row says how long the stage before it took (#1291)
+CITY_AT = 0.0  # when the drain last rewrote city.html (#1350)
+CITY_EVERY = 60  # seconds between rewrites
 
 
 def log_stage(story: str, repo: str, stage: str, started_at: float | None = None, reason: str = "", **extra) -> None:
@@ -342,6 +344,20 @@ def log_stage(story: str, repo: str, stage: str, started_at: float | None = None
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
     except OSError:
+        pass
+    refresh_city(now)
+
+
+def refresh_city(now: float) -> None:
+    """Rewrite city.html from local files, at most once a minute, with no GitHub or model call. A failed rewrite never stops the drain (#1350)."""
+    global CITY_AT
+    if now - CITY_AT < CITY_EVERY:
+        return
+    CITY_AT = now
+    try:
+        from lib import city  # local import: city reads the modules that import this one
+        city.refresh()
+    except Exception:  # shortcut: any failure is swallowed, since the page is a view and the next stage row retries it
         pass
 
 
