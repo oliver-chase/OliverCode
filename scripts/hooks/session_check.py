@@ -9,7 +9,7 @@ This runs in every session, in whatever folder it starts, and names these gaps:
 - the repo is a git repo with no commit gates of its own
 - a link that loads OliverCode's rules into ~/.claude is broken
 - a repo, worktree or backup sits outside repoRoot (scripts/lib/placement.py)
-- the OliverCode checkout holds commits origin/main lacks, or trails it with edits (the fast-forward and the board groom belong to `olivercode maintain --fix`)
+- the OliverCode checkout holds commits origin/main lacks, or trails it with edits (the fast-forward belongs to `olivercode maintain --fix`)
 
 In a repo that has commit gates, a session that is not headless also refreshes the status digest with no model call and prints three lines: the open
 count, the last story landed and the digest to read before acting (#985).

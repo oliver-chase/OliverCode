@@ -93,7 +93,7 @@ The secret patterns live once in `core/hooks/secret-patterns.sh`, and `scripts/b
 
 ## Repeated blockers
 
-The daily `olivercode board groom --all`, which `maintain --fix` runs, reads the failure log with no model call. A gate and reason that appear 3 or more times file one story, "Prevent the repeated block: ...", naming the blocker and its occurrences. An open story for the same blocker gets each new occurrence as a comment, and a blocker seen twice files nothing.
+`olivercode maintain --fix` reads the failure log with no model call. A gate and reason that appear 3 or more times, from a guard the tree still has, are reported with the latest time. It files nothing, and a blocker seen twice is not reported.
 
 ## Engine-only check
 
@@ -101,8 +101,5 @@ The engine-only check, `scripts/lib/engine_only.py`, keeps an OliverCode clone f
 
 ## Rename check
 
-A rename story carries a line `Renames: OLD -> NEW` in its body. `complete_story.py` refuses to close it while OLD still appears in a tracked line of scripts, docs, tests, launchd plists or the feature register, and it lists each file and line. A line that says "alias", "formerly" or "renamed from", and any history file, are skipped. `olivercode board groom` tells the owner about an open rename story that has no `Renames:` line. The check lives in `scripts/lib/rename_check.py`.
+A rename story carries a line `Renames: OLD -> NEW` in its body. `complete_story.py` refuses to close it while OLD still appears in a tracked line of scripts, docs, tests, launchd plists or the feature register, and it lists each file and line. A line that says "alias", "formerly" or "renamed from", and any history file, are skipped. The check lives in `scripts/lib/rename_check.py`.
 
-## Name check
-
-`olivercode board groom` compares each command, job label and file name in a tracked README with the heading it sits under, and tells the owner about every pair that reads differently, with the fix: use one name in both. A heading and an identifier belong together when the heading's section names exactly one identifier, or when the identifier is followed by the heading's name in brackets. No model runs. The check lives in `scripts/lib/name_drift.py`.

@@ -1,7 +1,5 @@
-"""Intake check (#728) and the repeated-blocker report. Neither files a story (#1275)."""
+"""Size and Priority, the filing fit check and the repeated-blocker report. None files a story (#1275)."""
 
-import contextlib
-import io
 import os
 import sys
 import unittest
@@ -10,51 +8,39 @@ from unittest import mock
 from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_owner, intake  # noqa: E402
-
-GOOD = """**As the owner**, I want a thing, so that it works.
-
-```gherkin
-Feature: A thing
-  Scenario: Main
-    Given a
-    When b
-    Then c
-```
-
-Epic: #1
-Priority: P2. Size: S. Work type: Story.
-"""
+from lib import intake  # noqa: E402
 
 
-class TestIntake(unittest.TestCase):
-    def setUp(self):
-        p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
-        p.start()
-        self.addCleanup(p.stop)
+class TestSizeAndPriority(unittest.TestCase):
+    def test_the_stated_lines_win_and_the_body_length_sizes_the_rest(self):
+        self.assertEqual("S", intake.size_of({"body": "Priority: P1. Size: S. Work type: Story."}))
+        self.assertEqual("P1", intake.priority_of({"body": "Priority: P1. Size: S."}))
+        self.assertEqual("XS", intake.size_of({"body": "short"}))
+        self.assertEqual("XL", intake.size_of({"body": "x" * 5000}))
+        self.assertEqual("P0", intake.priority_of({"title": "A leaked secret", "body": ""}))
+        self.assertEqual("P1", intake.priority_of({"title": "The run is broken", "body": ""}))
+        self.assertEqual("P2", intake.priority_of({"title": "Add a flag", "body": ""}))
 
-    def run_check(self, issues):
-        return intake.check("Alpha", "o/r", fetch=lambda slug: issues)
 
-    def test_ten_template_less_issues_fail_and_are_named_and_no_story_is_filed(self):
-        issues = [{"number": n, "title": f"t{n}", "body": "just a line"} for n in range(1, 11)] + [{"number": 11, "title": "ok", "body": GOOD}]
-        bad, line = self.run_check(issues)
-        self.assertTrue(bad)
-        self.assertIn("10 open issue(s) lack the story template", line)
-        self.assertIn("#1, #2", line)
-        self.assertFalse(hasattr(intake, "candidate"))
-        self.assertFalse(hasattr(intake, "BODY"))
+class TestFit(unittest.TestCase):
+    def test_an_overlapping_open_story_gets_one_related_line_and_a_repeat_keeps_one(self):
+        stories = {7: {"body": "Files area: scripts/lib/intake.py"}}
+        with mock.patch.object(intake, "tracked", return_value={"scripts", "scripts/lib", "scripts/lib/intake.py"}):
+            once, _ = intake.fit("Files area: scripts/lib/intake.py\n", "New", stories, ".")
+            twice, _ = intake.fit(once, "New", stories, ".")
+        self.assertEqual("Related: #7 (Files area overlaps)", once.splitlines()[-1])
+        self.assertEqual(once, twice)
 
-    def test_a_few_issues_without_the_template_pass(self):
-        bad, _ = self.run_check([{"number": 1, "title": "t", "body": "x"}, {"number": 2, "title": "ok", "body": GOOD}])
-        self.assertFalse(bad)
+    def test_a_path_not_on_main_and_not_created_is_printed(self):
+        with mock.patch.object(intake, "tracked", return_value={"a.py"}):
+            _, lines = intake.fit("Files area: a.py, b.py, c.py, word\nCreates: c.py\n", "New", {}, ".")
+        self.assertEqual(1, len(lines))
+        self.assertIn("names b.py", lines[0])
 
-    def test_an_unreadable_repo_is_never_reported_clean(self):
-        def boom(slug):
-            raise RuntimeError("rate limited")
-        bad, line = intake.check("Alpha", "o/r", fetch=boom)
-        self.assertTrue(bad)
-        self.assertIn("did not run", line)
+    def test_git_unable_to_read_main_is_said(self):
+        with mock.patch.object(intake, "tracked", return_value=None):
+            _, lines = intake.fit("Files area: a.py\n", "New", {}, ".")
+        self.assertIn("did not run", lines[0])
 
 
 class TestRepeatedBlockers(unittest.TestCase):

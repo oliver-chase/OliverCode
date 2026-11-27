@@ -1,8 +1,4 @@
-"""The boards `olivercode board groom` keeps in order: OliverCode and every cloned fleet repo whose board has a backlog config (#982).
-
-The nightly board sweep and its launchd job are gone. Groom does the sweep's work: it moves a closed story's card to Complete, adds an
-open story with no card, and runs the intake check and the repeated-blocker check after the boards.
-"""
+"""The boards `olivercode board sync` keeps in order: OliverCode, when its board has a backlog config (#982)."""
 
 from __future__ import annotations
 
@@ -36,14 +32,3 @@ def boards() -> list[tuple[str, Path]]:
             found.append((name, config))
     return found
 
-
-def repos(board_list=boards) -> list[tuple[str, str, int]]:
-    """(name, owner/repo, epic number) for each board, for the intake check. The epic is the Epic line the repo's stories carry."""
-    out = []
-    for name, config in board_list():
-        try:
-            cfg = json.loads(config.read_text(encoding="utf-8"))
-            out.append((name, f"{cfg['repoOwner']}/{cfg['repoName']}", int(cfg.get("epic") or 1)))
-        except (OSError, ValueError, KeyError):
-            continue
-    return out

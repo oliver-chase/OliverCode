@@ -219,26 +219,6 @@ def command_health() -> int:
     if not found:
         t.ok(f"{schedules.summary()} scheduled tasks and launchd jobs name real tracked paths and ran without repeated interruptions")
 
-    # Grooming runs inside maintain and at session start; a board it has not groomed in 48 hours means the schedule stopped (#724).
-    print("\nBoard grooming:")
-    from lib import cmd_groom
-    from lib.cmd_sweep import boards
-    slugs = []
-    for _name, config in boards():
-        try:
-            cfg = json.loads(config.read_text(encoding="utf-8"))
-            slugs.append(f"{cfg['repoOwner']}/{cfg['repoName']}")
-        except (OSError, ValueError, KeyError):
-            continue
-    if not slugs:
-        t.ok("no board to groom")
-    elif not any(cmd_groom.load_state().get(s, {}).get("ok") for s in slugs):
-        t.warn("no board has been groomed yet. Run `olivercode board groom --all`")
-    elif cmd_groom.stale(cmd_groom.STALE_HOURS, slugs=slugs):
-        t.fail(f"a board has not been groomed in {cmd_groom.STALE_HOURS} hours. Run `olivercode board groom --all`")
-    else:
-        t.ok(f"every board was groomed within {cmd_groom.STALE_HOURS} hours")
-
     # Repos to check for remote reachability and oversized files: the private repos,
     # and this framework repo.
     topo_repos: list[tuple[str, Path]] = [(n, p) for n, p in _private_repos().items() if (p / ".git").exists() and not _repo_state.skipped(n, p)]

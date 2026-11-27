@@ -1,8 +1,7 @@
 """A rename story names its old name on a `Renames: OLD -> NEW` line, and closes only when OLD is gone (#838).
 
 `refusal(body, root)` is what complete_story.py calls: it lists each tracked line of scripts, docs, tests, launchd
-plists and the feature register that still holds OLD, except an alias line or a history file. `missing_line(stories)`
-is what `olivercode board groom` calls: it names each open rename story with no `Renames:` line.
+plists and the feature register that still holds OLD, except an alias line or a history file.
 """
 from __future__ import annotations
 
@@ -12,7 +11,6 @@ from pathlib import Path
 from lib import gitfiles
 
 LINE = re.compile(r"^\s*Renames:\s*`?([^\s`]+)`?\s*(?:->|→)\s*`?([^\s`]+)`?\s*$", re.M)
-TITLE = re.compile(r"^\s*(?:\w+:\s*)?renam\w*\b|\brenam\w*\s+\S+\s+(?:to|->)\s", re.I)
 SCANNED = ("scripts/", "docs/", "tests/")
 ALIAS = re.compile(r"alias|formerly|renamed from|was renamed|previously named", re.I)
 HISTORY = re.compile(r"history|changelog|LIMITS\.json|/audits?/", re.I)
@@ -54,9 +52,3 @@ def refusal(body: str | None, root: Path) -> str:
     shown = ", ".join(left[:SHOWN]) + (f" and {len(left) - SHOWN} more" if len(left) > SHOWN else "")
     return (f"the old name `{old}` still appears in {len(left)} place(s): {shown}. "
             f"Change each to `{new}`, or mark a deliberate one as an alias on its own line")
-
-
-def missing_line(stories: dict) -> dict[int, str]:
-    """{number: fix} for each open story that renames something and has no `Renames: OLD -> NEW` line."""
-    fix = "add the line `Renames: OLD -> NEW` to its body"
-    return {n: fix for n, s in stories.items() if TITLE.search(s.get("title") or "") and not parse(s.get("body"))}

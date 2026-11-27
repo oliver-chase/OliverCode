@@ -20,7 +20,7 @@ from collections import Counter, deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from lib import agent_loop, cmd_dispatch, cmd_groom, cmd_land, cmd_owner, failure_log, gh_budget, gitfiles, intake, local_config, model, policy, run_lock
+from lib import agent_loop, cmd_dispatch, cmd_land, cmd_owner, failure_log, gh_budget, gitfiles, intake, local_config, model, policy, run_lock
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
@@ -57,7 +57,7 @@ def skip_reason(issue: dict, repo: Path | None = None) -> str:
         return f"its board Status is {issue.get('status') or 'empty'}, not Ready"
     if not issue.get("size"):
         return "it has no Size on the board"
-    if (size := cmd_groom.size_of(issue)) in ("L", "XL"):  # the text's Size routes the builder, so it also decides the refusal (#1342)
+    if (size := intake.size_of(issue)) in ("L", "XL"):  # the text's Size routes the builder, so it also decides the refusal (#1342)
         return f"its Size is {size}, so it needs splitting into S and M stories"
     area = intake.files_area(issue.get("body") or "")
     if not area:
@@ -114,7 +114,7 @@ class Io:
         return issues
 
     def board_cards(self) -> dict[int, dict] | None:
-        """The board's card for each story number, from the shared board copy groom keeps. None when the board cannot be read, so drain stops
+        """The board's card for each story number, from the shared board copy. None when the board cannot be read, so drain stops
         rather than treat an unread story as Ready (#1014)."""
         import check_board_hygiene
         self.unread = ""
@@ -200,12 +200,12 @@ class Io:
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names, and the
         model is the one the brief names (#1015), with a small story getting a third round (#890)."""
-        n, size = issue["number"], cmd_groom.size_of(issue)
+        n, size = issue["number"], intake.size_of(issue)
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
         builder, _reader, why = intake.models(issue, f"story-{n}")
         files = intake.files_area(issue.get("body") or "")
-        review = agent_loop.review_mode(size, issue.get("labels") or (), files, cmd_groom.priority_of(issue))
+        review = agent_loop.review_mode(size, issue.get("labels") or (), files, intake.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         agent_loop.log_stage(f"story-{n}", self.repo.name, "building")
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
@@ -756,9 +756,9 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 if issue.get("status") == "Backlog" and issue["number"] not in unparked and not owner_gated(issue):  # a story parked for an overlap or a Size returns once that cause is gone (#1348)
                     unparked.add(issue["number"])
                     cause = io.parked_for(issue["number"])
-                    if cause and not (cause == "size" and cmd_groom.size_of(issue) in ("L", "XL")):
+                    if cause and not (cause == "size" and intake.size_of(issue) in ("L", "XL")):
                         io.set_card(issue["number"], {"status": "Ready"})
-                        io.comment(issue["number"], f"{RETURNED} " + ("the drain builds stories that share files one after the other." if cause == "overlap" else f"its text Size {cmd_groom.size_of(issue)} fits one builder."))
+                        io.comment(issue["number"], f"{RETURNED} " + ("the drain builds stories that share files one after the other." if cause == "overlap" else f"its text Size {intake.size_of(issue)} fits one builder."))
                         issue["status"] = "Ready"
                 why = skip_reason(issue, io.repo)
                 if why == NO_AREA and issue["number"] not in filled:  # a Ready story gets its Files area once per drain, just before it builds (#1316)
@@ -774,7 +774,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         if owner_gated(issue):
                             notify(f"Story #{issue['number']} is owner-gated and waits for you")
                     continue
-                if re.search(r"Size:\s*(XS|S|M|L|XL)\b", issue.get("body") or "") and (text_size := cmd_groom.size_of(issue)) != str(issue["size"]).strip().upper() and issue["number"] not in mismatched:
+                if re.search(r"Size:\s*(XS|S|M|L|XL)\b", issue.get("body") or "") and (text_size := intake.size_of(issue)) != str(issue["size"]).strip().upper() and issue["number"] not in mismatched:
                     mismatched.add(issue["number"])
                     say(f"#{issue['number']}: its card says Size {issue['size']} but its text says {text_size}; the card is set to {text_size} (#1342, #1348).")
                     io.set_card(issue["number"], {"size": text_size})

@@ -335,16 +335,12 @@ class TestFailureGaps(unittest.TestCase):
 
     def test_the_same_gate_failure_three_times_is_reported_and_no_candidate_is_written(self):
         """#1275: three identical failures, then the nightly run: the repeat is reported and nothing is filed or listed."""
-        from lib import cmd_groom, failure_log
+        from lib import failure_log
         for _ in range(3):
             failure_log.record("gate 4", "land interrupted", "r")
-        lines = []
-        with mock.patch.object(cmd_groom.gh_budget, "refusal", return_value=""), mock.patch.object(cmd_groom.gh_budget, "points_refusal", return_value=""), \
-                mock.patch("lib.cmd_sweep.repos", return_value=[]), mock.patch("subprocess.run") as gh:
-            cmd_groom.check_intake([("R", Path("a.json"))], out=lines.append)
-            with mock.patch.object(maintain, "failure_gaps", return_value=[]):
-                self.assertEqual([], maintain.check_failure_gaps(True))
-        self.assertTrue(any("gate 4: land interrupted blocked 3 times" in line for line in lines))
+        with mock.patch("subprocess.run") as gh, mock.patch.object(maintain, "failure_gaps", return_value=[]):
+            problems = maintain.check_failure_gaps(True)
+        self.assertTrue(any("gate 4: land interrupted blocked 3 times, latest" in p.text for p in problems))
         gh.assert_not_called()
         self.assertEqual([], sorted(p.name for p in self.home.iterdir() if "candidate" in p.name or "outbox" in p.name))
         self.assertFalse((REPO_ROOT / "scripts" / "lib" / "candidates.py").exists())

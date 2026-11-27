@@ -25,7 +25,6 @@ os.environ["OLIVERCODE_LOCAL_CONFIG"] = os.devnull
 os.environ.update(ISOLATION)
 # repo_state asks GitHub whether a repo is archived; no test reaches the network, so a test that wants an answer injects one.
 os.environ["OLIVERCODE_ARCHIVED"] = "off"
-# The session hook starts a background groom when the last one is old; no test starts one.
 os.environ["OLIVERCODE_NO_BACKGROUND"] = "1"
 os.environ["OLIVERCODE_NO_STARTUP_CHECK"] = "1"  # manager check skips the start-up checklist (#726); its own tests unset this
 

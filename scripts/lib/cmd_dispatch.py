@@ -43,8 +43,7 @@ def headless_brief(n: int, story: dict, agent: str, worktree=None, extras: str =
     """The one brief a headless builder gets, for `dispatch` and `drain` alike (#877): the story, what it names, and rules that end at the commit.
     `extras` is text between the story and the rules (code excerpts, owner decisions) and `note` says why an earlier builder stopped."""
     builder, reader, why = intake.models(story, f"story-{n}")  # the same names the runner starts (#1015), and the rule that chose the builder (#1026)
-    from lib import cmd_groom
-    review = agent_loop.review_mode(cmd_groom.size_of(story), story.get("labels") or (), intake.files_area(story.get("body") or ""), cmd_groom.priority_of(story))
+    review = agent_loop.review_mode(intake.size_of(story), story.get("labels") or (), intake.files_area(story.get("body") or ""), intake.priority_of(story))
     review_note = (f"a fresh {reader.capitalize()} reader reads the commit before it lands" if review == "full"
                    else "repository validation and commit gates check the commit before it lands")
     model = f"Run on {builder.capitalize()} ({why}), and {review_note}"
@@ -282,8 +281,7 @@ def command_dispatch(argv: list[str], runner=gh, busy=None, clock=None, repo=Non
 
 def _too_large(story: dict) -> str:
     """Why an L or XL story is not built (#1307), or '' when its size allows it."""
-    from lib import cmd_groom
-    size = cmd_groom.size_of(story)
+    size = intake.size_of(story)
     return f"has Size {size}, so it needs splitting into S and M stories" if size in ("L", "XL") else ""
 
 

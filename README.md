@@ -103,7 +103,7 @@ python3 scripts/olivercode health
 | Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode maintain`, `olivercode limits` |
 | Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode watch`, `olivercode land`, `olivercode promote`, `olivercode wip`, `olivercode validated`, `olivercode queue` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
-| Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode gh-limit`, `olivercode gated` |
+| Backlog and boards | `olivercode backlog-setup`, `olivercode board fit`, `olivercode board sync`, `olivercode gh-limit`, `olivercode gated` |
 | Owner and decisions | `olivercode owner`, `olivercode decisions`, `olivercode handoff` |
 | Fleet and policy | `olivercode discover`, `olivercode policy` |
 | Orientation | `olivercode guide` |

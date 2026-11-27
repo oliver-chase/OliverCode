@@ -76,15 +76,6 @@ class TestRenameCheck(unittest.TestCase):
         code, text = close(STORY, root)
         self.assertEqual(0, code, text)
 
-    def test_groom_flags_a_rename_story_with_no_line_and_names_the_fix(self):
-        stories = {1: {"title": "Rename showcase to gallery", "body": "no line"},
-                   2: {"title": "Rename showcase to gallery", "body": STORY},
-                   3: {"title": "A rename story lists the old name", "body": "x"},
-                   4: {"title": "Add a check", "body": "x"}}
-        flagged = rename_check.missing_line(stories)
-        self.assertEqual([1], list(flagged))
-        self.assertIn("Renames: OLD -> NEW", flagged[1])
-
 
 if __name__ == "__main__":
     unittest.main()

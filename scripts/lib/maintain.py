@@ -369,16 +369,6 @@ def check_job_python(agents: Path | None = None) -> list[Problem]:
     return [Problem("jobpython", f"the daily job runs {exe} ({'.'.join(map(str, found)) if found else 'unknown version'}), below {'.'.join(map(str, MIN_PYTHON))}: run `olivercode maintain --schedule` to reinstall it with {job_python()}")]
 
 
-def check_groom(fix: bool) -> list[Problem]:
-    """Reads every board and reports its findings when `maintain --fix` runs (#724); groom writes nothing to GitHub (#1275). A failed board is a problem that names its repo."""
-    if not fix:
-        return []
-    from lib import cmd_groom
-    if cmd_groom.command_groom(["--all"]) == 0:
-        return []
-    return [Problem("groom", "a board did not groom; the reason is in the owner queue and `~/.olivercode/groom-state.json`", fixable=False)]
-
-
 def check_queues(fix: bool) -> list[Problem]:
     """Closes each denied-step owner line whose check now passes, once `maintain --fix` runs. It creates no issue (#971)."""
     if not fix:
@@ -468,14 +458,16 @@ def failure_gaps() -> list[tuple[str, str, str]]:
 
 def check_failure_gaps(fix: bool) -> list[Problem]:
     """The daily run reports each failing check as a problem that names its repo and fix (#978). It files no story and writes no list (#1275).
-    A check that cannot read its inputs is reported."""
+    A gate blocked 3 or more times is reported with its reason and latest time. A check that cannot read its inputs is reported."""
     if not fix:
         return []
     try:
         gaps = failure_gaps()
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         return [Problem("gaps", f"the failing checks could not be read: {error}", fixable=False)]
-    return [Problem("gaps", f"{repo}: {title}. {body.strip().splitlines()[-1]}", fixable=False) for repo, title, body in gaps]
+    from lib import intake
+    return [Problem("gaps", f"{repo}: {title}. {body.strip().splitlines()[-1]}", fixable=False) for repo, title, body in gaps] + \
+           [Problem("blocker", line, fixable=False) for line in intake.repeated_blockers()]
 
 
 STATE_STEP = "state"
@@ -554,7 +546,7 @@ def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> 
     fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's private repos
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
-                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_gaps(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
+                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_gaps(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
     if health:
         problems += check_health()
     return problems
