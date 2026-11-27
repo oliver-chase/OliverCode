@@ -426,6 +426,9 @@ class DrainCase(unittest.TestCase):
 
     def test_the_default_drain_fills_the_machine_limit_and_parallel_overrides_it(self):
         """#1055: with no flag a drain runs up to maxBuilders less what other repos build; --parallel N wins; a bad N is refused."""
+        idle = mock.patch.object(cmd_drain.os, "getloadavg", return_value=(0.0, 0.0, 0.0))  # a loaded machine would cap the count (#1487)
+        idle.start()
+        self.addCleanup(idle.stop)
         with mock.patch.object(cmd_drain.local_config, "max_builders", return_value=4), \
                 mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=3):
             self.assertEqual(1, cmd_drain.Io(Path("/nonexistent"), "o/r").capacity())
@@ -499,13 +502,29 @@ class DrainCase(unittest.TestCase):
         self.assertEqual("size", io_for("Parked.\n\nSize XL is too large for one builder session.").parked_for(1))
         self.assertEqual("", io_for("Size XL is too large for one builder session.\n\nBack to Ready: its text Size S fits one builder.").parked_for(1))
 
-    def test_a_full_machine_waits_for_a_free_builder_and_never_reads_the_load(self):
-        """#1055: no free builder means wait, then start; the load average plays no part."""
+    def test_a_full_machine_waits_for_a_free_builder(self):
+        """#1055: no free builder means wait, then start."""
         io = FakeIo([issue(1)], cap=[0, 0, 1])
         naps = []
-        with mock.patch.object(cmd_drain.cmd_dispatch, "machine_load", side_effect=AssertionError("load read"), create=True):
-            quiet(cmd_drain.drain, io, cmd_drain.new_state(), sleep=naps.append)
+        quiet(cmd_drain.drain, io, cmd_drain.new_state(), sleep=naps.append)
         self.assertEqual(([1], 1), (io.started, len(naps)))
+
+    def test_a_load_above_twice_the_cores_caps_a_run_at_one_builder(self):
+        """#1487: --parallel is capped too, a load of exactly twice the cores is normal, and a full machine stays full."""
+        for load, parallel, elsewhere, want in ((16.0, None, 0, 2), (16.1, None, 0, 1), (16.0, 3, 0, 3), (16.1, 3, 0, 1), (16.1, None, 2, 0)):
+            with mock.patch.object(cmd_drain.os, "getloadavg", return_value=(load, 0.0, 0.0)), mock.patch.object(cmd_drain.os, "cpu_count", return_value=8), \
+                    mock.patch.object(cmd_drain.local_config, "max_builders", return_value=2), \
+                    mock.patch.object(cmd_drain.run_lock, "building_elsewhere", return_value=elsewhere):
+                self.assertEqual(want, cmd_drain.Io(Path("/nonexistent"), "o/r", parallel=parallel).capacity(), (load, parallel, elsewhere))
+
+    def test_a_heavily_loaded_drain_builds_one_story_at_a_time_until_none_is_left(self):
+        """#1487: the load never stops the run, and a normal load fills the limit."""
+        for load, most in ((999.0, 1), (0.0, 2)):
+            io = FakeIo([issue(1), issue(2), issue(3)])
+            io.parallel, io.capacity = 2, lambda: cmd_drain.Io.capacity(io)
+            with mock.patch.object(cmd_drain.os, "getloadavg", return_value=(load, 0.0, 0.0)):
+                self.run_drain(io)
+            self.assertEqual((most, [1, 2, 3]), (max(map(len, io.beats)), sorted(io.closed)), load)
 
     def test_a_held_story_is_not_restarted_or_pushed_and_one_comment_holds_the_finding(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "held": "scripts/a.py: no test"}]})

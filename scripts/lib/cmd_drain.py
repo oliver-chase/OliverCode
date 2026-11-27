@@ -244,8 +244,11 @@ class Io:
         return self.parallel or local_config.max_builders()
 
     def capacity(self) -> int:
-        """Builders this run may hold now: --parallel N, else the machine limit less what other repos' runs are building."""
-        return self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
+        """Builders this run may hold now: --parallel N, else the machine limit less what other repos' runs are building. At most 1 while the
+        1-minute load average is above twice the core count, so a heavy load slows new starts and never ends the run (#1487).
+        shortcut: a fix round after a failed landing starts without asking, as it does past maxBuilders, upgrade when a loaded run is seen holding two builders."""
+        free = self.parallel or max(0, local_config.max_builders() - run_lock.building_elsewhere(self.slug))
+        return min(free, 1) if os.getloadavg()[0] > 2 * (os.cpu_count() or 1) else free
 
     def beat(self, building: list[int]) -> None:
         """Tell the repo's run lock which stories are building now (#992)."""
@@ -1057,7 +1060,7 @@ def detach(argv: list[str], repo: Path, spawn=subprocess.Popen) -> int:
 
 
 def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit, spawn=subprocess.Popen) -> int:
-    """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055), detached unless `--foreground` is given (#1276).
+    """`drain REPO` runs up to the machine-wide builder limit, or N with `--parallel N` (#1055), one while the machine is heavily loaded (#1487), detached unless `--foreground` is given (#1276).
     One run holds a repo at a time (#992). When the run ends it logs one run-end row with the stories it landed and stopped. A run that ended because
     OliverCode's checkout moved logs a restarting row and starts itself again, detached, with the same repo and flags (#1480)."""
     args, parallel, rest, foreground = list(argv), None, [], False
