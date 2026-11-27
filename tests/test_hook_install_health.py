@@ -1,8 +1,7 @@
 """Tests for repo_gates.hook_problems() and _install_hook_pair() in scripts/olivercode.
 
-When core.hooksPath is unset or points elsewhere, or the hook is missing, not executable or
-the wrong variant, git runs weaker gates or none and says nothing. `olivercode health` is the
-detector for OliverCode and each private repo, so it must not report OK in any of those states.
+When core.hooksPath is unset or points elsewhere, or the hook is missing, not executable or the wrong variant, git runs weaker
+gates or none and says nothing. `olivercode health` is the detector for OliverCode and each private repo, so it must not report OK then.
 """
 
 import os
@@ -58,6 +57,7 @@ class TestHookProblems(unittest.TestCase):
         git(self.repo, "commit", "-qan", "-m", "drift")
         shutil.copy(TEMPLATES / "pre-push", self.hooks / "pre-push")
         self.assertIn("differs from HEAD", " ".join(self.problems()))
+        self.assertEqual([], repo_gates.hook_problems(self.repo, TEMPLATES, False, committed=False))
 
     def test_unset_hooks_path_is_reported(self):
         self.assertIn("unset", self.problems()[0])

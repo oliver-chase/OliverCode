@@ -88,11 +88,27 @@ def _check_vault_skill_links(skills_root: Path | None, oc_skills: Path | None = 
     return passed, failed, 0
 
 
+def _older_release(oc_root: Path, name: str, copy: bytes) -> bool:
+    """The copy starts with the text an earlier commit of docs/<name> held, so it is out of date and nobody edited it."""
+    def git(*args: str) -> bytes:
+        return subprocess.run(["git", "-C", str(oc_root), *args], capture_output=True).stdout
+    shared = (git("show", f"{c}:docs/{name}") for c in git("log", "--format=%H", "--", f"docs/{name}").decode().split())
+    return any(text and copy.startswith(text) for text in shared)
+
+
+def _copy_differs(oc_root: Path, root: Path, name: str, source: Path) -> tuple[int, int]:
+    """Report a copy that lacks the current shared text, as (failed, skipped): a warning for an older release, a failure for an edit."""
+    old = _older_release(oc_root, name, (root / "docs" / name).read_bytes())
+    what = "holds an older release of the shared text" if old else "changes the shared text"
+    print(f"  [{'WARN' if old else 'FAIL'}] {root.name}/docs/{name} {what} — copy it from {source} and keep its own sections after it")
+    return int(not old), int(old)
+
+
 def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]:
     """A self-contained suite's docs/VOICE.md must start with this repo's docs/VOICE.md.
 
-    A suite may add its own sections after the shared text, and any edit to the shared
-    text fails.
+    A suite may add its own sections after the shared text. Any edit to the shared text
+    fails, and a copy of an earlier release warns, since every change here leaves each copy behind.
 
     A suite ships its own copy so it runs without OliverCode, and nothing else notices
     when one copy is edited and the others are not. A suite is found from its skills
@@ -121,15 +137,15 @@ def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]
     if not suites:
         print("  [INFO] no installed suite ships docs/VOICE.md — not checked")
         return 0, 0, 0
-    passed = failed = 0
+    passed = failed = skipped = 0
     text = canonical.read_bytes()
     for root in sorted(suites):
         if (root / "docs" / "VOICE.md").read_bytes().startswith(text):
             print(f"  [OK] {root.name}/docs/VOICE.md keeps the shared text")
             passed += 1
         else:
-            print(f"  [FAIL] {root.name}/docs/VOICE.md changes the shared text — copy it from {canonical} and keep its own sections after it")
-            failed += 1
+            bad, old = _copy_differs(oc_root, root, "VOICE.md", canonical)
+            failed, skipped = failed + bad, skipped + old
     # A repo may follow the shipped DESIGN.md or the owner's own designFile (#995), so either one passes and a repo matching neither fails.
     sources = []
     for candidate in (oc_root / "docs" / "DESIGN.md", design_file(oc_root)):
@@ -142,9 +158,9 @@ def _check_voice_copies(oc_root: Path, skills_dir: Path) -> tuple[int, int, int]
                 print(f"  [OK] {root.name}/docs/DESIGN.md keeps the shared text")
                 passed += 1
             else:
-                print(f"  [FAIL] {root.name}/docs/DESIGN.md changes the shared text — copy it from {design_file(oc_root)} and keep its own sections after it")
-                failed += 1
-    return passed, failed, 0
+                bad, old = _copy_differs(oc_root, root, "DESIGN.md", design_file(oc_root))
+                failed, skipped = failed + bad, skipped + old
+    return passed, failed, skipped
 
 
 def _check_placement_drift(oc_root: Path) -> tuple[int, int, int]:
@@ -274,7 +290,8 @@ def stale_hook(path: Path, base: str = "origin/main") -> str:
 
 
 def _check_worktree_hooks() -> tuple[int, int, int]:
-    """Fail each linked worktree whose commit hooks predate origin/main, and name it with its fix (#902). A worktree with no gates says nothing."""
+    """Warn on each linked worktree whose commit hooks predate origin/main, and name it with its fix (#902). It warns because every hook change
+    leaves each older branch behind on a correct machine. A worktree with no gates says nothing."""
     from lib import placement
     stale = [(wt.path, why) for wt in placement.worktrees() if (why := stale_hook(wt.path))]
     print("\nWorktree hooks:")
@@ -282,10 +299,10 @@ def _check_worktree_hooks() -> tuple[int, int, int]:
         print("  [OK] every worktree's commit hooks are current with origin/main")
         return 1, 0, 0
     for path, why in stale:
-        print(f"  [FAIL] {path} runs commit hooks older than origin/main ({why}). Rebase it with "
+        print(f"  [WARN] {path} runs commit hooks older than origin/main ({why}). Rebase it with "
               f"`git -C \"{path}\" rebase origin/main`, then run `olivercode worktree fix \"{path}\"`. "
               "Once it is merged, `olivercode clean --apply` removes it")
-    return 0, len(stale), 0
+    return 0, 0, len(stale)
 
 
 MEMORY_WORDS = 5000
@@ -411,9 +428,12 @@ def state_limits(root: Path | None = None) -> dict:
 
 
 def folder_bytes(home: Path) -> int:
-    """The bytes under a folder, with links left out so a link to a large file elsewhere is not counted here."""
+    """The bytes under a folder, with links left out so a link to a large file elsewhere is not counted here. `backups` is left out
+    because those are kept on purpose and `maintain --fix` never clears them."""
     total = 0
-    for dirpath, _dirs, files in os.walk(home):
+    for dirpath, dirs, files in os.walk(home):
+        if Path(dirpath) == home:
+            dirs[:] = [d for d in dirs if d != "backups"]
         for name in files:
             full = os.path.join(dirpath, name)
             if not os.path.islink(full):
@@ -429,7 +449,7 @@ def _check_state_folder(home: Path | None = None, limits: dict | None = None) ->
     limits = state_limits() if limits is None else limits
     entries = len(list(home.iterdir())) if home.is_dir() else 0
     size = folder_bytes(home)
-    text = f"{home} holds {entries} entries and {size / MIB:.1f} MB"
+    text = f"{home} holds {entries} entries and {size / MIB:.1f} MB outside backups"
     over = []
     if limits["stateEntries"] is not None and entries > limits["stateEntries"]:
         over.append(f"{entries} entries against a limit of {limits['stateEntries']}")
@@ -463,20 +483,23 @@ def _check_stopped_hooks(oc_root: Path, private: dict[str, Path]) -> tuple[int, 
     if not install_linked(oc_root):
         print("  [WARN] install has not linked this checkout on this machine, so commit hooks are not checked")
         return 0, 0, 1
-    passed = failed = 0
+    passed = failed = skipped = 0
     for name, path in [(oc_root.name, oc_root), *private.items()]:
         if not (path / ".git").exists():
             continue
         why = stopped_hook(path, oc_root, private=path != oc_root)
         if why:
             fix = repo_gates.fix_command(path) if path == oc_root else "olivercode sync-hooks --commit --story N"
-            print(f"  [FAIL] {name}: {why}. Fix: {fix}")
-            failed += 1
+            # Git runs the files on disk, so current hooks that are only uncommitted still run every gate.
+            current = path != oc_root and not repo_gates.hook_problems(path, repo_gates.hook_templates(oc_root), True, committed=False)
+            print(f"  [{'WARN' if current else 'FAIL'}] {name}: {why}. Fix: {fix}")
+            skipped += current
+            failed += not current
         else:
             passed += 1
     if passed and not failed:
         print(f"  [OK] git runs the gates in {passed} repo(s)")
-    return passed, failed, 0
+    return passed, failed, skipped
 
 
 def _check_python() -> tuple[int, int, int]:

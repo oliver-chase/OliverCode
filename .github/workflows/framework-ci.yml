@@ -24,10 +24,8 @@ jobs:
           # silently rejects a ref fetched from a shallow one, leaving its sandbox clone empty (#1479).
           fetch-depth: 0
 
-      - name: Health check
-        run: python3 scripts/olivercode health
-
-      # validate.sh covers the pre-commit gates, gate incident records, reference
+      # Health checks this machine's setup (hooks path, links, jobs), which a fresh runner never has, so CI runs
+      # validation only. validate.sh covers the pre-commit gates, gate incident records, reference
       # integrity, bloat, code quality and the smoke tests.
       - name: Validate gates over the whole tree
         run: bash scripts/validate.sh --tree

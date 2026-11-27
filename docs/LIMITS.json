@@ -1,5 +1,5 @@
 {
-  "_comment": "The tracked-line ceiling outside tests (limit): `olivercode limits check` prints the count against it, warns when over and never blocks. The state keys cap the OliverCode home (#997): `olivercode health` fails over stateEntries or stateBytes, and `maintain --fix` cuts each log over stateLogBytes to that size. Edit any number by hand to accept growth (scripts/lib/limits.py, scripts/lib/health_checks.py).",
+  "_comment": "The tracked-line ceiling outside tests (limit): `olivercode limits check` prints the count against it, warns when over and never blocks. The state keys cap the OliverCode home (#997): `olivercode health` fails over stateEntries or stateBytes (bytes outside backups), and `maintain --fix` cuts each log over stateLogBytes to that size. Edit any number by hand to accept growth (scripts/lib/limits.py, scripts/lib/health_checks.py).",
   "limit": 35132,
   "stateEntries": 80,
   "stateBytes": 52428800,

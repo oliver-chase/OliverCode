@@ -102,7 +102,7 @@ def _committed_bytes(repo_root: Path, installed: Path, filename: str) -> bytes:
     return installed.read_bytes()
 
 
-def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> list[str]:
+def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool, committed: bool = True) -> list[str]:
     """Return human-readable problems with a repo's live hooks, or [] when they match.
 
     `repo_gates.gate_problem` first catches every state where git runs none of the repo's
@@ -110,6 +110,7 @@ def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> l
     missing, or a pre-commit that is not executable. The live pre-commit must then match
     the one template this repo's variant names, so a public repo running the weaker private
     hook fails. pre-push and commit-msg must match their templates too, because sync-hooks deploys them.
+    With `committed` off, only the files git runs are compared, whatever HEAD holds.
     """
     gate = gate_problem(repo_root)
     if gate:
@@ -127,9 +128,9 @@ def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool) -> l
             problems.append(f"no {filename} in {hooks_dir}")
         elif not os.access(installed, os.X_OK):
             problems.append(f"{installed} is not executable, so git skips it")
-        elif _tracked(repo_root, filename) and _git(repo_root, "status", "--porcelain", "--", f".githooks/{filename}").stdout.strip():
+        elif committed and _tracked(repo_root, filename) and _git(repo_root, "status", "--porcelain", "--", f".githooks/{filename}").stdout.strip():
             problems.append(f"{filename} is tracked but differs from HEAD, so it is hand-edited or uncommitted")
-        elif _committed_bytes(repo_root, installed, filename) != canonical.read_bytes():
+        elif (_committed_bytes(repo_root, installed, filename) if committed else installed.read_bytes()) != canonical.read_bytes():
             problems.append(f"{filename} diverges from the {template} template")
 
     return problems
