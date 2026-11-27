@@ -246,7 +246,7 @@ BUG_BRIEF = ("You are a fresh reader of one failure OliverCode found. Read it ag
              "already covers it), or NOT A BUG. A feature, cleanup, refactor or new gate is NOT A BUG. For BUG or REGRESSION write the story after the first line: a line `Title: <short title>`, "
              "then `**As the owner**, I want ..., so that ...`, a gherkin block, `Root cause: <file and line>`, the smallest change that fixes the cause (removing or reusing code before adding any), "
              "`Existing coverage checked: <what you searched>`, `Size: XS|S|M|L|XL. Work type: Story.` and `Files area: <files, not folders>`. Leave out the Epic, Blocked by and Priority lines, "
-             "which the runner adds. For the other answers give one sentence why.\n\n{task}{diff}{tail}")
+             "which the runner adds. For the other answers give one sentence why. " + agent_loop.VERDICT_FIRST + "\n\n{task}{diff}{tail}")
 
 
 def seen_path() -> Path:
@@ -300,12 +300,11 @@ def ci_candidate(slug: str, gh, branch: str = "staging") -> dict | None:
 
 
 def parse(text: str) -> tuple[str, str]:
-    """(answer, rest) from the reader's reply: 'bug', 'regression', 'covered #N' or 'not a bug', and the text after the first line."""
-    first, _, rest = text.strip().partition("\n")
-    word = re.sub(r"[^a-z0-9# ]", "", first.lower()).strip()
-    if word.startswith("covered") and (m := re.search(r"#\d+", first)):
-        return "covered " + m.group(0), rest.strip()
-    return next((a for a in ("bug", "regression") if word.startswith(a)), "not a bug"), rest.strip()
+    """(answer, rest) from the reader's reply: 'bug', 'regression', 'covered #N' or 'not a bug', and the text after the verdict line."""
+    word, rest = agent_loop.verdict_line(text, r"bug|regression|covered\b[^#]*#\d+|not a bug")
+    if word.startswith("covered"):
+        return "covered " + re.search(r"#\d+", word).group(0), rest
+    return next((a for a in ("bug", "regression") if word.startswith(a)), "not a bug"), rest
 
 
 def story_text(rest: str, candidate: dict, epic: int) -> tuple[str, str]:

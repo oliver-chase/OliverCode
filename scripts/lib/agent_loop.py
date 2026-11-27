@@ -35,8 +35,10 @@ RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", 
 RISKY_DIRS = ("core/hooks", "scripts/hooks")
 SYSTEM = ("When you wait for a result, end your turn and never poll: every wait re-reads the whole context. Before you commit, run every test file that imports a module you changed and fix any failure. Commit by explicit path and stop: the runner runs the repo's validation and lands the commit, so run neither. A refused call says why: "
           "change your approach and never look for a way around a gate. End with one short summary.")
+VERDICT_FIRST = "Your verdict is the first line of your reply, with no progress note before it."
+TAKEN_BACK = re.compile(r"\bI (?:cannot|can not|can['’]t|won['’]t|will not|don['’]t|do not) (?:pass|give (?:it |this )?(?:a )?pass)\b|\bPASS is not the verdict\b", re.I)
 READER_SYSTEM = ("You are a fresh reader of one story's commit. You check the story, the diff and the test output you are given, answer as the brief asks, "
-                 "and change nothing. Read or search the worktree only to settle a point the diff alone cannot.")
+                 "and change nothing. Read or search the worktree only to settle a point the diff alone cannot. " + VERDICT_FIRST)
 READER_TOOLS = "Read,Grep,Glob"  # read-only, so the reader can open the file a diff calls into (#1079)
 READER_TURNS = 10  # enough for a few lookups and the answer; a one-turn reader could never open a file (#1079)
 
@@ -213,7 +215,7 @@ def reader_for(builder: str) -> str:
 REVIEW_BRIEF = ("You are a fresh reader. You get the story, the diff and the test output below, and you may read and search the worktree. Check that the diff does what the "
                 "story's scenarios say and breaks nothing. When the diff alone cannot settle a point, such as whether a helper it calls exists, open the file and check: a "
                 "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. Answer PASS on the first line "
-                "when it does. Otherwise list each finding on its own line with the file and what is wrong.\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
+                "when it does. Otherwise list each finding on its own line with the file and what is wrong. " + VERDICT_FIRST + "\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
 FIX_BRIEF = ("You are a new session, not the story's builder. A fresh reader checked the story's commit and reports the findings below. Fix every finding "
@@ -225,9 +227,20 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
     return FIX_BRIEF.format(task=task, diff=branch_diff(cwd), finding=finding)
 
 
+def verdict_line(text: str, answers: str) -> tuple[str, str]:
+    """(the verdict line, the text after it) of a reader's reply, or ('', '') when it gives none (#1477). The verdict opens the first line, or is the whole
+    second line after one line of progress note. `answers` is a regex of the verdicts, matched in lower case with each run of markdown and punctuation read as one space."""
+    lines = text.strip().splitlines()
+    for k, i in enumerate([i for i, line in enumerate(lines) if line.strip()][:2]):
+        word = re.sub(r"[^a-z0-9#]+", " ", lines[i].lower()).strip()
+        if (re.fullmatch if k else re.match)(rf"(?:{answers})\b", word):
+            return word, "\n".join(lines[i + 1:]).strip()
+    return "", ""
+
+
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
            max_turns: int = READER_TURNS, attempts: int = 2, brief: str = REVIEW_BRIEF) -> dict:
-    """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
+    """One fresh headless reader on the diff, the story and the test output (#891). Only a PASS verdict that the reply never takes back passes (#1015, #1477).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
     `brief` swaps the question: bug intake asks about a failure, not a diff (#1371).
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
@@ -242,7 +255,7 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
         else:
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
-                verdict = "pass" if re.match(r"PASS\b", text, re.I) else "findings"
+                verdict = "pass" if verdict_line(text, "pass")[0] and not TAKEN_BACK.search(text) else "findings"
                 log_round(f"{session}-review", 1, model_name, reply)
                 log_review(session, verdict, text)
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))

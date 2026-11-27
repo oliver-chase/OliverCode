@@ -403,12 +403,28 @@ class TestLoop(unittest.TestCase):
         out = self.loop(run, [(True, "")])
         self.assertEqual((True, 2), (out["done"], len(run.prompts)))
 
-    def test_only_a_reply_whose_first_word_is_pass_passes(self):
+    def test_only_a_pass_verdict_passes(self):
         for text, verdict in (("PASS", "pass"), ("PASS, the diff does what the story says.", "pass"), ("PASSING concerns", "findings"),
+                              ("PASS—the diff does what the story says.", "pass"), ("**PASS**—notes", "pass"),
                               ("Passing is not a verdict", "findings"), ("scripts/a.py: wrong", "findings")):
             with self.subTest(text=text):
                 out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
                 self.assertEqual(verdict, out["verdict"])
+
+    def test_a_pass_after_a_progress_note_passes_unless_the_reply_takes_it_back(self):  # #1477
+        note = "Still reviewing: I've checked the callers and I'm about to give the verdict."
+        for text, verdict in ((f"{note}\n\nPASS\n\n- notes", "pass"), (f"{note}\n**PASS**", "pass"), ("**PASS**", "pass"),
+                              ("PASS\n\nI can't pass it because one scenario is unmet.", "findings"),
+                              (f"{note}\n\nPASS\n\nOn reflection I can’t pass it because one scenario is unmet.", "findings"),
+                              (f"{note}\n\nPASS is not the verdict here.", "findings"), (f"{note}\n\n- a.py: wrong\n\nPASS", "findings")):
+            with self.subTest(text=text):
+                out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
+                self.assertEqual(verdict, out["verdict"])
+
+    def test_the_reader_briefs_ask_for_the_verdict_before_any_progress_note(self):  # #1477
+        from lib import intake
+        for text in (agent_loop.REVIEW_BRIEF, intake.BUG_BRIEF, agent_loop.READER_SYSTEM):
+            self.assertIn("first line of your reply, with no progress note before it", text)
 
     def test_a_brief_swaps_the_question_and_skips_the_diff_it_does_not_name(self):
         run = Scripted(reply("BUG\nroot cause"))

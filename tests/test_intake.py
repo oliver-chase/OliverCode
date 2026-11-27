@@ -143,6 +143,19 @@ class TestBugIntake(unittest.TestCase):
         self.assertEqual(0, self.run_bugs("NOT A BUG\nIt is a feature."))
         self.assertEqual("not a bug", json.loads((self.home / "bug-seen.json").read_text())["seen"][intake.signature("drain", "Close refused: no commit")]["verdict"])
 
+    def test_a_bug_after_a_progress_note_is_filed(self):  # #1477
+        self.run_bugs("")
+        self.stop("Close refused: no commit")
+        self.assertEqual(1, self.run_bugs("I've opened the files and I'm about to answer.\n\nBUG\n" + BODY))
+        self.assertEqual("bug", json.loads((self.home / "bug-seen.json").read_text())["seen"][intake.signature("drain", "Close refused: no commit")]["verdict"])
+
+    def test_each_answer_is_read_on_the_first_line_or_after_one_line_of_note(self):  # #1477
+        for text, answer in (("BUG\nx", "bug"), ("Checked.\n**REGRESSION**\nx", "regression"), ("Checked.\nCOVERED #12\nx", "covered #12"),
+                             ("COVERED by #12: it does.", "covered #12"), ("NOT A BUG. A feature.", "not a bug"), ("Checked.\nNOT A BUG\nx", "not a bug"),
+                             ("BUG—the close fails", "bug"), ("**REGRESSION**—it broke", "regression"), ("COVERED—#12", "covered #12")):
+            with self.subTest(text=text):
+                self.assertEqual(answer, intake.parse(text)[0])
+
     def test_a_covered_failure_comments_on_the_open_story(self):
         self.run_bugs("")
         self.stop("Close refused: no commit")
