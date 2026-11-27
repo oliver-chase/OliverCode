@@ -86,7 +86,8 @@ def live_claims(now: float) -> dict:
 def runner_alive() -> bool:
     """True when a drain or dispatch process runs on this machine, read from the process table. No model call (#987)."""
     try:
-        return subprocess.run(["pgrep", "-f", "olivercode (drain|dispatch)"], capture_output=True).returncode == 0
+        # -a: on macOS a plain pgrep skips its caller's ancestors, so a drain rewriting City never finds itself (#1379)
+        return subprocess.run(["pgrep", "-fa", "olivercode (drain|dispatch)"], capture_output=True).returncode == 0
     except OSError:
         return False
 

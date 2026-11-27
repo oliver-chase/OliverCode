@@ -344,5 +344,20 @@ class TestDigest(unittest.TestCase):
             self.assertEqual([], cmd_status.run_log())
 
 
+class TestRunnerAlive(unittest.TestCase):
+    def test_the_process_table_is_read_with_pgrep_full_command_so_the_caller_can_see_itself(self):
+        with mock.patch.object(cmd_status.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
+            self.assertTrue(cmd_status.runner_alive())
+        self.assertEqual(["pgrep", "-fa", "olivercode (drain|dispatch)"], run.call_args.args[0])
+
+    def test_no_drain_or_dispatch_process_reads_as_not_alive(self):
+        with mock.patch.object(cmd_status.subprocess, "run", return_value=mock.Mock(returncode=1)):
+            self.assertFalse(cmd_status.runner_alive())
+
+    def test_a_missing_pgrep_reads_as_not_alive(self):
+        with mock.patch.object(cmd_status.subprocess, "run", side_effect=OSError):
+            self.assertFalse(cmd_status.runner_alive())
+
+
 if __name__ == "__main__":
     unittest.main()
