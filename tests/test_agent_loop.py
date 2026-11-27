@@ -288,13 +288,24 @@ class TestLoop(unittest.TestCase):
             self.addCleanup(agent_loop.STORY_SIZE.pop, key, None)
             self.addCleanup(agent_loop.SPEND.pop, key, None)
         agent_loop.STORY_SIZE["s1"] = "XS"
-        costly = {**reply(), "cost_usd": 0.30}
+        costly = {**reply(), "cost_usd": 0.60}
         agent = Scripted(costly, costly)
         out = self.loop(agent, [(False, "fail"), (False, "fail")], rounds=3)
-        self.assertEqual(2, len(agent.prompts))  # $0.30 is under $0.50, so the fix round ran
-        self.assertTrue(out["capped"])  # $0.60 has reached it
-        self.assertIn("$0.60", out["reason"])
-        self.assertIn("$0.50", out["reason"])
+        self.assertEqual(2, len(agent.prompts))  # $0.60 is under $1.00, so the fix round ran
+        self.assertTrue(out["capped"])  # $1.20 has reached it
+        self.assertIn("$1.20", out["reason"])
+        self.assertIn("$1.00", out["reason"])
+
+    def test_an_s_story_under_its_ceiling_fixes_and_an_m_story_past_its_ceiling_stops(self):  # #1491
+        self.assertEqual({"XS": 1.00, "S": 2.00, "M": 4.00}, agent_loop.COST_CEILING)
+        self.addCleanup(agent_loop.STORY_SIZE.pop, "s1", None)
+        self.addCleanup(agent_loop.SPEND.pop, "s1", None)
+        for size, spent, rounds in (("S", 1.58, 1), ("M", 4.60, 0)):
+            with self.subTest(size=size):
+                agent_loop.STORY_SIZE["s1"], agent_loop.SPEND["s1"] = size, spent
+                agent = Scripted(reply())
+                out = self.loop(agent, [(False, "fail")], rounds=1)
+                self.assertEqual((rounds, rounds == 0), (len(agent.prompts), bool(out.get("capped"))))
 
     def test_the_model_follows_the_size_and_only_a_design_label_takes_the_largest(self):
         self.assertEqual(["haiku", "haiku", "sonnet", "sonnet", "opus"],

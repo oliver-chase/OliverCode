@@ -174,7 +174,7 @@ class TestCity(unittest.TestCase):
         stories = [{"status": "In progress", "size": "S", "priority": "P0", "content": {"number": 7, "title": "A story", "repository": "o/r"}}]
         page = self.live(log, {"o/r#7": {"agent": "sonnet", "at": NOW.timestamp() - 600}}, stories)
         for part in ('id="live"', "#7", "A story", '<li class="now">Validating</li>', "2 minutes in validating, 10 minutes in all", "Sonnet, round 1. Chosen because size S.",
-                     "$0.33 of the $1.00 S limit, review included", "width:33%", "70 written to cache, 900 read from cache", ">S</span>", ">P0</span>"):
+                     "$0.33 of the $2.00 S limit, review included", "width:16%", "70 written to cache, 900 read from cache", ">S</span>", ">P0</span>"):
             self.assertIn(part, page)
 
     def test_a_builder_card_says_what_the_files_do_not_hold(self):
@@ -253,7 +253,7 @@ class TestCity(unittest.TestCase):
         log = self.today_log()
         section = self.today_section(city.render(data(log=log, landed=cmd_status.landed_today(log, NOW.timestamp()))))
         for question, word, evidence in (("Is it working?", "Idle", "No drain is running"), ("Is it shipping?", "Yes", "1 landed today and 1 in the last 7 days."),
-                                         ("Is it worth the cost?", "Yes", "$0.50 a landed story against the $2.00 M limit"), ("Does it need me?", "No", "Nothing waits on you.")):
+                                         ("Is it worth the cost?", "Yes", "$0.50 a landed story against the $4.00 M limit"), ("Does it need me?", "No", "Nothing waits on you.")):
             self.assertIn(f'<span class="q">{question}</span><span class="a">{word}</span>', section)
             self.assertIn(evidence, section)
 

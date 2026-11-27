@@ -41,7 +41,7 @@ class TestCityCost(unittest.TestCase):
 
     def test_the_size_lanes_show_median_highest_and_the_limit_mark(self):
         page = city_cost.render({"log": LOG})
-        for part in ("XS highest story used 40% of its limit", "S highest story used 40% of its limit", 'aria-label="XS: median $0.20, highest $0.20, limit $0.50"',
+        for part in ("XS highest story used 20% of its limit", "S highest story used 20% of its limit", 'aria-label="XS: median $0.20, highest $0.20, limit $1.00"',
                      'class="lim"', "Median", "Highest", "Limit"):
             self.assertIn(part, page)
 
