@@ -159,7 +159,6 @@ def _schedule_replay() -> None:
 
 
 REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep", "lessons"))
-REMOVED_PAGES = (".olivercode/city.html",)
 
 
 def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[str]:
@@ -223,28 +222,13 @@ def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run, sta
     return _boot_out(folder, [label for label in labels if not (stale_only and label in defined)], run)
 
 
-def retire_removed_pages(home: Path | None = None) -> list[str]:
-    """Delete the pages that removed commands wrote under the home folder. Returns the paths it removed, relative to home."""
-    folder = home or Path.home()
-    gone = []
-    for rel in REMOVED_PAGES:
-        page = folder / rel
-        if not page.is_file():
-            continue
-        page.unlink()
-        print(f"  [PAGE] removed {rel}, which a removed command wrote")
-        gone.append(rel)
-    return gone
-
-
 def _retire_removed_jobs(oc_root: Path) -> None:
-    """Remove the jobs and pages of removed commands, and any other job of this checkout the code no longer defines, under the same real-home rule as the replay job."""
+    """Remove the jobs of removed commands, and any other job of this checkout the code no longer defines, under the same real-home rule as the replay job."""
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
     retire_removed_jobs()
     remove_jobs(oc_root, stale_only=True)
-    retire_removed_pages()
 
 
 def owner_terminal() -> bool:

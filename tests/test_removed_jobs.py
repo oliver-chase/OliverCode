@@ -70,24 +70,14 @@ class TestRemovedJobs(unittest.TestCase):
     def test_a_second_run_finds_nothing_to_remove(self):
         self.assertEqual([], cmd_install.retire_removed_jobs(self.home, run=mock.Mock()))
 
-    def test_an_installed_page_of_a_removed_command_is_deleted_and_a_second_run_finds_nothing(self):
-        page = self.home / ".olivercode" / "city.html"
-        page.parent.mkdir()
-        page.write_text("<html/>")
-        self.assertEqual([".olivercode/city.html"], cmd_install.retire_removed_pages(self.home))
-        self.assertFalse(page.exists())
-        self.assertEqual([], cmd_install.retire_removed_pages(self.home))
-
     def test_install_runs_the_removal(self):
         with mock.patch.object(cmd_install, "retire_removed_jobs") as retired, \
                 mock.patch.object(cmd_install, "remove_jobs") as stale, \
-                mock.patch.object(cmd_install, "retire_removed_pages") as pages, \
                 mock.patch.object(cmd_install.sys, "platform", "darwin"), \
                 mock.patch.object(cmd_install.pwd, "getpwuid", return_value=mock.Mock(pw_dir=str(cmd_install.Path.home()))):
             cmd_install._retire_removed_jobs(cmd_install.Path('/oc'))
         retired.assert_called_once_with()
         stale.assert_called_once_with(cmd_install.Path('/oc'), stale_only=True)
-        pages.assert_called_once_with()
 
     def test_the_help_lists_no_city_command(self):
         done = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "olivercode"), "--help"], capture_output=True, text=True)
