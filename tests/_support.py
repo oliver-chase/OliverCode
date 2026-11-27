@@ -1,13 +1,14 @@
 """Helpers the tests share: loading a script as a module and building scratch git repos.
 
-Importing this module sets GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1 and OLIVERCODE_LOCAL_CONFIG=/dev/null and a temporary HOME for the whole
-test process. A machine's global git config (a signing key, a commit template, a `core.hooksPath`,
+Importing this module sets GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1, a temporary HOME and an empty
+repo root for the whole test process (its local config names that root, so no test walks real folders). A machine's global git config (a signing key, a commit template, a `core.hooksPath`,
 a different default branch) would otherwise change what a scratch repo does, and a test could pass
 or fail because of the machine and not the code.
 """
 
 import atexit
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -18,15 +19,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
-# olivercode.local.json lists this machine's real repos, and a command that reaches them
-# (sync-hooks, health) would write there. Pointing the config at /dev/null keeps every test on scratch paths.
-os.environ["OLIVERCODE_LOCAL_CONFIG"] = os.devnull
-
-os.environ.update(ISOLATION)
-# repo_state asks GitHub whether a repo is archived; no test reaches the network, so a test that wants an answer injects one.
-os.environ["OLIVERCODE_ARCHIVED"] = "off"
-os.environ["OLIVERCODE_NO_BACKGROUND"] = "1"
-os.environ["OLIVERCODE_NO_STARTUP_CHECK"] = "1"  # manager check skips the start-up checklist (#726); its own tests unset this
 
 # The suite runs with a throwaway HOME, so no test can back up, relink or rewrite the owner's
 # real ~/.claude. A test that needs a home of its own still sets one.
@@ -36,6 +28,21 @@ atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
 os.environ["HOME"] = TEST_HOME
 # uninstall moves the OliverCode home to the Trash, so no test may reach the owner's real one.
 os.environ["OLIVERCODE_HOME"] = os.path.join(TEST_HOME, ".olivercode")
+
+# olivercode.local.json lists this machine's real repos, and a command that reaches them
+# (sync-hooks, health) would write there. The config names an empty repo root instead, so placement.config()
+# and placement.checkouts() read a folder the harness made, whatever folder the checkout sits in (#1435).
+TEST_REPO_ROOT = Path(TEST_HOME) / "repos"
+TEST_REPO_ROOT.mkdir()
+TEST_LOCAL_CONFIG = Path(TEST_HOME) / "olivercode.local.json"
+TEST_LOCAL_CONFIG.write_text(json.dumps({"repoRoot": str(TEST_REPO_ROOT), "watchRoots": [str(TEST_REPO_ROOT)]}))
+os.environ["OLIVERCODE_LOCAL_CONFIG"] = str(TEST_LOCAL_CONFIG)
+
+os.environ.update(ISOLATION)
+# repo_state asks GitHub whether a repo is archived; no test reaches the network, so a test that wants an answer injects one.
+os.environ["OLIVERCODE_ARCHIVED"] = "off"
+os.environ["OLIVERCODE_NO_BACKGROUND"] = "1"
+os.environ["OLIVERCODE_NO_STARTUP_CHECK"] = "1"  # manager check skips the start-up checklist (#726); its own tests unset this
 
 # No test reaches the real gh, claude or osascript (#1271). A guard directory comes first on PATH, and each guard
 # names the call on stderr and exits 97. A test that needs one puts its own fake ahead of this directory.

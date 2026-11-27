@@ -59,7 +59,7 @@ class TestCommandSyncHooks(ScratchHome):
 
     def test_with_the_harness_config_it_touches_nothing_outside_the_temp_dir(self):
         """No fixture config: the machine's olivercode.local.json must not reach the run."""
-        self.assertEqual(os.environ["OLIVERCODE_LOCAL_CONFIG"], os.devnull)
+        self.assertEqual([], os.listdir(local_config.load_local()["repoRoot"]))
         self.assertEqual({}, cmd_fleet._private_repos())
         scratch_repo(self.fleet / "alpha")
         code, out = quiet(launcher.command_sync_hooks, self.oc)
