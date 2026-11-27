@@ -9,7 +9,6 @@ parsed command words, so a quoted path or a comment names no target. Fails open 
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -67,25 +66,3 @@ def reason(data: dict) -> str:
     if any(AUTO_MEMORY.search(t.replace("\\", "/")) for t in targets):
         return REFUSAL
     return REFUSAL if RULE.search(text) else ""
-
-
-def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-        why = reason(data) if isinstance(data, dict) else ""
-    except Exception as exc:  # noqa: BLE001 -- fail open
-        print(f"memory_guard: skipped, {exc}", file=sys.stderr)
-        return 0
-    if why:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                 "permissionDecision": "deny",
-                                                 "permissionDecisionReason": why}}))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception as exc:  # noqa: BLE001 -- fail open
-        print(f"memory_guard: skipped, {exc}", file=sys.stderr)
-        raise SystemExit(0)

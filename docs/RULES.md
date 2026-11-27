@@ -71,7 +71,7 @@ Managed files stay byte-identical across repos where `shared/project-bootstrap-m
 | Agent skill | `OliverCode/skills/` for engineering-method and framework-tooling skills, per "Skill placement". Personal and business skills go to `skillsRoot` in `olivercode.local.json`, and product or vendor skills are real untracked directories under `~/.claude/skills/` |
 | Runtime artifact or output | A gitignored directory the repo declares in its `docs/repo-structure-contract.md`. It is generated, never hand-edited and never tracked |
 
-OliverCode's `.gitignore` names `.claude-optimization/memory/`, `.claude-optimization/state/`, `runtime/control-plane/`, `scratch/` and `olivercode.local.json`.
+OliverCode's `.gitignore` names `.claude-optimization/memory/`, `.claude-optimization/state/`, `scratch/` and `olivercode.local.json`.
 
 ## No icons
 
@@ -83,7 +83,7 @@ Every repo separates the public tracked surface (code, documents, templates, val
 
 ## Framework boundary
 
-OliverCode is the shared orchestration framework: standards (`docs/RULES.md`), skills (`skills/`), project templates (`core/templates/project/`), shared manifests (`shared/`), documents (`docs/`), a thin launcher (`scripts/olivercode`) and the commit hooks (`.githooks/`). A clone works standalone. Product repos live at `<fleet-root>/*`, and product-specific documents and workflows stay in each project repo. Per-machine state lives in `runtime/control-plane/`, which is gitignored and never pushed, and OliverCode holds no logs, telemetry, handoff data or project credentials.
+OliverCode is the shared orchestration framework: standards (`docs/RULES.md`), skills (`skills/`), project templates (`core/templates/project/`), shared manifests (`shared/`), documents (`docs/`), a thin launcher (`scripts/olivercode`) and the commit hooks (`.githooks/`). A clone works standalone. Product repos live at `<fleet-root>/*`, and product-specific documents and workflows stay in each project repo. OliverCode holds no logs, telemetry, handoff data or project credentials.
 
 `~/.claude/` is local and per machine. `olivercode install` writes only the `CLAUDE.md`, `VOICE.md` and `DESIGN.md` links, a link per skill, its hook entries in `settings.json`, the install record `.olivercode-install.json` that `uninstall` reads, and a `.pre-olivercode` backup of anything it replaced.
 

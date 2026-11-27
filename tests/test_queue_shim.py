@@ -1,4 +1,4 @@
-"""Install links olivercode onto the PATH and writes no validate-queue file, removing an old one (#1315). Every test runs in a temp HOME."""
+"""Install links olivercode onto the PATH and writes no validate-queue file (#1315). Every test runs in a temp HOME."""
 
 import os
 import unittest
@@ -10,7 +10,6 @@ from _support import REPO_ROOT, load_script, quiet, temp_dir
 launcher = load_script("scripts/olivercode", "olivercode_launcher_shim")
 from lib import cmd_install, cmd_health, queue_shim  # noqa: E402
 
-OLD_SHIM = "#!/bin/sh\nexec python3 /elsewhere/OC/scripts/lib/validate_queue.py \"$@\"\n"
 
 
 class HomeCase(unittest.TestCase):
@@ -33,19 +32,6 @@ class TestInstall(HomeCase):
         self.assertEqual(REPO_ROOT.resolve() / "scripts" / "olivercode", (self.bin / "olivercode").resolve())
         self.assertFalse(self.shim.exists())
         self.assertNotIn("validate-queue", out)
-
-    def test_an_old_shim_is_removed(self):
-        self.bin.mkdir(parents=True)
-        self.shim.write_text(OLD_SHIM)
-        _, out = self.install()
-        self.assertFalse(self.shim.exists())
-        self.assertIn("[REMOVED] ~/.local/bin/validate-queue", out)
-
-    def test_a_file_that_is_not_the_old_shim_is_left_alone(self):
-        self.bin.mkdir(parents=True)
-        self.shim.write_text("my own helper\n")
-        self.install()
-        self.assertEqual("my own helper\n", self.shim.read_text())
 
 
 class TestHealth(HomeCase):

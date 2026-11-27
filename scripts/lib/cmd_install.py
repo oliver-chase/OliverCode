@@ -201,22 +201,7 @@ def _schedule_replay() -> None:
     print("  [JOB] " + ("GitHub replay job loaded" if cmd_ghreplay.schedule(True) == 0 else "GitHub replay job failed; run `olivercode gh-limit --schedule`"))
 
 
-REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep", "lessons", "fleet-sync"))
-
-
-def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[str]:
-    """Unload and delete the launchd jobs of commands the engine no longer has. Returns the labels it removed."""
-    folder = launchd.agents_dir(home)
-    gone = []
-    for label in REMOVED_JOBS:
-        plist = folder / f"{label}.plist"
-        if not plist.is_file():
-            continue
-        run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
-        plist.unlink(missing_ok=True)
-        print(f"  [JOB] removed the job {label}, which has no command any more")
-        gone.append(label)
-    return gone
+REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep", "lessons", "fleet-sync", "issues-page"))
 
 
 def close_fleet_sync_items() -> list[int]:
@@ -281,7 +266,6 @@ def _retire_removed_jobs(oc_root: Path) -> None:
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
-    retire_removed_jobs()
     remove_jobs(oc_root, stale_only=True)
 
 
@@ -567,10 +551,6 @@ def command_install(oc_root: Path) -> int:
                                if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == src.resolve()}, city_added)
 
     broken_settings = False
-    # The validation queue is gone (#1315), so the shim an earlier install wrote goes too.
-    if _queue_shim.remove_old_shim():
-        print("  [REMOVED] ~/.local/bin/validate-queue")
-
     try:
         for line in _queue_shim.install_launcher(oc_root, backups):
             print(line)

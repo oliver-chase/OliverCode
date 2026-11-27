@@ -67,14 +67,6 @@ class TestMemoryGuard(unittest.TestCase):
         self.assertEqual("deny", decision["permissionDecision"])
         self.assertIn("rule into memory", decision["permissionDecisionReason"])
 
-    def test_an_error_fails_open_with_one_stderr_line(self):
-        err = io.StringIO()
-        with mock.patch.object(sys, "stdin", io.StringIO("{not json")), contextlib.redirect_stderr(err), \
-                contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(0, guard.main())
-        self.assertEqual("", out.getvalue())
-        self.assertEqual(1, len(err.getvalue().splitlines()))
-
 
 if __name__ == "__main__":
     unittest.main()

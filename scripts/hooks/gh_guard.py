@@ -7,7 +7,6 @@ the account's budget. `gh api rate_limit` is free and always allowed. Fails open
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
@@ -198,31 +197,3 @@ def hold_only_gh(command: str, why: str) -> str | None:
     stub = f"{{ echo {shlex.quote(why)} >&2; false; }}"
     # A refused step must not stop the git steps after it, so `&&` after a stub becomes `;`.
     return "".join(f"{stub}{';' if sep == '&&' else sep}" if uses_gh(s) else f"{s}{sep}" for s, sep in steps)
-
-
-def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-        why = check(data)
-    except (json.JSONDecodeError, AttributeError) as exc:
-        print(f"gh_guard: unreadable hook input, allowing: {type(exc).__name__}", file=sys.stderr)
-        return 0
-    if why:
-        tool_input = data.get("tool_input") or {}
-        mixed = hold_only_gh(tool_input.get("command") or "", why)
-        if mixed:
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
-                                                     "permissionDecisionReason": why,
-                                                     "updatedInput": {**tool_input, "command": mixed}}}))
-            return 0
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                                 "permissionDecisionReason": why}}))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception as exc:  # noqa: BLE001 -- fail open
-        print(f"gh_guard failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-        raise SystemExit(0)

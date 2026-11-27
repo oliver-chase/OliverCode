@@ -17,7 +17,6 @@ its own bug costs more than the rare case it misses.
 
 from __future__ import annotations
 
-import json
 import shlex
 import sys
 from pathlib import Path
@@ -227,27 +226,3 @@ def reason(command: str, cwd: Path) -> str:
         if problem:
             return f"Refused: {problem}. Fix it, then commit again. See docs/GATES.md, Repo-local hook."
     return ""
-
-
-def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-        command = (data.get("tool_input") or {}).get("command") or ""
-        cwd = Path(data.get("cwd") or ".")
-    except (json.JSONDecodeError, AttributeError):
-        return 0
-    if "commit" not in command:
-        return 0
-    why = reason(command, cwd)
-    if why:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                 "permissionDecision": "deny",
-                                                 "permissionDecisionReason": why}}))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception:  # noqa: BLE001 -- fail open, never block on the hook's own bug
-        raise SystemExit(0)

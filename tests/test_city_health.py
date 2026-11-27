@@ -37,16 +37,6 @@ class HealthTests(unittest.TestCase):
         self.assertIn("Not recorded, because the installed commit", out)
         self.assertIn("Not recorded, because no GitHub reading", page(home))
 
-    def test_hook_firing_age_makes_no_claim_the_hooks_ran(self):
-        home = temp_dir(self)
-        (home / "hook-fires").mkdir()
-        f = home / "hook-fires" / "a.json"
-        f.write_text("{}")
-        os.utime(f, (1795000000, 1795000000))
-        out = page(home)
-        self.assertIn("no longer recorded since", out)
-        self.assertNotIn("hooks ran", out)
-
     def test_three_newest_lessons_show_and_the_rest_fold(self):
         home = temp_dir(self)
         (home / "lessons").mkdir()

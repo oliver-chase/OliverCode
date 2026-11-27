@@ -187,20 +187,7 @@ def version() -> str:
     return row(f"Version: installed {installed}, staging {staging}: {state}.")
 
 
-def hook_newest() -> float | None:
-    try:
-        return max(p.stat().st_mtime for p in (failure_log.home() / "hook-fires").iterdir())
-    except (OSError, ValueError):
-        return None
-
-
-def hooks(newest: float | None) -> str:
-    if newest is None:
-        return row("Hook firing is not recorded.")
-    return row(f"Hook firing is no longer recorded since {local_config.local_time(newest, '%d %b')}.")
-
-
-def lead(github: dict | None, newest: float | None) -> str:
+def lead(github: dict | None) -> str:
     runs_ = (github or {}).get("checks")
     if runs_ is None:
         first = "The checks on main are not recorded."
@@ -211,20 +198,18 @@ def lead(github: dict | None, newest: float | None) -> str:
         first = f"{count} failing check{'s' if count != 1 else ''} on main."
     else:
         first = f"All {len(runs_)} checks on main pass."
-    if newest is None:
-        return first
-    return f"{first} Hook firing is no longer recorded since {local_config.local_time(newest, '%d %b')}, so the page cannot confirm the guards ran since then."
+    return first
 
 
 def render(data: dict) -> str:
     """The Health section as HTML, from the page's figures in DATA, in the mockup's markup and classes (docs/city/Main.dc.html)."""
-    github, found, newest = data.get("github"), runs(), hook_newest()
+    github, found = data.get("github"), runs()
     entries = failure_log.entries()
     tiles = checks_tile(github) + queue_tile(found) + gates_tile(entries)
     gates = card("Gate blocks", gate_bars(entries) + '<h3 style="padding-top:12px">Recent refusals</h3>' + refusal_rows(entries))
     suite = card("Test suite", test_suite(found) + slowest() + '<h3 style="padding-top:12px">Lessons</h3>' + lessons())
-    records = f'<div class="card" style="grid-column:1/-1"><h3>Records</h3><div>{hooks(newest)}{version()}</div></div>'
+    records = f'<div class="card" style="grid-column:1/-1"><h3>Records</h3><div>{version()}</div></div>'
     return ('<section class="chap" id="health" aria-labelledby="h0"><h2 id="h0">Health</h2>'
-            f'<p class="read">{esc(lead(github, newest))}</p>'
+            f'<p class="read">{esc(lead(github))}</p>'
             f'<div class="tiles">{tiles}</div>'
             f'<div class="grid2">{gates}{suite}{records}</div></section>')

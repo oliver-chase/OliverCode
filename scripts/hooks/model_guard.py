@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 
 AGENT_TOOLS = {"Agent", "Task"}
@@ -56,19 +55,3 @@ def reason(data: dict) -> str:
         return ""
     return (f"Delegated work runs on Sonnet unless the owner names {model}. Start the subagent on Sonnet, or leave the model "
             "out. See docs/RULES.md, Execution.")
-
-
-def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-        why = reason(data) if isinstance(data, dict) else ""
-    except Exception as exc:  # noqa: BLE001 -- fail open
-        print(f"model_guard: {exc}", file=sys.stderr)
-        return 0
-    if why:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": why}}))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -9,7 +9,6 @@ look up, because a guard that blocks a legitimate command on its own bug costs m
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -31,25 +30,3 @@ def reason(command: str, cwd: Path, runner=None) -> str:
             return (f"Refused: {root.name} is {state} on GitHub, so its work cannot leave this machine. Do not commit, push or change "
                     "anything in this repo. See docs/RULES.md, Execution.")
     return ""
-
-
-def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-        command = (data.get("tool_input") or {}).get("command") or ""
-        cwd = Path(data.get("cwd") or ".")
-    except (json.JSONDecodeError, AttributeError):
-        return 0
-    why = reason(command, cwd)
-    if why:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                 "permissionDecision": "deny",
-                                                 "permissionDecisionReason": why}}))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception:  # noqa: BLE001 -- fail open, never block on the hook's own bug
-        raise SystemExit(0)

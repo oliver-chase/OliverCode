@@ -141,7 +141,6 @@ Hooks enforce the rules that must block work. The standards and skills guide the
 | `docs/` | Standards and reference documents, including `DESIGN.md` for visual work |
 | `tests/` | Tests for the shipped checks and commands |
 | `olivercode.local.example.json` | The example of this machine's `olivercode.local.json`, which is gitignored |
-| `runtime/control-plane/` | Local control-plane state, gitignored and never pushed |
 | `scratch/` | Local working files, gitignored. The board backups `backlog-setup` writes go to `backlog-backups/` in the repo's git directory |
 
 ## Using OliverCode in your own fork

@@ -48,7 +48,6 @@ def headless_brief(n: int, story: dict, agent: str, worktree=None, extras: str =
                    else "repository validation and commit gates check the commit before it lands")
     model = f"Run on {builder.capitalize()} ({why}), and {review_note}"
     body = (story.get("body") or "").strip()
-    extras = extras.replace(" and validate before the last commit. `olivercode land` then lands the branch and each story is closed.", ". The runner validates and lands the branch and closes each story.")
     text = f"Story #{n}: {story['title']}\n\n{body}\n\n{extras + chr(10) if extras else ''}{HEADLESS_RULES.format(n=n, model=model, agent=agent)}\n"
     if note:
         text += f"\nAn earlier builder stopped here: {note}\nContinue from the work already in this worktree.\n"
@@ -126,8 +125,6 @@ def _parse(argv: list[str]):
             sid, i = argv[i + 1], i + 2
         elif argv[i] == "--dry-run":
             dry, i = True, i + 1
-        elif argv[i] == "--run":  # dispatch always builds headless now; the flag is accepted so older instructions that still name it work
-            i += 1
         elif argv[i].startswith("--"):
             return None
         else:

@@ -112,22 +112,3 @@ class BatchProject(unittest.TestCase):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Nope"}}]}))
         self.assertEqual(2, bp.main(["--config", str(self.cfg), "--input", str(self.input)], err=io.StringIO()))
 
-    def test_archive_closed_archives_only_cards_of_closed_issues_in_batches(self):
-        nodes = [{"id": f"C{i}", "content": {"state": "CLOSED"}} for i in range(20)] + [{"id": "O", "content": {"state": "OPEN"}}]
-        calls = []
-
-        def runner(args):
-            q = args[-1]
-            calls.append(q)
-            if "items(first:100" in q:
-                return subprocess.CompletedProcess(args, 0, json.dumps({"data": {"node": {"items": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": ""}, "nodes": nodes}}}}), "")
-            return subprocess.CompletedProcess(args, 0, json.dumps({"data": {}}), "")
-        out = io.StringIO()
-        self.assertEqual(0, bp.main(["--config", str(self.cfg), "--archive-closed"], runner=runner, out=out))
-        archives = [c for c in calls if "archiveProjectV2Item" in c]
-        self.assertEqual(2, len(archives))  # 20 cards in chunks of fifteen
-        self.assertNotIn('itemId:"O"', "".join(archives))
-        self.assertIn("archived 20", out.getvalue())
-        read = next(c for c in calls if "items(first:100" in c)
-        self.assertEqual(read.count("{"), read.count("}"))  # the real API parses the query, the fake does not

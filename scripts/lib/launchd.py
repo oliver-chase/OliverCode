@@ -92,13 +92,3 @@ def _schedule_without_launchd(on: bool, label: str, build, removed: str) -> int:
     print(f"Scheduling uses launchd, which only macOS has, so the {removed} is not installed. Add this line with `crontab -e`:")
     print(cron_line(build()))
     return 1
-
-
-def command_with_schedule(argv: list[str], usage: str, schedule_job, run) -> int:
-    """The shared body of a command that runs once or installs and removes its daily job."""
-    if argv in (["--schedule"], ["--unschedule"]):
-        return schedule_job(argv == ["--schedule"])
-    if argv:
-        print(usage)
-        return 1
-    return run()

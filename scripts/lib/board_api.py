@@ -93,8 +93,6 @@ FIELDS_QUERY = """query($p:ID!){node(id:$p){... on ProjectV2{id title number
  fields(first:100){nodes{__typename ... on ProjectV2FieldCommon{id name}
  ... on ProjectV2SingleSelectField{options{id name color description}}}}}}}"""
 
-WORKFLOWS_QUERY = """query($p:ID!){node(id:$p){... on ProjectV2{workflows(first:50){nodes{name enabled}}}}}"""
-
 ITEMS_QUERY = """query($p:ID!,$c:String){node(id:$p){... on ProjectV2{items(first:100,after:$c){
  pageInfo{hasNextPage endCursor}
  nodes{id content{__typename ... on Issue{number title} ... on PullRequest{number title} ... on DraftIssue{title}}
@@ -113,17 +111,6 @@ def read_fields(api: Api, project_id: str) -> dict:
         fields.append({"id": f["id"], "name": f["name"], "type": f["__typename"], "options": f.get("options") or []})
     return {"id": node["id"], "title": node["title"], "number": node["number"],
             "owner": (node.get("owner") or {}).get("login", ""), "fields": fields}
-
-
-def read_workflows(api: Api, project_id: str) -> dict[str, bool] | None:
-    """{workflow name: enabled} for a Project, or None when GitHub does not let this account read them."""
-    try:
-        node = api.graphql(WORKFLOWS_QUERY, p=project_id).get("node")
-    except SetupError:
-        return None
-    if not node or "workflows" not in node:
-        return None
-    return {w["name"]: bool(w["enabled"]) for w in node["workflows"]["nodes"] if w}
 
 
 def read_items(api: Api, project_id: str) -> list[dict]:

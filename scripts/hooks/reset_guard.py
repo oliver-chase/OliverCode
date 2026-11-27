@@ -7,7 +7,6 @@ A clean linked worktree holds nothing to lose, so the reset is allowed there. Fa
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -43,25 +42,3 @@ def reason(command: str, cwd: Path) -> str:
         if dirty.returncode == 0 and dirty.stdout.strip():
             return f"Refused: `git reset --hard` in {root.name} would erase uncommitted changes. Commit them or run `git checkout -- FILE`. {RULES_DOC}"
     return ""
-
-
-def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-        command = (data.get("tool_input") or {}).get("command") or ""
-        cwd = Path(data.get("cwd") or ".")
-    except (json.JSONDecodeError, AttributeError):
-        return 0
-    why = reason(command, cwd)
-    if why:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                 "permissionDecision": "deny",
-                                                 "permissionDecisionReason": why}}))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception:  # noqa: BLE001 -- fail open
-        raise SystemExit(0)

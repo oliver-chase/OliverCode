@@ -70,18 +70,6 @@ class TestInstall(HomeCase):
                 cmd_install._schedule_replay()
             sched.assert_called_once_with(True)
 
-    def test_install_unloads_and_deletes_the_idle_sessions_job_the_command_it_ran_is_gone(self):
-        agents = self.tmp / "Library" / "LaunchAgents"
-        agents.mkdir(parents=True)
-        plist = agents / "com.olivercode.idle-sessions.plist"
-        plist.write_text("<plist/>", encoding="utf-8")
-        ran = mock.Mock()
-        with contextlib.redirect_stdout(io.StringIO()):
-            gone = cmd_install.retire_removed_jobs(self.tmp, run=ran)
-        self.assertEqual(["com.olivercode.idle-sessions"], gone)
-        self.assertFalse(plist.exists())
-        self.assertEqual("bootout", ran.call_args[0][0][1])
-
     def test_existing_real_claude_md_is_backed_up_not_destroyed(self):
         claude_dir = self.tmp / ".claude"
         claude_dir.mkdir(parents=True)

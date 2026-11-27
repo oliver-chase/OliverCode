@@ -119,11 +119,10 @@ class TestMarkdownLinks(RepoCase):
         self.assertEqual(len(failures), 1)
         self.assertIn("docs/GONE.md", failures[0])  # an anchored link is checked by its file part
 
-    def test_links_into_the_local_runtime_layer_pass_and_archived_docs_are_skipped(self):
+    def test_archived_docs_are_skipped(self):
         (self.repo / "docs" / "archive").mkdir()
         (self.repo / "docs" / "archive" / "OLD.md").write_text("[dead](NOPE.md)\n")
-        checked, failures = self.links("[local](runtime/control-plane/README.md)\n")
-        self.assertEqual((checked, failures), (1, []))
+        self.assertEqual(self.links("[ok](docs/REAL.md)\n"), (1, []))
 
     def test_report_exits_zero_when_clean_and_one_when_a_link_is_broken(self):
         self.links("[ok](docs/REAL.md)\n")

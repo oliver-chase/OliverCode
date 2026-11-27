@@ -334,15 +334,12 @@ def check_tidy(cfg: placement.Config, fix: bool, ps_text: str | None = None, tas
     return found
 
 
-RETIRED_JOBS = ("issues-page", "idle-sessions")  # without the com.olivercode. prefix, so the story-close check does not read them as live jobs
-
-
 def check_retired_jobs(fix: bool, agents: Path | None = None) -> list[Problem]:
     """A launchd job whose command no longer exists fails every run, and removing its plist loses nothing."""
+    from lib.cmd_install import REMOVED_JOBS
     agents = agents or launchd.agents_dir()
     found = []
-    for label in RETIRED_JOBS:
-        label = f"com.olivercode.{label}"
+    for label in REMOVED_JOBS:
         plist = agents / f"{label}.plist"
         if not plist.exists():
             continue
@@ -615,10 +612,6 @@ def plist() -> dict:
         "StandardOutPath": str(failure_log.home() / "maintain.out"),
         "StandardErrorPath": str(failure_log.home() / "maintain.out"),
     }
-
-
-def _agent_path() -> Path:
-    return launchd.plist_path(LABEL)
 
 
 def schedule(on: bool) -> int:

@@ -9,7 +9,6 @@ a guard that blocks a legitimate action on its own bug costs more than the case 
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -38,24 +37,3 @@ def decide(data: dict) -> tuple[policy.Decision | None, str]:
         return policy.evaluate_path(rules, root, file_path), root.name
     command = tool_input.get("command") or ""
     return (policy.evaluate_bash(rules, command, root.name, root) if command else None), root.name
-
-
-def main() -> int:
-    try:
-        data = json.load(sys.stdin)
-        decision, repo = decide(data)
-    except (json.JSONDecodeError, AttributeError, OSError):
-        return 0
-    if decision:
-        policy.log_block(decision, repo)
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                 "permissionDecision": decision.kind,
-                                                 "permissionDecisionReason": decision.reason}}))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception:  # noqa: BLE001 -- fail open
-        raise SystemExit(0)

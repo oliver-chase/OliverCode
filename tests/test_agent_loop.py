@@ -298,17 +298,17 @@ class TestLoop(unittest.TestCase):
 
     def test_the_model_follows_the_size_and_only_a_design_label_takes_the_largest(self):
         self.assertEqual(["haiku", "haiku", "sonnet", "sonnet", "opus"],
-                         [agent_loop.model_for(s) for s in ("XS", "S", "M", "L")] + [agent_loop.model_for("M", [{"name": "design"}])])
+                         [agent_loop.route(s)[0] for s in ("XS", "S", "M", "L")] + [agent_loop.route("M", [{"name": "design"}])[0]])
 
     def test_a_small_story_touching_landing_claims_gates_or_hooks_or_a_p0_starts_on_the_middle_model(self):
         for files, priority in ((["scripts/lib/cmd_land.py"], "P2"), (["scripts/lib/cmd_drain.py"], "P2"), (["scripts/lib/agent_loop.py", "docs/RULES.md"], "P2"),
                                 (["scripts/lib/log_action.py"], "P2"), (["skills/backlog/scripts/complete_story.py"], "P2"), (["core/hooks/guard.py"], "P2"),
                                 (["scripts/hooks/gh_guard.py"], "P2"), ([], "P0")):
             with self.subTest(files=files, priority=priority):
-                self.assertEqual("sonnet", agent_loop.model_for("S", files=files, priority=priority))
+                self.assertEqual("sonnet", agent_loop.route("S", files=files, priority=priority)[0])
 
     def test_a_small_story_touching_only_docs_tests_or_one_command_starts_on_the_smallest_model(self):
-        self.assertEqual("haiku", agent_loop.model_for("XS", files=["docs/RULES.md", "tests/test_cmd_status.py", "scripts/lib/cmd_status.py"], priority="P2"))
+        self.assertEqual("haiku", agent_loop.route("XS", files=["docs/RULES.md", "tests/test_cmd_status.py", "scripts/lib/cmd_status.py"], priority="P2")[0])
 
     def test_only_medium_or_larger_design_p0_or_risky_stories_get_a_fresh_reader(self):
         self.assertEqual("none", agent_loop.review_mode("S", files=["docs/RULES.md"], priority="P2"))

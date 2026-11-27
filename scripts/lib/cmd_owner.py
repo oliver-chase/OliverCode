@@ -155,15 +155,6 @@ def queue_denied(session: str, key: str, step: str, command: str, error: str, re
     return add(session, step, command, error, extra={"key": key, "resolve": resolve})
 
 
-def note(session: str, step: str) -> dict:
-    """A line the owner can read and never has to close: a job's result, queued with status info."""
-    nxt = max((i["id"] for i in _lines()), default=0) + 1
-    item = {"id": nxt, "created": _now().isoformat(timespec="seconds"), "session": session, "step": step,
-            "command": "", "error": "", "status": "info"}
-    _append(item)
-    return item
-
-
 def _show(item: dict) -> str:
     if item.get("tab"):
         return (f"  #{item['id']} {item['step']} (prepared at {item['tab']}: you enter the secret and submit, then the agent {item['after']}"

@@ -87,12 +87,6 @@ def refusal(text: str, names: list[str] | None = None, root: Path = ROOT) -> str
             f'write "{REPLACEMENT}" instead. Reword those lines and try again.')
 
 
-def redact(text: str, names: list[str] | None = None, root: Path = ROOT) -> str:
-    """`text` with each fleet repo name replaced by REPLACEMENT, so a candidate for OliverCode's board keeps its meaning and names no other repo (#978)."""
-    pattern = _pattern(default_names(root) if names is None else names)
-    return text if pattern is None else pattern.sub(REPLACEMENT, text)
-
-
 def _gh_pages(path: str, params: list[str]) -> list[dict] | None:
     done = subprocess.run(["gh", "api", "-X", "GET", path, *params, "-f", "per_page=100", "--paginate", "--slurp"],
                           capture_output=True, text=True, timeout=300)

@@ -129,30 +129,6 @@ def command_health() -> int:
         for line in main_checkout.drift(repo):
             t.warn(line)
 
-    # 2. The optional local control plane (runtime/control-plane/, gitignored). A machine
-    # without one has nothing to check here, so its absence is not counted as a skip.
-    control_plane = OC_ROOT / "runtime" / "control-plane"
-    if not control_plane.exists():
-        print("  [INFO] no local control plane on this machine — not checked")
-    else:
-        if (control_plane / "olivercode").exists():
-            t.ok("runtime/control-plane/olivercode (launcher)")
-        else:
-            t.fail("runtime/control-plane/olivercode — control plane present but launcher missing")
-        dep_file = control_plane / "OLIVERCODE_DEPENDENCY.md"
-        if dep_file.exists():
-            oc_dirs = ("shared/", "core/", "docs/", "scripts/", "tooling/", "runtime/", ".githooks/")
-            text = dep_file.read_text(encoding="utf-8", errors="ignore")
-            declared = [m for m in re.findall(r"`([^`]+)`", text) if m.startswith(oc_dirs)]
-            missing = [rel for rel in declared if not (OC_ROOT / rel).exists()]
-            if not declared:
-                t.warn("no OliverCode-relative dependency paths declared")
-            elif not missing:
-                t.ok(f"all {len(declared)} declared dependency paths resolve")
-            else:
-                for rel in missing:
-                    t.fail(f"{rel} — not found")
-
     # 3. Placement drift (spec: docs/RULES.md "Skill placement").
     # Everything here reads OUTSIDE OC_ROOT (private repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone

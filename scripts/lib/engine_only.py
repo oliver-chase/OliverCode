@@ -58,12 +58,6 @@ def staged_paths(root: Path) -> list[str]:
     return [line for line in out.stdout.splitlines() if line]
 
 
-def checkout_paths(root: Path) -> list[str]:
-    """Tracked files plus untracked files git does not ignore: the files that could reach a commit."""
-    out = subprocess.run(["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard"], capture_output=True, text=True, check=False)
-    return sorted({line for line in out.stdout.splitlines() if line and (root / line).is_file()})
-
-
 def main(argv: list[str]) -> int:
     """The commit gate: refuse the staged files named in ARGV (all staged files when none) that are personal."""
     root = Path.cwd()

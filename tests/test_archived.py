@@ -187,24 +187,20 @@ class TestTheGuard(FakeGh):
         with mock.patch.object(archived_guard.repo_state, "archived", side_effect=RuntimeError("boom")):
             payload = {"tool_input": {"command": f"git -C {self.old} push"}, "cwd": str(self.tmp)}
             self.assertEqual([], pretool.verdicts(payload))
-            with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))):
-                with self.assertRaises(RuntimeError):
-                    archived_guard.main()
 
-    def test_the_combined_hook_and_the_script_alone_both_deny(self):
+    def test_the_hook_denies_an_archived_repo_and_stays_silent_for_a_live_one(self):
         payload = {"tool_name": "Bash", "tool_input": {"command": f"git -C {self.old} push"}, "cwd": str(self.tmp)}
         found = pretool.verdicts(payload)
         self.assertEqual("deny", found[0][0])
         self.assertIn("old-app is archived", found[0][1])
         import subprocess
-        for script in ("archived_guard.py", "pretool_guard.py"):
-            ran = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / script)], input=json.dumps(payload),
-                                 capture_output=True, text=True, env=os.environ.copy())
-            out = json.loads(ran.stdout)["hookSpecificOutput"]
-            self.assertEqual("deny", out["permissionDecision"], script)
-            self.assertIn("archived on GitHub", out["permissionDecisionReason"])
+        ran = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "pretool_guard.py")], input=json.dumps(payload),
+                             capture_output=True, text=True, env=os.environ.copy())
+        out = json.loads(ran.stdout)["hookSpecificOutput"]
+        self.assertEqual("deny", out["permissionDecision"])
+        self.assertIn("archived on GitHub", out["permissionDecisionReason"])
         payload["tool_input"]["command"] = f"git -C {self.live} push"
-        ran = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "archived_guard.py")], input=json.dumps(payload),
+        ran = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "pretool_guard.py")], input=json.dumps(payload),
                              capture_output=True, text=True, env=os.environ.copy())
         self.assertEqual("", ran.stdout)
 

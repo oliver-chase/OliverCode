@@ -14,7 +14,7 @@ from _support import REPO_ROOT, run_hook, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 import gh_budget  # noqa: E402
 
-GUARD = REPO_ROOT / "scripts" / "hooks" / "gh_guard.py"
+GUARD = REPO_ROOT / "scripts" / "hooks" / "pretool_guard.py"
 WATCH = REPO_ROOT / "scripts" / "hooks" / "gh_watch.py"
 
 
@@ -238,10 +238,6 @@ class TestHooks(Isolated):
             out = self.hook(GUARD, {"tool_input": {"command": "gh issue comment 6 -b hi"}})
         self.assertEqual("deny", out["permissionDecision"])
         self.assertIn("writes in the last hour", out["permissionDecisionReason"])
-
-    def test_garbage_input_fails_open(self):
-        done = subprocess.run([sys.executable, str(GUARD)], input="nope", capture_output=True, text=True)
-        self.assertEqual((0, ""), (done.returncode, done.stdout))
 
 
 

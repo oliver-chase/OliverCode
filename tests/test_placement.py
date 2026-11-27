@@ -15,7 +15,7 @@ from _support import REPO_ROOT, git, scratch_repo, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_land, placement, repo_gates  # noqa: E402
 
-GUARD = REPO_ROOT / "scripts" / "hooks" / "placement_guard.py"
+GUARD = REPO_ROOT / "scripts" / "hooks" / "pretool_guard.py"
 
 
 def make_config(root, watch, allow=()):
@@ -344,10 +344,6 @@ class TestGuardScript(unittest.TestCase):
 
     def test_an_unrelated_command_prints_nothing(self):
         self.assertEqual((0, ""), self.run_guard("ls -la", "/tmp"))
-
-    def test_garbage_input_fails_open(self):
-        done = subprocess.run([sys.executable, str(GUARD)], input="not json", capture_output=True, text=True)
-        self.assertEqual((0, ""), (done.returncode, done.stdout))
 
 
 class TestOtherDevice(unittest.TestCase):

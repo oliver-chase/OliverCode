@@ -8,9 +8,8 @@ The gates guard against honest mistakes and careless agents. A commit that rewri
 
 `bash scripts/validate.sh` runs every active check from the repo root:
 
-- With no argument it runs the pre-commit gates, the fleet name check, reference integrity (`scripts/link-check.sh`), the docs check, the size warning (`olivercode limits check`, which never fails the run), the bloat and code quality checks, and the tests
+- With no argument it runs the pre-commit gates, the fleet name check, reference integrity (`scripts/lib/reference_check.py`), the docs check, the size warning (`olivercode limits check`, which never fails the run), the bloat and code quality checks, and the tests
 - `--tree` is the same as no argument, because the pre-commit gates always scan every tracked file; any other unknown option exits 2 and records nothing
-- `--check-consistency` runs the fleet name check only
 - `--rehearse` rehearses the install in sandboxes (`scripts/qa/rehearse-install.sh`)
 - `bash scripts/run-tests.sh` runs the test suite from a clean clone of HEAD under a temporary HOME
 

@@ -98,8 +98,6 @@ class TestDispatch(DispatchCase):
         self.assertEqual((0, ["claim", "build", "land", "close", "release"]), (code, io.steps))
         self.assertIn("Story #77 landed and closed", out)
         self.assertEqual("Fixture story title", io.issue["title"])
-        code, _, io = self.run_dispatch(argv=("77", "--run"))  # the old flag is accepted and changes nothing
-        self.assertEqual((0, ["claim", "build", "land", "close", "release"]), (code, io.steps))
 
     def test_the_story_runs_the_same_work_story_drain_uses(self):
         with mock.patch.object(cmd_drain, "work_story", return_value=(True, 5)) as work:

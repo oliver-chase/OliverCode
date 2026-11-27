@@ -1,6 +1,6 @@
 """Backtick repo-path reference integrity.
 
-The markdown-link half of link-check.sh only sees inline `[text](path.md)` links.
+The markdown-link half only sees inline `[text](path.md)` links.
 This repo's real cross-references are backtick-quoted repo paths, and there are two
 orders of magnitude more of them. A link checker that only reads markdown link
 syntax cannot see a stale path in a backtick.
@@ -46,8 +46,6 @@ PLACEHOLDER_CHARS = set("<>*|$")
 DOWNSTREAM_RELATIVE = frozenset(
     {
         "docs/repo-structure-contract.md",
-        "scripts/validate-repo.sh",
-        "scripts/check-structure-contract.mjs",
         ".githooks/pre-commit-private",
     }
 )
@@ -76,12 +74,9 @@ SKILL_TEST = re.compile(r"^skills/[^/]+/scripts/test_[^/]+\.py$")
 # these must stay exempt or `validate.sh` fails for everyone who forks this repo
 # (verified against a clean clone: memory/ and state/ are created per user, never tracked).
 OPTIONAL_PREFIXES = (
-    "runtime/control-plane/",
-    "runtime/manifests",
     ".claude-optimization/memory/",
     ".claude-optimization/state/",
     "docs/backlog-config.local.json",
-    "shared/repo-profiles.local.json",
 )
 
 
@@ -150,9 +145,8 @@ LINK_ROOTS = ("docs", "core", "shared", "skills", "README.md", "CLAUDE.md")  # e
 
 def check_markdown_links(repo_root: Path) -> tuple[int, list[str]]:
     """(links checked, [failure lines]) for inline markdown links ending in .md, resolved relative to the file that holds them. External and
-    anchor-only links pass, docs/archive is skipped, and links into the gitignored runtime/control-plane/ count as valid."""
+    anchor-only links pass, docs/archive is skipped."""
     root, checked, failures = Path(repo_root), 0, []
-    optional = str(root / "runtime" / "control-plane") + os.sep
     for name in LINK_ROOTS:
         path = root / name
         for file in [path] if path.is_file() else sorted(path.rglob("*.md")) if path.is_dir() else []:
@@ -163,13 +157,13 @@ def check_markdown_links(repo_root: Path) -> tuple[int, list[str]]:
                     continue
                 target = os.path.normpath(file.parent / link)  # normpath works when an intermediate folder is missing
                 checked += 1
-                if not target.startswith(optional) and not os.path.isfile(target):
+                if not os.path.isfile(target):
                     failures.append(f"  [BROKEN] {file.relative_to(root)} → {link} (resolved to {target}, not found)")
     return checked, failures
 
 
 def report(repo_root: Path, quiet: bool = False) -> int:
-    """Run both passes, print what scripts/link-check.sh prints, and return its exit code."""
+    """Run both passes, print the summary, and return its exit code."""
     say = (lambda *_: None) if quiet else print
     say("=== Internal Link Integrity Check ===\n")
     checked, failures = check_markdown_links(repo_root)
@@ -186,3 +180,9 @@ def report(repo_root: Path, quiet: bool = False) -> int:
         return 1
     say("\nOK: all internal references valid")
     return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(report(Path(__file__).resolve().parents[2], "--quiet" in sys.argv[1:]))

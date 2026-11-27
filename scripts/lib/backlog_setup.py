@@ -42,30 +42,6 @@ def workflow_steps(owner: str, number: int) -> list[str]:
             "  - Auto-add to project: choose this repo, " + WORKFLOWS[1][1] + ", then turn it on"]
 
 
-def workflow_problems(target: Path, api: Api) -> list[str]:
-    """Names each readable workflow that is off on the repo's board. An unreadable board or workflow list reports nothing."""
-    slug = origin_owner_name(target)
-    try:
-        config = load_config(config_path(target))
-    except SetupError:
-        return []
-    if slug is None or config is None:
-        return []
-    state = board_api.read_workflows(api, config["projectId"])
-    if not state:
-        return []
-    by_lower = {k.lower(): v for k, v in state.items()}
-    off = [name for name, _ in WORKFLOWS if by_lower.get(name.lower()) is False]
-    if not off:
-        return []
-    try:
-        number = read_fields(api, config["projectId"])["number"]
-    except SetupError:
-        return []
-    return [f"the board {slug[0]}/{slug[1]} has the workflow '{name}' off. Turn it on at "
-            f"{WORKFLOW_URL.format(owner=slug[0], number=number)}" for name in off]
-
-
 def write_snapshot(snapshot: dict, target: Path, stamp: str) -> Path:
     # The git dir is never tracked, so a snapshot of item titles cannot be committed by accident.
     found = subprocess.run(["git", "-C", str(target), "rev-parse", "--absolute-git-dir"], capture_output=True, text=True)

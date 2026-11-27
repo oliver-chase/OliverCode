@@ -165,16 +165,11 @@ class TestCommitGuard(RepoCase):
 
     def test_the_hook_prints_a_deny_decision(self):
         self.gates(point_git_at_them=False)
-        out = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "commit_guard.py")],
+        out = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "pretool_guard.py")],
                              input=json.dumps({"cwd": str(self.repo), "tool_input": {"command": "git commit -m x"}}),
                              capture_output=True, text=True)
         decision = json.loads(out.stdout)["hookSpecificOutput"]
         self.assertEqual((out.returncode, decision["permissionDecision"]), (0, "deny"))
-
-    def test_bad_input_fails_open(self):
-        out = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "commit_guard.py")],
-                             input="not json", capture_output=True, text=True)
-        self.assertEqual((out.returncode, out.stdout), (0, ""))
 
 
 class TestUpdateNotice(unittest.TestCase):

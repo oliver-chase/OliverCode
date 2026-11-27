@@ -184,11 +184,6 @@ def route(size: str, labels=(), files=(), priority: str = "") -> tuple[str, str]
     return LADDER[0], f"size {size} with no risky path or P0 priority"
 
 
-def model_for(size: str, labels=(), files=(), priority: str = "") -> str:
-    """The model a story starts on (#890, #1026). route() also says which rule chose it."""
-    return route(size, labels, files, priority)[0]
-
-
 def escalate(model_name: str, failures: int) -> str:
     """One level up the ladder after a second failed validation, and the same model before that or when the name is not on the ladder."""
     if failures < 2 or model_name not in LADDER:

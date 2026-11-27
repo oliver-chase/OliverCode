@@ -68,7 +68,7 @@ run_limits_check() {
 run_reference_check() {
   # Internal reference integrity (markdown links + backtick repo paths).
   echo "=== validate: checking internal references ==="
-  if ! bash "${SCRIPT_DIR}/link-check.sh" --quiet; then
+  if ! PYTHONPATH="${SCRIPT_DIR}" python3 -m lib.reference_check --quiet; then
     echo "=== validate: reference check FAILED ==="
     exit 1
   fi
@@ -148,17 +148,12 @@ main() {
       echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: cores);"
       echo "                         OLIVERCODE_VALIDATE_JOBS sets the smoke test parallelism"
       echo "  --tree                 Same as no args (the pre-commit gates always scan every tracked file)"
-      echo "  --check-consistency    Run the fleet name check only"
       echo "  --check-repo <dir>     Run the bloat and code quality checks on another checkout"
       echo "  --rehearse [--clone]   Rehearse install and adoption in sandboxes (scripts/qa/rehearse-install.sh)"
       echo "  --help                 Show this help"
       ;;
     --gate)
       run_gate "${2:-}"
-      ;;
-    --check-consistency)
-      run_build_hooks
-      run_consistency
       ;;
     --check-repo)
       # The downstream governance gate: bloat and code quality for another checkout.
@@ -185,7 +180,7 @@ main() {
       ;;
     *)
       echo "Unknown option: $mode" >&2
-      echo "Usage: bash scripts/validate.sh [--help | --tree | --gate NAME | --check-consistency | --check-repo <dir> | --rehearse]" >&2
+      echo "Usage: bash scripts/validate.sh [--help | --tree | --gate NAME | --check-repo <dir> | --rehearse]" >&2
       exit 2
       ;;
   esac

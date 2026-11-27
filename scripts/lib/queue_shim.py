@@ -30,15 +30,6 @@ def _set_aside(path: Path, backups: list[str]) -> None:
     backups.append(str(backup))
 
 
-def remove_old_shim() -> bool:
-    """Remove ~/.local/bin/validate-queue left by an earlier install when it is the old two-line shim. True when it removed one."""
-    path = Path.home() / ".local" / "bin" / "validate-queue"
-    if not path.is_symlink() and "validate_queue.py" in (_read(path) or ""):
-        path.unlink()
-        return True
-    return False
-
-
 # --- the `olivercode` command on the PATH (#777) ---
 
 LAUNCHER_NAME = "olivercode"

@@ -21,7 +21,7 @@ from lib import failure_log, health_checks, hygiene, maintain, placement  # noqa
 class TestRetiredJobs(Base):
     def test_a_job_for_a_removed_command_is_reported_and_removed_by_fix(self):
         agents = temp_dir(self)
-        plist = agents / f"com.olivercode.{maintain.RETIRED_JOBS[0]}.plist"
+        plist = agents / "com.olivercode.issues-page.plist"
         plist.write_text("x")
         with mock.patch.object(maintain.subprocess, "run"):
             self.assertEqual(["retiredjob"], [p.step for p in maintain.check_retired_jobs(False, agents)])

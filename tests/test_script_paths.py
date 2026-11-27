@@ -1,4 +1,4 @@
-"""link-check.sh and validate.sh pass paths to python3 as arguments, so a quote in the path breaks neither."""
+"""The reference check and validate.sh pass paths to python3 as arguments, so a quote in the path breaks neither."""
 
 import shutil
 import subprocess
@@ -26,6 +26,6 @@ class QuotedCheckout(unittest.TestCase):
     def run_script(self, *args):
         return subprocess.run(["bash", *args], cwd=self.repo, capture_output=True, text=True, env=git_env())
 
-    def test_link_check_runs_in_a_path_with_a_single_quote(self):
-        result = self.run_script("scripts/link-check.sh", "--quiet")
+    def test_reference_check_runs_in_a_path_with_a_single_quote(self):
+        result = self.run_script("scripts/validate.sh", "--gate", "refs")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
