@@ -638,31 +638,31 @@ class DrainCase(unittest.TestCase):
             quiet(cmd_drain.drain, io, state(), sleep=naps.append)
         texts = [c.args[0] for c in notify.call_args_list]
         self.assertEqual(len(texts), 2)
-        self.assertIn("waiting", texts[0])
-        self.assertIn("resume at about", texts[0])
-        self.assertIn("stopped for the GitHub hold", texts[1])
+        self.assertIn("Paused for GitHub's limit. Back at about", texts[0])
+        self.assertIn("Stopped at GitHub's limit", texts[1])
+        self.assertTrue(all(len(t) <= 110 for t in texts))
+        self.assertNotIn("still on after the reset it named", texts[1])
+        self.assertNotIn("rate-limit", texts[0] + texts[1])
 
-    def test_a_story_that_stops_without_landing_notifies_with_its_number_and_reason(self):  # #1325
+    def test_a_story_that_stops_without_landing_notifies_in_plain_words_without_the_reason(self):  # #1325, #1374
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "review still failing"} for _ in range(4)]})
         io.said[1] = "review still failing"
         with mock.patch.object(cmd_drain, "notify") as notify:
             self.run_drain(io)
-        notify.assert_called_once()
-        self.assertIn("#1", notify.call_args.args[0])
-        self.assertIn("review still failing", notify.call_args.args[0])
+        notify.assert_called_once_with("#1 didn't land yet. It'll try again on its own.")
 
     def test_an_io_with_no_said_map_still_notifies_a_stopped_story(self):  # #1325, dispatch's RunIo has none
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "x"} for _ in range(4)]})
         del io.said
         with mock.patch.object(cmd_drain, "notify") as notify:
             self.run_drain(io)
-        self.assertIn("no reason recorded", notify.call_args.args[0])
+        self.assertIn("didn't land yet", notify.call_args.args[0])
 
     def test_a_story_that_lands_sends_no_notification(self):  # #1325
         io = FakeIo([issue(1)])
         with mock.patch.object(cmd_drain, "notify") as notify:
             self.run_drain(io)
-        self.assertEqual((io.closed, [c.args[0] for c in notify.call_args_list if "stopped without" in c.args[0] or "waiting" in c.args[0]]), ([1], []))
+        self.assertEqual((io.closed, [c.args[0] for c in notify.call_args_list if "didn't land" in c.args[0] or "Paused" in c.args[0]]), ([1], []))
 
     def test_no_hold_means_no_waiting_row(self):  # #1314
         io = FakeIo([issue(1)])
@@ -1165,7 +1165,7 @@ class DetachedRun(unittest.TestCase):
             quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
         calls = [c for c in run.call_args_list if c.args and c.args[0][0] == "osascript"]
         self.assertEqual(1, len(calls))
-        self.assertIn("2 landed, 1 stopped", calls[0].args[0][2])
+        self.assertIn("Done: 2 stories landed. 1 will try again.", calls[0].args[0][2])
 
     def test_notify_sends_nothing_and_does_not_raise_without_osascript(self):
         with mock.patch.object(cmd_drain.subprocess, "run", side_effect=FileNotFoundError):

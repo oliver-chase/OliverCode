@@ -447,7 +447,7 @@ def finish(io, worktree: Path, n: int, why: str) -> None:
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
         io.stopped(n, f"Close refused: {reason}")  # the refusal is the reason status shows, and bug intake reads its prefix (#1291, #1371)
-        notify(f"Story #{n} close refused: {reason}")
+        notify(f"#{n} landed but didn't close. Nothing needed from you.")  # the gate's message stays in the comment and the stopped row
         raise CloseRefused(reason)
 
 
@@ -485,7 +485,7 @@ def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str]
         if closed is False:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
             if n not in state.get("limited", []):  # the usage limit already sent its own notification
-                notify(f"Story #{n} stopped without landing: {getattr(io, 'said', {}).get(n) or 'no reason recorded'}")  # (#1325)
+                notify(f"#{n} didn't land yet. It'll try again on its own.")  # the reason stays in the story comment and the run log (#1325, #1374)
         return closed, used
     except CloseRefused:  # a refused close leaves the story with the gate's message and its one stopped row (#1011)
         return False, 0
@@ -571,7 +571,7 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
         if out.get("usage_limit"):  # the story goes back to Ready unblocked, and the drain starts no new builder (#1299)
             state.setdefault("limited", []).append(n)
             io.comment(n, f"Drain stopped: {out['reason']}")
-            notify(f"Story #{n} hit the usage limit: {out['reason']}")
+            notify("Paused at the Claude usage limit. Picks up when it resets.")
             return False, tokens
         if out.get("capped"):  # the story spent its size's ceiling, so no restart; the stopped row takes this comment as its reason (#1318)
             io.comment(n, f"Drain stopped: {out['reason']}")
@@ -731,10 +731,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     state["held"] = f"GitHub's rate-limit hold was still on after the reset it named, about {reset}"
                     agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "stopped", reason=state["held"])
                     say(f"Drain stopped: {state['held']}.")
-                    notify(f"Drain stopped for the GitHub hold: still on after the reset it named, about {reset}")
+                    notify("Stopped at GitHub's limit, which is still on. Start it again later.")
                     return 1
                 hold_waited = True
-                notify(f"Drain is waiting for GitHub's rate-limit reset and expects to resume at about {reset}")
+                notify(f"Paused for GitHub's limit. Back at about {time.strftime('%-I:%M', time.localtime(until))}.")
                 agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "waiting", reason=f"GitHub's rate-limit hold lasts until about {reset}")
                 say(f"Waiting for GitHub's rate-limit reset at about {reset}.")
                 sleep(max(0.0, until - time.time()) + 1)
@@ -776,7 +776,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")
                         if owner_gated(issue):
-                            notify(f"Story #{issue['number']} is owner-gated and waits for you")
+                            notify(f"#{issue['number']} needs you. The story says what to do.")
                     continue
                 if re.search(r"Size:\s*(XS|S|M|L|XL)\b", issue.get("body") or "") and (text_size := intake.size_of(issue)) != str(issue["size"]).strip().upper() and issue["number"] not in mismatched:
                     mismatched.add(issue["number"])
@@ -956,7 +956,8 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
                 io.find_bugs()
             except Exception as exc:  # noqa: BLE001 -- bug intake never hides the run's end
                 print(f"drain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-            notify(f"Drain ended: {len(state['closed'])} landed, {len(state['blocked'])} stopped")
+            landed, retry = len(state["closed"]), len(state["blocked"])
+            notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.")
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)
