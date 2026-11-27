@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OliverCode City states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#4C3FB0}a:hover{color:#2F2580}
+.st{--field:#F6F6F7;--card:#FFFFFF;--ink:#17161C;--muted:#5D5C66;--accent:#4C3FB0;--asoft:#EEECF8;--ok:#2B7A4B;--warn:#8A4B00;--warnbg:#FBEEDD;--fail:#B3261E;--failbg:#FAE6E4;--idle:#5F5E69;--idlebg:#ECECEF;--line:rgb(23 22 28 / .10);width:1200px;height:1500px;box-sizing:border-box;padding:56px;background:var(--field);color:var(--ink);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.5;display:flex;flex-direction:column;gap:32px;font-variant-numeric:tabular-nums}
+h1,h2{font-family:Newsreader,Georgia,serif;font-weight:400;margin:0}
+h1{font-size:44px;line-height:1.1}
+h2{font-size:22px;line-height:1.25}
+p{margin:0}
+.lede{font-size:18px;color:var(--muted);margin-top:8px;max-width:760px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.panel{background:var(--card);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:12px;min-height:270px;box-sizing:border-box}
+.name{font-size:14px;color:var(--muted)}
+.band{border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.b-run{background:var(--asoft)}.b-idle{background:var(--idlebg)}.b-wait{background:var(--warnbg)}.b-fail{background:var(--failbg)}
+.pill{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;padding:5px 13px;border-radius:999px;font-size:14px;font-weight:500;background:#fff}
+.pill i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.c-run{color:var(--accent)}.c-idle{color:var(--idle)}.c-wait{color:var(--warn)}.c-fail{color:var(--fail)}
+.small{font-size:14px;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:999px;border:0;font:inherit;font-size:15px;font-weight:500;cursor:pointer;white-space:nowrap;text-decoration:none}
+.b-pri{background:var(--ink);color:#fff}
+.b-ghost{background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.b-danger{background:var(--fail);color:#fff}
+.btn[disabled]{background:var(--idlebg);color:var(--idle);cursor:not-allowed}
+.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:auto}
+.count{font-family:Newsreader,Georgia,serif;font-size:40px;line-height:1;color:var(--warn)}
+.upd{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%}
+.empty{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.empty p:first-child{font-family:Newsreader,Georgia,serif;font-size:26px}
+.dialog{border-radius:16px;padding:18px;box-shadow:0 12px 32px rgb(23 22 28 / .12),0 0 0 1px var(--line);display:flex;flex-direction:column;gap:10px}
+</style>
+</helmet>
+<div class="st">
+<div>
+<h1>Alternate states</h1>
+<p class="lede">How the status band and its message change. Running uses the purple accent, idle stays grey, waiting is amber and anything blocked is red.</p>
+</div>
+<div class="grid">
+
+<section class="panel" aria-label="Running">
+<span class="name">Running</span>
+<div class="band b-run"><span class="pill c-run"><i></i>Building</span><p>Two builders are working. #1348 is validating, and #1349 is on round 2 after review.</p></div>
+<p class="small">With one builder the sentence names one story. With three, each gets a line in the Live panel.</p>
+</section>
+
+<section class="panel" aria-label="Idle with work ready">
+<span class="name">Idle, work ready</span>
+<div class="band b-idle"><span class="pill c-idle"><i></i>Idle</span><p>No drain is running. 7 stories are Ready, so starting the drain would take them in priority order.</p></div>
+<div class="acts"><button class="btn b-pri">Start the drain</button></div>
+</section>
+
+<section class="panel" aria-label="Idle with an empty board">
+<span class="name">Idle, nothing Ready</span>
+<div class="band b-idle"><span class="pill c-idle"><i></i>Idle</span><p>No drain is running, and no story is Ready. The drain has nothing to take until a story is marked Ready.</p></div>
+<div class="acts"><a class="btn b-ghost" href="#">Open the board</a></div>
+</section>
+
+<section class="panel" aria-label="Stopped">
+<span class="name">Stopped</span>
+<div class="band b-fail"><span class="pill c-fail"><i></i>Stopped</span><p>#1294 stopped after 3 builder restarts. Its last landing attempt failed to push, and its handover says where it got to.</p></div>
+<div class="acts"><a class="btn b-ghost" href="#">Open #1294</a><button class="btn b-pri">Start the drain</button></div>
+</section>
+
+<section class="panel" aria-label="Waiting on GitHub">
+<span class="name">Waiting on GitHub</span>
+<div class="band b-wait"><span class="pill c-wait"><i></i>Waiting</span><p>GitHub's hourly budget is used up, so the drain is paused until about 23:05 UTC and will carry on by itself.</p></div>
+<div style="display:flex;align-items:baseline;gap:10px"><span class="count">12 min</span><span class="small">until it resumes</span></div>
+</section>
+
+<section class="panel" aria-label="Checks failing">
+<span class="name">Checks failing</span>
+<div class="band b-fail"><span class="pill c-fail"><i></i>Checks failing</span><p>Checks on staging fail at the install rehearsal step, so promoting to main waits until that is fixed.</p></div>
+<div class="acts"><button class="btn" disabled>Promote</button><a href="#" style="font-weight:500;font-size:15px">Open the check</a></div>
+</section>
+
+<section class="panel" aria-label="A decision step">
+<span class="name">A step that asks for a decision</span>
+<div class="dialog" style="box-shadow:0 0 0 1px var(--line)">
+<h2>Start #1275 now?</h2>
+<p class="small">From a work session. Your answer is saved to your decisions.</p>
+<div class="acts"><button class="btn b-pri">Approve</button><button class="btn b-ghost">Decline</button></div>
+</div>
+</section>
+
+<section class="panel" aria-label="Nothing waiting">
+<span class="name">Nothing waiting</span>
+<div class="empty"><p>Nothing waits on you.</p><p class="small">The count in the status bar disappears too.</p></div>
+</section>
+
+<section class="panel" aria-label="Stale page">
+<span class="name">Page out of date</span>
+<div class="upd"><span class="dot" style="background:#A3A2AC"></span>Updated 00:10 UTC, 12 min ago</div>
+<div class="band b-wait"><span class="pill c-wait"><i></i>Out of date</span><p>This page is 12 minutes old, so the figures may have changed. Refresh to rebuild it.</p></div>
+<div class="acts"><button class="btn b-pri">Refresh</button></div>
+</section>
+
+<section class="panel" aria-label="No data yet">
+<span class="name">No data yet</span>
+<div class="empty"><p>No landings yet today.</p><p class="small">One day of data shows as a figure, never as a trend.</p></div>
+</section>
+
+<section class="panel" aria-label="Confirm promote">
+<span class="name">Promote, confirm step</span>
+<div class="dialog">
+<h2>Promote 46 changes to main?</h2>
+<p class="small">Checks on staging pass, and staging can fast-forward.</p>
+<div class="acts"><button class="btn b-pri">Promote</button><button class="btn b-ghost">Cancel</button></div>
+</div>
+</section>
+
+<section class="panel" aria-label="Confirm stopping the drain">
+<span class="name">Stop the drain, confirm step</span>
+<div class="dialog">
+<h2>Stop the drain?</h2>
+<p class="small">Two builders are working. Their stories show as stopped until the drain starts again.</p>
+<div class="acts"><button class="btn b-danger">Stop the drain</button><button class="btn b-ghost">Keep running</button></div>
+</div>
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
