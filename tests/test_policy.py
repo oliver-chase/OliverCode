@@ -123,6 +123,19 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "rm -rf ~/Documents").kind)
         self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "rm --recursive build").kind)
 
+    def test_a_headless_builder_may_git_rm_many_files_in_its_worktree_and_nothing_else(self):
+        many = "git rm " + " ".join(f"f{i}.txt" for i in range(12))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": "1"}):
+            self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, many))
+            for command in ("rm -r build", "rm " + " ".join(f"f{i}" for i in range(12)),
+                            "git rm ../a " + " ".join(f"f{i}" for i in range(12)),
+                            "git rm /tmp/a " + " ".join(f"f{i}" for i in range(12))):
+                self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, command).kind, command)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("OLIVERCODE_HEADLESS", None)
+            self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, many).kind)
+            self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "OLIVERCODE_HEADLESS=1 " + many).kind)
+
     def test_a_descriptor_redirect_is_no_command_and_a_heredoc_body_is_no_write(self):
         echo_only = {"commands": {"allow": ["echo"]}}
         for command in ("echo hi 2>&1", "echo hi >&2", "echo hi 2>&-"):

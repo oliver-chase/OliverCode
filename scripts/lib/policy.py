@@ -495,9 +495,21 @@ def evaluate_bash(policy: dict, command: str, repo: str = "", root: Path | None 
         limit = triggers.get("deleteFiles")
         if limit and not ask:
             targets = [w for w in rest if not w.startswith("-")]
+            if name == "git" and sub == "rm" and _headless_worktree_rm(rest):
+                continue
             if (name == "rm" and (_recursive(rest) or len(targets) > limit)) or (name == "git" and sub == "rm" and len(targets) - 1 > limit):
                 ask = Decision("ask", "triggers.deleteFiles", "This deletes a folder or more than " + str(limit) + " files, so the policy asks first. See docs/RULES.md, Execution.")
     return ask
+
+
+def _headless_worktree_rm(rest: list[str]) -> bool:
+    """True for `git rm` in a headless session whose paths all stay inside the working folder, since git restores
+    every tracked file it removes. -C or -c, an absolute, home or parent path and a variable keep the ask. Only the
+    process environment counts, so a prefix on the command cannot grant itself the exemption."""
+    if not os.environ.get("OLIVERCODE_HEADLESS") or any(w in ("-C", "-c") for w in rest):
+        return False
+    paths = [w for w in rest[rest.index("rm") + 1:] if not w.startswith("-")]
+    return all(not (p.startswith(("/", "~")) or "$" in p or ".." in Path(p).parts) for p in paths)
 
 
 def _subcommand(name: str, rest: list[str]) -> str:
