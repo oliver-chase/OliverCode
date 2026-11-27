@@ -68,7 +68,10 @@ def scan(repo):
             rows.append(("owner-identity", f, f"holds {hits} author name or address"))
     shas = git(repo, "log", "--all", "-E", "-i", "-G", SECRET_VALUE, "--format=%h").split()
     if shas:
-        rows.append(("history-secret", f"{len(shas)}-commits", "a diff changes a secret-shaped value; revoke it first, then decide on a history rewrite"))
+        where = f"{len(shas)}-commits"
+        kept = re.search(rf"^Accepted:[ \t]*history-secret[ \t]+{where}[ \t]+-[ \t]*\S", texts.get(ACCEPTED_FILE, ""), re.M)
+        detail = "accepted in docs/AUDIT-ACCEPTED.md" if kept else "a diff changes a secret-shaped value; revoke it first, then decide on a history rewrite"
+        rows.append(("history-secret", where, detail))
     names = {Path(f).name for f in files}
     if not any(n.startswith(("LICENSE", "COPYING")) for n in names):
         rows.append(("missing", "LICENSE", "no license"))

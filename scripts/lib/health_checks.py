@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import re
 import shutil
 import subprocess
@@ -15,7 +16,7 @@ import time
 from pathlib import Path
 
 from lib import claude_settings as _claude_settings
-from lib import failure_log
+from lib import failure_log, launchd
 from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, gh_problem, python_version
 from lib.local_config import claude_dir as _claude_dir
 from lib.limits import LIMITS_FILE
@@ -266,6 +267,31 @@ def _check_managed_hooks_only(managed_path: Path = MANAGED_SETTINGS) -> tuple[in
           f"~/.claude/settings.json ({', '.join(lacking)} missing there). Add those hooks to the managed settings, "
           "since a user cannot lift the lock")
     return 0, 0, 1
+
+
+def _check_scheduled_jobs(agents: Path | None = None) -> tuple[int, int, int]:
+    """Fail when an OliverCode launchd job runs a python or an olivercode script that is gone. launchd keeps the job and it fails on
+    every run, so a worktree removed after its install turns the job off with no error (#1399). Only the first two arguments are
+    checked: they are the python and the script, and a later argument may be a path that never had to exist."""
+    folder = agents or launchd.agents_dir()
+    jobs = sorted(folder.glob("com.olivercode.*.plist"))
+    if not jobs:
+        return 0, 0, 0
+    gone = []
+    for plist_file in jobs:
+        try:
+            args = plistlib.loads(plist_file.read_bytes()).get("ProgramArguments") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        gone += [(plist_file.stem, a) for a in args[:2] if isinstance(a, str) and not Path(a).exists()]
+    print("\nScheduled jobs:")
+    if not gone:
+        print("  [OK] every OliverCode scheduled job runs a file that exists")
+        return 1, 0, 0
+    for label, path in gone:
+        print(f"  [FAIL] {label} runs {path}, which does not exist. Reschedule the job from a checkout that exists, or remove it "
+              "with its unschedule command")
+    return 0, len(gone), 0
 
 
 # The sources a worktree's commit hooks are built from. A worktree builds them from its own branch, so they are older than
