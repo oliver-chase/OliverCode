@@ -306,9 +306,9 @@ class LiveCheck(unittest.TestCase):
     def test_a_job_story_needs_the_job_loaded_and_names_its_label(self):
         c = self.commit("scripts/lib/cmd_job.py", 'LABEL = "com.olivercode.demo-job"\n'
                         'def schedule(on):\n    return launchd.schedule(on, LABEL, lambda: launchd.job(LABEL, ["x"], "x.out"), "a", "b")\n')
-        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: False)
+        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: False, scheduled=lambda label: True)
         self.assertIn("com.olivercode.demo-job is not loaded", reason)
-        reason, proof = cs.live_check([c], self.oc, self.oc, loaded=lambda label: label == "com.olivercode.demo-job")
+        reason, proof = cs.live_check([c], self.oc, self.oc, loaded=lambda label: label == "com.olivercode.demo-job", scheduled=lambda label: True)
         self.assertIsNone(reason)
         self.assertIn("launchd job com.olivercode.demo-job is loaded", proof)
 
@@ -326,7 +326,13 @@ class LiveCheck(unittest.TestCase):
     def test_a_plist_label_or_literal_schedule_call_is_demanded(self):
         c = self.commit("scripts/lib/cmd_plist.py", 'def plist():\n    return {"Label": "com.olivercode.plist-job"}\n'
                         'launchd.schedule(True, "com.olivercode.lit-job", plist, "a", "b")\n')
-        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: label != "com.olivercode.plist-job")
+        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: label != "com.olivercode.plist-job", scheduled=lambda label: True)
         self.assertIn("com.olivercode.plist-job is not loaded", reason)
-        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: label != "com.olivercode.lit-job")
+        reason, _ = cs.live_check([c], self.oc, self.oc, loaded=lambda label: label != "com.olivercode.lit-job", scheduled=lambda label: True)
         self.assertIn("com.olivercode.lit-job is not loaded", reason)
+
+    def test_a_job_the_owner_never_scheduled_is_not_demanded(self):
+        c = self.commit("scripts/lib/cmd_job.py", 'launchd.schedule(True, "com.olivercode.maintain", plist, "a", "b")\n')
+        reason, proof = cs.live_check([c], self.oc, self.oc, loaded=lambda label: self.fail(f"{label} is not scheduled"), scheduled=lambda label: False)
+        self.assertIsNone(reason)
+        self.assertNotIn("launchd job", proof)

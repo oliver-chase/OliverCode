@@ -132,7 +132,12 @@ def job_loaded(label):
     return subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{label}"], capture_output=True).returncode == 0
 
 
-def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings=None):
+def job_scheduled(label):
+    """True when the owner turned the job on: its plist is in ~/Library/LaunchAgents."""
+    return (Path.home() / "Library" / "LaunchAgents" / f"{label}.plist").is_file()
+
+
+def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings=None, scheduled=job_scheduled):
     """(reason, proof): reason is None when the installed checkout `oc` holds `commits` and what they change is loaded (#713).
 
     An installed checkout that is behind is updated once with `olivercode update`, then checked again. Proof names the
@@ -171,6 +176,8 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
         except (OSError, ValueError):
             pass
     for label in sorted(labels):
+        if not scheduled(label):
+            continue  # a job this machine never scheduled is not one it runs (#1373)
         if not loaded(label):
             return f"launchd job {label} is not loaded; run `olivercode install`", None
         proof.append(f"launchd job {label} is loaded")
