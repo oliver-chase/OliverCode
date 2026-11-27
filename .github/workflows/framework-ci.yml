@@ -1,8 +1,11 @@
 name: OliverCode Framework CI
 
 on:
+  # A push to main is what `olivercode promote` sends, so this runs on the code
+  # that ships. A push to staging does not run it, which keeps one failed-run
+  # email per release.
   push:
-    branches: [staging]
+    branches: [main]
   pull_request:
     branches: [main]
 
