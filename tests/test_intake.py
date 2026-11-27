@@ -1,8 +1,10 @@
 """Size and Priority, the filing fit check and the repeated-blocker report. None files a story (#1275)."""
 
+import json
 import os
 import sys
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, temp_dir
@@ -68,6 +70,110 @@ class TestRepeatedBlockers(unittest.TestCase):
 
     def test_a_refusal_from_a_guard_the_tree_no_longer_has_is_not_reported(self):
         self.assertEqual([], intake.repeated_blockers({("gone_guard", "x"): ["t1", "t2", "t3"]}))
+
+
+BODY = ("Title: Fix the crash\n**As the owner**, I want the crash fixed, so that drain goes on.\n\n```gherkin\nFeature: x\n  Scenario: y\n    Given a\n    When b\n    Then c\n```\n\n"
+        "Root cause: scripts/lib/a.py:1\n\nExisting coverage checked: grep.\n\nFit: reuses.\n\nSize: S. Work type: Story.\n\nFiles area: scripts/lib/a.py\n")
+
+
+class TestBugIntake(unittest.TestCase):
+    def setUp(self):
+        from lib import failure_log
+        self.log = failure_log
+        home = temp_dir(self)
+        p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home), "OLIVERCODE_FAILURE_LOG": str(home / "failures.log")})
+        p.start()
+        self.addCleanup(p.stop)
+        self.home = home
+        self.calls = []
+        self.prompts = []
+
+    def stop(self, reason, at="2999-01-01T00:00:00Z", stage="stopped"):
+        with open(self.home / "run-log.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"story": "story-9", "stage": stage, "reason": reason, "at": at}) + "\n")
+
+    def gh(self, args):
+        self.calls.append(args)
+        out = {"number": 50 + len(self.calls)} if "POST" in args and any(a.endswith("/issues") for a in args) else {}
+        return mock.Mock(returncode=0, stdout=json.dumps(out))
+
+    def run_bugs(self, answer, opened=None):
+        def read(task, *a, **k):
+            self.prompts.append((task, k))
+            return {"verdict": "findings", "text": answer}
+        with mock.patch.object(intake.open_issues, "fetch", return_value=opened or []), \
+                mock.patch.object(intake, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
+                mock.patch.object(intake, "file_story", side_effect=lambda slug, root, t, b, gh: 77), \
+                mock.patch.object(intake, "ci_candidate", return_value=None):
+            return intake.bugs(Path("."), gh=self.gh, read=read, say=lambda *_: None)
+
+    def test_only_a_crash_a_fatal_stop_or_a_refused_close_is_a_candidate(self):
+        rows = [{"stage": "stopped", "reason": r} for r in ("Drain blocked: the worker crashed with ValueError()", "Drain blocked: the landing queue crashed with x.",
+                                                            "Close refused: no commit", "Drain blocked: The model finished, but nothing checked the result.")]
+        rows += [{"stage": "stopped", "reason": r} for r in ("Drain stopped: the story spent its ceiling", "Held by the fresh reader", "tests failed", "usage limit")]
+        self.assertEqual(4, len(intake.run_candidates(rows)))
+
+    def test_candidates_that_differ_in_hex_numbers_or_worktree_paths_share_a_signature(self):
+        a = intake.signature("drain", "crash 12 at /x/_worktrees/oc-1/f.py in deadbeef01")
+        b = intake.signature("drain", "crash 345 at /y/_worktrees/oc-9/f.py in cafebabe99")
+        self.assertEqual(a, b)
+
+    def test_a_hook_crash_is_recorded_when_a_guard_raises(self):
+        sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
+        import pretool_guard
+
+        def boom():
+            raise ValueError("bad")
+        self.assertIsNone(pretool_guard._safely(boom))
+        self.assertEqual("hook-crash", self.log.entries()[-1][2])
+        self.assertIn("ValueError", self.log.entries()[-1][3])
+        self.assertEqual(1, len(intake.hook_candidates()))
+
+    def test_a_bug_is_filed_once_and_its_signature_is_never_read_again(self):
+        self.run_bugs("")  # makes bug-seen.json, so older rows are not read
+        self.stop("Close refused: no commit")
+        self.assertEqual(1, self.run_bugs("BUG\n" + BODY))
+        self.assertIn("The open stories", self.prompts[0][0])
+        self.assertEqual(0, self.run_bugs("BUG\n" + BODY))
+        self.assertEqual(1, len(self.prompts))
+
+    def test_not_a_bug_is_recorded_and_files_nothing(self):
+        self.run_bugs("")
+        self.stop("Close refused: no commit")
+        self.assertEqual(0, self.run_bugs("NOT A BUG\nIt is a feature."))
+        self.assertEqual("not a bug", json.loads((self.home / "bug-seen.json").read_text())["seen"][intake.signature("drain", "Close refused: no commit")]["verdict"])
+
+    def test_a_covered_failure_comments_on_the_open_story(self):
+        self.run_bugs("")
+        self.stop("Close refused: no commit")
+        self.run_bugs("COVERED #12\nOpen story 12 covers it.", opened=[{"number": 12, "title": "t"}])
+        self.assertIn(["-X", "POST", "repos/o/r/issues/12/comments"], [c[:3] for c in self.calls])
+
+    def test_rows_older_than_bug_seen_json_are_never_read_and_a_run_reads_three(self):
+        self.stop("Close refused: old", at="2000-01-01T00:00:00Z")
+        self.run_bugs("NOT A BUG\nx")
+        self.assertEqual([], self.prompts)
+        for i in "abcde":
+            self.stop(f"Close refused: reason {i}x")
+        self.run_bugs("NOT A BUG\nx")
+        self.assertEqual(3, len(self.prompts))
+
+    def test_a_fourth_bug_waits_for_the_next_day_and_the_owner_queue_gets_nothing(self):
+        self.run_bugs("")
+        for i in "abcd":
+            self.stop(f"Close refused: reason {i}x")
+        now = intake.datetime.datetime(2999, 1, 1, tzinfo=intake.datetime.timezone.utc)
+        with mock.patch.object(intake.open_issues, "fetch", return_value=[]), mock.patch.object(intake, "ci_candidate", return_value=None), \
+                mock.patch.object(intake, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
+                mock.patch.object(intake, "file_story", return_value=77) as filed:
+            read = lambda *a, **k: {"verdict": "findings", "text": "BUG\n" + BODY}
+            self.assertEqual(3, intake.bugs(Path("."), gh=self.gh, read=read, now=now, say=print))
+            self.assertEqual(1, intake.bugs(Path("."), gh=self.gh, read=read, now=now.replace(day=2), say=print))
+        self.assertEqual(4, filed.call_count)
+
+    def test_a_staging_ci_story_is_p1_and_others_p2(self):
+        self.assertIn("Priority: P1.", intake.story_text(BODY, {"branch": "staging", "sig": "s", "text": "t"})[1])
+        self.assertIn("Priority: P2.", intake.story_text(BODY, {"branch": "", "sig": "s", "text": "t"})[1])
 
 
 if __name__ == "__main__":

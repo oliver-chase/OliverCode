@@ -31,7 +31,11 @@ from lib import failure_log, main_checkout, policy  # noqa: E402
 def _safely(check, *args):
     try:
         return check(*args)
-    except Exception:  # noqa: BLE001 -- fail open, one guard's bug never blocks a command or hides another guard
+    except Exception as exc:  # noqa: BLE001 -- fail open, one guard's bug never blocks a command or hides another guard
+        try:
+            failure_log.record("hook-crash", f"{getattr(check, '__module__', '')}.{getattr(check, '__name__', '')}: {exc!r}", Path.cwd().name)  # bug intake reads it (#1371)
+        except Exception:  # noqa: BLE001 -- the record is best effort too
+            pass
         return None
 
 

@@ -1206,7 +1206,7 @@ class CloseByScript(unittest.TestCase):
         comments = [body for n, body in io.comments if n == 1]
         self.assertEqual(1, len(comments))
         self.assertIn("no run output", comments[0])
-        self.assertEqual([(1, io.refuse_close)], io.stops_logged)  # #1291: the refusal is the stopped row's reason, and #1297: only one row
+        self.assertEqual([(1, f"Close refused: {io.refuse_close}")], io.stops_logged)  # #1291: the refusal is the stopped row's reason, #1297: only one row, #1371: bug intake reads the prefix
         self.assertEqual([], io.kept)  # keep_open would log a second stopped row
 
     def test_an_engine_story_on_staging_closes_like_any_landed_story(self):

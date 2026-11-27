@@ -242,12 +242,13 @@ def review_brief(task: str, cwd: str | Path, finding: str) -> str:
 
 
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
-           max_turns: int = READER_TURNS, attempts: int = 2) -> dict:
+           max_turns: int = READER_TURNS, attempts: int = 2, brief: str = REVIEW_BRIEF) -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Only a reply whose first word is PASS passes (#1015).
     A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
+    `brief` swaps the question: bug intake asks about a failure, not a diff (#1371).
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
-    prompt = REVIEW_BRIEF.format(task=task, diff=branch_diff(cwd), tail=tail)
+    prompt = brief.format(task=task, diff=branch_diff(cwd) if "{diff}" in brief else "", tail=tail)
     failure = ""
     for attempt in range(1, attempts + 1):
         try:

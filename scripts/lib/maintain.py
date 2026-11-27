@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.cli import MIN_PYTHON, newer_python
-from lib import failure_log, hygiene, launchd, placement, repo_gates, repo_state
+from lib import failure_log, hygiene, intake, launchd, placement, repo_gates, repo_state
 from lib import local_config
 from lib.local_config import OC_ROOT, claude_dir
 
@@ -465,7 +465,6 @@ def check_failure_gaps(fix: bool) -> list[Problem]:
         gaps = failure_gaps()
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         return [Problem("gaps", f"the failing checks could not be read: {error}", fixable=False)]
-    from lib import intake
     return [Problem("gaps", f"{repo}: {title}. {body.strip().splitlines()[-1]}", fixable=False) for repo, title, body in gaps] + \
            [Problem("blocker", line, fixable=False) for line in intake.repeated_blockers()]
 
@@ -625,4 +624,8 @@ def command_maintain(argv: list[str]) -> int:
         print("Usage: olivercode maintain [--fix | --schedule | --unschedule]")
         return 1
     fix = argv == ["--fix"]
+    try:
+        intake.bugs(OC_ROOT)  # the daily run files the bugs the failure and run logs hold, each read once by a fresh reader (#1371)
+    except Exception as exc:  # noqa: BLE001 -- bug intake never stops the daily repair
+        print(f"maintain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
     return report(run(fix), fix)

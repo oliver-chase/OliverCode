@@ -1,17 +1,18 @@
-"""What drain, dispatch and filing read from a story: its Size and Priority, its Files area, the filing fit check (#1004) and the
-repeated-blocker report. Nothing here files a story or edits an issue (#1275). Standard library only."""
+"""What drain, dispatch and filing read from a story: its Size and Priority, its Files area, the filing fit check (#1004), the
+repeated-blocker report and bug intake (#1371). Only bug intake files a story, and only for a fault in OliverCode's own code (#1275). Standard library only."""
 
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-from lib import agent_loop
-from lib.local_config import OC_ROOT
+from lib import agent_loop, failure_log, open_issues
+from lib.local_config import OC_ROOT, backlog_config
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 
@@ -54,7 +55,6 @@ def guard_exists(gate: str) -> bool:
 
 def repeated_blockers(repeats=None) -> list[str]:
     """One report line for each blocker the failure log holds 3 or more times, from a guard the tree still has. It files and edits nothing (#1275)."""
-    from lib import failure_log
     repeats = failure_log.repeated() if repeats is None else repeats
     return [f"{gate}: {reason}"[:100] + f" blocked {len(times)} times, latest {times[-1]}"
             for (gate, reason), times in sorted(repeats.items()) if guard_exists(gate)]
@@ -234,3 +234,164 @@ def render(found: dict) -> str:
     lines += [f"#{n} names no files area: rewrite it, it is not dispatched" for n in found["rewrite"]]
     lines += [f"#{n} {why}" for n, why in sorted(found["waits"].items())]
     return "\n".join(lines) or "No open stories to split."
+
+
+# Bug intake (#1371): a failure OliverCode's own code caused becomes one story, once a fresh reader has checked it. The failure log is no source, since its gate blocks are the
+# gates working; the hook-crash rows are the one exception. Every signature is read once and kept in bug-seen.json with the reader's verdict.
+EPIC = 1246
+DAILY_CAP = 3
+MAX_READS = 3
+CRASH = re.compile(r"^(Drain blocked: (the worker crashed|the landing queue crashed|The model finished, but nothing checked)|Close refused:)")
+BUG_BRIEF = ("You are a fresh reader of one failure OliverCode found. Read it against this checkout (staging) with Read, Grep and Glob, and change nothing. Open the files the failure "
+             "names before you decide: a doubt you did not check is not an answer. Reply with the first line being exactly one of: BUG, REGRESSION, COVERED #<number> (an open story "
+             "already covers it), or NOT A BUG. A feature, cleanup, refactor or new gate is NOT A BUG. For BUG or REGRESSION write the story after the first line: a line `Title: <short title>`, "
+             "then `**As the owner**, I want ..., so that ...`, a gherkin block, `Root cause: <file and line>`, the smallest change that fixes the cause (removing or reusing code before adding any), "
+             "`Existing coverage checked: <what you searched>`, `Size: XS|S|M|L|XL. Work type: Story.` and `Files area: <files, not folders>`. Leave out the Epic, Blocked by and Priority lines, "
+             "which the runner adds. For the other answers give one sentence why.\n\n{task}{diff}{tail}")
+
+
+def seen_path() -> Path:
+    return failure_log.home() / "bug-seen.json"
+
+
+def signature(kind: str, text: str) -> str:
+    """One signature for failures that differ only in a worktree path, hex of 7 or more characters or a number."""
+    flat = re.sub(r"\d+", "N", re.sub(r"\b[0-9a-f]{7,}\b", "H", re.sub(r"\S*_worktrees/\S*", "W", text)))
+    return f"{kind}:{hashlib.sha1(flat.encode()).hexdigest()[:12]}"
+
+
+def read_seen() -> dict:
+    """bug-seen.json: {'created': stamp, 'seen': {signature: entry}}. It is made on the first read, so the first run reads only what was written after it."""
+    try:
+        data = json.loads(seen_path().read_text(encoding="utf-8"))
+        if isinstance(data.get("seen"), dict):
+            return data
+    except (OSError, ValueError, AttributeError):
+        pass
+    return {"created": failure_log.stamp(), "seen": {}}
+
+
+def run_candidates(rows: list[dict]) -> list[dict]:
+    """Stopped rows of the run log that a crash, a fatal stop or a refused close wrote. A failed test, a cap, a held review, a policy stop and the usage limit never match."""
+    return [{"sig": signature("drain", r["reason"]), "at": r.get("at", ""), "branch": "", "text": f"A drain stopped story {r.get('story')}: {r['reason']}"}
+            for r in rows if r.get("stage") == "stopped" and CRASH.match(str(r.get("reason") or ""))]
+
+
+def hook_candidates() -> list[dict]:
+    return [{"sig": signature("hook", reason), "at": when, "branch": "", "text": f"A guard raised and failed open: {reason}"}
+            for when, _repo, gate, reason in failure_log.entries() if gate == "hook-crash"]
+
+
+def ci_candidate(slug: str, gh) -> dict | None:
+    """The newest completed CI run on staging when it failed, keyed by its failing job and step."""
+    def get(path):
+        done = gh([path])
+        try:
+            return json.loads(done.stdout) if done.returncode == 0 else {}
+        except ValueError:
+            return {}
+    runs = get(f"repos/{slug}/actions/runs?branch=staging&status=completed&per_page=1").get("workflow_runs") or []
+    if not runs or runs[0].get("conclusion") != "failure":
+        return None
+    bad = next((j for j in get(f"repos/{slug}/actions/runs/{runs[0]['id']}/jobs").get("jobs") or [] if j.get("conclusion") == "failure"), {})
+    step = next((s.get("name") for s in bad.get("steps") or [] if s.get("conclusion") == "failure"), "")
+    key = f"{bad.get('name', 'unknown')} / {step or 'unknown'}"
+    return {"sig": signature("ci", key), "at": runs[0].get("created_at", ""), "branch": "staging",
+            "text": f"CI on staging failed ({runs[0].get('html_url', '')}).\n- Job: {bad.get('name', 'unknown')}\n- Failing step: {step or 'unknown'}"}
+
+
+def parse(text: str) -> tuple[str, str]:
+    """(answer, rest) from the reader's reply: 'bug', 'regression', 'covered #N' or 'not a bug', and the text after the first line."""
+    first, _, rest = text.strip().partition("\n")
+    word = re.sub(r"[^a-z0-9# ]", "", first.lower()).strip()
+    if word.startswith("covered") and (m := re.search(r"#\d+", first)):
+        return "covered " + m.group(0), rest.strip()
+    return next((a for a in ("bug", "regression") if word.startswith(a)), "not a bug"), rest.strip()
+
+
+def story_text(rest: str, candidate: dict) -> tuple[str, str]:
+    """(title, body): the reader's story with the Epic, Blocked by and Priority lines the runner owns, P1 for staging CI and P2 otherwise."""
+    title = re.search(r"^Title:\s*(.+)$", rest, re.M)
+    body = re.sub(r"^Title:.*\n?", "", rest, flags=re.M).strip()
+    tail = f"\n\nEpic: #{EPIC}\nBlocked by: none.\nPriority: {'P1' if candidate['branch'] == 'staging' else 'P2'}.\n\nFound by bug intake ({candidate['sig']}):\n{candidate['text']}\n"
+    return (title.group(1).strip() if title else "Fix a failure OliverCode found")[:120], body + tail
+
+
+def file_story(slug: str, root: Path, title: str, body: str, gh) -> int | None:
+    """Create the issue over REST and queue its card for Ready. Returns its number, or None when it was not created."""
+    done = gh(["-X", "POST", f"repos/{slug}/issues", "-f", f"title={title}", "-f", f"body={body}"])
+    try:
+        n = int(json.loads(done.stdout)["number"]) if done.returncode == 0 else None
+    except (ValueError, KeyError, TypeError):
+        return None
+    if n:
+        from lib import cmd_dispatch  # local import: cmd_dispatch loads the modules that import this one
+        cfg = backlog_config(root)
+        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "Ready"}}]}]))
+    return n
+
+
+def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.datetime | None = None, say=print) -> int:
+    """Read the new candidates (a drain stop, red CI on staging, a hook crash) with a fresh reader and file a story for each bug or regression. Returns how many stories were filed.
+    A signature already in bug-seen.json starts no reader: a covered, not-a-bug or filed one is skipped, a recurrence of a closed story reopens it, and a bug the daily cap held is filed."""
+    from check_story_format import check_body  # noqa: PLC0415
+    cfg = backlog_config(root)
+    slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
+    gh = gh or (lambda args: subprocess.run(["gh", "api", *args], capture_output=True, text=True, timeout=60))
+    opened = open_issues.fetch(slug)
+    if opened is None:
+        return 0  # GitHub is held or unreadable, so the next run reads again
+    data = read_seen()
+    seen, today = data["seen"], (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y-%m-%d")
+    open_numbers = {i["number"] for i in opened}
+    filed = sum(1 for e in seen.values() if e.get("filed_on") == today)
+
+    def file_entry(sig: str, entry: dict) -> bool:
+        nonlocal filed
+        if filed >= DAILY_CAP or not (n := file_story(slug, root, entry["title"], entry["body"], gh)):
+            return False
+        entry.update(story=n, filed_on=today)
+        filed += 1
+        return True
+
+    new = 0
+    for sig, entry in seen.items():  # a bug the cap held waits in bug-seen.json until the next day
+        if entry["verdict"] in ("bug", "regression") and not entry.get("story"):
+            new += file_entry(sig, entry)
+    rows = [json.loads(l) for l in (failure_log.home() / "run-log.jsonl").read_text(encoding="utf-8").splitlines() if l.startswith("{")] if (failure_log.home() / "run-log.jsonl").is_file() else []
+    ci = ci_candidate(slug, gh)
+    reads = 0
+    for c in [*run_candidates(rows), *hook_candidates(), *([ci] if ci else [])]:
+        entry = seen.get(c["sig"])
+        if c["at"] < data["created"]:
+            continue  # written before bug-seen.json was made, so it is never read
+        if entry:
+            if entry.get("story") and entry["story"] not in open_numbers and c["at"] > entry.get("at", ""):
+                gh(["-X", "PATCH", f"repos/{slug}/issues/{entry['story']}", "-f", "state=open"])
+                gh(["-X", "POST", f"repos/{slug}/issues/{entry['story']}/comments", "-f", f"body=This failure came back ({c['sig']}):\n{c['text']}"])
+                entry["at"] = c["at"]
+            continue
+        if reads >= MAX_READS:
+            break
+        reads += 1
+        titles = "\n".join(f"- #{i['number']} {i.get('title', '')}" for i in opened)
+        reply = read(f"The failure:\n{c['text']}\n\nThe open stories:\n{titles}\n", root, "bug-intake", "", brief=BUG_BRIEF, say=say)
+        if reply["verdict"] == "none":
+            continue  # no answer, so nothing is recorded and the next run reads it again
+        answer, rest = parse(reply["text"])
+        entry = seen[c["sig"]] = {"verdict": answer.split()[0] if answer != "not a bug" else "not a bug", "at": c["at"]}
+        if answer.startswith("covered"):
+            number = int(answer.split("#")[1])
+            entry["story"] = number
+            gh(["-X", "POST", f"repos/{slug}/issues/{number}/comments", "-f", f"body=Another occurrence of a failure this story covers ({c['sig']}):\n{c['text']}"])
+        elif answer != "not a bug":
+            entry["title"], entry["body"] = story_text(rest, c)
+            if check_body(entry["body"], files=True, blocker=True, root=root):
+                entry["verdict"] = "not a bug"  # a story that fails the format check is never filed
+                continue
+            new += file_entry(c["sig"], entry)
+    try:
+        failure_log.write_private(seen_path(), json.dumps(data, indent=1))
+    except OSError:
+        pass
+    return new

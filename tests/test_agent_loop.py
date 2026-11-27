@@ -393,6 +393,12 @@ class TestLoop(unittest.TestCase):
                 out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
                 self.assertEqual(verdict, out["verdict"])
 
+    def test_a_brief_swaps_the_question_and_skips_the_diff_it_does_not_name(self):
+        run = Scripted(reply("BUG\nroot cause"))
+        out = agent_loop.review("the failure", self.repo, "s1", "", run=run, say=lambda *_: None, brief="Read this: {task}{diff}{tail}")
+        self.assertEqual("Read this: the failure", run.prompts[0])
+        self.assertEqual("findings", out["verdict"])
+
     def test_a_reader_that_fails_once_is_asked_again_and_its_pass_lands_the_story(self):
         run = Scripted(reply("built"), model.ModelError("no reader"), reply("PASS"))
         out = self.loop(run, [(True, "")])

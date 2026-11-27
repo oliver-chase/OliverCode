@@ -321,6 +321,10 @@ class Io:
         """True when this repo is OliverCode's own and lands on the owner's engineBranch, where a story closes on staging and main is a label (#1330)."""
         return bool(agent_loop.setting("engineBranch")) and agent_loop.is_engine_repo(self.repo)
 
+    def find_bugs(self) -> None:
+        """Read the stops this run wrote, and red CI, for faults in OliverCode itself (#1371)."""
+        intake.bugs(OC_ROOT)
+
     def stopped(self, n: int, reason: str) -> None:
         """Append the stopped row that says why a story left the status line (#1291)."""
         agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=reason)
@@ -442,7 +446,7 @@ def finish(io, worktree: Path, n: int, why: str) -> None:
     closed, reason = io.close_by_script(worktree, n, why)
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
-        io.stopped(n, reason)  # the refusal is the reason status shows (#1291)
+        io.stopped(n, f"Close refused: {reason}")  # the refusal is the reason status shows, and bug intake reads its prefix (#1291, #1371)
         notify(f"Story #{n} close refused: {reason}")
         raise CloseRefused(reason)
 
@@ -948,6 +952,10 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
                 cmd_status.write_digest(slug, out=lambda _text: None)  # the digest is current when a run ends (#1313)
             except Exception as exc:  # noqa: BLE001 -- a digest bug never hides the run's end
                 print(f"drain: status digest failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+            try:
+                io.find_bugs()
+            except Exception as exc:  # noqa: BLE001 -- bug intake never hides the run's end
+                print(f"drain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
             notify(f"Drain ended: {len(state['closed'])} landed, {len(state['blocked'])} stopped")
         if on_main:
             signal.signal(signal.SIGTERM, previous)
