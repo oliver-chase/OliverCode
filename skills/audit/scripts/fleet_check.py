@@ -35,21 +35,13 @@ SMALL = {"a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "
 CURLY = "‘’“”"
 
 
-def queued(command):
-    """The command behind the machine's validation queue helper (the same neutral `validate-queue` shim every repo's validate.sh
-    uses), so a timing run waits for a slot like any validation. Inside a held slot, or with no helper, the command runs as given."""
-    shim = Path.home() / ".local" / "bin" / "validate-queue"
-    inside = any(os.environ.get(v, "").endswith(".json") for v in ("OLIVERCODE_VALIDATE_SLOT", "VALIDATE_QUEUE_SLOT"))
-    return command if inside or not shim.is_file() else f"{shim} run {command}"
-
-
 def run_validation(repo):
     """(seconds, passed, last line of output) for the repo's own validation, run once while the machine has room,
     or None when load_guard says to wait."""
     if load_guard.advice(os.getloadavg()[0], os.cpu_count() or 1)[0] == 0:
         return None
     start = time.monotonic()
-    done = subprocess.run(queued(validation_command(repo)), cwd=repo, shell=True, capture_output=True, text=True)
+    done = subprocess.run(validation_command(repo), cwd=repo, shell=True, capture_output=True, text=True)
     last = ((done.stdout + done.stderr).strip().splitlines() or [""])[-1][:120]
     return round(time.monotonic() - start, 1), done.returncode == 0, last
 

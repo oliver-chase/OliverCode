@@ -67,6 +67,10 @@ class TestValidateOnce(unittest.TestCase):
         self.assertEqual(1, self.argv(False)[1].call_count)
         self.assertEqual(0, self.argv(False, code=1)[1].call_count)
 
+    def test_the_repo_validation_runs_directly_with_no_queue_in_front(self):
+        self.assertEqual(["bash", "scripts/validate.sh"], self.argv(False)[0][:2])
+        self.assertNotIn("queue", self.argv(False)[0])
+
     def test_quick_adds_the_flag_only_when_the_script_offers_it(self):
         self.assertNotIn("--quick", self.argv(True)[0])
         self.script.write_text('if [[ "$1" == "--quick" ]]; then exit 0; fi\n')

@@ -95,7 +95,6 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sy
     timeout = default_timeout() if timeout is None else timeout
     max_gates = max(1, default_max_gates() if max_gates is None else max_gates)
     env = {**os.environ}
-    env.setdefault("VALIDATE_QUEUE_SLOT", "none")  # a gate is part of this run, so it takes no slot of its own
     codes: dict[str, int] = {}
     took: dict[str, float] = {}
     stalled: list[str] = []

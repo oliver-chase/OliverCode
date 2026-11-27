@@ -229,8 +229,7 @@ class Record(unittest.TestCase):
         shutil.copy(REPO_ROOT / "scripts" / "validate.sh", self.repo / "scripts" / "validate.sh")
         # An unknown check-repo directory fails before the record step,.
         result = subprocess.run(["bash", str(self.repo / "scripts" / "validate.sh"), "--check-repo", str(self.tmp / "none")],
-                                capture_output=True, text=True, env={**os.environ, "OLIVERCODE_HOME": str(self.home),
-                                "OLIVERCODE_VALIDATE_SLOT": "none"})
+                                capture_output=True, text=True, env={**os.environ, "OLIVERCODE_HOME": str(self.home)})
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.home / "validated.jsonl").exists())
 

@@ -144,11 +144,8 @@ class TestDispatch(DispatchCase):
         self.assertFalse((self.home / "gh-project-queue.json").exists())
 
     def test_a_dispatch_starts_below_the_machine_limit_and_refuses_at_it(self):
-        """#1055: other runs' builders count against maxBuilders; held validation slots and the load average do not."""
+        """#1055: other runs' builders count against maxBuilders; the load average does not."""
         with mock.patch.object(cmd_dispatch.local_config, "max_builders", return_value=4):
-            folder = self.home / "validate-slots"
-            folder.mkdir(parents=True, exist_ok=True)
-            (folder / "slot-1.json").write_text(json.dumps({"pid": os.getpid(), "started": time.time(), "label": "held"}))
             code, _out, io = self.run_dispatch(busy=lambda slug: 3)
             self.assertEqual((code, "build" in io.steps), (0, True))
             code, out, io = self.run_dispatch(busy=lambda slug: 4)

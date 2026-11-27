@@ -11,7 +11,6 @@ from pathlib import Path
 from lib import backlog_setup as _backlog_setup
 from lib import repo_gates, repo_profiles
 from lib import update_state
-from lib import validate_snippet as _snippet
 from lib.cli import require_dir, take_flag
 from lib.gitfiles import commit_after, commit_changes
 from lib.local_config import OC_ROOT
@@ -93,8 +92,7 @@ def _set_hooks_path(repo_path: Path) -> None:
 HOOK_FILES = ("pre-commit", "pre-commit-private", "pre-push", "commit-msg")  # every file a sync can write or delete
 
 
-VALIDATE_PATH = "scripts/validate.sh"  # sync also inserts the validation-queue block here
-MANAGED_PATHS = tuple(f".githooks/{n}" for n in HOOK_FILES) + (VALIDATE_PATH,)
+MANAGED_PATHS = tuple(f".githooks/{n}" for n in HOOK_FILES)
 
 
 def _git(repo_path: Path, *args: str) -> subprocess.CompletedProcess:
@@ -153,19 +151,10 @@ def _commit_synced(name: str, repo_path: Path, before: dict, story: str, archive
     changed += already
     if not changed:
         return say("nothing to commit")
-    queue_line = ("scripts/validate.sh now takes a slot in the per-user validation queue, so a script that calls it "
-                  "directly waits its turn.\n\n" if VALIDATE_PATH in changed else "")
     message = (f"Sync the managed hook files from OliverCode ({story})\n\n"
-               "The hook files in this repo now match the current OliverCode templates.\n\n" + queue_line +
+               "The hook files in this repo now match the current OliverCode templates.\n\n"
                "No test: managed hook files copied from OliverCode\nSize: XS\n")
     say(commit_changes(repo_path, changed, message))
-
-
-def _queue_block(oc_root: Path, name: str, repo_path: Path) -> None:
-    """Insert the validation-queue block into the repo's own scripts/validate.sh when it lacks it."""
-    line = _snippet.report(name, *_snippet.ensure_queue_snippet(oc_root, repo_path))
-    if line:
-        print(line)
 
 
 def _sync_one(name: str, repo_path: Path, failed: list[str], install, ok_line: str, commit: bool, story: str | None) -> bool:
@@ -202,7 +191,7 @@ def command_sync_hooks(oc_root: Path, commit: bool = False, story: str | None = 
             if _repo_state.skipped(name, root):
                 skipped += 1
                 continue
-            if _sync_one(name, root, failed_repos, lambda: (_install_hook_pair(root, templates_dir, private_repo=True), _queue_block(oc_root, name, root)),
+            if _sync_one(name, root, failed_repos, lambda: _install_hook_pair(root, templates_dir, private_repo=True),
                          f"  [OK] {name}: private-variant hook synced, hooksPath set", commit, story):
                 updated += 1
         else:

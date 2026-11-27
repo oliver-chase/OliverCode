@@ -201,7 +201,6 @@ In a repo with commit gates, a new interactive session refreshes `status-digest.
 - `owner` and `decisions` keep the owner's steps and decisions in `~/.olivercode/`
 - `install` links `docs/VOICE.md` and `docs/DESIGN.md` into `~/.claude`, links each skill, merges the hook entries listed in `docs/RULES.md` ("Execution") into `~/.claude/settings.json` and sets `core.hooksPath` to `.githooks` here when unset. Any other file at a target path moves to `<name>.pre-olivercode` and is printed. `uninstall` reverses exactly that
 - `validated record|check SHA` keeps the passing full validations that the pre-push hook requires before a push to main
-- `queue show` lists the validation runs holding one of the slots that every `scripts/validate.sh` waits for. The slot count is `OLIVERCODE_VALIDATE_SLOTS`, which defaults to an eighth of this machine's cores (at least 1), so an 8-core laptop runs one validation at a time and a 16-core desktop runs two. A holder keeps its slot while its process lives and for up to 4 hours, and a run waits up to an hour before it goes ahead with a message that names why. A slot whose holder died, whose pid now belongs to another process or whose file is damaged is reclaimed with a line that names the repair The pretool guard routes `npm test`, `pytest` and the other commands in `QUEUED_COMMANDS` (`scripts/hooks/queue_guard.py`) through `queue run`
 
 ### The olivercode command on PATH
 

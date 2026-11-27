@@ -90,12 +90,6 @@ run_code_quality() {
   python3 "${SCRIPT_DIR}/lib/repo_checks.py" quality "${1:-$REPO_ROOT}"
 }
 
-run_queue_bypass() {
-  # Every caller reaches validation through this script, whose queue block takes the slot. A tracked script that starts the
-  # test suite or a slotless copy of validate.sh around the queue fails here (scripts/lib/queue_bypass.py).
-  python3 "${SCRIPT_DIR}/lib/queue_bypass.py" "$REPO_ROOT"
-}
-
 run_smoke_tests() {
   # Skipped when tests/ does not exist. Tests read the one tracked shared/repo-profiles.json, so they pass identically everywhere.
   #
@@ -111,7 +105,7 @@ run_smoke_tests() {
 }
 
 # The gates that share no state, in the order their output is replayed. Each is `bash validate.sh --gate NAME`.
-GATES=(precommit fleet bloat quality refs docs limits bypass smoke)
+GATES=(precommit fleet bloat quality refs docs limits smoke)
 
 run_gate() {
   case "$1" in
@@ -122,7 +116,6 @@ run_gate() {
     refs) run_reference_check ;;
     docs) run_docs_check ;;
     limits) run_limits_check ;;
-    bypass) run_queue_bypass ;;
     smoke) run_smoke_tests ;;
     *) echo "validate: no gate named '$1'" >&2; exit 2 ;;
   esac
@@ -148,9 +141,9 @@ main() {
       echo ""
       echo "Options:"
       echo "  (no args)              Run pre-commit gates, fleet names, reference integrity, bloat,"
-      echo "                         code quality, the docs and size limit checks, the queue bypass check, smoke tests (tests/ and the"
+      echo "                         code quality, the docs and size limit checks, smoke tests (tests/ and the"
       echo "                         skills' own script tests, if present), in"
-      echo "                         parallel inside one queue slot, printing each gate as it starts and finishes"
+      echo "                         parallel, printing each gate as it starts and finishes"
       echo "                         OLIVERCODE_VALIDATE_TIMEOUT (seconds) is the run's budget and"
       echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: cores);"
       echo "                         OLIVERCODE_VALIDATE_JOBS sets the smoke test parallelism"
@@ -197,25 +190,5 @@ main() {
       ;;
   esac
 }
-
-# Help and a single gate started by a run that holds its slot already take none of their own.
-case "${1:-}" in --help|-h|--gate) VALIDATE_QUEUE_SLOT="${VALIDATE_QUEUE_SLOT:-none}" ;; esac
-
-# The validation queue block is the one the fleet shares (core/templates/project/scripts/validate-queue.snippet.sh), pointed at this checkout's helper.
-VALIDATE_QUEUE_BIN="${SCRIPT_DIR}/lib/validate_queue.py"
-# managed:validate-queue block, kept in step by sync-hooks and bootstrap
-# One per-user queue for validation runs, taken through the validate-queue helper this machine installs.
-# Without the helper the run goes ahead unqueued.
-VALIDATE_QUEUE_BIN="${VALIDATE_QUEUE_BIN:-$HOME/.local/bin/validate-queue}"
-if [[ -z "${VALIDATE_QUEUE_SLOT:-}" ]]; then
-  if [[ -x "$VALIDATE_QUEUE_BIN" ]]; then
-    VALIDATE_QUEUE_SLOT="$("$VALIDATE_QUEUE_BIN" acquire --pid $$ --label "$(basename "${REPO_ROOT:-$PWD}")" || true)"
-    export VALIDATE_QUEUE_SLOT="${VALIDATE_QUEUE_SLOT:-none}"
-    # A script's own EXIT trap wins: the queue reaps a slot whose process has exited, so nothing leaks.
-    [[ -n "$(trap -p EXIT)" ]] || trap '"$VALIDATE_QUEUE_BIN" release "$VALIDATE_QUEUE_SLOT" >/dev/null 2>&1 || true' EXIT
-  else
-    echo "validate: no validate-queue helper at $VALIDATE_QUEUE_BIN, running unqueued" >&2
-  fi
-fi
 
 main "$@"

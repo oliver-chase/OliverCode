@@ -11,7 +11,7 @@ What the harness covers today:
 - Shared instructions, voice and design standards, and skills that install into `~/.claude`
 - Commit and push gates that refuse unsafe or incomplete work, with a health check that the gates still run in OliverCode and each private repo
 - Machine health and placement checks, plus scheduled jobs that report on boards with no model call
-- A GitHub budget and a validation queue that every session shares
+- A GitHub budget that every session shares
 - A decision ledger that keeps the owner's exact words for each decision
 
 Also in place: a check that policy cannot turn off silently. Failures are reported, and none becomes a story, a gate or an issue edit by itself. Fresh-clone portability, second-device sync and honest token counts are tracked on the backlog.
@@ -101,7 +101,7 @@ python3 scripts/olivercode health
 | --- | --- |
 | Install and update | `olivercode install`, `olivercode uninstall`, `olivercode update`, `olivercode bootstrap`, `olivercode sync-hooks`, `olivercode place`, `olivercode clean`, `olivercode worktree`, `olivercode commit-check` |
 | Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode maintain`, `olivercode limits` |
-| Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode watch`, `olivercode land`, `olivercode promote`, `olivercode wip`, `olivercode validated`, `olivercode queue` |
+| Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode watch`, `olivercode land`, `olivercode promote`, `olivercode wip`, `olivercode validated` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board fit`, `olivercode board sync`, `olivercode gh-limit`, `olivercode gated` |
 | Owner and decisions | `olivercode owner`, `olivercode decisions`, `olivercode handoff` |

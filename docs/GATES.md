@@ -8,20 +8,19 @@ The gates guard against honest mistakes and careless agents. A commit that rewri
 
 `bash scripts/validate.sh` runs every active check from the repo root:
 
-- With no argument it runs the pre-commit gates, the fleet name check, reference integrity (`scripts/link-check.sh`), the docs check, the size warning (`olivercode limits check`, which never fails the run), the bloat and code quality checks, the queue bypass check, and the tests
+- With no argument it runs the pre-commit gates, the fleet name check, reference integrity (`scripts/link-check.sh`), the docs check, the size warning (`olivercode limits check`, which never fails the run), the bloat and code quality checks, and the tests
 - `--tree` is the same as no argument, because the pre-commit gates always scan every tracked file; any other unknown option exits 2 and records nothing
 - `--check-consistency` runs the fleet name check only
 - `--rehearse` rehearses the install in sandboxes (`scripts/qa/rehearse-install.sh`)
-- `bash scripts/run-tests.sh` runs the test suite from a clean clone of HEAD under a temporary HOME, inside one validation queue slot
+- `bash scripts/run-tests.sh` runs the test suite from a clean clone of HEAD under a temporary HOME
 
 ### Throughput and the one entry point
 
-Every validation waits in the per-user queue, so at most a few run at once however many builders, landings and hooks ask. `bash scripts/validate.sh` is the one entry point: its managed block takes a slot before any gate starts, and `olivercode land`, the builders, the audit's done check and health all start validation through it.
+`bash scripts/validate.sh` is the one entry point, and a validation starts at once and takes no slot. `maxBuilders` is the one control on how much runs together, and `olivercode land`, the builders, the audit's done check and health all start validation through it.
 
-- The gates that share no state (pre-commit, fleet names, bloat, code quality, references, docs, size limits, queue bypass, smoke tests and hook state) run in parallel inside the run's one slot, at most `OLIVERCODE_VALIDATE_GATES` at once (default: the core count). A `=== validate: gate ... ===` line prints as each gate starts and as it finishes with its seconds, and `olivercode land` shows the same lines while its full log fills. Their output replays in the order above with the same `=== validate: ... ===` lines, and any failing gate fails the run with that gate's exit code. The smoke tests run one process per test module, `OLIVERCODE_VALIDATE_JOBS` at a time (default: the core count)
-- The slot count is `OLIVERCODE_VALIDATE_SLOTS`, default an eighth of the machine's cores and at least 1, so an 8-core machine runs one validation at a time. A slot is reclaimed when its holder is gone or its pid belongs to another process, and a slot held for more than 4 hours is reaped even when its holder lives. A run that has waited an hour goes ahead and says so on stderr. Missing, old and damaged state is repaired with a line that names the repair
+- The gates that share no state (pre-commit, fleet names, bloat, code quality, references, docs, size limits, smoke tests and hook state) run in parallel, at most `OLIVERCODE_VALIDATE_GATES` at once (default: the core count). A `=== validate: gate ... ===` line prints as each gate starts and as it finishes with its seconds, and `olivercode land` shows the same lines while its full log fills. Their output replays in the order above with the same `=== validate: ... ===` lines, and any failing gate fails the run with that gate's exit code. The smoke tests run one process per test module, `OLIVERCODE_VALIDATE_JOBS` at a time (default: the core count)
 - A run keeps a time budget of `OLIVERCODE_VALIDATE_TIMEOUT` seconds (default 5 minutes, set from measured runs with headroom and scaled up to twice by the machine's load per core). Past it, the run stops the gates still running and fails with exit 124 and a line that names each one, its seconds and the load, with the command that reruns that gate alone
-- The queue bypass gate (`scripts/lib/queue_bypass.py`) fails when a tracked `scripts/validate.sh` has no queue block, when a script starts the test suite (`python3 -m unittest`, `pytest`, `npm test`, `run-tests.sh`) outside the queue, or when a script starts `validate.sh` with its queue variables replaced. The finding names the script and line and the entry point to use. Tests, docs and Markdown may name these commands. The docs check fails when a gate script this file names has no script or hook that runs it
+- The docs check fails when a gate script this file names has no script or hook that runs it
 
 Hook drift fails validation: OliverCode's hook, the public template and the private template run the same gates, each gate's body lives once in `core/hooks/gates/`, and `scripts/build-hooks.py` assembles the four hooks (two pre-commit templates, pre-push and commit-msg) from one ordered gate list. The built hooks are untracked, and install, bootstrap, sync-hooks and `validate.sh` build them before reading them.
 

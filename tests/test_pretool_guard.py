@@ -99,6 +99,11 @@ class TestDispatch(unittest.TestCase):
             ran = subprocess.run([sys.executable, str(SCRIPT)], input=stdin, capture_output=True, text=True)
             self.assertEqual((0, ""), (ran.returncode, ran.stdout), stdin)
 
+    def test_a_test_or_render_command_passes_unchanged(self):
+        for command in ("pytest", "npm test", "ffmpeg -i a.mp4 b.mp4", "bash scripts/validate.sh"):
+            with quiet_guards():
+                self.assertIsNone(run_main({**BASH, "tool_input": {"command": command}}), command)
+
 
 class TestRegistration(unittest.TestCase):
     def test_one_entry_replaces_the_four_pre_tool_guards(self):

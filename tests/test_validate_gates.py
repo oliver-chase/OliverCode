@@ -1,5 +1,4 @@
-"""Validation throughput (#757): the parallel gate runner, the per-run timeout and retry, the queue bypass gate
-and the smoke runner (scripts/lib/validate_gates.py, queue_bypass.py, smoke_runner.py)."""
+"""Validation throughput (#757): the parallel gate runner, the per-run timeout and retry, and the smoke runner (scripts/lib/validate_gates.py, smoke_runner.py)."""
 
 import io
 import os
@@ -10,7 +9,6 @@ from unittest import mock
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
-import queue_bypass  # noqa: E402
 import smoke_runner  # noqa: E402
 import validate_gates  # noqa: E402
 
@@ -102,59 +100,10 @@ class ParallelGates(unittest.TestCase):
 
     def test_validate_sh_lists_each_gate_once_and_runs_one_by_name(self):
         text = (REPO_ROOT / "scripts" / "validate.sh").read_text(encoding="utf-8")
-        self.assertIn("GATES=(precommit fleet bloat quality refs docs limits bypass smoke)", text)
+        self.assertIn("GATES=(precommit fleet bloat quality refs docs limits smoke)", text)
         import subprocess
         done = subprocess.run(["bash", str(REPO_ROOT / "scripts" / "validate.sh"), "--gate", "nonesuch"], capture_output=True, text=True)
         self.assertEqual(2, done.returncode)
-
-
-class QueueBypassGate(unittest.TestCase):
-    def repo_with(self, files):
-        repo = scratch_repo(temp_dir(self, "olivercode-bypass-"))
-        for rel, text in files.items():
-            path = repo / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-            git(repo, "add", rel)
-        return repo
-
-    def test_this_repo_has_no_bypass(self):
-        self.assertEqual([], queue_bypass.check(REPO_ROOT))
-
-    def test_a_script_that_runs_the_suite_directly_is_named_with_the_entry_point(self):
-        repo = self.repo_with({"scripts/nightly.sh": "#!/usr/bin/env bash\npython3 -m unittest discover -s tests\n"})
-        found = queue_bypass.check(repo)
-        self.assertEqual(1, len(found))
-        self.assertIn("scripts/nightly.sh:2", found[0])
-        self.assertIn("bash scripts/validate.sh", found[0])
-
-    def test_a_python_caller_that_builds_an_unqueued_argv_is_caught(self):
-        repo = self.repo_with({"tools/run.py": 'import subprocess\nsubprocess.run(["python3", "-m", "unittest"])\n'})
-        self.assertEqual(1, len(queue_bypass.check(repo)))
-
-    def test_a_validate_sh_without_the_queue_block_is_caught(self):
-        repo = self.repo_with({"scripts/validate.sh": "#!/usr/bin/env bash\necho hi\n"})
-        self.assertIn("no queue block", queue_bypass.check(repo)[0])
-
-    def test_validate_sh_started_with_the_slot_variables_replaced_is_caught(self):
-        repo = self.repo_with({"scripts/ci.sh": "VALIDATE_QUEUE_SLOT=none bash scripts/validate.sh\n"})
-        self.assertIn("scripts/ci.sh:1", queue_bypass.check(repo)[0])
-
-    def test_a_queued_command_a_comment_a_test_and_a_doc_pass(self):
-        repo = self.repo_with({
-            "scripts/ok.sh": "# python3 -m unittest is run by validate.sh\nvalidate-queue run python3 -m unittest\n"
-                             "python3 validate_queue.py run \\\n  python3 -m unittest\n",
-            "tests/test_x.py": 'x = "python3 -m unittest"\n',
-            "docs/NOTES.md": "run python3 -m unittest\n",
-        })
-        self.assertEqual([], queue_bypass.check(repo))
-
-    def test_the_gate_exits_one_and_prints_each_bypass(self):
-        repo = self.repo_with({"scripts/x.sh": "pytest\n"})
-        out = io.StringIO()
-        with mock.patch("sys.stdout", out):
-            self.assertEqual(1, queue_bypass.main([str(repo)]))
-        self.assertIn("scripts/x.sh:1", out.getvalue())
 
 
 class SmokeRunner(unittest.TestCase):

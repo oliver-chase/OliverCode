@@ -1,7 +1,6 @@
 """OliverCode's own agent loop: Claude Code headless does the work, OliverCode owns the rounds around it.
 
-The builder session runs `claude -p` on the task and exits at its commit. The runner then runs the repo's own validation through the
-per-user queue, outside any session. A pass ends the loop. A failure starts one short fix session whose brief is the story, the diff and the last 60 lines of the gate (#888). The loop stops when validation passes, after
+The builder session runs `claude -p` on the task and exits at its commit. The runner then runs the repo's own validation directly, outside any session. A pass ends the loop. A failure starts one short fix session whose brief is the story, the diff and the last 60 lines of the gate (#888). The loop stops when validation passes, after
 MAX_ROUNDS rounds, when `claude` exits with an error or when the session's token budget refuses the next call, and a stopped loop leaves the
 working tree as it is. The model's tools run under the installed pretool guards, and the repo's commit gates run on every commit it makes.
 """
@@ -12,7 +11,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -106,7 +104,7 @@ def offers_quick(command: list[str], cwd: str | Path) -> bool:
 
 
 def validate(cwd: str | Path, quick: bool = False) -> tuple[bool, str]:
-    """(passed, the end of its output). It waits for a slot in the per-user validation queue.
+    """(passed, the end of its output).
 
     `quick` runs the repo's `validate.sh --quick` when the script offers it (#1290). A pass is recorded for the worktree's tree, so land reuses
     it and never runs the same validation again."""
@@ -115,9 +113,8 @@ def validate(cwd: str | Path, quick: bool = False) -> tuple[bool, str]:
         return False, NO_VALIDATION
     if quick and offers_quick(command, cwd):
         command = [*command, "--quick"]
-    argv = [sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "queue", "run", "--", *command]
     try:
-        ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
+        ran = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
         return False, f"Validation ran past {VALIDATE_TIMEOUT} seconds and was stopped."
     if ran.returncode == 0:

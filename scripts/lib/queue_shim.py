@@ -1,31 +1,14 @@
-"""The validate-queue shim that `olivercode install` writes to ~/.local/bin (#572).
-
-A repo's scripts/validate.sh takes a validation slot by calling `$HOME/.local/bin/validate-queue`, so no repo script names
-OliverCode or a path on this machine. The shim is two lines that exec this checkout's scripts/lib/validate_queue.py by its
-absolute path. Install writes it, uninstall removes it, and health checks it.
-
-The same install also puts `olivercode` itself on the PATH (#777): a symlink at ~/.local/bin/olivercode to this checkout's
-launcher, plus a marked PATH block in the zsh and bash startup files when ~/.local/bin is not on the PATH yet.
+"""Puts `olivercode` itself on the PATH (#777): a symlink at ~/.local/bin/olivercode to this checkout's launcher, plus a marked
+PATH block in the zsh and bash startup files when ~/.local/bin is not on the PATH yet. Install writes it, uninstall removes it,
+and health checks it.
 """
 
 from __future__ import annotations
 
 import os
-import shlex
 from pathlib import Path
 
-NAME = "validate-queue"
 FIX = "run `olivercode install`"
-
-
-def shim_path() -> Path:
-    """Where the shim lives, resolved at call time so a test that sets HOME gets its own."""
-    return Path.home() / ".local" / "bin" / NAME
-
-
-def shim_text(oc_root: Path) -> str:
-    target = (Path(oc_root).resolve() / "scripts" / "lib" / "validate_queue.py")
-    return f"#!/bin/sh\nexec python3 {shlex.quote(str(target))} \"$@\"\n"
 
 
 def _read(path: Path) -> str | None:
@@ -33,21 +16,6 @@ def _read(path: Path) -> str | None:
         return path.read_text(encoding="utf-8")
     except (OSError, ValueError):
         return None
-
-
-def problem(oc_root: Path) -> str | None:
-    """Why the shim cannot serve this checkout, or None when it can."""
-    path = shim_path()
-    if not (path.exists() or path.is_symlink()):
-        return f"{path} is missing, so every repo's validate.sh runs unqueued. {FIX.capitalize()}"
-    text = _read(path)
-    if text != shim_text(oc_root):
-        pointed = [w for w in (text or "").replace("'", " ").split() if w.endswith("validate_queue.py")]
-        where = f"points at {pointed[0]}" if pointed else "is not the shim install writes"
-        return f"{path} {where}, not this checkout's validate_queue.py. {FIX.capitalize()}"
-    if not os.access(path, os.X_OK):
-        return f"{path} is not executable. {FIX.capitalize()}"
-    return None
 
 
 def _set_aside(path: Path, backups: list[str]) -> None:
@@ -62,40 +30,13 @@ def _set_aside(path: Path, backups: list[str]) -> None:
     backups.append(str(backup))
 
 
-def install(oc_root: Path, backups: list[str]) -> str:
-    """Write the shim and return a one-word status: already, linked or backed-up. A file already at the path is moved
-    aside to `validate-queue.pre-olivercode` (a free name, never replacing an earlier backup) and added to `backups`."""
-    path = shim_path()
-    text = shim_text(oc_root)
-    if not path.is_symlink() and _read(path) == text and os.access(path, os.X_OK):
-        return "already"
-    status = "linked"
-    if path.exists() or path.is_symlink():
-        _set_aside(path, backups)
-        status = "backed-up"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    path.chmod(0o755)
-    return status
-
-
-def uninstall(oc_root: Path) -> str:
-    """Remove the shim when it is this checkout's, then restore the newest backup. Returns removed, restored, kept or absent."""
-    from lib.cmd_install import _backups
-    path = shim_path()
-    backups = _backups(path)
-    if path.exists() or path.is_symlink():
-        if path.is_symlink() or _read(path) != shim_text(oc_root):
-            return "kept"
+def remove_old_shim() -> bool:
+    """Remove ~/.local/bin/validate-queue left by an earlier install when it is the old two-line shim. True when it removed one."""
+    path = Path.home() / ".local" / "bin" / "validate-queue"
+    if not path.is_symlink() and "validate_queue.py" in (_read(path) or ""):
         path.unlink()
-        if backups:
-            backups[-1].rename(path)
-            return "restored"
-        return "removed"
-    if backups:
-        backups[-1].rename(path)
-        return "restored"
-    return "absent"
+        return True
+    return False
 
 
 # --- the `olivercode` command on the PATH (#777) ---

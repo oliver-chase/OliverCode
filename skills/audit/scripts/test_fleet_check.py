@@ -50,8 +50,7 @@ class Tests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_time_runs_the_repos_validation_once_and_reports_failure(self):
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fleet_check.os, "getloadavg", return_value=(0, 0, 0)), \
-                mock.patch.object(fleet_check, "queued", side_effect=lambda c: c):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fleet_check.os, "getloadavg", return_value=(0, 0, 0)):
             repo = make_repo(tmp, {"scripts/validate.sh": "echo run >> ran.txt\n"})
             code, out = run("--time", str(repo))
             self.assertEqual(code, 0)

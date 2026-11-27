@@ -111,12 +111,6 @@ def command_health() -> int:
             t.fail(f"~/.claude/settings.json permissions.allow lacks {', '.join(no_allow)} — run `olivercode install`")
         else:
             t.ok("permissions.allow holds the tools a session needs")
-        # The shim is what lets every repo's validate.sh take a queue slot (#572).
-        why = _queue_shim.problem(OC_ROOT)
-        if why:
-            t.fail(why)
-        else:
-            t.ok("the validate-queue shim in ~/.local/bin points at this checkout")
         gap = _queue_shim.launcher_problem(OC_ROOT)
         if gap:
             t.fail(gap)

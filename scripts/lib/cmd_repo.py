@@ -232,10 +232,6 @@ def command_bootstrap(oc_root: Path, target: Path, dry_run: bool) -> int:
     print(f"\n  {new} new, {overwritten} overwritten (strict), {kept} kept (presence, already present)")
     for rel in missing_src:
         print(f"  [FAIL] template source missing from this checkout: {rel}")
-    from lib import validate_snippet
-    line = validate_snippet.report(target.name, *validate_snippet.ensure_queue_snippet(oc_root, target, dry_run), dry_run=dry_run)
-    if line:
-        print(line)
 
     if dry_run:
         print("\nRe-run without --dry-run to apply.")
@@ -352,19 +348,3 @@ def command_gh_limit(argv: list[str]) -> int:
     why = gh_budget.refusal()
     print(why or "No GitHub rate-limit hold is on.")
     return 1 if why else 0
-
-
-def command_queue(argv: list[str]) -> int:
-    """`olivercode queue show` lists the runs holding a validation or render slot, and `queue run [--render] -- COMMAND...` runs one inside a queue."""
-    from lib import validate_queue
-    if argv[:1] == ["run"]:
-        queue = "render" if argv[1:2] == ["--render"] else "validate"
-        rest = argv[2:] if queue == "render" else argv[1:]
-        command = rest[1:] if rest[:1] == ["--"] else rest
-        if command:
-            return validate_queue.run(command, queue)
-    if argv in ([], ["show"]):
-        print(validate_queue.show())
-        return 0
-    print("Usage: olivercode queue show | olivercode queue run [--render] -- COMMAND...")
-    return 1

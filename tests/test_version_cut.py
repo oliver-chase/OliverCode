@@ -229,15 +229,15 @@ class TestDocsCheck(unittest.TestCase):
 
     def test_a_listed_gate_script_that_nothing_runs_fails_and_one_a_script_runs_passes(self):
         root = self.tree()
-        (root / "docs/GATES.md").write_text((root / "docs/GATES.md").read_text() + "\nThe queue bypass gate (`scripts/lib/queue_bypass.py`) fails a bypass.\n")
+        (root / "docs/GATES.md").write_text((root / "docs/GATES.md").read_text() + "\nThe smoke gate (`scripts/lib/smoke_runner.py`) fails a bypass.\n")
         text = "\n".join(docs_check.run(root))
-        self.assertIn("scripts/lib/queue_bypass.py and the file does not exist", text)
-        (root / "scripts/lib/queue_bypass.py").write_text("print('ok')\n")
-        (root / "scripts/validate.sh").write_text("# python3 scripts/lib/queue_bypass.py, a comment runs nothing\nexit 0\n")
+        self.assertIn("scripts/lib/smoke_runner.py and the file does not exist", text)
+        (root / "scripts/lib/smoke_runner.py").write_text("print('ok')\n")
+        (root / "scripts/validate.sh").write_text("# python3 scripts/lib/smoke_runner.py, a comment runs nothing\nexit 0\n")
         problems = docs_check.run(root)
         self.assertEqual(1, len(problems), problems)
         self.assertIn("no script or hook runs it", problems[0])
-        (root / "scripts/validate.sh").write_text('python3 "$DIR/lib/queue_bypass.py" .\n')
+        (root / "scripts/validate.sh").write_text('python3 "$DIR/lib/smoke_runner.py" .\n')
         self.assertEqual([], docs_check.run(root))
 
     def test_the_main_exit_code_is_one_on_a_miss_and_zero_on_a_pass(self):

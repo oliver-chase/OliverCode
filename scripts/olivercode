@@ -60,7 +60,7 @@ from lib.cmd_commit_check import command_commit_check  # noqa: E402
 from lib.wip import command_wip  # noqa: E402
 from lib.cmd_install import command_install, command_uninstall  # noqa: E402
 from lib.cmd_repo import (
-    command_bootstrap, command_clean, command_discover, command_gh_limit, command_place, command_queue,
+    command_bootstrap, command_clean, command_discover, command_gh_limit, command_place,
     command_policy, command_worktree,
 )  # noqa: E402
 from lib.local_config import OC_ROOT  # noqa: E402
@@ -118,8 +118,6 @@ def main() -> int:
         return command_watch(argv)
     if cmd == "validated":
         return command_validated(argv)
-    if cmd == "queue":
-        return command_queue(argv)
     if cmd == "gh-limit":
         return command_gh_limit(argv)
     if cmd == "gated":

@@ -565,13 +565,9 @@ def command_install(oc_root: Path) -> int:
                                if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == src.resolve()}, city_added)
 
     broken_settings = False
-    # Every repo's validate.sh takes a queue slot through this helper, so no repo script names this checkout (#572).
-    try:
-        status = _queue_shim.install(oc_root, backups)
-        print(f"  [{status.upper()}] ~/.local/bin/validate-queue")
-    except OSError as exc:
-        print(f"  [FAIL] ~/.local/bin/validate-queue could not be written ({exc}); validate.sh runs unqueued until `olivercode install` succeeds")
-        broken_settings = True
+    # The validation queue is gone (#1315), so the shim an earlier install wrote goes too.
+    if _queue_shim.remove_old_shim():
+        print("  [REMOVED] ~/.local/bin/validate-queue")
 
     try:
         for line in _queue_shim.install_launcher(oc_root, backups):
@@ -767,8 +763,6 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     if not jobs:
         print("  [ABSENT] launchd jobs")
 
-    shim = _queue_shim.uninstall(oc_root)
-    print(f"  [{shim.upper()}] ~/.local/bin/validate-queue")
     for line in _queue_shim.uninstall_launcher(oc_root):
         print(line)
 
@@ -777,7 +771,7 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
         print(line)
 
     leftovers = [b for name in RULE_LINKS for b in _backups(claude_dir / name)]
-    leftovers += _backups(_queue_shim.shim_path()) + _backups(_queue_shim.launcher_path())
+    leftovers += _backups(_queue_shim.launcher_path())
     if skills_dir.is_dir():
         leftovers += sorted(b for b in skills_dir.iterdir() if BACKUP_SUFFIX in b.name)
     (claude_dir / INSTALL_RECORD).unlink(missing_ok=True)

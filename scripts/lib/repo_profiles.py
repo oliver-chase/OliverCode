@@ -26,7 +26,6 @@ def _npm_scripts(repo: Path) -> dict:
     return scripts if isinstance(scripts, dict) else {}
 
 
-# Split so the queue-bypass gate reads these names as data, not as a script starting the suite.
 PYTEST = "py" "test"
 NPM_TEST = "npm " "test"
 
