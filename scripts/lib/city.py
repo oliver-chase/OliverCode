@@ -192,11 +192,6 @@ def command(text: str, label: str = "Copy") -> str:
     return f'<div class="acts"><code>{esc(text)}</code><button class="btn b-ghost" data-copy="{html.escape(text, quote=True)}">{label}</button></div>'
 
 
-def landed_row(row: dict) -> str:
-    cost = f"${row['cost']:.2f}" if row["cost"] else "cost not recorded"
-    return f"#{row['story'].rsplit('-', 1)[-1]} in {row['repo']} landed at {datetime.fromtimestamp(row['at'], timezone.utc):%H:%M} UTC, {cmd_status.minutes(row['total'])}, {cost}"
-
-
 def github_path() -> Path:
     return failure_log.home() / "city-github.json"
 
@@ -350,10 +345,8 @@ def decision_block(rec: dict | None) -> str:
 
 
 def fold(rows: list[str], label: str) -> str:
-    """ROWS after the first SHOWN sit behind a See all control, which the page script opens and remembers across the 60-second reload."""
-    if len(rows) <= SHOWN:
-        return "".join(rows)
-    return f'{"".join(rows[:SHOWN])}<div class="fold" hidden>{"".join(rows[SHOWN:])}</div><a class="more" href="#" data-fold="See all {len(rows)} {label}">See all {len(rows)} {label}</a>'
+    """ROWS after the first SHOWN sit behind a See all control (see city_delivery.fold)."""
+    return city_delivery.fold(rows, label, SHOWN)
 
 
 def needs_card(data: dict) -> str:
@@ -496,22 +489,7 @@ def lede(data: dict) -> str:
 
 
 def today(data: dict) -> str:
-    landed, github = data["landed"], data["github"]
-    cost = sum(r["cost"] for r in landed or [])
-    rows = [landed_row(r) for r in landed] if landed else ["Nothing has landed today." if landed is not None else "Landed today: unknown, because the run log could not be read."]
-    parts = []
-    if github and github.get("open") is not None:
-        parts.append(f"{github['open']} open.")
-    if github and github.get("opened") is not None and github.get("closed") is not None:
-        parts.append(f"In the last {cmd_status.DAYS} days {github['closed']} closed as completed and {github['opened']} opened.")
-    if parts:
-        pace = " ".join(parts)
-        read = f"Read from GitHub at {datetime.fromtimestamp(github['read_at'], timezone.utc):%H:%M} UTC."
-    else:
-        pace, read = "Open count and landing rate: not recorded yet.", "Run `olivercode status page --fetch` to read them from GitHub once."
-    total = f'<p class="small">{len(landed)} landed for ${cost:.2f} today.</p>' if landed else ""
-    return (f'{lede(data)}<div class="card"><h3>Landed today</h3>{"".join(f"<p>{esc(r)}</p>" for r in rows)}{total}</div>'
-            f'<div class="card"><h3>Pace</h3><p>{esc(pace)}</p><p class="small">{esc(read)}</p></div>')
+    return lede(data)
 
 
 def render(data: dict) -> str:

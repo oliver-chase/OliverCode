@@ -75,12 +75,12 @@ class TestCity(unittest.TestCase):
         page = city.render(data(steps=[{"id": 1, "step": "<script>x</script>"}], landed=None))
         self.assertIn("&lt;script&gt;", page)
         self.assertEqual(page.count("<script>"), 1)
-        self.assertIn("unknown", page)
+        self.assertIn("Nothing has landed yet.", page)
 
     def test_github_figures_show_when_they_were_read(self):
         figures = {"slug": "o/r", "read_at": NOW.timestamp(), "open": 4, "opened": 6, "closed": 9, "checks": []}
         page = city.render(data(github=figures))
-        self.assertIn("4 open. In the last 7 days 9 closed as completed and 6 opened.", page)
+        self.assertIn("9 closed as completed against 6 opened in the last 7 days.", page)
         self.assertIn("Read from GitHub at 12:00 UTC.", page)
         self.assertIn("not recorded yet", city.render(data()))
 
@@ -88,7 +88,7 @@ class TestCity(unittest.TestCase):
         figures = {"slug": "o/r", "read_at": NOW.timestamp(), "open": None, "opened": 6, "closed": 9, "checks": None}
         page = city.render(data(github=figures))
         self.assertNotIn("None", page)
-        self.assertIn("9 closed as completed and 6 opened.", page)
+        self.assertIn("9 closed as completed against 6 opened", page)
 
     def test_each_section_module_renders_its_own_anchor(self):
         for module, anchor in ((city_delivery, "delivery"), (city_cost, "cost"), (city_health, "health")):
@@ -110,14 +110,14 @@ class TestCity(unittest.TestCase):
     def test_a_plain_write_makes_no_github_call(self):
         code, text, home, calls = self.write()
         self.assertEqual((code, calls), (0, []))
-        self.assertIn("Nothing has landed today.", text)
+        self.assertIn("Nothing has landed yet.", text)
         self.assertFalse((home / "city-github.json").exists())
 
     def test_a_plain_write_reads_the_saved_github_figures(self):
         saved = {"slug": "o/r", "read_at": NOW.timestamp(), "open": 2, "opened": 1, "closed": 3, "checks": []}
         _, text, _, calls = self.write(saved=saved)
         self.assertEqual(calls, [])
-        self.assertIn("2 open.", text)
+        self.assertIn("3 closed as completed against 1 opened", text)
 
     def test_fetch_reads_github_once_and_saves_it_with_the_time(self):
         figures = {"slug": "o/r", "read_at": NOW.timestamp(), "open": 5, "opened": 2, "closed": 1, "checks": [{"name": "ci", "conclusion": "success"}]}
