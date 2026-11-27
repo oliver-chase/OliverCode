@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lib import agent_loop, cmd_owner, failure_log, gh_budget, open_issues, relay, repo_state, run_lock
+from lib import agent_loop, cmd_owner, failure_log, gh_budget, local_config, open_issues, relay, repo_state, run_lock
 from lib.local_config import OC_ROOT
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -276,7 +276,7 @@ def building_block(now: float, claims: dict, log: list[dict], alive: bool, open_
         progress = max([float(mine.get("at", 0))] + [_epoch(r.get("at")) for r in rows])
         if not alive:
             clears = datetime.fromtimestamp(float(mine.get("at", 0)) + log_action.CLAIM_HOURS * 3600, timezone.utc)
-            lines.append(f"#{n} is claimed but nothing is building. The claim clears by itself at {clears:%H:%M} UTC.")
+            lines.append(f"#{n} is claimed but nothing is building. The claim clears by itself at {local_config.local_time(clears)}.")
         elif (now - progress) / 60 > STALL_MINUTES:
             warnings.append(stall_line(n, mine, int((now - progress) // 60), holder))
         else:

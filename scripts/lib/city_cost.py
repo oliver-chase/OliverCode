@@ -6,9 +6,8 @@ from __future__ import annotations
 import html
 import json
 from collections import Counter
-from datetime import datetime, timezone
 
-from lib import agent_loop, cmd_status, gh_budget
+from lib import agent_loop, local_config, cmd_status, gh_budget
 
 SIZES = ("XS", "S", "M", "L", "XL")
 SHOWN_ROUTES = 6
@@ -209,7 +208,7 @@ def read_json(name: str) -> dict:
 
 
 def clock(stamp) -> str:
-    return f"{datetime.fromtimestamp(float(stamp), timezone.utc):%d %b %H:%M} UTC"
+    return local_config.local_time(float(stamp), "%d %b %H:%M %Z")
 
 
 def github_budget() -> str:

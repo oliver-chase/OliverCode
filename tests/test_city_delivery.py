@@ -76,7 +76,7 @@ class TestDelivery(unittest.TestCase):
     def test_backlog_flow_names_the_read_time_or_the_command(self):
         self.assertIn("run <code>olivercode status page --fetch</code>".replace("run", "Run"), page([]))
         read = {"opened": 4, "closed": 6, "read_at": NOW.timestamp()}
-        self.assertIn("6 closed as completed against 4 opened in the last 7 days. Read from GitHub at 12:00 UTC", page([], read))
+        self.assertIn("6 closed as completed against 4 opened in the last 7 days. Read from GitHub at 07:00 EST", page([], read))
 
     def test_an_unreadable_log_is_named(self):
         self.assertIn("unknown, because the run log could not be read", page(None))
@@ -101,6 +101,19 @@ class TestDelivery(unittest.TestCase):
             for c in dict.fromkeys(classes(ours)):
                 if c not in ("fold", "more"):
                     self.assertTrue(any(c == m for m in seen), f"{c} is not in the mockup's order")
+
+
+
+class TestActivityZone(unittest.TestCase):
+    def test_landings_at_0330_and_0430_utc_fall_in_the_2200_and_2300_est_hours(self):
+        now = datetime(2026, 11, 27, 12, 0, tzinfo=timezone.utc).timestamp()
+        log = [{"story": "story-1", "repo": "r", "stage": "landed", "at": "2026-11-27T03:30:00Z", "seconds": 0},
+               {"story": "story-2", "repo": "r", "stage": "landed", "at": "2026-11-27T04:30:00Z", "seconds": 0}]
+        view = city_delivery.activity(log, now)[0]["day"]
+        self.assertEqual("22:00", view["labels"][15])
+        self.assertEqual("23:00", view["labels"][16])
+        self.assertEqual((1, 1), (view["landed"][15], view["landed"][16]))
+        self.assertEqual("EST", view["zone"])
 
 
 if __name__ == "__main__":

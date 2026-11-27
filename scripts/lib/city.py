@@ -298,8 +298,7 @@ def running(working_list: list, n: int) -> str:
 def state(data: dict) -> tuple[str, str, str]:
     """(css, word, sentence) for the band: waiting on GitHub, stopped, running, idle with work Ready or idle with nothing Ready."""
     if data["until"]:
-        when = datetime.fromtimestamp(data["until"], timezone.utc)
-        return "wait", "Waiting", f"GitHub's hourly budget is used up, so the drain is paused until about {when:%H:%M} UTC and will carry on by itself."
+        return "wait", "Waiting", f"GitHub's hourly budget is used up, so the drain is paused until about {local_config.local_time(data['until'])} and will carry on by itself."
     if data["warnings"]:
         return "fail", "Stopped", data["warnings"][0].removeprefix("Warning: ")
     n = data["builders"]
@@ -342,7 +341,7 @@ def decision_block(rec: dict | None) -> str:
     words = " ".join(str(rec.get("words") or rec.get("decision") or "not recorded").split())
     words = words if len(words) <= 300 else words[:297] + "..."
     try:
-        when = f"{datetime.fromisoformat(str(rec['created'])).astimezone(timezone.utc):%-d %b, %H:%M} UTC"
+        when = local_config.local_time(datetime.fromisoformat(str(rec["created"])), "%-d %b, %H:%M %Z")
     except (KeyError, TypeError, ValueError):
         when = "date not recorded"
     return (f'<div style="display:flex;flex-direction:column;gap:4px;padding-top:12px;box-shadow:0 -1px 0 var(--line)">'
@@ -421,7 +420,7 @@ def building_card(data: dict) -> str:
     start = command("olivercode drain REPO", "Start the drain") if css == "idle" else ""
     if css == "run" and data["pid"]:  # kill releases the claim and the run lock, and the story goes back to Ready (cmd_status.stall_line) (#1381)
         start = command(f"kill {data['pid']}", "Stop the drain")
-    return (f'<div class="card"><div class="railhead"><h2>Live</h2><span class="small">{data["now"].day} {data["now"]:%b, %H:%M} UTC</span></div>'
+    return (f'<div class="card"><div class="railhead"><h2>Live</h2><span class="small">{local_config.local_time(data["now"], "%-d %b, %H:%M %Z")}</span></div>'
             f'<div class="band"><span class="pill p-{css}"><i></i>{word}</span><p>{esc(sentence)}</p></div>{body}{warned}{queue_line(data)}{start}</div>')
 
 
@@ -508,7 +507,7 @@ def render(data: dict) -> str:
             '<span class="brand">OliverCode City</span><nav class="nav" aria-label="Sections"><a class="on" href="#today">Today</a><a href="#delivery">Delivery</a>'
             '<a href="#cost">Cost</a><a href="#health">Health</a></nav>'
             f'<div class="status" aria-label="System status"><span class="pill p-{css}"><i></i>{word}</span>{chips}'
-            f'<span class="upd"><span class="dot" aria-hidden="true"></span>Updated {now:%H:%M} UTC</span><button class="btn b-ghost" id="refresh">Refresh</button></div></div></header>'
+            f'<span class="upd"><span class="dot" aria-hidden="true"></span>Updated {local_config.local_time(now)}</span><button class="btn b-ghost" id="refresh">Refresh</button></div></div></header>'
             '<div class="wrap"><div class="band" id="stale" hidden style="margin-top:16px"><span class="pill p-warn"><i></i>Out of date</span><p></p>'
             f'{command("olivercode status page")}</div></div>'
             f'<div class="wrap body"><aside class="rail" id="live" aria-label="Live status">{building_card(data)}{needs_card(data)}</aside>'

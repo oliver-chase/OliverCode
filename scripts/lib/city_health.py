@@ -8,10 +8,9 @@ import html
 import json
 import subprocess
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import failure_log
+from lib import local_config, failure_log
 
 SHOWN_GATES = 4
 SHOWN_SLOWEST = 5
@@ -28,7 +27,7 @@ def esc(text) -> str:
 
 
 def clock(stamp) -> str:
-    return f"{datetime.fromtimestamp(float(stamp), timezone.utc):%d %b %H:%M} UTC"
+    return local_config.local_time(float(stamp), "%d %b %H:%M %Z")
 
 
 def read_lines(path: Path) -> list[str]:
@@ -198,7 +197,7 @@ def hook_newest() -> float | None:
 def hooks(newest: float | None) -> str:
     if newest is None:
         return row("Hook firing is not recorded.")
-    return row(f"Hook firing is no longer recorded since {datetime.fromtimestamp(newest, timezone.utc):%d %b}.")
+    return row(f"Hook firing is no longer recorded since {local_config.local_time(newest, '%d %b')}.")
 
 
 def lead(github: dict | None, newest: float | None) -> str:
@@ -214,7 +213,7 @@ def lead(github: dict | None, newest: float | None) -> str:
         first = f"All {len(runs_)} checks on main pass."
     if newest is None:
         return first
-    return f"{first} Hook firing is no longer recorded since {datetime.fromtimestamp(newest, timezone.utc):%d %b}, so the page cannot confirm the guards ran since then."
+    return f"{first} Hook firing is no longer recorded since {local_config.local_time(newest, '%d %b')}, so the page cannot confirm the guards ran since then."
 
 
 def render(data: dict) -> str:

@@ -14,7 +14,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 OC_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -31,7 +33,7 @@ DEFAULTS: dict = {
     "allowOutside": [], "allowedAuthors": [], "auditMode": None, "city": False, "deleteMergedRemoteBranches": False,
     "designFile": None, "engineBranch": None, "fleetRegistry": None, "liveCopies": {}, "maxBuilders": None,
     "otherDeviceOwners": [], "otherDeviceRepos": [], "privateRepos": {}, "repoPaths": {}, "repoRoot": None, "schedules": {},
-    "skillsRoot": None, "voiceFile": None, "watchRoots": None,
+    "skillsRoot": None, "timeZone": "America/New_York", "voiceFile": None, "watchRoots": None,
 }
 BACKLOG_CONFIG = "docs/backlog-config.json"
 LOCAL_BACKLOG_CONFIG = "docs/backlog-config.local.json"  # git-ignored: the user's own repo and Project win over the tracked file
@@ -139,6 +141,20 @@ def max_builders() -> int:
     if isinstance(saved, int) and not isinstance(saved, bool) and saved >= 1:
         return saved
     return default_builders()
+
+
+DEFAULT_ZONE = "America/New_York"  # the zone City's times show in when the local file names no timeZone (#1386)
+
+
+def local_time(at, spec: str = "%H:%M %Z") -> str:
+    """AT, a Unix stamp or a datetime, formatted with SPEC in the owner's timeZone, New York by default. A zone the database does not hold falls
+    back to New York, so the page still renders (#1386). The default SPEC ends in the zone's abbreviation, such as EST."""
+    try:
+        zone = ZoneInfo(str(setting("timeZone") or DEFAULT_ZONE))
+    except (ZoneInfoNotFoundError, ValueError):
+        zone = ZoneInfo(DEFAULT_ZONE)
+    dt = at if isinstance(at, datetime) else datetime.fromtimestamp(float(at), timezone.utc)
+    return f"{dt.astimezone(zone):{spec}}"
 
 
 def _overlay(base: dict, top: dict) -> dict:

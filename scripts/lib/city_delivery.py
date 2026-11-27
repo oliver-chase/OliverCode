@@ -8,9 +8,8 @@ import html
 import json
 import re
 from collections import Counter
-from datetime import datetime, timezone
 
-from lib import cmd_status
+from lib import local_config, cmd_status
 
 HOUR, DAY = 3600, 86400
 VIEWS = {"twoh": ("2 hours", 12, 600), "day": ("Day", 24, HOUR), "week": ("Week", 7, DAY), "month": ("Month", 30, DAY)}
@@ -31,7 +30,7 @@ shaded=(v==="week"||v==="month")&&s.none.length&&s.since;
 var box=document.getElementById("activity-chart");box.setAttribute("aria-label",cap);
 box.innerHTML=bars+'<div class="avg" style="bottom:'+(max>0?(avg/max*100).toFixed(1):0)+'%"><span>Average '+fmt(avg)+'</span></div>';
 document.getElementById("activity-labels").innerHTML=labs;document.getElementById("activity-caption").textContent=cap;
-document.getElementById("activity-foot").textContent=(shaded?"Records start on "+s.since+" UTC, so the shaded days have no data. ":"Times are UTC. ")+"The dashed line is the average for periods with activity, and the purple bar is the peak.";
+document.getElementById("activity-foot").textContent=(shaded?"Records start on "+s.since+", so the shaded days have no data. ":"Times are in "+s.zone+". ")+"The dashed line is the average for periods with activity, and the purple bar is the peak.";
 document.querySelectorAll("[data-view],[data-metric]").forEach(function(b){var on=b.dataset.view===v||b.dataset.metric===m;b.setAttribute("aria-pressed",String(on));b.className=on?"on":""})}
 document.addEventListener("click",function(e){var b=e.target.closest("[data-view],[data-metric]");if(!b)return;if(b.dataset.view)v=b.dataset.view;else m=b.dataset.metric;draw()});document.addEventListener("DOMContentLoaded",draw)})();
 """
@@ -42,13 +41,12 @@ def esc(text) -> str:
 
 
 def _day(stamp: float) -> str:
-    return datetime.fromtimestamp(stamp, timezone.utc).strftime("%Y-%m-%d")
+    return local_config.local_time(stamp, "%Y-%m-%d")
 
 
 def stamp(at: float, now: float) -> str:
-    """AT as a UTC time, with its date when it is not today."""
-    dt = datetime.fromtimestamp(at, timezone.utc)
-    return f"{dt:%H:%M}" if _day(at) == _day(now) else f"{dt.day} {dt:%b} {dt:%H:%M}"
+    """AT in the owner's time zone, with its date when it is not today."""
+    return local_config.local_time(at) if _day(at) == _day(now) else local_config.local_time(at, "%-d %b %H:%M %Z")
 
 
 def activity(log: list[dict], now: float) -> tuple[dict, int]:
@@ -60,9 +58,10 @@ def activity(log: list[dict], now: float) -> tuple[dict, int]:
     for key, (name, n, width) in VIEWS.items():
         out[key] = {m: [0] * n if m in ("landed", "rounds") else [0.0] * n for m in METRICS}
         starts = [now - (n - i) * width for i in range(n)]
-        out[key]["labels"] = [f"{datetime.fromtimestamp(t, timezone.utc):%H:%M}" if width < DAY else f"{datetime.fromtimestamp(t, timezone.utc).day} {datetime.fromtimestamp(t, timezone.utc):%b}" for t in starts]
+        out[key]["labels"] = [local_config.local_time(t, "%H:%M") if width < DAY else local_config.local_time(t, "%-d %b") for t in starts]
+        out[key]["zone"] = local_config.local_time(now, "%Z")
         out[key]["none"] = [i for i, t in enumerate(starts) if first and t + width <= first]
-        out[key]["since"] = f"{datetime.fromtimestamp(first, timezone.utc).day} {datetime.fromtimestamp(first, timezone.utc):%b} at {datetime.fromtimestamp(first, timezone.utc):%H:%M}" if first else ""
+        out[key]["since"] = local_config.local_time(first, "%-d %b at %H:%M %Z") if first else ""
     untimed = 0
     for row in log:
         is_round = "round" in row and "stage" not in row
@@ -152,7 +151,7 @@ def table(head: list[tuple[str, bool]], rows: list[list[str]], label: str, shown
 def flow(github: dict | None) -> str:
     if github and github.get("opened") is not None and github.get("closed") is not None:
         return (f"{github['closed']} closed as completed against {github['opened']} opened in the last {cmd_status.DAYS} days. "
-                f"Read from GitHub at {datetime.fromtimestamp(github['read_at'], timezone.utc):%H:%M} UTC.")
+                f"Read from GitHub at {local_config.local_time(github['read_at'])}.")
     return "Backlog flow: not recorded yet. Run <code>olivercode status page --fetch</code> to read it from GitHub once."
 
 

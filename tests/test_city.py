@@ -34,7 +34,7 @@ class TestCity(unittest.TestCase):
         for name in ("Today", "Delivery", "Cost", "Health"):
             self.assertIn(f">{name}</a>", page)
         self.assertIn('<meta http-equiv="refresh" content="60">', page)
-        for part in ("2 builders", "2 need you", "Updated 12:00 UTC", ">Refresh</button>"):
+        for part in ("2 builders", "2 need you", "Updated 07:00 EST", ">Refresh</button>"):
             self.assertIn(part, page)
 
     def test_no_phone_link_shows_and_the_setting_is_gone(self):
@@ -48,7 +48,7 @@ class TestCity(unittest.TestCase):
             "Building": (data(busy=True, builders=2), "2 builders are working"),
             "Idle": (data(ready=7), "7 stories are Ready, so starting the drain would take them in priority order"),
             "Stopped": (data(warnings=["Warning: #5 stopped"]), "#5 stopped"),
-            "Waiting": (data(until=NOW.timestamp() + 600), "paused until about 12:10 UTC and will carry on by itself"),
+            "Waiting": (data(until=NOW.timestamp() + 600), "paused until about 07:10 EST and will carry on by itself"),
         }
         for word, (d, sentence) in cases.items():
             page = city.render(d)
@@ -81,7 +81,7 @@ class TestCity(unittest.TestCase):
         figures = {"slug": "o/r", "read_at": NOW.timestamp(), "open": 4, "opened": 6, "closed": 9, "checks": []}
         page = city.render(data(github=figures))
         self.assertIn("9 closed as completed against 6 opened in the last 7 days.", page)
-        self.assertIn("Read from GitHub at 12:00 UTC.", page)
+        self.assertIn("Read from GitHub at 07:00 EST.", page)
         self.assertIn("not recorded yet", city.render(data()))
 
     def test_an_unread_open_count_is_never_printed_as_none(self):
@@ -124,7 +124,7 @@ class TestCity(unittest.TestCase):
         code, text, home, calls = self.write(fetch=True, read=figures)
         self.assertEqual((code, len(calls)), (0, 1))
         self.assertEqual(json.loads((home / "city-github.json").read_text(encoding="utf-8")), figures)
-        self.assertIn("Read from GitHub at 12:00 UTC.", text)
+        self.assertIn("Read from GitHub at 07:00 EST.", text)
 
     def test_fetch_exits_1_when_a_figure_could_not_be_read_and_still_writes_the_page(self):
         code, text, _, _ = self.write(fetch=True, read={"slug": "o/r", "read_at": NOW.timestamp(), "open": None, "opened": None, "closed": None, "checks": None})
@@ -155,7 +155,7 @@ class TestCity(unittest.TestCase):
     def test_a_claim_with_no_runner_says_it_once_with_no_red_band_card_or_path(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
         page = self.live([], claims, alive=False)
-        self.assertEqual(1, page.count("#7 is claimed but nothing is building. The claim clears by itself at 13:59 UTC."))
+        self.assertEqual(1, page.count("#7 is claimed but nothing is building. The claim clears by itself at 08:59 EST."))
         self.assertIn('<i></i>Idle</span>', page)
         for part in ('class="pill p-fail"', 'class="bld"', "dispatch-claims", "Runner idle"):
             self.assertNotIn(part, page)
@@ -204,7 +204,7 @@ class TestCity(unittest.TestCase):
     def test_needs_you_shows_the_latest_decision_with_the_owners_words_and_date(self):
         decision = {"decision": "D-1", "choice": "Option A", "created": "2026-11-21T09:00:00-05:00", "words": "Go ahead with the tab"}
         page = self.live([], {}, decision=decision)
-        for part in ("Your latest decision", '"Go ahead with the tab"', "21 Nov, 14:00 UTC"):
+        for part in ("Your latest decision", '"Go ahead with the tab"', "21 Nov, 09:00 EST"):
             self.assertIn(part, page)
         self.assertNotIn("Your latest decision", city.render(data()))
 
@@ -268,6 +268,30 @@ class TestCity(unittest.TestCase):
         self.assertIn('<span class="a">Unknown</span>', section)
         self.assertEqual(section.count('<span class="a">Unknown</span>'), 2)
         self.assertIn("The run log could not be read", section)
+
+
+
+class TestCityTimeZone(unittest.TestCase):
+    """Every time City shows is in the owner's timeZone, New York by default, with its abbreviation (#1386)."""
+
+    def test_no_time_zone_set_shows_new_york_and_never_utc(self):
+        page = city.render(data())
+        self.assertIn("Updated 07:00 EST", page)
+        self.assertNotIn("UTC", page)
+
+    def test_the_owner_zone_is_used_with_its_daylight_abbreviation(self):
+        with mock.patch.object(local_config, "load_local", return_value={"timeZone": "America/Los_Angeles"}):
+            page = city.render(data())
+        self.assertIn("Updated 04:00 PST", page)
+        self.assertNotIn("UTC", page)
+        summer = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+        with mock.patch.object(local_config, "load_local", return_value={"timeZone": "America/Los_Angeles"}):
+            self.assertEqual("05:00 PDT", local_config.local_time(summer))
+
+    def test_a_zone_the_database_does_not_hold_falls_back_to_new_york(self):
+        with mock.patch.object(local_config, "load_local", return_value={"timeZone": "Mars/Olympus"}):
+            page = city.render(data())
+        self.assertIn("Updated 07:00 EST", page)
 
 
 if __name__ == "__main__":

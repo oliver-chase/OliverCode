@@ -318,7 +318,7 @@ class TestDigest(unittest.TestCase):
     def test_a_claim_without_a_live_runner_says_it_once_in_a_plain_sentence_with_its_clear_time(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
         lines = cmd_status.activity(NOW.timestamp(), claims, [], False, 1, "")
-        self.assertEqual("#7 is claimed but nothing is building. The claim clears by itself at 01:59 UTC.", lines[0])
+        self.assertEqual("#7 is claimed but nothing is building. The claim clears by itself at 20:59 EST.", lines[0])
         self.assertFalse(any(line.startswith("Warning") or "dispatch-claims" in line or "Runner idle" in line for line in lines))
 
     def test_a_last_run_that_did_not_stop_cleanly_is_warned_with_its_stop_reason(self):
