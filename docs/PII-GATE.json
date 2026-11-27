@@ -3,11 +3,13 @@
   "exempt": [
     ".githooks/pre-commit",
     "core/hooks/*",
-    "docs/AUDIT-ACCEPTED.md"
+    "docs/AUDIT-ACCEPTED.md",
+    ".mailmap"
   ],
   "reasons": {
     ".githooks/pre-commit": "The hook holds the PII patterns it blocks.",
     "core/hooks/*": "The gate sources hold the PII patterns they block.",
-    "docs/AUDIT-ACCEPTED.md": "It names the history addresses the owner accepted, which done_check matches by value."
+    "docs/AUDIT-ACCEPTED.md": "It names the history addresses the owner accepted, which done_check matches by value.",
+    ".mailmap": "It maps the history's personal addresses to the one public identity, so it must name them."
   }
 }

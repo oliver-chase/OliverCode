@@ -3,10 +3,12 @@
   "configGlobs": [],
   "localData": [
     "LICENSE",
-    "docs/AUDIT-ACCEPTED.md"
+    "docs/AUDIT-ACCEPTED.md",
+    ".mailmap"
   ],
   "localDataReasons": {
     "LICENSE": "The MIT license text must name its copyright holder.",
-    "docs/AUDIT-ACCEPTED.md": "It lists the audit rows the owner accepted, and done_check skips each one."
+    "docs/AUDIT-ACCEPTED.md": "It lists the audit rows the owner accepted, and done_check skips each one.",
+    ".mailmap": "It maps the history's personal identities to the one public identity, so it must name them."
   }
 }

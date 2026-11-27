@@ -66,7 +66,9 @@ def reason(data: dict) -> str:
         if is_main_checkout(root):
             if path and Path(path).resolve().is_relative_to(root.resolve() / ".claude-optimization") and _git(root, "check-ignore", "-q", path).returncode == 0:
                 continue
-            return (f"Refused: {root.name}'s main checkout holds only landed work. Run `git worktree add -b story/N ../_worktrees/oc-N origin/main` to work in a worktree, "
+            from lib import placement
+            worktree = placement.config().worktrees / f"{root.name}-N"
+            return (f"Refused: {root.name}'s main checkout holds only landed work. Run `git worktree add -b story/N {worktree} origin/main` to work in a worktree, "
                     "then `olivercode land WORKTREE STORY` to put the commit on origin/main.")
     return ""
 

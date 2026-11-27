@@ -37,7 +37,7 @@ ACCEPTED_FILE = "docs/AUDIT-ACCEPTED.md"
 def identities(repo):
     """{(name, address): commits} over every author and committer in all history."""
     seen = {}
-    for line in git(repo, "log", "--all", "--format=%an%x09%ae%n%cn%x09%ce").splitlines():
+    for line in git(repo, "log", "--all", "--format=%aN%x09%aE%n%cN%x09%cE").splitlines():
         if "\t" in line:
             key = tuple(line.split("\t", 1))
             seen[key] = seen.get(key, 0) + 1

@@ -20,7 +20,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-BOARD_FILES = ("docs/backlog-config.json",)
+BOARD_FILES = ("docs/backlog-config.json", ".mailmap")  # .mailmap names the history identities it maps to one public identity
 GENERIC = {"claude", "anthropic", "github", "noreply", "bot", "root", "user", "users", "test", "example"}
 NEUTRAL_AUTHOR = ("OliverCode Release", "release" + chr(64) + "example.invalid")
 

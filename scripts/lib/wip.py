@@ -21,8 +21,8 @@ from pathlib import Path
 
 PRUNE_DAYS = 7
 NS = "refs/wip"
-_IDENT = {"GIT_AUTHOR_NAME": "OliverCode wip", "GIT_AUTHOR_EMAIL": "wip" + chr(64) + "olivercode.invalid",
-          "GIT_COMMITTER_NAME": "OliverCode wip", "GIT_COMMITTER_EMAIL": "wip" + chr(64) + "olivercode.invalid"}
+_IDENT = {"GIT_AUTHOR_NAME": "wip", "GIT_AUTHOR_EMAIL": "wip" + chr(64) + "olivercode.invalid",
+          "GIT_COMMITTER_NAME": "wip", "GIT_COMMITTER_EMAIL": "wip" + chr(64) + "olivercode.invalid"}
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 

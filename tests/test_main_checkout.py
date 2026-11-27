@@ -13,7 +13,7 @@ from _support import REPO_ROOT, git, scratch_repo
 import sys
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
-from lib import main_checkout  # noqa: E402
+from lib import main_checkout, placement  # noqa: E402
 
 
 class TestMainCheckout(Base):
@@ -40,12 +40,12 @@ class TestMainCheckout(Base):
 
     def test_an_edit_or_commit_in_a_fleet_main_checkout_is_refused_and_names_the_fix(self):
         work = self.repo()
-        with mock.patch.object(main_checkout, "fleet_roots", return_value=[work.resolve()]):
+        with mock.patch.object(main_checkout, "fleet_roots", return_value=[work.resolve()]), mock.patch.object(placement, "load_local", return_value={"repoRoot": str(self.root)}):
             edit = {"tool_name": "Edit", "tool_input": {"file_path": str(work / "a.txt")}, "cwd": str(work)}
             commit = {"tool_name": "Bash", "tool_input": {"command": "git commit -am x"}, "cwd": str(work)}
             for data in (edit, commit):
                 why = main_checkout.reason(data)
-                self.assertIn("git worktree add", why)
+                self.assertIn(f"git worktree add -b story/N {self.root}/_worktrees/work-N", why)
                 self.assertIn("olivercode land", why)
             self.assertEqual("", main_checkout.reason({"tool_name": "Bash", "tool_input": {"command": "ls"}, "cwd": str(work)}))
         with mock.patch.object(main_checkout, "fleet_roots", return_value=[]):
