@@ -737,8 +737,12 @@ class TestPromote(Base):
                   mock.patch.object(cmd_land.agent_loop, "validate", side_effect=validate),
                   mock.patch.object(cmd_land.run_lock, "active", return_value={}),
                   mock.patch.object(cmd_land, "_story_slug", return_value="o/r"),
+                  mock.patch.object(cmd_land, "_rehearse_upgrade", side_effect=lambda *a: self.rehearsal(*a)),
                   mock.patch.object(cmd_land.subprocess, "run", side_effect=run)):
             p.start(); self.addCleanup(p.stop)
+
+    def rehearsal(self, repo, wt, head):  # the rehearsal has its own tests (test_promote_upgrade.py), so a promote test passes it
+        return True, ""
 
     def promote(self, staging_seconds=10):
         ticks = iter([0, 10, 10, 10 + staging_seconds])

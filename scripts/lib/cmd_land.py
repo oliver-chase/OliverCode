@@ -547,6 +547,15 @@ def _timed_quick(wt: Path, ref: str, label: str) -> tuple[bool, float, str]:
     return passed, time.monotonic() - began, f"{label} quick validation:\n{tail}"
 
 
+def _rehearse_upgrade(repo: Path, wt: Path, head: str) -> tuple[bool, str]:
+    """(passed, output) of the update a main user runs, rehearsed to head in a sandbox HOME by scripts/qa/rehearse-upgrade.sh (#1389)."""
+    try:
+        ran = subprocess.run(["bash", str(wt / "scripts" / "qa" / "rehearse-upgrade.sh"), str(repo), head], capture_output=True, text=True, timeout=900)
+    except (OSError, subprocess.TimeoutExpired) as err:
+        return False, f"the rehearsal could not run: {err}"
+    return ran.returncode == 0, (ran.stdout + ran.stderr).strip()
+
+
 def _ci_refusal(slug: str, sha: str) -> str:
     """The check and its state when CI has not passed on sha, else "" (#1305)."""
     try:
@@ -605,11 +614,20 @@ def promote(repo: Path, say=print) -> int:
         if stg_s >= main_s * SLOWER:
             say(f"Staging is slower than main, so nothing was promoted: {staging} took {stg_s:.0f}s and {main} took {main_s:.0f}s (limit {SLOWER}x).")
             return 1
+        rehearsed, said = _rehearse_upgrade(repo, wt, head)
+        if not rehearsed:
+            say(f"Refused: a main user's update to {staging} fails in a sandbox, so nothing was promoted.\n{said}")
+            return 1
         passed, tail = agent_loop.validate(wt)
         if not passed:
             say(f"Refused: the repo's validation failed on {staging}, so nothing was promoted. Failing gate output:\n{tail}")
             return 1
         env = {**os.environ, "ALLOW_BRANCH_PUSH": "1"}
+        old = _git(repo, "rev-parse", f"origin/{main}").stdout.strip()
+        archive = f"archive/{main}-{time.strftime('%Y-%m-%d')}"
+        if subprocess.run(["git", "-C", str(wt), "push", "origin", f"{old}:refs/tags/{archive}"], env=env, capture_output=True, text=True).returncode:
+            say(f"Refused: the tag {archive} could not be pushed at main's old head, so main was not moved and nothing was promoted.")
+            return 1
         if subprocess.run(["git", "-C", str(wt), "push", "origin", f"{head}:refs/heads/{main}"], env=env, capture_output=True, text=True).returncode:
             say(f"Refused: origin/{main} moved or rejected the push, so nothing was promoted. Run promote again.")
             return 1
