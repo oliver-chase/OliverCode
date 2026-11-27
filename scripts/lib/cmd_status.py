@@ -326,13 +326,16 @@ def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> i
     claims = repo_claims(live_claims(stamp), slug)
     for line in activity(stamp, claims, log, alive(), None, next_ready(digest_path(), claims), run_lock.active(slug, stamp) if slug else None):
         out(line)
-    seen, idle = len(log), 0
+    seen, idle, prev = len(log), 0, None
     while idle < 3:
         log = run_log()
         for row in log[seen:]:
             if row.get("stage") and (not repo or row.get("repo") == repo.name):
                 out(watch_line(row, log))
-                if row["stage"] == "run-end":
+                # a run-end right after a restarting row is the old run handing over to the new one, so the watch keeps reading (#1494)
+                ends = row["stage"] == "run-end" and prev != "restarting"
+                prev = row["stage"]
+                if ends:
                     return 0
         seen = len(log)
         idle = 0 if alive() else idle + 1

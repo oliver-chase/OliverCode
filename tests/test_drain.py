@@ -1674,6 +1674,21 @@ class DetachedRun(unittest.TestCase):
         self.assertRegex(lines[4], r"^\d\d:\d\d (EST|EDT) #169 in r: landed\. Building took under a minute, validation under a minute, landing under a minute, under a minute in all\.$")
         self.assertTrue(lines[5].endswith("1 story landed, 0 stopped."))
 
+    def test_watch_keeps_reading_through_a_restart_and_ends_at_the_real_run_end(self):
+        from lib import cmd_status
+        from lib.agent_loop import log_stage
+        steps = iter([lambda: (log_stage("run-r", "r", "restarting"), log_stage("run-r", "r", "run-end", landed=0, stopped=0)),
+                      lambda: (log_stage("story-170", "r", "claimed"), log_stage("story-170", "r", "landed"), log_stage("run-r", "r", "run-end", landed=1, stopped=0))])
+        lines = []
+        code = cmd_status.command_watch(["r"], sleep=lambda s: next(steps)(), out=lines.append, alive=lambda: True)
+        self.assertEqual(0, code)
+        self.assertRegex(lines[2], r"^\d\d:\d\d (EST|EDT) #r in r: restarting$")  # the restarting row, then the old run's run-end line, both printed
+        self.assertTrue(lines[3].startswith("Last run ended"))
+        self.assertRegex(lines[4], r"^\d\d:\d\d (EST|EDT) #170 in r: claimed$")  # the restarted run's rows stream on
+        self.assertRegex(lines[5], r"^\d\d:\d\d (EST|EDT) #170 in r: landed")
+        self.assertTrue(lines[6].startswith("Last run ended") and lines[6].endswith("1 story landed, 0 stopped."))
+        self.assertEqual(7, len(lines))
+
     def test_watch_exits_when_no_drain_holds_the_run_lock_and_leaves_the_drain_alone(self):
         from lib import cmd_status
         lines = []
