@@ -9,7 +9,8 @@ import sys
 import unittest
 from unittest import mock
 
-from _support import REPO_ROOT, temp_dir
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.test_agent_loop` finds _support
+from _support import REPO_ROOT, temp_dir  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import agent_loop, cmd_run, model  # noqa: E402
@@ -100,7 +101,7 @@ class TestValidationCommand(unittest.TestCase):
         self.assertEqual(["npm", "run", "verify"], agent_loop.validation_command(repo))
 
 
-class TestRunLog(unittest.TestCase):
+class TestRunLogRounds(unittest.TestCase):
     """What a headless run costs (docs/SETUP.md), #878: one JSON line per round under the OliverCode home folder."""
 
     def test_each_round_appends_one_line_with_story_round_model_tokens_and_cost(self):
@@ -113,7 +114,7 @@ class TestRunLog(unittest.TestCase):
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             agent_loop.run_loop("do it", repo, "story-878", run=replies, check=lambda cwd: next(checks), say=lambda *_: None, model_name="sonnet")
         rows = [json.loads(line) for line in (home / "run-log.jsonl").read_text().splitlines()]
-        self.assertEqual([1, 2, 1], [r["round"] for r in rows])  # the reader's own row comes last
+        self.assertEqual([1, 2, 1, None], [r.get("round") for r in rows])  # the reader's own round, then its verdict row
         self.assertEqual(("story-878", "sonnet", 3, 4, 100, 50, 0.5), tuple(rows[0][k] for k in ("story", "model", "input", "output", "cache_read", "cache_write", "cost_usd")))
         self.assertIsNone(rows[1]["cost_usd"])
 

@@ -1,6 +1,5 @@
 """The owner queue refuses a step with no attempt behind it and summarizes the open steps (#629)."""
 
-import json
 import os
 import sys
 import unittest
@@ -84,10 +83,6 @@ class TestRemovedJobItems(unittest.TestCase):
             self.assertEqual(["maintain queues: a denied step", "Pick a price"], [i["step"] for i in cmd_owner.open_items()])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestPreparedOwnerSteps(unittest.TestCase):
     def run_cmd(self, *argv):
         buf = io.StringIO()
@@ -146,3 +141,7 @@ class TestPreparedOwnerSteps(unittest.TestCase):
             self.run_cmd("add", "--session", "s1", "--step", "Key", "--command", "gh auth login", "--error", "refused")
             _, closed = self.run_cmd("done", "1")
             self.assertNotIn("Resume:", closed)
+
+
+if __name__ == "__main__":
+    unittest.main()

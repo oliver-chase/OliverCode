@@ -5,17 +5,14 @@ import fcntl
 import io
 import json
 import os
-import plistlib
-import subprocess
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _maintain_case import Base
-from _support import REPO_ROOT, git, git_env, load_script, quiet, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import failure_log, health_checks, hygiene, maintain, placement  # noqa: E402
+from lib import health_checks, hygiene, maintain
 
 
 class TestRetiredJobs(Base):
@@ -342,9 +339,9 @@ class TestFailureGaps(unittest.TestCase):
             problems = maintain.check_failure_gaps(True)
         self.assertTrue(any("gate 4: land interrupted blocked 3 times, latest" in p.text for p in problems))
         gh.assert_not_called()
+        self.assertEqual([False], [p.fixable for p in problems])  # reported once, with nothing for --fix to act on
+        self.assertEqual(3, len(failure_log.entries()))  # the run adds no finding to the log it reads
         self.assertEqual([], sorted(p.name for p in self.home.iterdir() if "candidate" in p.name or "outbox" in p.name))
-        self.assertFalse((REPO_ROOT / "scripts" / "lib" / "candidates.py").exists())
-        self.assertFalse(hasattr(maintain, "file_failure_candidates"))
 
 
 class TestStateFolder(Base):

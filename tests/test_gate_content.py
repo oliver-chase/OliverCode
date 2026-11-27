@@ -1,7 +1,7 @@
 """The PII gate of the pre-commit hook."""
 
-from _support import git  # noqa: F401
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
+__all__ = ["setUpModule", "tearDownModule"]  # unittest runs them from this module
 
 
 class TestGate2PII(GateHarness):

@@ -14,7 +14,7 @@ from _support import REPO_ROOT, temp_dir
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "backlog" / "scripts"))
-from lib import cmd_dispatch, cmd_owner, failure_log, gh_budget, local_config  # noqa: E402
+from lib import cmd_dispatch, cmd_owner, gh_budget, local_config
 import log_action  # noqa: E402
 
 

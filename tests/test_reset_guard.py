@@ -2,7 +2,6 @@
 
 import sys
 import unittest
-from pathlib import Path
 
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 

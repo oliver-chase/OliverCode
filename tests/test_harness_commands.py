@@ -1,6 +1,5 @@
 """The gate-block report, memory and version health, and the voice override."""
 
-import json
 import os
 import subprocess
 import unittest

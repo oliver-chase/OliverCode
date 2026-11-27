@@ -4,7 +4,6 @@ Every test runs against a scratch checkout and a scratch HOME. Nothing reaches t
 git reads no machine config (tests/_support.py).
 """
 
-import json
 import os
 import shutil
 import subprocess
@@ -12,12 +11,11 @@ import unittest
 from unittest import mock
 
 from _fleet_case import ScratchHome
-from _support import REPO_ROOT, git, git_env, load_script, scratch_repo, quiet, temp_dir
+from _support import REPO_ROOT, git, git_env, load_script, scratch_repo, quiet
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import local_config  # noqa: E402  (load_script put scripts/ on the path)
-from lib import cmd_fleet, cmd_health, cmd_repo, gitfiles  # noqa: E402
+from lib import cmd_fleet, gitfiles, local_config  # noqa: E402  (load_script put scripts/ on the path)
 
 
 class TestCommandSyncHooks(ScratchHome):

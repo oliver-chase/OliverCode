@@ -1,6 +1,5 @@
 """The leak scan names a tracked file that holds the owner's identifier, exempts the board file and writes a one-commit neutral release (#559)."""
 
-import subprocess
 import unittest
 from pathlib import Path
 

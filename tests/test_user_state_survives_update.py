@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, temp_dir

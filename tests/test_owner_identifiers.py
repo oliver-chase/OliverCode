@@ -9,6 +9,7 @@ import shutil
 
 from _support import git
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
+__all__ = ["setUpModule", "tearDownModule"]  # unittest runs them from this module
 
 CONFIG = "docs/IDENTIFIER-GATE.json"
 FAKE = "zorbian" + "quill"  # a made-up one-word name, joined at runtime

@@ -294,10 +294,6 @@ class TestCityTimeZone(unittest.TestCase):
         self.assertIn("Updated 07:00 EST", page)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 FOLD = {"fold", "more"}  # the fold wrapper and the See all link, which the mockup styles inline
 MOCKUP = (REPO_ROOT / "docs" / "city" / "Main.dc.html").read_text()
 
@@ -353,3 +349,7 @@ class TestMirror(unittest.TestCase):
     def test_the_reload_script_restores_folds_the_view_and_the_scroll(self):
         for part in ("sessionStorage", "[data-fold]", "[data-view]", "scrollTo("):
             self.assertIn(part, city.SCRIPT)
+
+
+if __name__ == "__main__":
+    unittest.main()

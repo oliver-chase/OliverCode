@@ -479,7 +479,9 @@ class TestSettingsRemove(unittest.TestCase):
         commands = [h["command"] for g in merged["hooks"]["PostToolUse"] for h in g["hooks"]]
         self.assertEqual([claude_settings._command("gh_watch.py", hooks)], commands)
         self.assertIn("gh_watch.py", claude_settings.missing(Path("/nowhere.json"), hooks))
-        self.assertEqual([], claude_settings.missing_for(merged, hooks) if hasattr(claude_settings, "missing_for") else [])
+        settings = temp_dir(self, "olivercode-merged-") / "settings.json"
+        settings.write_text(json.dumps(merged))
+        self.assertEqual([], claude_settings.missing(settings, hooks))
         self.assertEqual(claude_settings.without(merged).get("hooks"), None)
 
     def test_dead_names_a_new_form_entry_and_health_reports_it_without_the_instruction_link(self):

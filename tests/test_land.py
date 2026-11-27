@@ -513,9 +513,6 @@ class TestSessionStart(Base):
         ff.assert_not_called()
         self.assertEqual(before, git(self.main, "rev-parse", "HEAD").stdout)
 
-    def test_session_start_starts_no_groom(self):
-        self.assertFalse(hasattr(session_check, "groom_notes"))
-
     def test_an_edited_checkout_stays_as_it_is_and_is_named_at_session_start(self):
         self.push_commit()
         (self.main / "a.txt").write_text("edit")

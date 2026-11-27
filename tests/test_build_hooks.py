@@ -4,10 +4,13 @@ import contextlib
 import io
 import shutil
 import subprocess
+import sys
 import unittest
 import unittest.mock
+from pathlib import Path
 
-from _support import REPO_ROOT, load_script, temp_dir
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # so `-m unittest tests.test_build_hooks` finds _support
+from _support import REPO_ROOT, load_script, temp_dir  # noqa: E402
 
 bh = load_script("scripts/build-hooks.py", "build_hooks")
 BUILT = (*bh.VARIANTS, *bh.PRE_PUSH_TARGETS, *bh.COMMIT_MSG_TARGETS)
@@ -87,7 +90,6 @@ class TestSharedFunctionsDoNotDrift(unittest.TestCase):
     """secret_filter, and SECRET_PATTERNS live once in core/hooks/ (#606), so every built hook holds that text verbatim."""
 
     def test_each_built_hook_holds_the_shared_source_it_is_built_from(self):
-        subprocess.run(["python3", str(REPO_ROOT / "scripts" / "build-hooks.py")], check=True)
         shared = {"secret-patterns.sh": (*bh.VARIANTS, *bh.PRE_PUSH_TARGETS)}
         for name, hooks in shared.items():
             text = (REPO_ROOT / "core" / "hooks" / name).read_text()

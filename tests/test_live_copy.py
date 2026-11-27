@@ -3,10 +3,9 @@
 import json
 import os
 import unittest
-from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, load_script, quiet, temp_dir
+from _support import load_script, quiet, temp_dir
 
 load_script("scripts/olivercode", "olivercode_launcher_live")
 from lib import cmd_install, live_copy  # noqa: E402

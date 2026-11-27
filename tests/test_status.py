@@ -1,7 +1,6 @@
 """`olivercode status`: open count, landing rate and projected zero date from gh REST, with no model call."""
 
 import io
-import json
 import os
 import sys
 import tempfile

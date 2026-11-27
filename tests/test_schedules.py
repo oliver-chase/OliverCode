@@ -145,10 +145,6 @@ class Schedules(unittest.TestCase):
         self.assertIsNone(schedules.task_runs(self.tmp / "none"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class Gated(unittest.TestCase):
     def setUp(self):
         self.tmp = temp_dir(self, "olivercode-wrap-", resolve=True)
@@ -197,3 +193,7 @@ class Gated(unittest.TestCase):
         self.assertIn("Not loaded: co.x.open", schedules.refusal("co.x.open", plist))
         plist["ProgramArguments"][2] = "olivercode gated ./x.sh -- claude -p run"
         self.assertIsNone(schedules.refusal("co.x.open", plist))
+
+
+if __name__ == "__main__":
+    unittest.main()

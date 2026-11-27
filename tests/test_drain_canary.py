@@ -8,10 +8,8 @@ import shlex
 import signal
 import subprocess
 import sys
-import textwrap
 import time
 import unittest
-from pathlib import Path
 
 from _support import REPO_ROOT, git, git_env, temp_dir
 

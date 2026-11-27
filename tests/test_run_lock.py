@@ -1,6 +1,5 @@
 """#992: one run per repo, whichever thread starts it. The lock, the joined queue, the takeover, the session line and the status line."""
 
-import json
 import os
 import sys
 import unittest

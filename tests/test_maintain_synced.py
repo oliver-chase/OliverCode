@@ -1,17 +1,14 @@
 """olivercode maintain: slow repos and the synced roots."""
 
-import os
-import plistlib
 import subprocess
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _maintain_case import Base
-from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
+from _support import git, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import failure_log, hygiene, maintain, placement  # noqa: E402
+from lib import hygiene, maintain, placement
 
 
 class TestSlowRepo(Base):

@@ -4,9 +4,8 @@ Each blocking test stages every case under its own file name and runs the hook o
 `BLOCKED: <file>` line per offending file, so each case is still checked on its own while the suite pays for one hook run.
 """
 
-import unittest
-
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
+__all__ = ["setUpModule", "tearDownModule"]  # unittest runs them from this module
 
 
 class TestGate1Secrets(GateHarness):

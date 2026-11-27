@@ -13,6 +13,7 @@ from unittest import mock
 
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 from test_precommit_gates import GateHarness, setUpModule, tearDownModule  # noqa: F401
+__all__ = ["setUpModule", "tearDownModule"]  # unittest runs them from this module
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 SCRIPTS = REPO_ROOT / "core" / "templates" / "project" / "scripts"

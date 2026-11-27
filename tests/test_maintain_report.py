@@ -1,17 +1,12 @@
 """olivercode maintain: stale docs, the report, the schedule, tidying and the main checkout."""
 
-import os
 import plistlib
-import shutil
 import subprocess
-import sys
-import tempfile
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _maintain_case import Base
-from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
+from _support import git, git_env, load_script, quiet, scratch_repo
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import failure_log, hygiene, maintain, placement  # noqa: E402

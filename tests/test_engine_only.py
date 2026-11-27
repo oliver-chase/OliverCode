@@ -4,12 +4,10 @@ import json
 import subprocess
 import sys
 import unittest
-from pathlib import Path
 
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import engine_only  # noqa: E402
 
 FLEET_NAME = "alpha-repo"
 

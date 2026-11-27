@@ -9,7 +9,6 @@ import subprocess
 import sys
 import time
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from _support import REPO_ROOT, git, git_env, quiet, scratch_repo, run_hook, temp_dir

@@ -6,7 +6,7 @@ import sys
 import unittest
 from unittest import mock
 
-from _support import REPO_ROOT, git, scratch_repo, temp_dir
+from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 import smoke_runner  # noqa: E402
@@ -94,7 +94,8 @@ class ParallelGates(unittest.TestCase):
     def test_the_gate_cap_defaults_to_the_core_count(self):
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": ""}), mock.patch("os.cpu_count", return_value=8):
             self.assertEqual(8, validate_gates.default_max_gates())
-        self.assertFalse(hasattr(validate_gates, "default_retries"))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": "0.5"}):
+            self.assertEqual(1, validate_gates.default_max_gates())  # a cap under one still runs one gate
         with mock.patch.dict(os.environ, {"OLIVERCODE_VALIDATE_GATES": "3"}):
             self.assertEqual(3, validate_gates.default_max_gates())
 

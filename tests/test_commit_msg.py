@@ -9,7 +9,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # so `-m unittest tests.test_commit_msg` finds _support
+from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir  # noqa: E402
 
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "commit-msg"
 

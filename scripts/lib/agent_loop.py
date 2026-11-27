@@ -306,9 +306,9 @@ def run_log_lines() -> list[str]:
 
 def append_run_log(row: dict) -> None:
     """Append one JSON row to the run log, rolling it first. A log that cannot be written never stops a loop."""
-    path = failure_log.home() / "run-log.jsonl"
-    roll(path)
     try:
+        path = failure_log.home() / "run-log.jsonl"
+        roll(path)
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
     except OSError:

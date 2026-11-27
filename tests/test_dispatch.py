@@ -13,7 +13,6 @@ from _support import REPO_ROOT, git, quiet, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
-import gh_budget  # noqa: E402
 from lib import cmd_dispatch, cmd_drain  # noqa: E402
 
 NOW = 1_800_000_000.0

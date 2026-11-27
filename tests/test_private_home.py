@@ -1,6 +1,5 @@
 """The OliverCode home is private to its user, and repo names reach only ignored files (story 690)."""
 
-import json
 import os
 import stat
 import subprocess

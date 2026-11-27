@@ -5,8 +5,6 @@ Argument handling gets tests because an ignored unknown flag is a wrong success:
 `sync-hooks --root /somewhere` would sync the default fleet and report that it worked.
 """
 
-import contextlib
-import io
 import os
 import json
 import plistlib
