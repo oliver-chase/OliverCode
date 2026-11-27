@@ -4,7 +4,7 @@
 that `board sync` keeps and `city-github.json`. Only `--fetch` calls GitHub: it reads the opened and closed counts and the check results once and saves them
 to `city-github.json` with the time read. The frame is a nav (Today, Delivery, Cost, Health) and a status band that gives the run state, the builder count,
 the needs-you count, the Updated time and a Refresh control. The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
-their own module. The Live rail shows a card for each working builder, the queue, and Needs you with the latest owner decision (#1357).
+their own module. The Live rail shows a card for each working builder, the queue, and Needs you with the latest owner decision (#1357). The Today section opens with the date, a headline, a paragraph and four answers (#1361).
 """
 
 from __future__ import annotations
@@ -54,6 +54,10 @@ background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);c
 code{font:13px ui-monospace,"SF Mono",Menlo,monospace;background:var(--field);padding:8px 10px;border-radius:10px;overflow-wrap:anywhere}
 .chap{display:flex;flex-direction:column;gap:12px}.chap>h2{font-size:40px;line-height:1.1}
 .count{font:40px/1 Newsreader,Georgia,serif}
+.read{font-size:17px;max-width:70ch}
+.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:16px;padding-top:8px}
+.ans{display:flex;flex-direction:column;gap:6px;padding-top:14px;box-shadow:0 -2px 0 var(--ink)}
+.ans .q{font-size:14px;color:var(--muted)}.ans .a{font-family:Newsreader,Georgia,serif;font-size:28px;line-height:1.15}.ans .e{font-size:14px;color:var(--muted)}
 .bhead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .tag{font-size:12px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--idlebg);color:var(--ink);white-space:nowrap}
 .kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;margin:0;font-size:14px}.kv dt{color:var(--muted)}.kv dd{margin:0}
@@ -296,6 +300,74 @@ def building_card(data: dict) -> str:
             f'{command("olivercode drain REPO")}</div>')
 
 
+def money(value: float) -> str:
+    return f"${value:,.2f}"
+
+
+def landed_week(log: list[dict], stamp: float) -> int:
+    """Stories landed in the last DAYS days, read from the run log's landed rows (#1361)."""
+    return sum(1 for f in cmd_status.landings(log) if f["at"] >= stamp - cmd_status.DAYS * city_delivery.DAY)
+
+
+def landed_costs(log: list[dict]) -> list[float]:
+    """The cost of each landed story whose cost is recorded (#1361)."""
+    return [float(s["cost"]) for s in city_cost.landed_stories(log) if s["cost"]]
+
+
+def checks_line(github: dict | None) -> str:
+    """The Health sentence for the Today paragraph: the checks on main, read by `--fetch` (#1361)."""
+    runs = (github or {}).get("checks")
+    if runs is None:
+        return "Health: checks on main are not recorded yet."
+    if not runs:
+        return "Health: no check is recorded on main."
+    failed = [r for r in runs if r.get("conclusion") not in ("success", "skipped", "neutral")]
+    return f"Health: {len(failed)} of {len(runs)} checks on main fail." if failed else f"Health: all {len(runs)} checks on main pass."
+
+
+def answer(question: str, word: str, evidence: str) -> str:
+    return f'<div class="ans"><span class="q">{esc(question)}</span><span class="a">{esc(word)}</span><span class="e">{esc(evidence)}</span></div>'
+
+
+def answers(data: dict) -> str:
+    """The four answers, each a one-word answer and one line of evidence. A figure the files do not hold is Unknown, and a single day of data is shown as a figure, never a trend (#1361)."""
+    log, steps, stamp = data["log"], data["steps"], data["now"].timestamp()
+    css, _, sentence = state(data)
+    working = {"fail": ("No", sentence), "wait": ("Paused", sentence), "run": ("Yes", sentence)}.get(css, ("Idle", sentence))
+    if log is None:
+        shipping = ("Unknown", "Landed: unknown, because the run log could not be read.")
+        worth = ("Unknown", "Cost is not recorded, because the run log could not be read.")
+    else:
+        week = landed_week(log, stamp)
+        shipping = ("Yes" if week else "No", f"{len(data['landed'] or [])} landed today and {week} in the last {cmd_status.DAYS} days.")
+        costs = landed_costs(log)
+        if costs:
+            average, limit = sum(costs) / len(costs), agent_loop.COST_CEILING["M"]
+            worth = ("Yes" if average <= limit else "No", f"{money(average)} a landed story against the {money(limit)} M limit, {money(sum(costs))} in all.")
+        else:
+            worth = ("Unknown", "No landed story has a cost recorded.")
+    needs = ("Yes", f"{len(steps)} {'step' if len(steps) == 1 else 'steps'} waiting under Needs you.") if steps else ("No", "Nothing waits on you.")
+    return "".join(answer(q, *a) for q, a in (("Is it working?", working), ("Is it shipping?", shipping), ("Is it worth the cost?", worth), ("Does it need me?", needs)))
+
+
+def lede(data: dict) -> str:
+    """The date, a one-line headline and a short paragraph, all built from the Delivery, Cost and Health figures, then the four answers (#1361)."""
+    log, landed, now = data["log"], data["landed"] or [], data["now"]
+    if log is None:
+        headline = "The run log could not be read, so the figures are unknown."
+        parts = ["Delivery and Cost are unknown, because the run log could not be read."]
+    else:
+        spent = sum(r["cost"] or 0 for r in landed)
+        headline = f"{len(landed)} landed today for {money(spent)}, and {len(data['steps'])} waiting on you."
+        parts = [f"Delivery: {landed_week(log, now.timestamp())} landed in the last {cmd_status.DAYS} days."]
+        costs, share = landed_costs(log), city_cost.token_kinds(city_cost.rounds(log))[1]
+        cost = f"Cost: {money(sum(costs) / len(costs))} a landed story" if costs else "Cost: no landed story has a cost recorded"
+        parts.append(cost + (f", and {share:.1f}% of tokens were read from cache." if share is not None else "."))
+    parts.append(checks_line(data["github"]))
+    return (f'<p class="small">{esc(now.strftime("%A"))} {now.day} {esc(now.strftime("%B %Y"))}</p><h2>{esc(headline)}</h2>'
+            f'<p class="read">{esc(" ".join(parts))}</p><div class="answers">{answers(data)}</div>')
+
+
 def today(data: dict) -> str:
     landed, github = data["landed"], data["github"]
     cost = sum(r["cost"] for r in landed or [])
@@ -311,7 +383,7 @@ def today(data: dict) -> str:
     else:
         pace, read = "Open count and landing rate: not recorded yet.", "Run `olivercode status page --fetch` to read them from GitHub once."
     total = f'<p class="small">{len(landed)} landed for ${cost:.2f} today.</p>' if landed else ""
-    return (f'<section class="chap" id="today"><h2>Today</h2><div class="card"><h3>Landed today</h3>{"".join(f"<p>{esc(r)}</p>" for r in rows)}{total}</div>'
+    return (f'<section class="chap" id="today" aria-label="Today">{lede(data)}<div class="card"><h3>Landed today</h3>{"".join(f"<p>{esc(r)}</p>" for r in rows)}{total}</div>'
             f'<div class="card"><h3>Pace</h3><p>{esc(pace)}</p><p class="small">{esc(read)}</p></div></section>')
 
 

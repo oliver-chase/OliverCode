@@ -198,6 +198,44 @@ class TestCity(unittest.TestCase):
             self.assertEqual(city.status_count(city.board_stories(root, "o/r"), "ready"), 1)
             self.assertIsNone(city.board_stories(temp_dir(self), "o/r"))
 
+    def today_log(self):
+        """One story claimed, costed and landed on the day of NOW: one day of data (#1361)."""
+        return [{"story": "story-7", "stage": "claimed", "repo": "r", "at": ago(30), "size": "S"},
+                {"story": "story-7", "round": 1, "model": "sonnet", "cost_usd": 0.5, "stop": "end_turn"},
+                {"story": "story-7", "stage": "landed", "repo": "r", "at": ago(10)}]
+
+    def today_section(self, page):
+        return page[page.index('id="today"'):page.index('id="delivery"')]
+
+    def test_today_opens_with_the_date_a_headline_and_a_paragraph_from_the_figures(self):
+        log = self.today_log()
+        section = self.today_section(city.render(data(log=log, landed=cmd_status.landed_today(log, NOW.timestamp()))))
+        self.assertIn(f"{NOW:%A} 22 November 2026", section)
+        self.assertIn("<h2>1 landed today for $0.50, and 0 waiting on you.</h2>", section)
+        self.assertIn("Delivery: 1 landed in the last 7 days.", section)
+        self.assertIn("Cost: $0.50 a landed story", section)
+        self.assertIn("Health: checks on main are not recorded yet.", section)
+
+    def test_four_answers_each_give_one_word_and_a_line_of_evidence(self):
+        log = self.today_log()
+        section = self.today_section(city.render(data(log=log, landed=cmd_status.landed_today(log, NOW.timestamp()))))
+        for question, word, evidence in (("Is it working?", "Idle", "No drain is running"), ("Is it shipping?", "Yes", "1 landed today and 1 in the last 7 days."),
+                                         ("Is it worth the cost?", "Yes", "$0.50 a landed story against the $2.00 M limit"), ("Does it need me?", "No", "Nothing waits on you.")):
+            self.assertIn(f'<span class="q">{question}</span><span class="a">{word}</span>', section)
+            self.assertIn(evidence, section)
+
+    def test_one_day_of_data_is_shown_as_a_figure_never_as_a_trend(self):
+        log = self.today_log()
+        section = self.today_section(city.render(data(log=log, landed=cmd_status.landed_today(log, NOW.timestamp()))))
+        self.assertNotIn("trend", section.lower())
+        self.assertIn("1 landed today and 1 in the last 7 days.", section)
+
+    def test_today_says_unknown_when_the_run_log_cannot_be_read(self):
+        section = self.today_section(city.render(data(log=None, landed=None)))
+        self.assertIn('<span class="a">Unknown</span>', section)
+        self.assertEqual(section.count('<span class="a">Unknown</span>'), 2)
+        self.assertIn("The run log could not be read", section)
+
 
 if __name__ == "__main__":
     unittest.main()
