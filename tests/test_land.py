@@ -20,27 +20,27 @@ REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_
 REAL_RUN = subprocess.run
 
 
-class Base(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        """One origin, main checkout and story worktree per class; each test copies them and repoints their absolute paths."""
-        cls._template = Path(tempfile.mkdtemp(prefix="olivercode-land-template-")).resolve()
-        cls.addClassCleanup(shutil.rmtree, cls._template, ignore_errors=True)
-        root = cls._template
-        origin = root / "origin.git"
-        scratch_repo(origin, bare=True, branch="main")
-        seed = scratch_repo(root / "seed", branch="main")
-        git(seed, "remote", "add", "origin", str(origin))
-        (seed / "scripts").mkdir()
-        (seed / "scripts" / "validate.sh").write_text("exit 0\n")
-        (seed / "a.txt").write_text("a")
-        git(seed, "add", "."); git(seed, "commit", "-q", "-m", "one"); git(seed, "push", "-q", "origin", "main")
-        git(root, "clone", "-q", "-c", "maintenance.auto=false", "-c", "gc.auto=0", str(origin), str(root / "main"))  # a clone skips scratch_repo's maintenance settings, so a copy could meet its lock half-gone
-        git(root / "main", "config", "user.email", "t@example.invalid"); git(root / "main", "config", "user.name", "T")
-        git(root / "main", "worktree", "add", "-q", "-b", "story/9", str(root / "wt"), "origin/main")
-        (root / "wt" / "b.txt").write_text("b")
-        git(root / "wt", "add", "."); git(root / "wt", "commit", "-q", "-m", "Add b (#9)")
+def setUpModule():
+    """One origin, main checkout and story worktree for the whole file; each test copies them and repoints their absolute paths."""
+    Base._template = Path(tempfile.mkdtemp(prefix="olivercode-land-template-")).resolve()
+    unittest.addModuleCleanup(shutil.rmtree, Base._template, ignore_errors=True)
+    root = Base._template
+    origin = root / "origin.git"
+    scratch_repo(origin, bare=True, branch="main")
+    seed = scratch_repo(root / "seed", branch="main")
+    git(seed, "remote", "add", "origin", str(origin))
+    (seed / "scripts").mkdir()
+    (seed / "scripts" / "validate.sh").write_text("exit 0\n")
+    (seed / "a.txt").write_text("a")
+    git(seed, "add", "."); git(seed, "commit", "-q", "-m", "one"); git(seed, "push", "-q", "origin", "main")
+    git(root, "clone", "-q", "-c", "maintenance.auto=false", "-c", "gc.auto=0", str(origin), str(root / "main"))  # a clone skips scratch_repo's maintenance settings, so a copy could meet its lock half-gone
+    git(root / "main", "config", "user.email", "t@example.invalid"); git(root / "main", "config", "user.name", "T")
+    git(root / "main", "worktree", "add", "-q", "-b", "story/9", str(root / "wt"), "origin/main")
+    (root / "wt" / "b.txt").write_text("b")
+    git(root / "wt", "add", "."); git(root / "wt", "commit", "-q", "-m", "Add b (#9)")
 
+
+class Base(unittest.TestCase):
     def setUp(self):
         self.root = temp_dir(self, resolve=True)
         p = mock.patch.dict(os.environ, git_env(), clear=True); p.start(); self.addCleanup(p.stop)

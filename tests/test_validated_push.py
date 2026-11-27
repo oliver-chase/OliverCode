@@ -19,23 +19,23 @@ LAUNCHER = REPO_ROOT / "scripts" / "olivercode"
 ZERO = "0" * 40
 
 
-class ValidatedPush(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        """One remote and one work repo with the pre-push hook installed per class; each test copies them."""
-        cls._template = Path(tempfile.mkdtemp(prefix="validated-template-")).resolve()
-        cls.addClassCleanup(shutil.rmtree, cls._template, ignore_errors=True)
-        env = git_env(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
-        remote = scratch_repo(cls._template / "remote.git", bare=True)
-        work = scratch_repo(cls._template / "work", branch="main", identity=False)
-        (work / "scripts").mkdir()
-        (work / "scripts" / "validate.sh").write_text("olivercode validated record\n")
-        for args in (["add", "-A"], ["commit", "-q", "-m", "init"], ["remote", "add", "origin", str(remote)]):
-            subprocess.run(["git", *args], cwd=work, env=env, capture_output=True, text=True)
-        hook = work / ".git" / "hooks" / "pre-push"
-        shutil.copy(HOOK, hook)
-        hook.chmod(0o755)
+def setUpModule():
+    """One remote and one work repo with the pre-push hook installed for the whole file; each test copies them."""
+    ValidatedPush._template = Path(tempfile.mkdtemp(prefix="validated-template-")).resolve()
+    unittest.addModuleCleanup(shutil.rmtree, ValidatedPush._template, ignore_errors=True)
+    env = git_env(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
+    remote = scratch_repo(ValidatedPush._template / "remote.git", bare=True)
+    work = scratch_repo(ValidatedPush._template / "work", branch="main", identity=False)
+    (work / "scripts").mkdir()
+    (work / "scripts" / "validate.sh").write_text("olivercode validated record\n")
+    for args in (["add", "-A"], ["commit", "-q", "-m", "init"], ["remote", "add", "origin", str(remote)]):
+        subprocess.run(["git", *args], cwd=work, env=env, capture_output=True, text=True)
+    hook = work / ".git" / "hooks" / "pre-push"
+    shutil.copy(HOOK, hook)
+    hook.chmod(0o755)
 
+
+class ValidatedPush(unittest.TestCase):
     def setUp(self):
         self.tmp = temp_dir(self, "validated-")
         self.home = self.tmp / "home"

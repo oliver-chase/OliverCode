@@ -10,6 +10,7 @@ import test_land
 from lib import cmd_land
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+setUpModule = test_land.setUpModule  # unittest runs setUpModule only for the module that defines the class, so this file borrows test_land's template
 
 
 class TestPromoteUpgrade(test_land.TestPromote):

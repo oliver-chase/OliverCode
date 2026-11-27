@@ -5,7 +5,7 @@ import subprocess
 import unittest
 
 from _support import REPO_ROOT, git_env, temp_dir
-from test_commit_msg import CommitMsgCase
+from test_commit_msg import CommitMsgCase, setUpModule  # noqa: F401 - unittest runs setUpModule per defining module, so this file borrows the template
 
 
 class TestClosesCard(CommitMsgCase):

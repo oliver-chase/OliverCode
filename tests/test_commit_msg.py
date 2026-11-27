@@ -14,20 +14,20 @@ from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "commit-msg"
 
 
-class CommitMsgCase(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        """One scratch repo per class with the hook installed and a.txt staged; each test copies it."""
-        cls._template = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-template-"))
-        cls.addClassCleanup(shutil.rmtree, cls._template, ignore_errors=True)
-        scratch_repo(cls._template)
-        hooks = cls._template / ".githooks"
-        hooks.mkdir()
-        shutil.copy2(HOOK, hooks / "commit-msg")
-        git(cls._template, "config", "core.hooksPath", ".githooks")
-        (cls._template / "a.txt").write_text("a\n")
-        git(cls._template, "add", "a.txt")
+def setUpModule():
+    """One scratch repo for the whole file with the hook installed and a.txt staged; each test copies it."""
+    CommitMsgCase._template = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-template-"))
+    unittest.addModuleCleanup(shutil.rmtree, CommitMsgCase._template, ignore_errors=True)
+    scratch_repo(CommitMsgCase._template)
+    hooks = CommitMsgCase._template / ".githooks"
+    hooks.mkdir()
+    shutil.copy2(HOOK, hooks / "commit-msg")
+    git(CommitMsgCase._template, "config", "core.hooksPath", ".githooks")
+    (CommitMsgCase._template / "a.txt").write_text("a\n")
+    git(CommitMsgCase._template, "add", "a.txt")
 
+
+class CommitMsgCase(unittest.TestCase):
     def setUp(self):
         self.repo = temp_dir(self, "olivercode-commitmsg-") / "repo"
         shutil.copytree(self._template, self.repo, symlinks=True)

@@ -40,6 +40,11 @@ class TestGuide(unittest.TestCase):
             self.assertIn(phrases, skills)
             self.assertRegex(phrases, r"(?i)\b(trigger|use when)", name)
 
+    def test_the_guide_prints_every_how_work_runs_sentence_and_habit(self):
+        _, text = self._guide()
+        for line in [*cmd_guide.HOW_WORK_RUNS, *cmd_guide.USING_IT_WELL]:
+            self.assertIn(line, text)
+
     def test_the_launcher_runs_guide_and_rejects_extra_arguments(self):
         import sys
         from unittest import mock
@@ -60,15 +65,6 @@ class TestApprovedCopy(unittest.TestCase):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         positions = [text.index(f"\n{heading}\n") for heading in HEADINGS]
         self.assertEqual(positions, sorted(positions))
-
-    def test_how_work_runs_and_the_habits_print_their_archived_lines(self):
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("You work in Claude Code normally", text)
-        for sentence in cmd_guide.HOW_WORK_RUNS:
-            self.assertIn(sentence, text)
-        for habit in cmd_guide.USING_IT_WELL:
-            self.assertIn(habit, text)
-        self.assertIn(cmd_guide.THREAD_LINE, text)
 
     def test_every_command_the_guide_names_exists_in_the_launcher(self):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)

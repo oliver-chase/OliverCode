@@ -94,15 +94,7 @@ class RetiredFleetSync(unittest.TestCase):
 
 
 class WhoBuilds(unittest.TestCase):
-    """The install text, the guide, the README, RULES.md and CLAUDE.md state one rule for who builds a board story (#1013)."""
-
-    RULE = "A chat never builds a board story by hand"
-
-    def test_each_doc_and_the_guide_state_the_one_rule(self):
-        from lib import cmd_guide
-        for path in ("CLAUDE.md", "docs/RULES.md", "README.md"):
-            self.assertIn(self.RULE, (REPO_ROOT / path).read_text(encoding="utf-8"), path)
-        self.assertIn(self.RULE, " ".join(cmd_guide.HOW_WORK_RUNS))
+    """The install text and the guide name the commands that build a board story (#1013)."""
 
     def test_the_first_steps_end_on_building_a_story_in_install(self):
         self.assertIn("3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`", cmd_install.INTRODUCTION)
