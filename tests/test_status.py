@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +14,9 @@ from unittest import mock
 from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_owner, cmd_status  # noqa: E402
+from lib import cmd_owner, cmd_status, local_config  # noqa: E402
 
-NOW = datetime(2026, 11, 22, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 22, 12, tzinfo=timezone.utc)  # noon UTC is still 22 Nov in New York, so "landed today" holds for the fixture's landings (#1486)
 
 
 def stage(story: str, name: str, hhmm: str, seconds: int = 0, repo: str = "r") -> dict:
@@ -54,7 +55,7 @@ class TestStatus(unittest.TestCase):
         text = out.getvalue()
         order = [text.index(h) for h in ("Needs you:", "Building:", "Landed today:", "Pace:")]
         self.assertEqual(order, sorted(order))
-        self.assertIn("Landed: #5 in r at 2026-11-22 09:17 UTC. Building took under a minute, validation under a minute, landing under a minute, 17 minutes in all.", text)
+        self.assertIn("Landed: #5 in r at 2026-11-22 04:17 EST. Building took under a minute, validation under a minute, landing under a minute, 17 minutes in all.", text)
 
     def test_an_unreadable_run_log_is_named_as_unknown_and_no_figure_is_guessed(self):
         out = io.StringIO()
@@ -207,7 +208,7 @@ class TestDigest(unittest.TestCase):
     def test_the_session_lines_are_three_and_name_the_open_count_the_last_landing_and_the_digest(self):
         log = [stage("story-4", "claimed", "08:00"), stage("story-4", "landed", "08:10", 600), stage("story-5", "claimed", "09:00"), stage("story-5", "landed", "09:20", 1200)]
         lines = cmd_status.session_lines("o/r", 14, log, Path("/x/status-digest.md"))
-        self.assertEqual(["o/r: 14 open stories.", "Last story landed: #5 in r at 2026-11-22 09:20 UTC.", "Read /x/status-digest.md before acting."], lines)
+        self.assertEqual(["o/r: 14 open stories.", "Last story landed: #5 in r at 2026-11-22 04:20 EST.", "Read /x/status-digest.md before acting."], lines)
         self.assertIn("No story landing is recorded", cmd_status.session_lines("o/r", 0, [], Path("/x"))[1])
 
     def test_no_origin_writes_nothing_and_exits_one(self):
@@ -245,7 +246,7 @@ class TestDigest(unittest.TestCase):
                stage("story-5", "validating", "09:12", 720), {"story": "story-5-review", "round": 1, "cost_usd": 0.5, "at": "2026-11-22T09:14:00Z"},
                stage("story-5", "landing", "09:15", 180), stage("story-5", "landed", "09:17", 120)]
         lines = cmd_status.activity(NOW.timestamp(), {}, log, False, 0, "")
-        self.assertEqual("Last landed: #5 in r at 2026-11-22 09:17 UTC. Building took 12 minutes and $2.50, validation 3 minutes, landing 2 minutes, 17 minutes in all.", lines[1])
+        self.assertEqual("Last landed: #5 in r at 2026-11-22 04:17 EST. Building took 12 minutes and $2.50, validation 3 minutes, landing 2 minutes, 17 minutes in all.", lines[1])
 
     def test_the_last_landing_is_the_runners_landed_row_and_never_a_closed_issue(self):
         """#1291: an issue closed as not planned leaves no landed row, so the line names the story the runner landed."""
@@ -255,7 +256,7 @@ class TestDigest(unittest.TestCase):
             lines = cmd_status.live_lines(NOW, 1)
         landed = [l for l in lines if l.startswith("Landed: ")]
         self.assertEqual(1, len(landed))
-        self.assertIn("#3 in r at 2026-11-22 08:20 UTC", landed[0])
+        self.assertIn("#3 in r at 2026-11-22 03:20 EST", landed[0])
         self.assertNotIn("#9", landed[0])
 
     def sized(self, n: int, size: str | None, retry: bool = False) -> list[dict]:
@@ -318,7 +319,7 @@ class TestDigest(unittest.TestCase):
     def test_a_claim_without_a_live_runner_says_it_once_in_a_plain_sentence_with_its_clear_time(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
         lines = cmd_status.activity(NOW.timestamp(), claims, [], False, 1, "")
-        self.assertEqual("#7 is claimed but nothing is building. The claim clears by itself at 20:59 EST.", lines[0])
+        self.assertEqual("#7 is claimed but nothing is building. The claim clears by itself at 08:59 EST.", lines[0])
         self.assertFalse(any(line.startswith("Warning") or "dispatch-claims" in line or "Runner idle" in line for line in lines))
 
     def test_a_last_run_that_did_not_stop_cleanly_is_warned_with_its_stop_reason(self):
@@ -358,6 +359,54 @@ class TestRunnerAlive(unittest.TestCase):
     def test_a_missing_pgrep_reads_as_not_alive(self):
         with mock.patch.object(cmd_status.subprocess, "run", side_effect=OSError):
             self.assertFalse(cmd_status.runner_alive())
+
+
+class TestOwnerZone(unittest.TestCase):
+    """#1486: every time status and watch print is in the owner's zone, watch opens with the current state, and Next Ready skips a claimed story."""
+
+    def test_a_stage_line_is_stamped_with_its_row_time_in_the_owners_zone(self):
+        row = stage("story-1395", "validating", "19:40", repo="oc-staging")
+        self.assertEqual("14:40 EST #1395 in oc-staging: validating", cmd_status.watch_line(row, []))
+
+    def test_timezone_local_prints_this_computers_zone(self):
+        row = stage("story-1395", "validating", "19:40", repo="oc-staging")
+        with mock.patch.object(local_config, "setting", return_value="local"), mock.patch.dict(os.environ, {"TZ": "Asia/Tokyo"}):
+            time.tzset()
+            try:
+                line = cmd_status.watch_line(row, [])
+            finally:
+                os.environ.pop("TZ", None)
+                time.tzset()
+        self.assertEqual("04:40 JST #1395 in oc-staging: validating", line)
+
+    def test_landed_today_is_the_owners_local_date(self):
+        log = [stage("story-1", "claimed", "02:00"), stage("story-1", "landed", "03:00", 60),
+               stage("story-2", "claimed", "09:00"), stage("story-2", "landed", "10:00", 60)]
+        self.assertEqual(["story-2"], [f["story"] for f in cmd_status.landed_today(log, NOW.timestamp())])
+
+    def test_next_ready_names_the_first_open_story_with_no_live_claim(self):
+        digest = "# Status digest\nWritten 2026-11-22 12:00 UTC.\n\n## Open, 2 in priority order\n- P0 #1479 Staging CI passes again\n- P1 #1289 Next story\n\n## Landed\n- none\n"
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "status-digest.md"
+            path.write_text(digest, encoding="utf-8")
+            self.assertEqual("P0 #1479 Staging CI passes again", cmd_status.next_ready(path))
+            self.assertEqual("P1 #1289 Next story", cmd_status.next_ready(path, {"o/r#1479": {"agent": "drain", "at": 0}}))
+
+    def test_watch_opens_with_the_building_block_the_landings_and_next_ready_then_streams(self):
+        log = [stage("story-7", "claimed", "09:00"), stage("story-5", "claimed", "08:00"), stage("story-5", "landed", "09:17", 120)]
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 120}}
+        lines = []
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "status-digest.md"
+            path.write_text("# Status digest\n\n## Open, 2 in priority order\n- P0 #7 Building story\n- P1 #9 First\n\n## Landed\n- none\n", encoding="utf-8")
+            with mock.patch.object(cmd_status, "run_log", return_value=log), mock.patch.object(cmd_status, "live_claims", return_value=claims), \
+                    mock.patch.object(cmd_status, "digest_path", return_value=path):
+                code = cmd_status.command_watch([], sleep=lambda s: None, out=lines.append, alive=lambda: False)
+        self.assertEqual(0, code)
+        self.assertTrue(lines[0].startswith("#7 is claimed but nothing is building. The claim clears by itself at "))
+        self.assertTrue(lines[1].startswith("Last landed: #5 in r at 2026-11-22 04:17 EST. Building took"))
+        self.assertEqual("Next Ready: P1 #9 First.", lines[2])
+        self.assertEqual("No drain is running.", lines[-1])
 
 
 if __name__ == "__main__":

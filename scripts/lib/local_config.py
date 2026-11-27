@@ -146,15 +146,22 @@ def max_builders() -> int:
 DEFAULT_ZONE = "America/New_York"  # the zone City's times show in when the local file names no timeZone (#1386)
 
 
-def local_time(at, spec: str = "%H:%M %Z") -> str:
-    """AT, a Unix stamp or a datetime, formatted with SPEC in the owner's timeZone, New York by default. A zone the database does not hold falls
-    back to New York, so the page still renders (#1386). The default SPEC ends in the zone's abbreviation, such as EST."""
+def zone():
+    """The owner's timeZone for datetime.astimezone: the named zone, New York when none is set or the database does not hold it (#1386). The value
+    "local" gives None, which astimezone reads as this computer's own zone (#1486)."""
+    name = str(setting("timeZone") or DEFAULT_ZONE)
+    if name == "local":
+        return None
     try:
-        zone = ZoneInfo(str(setting("timeZone") or DEFAULT_ZONE))
+        return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError):
-        zone = ZoneInfo(DEFAULT_ZONE)
+        return ZoneInfo(DEFAULT_ZONE)
+
+
+def local_time(at, spec: str = "%H:%M %Z") -> str:
+    """AT, a Unix stamp or a datetime, formatted with SPEC in the owner's timeZone (see zone). The default SPEC ends in the zone's abbreviation, such as EST."""
     dt = at if isinstance(at, datetime) else datetime.fromtimestamp(float(at), timezone.utc)
-    return f"{dt.astimezone(zone):{spec}}"
+    return f"{dt.astimezone(zone()):{spec}}"
 
 
 def _overlay(base: dict, top: dict) -> dict:

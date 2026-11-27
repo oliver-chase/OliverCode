@@ -1132,6 +1132,15 @@ class TestRealIo(unittest.TestCase):
         self.assertEqual([("story-7", self.repo.name, s) for s in ("claimed", "building", "landing", "stopped")], stages)
         self.assertEqual("Drain blocked: validation failed.", rows()[-1]["reason"])
 
+    def test_a_refused_landing_appends_a_stopped_row_with_its_reason_and_is_never_left_as_landing(self):
+        """#1486: a land that ends with RESULT weakened-test shows as stopped at once, with the refusal as its reason."""
+        refused = subprocess.CompletedProcess([], 1, "RESULT weakened-test \n", "")
+        with mock.patch.object(cmd_drain.subprocess, "run", return_value=refused):
+            landed, _ = self.io.land(Path("/wt/7"), 7)
+        last = [json.loads(l) for l in (Path(os.environ["OLIVERCODE_HOME"]) / "run-log.jsonl").read_text().splitlines()][-1]
+        self.assertFalse(landed)
+        self.assertEqual(("story-7", "stopped", "Landing refused: weakened-test"), (last["story"], last["stage"], last["reason"]))
+
     def test_a_close_that_succeeds_appends_the_landed_row_and_a_refused_close_does_not(self):
         git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
@@ -1365,7 +1374,7 @@ class DetachedRun(unittest.TestCase):
         self.assertEqual(("run-end", 2, 1), (end["stage"], end["landed"], end["stopped"]))
         from lib import cmd_status
         lines = cmd_status.activity(time.time(), {}, self.rows(), False, 0, "")
-        self.assertRegex(lines[2], r"^Last run ended \d{4}-\d\d-\d\d \d\d:\d\d UTC: 2 stories landed, 1 stopped\.$")
+        self.assertRegex(lines[2], r"^Last run ended \d{4}-\d\d-\d\d \d\d:\d\d (EST|EDT): 2 stories landed, 1 stopped\.$")
 
     def test_a_run_end_rewrites_the_status_digest_for_the_repo_and_a_failed_write_still_ends_the_run(self):
         with mock.patch.object(cmd_drain, "drain", return_value=0):
@@ -1406,21 +1415,26 @@ class DetachedRun(unittest.TestCase):
     def test_watch_prints_each_new_stage_row_and_ends_with_the_run(self):
         from lib import cmd_status
         from lib.agent_loop import log_stage
-        log_stage("story-168", "r", "building")  # already in the log before watch starts
+        log_stage("story-168", "r", "building")  # already in the log before watch starts: the opening block shows it, the rows after it stream
         steps = iter([lambda: (log_stage("story-169", "r", "claimed"), log_stage("story-169", "r", "validating")),
                       lambda: (log_stage("story-169", "r", "landed"), log_stage("run-r", "r", "run-end", landed=1, stopped=0))])
         lines = []
         code = cmd_status.command_watch(["r"], sleep=lambda s: next(steps)(), out=lines.append, alive=lambda: True)
         self.assertEqual(0, code)
-        self.assertEqual(["#169 in r: claimed", "#169 in r: validating", "#169 landed in under a minute"], lines[:3])
-        self.assertTrue(lines[3].endswith("1 story landed, 0 stopped."))
+        self.assertEqual("The runner is running and no story is building.", lines[0])
+        self.assertRegex(lines[2], r"^\d\d:\d\d (EST|EDT) #169 in r: claimed$")
+        self.assertRegex(lines[3], r"^\d\d:\d\d (EST|EDT) #169 in r: validating$")
+        self.assertRegex(lines[4], r"^\d\d:\d\d (EST|EDT) #169 in r: landed\. Building took under a minute, validation under a minute, landing under a minute, under a minute in all\.$")
+        self.assertTrue(lines[5].endswith("1 story landed, 0 stopped."))
 
     def test_watch_exits_when_no_drain_holds_the_run_lock_and_leaves_the_drain_alone(self):
         from lib import cmd_status
         lines = []
         with mock.patch.object(cmd_status.run_lock, "active", return_value={}):
             code = cmd_status.command_watch(["r"], sleep=lambda s: None, out=lines.append)
-        self.assertEqual((0, ["No drain is running for r."]), (code, lines))
+        self.assertEqual(0, code)
+        self.assertEqual(["No drain is running for r."], lines[-1:])
+        self.assertTrue(lines[0].startswith("Runner idle: no story is building."))
 
 
 if __name__ == "__main__":

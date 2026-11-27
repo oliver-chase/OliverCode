@@ -366,11 +366,13 @@ class Io:
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
         if out.returncode == 0:
             self.claim_start.pop(n, None)  # land keeps a lone older commit's committer date, so a resumed branch's commit would fail the since-claim filter (#1306)
-        elif "RESULT validate-failed" in out.stdout and (log := re.search(r"\(log: (.+?)\)", out.stdout)):
-            try:  # land prints only the result, so the validation's tail is read from its log
-                stop_if_gone(agent_loop.gate_tail(Path(log.group(1)).read_text(encoding="utf-8", errors="replace")))
-            except OSError:
-                pass
+        elif refused := re.search(r"RESULT (\S+)", out.stdout):  # a refused landing shows as stopped at once, not as still landing (#1486)
+            agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=f"Landing refused: {refused.group(1)}")
+            if refused.group(1) == "validate-failed" and (log := re.search(r"\(log: (.+?)\)", out.stdout)):
+                try:  # land prints only the result, so the validation's tail is read from its log
+                    stop_if_gone(agent_loop.gate_tail(Path(log.group(1)).read_text(encoding="utf-8", errors="replace")))
+                except OSError:
+                    pass
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
     def stack(self, items: list[tuple[Path, int]]) -> bool:

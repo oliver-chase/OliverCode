@@ -11,6 +11,7 @@ alone (#892), and the session-start hook refreshes it and prints `session_lines`
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import time
@@ -100,8 +101,14 @@ def _epoch(value) -> float:
         return 0.0
 
 
-def next_ready(path: Path) -> str:
-    """The first open story in the status digest, which is the next Ready story in priority order, or '' when no digest is written."""
+def repo_claims(claims: dict, slug: str) -> dict:
+    """The claims of SLUG's repo, or every claim when no slug is given."""
+    return {key: mine for key, mine in claims.items() if not slug or key.rsplit("#", 1)[0] == slug}
+
+
+def next_ready(path: Path, claims: dict = {}) -> str:
+    """The first open story in the status digest with no live claim in CLAIMS, which is the next Ready story in priority order (#1486), or '' when no
+    digest is written or every open story is claimed. A story that a builder holds is building, not Ready."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -109,10 +116,14 @@ def next_ready(path: Path) -> str:
     parts = text.split("\n## Open,", 1)
     if len(parts) < 2:
         return ""
+    held = {key.rsplit("#", 1)[-1] for key in claims}
     for line in parts[1].splitlines()[1:]:
         if line.startswith("## "):
             break
-        if line.startswith("- "):
+        if not line.startswith("- "):
+            continue
+        number = re.search(r"#(\d+)", line)
+        if number is None or number.group(1) not in held:
             return line[2:]
     return ""
 
@@ -212,31 +223,39 @@ def landings(log: list[dict]) -> list[dict]:
     return sorted(found, key=lambda f: f["at"], reverse=True)
 
 
-def landing_line(row: dict, label: str) -> str:
+def landing_detail(row: dict) -> str:
+    """'Building took 3 minutes and $0.77, validation 1 minute, landing 2 minutes, 7 minutes in all.' for a landed row from landings (#1291)."""
     cost = f" and ${row['cost']:.2f}" if row["cost"] else ""
-    return (f"{label}: #{row['story'].rsplit('-', 1)[-1]} in {row['repo']} at {datetime.fromtimestamp(row['at'], timezone.utc):%Y-%m-%d %H:%M} UTC. "
-            f"Building took {minutes(row['build'])}{cost}, validation {minutes(row['check'])}, landing {minutes(row['land'])}, {minutes(row['total'])} in all.")
+    return f"Building took {minutes(row['build'])}{cost}, validation {minutes(row['check'])}, landing {minutes(row['land'])}, {minutes(row['total'])} in all."
+
+
+def landing_line(row: dict, label: str) -> str:
+    """'Last landed: #5 in r at 2026-11-22 04:17 EST. Building took ...', the landing's time in the owner's zone (#1486)."""
+    return f"{label}: #{row['story'].rsplit('-', 1)[-1]} in {row['repo']} at {local_config.local_time(row['at'], '%Y-%m-%d %H:%M %Z')}. " + landing_detail(row)
 
 
 def run_end_line(row: dict) -> str:
-    """'Last run ended 2026-01-02 03:04 UTC: 3 stories landed, 1 stopped.' from a drain's run-end row (#1276)."""
-    return f"Last run ended {datetime.fromtimestamp(_epoch(row.get('at')), timezone.utc):%Y-%m-%d %H:%M} UTC: {row.get('landed', 0)} {'story' if row.get('landed', 0) == 1 else 'stories'} landed, {row.get('stopped', 0)} stopped."
+    """'Last run ended 2026-01-02 03:04 EST: 3 stories landed, 1 stopped.' from a drain's run-end row (#1276, #1486)."""
+    return f"Last run ended {local_config.local_time(_epoch(row.get('at')), '%Y-%m-%d %H:%M %Z')}: {row.get('landed', 0)} {'story' if row.get('landed', 0) == 1 else 'stories'} landed, {row.get('stopped', 0)} stopped."
 
 
 def watch_line(row: dict, log: list[dict]) -> str:
-    """One plain line for a new stage row, reusing the status formatting: '#7 in repo: validating', '#7 landed in 3 minutes, $0.03' (#1276)."""
+    """One plain line for a new stage row, stamped with the row's time in the owner's zone (#1486): '14:40 EST #7 in repo: validating', '14:40 EST #7 in repo:
+    landed. Building took ...', '14:40 EST #7 in repo: stopped (Landing refused: weakened-test)'. A run-end row already carries its time (#1276)."""
     if row["stage"] == "run-end":
         return run_end_line(row)
+    stamp = local_config.local_time(_epoch(row.get("at")) or time.time(), "%H:%M %Z")
     n = str(row.get("story")).rsplit("-", 1)[-1]
     if row["stage"] == "landed":
         done = next((f for f in landings(log) if f["story"] == row["story"]), None)
-        return f"#{n} landed" + (f" in {minutes(done['total'])}" + (f", ${done['cost']:.2f}" if done["cost"] else "") if done else "")
-    return f"#{n} in {row.get('repo')}: {row['stage']}" + (f" ({row['reason']})" if row.get("reason") else "")
+        return f"{stamp} #{n} in {row.get('repo')}: landed" + (f". {landing_detail(done)}" if done else ".")
+    return f"{stamp} #{n} in {row.get('repo')}: {row['stage']}" + (f" ({row['reason']})" if row.get("reason") else "")
 
 
 def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> int:
-    """`watch [REPO]` prints one line per stage row added to the run log from now on, and ends with the run-end row or when no drain holds the repo's
-    run lock for three checks in a row. It reads the log only: no model and no GitHub call (#1276)."""
+    """`watch [REPO]` opens with what is building, the last three landings and the next Ready story, as status shows them (#1486). Then it prints one
+    line per stage row added to the run log from now on, each stamped in the owner's zone, and ends with the run-end row or when no drain holds the repo's
+    run lock for three checks in a row. It reads the log and the digest only: no model and no GitHub call (#1276, #1486)."""
     from lib import cmd_drain
     repo = cmd_drain.resolve_repo(argv[0]) if argv else None
     if (argv and not repo) or len(argv) > 1:
@@ -244,7 +263,12 @@ def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> i
         return 1
     slug = cmd_drain.slug_of(repo) if repo else ""
     alive = alive or (lambda: bool(run_lock.active(slug, time.time())) if slug else runner_alive())
-    seen, idle = len(run_log()), 0
+    log = run_log()
+    stamp = time.time()
+    claims = repo_claims(live_claims(stamp), slug)
+    for line in activity(stamp, claims, log, alive(), None, next_ready(digest_path(), claims), run_lock.active(slug, stamp) if slug else None):
+        out(line)
+    seen, idle = len(log), 0
     while idle < 3:
         log = run_log()
         for row in log[seen:]:
@@ -350,9 +374,9 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
 
 
 def landed_today(log: list[dict], now: float) -> list[dict]:
-    """The stories landed on today's UTC date, newest first (#1334)."""
-    today = datetime.fromtimestamp(now, timezone.utc).date()
-    return [f for f in landings(log) if datetime.fromtimestamp(f["at"], timezone.utc).date() == today]
+    """The stories landed on today's date in the owner's zone, newest first (#1334, #1486)."""
+    today = local_config.local_time(now, "%Y-%m-%d")
+    return [f for f in landings(log) if local_config.local_time(f["at"], "%Y-%m-%d") == today]
 
 
 def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]:
@@ -364,8 +388,9 @@ def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]
     except (OSError, ValueError) as err:
         return [f"Building and landed today: unknown, because the run log could not be read ({err})."]
     holder = run_lock.active(slug, stamp) if slug else {}
-    building, warnings = building_block(stamp, live_claims(stamp), log, runner_alive(), open_now, holder)
-    ready = next_ready(digest_path())
+    claims = live_claims(stamp)
+    building, warnings = building_block(stamp, claims, log, runner_alive(), open_now, holder)
+    ready = next_ready(digest_path(), repo_claims(claims, slug))
     found, last = landed_today(log, stamp), landings(log)
     landed = [landing_line(row, "Landed") for row in found] or ["Nothing has landed today."]
     if not found:
@@ -494,7 +519,7 @@ def waiting_lines() -> list[str]:
 def session_lines(slug: str, open_now: int, log: list[dict], path: Path) -> list[str]:
     """The three lines a new session prints: the open count, the last story landed and the digest to read. The landing is the run log's latest landed row (#1291)."""
     last = landings(log)
-    done = (f"Last story landed: #{last[0]['story'].rsplit('-', 1)[-1]} in {last[0]['repo']} at {datetime.fromtimestamp(last[0]['at'], timezone.utc):%Y-%m-%d %H:%M} UTC."
+    done = (f"Last story landed: #{last[0]['story'].rsplit('-', 1)[-1]} in {last[0]['repo']} at {local_config.local_time(last[0]['at'], '%Y-%m-%d %H:%M %Z')}."
             if last else "No story landing is recorded in the run log yet.")
     return [f"{slug}: {open_now} open stories.", done, f"Read {path} before acting."]
 
