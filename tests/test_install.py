@@ -270,13 +270,25 @@ class CityShortcut(unittest.TestCase):
     def shortcut(self) -> Path:
         return self.desktop / cmd_install.CITY_SHORTCUT
 
-    def test_install_writes_city_first_then_a_webloc_pointing_at_it(self):
+    def test_install_writes_city_first_then_an_html_link_to_it(self):
         out = self.install()
         self.assertEqual(1, self.refreshed.call_count)
         self.assertTrue(self.page.is_file())
-        with self.shortcut().open("rb") as f:
-            self.assertEqual(self.page.as_uri(), plistlib.load(f)["URL"])
-        self.assertIn("[ADDED] ~/Desktop/OliverCode City.webloc", out)
+        self.assertTrue(self.shortcut().is_symlink())
+        self.assertEqual(self.page, Path(os.readlink(self.shortcut())))
+        self.assertIn("[ADDED] ~/Desktop/OliverCode City.html", out)
+
+    def test_update_replaces_an_earlier_webloc_with_the_html_link(self):
+        self.install()
+        self.shortcut().unlink()
+        legacy = self.desktop / cmd_install.CITY_SHORTCUT_WEBLOC
+        with legacy.open("wb") as f:
+            plistlib.dump({"URL": self.page.as_uri()}, f)
+        out = self.install()
+        self.assertFalse(legacy.exists())
+        self.assertTrue(self.shortcut().is_symlink())
+        self.assertIn("[REMOVED] ~/Desktop/OliverCode City.webloc", out)
+        self.assertIn("[ADDED] ~/Desktop/OliverCode City.html", out)
 
     def test_a_page_already_written_is_not_rewritten_before_the_shortcut(self):
         self.home.mkdir(parents=True)
@@ -289,7 +301,7 @@ class CityShortcut(unittest.TestCase):
     def test_no_shortcut_when_city_cannot_be_written(self):
         out = self.install(refresh=lambda root=None: 1)
         self.assertFalse(self.shortcut().exists())
-        self.assertIn("[WARN] ~/Desktop/OliverCode City.webloc not written", out)
+        self.assertIn("[WARN] ~/Desktop/OliverCode City.html not written", out)
 
     def test_a_shortcut_the_owner_deleted_is_not_written_again_by_update(self):
         self.install()
@@ -309,7 +321,15 @@ class CityShortcut(unittest.TestCase):
     def test_uninstall_removes_the_shortcut_install_added(self):
         self.install()
         out = self.uninstall()
-        self.assertFalse(self.shortcut().exists())
+        self.assertFalse(self.shortcut().is_symlink() or self.shortcut().exists())
+        self.assertIn("[REMOVED] ~/Desktop/OliverCode City.html", out)
+
+    def test_uninstall_removes_an_earlier_webloc_install_added(self):
+        self.install()
+        legacy = self.desktop / cmd_install.CITY_SHORTCUT_WEBLOC
+        legacy.write_text("earlier\n")
+        out = self.uninstall()
+        self.assertFalse(legacy.exists())
         self.assertIn("[REMOVED] ~/Desktop/OliverCode City.webloc", out)
 
     def test_status_page_open_writes_the_page_and_opens_it_in_the_browser(self):

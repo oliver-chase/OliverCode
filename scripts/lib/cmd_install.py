@@ -44,7 +44,8 @@ def _backups(path: Path) -> list[Path]:
 
 
 INSTALL_RECORD = ".olivercode-install.json"
-CITY_SHORTCUT = "OliverCode City.webloc"
+CITY_SHORTCUT = "OliverCode City.html"
+CITY_SHORTCUT_WEBLOC = "OliverCode City.webloc"  # the shortcut before #1372: macOS refuses to open a web link to a local file, so update replaces it
 
 # The first install's closing text: how work runs, the first steps and the habits that keep it cheap, in 20 lines at most (#972, #991).
 INTRODUCTION = """How OliverCode works
@@ -139,14 +140,20 @@ def _desktop() -> Path:
 
 
 def _city_shortcut(oc_root: Path, claude_dir: Path, desktop: Path | None = None) -> bool:
-    """Put an OliverCode City shortcut on the Desktop, once, pointing at city.html. The page is written first when it is missing,
-    so the shortcut never opens a missing file. Returns whether install has added the shortcut, which stays True after the owner
-    deletes it. A shortcut already on the Desktop that install did not write is left alone."""
+    """Put an OliverCode City shortcut on the Desktop, once: a link to city.html, which opens in the default browser. The page is
+    written first when it is missing, so the shortcut never opens a missing file. Returns whether install has added the shortcut,
+    which stays True after the owner deletes it. A shortcut already on the Desktop that install did not write is left alone. An
+    earlier install's .webloc, which macOS cannot open, is removed and replaced by the link."""
     from lib import city  # local import: city reads this module's figures
     desktop = desktop or _desktop()
     recorded = _record_city(claude_dir)
+    legacy = desktop / CITY_SHORTCUT_WEBLOC
+    replacing = recorded and (legacy.is_symlink() or legacy.exists())
+    if replacing:
+        legacy.unlink()
+        print(f"  [REMOVED] ~/Desktop/{CITY_SHORTCUT_WEBLOC}")
     link = desktop / CITY_SHORTCUT
-    if recorded or link.exists() or link.is_symlink() or not desktop.is_dir():
+    if (recorded and not replacing) or link.exists() or link.is_symlink() or not desktop.is_dir():
         return recorded
     page = city.page_path()
     if not page.exists():
@@ -154,8 +161,7 @@ def _city_shortcut(oc_root: Path, claude_dir: Path, desktop: Path | None = None)
     if not page.exists():
         print(f"  [WARN] ~/Desktop/{CITY_SHORTCUT} not written: City could not be written to {page} yet. Run `olivercode status page` and install again.")
         return False
-    with link.open("wb") as f:
-        plistlib.dump({"URL": page.as_uri()}, f)
+    link.symlink_to(page)
     print(f"  [ADDED] ~/Desktop/{CITY_SHORTCUT}")
     return True
 
@@ -713,12 +719,13 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
         broken_settings = True
 
     if _record_city(claude_dir):
-        shortcut = _desktop() / CITY_SHORTCUT
-        if shortcut.is_symlink() or shortcut.exists():
-            shortcut.unlink()
-            print(f"  [REMOVED] ~/Desktop/{CITY_SHORTCUT}")
-        else:
-            print(f"  [ABSENT] ~/Desktop/{CITY_SHORTCUT}")
+        for name in (CITY_SHORTCUT, CITY_SHORTCUT_WEBLOC):
+            shortcut = _desktop() / name
+            if shortcut.is_symlink() or shortcut.exists():
+                shortcut.unlink()
+                print(f"  [REMOVED] ~/Desktop/{name}")
+            else:
+                print(f"  [ABSENT] ~/Desktop/{name}")
 
     jobs = remove_jobs(oc_root, run=run)
     if not jobs:
