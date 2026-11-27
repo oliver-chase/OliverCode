@@ -558,7 +558,8 @@ def policy_stop_in(repo: str, start: str) -> dict | None:
         gate = Counter(g for g, _ in blocks).most_common(1)[0][0]
         finding = next(reason for g, reason in reversed(blocks) if g == gate)
     named = re.search(r"[\w.-]+(?:/[\w.-]+)*\.\w+", finding)
-    return {"rule": asks[-1][len("ask "):], "gate": gate, "finding": finding, "file": named.group(0) if named else ""}
+    rule, _, command = asks[-1][len("ask "):].partition(" | ")  # the hooks log the rule, then the command that hit it (#1473)
+    return {"rule": rule, "command": command, "gate": gate, "finding": finding, "file": named.group(0) if named else ""}
 
 
 def policy_stop_comment(stop: dict) -> str:
@@ -567,15 +568,19 @@ def policy_stop_comment(stop: dict) -> str:
             f"- Gate: {stop['gate'] or 'none'}\n"
             f"- Last finding: {stop['finding'] or 'none'}\n"
             f"- File: {stop['file'] or 'none named'}\n"
+            f"- Command: {stop.get('command') or 'none logged'}\n"
             "- Next: run the diagnosing-bugs loop on the gate's finding, then return this story to Ready.")
 
 
 def stops_here(io, n: int, worktree: Path, note: str, landing: bool) -> bool:
     """True when a failed round must not restart the builder, after commenting why: a refused push is not the builder's to fix (#1296), and a policy ask
-    answers a headless builder with no one to answer it, so a restart would hit the same ask (#1058)."""
+    answers a headless builder with no one to answer it, so a restart would hit the same ask (#1058). A builder that got past its ask and committed is
+    not stopped by it: its commit lands, or its landing failure is the reason (#1473)."""
     if landing and "push-failed" in note:
         io.comment(n, f"Drain blocked: {note}")
         return True
+    if io.commits(worktree) > 0:
+        return False
     stop = io.policy_stop(n, worktree)
     if stop:
         io.comment(n, policy_stop_comment(stop))

@@ -74,7 +74,7 @@ def verdicts(data: dict) -> list[tuple[str, str]]:
     decided = _safely(policy_guard.decide, data)
     if decided and decided[0]:
         decision, repo = decided
-        _safely(policy.log_block, decision, repo)
+        _safely(policy.log_block, decision, repo, command or (data.get("tool_input") or {}).get("file_path") or "")
         found.append((decision.kind, decision.reason))
     # A GitHub write is counted against the budget, so it is only asked once nothing else has refused the call.
     if command and not any(kind == "deny" for kind, _ in found):

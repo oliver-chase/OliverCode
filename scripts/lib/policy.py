@@ -522,7 +522,8 @@ def _subcommand(name: str, rest: list[str]) -> str:
     return ""
 
 
-def log_block(decision: Decision, repo: str) -> None:
-    """Write the decision to the failure log, in the format failure_log.record writes."""
+def log_block(decision: Decision, repo: str, command: str = "") -> None:
+    """Write the decision to the failure log, in the format failure_log.record writes: the rule, then ` | ` and the first 120 characters of the command (#1473)."""
     from lib import failure_log
-    failure_log.record("policy", f"{decision.kind} {decision.rule}", repo)
+    cmd = " ".join(command.split())[:120]
+    failure_log.record("policy", f"{decision.kind} {decision.rule}" + (f" | {cmd}" if cmd else ""), repo)

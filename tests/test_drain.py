@@ -14,7 +14,7 @@ from unittest import mock
 from _support import REPO_ROOT, git, git_env, quiet, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_drain, run_lock  # noqa: E402
+from lib import cmd_drain, policy, run_lock  # noqa: E402
 
 
 def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
@@ -84,7 +84,7 @@ class FakeIo:
             self.active.discard(n)
         return {"tokens": self.tokens, **out}
 
-    def commits(self, wt): return 1
+    def commits(self, wt): return getattr(self, "commit_count", 1)
     def stack(self, items):
         self.stacked = getattr(self, "stacked", []) + [[n for _, n in items]]
         return self.stack_ok
@@ -496,6 +496,7 @@ class DrainCase(unittest.TestCase):
     def test_a_policy_stopped_builder_is_not_restarted_and_the_owner_hears_once(self):
         stop = {"rule": "triggers.deleteFiles", "gate": "Owner identifiers", "finding": "scripts/lib/x.py:4 owner identifier", "file": "scripts/lib/x.py"}
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "commit refused"}]}, stops={1: stop})
+        io.commit_count = 0  # the builder left no commit, so the ask stops it (#1473)
         _, out, st = self.run_drain(io)
         self.assertEqual(io.started, [1])
         self.assertEqual(st["blocked"], [1])
@@ -519,12 +520,30 @@ class DrainCase(unittest.TestCase):
                 return cmd_drain.policy_stop_in("OliverCode-1012", "2026-11-23T16:12:00Z")
 
         io = Replay([issue(1012)], builds={1012: [{"done": False, "reason": "commit refused"} for _ in range(4)]})
+        io.commit_count = 0
         with mock.patch.dict(os.environ, {"OLIVERCODE_FAILURE_LOG": str(log)}):
             _, out, st = self.run_drain(io)
         self.assertEqual(io.started, [1012])
         self.assertEqual(1, len(io.comments))
         self.assertIn("File: scripts/lib/owner.py", io.comments[0][1])
         self.assertEqual(st["blocked"], [1012])
+
+    def test_a_builder_that_got_past_an_ask_and_committed_is_not_policy_stopped(self):  # #1473
+        stop = {"rule": "triggers.deleteFiles", "gate": "", "finding": "", "file": "", "command": "git rm -r old"}
+        io = FakeIo([issue(1)], builds={1: [{"done": True}]}, stops={1: stop}, land_ok=False)
+        _, out, st = self.run_drain(io)
+        self.assertEqual([], io.owner)
+        self.assertFalse(any("Stopped by the policy" in c for _, c in io.comments))
+
+    def test_the_logged_ask_names_its_command_and_the_stop_comment_repeats_it(self):  # #1473
+        log = temp_dir(self) / "failures.log"
+        with mock.patch.dict(os.environ, {"OLIVERCODE_FAILURE_LOG": str(log)}):
+            start = "2000-01-01T00:00:00Z"
+            policy.log_block(policy.Decision("ask", "triggers.deleteFiles", "r"), "OliverCode-9", "git rm -r " + "x" * 200)
+            stop = cmd_drain.policy_stop_in("OliverCode-9", start)
+        self.assertEqual("triggers.deleteFiles", stop["rule"])
+        self.assertEqual(("git rm -r " + "x" * 200)[:120], stop["command"])
+        self.assertIn("Command: git rm -r ", cmd_drain.policy_stop_comment(stop))
 
     def test_a_stop_with_no_policy_ask_in_the_run_is_not_a_stop(self):
         log_home = temp_dir(self)
