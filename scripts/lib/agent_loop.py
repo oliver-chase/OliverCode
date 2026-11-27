@@ -356,7 +356,7 @@ def refresh_city(now: float) -> None:
     CITY_AT = now
     try:
         from lib import city  # local import: city reads the modules that import this one
-        city.refresh()
+        city.refresh(OC_ROOT)
     except Exception:  # shortcut: any failure is swallowed, since the page is a view and the next stage row retries it
         pass
 

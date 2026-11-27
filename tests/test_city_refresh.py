@@ -21,7 +21,8 @@ class TestCityRefresh(unittest.TestCase):
             agent_loop.log_stage("story-1", "r", "claimed")
             agent_loop.log_stage("story-1", "r", "building")
             self.assertEqual(refresh.call_count, 1)
-            agent_loop.CITY_AT -= agent_loop.CITY_EVERY
+            refresh.assert_called_with(OC_ROOT)
+            agent_loop.CITY_AT -=agent_loop.CITY_EVERY
             agent_loop.log_stage("run-r", "r", "run-end", landed=1, stopped=0)
             self.assertEqual(refresh.call_count, 2)
 
