@@ -105,7 +105,7 @@ def saved_github() -> dict | None:
 
 
 def read_github(slug: str, now: datetime, count=None, fetch=cmd_status.recent, runner=cmd_status.issue_count.gh_list) -> dict:
-    """The one GitHub read: opened and closed counts over the last week and the check results on staging. A figure that could not be read is None."""
+    """The one GitHub read: opened and closed counts over the last week and the check results on main (CI runs on main only, #1354). A figure that could not be read is None."""
     open_now = (count or cmd_status.issue_count.count_issues)(slug, "open")
     rows = fetch(slug, now - timedelta(days=cmd_status.DAYS))
     since = now - timedelta(days=cmd_status.DAYS)
@@ -113,7 +113,7 @@ def read_github(slug: str, now: datetime, count=None, fetch=cmd_status.recent, r
     if rows is not None:
         figures["opened"] = sum(1 for r in rows if cmd_status._after(r.get("created_at"), since))
         figures["closed"] = sum(1 for r in rows if r.get("state_reason") == "completed" and cmd_status._after(r.get("closed_at"), since))
-    done = runner([f"repos/{slug}/commits/staging/check-runs?per_page=100"])
+    done = runner([f"repos/{slug}/commits/main/check-runs?per_page=100"])
     try:
         runs = json.loads(done.stdout)["check_runs"] if done.returncode == 0 else None
     except (ValueError, KeyError, TypeError):
