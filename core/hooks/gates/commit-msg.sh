@@ -97,10 +97,10 @@ case "$SUBJECT" in
 esac
 if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
     && [ -z "$(staged_code)" ]; then
-  exit 0
+  [ "$BLOCK_COUNT" -eq 0 ]; exit
 fi
 if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
-  exit 0
+  [ "$BLOCK_COUNT" -eq 0 ]; exit
 fi
 
 # VOICE-1. A repo that ships docs/VOICE.md opts in to voice enforcement; every other repo skips it. A commit message follows docs/VOICE.md: no bullet that ends in a period and no contrast

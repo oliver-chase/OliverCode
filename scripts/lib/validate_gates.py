@@ -122,6 +122,9 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sy
                 _kill(proc)
             raise
         now = time.monotonic()
+        for name in [n for n, p in procs.items() if p.poll() is not None]:  # one last poll: a gate that ended after the final loop pass is not stalled
+            codes[name] = procs.pop(name).returncode
+            took[name] = took.get(name, 0.0) + now - started[name]
         for proc in procs.values():
             _kill(proc)
         stalled = list(procs) + waiting

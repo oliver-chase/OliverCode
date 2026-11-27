@@ -68,9 +68,29 @@ def items() -> list[dict]:
     return [latest[i] for i in sorted(latest)]
 
 
-# A card number, or a password, key, token or code written into a field, which no agent ever types or stores (#635). The keyword
-# needs a non-letter before it, so a repo name such as OliverCode: is not read as a code (#973).
-_SECRET = re.compile(r"\b(?:\d[ -]?){13,19}\b|(?<![A-Za-z])(?:password|passwd|passcode|pwd|secret|token|api[_-]?key|otp|code|cvv)\s*[=:]\s*\S", re.IGNORECASE)
+# A password, key, token or one-time code written into a field, or a card number, which no agent ever types or stores (#635). The
+# keyword needs a non-letter before it, so a repo name such as OliverCode: is not read as a code (#973). A bare "code" is no keyword:
+# "exit code: 1" is a failed command, so only "verification code" and the otp forms count.
+_KEYWORD = re.compile(r"(?<![A-Za-z])(?:password|passwd|passcode|pwd|secret|token|api[_-]?key|otp(?:[ _-]?code)?|(?:verification|security|auth|sms|one[- ]time)[ _-]?code|cvv)\s*[=:]\s*\S", re.IGNORECASE)
+_DIGITS = re.compile(r"\b(?:\d[ -]?){13,19}\b")
+
+
+def _luhn(number: str) -> bool:
+    digits = [int(c) for c in number if c.isdigit()]
+    odd = digits[-1::-2]
+    even = [sum(divmod(2 * d, 10)) for d in digits[-2::-2]]
+    return (sum(odd) + sum(even)) % 10 == 0
+
+
+class _SecretCheck:
+    """`_SECRET.search(text)`: a keyword value, or a digit run that passes the Luhn check, so a 13-digit epoch is no card."""
+
+    @staticmethod
+    def search(text: str):
+        return _KEYWORD.search(text) or next((m for m in _DIGITS.finditer(text) if _luhn(m.group())), None)
+
+
+_SECRET = _SecretCheck()
 
 
 def add(session: str, step: str, command: str = "", error: str = "", tab: str = "", after: str = "", check: str = "",

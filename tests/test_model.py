@@ -33,8 +33,9 @@ class TestRunCli(unittest.TestCase):
         self.assertEqual(("ok", "abc", 57, 0), (out["text"], out["session_id"], out["tokens"], out["code"]))
 
     def test_no_api_key_is_read_or_passed(self):
-        run, _ = self.call()
-        self.assertNotIn("api", " ".join(run.call_args_list[0][0][0]).lower())
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "x", "ANTHROPIC_AUTH_TOKEN": "y"}):
+            run, _ = self.call()
+        self.assertFalse({"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"} & set(run.call_args_list[0][1]["env"]))
         self.assertEqual(["claude", "-p", "task"], run.call_args_list[0][0][0][:3])
 
     def test_resume_system_and_model_reach_the_command(self):

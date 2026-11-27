@@ -409,13 +409,15 @@ def violation(command_words: list[str], cwd: Path, cfg: Config | None = None) ->
         return ""
     rest = words[words.index("git") + 1:]
     while rest and rest[0].startswith("-"):
+        if rest[0] == "-C" and len(rest) > 1:
+            cwd = cwd / _p(rest[1])  # git resolves every relative path from the -C folder
         rest = rest[2:] if rest[0] in ("-C", "-c", "--git-dir", "--work-tree") else rest[1:]
     if rest[:2] == ["worktree", "add"]:
         positional = _positional(rest[2:], _VALUE_OPTIONS_ADD)
         if not positional:
             return ""
         dest = (cwd / _p(positional[0])).resolve()
-        if not inside(dest, cfg.worktrees):
+        if not inside(dest, cfg.worktrees) and not any(inside(dest, a) for a in cfg.allow):
             return (f"Worktrees live under {cfg.worktrees.name}, so this one goes in {cfg.worktrees.name}/{dest.name}. "
                     "See docs/RULES.md, File locations.")
     elif rest[:1] == ["clone"]:
@@ -424,7 +426,7 @@ def violation(command_words: list[str], cwd: Path, cfg: Config | None = None) ->
             return ""
         name = re.sub(r"\.git$", "", positional[0].rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1])
         dest = (cwd / _p(positional[1])).resolve() if len(positional) > 1 else (cwd / name).resolve()
-        if not inside(dest, cfg.root):
+        if not inside(dest, cfg.root) and not any(inside(dest, a) for a in cfg.allow):
             return f"Repos live under the repo root, so clone it as {dest.name}. See docs/RULES.md, File locations."
         owner = re.search(r"github\.com[:/]([^/:\s]+)/", positional[0])
         if belongs_to_other_device(name, f"{owner.group(1)}/{name}" if owner else None):

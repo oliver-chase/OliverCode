@@ -26,7 +26,7 @@ HOOKS_DIR = Path(__file__).resolve().parent.parent / "hooks"
 # (event, matcher or None, script). Stop and UserPromptSubmit take no matcher.
 MANAGED = (
     ("SessionStart", "startup", "session_check.py"),
-    ("PreToolUse", "Bash|Edit|Write|MultiEdit|Agent|Task", "pretool_guard.py"),
+    ("PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit|Agent|Task", "pretool_guard.py"),
     ("PostToolUse", "Bash", "gh_watch.py"),
     ("Stop", None, "early-stop-guard.py"),
     ("Stop", None, "wip_save.py"),

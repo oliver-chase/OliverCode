@@ -85,7 +85,8 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
     else:
         known = str(uuid.uuid4())  # a session id we chose, so a run that times out can still be resumed
         argv += ["--session-id", known]
-    env = {**os.environ, HEADLESS_ENV: "1"}
+    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}  # headless runs bill the subscription, never per token
+    env[HEADLESS_ENV] = "1"
     try:
         ran = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired as exc:

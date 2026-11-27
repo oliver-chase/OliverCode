@@ -124,10 +124,11 @@ class TestPreparedOwnerSteps(unittest.TestCase):
     def test_a_keyword_secret_is_refused_whatever_its_case_or_prefix(self):
         home = temp_dir(self)
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
-            for step in ("verification code: 123456", "OTP code: 4411", "passcode: 99182", "api_key=abc123", "my_password: hunter2"):
+            for step in ("verification code: 123456", "OTP code: 4411", "passcode: 99182", "api_key=abc123", "my_password: hunter2", "card 4111 1111 1111 1111"):
                 with self.assertRaisesRegex(ValueError, "a step never holds a password, card number, key or code"):
                     cmd_owner.add("s1", step)
             self.assertEqual([], cmd_owner.items())
+            self.assertEqual("open", cmd_owner.add("s2", "exit code: 1, code=128, at 1795752229000")["status"])
 
     def test_a_command_step_still_resumes_with_no_tab_line(self):
         home = temp_dir(self)

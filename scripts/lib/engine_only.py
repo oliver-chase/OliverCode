@@ -26,7 +26,7 @@ FIX = "move it to the private fleet repo and keep it out of this checkout"
 
 def _read(root: Path, rel: str, staged: bool) -> str:
     if staged:
-        done = subprocess.run(["git", "-C", str(root), "show", f":{rel}"], capture_output=True, text=True, check=False)
+        done = subprocess.run(["git", "-C", str(root), "show", f":{rel}"], capture_output=True, text=True, errors="replace", check=False)
         return done.stdout if done.returncode == 0 else ""
     try:
         return (root / rel).read_text(encoding="utf-8")
