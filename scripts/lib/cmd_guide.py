@@ -172,14 +172,17 @@ def plain_guide(oc_root: Path) -> list[str]:
     out += ["Your projects, your rules",
             "  OliverCode uses your repo's rules, validation and permissions. You stay in control of approvals, sensitive actions and anything that needs your judgment.", "",
             "City",
-            "  City gives you a live view of work, progress and anything waiting on you. Set it up in Claude Desktop to use it there and from your phone.", "",
+            "  City gives you a live view of work, progress and anything waiting on you. On this computer, open the \"OliverCode City\" shortcut on the Desktop to see the live page. Without the shortcut, run `olivercode status page --open`. Set it up in Claude Desktop to use it there and from your phone.", "",
             "Run `olivercode guide NAME` for a closer look at any command or skill. `guide city`, `guide skills` and `guide design` cover those topics."]
     return out
 
 
 def _city_topic(oc_root: Path) -> list[str]:
     url = city_url()
-    return ["OliverCode City", "", f"  {url}" if url else "  Not set up in the Claude desktop app. Open it and say \"Set up OliverCode City\" to finish, or \"Skip OliverCode City\" to stop the reminder.", "",
+    return ["OliverCode City", "", "On this computer",
+            "  1. Open the \"OliverCode City\" shortcut on the Desktop. It opens the live page.",
+            "  2. Without the shortcut, run `olivercode status page --open`.", "",
+            f"  {url}" if url else "  Not set up in the Claude desktop app. Open it and say \"Set up OliverCode City\" to finish, or \"Skip OliverCode City\" to stop the reminder.", "",
             "To check in from your phone"] + [f"  {n}. {step}" for n, step in enumerate(PHONE_STEPS, 1)]
 
 

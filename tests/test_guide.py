@@ -4,6 +4,7 @@ import contextlib
 import io
 import re
 import unittest
+from unittest import mock
 
 from _support import REPO_ROOT, load_script, quiet
 
@@ -74,7 +75,7 @@ class TestApprovedCopy(unittest.TestCase):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         for name in FLEET:
             self.assertNotRegex(text, rf"\b{name}\b", name)
-        for gone in ("status page", "status publish", "candidates", "olivercode story"):
+        for gone in ("status publish", "candidates", "olivercode story"):  # `status page` is real since #1363, so the guide names it
             self.assertNotIn(gone, text)
 
 
@@ -141,6 +142,38 @@ class TestStatusSteps(unittest.TestCase):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         self.assertIn(line, text)
         self.assertIn(free, text)
+
+
+class TestCityOpening(unittest.TestCase):
+    """#1366: the guide names every way to open City on this computer, with or without the Desktop shortcut."""
+
+    def test_the_short_guide_names_the_shortcut_and_status_page_open(self):
+        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
+        self.assertIn("\"OliverCode City\" shortcut on the Desktop", text)
+        self.assertIn("olivercode status page --open", text)
+
+    def test_the_city_topic_gives_this_computer_first_then_the_phone_steps_unchanged(self):
+        with mock.patch.object(cmd_guide, "city_url", return_value=""):
+            _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+        self.assertLess(text.index("On this computer"), text.index("To check in from your phone"))
+        self.assertIn("\"OliverCode City\" shortcut on the Desktop", text)
+        self.assertIn("olivercode status page --open", text)
+        steps = "\n".join(f"  {n}. {step}" for n, step in enumerate(cmd_guide.PHONE_STEPS, 1))
+        self.assertIn(steps, text)
+
+    def test_the_city_topic_names_both_ways_whether_or_not_the_artifact_is_set(self):
+        for url in ("", "https://claude.ai/artifact/abc"):
+            with mock.patch.object(cmd_guide, "city_url", return_value=url):
+                _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+            self.assertIn("On this computer", text, url)
+            self.assertIn("olivercode status page --open", text, url)
+            self.assertIn("\"OliverCode City\" shortcut", text, url)
+
+    def test_the_guide_still_names_status_page_open_once_the_owner_deleted_the_shortcut(self):
+        # install records the shortcut it wrote and never writes it again, so the guide has no Desktop check: its text is the same either way.
+        with mock.patch.object(cmd_guide, "city_url", return_value=""):
+            _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+        self.assertIn("olivercode status page --open", text)
 
 
 class TestLauncherSetupDoc(unittest.TestCase):
