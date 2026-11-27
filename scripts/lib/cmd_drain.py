@@ -293,9 +293,9 @@ class Io:
         self.said[n] = body
         self.gh(["api", "-X", "POST", f"repos/{self.slug}/issues/{n}/comments", "-f", f"body={body}"])
 
-    def close_by_script(self, worktree: Path, n: int, why: str) -> tuple[bool, str]:
+    def close_by_script(self, worktree: Path, n: int, why: str, stage: str = "landed") -> tuple[bool, str]:
         """Log the builder entry for the commit that names the story on origin's default branch, then close the story through complete_story.py
-        with the landing's output as its Run output (#912). Returns (closed, the refusal when the close was not made)."""
+        with the landing's output as its Run output (#912). `stage` is the run log row for the close: "landed" for a build, "closed" for a story already waiting in QA (#1377). Returns (closed, the refusal when the close was not made)."""
         branch = self.branch()
         log = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", *self.since_claim(n), "--format=%H%x09%s"], capture_output=True, text=True)
         sha = next((line.split("\t")[0] for line in log.stdout.splitlines() if f"(#{n})" in line), "")
@@ -313,7 +313,7 @@ class Io:
         done = subprocess.run([sys.executable, str(scripts / "complete_story.py"), "--story", str(n), "--config", str(config), "--evidence", evidence],
                               capture_output=True, text=True, cwd=self.repo)
         if done.returncode == 0:
-            agent_loop.log_stage(f"story-{n}", self.repo.name, "landed")
+            agent_loop.log_stage(f"story-{n}", self.repo.name, stage, reason=why if stage == "closed" else "")
             return True, ""
         return False, (done.stdout + done.stderr).strip()[-500:]
 
@@ -440,10 +440,10 @@ def land_and_close(io, worktree: Path, n: int) -> tuple[bool, str]:
     return True, why
 
 
-def finish(io, worktree: Path, n: int, why: str) -> None:
+def finish(io, worktree: Path, n: int, why: str, stage: str = "landed") -> None:
     """Close a landed story through complete_story.py, which accepts a commit on the engine branch as well as the default branch (#1330).
     A refused close comments the gate's message, logs its one stopped row and raises CloseRefused (#912, #1291)."""
-    closed, reason = io.close_by_script(worktree, n, why)
+    closed, reason = io.close_by_script(worktree, n, why, stage=stage)
     if not closed:
         io.comment(n, f"Close refused by complete_story.py: {reason}")
         io.stopped(n, f"Close refused: {reason}")  # the refusal is the reason status shows, and bug intake reads its prefix (#1291, #1371)
@@ -469,7 +469,7 @@ def close_waiting_in_qa(io, say=print) -> bool:
             say(f"Left open #{n}: its card is in QA and no commit for it is on the engine branch.")
             continue
         try:
-            finish(io, io.repo, n, "already on the engine branch")
+            finish(io, io.repo, n, "already on the engine branch", stage="closed")
         except CloseRefused as exc:  # finish has commented and logged the refusal
             say(f"Left open #{n}: {exc}")
     return True

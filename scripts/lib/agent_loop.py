@@ -273,7 +273,8 @@ def log_review(story: str, verdict: str, text: str) -> None:
     """Append the reader's pass or findings for a story to the run log. A log that cannot be written never stops a loop."""
     try:
         with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000]}) + "\n")
+            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000],
+                                 "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}) + "\n")
     except OSError:
         pass
 

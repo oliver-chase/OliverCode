@@ -60,7 +60,7 @@ class RunIo:
             self.on_main.add(n)
         return self.land_ok, "pushed abc1234" if self.land_ok else "validate-failed"
     def comment(self, n, body): self.steps.append("comment")
-    def close_by_script(self, wt, n, why):
+    def close_by_script(self, wt, n, why, stage="landed"):
         self.steps.append("close")
         return True, ""
     def release(self, n): self.steps.append("release")

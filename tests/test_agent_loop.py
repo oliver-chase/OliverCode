@@ -322,6 +322,16 @@ class TestLoop(unittest.TestCase):
         rows = [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
         self.assertEqual(["priority P0"], [r["route"] for r in rows if r.get("story") == "s1" and "route" in r])
 
+    def test_the_review_row_carries_its_time_in_the_stage_row_format(self):  # #1377
+        for verdict, text in (("pass", "PASS"), ("findings", "a.py: wrong")):
+            with self.subTest(verdict=verdict):
+                agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(reply(text)), say=lambda *_: None)
+        rows = [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
+        reviews = [r for r in rows if "review" in r]
+        self.assertEqual(2, len(reviews))
+        for r in reviews:
+            self.assertRegex(r["at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+
     def test_a_small_story_moves_up_one_level_after_a_second_failed_validation(self):
         run = Scripted(reply(), reply(), reply(), reply("PASS"))
         out = self.loop(run, [(False, "a"), (False, "b"), (True, "")], model_name="haiku", rounds=3)

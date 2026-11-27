@@ -90,7 +90,7 @@ class FakeIo:
             self.on_main.add(n)
         return self.land_ok, "RESULT pushed abc1234" if self.land_ok else "RESULT validate-failed"
     def comment(self, n, body): self.comments.append((n, body))
-    def close_by_script(self, wt, n, why):
+    def close_by_script(self, wt, n, why, stage="landed"):
         if self.refuse_close:
             return False, self.refuse_close
         self.closed.append(n)
@@ -856,7 +856,7 @@ class TestRealIo(unittest.TestCase):
             pushed.append(git(worktree, "rev-parse", "HEAD").stdout.strip())
             git(self.repo, "update-ref", "refs/remotes/origin/main", pushed[0])
             return True, "RESULT pushed"
-        self.io.land, self.io.close_by_script = land, lambda *a: (True, "")
+        self.io.land, self.io.close_by_script = land, lambda *a, **k: (True, "")
         self.assertEqual((True, "RESULT pushed"), cmd_drain.land_and_close(self.io, wt, 7))
         self.assertEqual(1, len(pushed))
         self.assertEqual(pushed[0], git(self.repo, "rev-parse", "origin/main").stdout.strip())
@@ -866,7 +866,7 @@ class TestRealIo(unittest.TestCase):
         self.commit_file("old.txt", "Earlier work (#7)")
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         closes = []
-        self.io.close_by_script = lambda wt, n, why: closes.append(wt) or (True, "")
+        self.io.close_by_script = lambda wt, n, why, stage="landed": closes.append(wt) or (True, "")
         self.io.landed_lead = lambda issue: None
         self.io.landed = lambda wt, n: True
         self.assertFalse(self.io.pending(7))
@@ -1226,6 +1226,17 @@ class CloseByScript(unittest.TestCase):
         self.assertEqual([1], io.closed)
         self.assertEqual(1, len(lines))
         self.assertIn("#2", lines[0])
+
+    def test_a_qa_close_logs_stage_closed_and_a_landing_logs_landed(self):  # #1377
+        a = dict(issue(1), status="QA")
+        io = FakeIo([a])
+        io.staged = lambda: True
+        io.on_main = {1}
+        stages = []
+        io.close_by_script = lambda wt, n, why, stage="landed": stages.append(stage) or (True, "")
+        cmd_drain.close_waiting_in_qa(io, lambda _: None)
+        cmd_drain.finish(io, io.repo, 1, "pushed")
+        self.assertEqual(["closed", "landed"], stages)
 
     def test_a_failed_board_read_puts_the_qa_close_off_and_the_next_read_closes_before_a_claim(self):  # #1345
         qa, new = dict(issue(1), status="QA"), issue(2)
