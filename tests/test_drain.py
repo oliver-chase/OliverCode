@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import unittest
+from concurrent.futures import wait
 from pathlib import Path
 from unittest import mock
 
@@ -71,6 +72,8 @@ class FakeIo:
         self.base_checks = getattr(self, "base_checks", 0) + 1
         return self.red.pop(0) if self.red else ""
     def validation(self): return None if self.no_validation else ["bash", "scripts/validate.sh"]
+    moves_on_land = False  # True makes each landed story move OliverCode's head (#1480)
+    def code_head(self): return f"head{len(self.on_main) if self.moves_on_land else 0}"
 
     def build(self, i, wt, note):
         n = i["number"]
@@ -1211,6 +1214,111 @@ class StoppedRun(unittest.TestCase):
                 mock.patch.object(cmd_drain.cmd_dispatch, "origin_slug", return_value="o/r"), mock.patch.object(cmd_drain, "drain", return_value=0):
             code, _ = quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]), exit_now=ended.append)
         self.assertEqual((0, []), (code, ended))
+
+
+SHARED = "Files area: scripts/shared.py"
+GONE_LINE = "Error: 'queue' is not a valid command. Guide: olivercode guide"
+
+
+class StaleCode(unittest.TestCase):
+    """#1480: a drain runs the code on staging, and stops when its validation calls a command that is gone."""
+
+    def setUp(self):
+        self.home = temp_dir(self)
+        mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)}).start()
+        mock.patch("lib.cmd_status.write_digest").start()
+        mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/x/r")).start()
+        mock.patch.object(cmd_drain, "slug_of", return_value="o/r").start()
+        self.notify = mock.patch.object(cmd_drain, "notify").start()
+        self.addCleanup(mock.patch.stopall)
+
+    def command(self, io, argv):
+        spawned = []
+        code, out = quiet(cmd_drain.command_drain, argv, lambda repo, slug, parallel=None: io, spawn=lambda cmd, **kw: spawned.append((cmd, run_lock.path("o/r").exists())))
+        rows = [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
+        return code, spawned, [r for r in rows if r["stage"] == "restarting"]
+
+    def test_a_moved_head_starts_no_new_story_and_restarts_the_drain_once_with_the_same_flags(self):
+        io = FakeIo([issue(1, SHARED), issue(2, SHARED)], cap=1)  # story 2 shares a file, so it cannot start before story 1 lands
+        io.moves_on_land = True
+        code, spawned, rows = self.command(io, ["r", "--parallel", "1", "--foreground"])
+        self.assertEqual((0, [1], [1]), (code, io.started, io.closed))
+        self.assertEqual(1, len(spawned))
+        cmd, locked = spawned[0]
+        self.assertEqual(["drain", "r", "--parallel", "1", "--foreground"], cmd[-5:])
+        self.assertEqual(1, cmd.count("--foreground"))
+        self.assertFalse(locked)  # the new process can take the run lock
+        self.assertEqual(1, len(rows))
+        self.assertIn("from head0 to head1", rows[0]["reason"])
+
+    def test_the_stories_being_built_finish_before_the_restart(self):
+        io = Held([issue(1), issue(2), issue(3)], cap=2)
+        claimed = []
+        io.claim = lambda n, size="": claimed.append(n)
+        io.code_head = lambda: f"head{int(len(claimed) >= 2)}"  # the head moves while both builders still run
+        with mock.patch.object(cmd_drain, "wait", lambda *a, **k: io.gate.set() or wait(*a, **k)):
+            _, spawned, _ = self.command(io, ["r", "--foreground"])
+        self.assertEqual(([1, 2], [1, 2], 1), (sorted(io.started), sorted(io.closed), len(spawned)))
+
+    def test_an_unmoved_head_restarts_nothing(self):
+        _, spawned, rows = self.command(FakeIo([issue(1)]), ["r", "--foreground"])
+        self.assertEqual(([], []), (spawned, rows))
+
+    def test_a_gone_command_in_a_build_stops_new_stories_and_counts_nothing_against_the_story(self):
+        io = FakeIo([issue(1), issue(2)], cap=1)
+        io.build = mock.Mock(side_effect=cmd_drain.CommandGone(GONE_LINE))
+        st = state()
+        code, _ = quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
+        self.assertEqual((0, 1, [], 0), (code, io.build.call_count, st["blocked"], st["restarts"][1]))
+        self.assertEqual(([1], [1]), (io.kept, io.released))
+        self.notify.assert_called_once()
+        self.assertIn("no longer exists", self.notify.call_args.args[0])
+        self.assertEqual(1, len(io.comments))
+        self.assertIn(GONE_LINE, io.comments[0][1])
+
+    def test_a_gone_command_in_a_landing_starts_no_fix_round_and_notifies_once(self):
+        io = FakeIo([issue(1, SHARED), issue(2), issue(3, SHARED)], cap=2)
+        io.land = mock.Mock(side_effect=cmd_drain.CommandGone(GONE_LINE))
+        st = state()
+        quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
+        quiet(cmd_drain.drain, io, st, sleep=lambda s: None)  # the pass a queued story earns neither builds nor notifies again
+        self.assertEqual(([1, 2], [], [1, 2]), (sorted(io.started), st["blocked"], sorted(io.kept)))
+        self.assertEqual([1, 2], sorted(io.released))
+        self.notify.assert_called_once()
+
+    def real_io(self):
+        repo = temp_dir(self)
+        scratch_repo(repo, branch="main")
+        return cmd_drain.Io(repo, "o/r"), repo
+
+    def test_a_gone_command_in_the_builders_validation_ends_the_loop_after_one_session(self):
+        io, repo = self.real_io()
+        sessions = []
+        reply = {"code": 0, "text": "done", "tokens": 1, "session_id": "s"}
+        with mock.patch.object(cmd_drain.agent_loop.model, "run_cli", lambda *a, **k: sessions.append(k["model"]) or reply), \
+                mock.patch.object(cmd_drain.agent_loop, "validation_command", return_value=["true"]), \
+                mock.patch.object(cmd_drain.agent_loop, "validate", return_value=(False, f"gate\n{GONE_LINE}")):
+            with self.assertRaisesRegex(cmd_drain.CommandGone, "'queue' is not a valid command"):
+                quiet(io.build, issue(5), repo, "")
+        self.assertEqual(1, len(sessions))
+
+    def test_a_failed_landing_reads_the_gone_command_from_the_land_log(self):
+        io, _ = self.real_io()
+        log = self.home / "land-r-5.log"
+        for text, gone in ((f"{GONE_LINE}\nRESULT validate-failed", True), ("FAIL: test_x\nRESULT validate-failed", False)):
+            log.write_text(text)
+            ran = subprocess.CompletedProcess([], 1, f"RESULT validate-failed (log: {log})\n", "")
+            with mock.patch.object(cmd_drain.agent_loop, "log_stage"), mock.patch.object(cmd_drain.subprocess, "run", return_value=ran):
+                if gone:
+                    self.assertRaises(cmd_drain.CommandGone, io.land, Path("/wt/5"), 5)
+                else:
+                    self.assertFalse(io.land(Path("/wt/5"), 5)[0])
+
+    def test_the_code_head_is_olivercodes_own_commit(self):
+        io, repo = self.real_io()
+        git(repo, "commit", "--allow-empty", "-qm", "base")
+        with mock.patch.object(cmd_drain, "OC_ROOT", repo):
+            self.assertEqual(git(repo, "rev-parse", "HEAD").stdout.strip(), io.code_head())
 
 
 class DetachedRun(unittest.TestCase):

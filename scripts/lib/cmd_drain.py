@@ -3,7 +3,8 @@
 It lists open stories through REST (epics, claimed and owner-gated stories are skipped), orders them P0 first, starts headless builders up to the builder cap
 and never two whose stories name the same files, then drives each one run -> validate -> `olivercode land` -> comment and close on REST. A builder that exits
 before its story lands restarts on the same worktree, up to RESTARTS times, then the blocker is commented on the story and drain moves on. `olivercode dispatch N`
-builds one story through the same `work_story`. Every outside effect goes through the `Io` object, so tests inject fakes and never touch the machine or GitHub.
+builds one story through the same `work_story`. A drain whose own code moved under it starts itself again, and one whose validation calls a command
+that is gone starts no new story (#1480). Every outside effect goes through the `Io` object, so tests inject fakes and never touch the machine or GitHub.
 """
 
 from __future__ import annotations
@@ -51,6 +52,17 @@ PARKED = re.compile(r"shares [^\n]* in its Files area|Size \w+ is too large for 
 RETURNED = "Back to Ready:"
 HELD = "Held by the fresh reader"  # how a held comment starts, and FINDING what its finding follows, so the next build can read it back (#1474)
 FINDING = "\n\nFinding:\n"
+GONE = "is not a valid command"  # what `olivercode` prints for a command it no longer has (#1480)
+
+
+class CommandGone(RuntimeError):
+    """A failed validation called a command that no longer exists. The fault is in the code that ran it, so the story counts no failure (#1480)."""
+
+
+def stop_if_gone(tail: str) -> None:
+    """Raise CommandGone with the line of a failed validation's tail that says a command is gone (#1480)."""
+    if line := next((line.strip() for line in tail.splitlines() if GONE in line), ""):
+        raise CommandGone(line)
 
 
 def skip_reason(issue: dict, repo: Path | None = None) -> str:
@@ -107,6 +119,11 @@ class Io:
     def branch(self) -> str:
         """The repo's default branch, which every ancestry and count check reads (#877)."""
         return agent_loop.default_branch(self.repo)
+
+    def code_head(self) -> str:
+        """The commit OliverCode's own checkout is on, which is the code a drain started now would run, or "" when git cannot say (#1480)."""
+        ran = subprocess.run(["git", "-C", str(OC_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
+        return ran.stdout.strip() if ran.returncode == 0 else ""
 
     def validation(self) -> list[str] | None:
         """The repo's own validation command, which a story needs before a builder starts (#1012)."""
@@ -267,7 +284,14 @@ class Io:
         review = agent_loop.review_mode(size, issue.get("labels") or (), files, intake.priority_of(issue))
         self.built_at[n] = failure_log.stamp()
         agent_loop.log_stage(f"story-{n}", self.repo.name, "building")
-        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why,
+
+        def check(cwd):  # raising here ends the loop before the failed round counts toward a fix round or a larger model (#1480)
+            passed, tail = agent_loop.validate(cwd)
+            if not passed:
+                stop_if_gone(tail)
+            return passed, tail
+
+        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, check=check,
                                    rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.repo.name)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
@@ -342,6 +366,11 @@ class Io:
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
         if out.returncode == 0:
             self.claim_start.pop(n, None)  # land keeps a lone older commit's committer date, so a resumed branch's commit would fail the since-claim filter (#1306)
+        elif "RESULT validate-failed" in out.stdout and (log := re.search(r"\(log: (.+?)\)", out.stdout)):
+            try:  # land prints only the result, so the validation's tail is read from its log
+                stop_if_gone(agent_loop.gate_tail(Path(log.group(1)).read_text(encoding="utf-8", errors="replace")))
+            except OSError:
+                pass
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
     def stack(self, items: list[tuple[Path, int]]) -> bool:
@@ -546,11 +575,21 @@ def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str]
             if n not in state.get("limited", []):  # the usage limit already sent its own notification
                 notify(f"#{n} didn't land yet. It'll try again on its own.")  # the reason stays in the story comment and the run log (#1325, #1374)
         return closed, used
+    except CommandGone as exc:  # the drain sends the one notification for it (#1480)
+        put_back_gone(io, state, n, str(exc))
+        return False, 0
     except CloseRefused:  # a refused close leaves the story with the gate's message and its one stopped row (#1011)
         return False, 0
     finally:
         if not handed:
             io.release(n)
+
+
+def put_back_gone(io, state: dict, n: int, line: str) -> None:
+    """Record a story whose validation called a command that is gone, comment the line and put the story back on Ready. No builder restarts for it (#1480)."""
+    state.setdefault("gone", {})[n] = line
+    io.comment(n, f"Drain stopped: validation calls a command that is gone, so this story counts no failure. Line: {line}")
+    io.keep_open(n)
 
 
 def held_comment(worktree: Path, finding: str) -> str:
@@ -669,7 +708,7 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
 def land_batch(io, batch: list[tuple[dict, Path, int]], say=print) -> list[tuple[dict, Path, int, str, str]]:
     """Validate and land the committed stories of one batch, one batch at a time (#1317). Two or more first stack and pass one quick validation, which
     each story's own land reuses. A batch that fails that validation lands each story on its own, so each is validated alone and only the failing one fails.
-    One story lands as it always did. Returns (issue, worktree, attempt, "closed" | "failed" | "refused", note) per story."""
+    One story lands as it always did. Returns (issue, worktree, attempt, "closed" | "failed" | "refused" | "gone", note) per story."""
     if len(batch) > 1:
         io.stack([(wt, issue["number"]) for issue, wt, _ in batch])
     rows = []
@@ -680,6 +719,8 @@ def land_batch(io, batch: list[tuple[dict, Path, int]], say=print) -> list[tuple
             rows.append((issue, wt, attempt, "closed" if closed else "failed", note))
         except CloseRefused:  # the refusal is already on the story with its one stopped row
             rows.append((issue, wt, attempt, "refused", ""))
+        except CommandGone as exc:
+            rows.append((issue, wt, attempt, "gone", str(exc)))
     return rows
 
 
@@ -701,7 +742,8 @@ def _stop_on_term(signum, frame):
 
 def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     """Run the loop until no story is left to start. Returns 0 when it ended, 1 when GitHub could not be read. A stop (Ctrl-C or SIGTERM) releases
-    the claims of the stories it was building and returns to Ready without waiting for their builders (#1076)."""
+    the claims of the stories it was building and returns to Ready without waiting for their builders (#1076). No new story starts once OliverCode's
+    checkout leaves the head the run started on, which `state['moved']` then names, or once a validation called a command that is gone (#1480)."""
     running: dict = {}
     pool = ThreadPoolExecutor(max_workers=max(1, io.limit()))
     lander = ThreadPoolExecutor(max_workers=1)  # one batch validates and lands at a time, so validation load stays bounded (#1317)
@@ -713,6 +755,18 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     stopped = False
     hold_waited = False
     checked, red, red_told = None, "", False  # closed count at the last base check, its failing line, whether the owner was told
+    state.setdefault("head", io.code_head())  # the code this run started on (#1480)
+
+    def halted() -> bool:
+        """True once no new story may start. The first call that finds a gone command tells the owner (#1480)."""
+        head = io.code_head()
+        if head and state["head"] and head != state["head"]:
+            state["moved"] = head
+        if state.get("gone") and not state.get("gone_told"):  # kept in the state, so a second pass for a queued story says nothing again
+            state["gone_told"] = True
+            say(f"No new story starts: validation calls a command that is gone: {next(iter(state['gone'].values()))}")
+            notify("Validation calls a command that no longer exists, so no new story starts.")
+        return bool(state.get("moved") or state.get("gone"))
 
     def enqueue(issue: dict, worktree: Path, attempt: int) -> None:
         committed[issue["number"]] = issue
@@ -733,6 +787,11 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 continue
             if status == "closed":
                 state["closed"].append(n)
+            elif status == "gone":
+                try:
+                    put_back_gone(io, state, n, note)
+                except Exception:
+                    pass
             else:
                 state["blocked"].append(n)
             if status == "crashed":
@@ -779,7 +838,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 continue
             if closed:
                 state["closed"].append(issue["number"])
-            elif issue["number"] not in state.get("limited", ()):  # a story released at the usage limit is not a failed round (#1299)
+            elif issue["number"] not in state.get("limited", ()) and issue["number"] not in state.get("gone", ()):  # neither is a failed round (#1299, #1480)
                 state["blocked"].append(issue["number"])
         io.beat([i["number"] for i in running.values()])
 
@@ -787,6 +846,11 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
         qa_closed = False  # the QA close waits for a board read, so a hold at start cannot skip it (#1345)
         while True:
             start_batch()  # before any hold or read failure ends the loop, so a committed story is never left waiting
+            if halted():  # the stories in flight finish, then the run ends (#1480)
+                if running or landing:
+                    step()
+                    continue
+                break
             until = gh_budget.blocked_until()
             if until and until - time.time() <= HOLD_WAIT_MAX:  # a hold that ends within the hour is waited out, once (#1314)
                 if running or landing:  # builders and the batch in flight finish first, and their board writes are already queued by the hold
@@ -874,7 +938,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             busy = [intake.files_area(i.get("body") or "") for i in [*running.values(), *committed.values()]]  # a story building, validating or landing holds its files; one overlap rule, shared with the planner (#1014)
             started = False
             for issue in todo:
-                if state.get("limited") or len(running) >= io.capacity():  # no builder starts once one has hit the usage limit (#1299)
+                if state.get("limited") or halted() or len(running) >= io.capacity():  # no builder starts once one has hit the usage limit (#1299) or the run is halted (#1480)
                     break
                 areas = intake.files_area(issue.get("body") or "")
                 if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
@@ -985,7 +1049,8 @@ def detach(argv: list[str], repo: Path, spawn=subprocess.Popen) -> int:
 
 def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os._exit, spawn=subprocess.Popen) -> int:
     """`drain REPO` runs up to the machine-wide builder limit, or exactly N with `--parallel N` (#1055), detached unless `--foreground` is given (#1276).
-    One run holds a repo at a time (#992). When the run ends it logs one run-end row with the stories it landed and stopped."""
+    One run holds a repo at a time (#992). When the run ends it logs one run-end row with the stories it landed and stopped. A run that ended because
+    OliverCode's checkout moved logs a restarting row and starts itself again, detached, with the same repo and flags (#1480)."""
     args, parallel, rest, foreground = list(argv), None, [], False
     while args:
         arg = args.pop(0)
@@ -1014,7 +1079,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
     io, pid = io_factory(repo, slug, parallel=parallel), os.getpid()
     on_main = threading.current_thread() is threading.main_thread()  # signal handlers can only be set on the main thread (#1076)
     previous = signal.signal(signal.SIGTERM, _stop_on_term) if on_main else None
-    code, state, ran = 0, new_state(), False
+    code, state, ran, restart = 0, new_state(), False, False
     try:
         if not take_run(io, slug, f"drain {repo.name}"):
             return 0
@@ -1023,11 +1088,15 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
             code = drain(io, state, sleep=sleep)
             while code == 0 and run_lock.release(slug, pid):  # a story another thread queued as this run ended is worked before the lock goes
                 code = drain(io, state, sleep=sleep)
+            restart = code == 0 and bool(state.get("moved")) and not state.get("limited")  # a new run would only meet the usage limit again
     except KeyboardInterrupt:  # drain has released its claims and said so; the lock goes in the finally below (#1076)
         code = 130
     finally:
         run_lock.release(slug, pid)
         if ran:
+            if restart:  # before the run-end row, where `watch` stops reading
+                agent_loop.log_stage(f"run-{repo.name}", repo.name, "restarting",
+                                     reason=f"OliverCode moved from {state['head'][:8]} to {state['moved'][:8]}, so the drain starts again on the new code.")
             agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
                                 **({"reason": f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}."} if state.get("limited")
                                    else {"reason": f"The run stopped: {state['held']}."} if state.get("held") else {}))
@@ -1048,4 +1117,6 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
         sys.stdout.flush()
         sys.stderr.flush()
         exit_now(130)
+    if restart:  # the lock is gone, so the new process can take it
+        return detach([a for a in argv if a != "--foreground"], repo, spawn)
     return code
