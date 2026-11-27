@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Claude Code PreToolUse hook (Bash, Edit, Write, MultiEdit): the commit, archived, placement, policy and GitHub guards in one process.
+"""Claude Code PreToolUse hook (Bash, Edit, Write, MultiEdit, Monitor): the commit, archived, placement, policy and GitHub guards in one process.
 
 One hook parses the input once per tool call and asks each guard in turn: commit_guard (a commit that would skip the repo's gates),
 archived_guard (a commit or push in a repo GitHub archived or deleted), placement_guard (a clone or worktree outside its home), main_checkout (an edit or commit in a fleet repo's main checkout), policy_guard (the repo's policy.json) and gh_guard
-(the shared GitHub budget), reset_guard (a `git reset --hard` in a main checkout or a tree with uncommitted changes), and model_guard (a subagent on a model other than Sonnet that the owner never named).  A deny from any guard wins over an ask. Each guard fails open on its own bug, so
+(the shared GitHub budget), reset_guard (a `git reset --hard` in a main checkout or a tree with uncommitted changes), model_guard (a subagent on a model other than Sonnet that the owner never named) and watch_guard (a watch that wakes a session on every drain event).  A deny from any guard wins over an ask. Each guard fails open on its own bug, so
 one broken guard never disables the others and never blocks a command.
 """
 
@@ -24,6 +24,7 @@ import model_guard  # noqa: E402
 import placement_guard  # noqa: E402
 import policy_guard  # noqa: E402
 import reset_guard  # noqa: E402
+import watch_guard  # noqa: E402
 from lib import failure_log, main_checkout, policy  # noqa: E402
 
 
@@ -71,6 +72,9 @@ def verdicts(data: dict) -> list[tuple[str, str]]:
     why = _safely(model_guard.reason, data)
     if why:
         _found(found, "model_guard", "deny", why, cwd)
+    why = _safely(watch_guard.reason, data)
+    if why:
+        _found(found, "watch_guard", "deny", why, cwd)
     decided = _safely(policy_guard.decide, data)
     if decided and decided[0]:
         decision, repo = decided

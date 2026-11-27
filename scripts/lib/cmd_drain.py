@@ -984,6 +984,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     continue
                 skipped.pop(issue["number"], None)  # a story that starts was not skipped at the run's end
                 todo.append(issue)
+            state.pop("red", None)  # set again below while a red staging holds a routine story, so the run-end row can say so (#1490)
             if todo:
                 counts = len(state["closed"]), len(state.get("base", ()))
                 if checked != counts:  # the base is checked once per run and again after each landing (#1431) or story it held, then afresh (#1481)
@@ -996,6 +997,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         notify(f"Staging fails validation ({red}). Routine stories wait until staging passes.")
                 told = red
                 if red:
+                    if any(intake.priority_of(i) != "P0" for i in todo):
+                        state["red"] = red
                     todo = [i for i in todo if intake.priority_of(i) == "P0"]
             busy = [intake.files_area(i.get("body") or "") for i in [*running.values(), *committed.values()]]  # a story building, validating or landing holds its files; one overlap rule, shared with the planner (#1014)
             started = False
@@ -1159,9 +1162,17 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
             if restart:  # before the run-end row, where `watch` stops reading
                 agent_loop.log_stage(f"run-{repo.name}", repo.name, "restarting",
                                      reason=f"OliverCode moved from {state['head'][:8]} to {state['moved'][:8]}, so the drain starts again on the new code.")
+            why = (f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}." if state.get("limited")
+                   else f"The run stopped: {state['held']}." if state.get("held")
+                   else "The run stopped: validation calls a command that is gone." if state.get("gone")
+                   else "The run was interrupted." if code == 130
+                   else "The run crashed." if sys.exc_info()[0]
+                   else f"The run stopped: {getattr(io, 'unread', '') or 'the open stories were not read'}." if code
+                   else f"Routine stories wait because staging fails validation: {state['red']}." if state.get("red")
+                   else f"Stories wait because the base branch fails validation: {next(iter(state['base'].values()))}." if state.get("base")
+                   else "")  # `watch --until-exit` prints it (#1490)
             agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
-                                **({"reason": f"The run stopped for the usage limit: {agent_loop.USAGE_LIMIT_REASON}."} if state.get("limited")
-                                   else {"reason": f"The run stopped: {state['held']}."} if state.get("held") else {}))
+                                **({"reason": why} if why else {}))
             try:
                 from lib import cmd_status
                 cmd_status.write_digest(slug, out=lambda _text: None)  # the digest is current when a run ends (#1313)

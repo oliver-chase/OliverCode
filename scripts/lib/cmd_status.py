@@ -252,17 +252,75 @@ def watch_line(row: dict, log: list[dict]) -> str:
     return f"{stamp} #{n} in {row.get('repo')}: {row['stage']}" + (f" ({row['reason']})" if row.get("reason") else "")
 
 
+def _restarting(rows: list[dict]) -> bool:
+    """True when ROWS end in the run-end row of a drain that starts itself again (#1480)."""
+    return [r["stage"] for r in rows[-2:]] == ["restarting", "run-end"]
+
+
+def run_rows(log: list[dict], repo: str) -> list[dict]:
+    """REPO's stage rows of its latest run, with the runs before it that restarted into it (#1490)."""
+    rows = [r for r in log if r.get("repo") == repo and r.get("stage")]
+    start = 0
+    for i in range(len(rows) - 1):
+        if rows[i]["stage"] == "run-end" and not _restarting(rows[:i + 1]):
+            start = i + 1
+    return rows[start:]
+
+
+def exit_line(repo: str, rows: list[dict]) -> str:
+    """The one line `watch --until-exit` prints for the run in ROWS: its landed and stopped counts and why it ended (#1490). A run with no run-end row
+    is counted from its story rows."""
+    if not rows:
+        return f"No drain is running for {repo}."
+    last = rows[-1]
+    if last["stage"] == "run-end":
+        ends = [r for r in rows if r["stage"] == "run-end"]
+        counts = {key: sum(r.get(key, 0) for r in ends) for key in ("landed", "stopped")}
+        why = "It logged a restart and the new run never started." if _restarting(rows) else last.get("reason") or "No story it could start was left."
+    else:
+        done = {r.get("story") for r in rows if r["stage"] in ("landed", "closed")}
+        stopped = {r.get("story") for r in rows if r["stage"] == "stopped" and str(r.get("story")).startswith("story-")} - done
+        counts = {"landed": len(done), "stopped": len(stopped)}
+        why = "It logged no run-end row, so no drain finished it."
+    return f"{run_end_line({**last, **counts})} {' '.join(why.split())}"
+
+
+def wait_for_exit(repo: str, alive, sleep, out) -> int:
+    """Print nothing while REPO's drain runs, then exit_line once: at a new run-end row, or when no drain holds the run lock for three checks in a row.
+    A run that ends by restarting is followed into the new run (#1490)."""
+    def ends(log: list[dict]) -> list[dict]:
+        return [r for r in log if r.get("repo") == repo and r.get("stage") == "run-end"]
+
+    before = ends(run_log())[-1:]
+    idle = 0
+    while idle < 3:
+        log = run_log()
+        rows = run_rows(log, repo)
+        if rows and rows[-1]["stage"] == "run-end" and ends(log)[-1:] != before and not _restarting(rows):
+            break
+        # shortcut: between a restart's two runs any drain process counts as alive, so match this repo's process if another repo's drain ever holds a watch open.
+        idle = 0 if alive() or (_restarting(rows) and runner_alive()) else idle + 1
+        sleep(2)
+    out(exit_line(repo, run_rows(run_log(), repo)))
+    return 0
+
+
 def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> int:
     """`watch [REPO]` opens with what is building, the last three landings and the next Ready story, as status shows them (#1486). Then it prints one
     line per stage row added to the run log from now on, each stamped in the owner's zone, and ends with the run-end row or when no drain holds the repo's
-    run lock for three checks in a row. It reads the log and the digest only: no model and no GitHub call (#1276, #1486)."""
+    run lock for three checks in a row. It reads the log and the digest only: no model and no GitHub call (#1276, #1486).
+    `watch REPO --until-exit` prints only the one line of wait_for_exit, which is the form a session runs in the background (#1490)."""
     from lib import cmd_drain
+    until_exit = "--until-exit" in argv
+    argv = [a for a in argv if a != "--until-exit"]
     repo = cmd_drain.resolve_repo(argv[0]) if argv else None
-    if (argv and not repo) or len(argv) > 1:
-        out("Usage: olivercode watch [REPO]")
+    if (argv and not repo) or len(argv) > 1 or (until_exit and not repo):
+        out("Usage: olivercode watch [REPO] | olivercode watch REPO --until-exit")
         return 1
     slug = cmd_drain.slug_of(repo) if repo else ""
     alive = alive or (lambda: bool(run_lock.active(slug, time.time())) if slug else runner_alive())
+    if until_exit:
+        return wait_for_exit(repo.name, alive, sleep, out)
     log = run_log()
     stamp = time.time()
     claims = repo_claims(live_claims(stamp), slug)

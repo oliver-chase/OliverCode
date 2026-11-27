@@ -408,5 +408,55 @@ class TestOwnerZone(unittest.TestCase):
         self.assertEqual("No drain is running.", lines[-1])
 
 
+class TestWatchUntilExit(unittest.TestCase):
+    """#1490: `watch REPO --until-exit` prints nothing while the drain runs and one line when it ends."""
+
+    def watch(self, batches, alive=True):
+        """Run the watch over a log that grows by one batch at each sleep. Returns the lines it printed and the sleeps it took."""
+        log, lines, steps = list(batches[0]), [], []
+
+        def sleep(_seconds):
+            steps.append(1)
+            self.assertEqual([], lines)
+            self.assertLess(len(steps), 20)
+            log.extend(batches[len(steps)] if len(steps) < len(batches) else [])
+
+        with mock.patch.object(cmd_status, "run_log", side_effect=lambda: list(log)), mock.patch.object(cmd_status.run_lock, "active", return_value={}), \
+                mock.patch.object(cmd_status, "runner_alive", return_value=False), mock.patch("lib.cmd_drain.resolve_repo", return_value=Path("/x/r")), \
+                mock.patch("lib.cmd_drain.slug_of", return_value="o/r"):
+            code = cmd_status.command_watch(["r", "--until-exit"], sleep=sleep, out=lines.append, alive=(lambda: True) if alive else None)
+        self.assertEqual(0, code)
+        return lines, len(steps)
+
+    def end(self, hhmm, landed, stopped, **extra):
+        return {**stage("run-r", "run-end", hhmm), "landed": landed, "stopped": stopped, **extra}
+
+    def test_it_is_quiet_while_stories_land_and_stop_then_prints_the_counts_and_why(self):
+        old = [self.end("08:00", 9, 9)]
+        lines, _ = self.watch([old, [stage("story-1", "landed", "09:00")], [stage("story-2", "stopped", "09:05")], [self.end("09:10", 1, 1)]])
+        self.assertEqual(["Last run ended 2026-11-22 04:10 EST: 1 story landed, 1 stopped. No story it could start was left."], lines)
+
+    def test_a_run_that_restarts_is_followed_into_the_new_run_and_both_are_counted(self):
+        lines, _ = self.watch([[], [stage("run-r", "restarting", "09:00"), self.end("09:00", 2, 0)], [stage("story-3", "claimed", "09:01")],
+                               [self.end("09:30", 1, 1, reason="The run stopped for the usage limit: x.")]])
+        self.assertEqual(["Last run ended 2026-11-22 04:30 EST: 3 stories landed, 1 stopped. The run stopped for the usage limit: x."], lines)
+
+    def test_a_drain_that_dies_with_no_run_end_row_is_counted_from_its_story_rows(self):
+        log = [self.end("08:00", 9, 9), stage("story-1", "stopped", "09:00"), stage("story-1", "landed", "09:05"), stage("story-2", "stopped", "09:06"),
+               stage("run-r", "stopped", "09:07")]
+        lines, sleeps = self.watch([log], alive=False)
+        self.assertEqual(3, sleeps)
+        self.assertEqual(["Last run ended 2026-11-22 04:07 EST: 1 story landed, 1 stopped. It logged no run-end row, so no drain finished it."], lines)
+
+    def test_a_run_that_ended_before_the_watch_and_a_repo_with_no_run_each_print_one_line(self):
+        self.assertEqual(1, len(self.watch([[self.end("08:00", 2, 0)]], alive=False)[0]))
+        self.assertEqual(["No drain is running for r."], self.watch([[]], alive=False)[0])
+
+    def test_until_exit_without_a_repo_is_a_usage_error(self):
+        lines = []
+        self.assertEqual(1, cmd_status.command_watch(["--until-exit"], out=lines.append))
+        self.assertTrue(lines[0].startswith("Usage:"))
+
+
 if __name__ == "__main__":
     unittest.main()

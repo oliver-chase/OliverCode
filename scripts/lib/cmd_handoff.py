@@ -239,7 +239,7 @@ def read(project: str, folder: Path) -> int:
     print("\n".join(steps) or f'Thread: this one is "{project} {number}", and no new name is needed.')
     repo = drain_repo(text)
     if repo:
-        print(f"Watch: run `olivercode watch {repo}` in the background, so this thread is woken when the run ends.")
+        print(f"Watch: run `olivercode watch {repo} --until-exit` in the background, so this thread wakes only when the drain ends. Never use Monitor for it.")
     return 0
 
 

@@ -109,5 +109,5 @@ class TestRegistration(unittest.TestCase):
     def test_one_entry_replaces_the_four_pre_tool_guards(self):
         # One process per Bash, Edit or Write call. The start-session guard matches only its own tool.
         pre = [m for m in claude_settings.MANAGED if m[0] == "PreToolUse" and m[1] and "Bash" in m[1]]
-        self.assertEqual([("PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit|Agent|Task", "pretool_guard.py")], pre)
+        self.assertEqual([("PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit|Agent|Task|Monitor", "pretool_guard.py")], pre)
 

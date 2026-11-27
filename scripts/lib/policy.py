@@ -276,7 +276,7 @@ def evaluate_path(policy: dict, root: Path, file_path: str) -> Decision | None:
 # The pre-tool guards and the maintenance run log their own refusals under these names. Only a commit gate that blocked a commit is
 # a commit-gate failure, which drain reads to name the gate behind a policy stop.
 NON_COMMIT_GATES = {"policy", "commit_guard", "archived_guard", "placement_guard", "reset_guard", "main_checkout_guard", "model_guard",
-                    "gh_guard", "memory_guard", "maintain", "pre-push"}
+                    "watch_guard", "gh_guard", "memory_guard", "maintain", "pre-push"}
 
 REDIRECT = re.compile(r"^(?:\d*>>?|&>>?|>\|)$")
 WRITERS_ALL = {"tee", "touch", "rm", "mv", "truncate", "chmod", "chown"}

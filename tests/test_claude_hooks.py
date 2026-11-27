@@ -23,6 +23,7 @@ from lib import placement  # noqa: E402
 
 guard = load_script("scripts/hooks/commit_guard.py")
 session = load_script("scripts/hooks/session_check.py")
+watch_guard = load_script("scripts/hooks/watch_guard.py")
 
 
 class RepoCase(unittest.TestCase):
@@ -376,6 +377,41 @@ class TestSettingsMerge(unittest.TestCase):
         self.assertEqual(claude_settings.install(path), "updated")
         self.assertEqual(claude_settings.install(path), "already")
         self.assertEqual(json.loads(path.read_text())["model"], "opus")
+
+
+class TestWatchGuard(unittest.TestCase):
+    """#1490: a watch that wakes a session on every drain event is refused, and a one-off read or a foreground watch passes."""
+
+    LOG = "~/.olivercode/run-log.jsonl"
+
+    def decision(self, tool, command, background=False):
+        payload = {"tool_name": tool, "tool_input": {"command": command, **({"run_in_background": True} if background else {})}, "cwd": "/"}
+        return watch_guard.reason(payload)
+
+    def test_a_per_event_watcher_is_refused_in_monitor_and_in_the_background(self):
+        for command in (f"tail -f {self.LOG}", f"tail -F {self.LOG} | grep --line-buffered landed", f"tail -n0 -qF {self.LOG}",
+                        f"tail --follow=name {self.LOG}", f"f={self.LOG}; nohup tail -f \"$f\"", f"while true; do grep landed {self.LOG}; sleep 30; done",
+                        f"until grep -q run-end {self.LOG}; do sleep 5; done", f"bash -c 'tail -f {self.LOG}'", "olivercode watch oc-staging",
+                        "cd /tmp && python3 /oc/scripts/olivercode watch", "while true; do olivercode watch r; done"):
+            for tool, background in (("Monitor", False), ("Bash", True)):
+                self.assertIn("olivercode watch REPO --until-exit", self.decision(tool, command, background), command)
+
+    def test_one_off_reads_a_foreground_watch_and_the_quiet_watch_pass(self):
+        for command in (f"cat {self.LOG}", f"grep landed {self.LOG}", f"jq . {self.LOG}", f"tail -n 5 {self.LOG}", "tail -f server.log",
+                        "olivercode watch oc-staging --until-exit", "for f in a b; do echo $f; done", "git log --grep 'olivercode watch'"):
+            self.assertEqual("", self.decision("Bash", command, True), command)
+        for command in (f"tail -f {self.LOG}", "olivercode watch oc-staging"):
+            self.assertEqual("", self.decision("Bash", command), command)
+
+    def test_the_pretool_hook_denies_a_monitor_and_install_matches_it(self):
+        payload = {"tool_name": "Monitor", "tool_input": {"command": f"tail -f {self.LOG}"}, "cwd": "/"}
+        out = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "hooks" / "pretool_guard.py")], input=json.dumps(payload),
+                             capture_output=True, text=True, env={**os.environ, "OLIVERCODE_HOME": str(temp_dir(self, "olivercode-watch-"))})
+        self.assertEqual("deny", json.loads(out.stdout)["hookSpecificOutput"]["permissionDecision"])
+        old = {"matcher": "Bash|Edit", "hooks": [{"type": "command", "command": claude_settings._command("pretool_guard.py", claude_settings.HOOKS_DIR)}]}
+        groups = claude_settings.merge({"hooks": {"PreToolUse": [old]}})["hooks"]["PreToolUse"]
+        self.assertEqual(1, len(groups))
+        self.assertIn("Monitor", groups[0]["matcher"].split("|"))
 
 
 class TestSettingsRemove(unittest.TestCase):

@@ -137,6 +137,7 @@ class DrainCase(unittest.TestCase):
             _, _, st = self.run_drain(io)
         self.assertEqual([2], io.started)
         self.assertEqual([2], st["closed"])
+        self.assertEqual("FAIL: tests/test_x.py", st["red"])  # story 1 still waits, so the run-end row says why (#1490)
         notify.assert_called_once()
         self.assertIn("FAIL: tests/test_x.py", notify.call_args.args[0])
         self.assertIn("wait until staging passes", notify.call_args.args[0])
@@ -176,6 +177,7 @@ class DrainCase(unittest.TestCase):
             _, _, st = self.run_drain(io)
         self.assertEqual([2, 1], io.started)
         self.assertEqual([2, 1], st["closed"])
+        self.assertNotIn("red", st)
 
     def test_a_passing_base_builds_every_story_without_a_notification(self):  # #1431
         io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1)
@@ -1611,6 +1613,15 @@ class DetachedRun(unittest.TestCase):
         from lib import cmd_status
         lines = cmd_status.activity(time.time(), {}, self.rows(), False, 0, "")
         self.assertRegex(lines[2], r"^Last run ended \d{4}-\d\d-\d\d \d\d:\d\d (EST|EDT): 2 stories landed, 1 stopped\.$")
+        self.assertNotIn("reason", end)
+        with mock.patch.object(cmd_drain, "drain", side_effect=RuntimeError("boom")), self.assertRaises(RuntimeError):
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
+        self.assertEqual("The run crashed.", self.rows()[-1]["reason"])
+        for held, why in (({"base": {4: "FAIL: x"}}, "Stories wait because the base branch fails validation: FAIL: x."),
+                          ({"red": "CI run u failed"}, "Routine stories wait because staging fails validation: CI run u failed.")):
+            with mock.patch.object(cmd_drain, "drain", side_effect=lambda io, st, sleep=None: st.update(held) or 0):
+                quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
+            self.assertEqual(why, self.rows()[-1]["reason"])
 
     def test_a_run_end_rewrites_the_status_digest_for_the_repo_and_a_failed_write_still_ends_the_run(self):
         with mock.patch.object(cmd_drain, "drain", return_value=0):
