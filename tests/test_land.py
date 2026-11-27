@@ -13,7 +13,7 @@ from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 session_check = load_script("scripts/hooks/session_check.py", "session_check_land")
-from lib import cmd_land, maintain, validated  # noqa: E402
+from lib import agent_loop, cmd_dispatch, cmd_land, intake, maintain, validated  # noqa: E402
 
 REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
 
@@ -590,6 +590,151 @@ class TestLandStaysInStory(Base):
         code, out = self.land()
         self.assertEqual(1, code)
         self.assertIn("RESULT scope-unchecked", out)
+
+
+GUIDE = "tests/test_guide.py"
+NAMED = GUIDE + "::test_the_guide_names_every_command"
+GUIDE_TESTS = """import unittest
+
+
+class TestGuide(unittest.TestCase):
+    def test_the_guide_names_every_command(self):
+        self.assertTrue(True)
+        self.assertEqual(1, 1)
+
+    def test_the_guide_opens(self):
+        self.assertTrue(True)
+        self.assertIsNone(None)
+"""
+NAMED_TEST = GUIDE_TESTS[GUIDE_TESTS.index("    def test_the_guide_names"):GUIDE_TESTS.index("    def test_the_guide_opens")]
+OPENS_ASSERTS = "        self.assertTrue(True)\n        self.assertIsNone(None)\n"
+
+
+class TestDeclaredRemovals(Base):
+    """A story's `Removes tests:` line lets the tests it names go whole, and nothing else (#1484)."""
+
+    def setUp(self):
+        super().setUp()
+        self.body = f"Removes tests: {NAMED}\n\nFiles area: {GUIDE}, b.txt"
+        (self.wt / "tests").mkdir()
+        self.commit(GUIDE_TESTS)
+        git(self.wt, "push", "-q", "origin", "HEAD:main")
+
+    def commit(self, text):
+        (self.wt / GUIDE).write_text(text)
+        git(self.wt, "add", "."); git(self.wt, "commit", "-q", "-m", "Trim the guide tests (#9)")
+
+    def refused(self, *named):
+        code, out = self.land()
+        self.assertEqual(1, code, out)
+        self.assertIn("RESULT weakened-test", out)
+        log = (self.root / "logs" / "land-main-9.log").read_text()
+        for text in named:
+            self.assertIn(text, log)
+        return log
+
+    def test_a_named_test_deleted_whole_lands_and_is_named_in_the_log_and_on_the_story(self):
+        self.commit(GUIDE_TESTS.replace(NAMED_TEST, ""))
+        with mock.patch.object(cmd_land, "_validates", return_value=True) as validates:
+            code, out = self.land()
+        self.assertEqual(0, code, out)
+        self.assertIn("RESULT pushed", out)
+        validates.assert_called_once()
+        self.assertIn(NAMED, (self.root / "logs" / "land-main-9.log").read_text())
+        self.comment.assert_called_once()
+        self.assertIn(NAMED, self.comment.call_args.args[2])
+
+    def test_an_assertion_removed_from_a_named_test_that_stays_is_refused(self):
+        self.commit(GUIDE_TESTS.replace("        self.assertEqual(1, 1)\n", ""))
+        self.refused(f"{GUIDE}:6 removes 1 assertion(s)")
+
+    def test_a_named_file_the_files_area_does_not_list_is_refused_and_named(self):
+        self.body = f"Removes tests: {NAMED}\n\nFiles area: b.txt"
+        self.commit(GUIDE_TESTS.replace(NAMED_TEST, ""))
+        self.refused(f"{GUIDE} is on the Removes tests line and the Files area does not list it")
+
+    def test_an_unnamed_removal_beside_a_named_one_is_refused_at_its_own_line(self):
+        self.commit(GUIDE_TESTS.replace(NAMED_TEST, "").replace("        self.assertIsNone(None)\n", ""))
+        self.refused(f"{GUIDE}:6 removes 1 assertion(s)")
+        self.comment.assert_not_called()
+
+    def test_a_declared_story_still_cannot_add_a_skip_or_a_trailing_true(self):
+        trimmed = GUIDE_TESTS.replace(NAMED_TEST, "")
+        self.commit(trimmed.replace("    def test_the_guide_opens", f"    {SKIP_LINE}\n    def test_the_guide_opens") + f"# {OR_TRUE_LINE}\n")
+        self.refused("adds a skip", "to a test command")
+
+    def test_a_story_with_no_declaration_is_refused_as_before(self):
+        self.body = f"Files area: {GUIDE}"
+        self.commit(GUIDE_TESTS.replace(NAMED_TEST, ""))
+        self.refused(f"{GUIDE}:4 removes 2 assertion(s)")
+
+    def test_a_name_two_tests_share_excuses_neither_until_the_class_is_named(self):
+        twin = GUIDE_TESTS + "\n\nclass TestOther(unittest.TestCase):\n" + NAMED_TEST
+        self.commit(twin)
+        git(self.wt, "push", "-q", "origin", "HEAD:main")
+        self.commit(GUIDE_TESTS)
+        self.assertEqual(([], {}), cmd_land._removed_whole(self.wt, "main", [NAMED]))
+        by_class = NAMED.replace("::", "::TestOther::")
+        self.assertEqual([by_class], cmd_land._removed_whole(self.wt, "main", [by_class])[0])
+
+    def test_a_named_test_that_is_renamed_excuses_no_assertion_removed_elsewhere(self):
+        self.commit(GUIDE_TESTS.replace("names_every_command", "names_commands").replace(OPENS_ASSERTS, "        pass\n"))
+        self.refused(f"{GUIDE}:10 removes 2 assertion(s)")
+        self.comment.assert_not_called()
+
+    def test_a_named_test_moved_to_another_class_excuses_nothing(self):
+        self.body = f"Removes tests: {GUIDE}::TestGuide::test_the_guide_names_every_command\nFiles area: {GUIDE}"
+        moved = GUIDE_TESTS.replace(NAMED_TEST, "").replace(OPENS_ASSERTS, "        pass\n") + "\n\nclass TestOther(unittest.TestCase):\n" + NAMED_TEST
+        self.commit(moved)
+        self.refused(f"{GUIDE}:13 removes 2 assertion(s)")
+
+    def test_a_named_assertion_that_reappears_elsewhere_makes_up_for_no_other_removal(self):
+        other = GUIDE.replace("guide", "other")
+        (self.wt / other).write_text(GUIDE_TESTS.replace("(1, 1)", "(2, 2)"))
+        self.commit(GUIDE_TESTS)
+        git(self.wt, "push", "-q", "origin", "HEAD:main")
+        (self.wt / other).write_text(GUIDE_TESTS.replace("(1, 1)", "(2, 2)").replace(OPENS_ASSERTS, NAMED_TEST.partition("\n")[2]))
+        self.commit(GUIDE_TESTS.replace(NAMED_TEST, ""))
+        self.refused(f"{other}:11 removes 1 assertion(s)")
+
+    def test_a_deleted_file_excuses_only_the_tests_it_names(self):
+        git(self.wt, "rm", "-q", GUIDE); git(self.wt, "commit", "-q", "-m", "Drop the guide tests (#9)")
+        self.refused(f"{GUIDE}:1 removes 2 assertion(s)")
+        self.body = f"Removes tests: {NAMED}, {GUIDE}::test_the_guide_opens\nFiles area: {GUIDE}"
+        code, out = self.land()
+        self.assertEqual(0, code, out)
+
+
+class TestRemovalReader(unittest.TestCase):
+    """The reader checks each test a story names for removal, on a routine story too (#1484)."""
+
+    def test_every_line_is_read_and_a_mention_in_prose_is_not(self):
+        body = "**Removes tests:** `t/a.py::test_a`, tests/b.py::B::test_b.\nRemoves tests: tests/c.py::test_c (wording only)\n"
+        self.assertEqual(["t/a.py::test_a", "tests/b.py::B::test_b", "tests/c.py::test_c"], intake.removed_tests(body))
+        self.assertEqual([], intake.removed_tests('    Given a story body with the line "Removes tests: tests/a.py::test_a"\n'))
+
+    def test_a_routine_story_that_removes_tests_is_read_and_the_brief_asks_about_each(self):
+        briefs = []
+
+        def run(prompt, cwd, **kw):
+            briefs.append(prompt)
+            return {"code": 0, "text": "PASS", "tokens": 1, "session_id": "c1"}
+
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}), mock.patch.object(agent_loop, "validation_command", return_value=["true"]):
+            for task in ("A routine story", f"A trim story\nRemoves tests: {NAMED}\n"):
+                agent_loop.run_loop(task, home, "s1", run=run, check=lambda cwd: (True, ""), say=lambda *_: None, review_mode="none")
+        self.assertEqual(3, len(briefs), "one build for the routine story, a build and a read for the other")
+        self.assertIn("confirm for each test it names that the removed test only checked wording or that another test covers", briefs[2])
+        self.assertIn("is a finding", briefs[2])
+        self.assertIn(NAMED, briefs[2])
+
+    def test_the_builder_brief_of_a_routine_story_that_removes_tests_names_the_reader(self):
+        story = {"title": "Trim", "body": "Files area: docs/RULES.md", "labels": [{"name": "S"}, {"name": "P2"}]}
+        with mock.patch.object(agent_loop, "review_mode", return_value="none"):
+            self.assertIn("commit gates check the commit", cmd_dispatch.headless_brief(9, story, "a"))
+            story["body"] += f"\nRemoves tests: {NAMED}"
+            self.assertIn("reader reads the commit", cmd_dispatch.headless_brief(9, story, "a"))
 
 
 class TestStoryReads(Base):

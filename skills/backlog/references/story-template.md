@@ -13,6 +13,7 @@ A story body has these parts, in this order:
 5. For a story, the line `Existing coverage checked:` naming the code, doc or issue you searched and what you found, so no story rebuilds something that exists
 6. Optional detail after the fields, such as the fit check from `SKILL.md` and a re-runnable audit command for an L or XL item
 7. For a story the runner builds, a last line `Files area:` naming the files it changes. It names files and never a folder, because the runner never builds two stories whose areas overlap and a folder overlaps every story that touches a file inside it
+8. Only for a story that removes tests by design, a line above `Files area:`, `Removes tests: tests/test_x.py::test_name, tests/test_y.py::ClassName::test_name`, naming each test it deletes. The landing lets a named test go only when the commit deletes the whole Python function and the `Files area:` line lists its file, and it still refuses any other removed assertion. Add `ClassName::` when two tests in a file share a name. The reader confirms each named test only checked wording or is covered by another test
 
 Name the role for the person who gets the outcome. The owner is `the owner`. Write each scenario so a second agent can QA the story from the criteria alone.
 

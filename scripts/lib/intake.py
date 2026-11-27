@@ -63,6 +63,7 @@ def repeated_blockers(repeats=None) -> list[str]:
 # Split open stories by files area so non-overlapping stories go to builders in parallel (#794).
 AREA = re.compile(r"^\W*Files area:\W*(.+)$", re.I | re.M)
 CREATES = re.compile(r"^\W*Creates:\W*(.+)$", re.I | re.M)
+REMOVES = re.compile(r"^\W*Removes tests:(.*)$", re.I | re.M)
 WAIT_LINE = re.compile(r"\b(?:wait\w*|until|after|once|data|window)\b", re.I)
 WAIT_DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 WAIT_SPAN = re.compile(r"\b(\d+)[- ]days?\s+(?:of\s+)?(?:data|window|wait)|\bwait\w*\s+(?:for\s+)?(\d+)\s+days?\b", re.I)
@@ -70,14 +71,23 @@ WAIT_DAYS = 14
 SMALL = ("XS", "S")
 
 
+def _tokens(text: str) -> list[str]:
+    return [t.strip("`.,;*()") for t in re.split(r"[,;\s]+", text) if t.strip("`.,;*()")]
+
+
 def _listed(line: re.Pattern, body: str) -> list[str]:
     m = line.search(body or "")
-    return [t.strip("`.,;*()") for t in re.split(r"[,;\s]+", m.group(1)) if t.strip("`.,;*()")] if m else []
+    return _tokens(m.group(1)) if m else []
 
 
 def files_area(body: str) -> list[str]:
     """The paths on the story's `Files area:` line, or [] when it has none."""
     return _listed(AREA, body)
+
+
+def removed_tests(body: str) -> list[str]:
+    """The `file::test` names on the story's `Removes tests:` lines, the tests it removes by design (#1484), or [] when it has none."""
+    return [t for line in REMOVES.findall(body or "") for t in _tokens(line) if "::" in t]
 
 
 def folders(area: list[str], root) -> list[str]:

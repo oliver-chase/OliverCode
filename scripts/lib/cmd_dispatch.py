@@ -45,7 +45,8 @@ def headless_brief(n: int, story: dict, agent: str, worktree=None, extras: str =
     `extras` is text between the story and the rules (code excerpts, owner decisions) and `note` says why an earlier builder stopped."""
     builder, reader, why = intake.models(story, f"story-{n}")  # the same names the runner starts (#1015), and the rule that chose the builder (#1026)
     review = agent_loop.review_mode(intake.size_of(story), story.get("labels") or (), intake.files_area(story.get("body") or ""), intake.priority_of(story))
-    review_note = (f"a fresh {reader.capitalize()} reader reads the commit before it lands" if review == "full"
+    read = review == "full" or intake.removed_tests(story.get("body") or "")  # a declared test removal is read whatever the lane (#1484)
+    review_note = (f"a fresh {reader.capitalize()} reader reads the commit before it lands" if read
                    else "repository validation and commit gates check the commit before it lands")
     model = f"Run on {builder.capitalize()} ({why}), and {review_note}"
     body = (story.get("body") or "").strip()

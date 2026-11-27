@@ -4,6 +4,7 @@ It rebases the worktree on origin/main, squashes a branch of several commits int
 checkout when that is clean and prints how far behind an edited or diverged one is. The log is ~/.olivercode/land/land-REPO-N.log (under OLIVERCODE_HOME when set) and ends
 with `RESULT pushed SHA`, `RESULT rebase-conflict`, `RESULT validate-failed`, `RESULT squash-failed` (the commits could not be squashed), `RESULT push-failed` (the push failed while main stood still) or `RESULT main-kept-moving` (a land keeps retrying with a short pause for ten minutes while main moves and each rebase is clean). A second land for a story that is already running refuses. Land never edits docs/LIMITS.json: the size ceiling only warns (#879).
 A commit that changes a file outside its story's Files area lands and the story gets a comment naming the files; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
+A story's `Removes tests: file::test` line lets that test go when the commit deletes it whole and the Files area lists its file; the log and a story comment name it (#1484).
 
 A landed story is cleaned up here (#712): the worktree, the local branch and the remote branch are deleted, so no session needs a removal permission. Work that did not land
 stays in its worktree, and no branch is pushed for it.
@@ -11,6 +12,7 @@ stays in its worktree, and no branch is pushed for it.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import fcntl
 import json
@@ -20,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import Counter
 from pathlib import Path
 
 from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, run_lock, validated
@@ -213,10 +216,10 @@ def _story_comment(wt: Path, story: str, text: str) -> None:
         _gh(f"repos/{slug}/issues/{story}/comments", "-f", f"body={text}")
 
 
-def _changed_lines(diff: str) -> list[tuple[str, int, str, str]]:
-    """(path, line, sign, text) for each changed line of a zero-context diff. The line is its number in the file after the commit, so a
-    removed line names the spot it left (#1073)."""
-    rows, old, path, new, header = [], "", "", 0, False
+def _changed_lines(diff: str) -> list[tuple[str, int, str, str, int]]:
+    """(path, line, sign, text, was) for each changed line of a zero-context diff. The line is its number in the file after the commit, so a
+    removed line names the spot it left (#1073). `was` is a removed line's number in the file before the commit, and 0 for an added one (#1484)."""
+    rows, old, path, new, was, header = [], "", "", 0, 0, False
     for raw in diff.splitlines():
         if raw.startswith("diff --git "):
             header = True
@@ -226,34 +229,81 @@ def _changed_lines(diff: str) -> list[tuple[str, int, str, str]]:
             path = raw[6:] if raw.startswith("+++ b/") else old
         elif raw.startswith("@@"):
             header, new = False, max(1, int(re.search(r"\+(\d+)", raw).group(1)))  # git writes +0 for a removal before line 1
+            was = int(re.search(r"-(\d+)", raw).group(1))
         elif raw.startswith("+"):
-            rows.append((path, new, "+", raw[1:]))
+            rows.append((path, new, "+", raw[1:], 0))
             new += 1
         elif raw.startswith("-"):
-            rows.append((path, new, "-", raw[1:]))
+            rows.append((path, new, "-", raw[1:], was))
+            was += 1
     return rows
 
 
-def weakened(rows: list[tuple[str, int, str, str]]) -> list[str]:
+def _test_functions(source: str) -> dict[str, tuple[int, int]] | None:
+    """{`name` or `Class::name`: (first line, last line)} of each function in a Python file, decorators included. None when it does not parse."""
+    try:
+        todo = [("", ast.parse(source))]
+    except (SyntaxError, ValueError):
+        return None
+    found = {}
+    while todo:
+        prefix, node = todo.pop()
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                found[prefix + child.name] = (min(n.lineno for n in [child, *child.decorator_list]), child.end_lineno)
+            else:
+                todo.append((f"{prefix}{child.name}::" if isinstance(child, ast.ClassDef) else prefix, child))
+    return found
+
+
+def _removed_whole(wt: Path, base: str, declared: list[str]) -> tuple[list[str], dict[str, set[int]]]:
+    """(the declared tests this commit deletes whole, {file: the base line numbers of the assertions in them}) (#1484). A test is deleted whole
+    when exactly one function on the base answers to its name, none in the commit does and the commit adds none of its bare name, so a test that
+    stays, moves to another class or shares its name excuses nothing; `Class::name` tells two of one name apart.
+    shortcut: only Python files parse, so a declared test in another language is still refused; upgrade when a story has to remove one."""
+    gone, excused = [], {}
+    for entry in declared:
+        path, _, name = entry.partition("::")
+        before = _git(wt, "show", f"origin/{base}:{path}").stdout
+        old, new = _test_functions(before), _test_functions(_git(wt, "show", f"HEAD:{path}").stdout)  # a deleted file reads as empty
+        if old is None or new is None:
+            continue
+        was, left = ([q for q in found if q == name or q.endswith(f"::{name}")] for found in (old, new))
+        if len(was) != 1 or left or any(q.split("::")[-1] == was[0].split("::")[-1] for q in new.keys() - old.keys()):
+            continue
+        first, last = old[was[0]]
+        lines = before.split("\n")
+        gone.append(entry)
+        excused.setdefault(path, set()).update(n for n in range(first, last + 1) if ASSERT.search(lines[n - 1]))
+    return gone, excused
+
+
+def weakened(rows: list[tuple[str, int, str, str, int]], excused: dict[str, set[int]] | None = None) -> list[str]:
     """What in a commit weakens a test, each as `file:line reason` (#1073): a skip added to a test file, `|| true` added to a test or validation
     file, or assertions removed from a test file net of the ones added to it. Assertions may go when the commit deletes more non-blank code
-    outside the tests than it adds there, since that is the code they covered. A one-line edit nets to zero, so it covers nothing."""
-    found, lost = [], {}
-    code = [sign for path, _, sign, text in rows if not TEST_FILE.search(path) and text.strip()]
+    outside the tests than it adds there, since that is the code they covered. A one-line edit nets to zero, so it covers nothing.
+    `excused` holds the assertion lines of the declared tests the commit deletes whole. Only those the diff removes are left out of the count, and an
+    added assertion with the text of one is that line moved, so it makes up for no other removal (#1484)."""
+    found, lost, excused = [], {}, excused or {}
+    moved = Counter(text.strip() for path, _, sign, text, was in rows if sign == "-" and ASSERT.search(text) and was in excused.get(path, ()))
+    code = [sign for path, _, sign, text, _ in rows if not TEST_FILE.search(path) and text.strip()]
     net_code = code.count("-") - code.count("+")
-    for path, line, sign, text in rows:
+    for path, line, sign, text, was in rows:
         test = TEST_FILE.search(path)
         if sign == "+" and test and SKIP.search(text):
             found.append(f"{path}:{line} adds a skip")
         if sign == "+" and (test or VALIDATION_FILE.search(path)) and OR_TRUE.search(text):
             found.append(f"{path}:{line} adds || true to a test command")
-        if test and ASSERT.search(text):
+        if test and ASSERT.search(text) and not (sign == "-" and was in excused.get(path, ())):
+            if sign == "+" and moved[text.strip()]:
+                moved[text.strip()] -= 1
+                continue
             first, net = lost.get(path, (None, 0))
             if sign == "-" and first is None:
                 first = line
             lost[path] = (first, net + (1 if sign == "-" else -1))
     if net_code <= 0:
-        found +=[f"{path}:{first} removes {net} assertion(s) without removing the code they cover" for path, (first, net) in lost.items() if net > 0]
+        found += [f"{path}:{first} removes {net} assertion(s) without removing the code they cover" for path, (first, net) in lost.items() if net > 0]
     return found
 
 
@@ -271,7 +321,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
     if body is None:
         log.write(f"Refused: story #{story} could not be read over REST, so its Files area is unknown and nothing landed.\n")
         return "scope-unchecked", ""
-    area = intake.files_area(body)
+    area, declared = intake.files_area(body), intake.removed_tests(body)
     deadline, attempt = time.monotonic() + BUDGET, 0
     while attempt < TRIES or time.monotonic() < deadline:
         if attempt >= TRIES:
@@ -292,10 +342,18 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
             names = ", ".join(outside)
             log.write(f"Note: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}).\n")
             _story_comment(wt, story, f"This commit changes files outside the Files area: {names}. The Files area is {', '.join(area)}.")
-        found = weakened(_changed_lines(_git(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout))
+        # a Removes tests entry excuses a test only in a file the Files area lists by name, and a test file listed nowhere there refuses the commit (#1484)
+        unlisted = [p for p in dict.fromkeys(entry.partition("::")[0] for entry in declared) if p not in area]
+        gone, excused = _removed_whole(wt, base, declared)
+        found = [f"{p} is on the Removes tests line and the Files area does not list it" for p in unlisted]
+        found += weakened(_changed_lines(_git(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout), excused)
         if found:
             log.write(f"Refused: this commit weakens a test, so nothing landed: {'; '.join(found)}.\n")
             return "weakened-test", ""
+        if gone:  # shortcut: a land that retries repeats this comment, as it does the Files area one; post once when the repeats bother a reader
+            names = ", ".join(gone)
+            log.write(f"Removed tests that story #{story} names: {names}.\n")
+            _story_comment(wt, story, f"This commit removes the tests the story names: {names}.")
         tree = _git(wt, "rev-parse", "HEAD^{tree}").stdout.strip()
         passed = validated.recorded_pass(tree) if tree else None  # a pass on record for this tree stands; a rebase that changed it has none (#910)
         if passed:

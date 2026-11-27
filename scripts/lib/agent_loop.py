@@ -222,7 +222,9 @@ def reader_for(builder: str) -> str:
 
 REVIEW_BRIEF = ("You are a fresh reader. You get the story, the diff and the test output below, and you may read and search the worktree. Check that the diff does what the "
                 "story's scenarios say and breaks nothing. When the diff alone cannot settle a point, such as whether a helper it calls exists, open the file and check: a "
-                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. Answer PASS on the first line "
+                "doubt you did not check is not a finding. If the diff says it was cut, read the files it names. When the story has a `Removes tests:` line, "
+                "confirm for each test it names that the removed test only checked wording or that another test covers what it checked, opening that test "
+                "to see. A named removal that was neither, or that you cannot confirm, is a finding. Answer PASS on the first line "
                 "when it does. Otherwise list each finding on its own line with the file and what is wrong. " + VERDICT_FIRST + "\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
@@ -474,7 +476,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
             log_stage(session, repo, "validating")
         passed, tail = check(cwd)
         if passed:
-            if review_mode == "none":
+            from lib import intake  # local import: intake imports this module
+            if review_mode == "none" and not intake.removed_tests(task):  # a declared test removal is read whatever the lane (#1484)
                 return {"done": True, "reason": "The repo's validation passes; routine story review is covered by validation and commit gates.",
                         "rounds": n, "tokens": tokens, "summary": summary}
             verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
