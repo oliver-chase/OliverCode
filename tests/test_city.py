@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,7 @@ from unittest import mock
 from _support import REPO_ROOT, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import city, city_cost, city_delivery, city_health, cmd_status  # noqa: E402
+from lib import city, city_cost, city_delivery, city_health, cmd_status, local_config  # noqa: E402
 
 NOW = datetime(2026, 11, 22, 12, 0, tzinfo=timezone.utc)
 DONE = {"story": "story-7", "repo": "r", "at": NOW.timestamp() - 600, "total": 300, "cost": 0.14}
@@ -36,19 +37,11 @@ class TestCity(unittest.TestCase):
         for part in ("2 builders", "2 need you", "Updated 12:00 UTC", ">Refresh</button>"):
             self.assertIn(part, page)
 
-    def test_the_top_right_links_the_pinned_artifact_when_city_artifact_is_set(self):
-        url = "https://claude.ai/artifact/abc"
-        with mock.patch("lib.local_config.setting", return_value=url):
-            found = city.gather("o/r", NOW, [], [], {}, False, None, None, None)
-        self.assertEqual(found["artifact"], url)
-        page = city.render(data(artifact=url))
-        self.assertIn(f'<a class="btn" href="{url}">Open on phone</a>', page)
-
-    def test_no_link_shows_when_city_artifact_is_not_set(self):
-        with mock.patch("lib.local_config.setting", return_value=None):
-            found = city.gather("o/r", NOW, [], [], {}, False, None, None, None)
-        self.assertEqual(found["artifact"], "")
-        self.assertNotIn("Open on phone", city.render(found))
+    def test_no_phone_link_shows_and_the_setting_is_gone(self):
+        page = city.render(data(artifact="https://claude.ai/artifact/abc"))
+        self.assertNotIn("Open on phone", page)
+        self.assertNotIn("cityArtifact", local_config.DEFAULTS)
+        self.assertNotIn("artifact", city.gather("o/r", NOW, [], [], {}, False, None, None, None))
 
     def test_the_band_shows_each_states_word_and_sentence(self):
         cases = {
@@ -72,17 +65,16 @@ class TestCity(unittest.TestCase):
         self.assertIn("Out of date", page)
         self.assertIn("minutes", page)
 
-    def test_the_phone_order_is_status_needs_you_building_then_the_sections(self):
+    def test_the_sections_follow_the_mockup_order_and_the_page_has_a_phone_layout(self):
         page = city.render(data())
         self.assertIn("max-width:600px", page)
-        order = [page.index(x) for x in ('class="band b-idle"', 'id="needs"', 'id="live"', 'id="today"', 'id="delivery"', 'id="cost"', 'id="health"')]
+        order = [page.index(x) for x in ('class="bar"', 'id="live"', 'id="needs"', 'id="today"', 'id="delivery"', 'id="cost"', 'id="health"')]
         self.assertEqual(order, sorted(order))
 
     def test_text_is_escaped_and_the_page_is_one_file(self):
         page = city.render(data(steps=[{"id": 1, "step": "<script>x</script>"}], landed=None))
         self.assertIn("&lt;script&gt;", page)
         self.assertEqual(page.count("<script>"), 1)
-        self.assertIn("overflow-x:hidden", page)
         self.assertIn("unknown", page)
 
     def test_github_figures_show_when_they_were_read(self):
@@ -225,7 +217,7 @@ class TestCity(unittest.TestCase):
         log = self.today_log()
         section = self.today_section(city.render(data(log=log, landed=cmd_status.landed_today(log, NOW.timestamp()))))
         self.assertIn(f"{NOW:%A} 22 November 2026", section)
-        self.assertIn("<h2>1 landed today for $0.50, and 0 waiting on you.</h2>", section)
+        self.assertIn('<h1 id="t1">1 landed today for $0.50, and 0 waiting on you.</h1>', section)
         self.assertIn("Delivery: 1 landed in the last 7 days.", section)
         self.assertIn("Cost: $0.50 a landed story", section)
         self.assertIn("Health: checks on main are not recorded yet.", section)
@@ -253,3 +245,56 @@ class TestCity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FOLD = {"fold", "more"}  # the fold wrapper and the See all link, which the mockup styles inline
+MOCKUP = (REPO_ROOT / "docs" / "city" / "Main.dc.html").read_text()
+
+
+def classes(markup: str) -> list[str]:
+    """Every class token in MARKUP, in the order it appears."""
+    return [c for m in re.findall(r'class="([^"]*)"', markup) for c in m.split()]
+
+
+def section(markup: str, start: str, end: str | None) -> str:
+    return markup[markup.index(start):markup.index(end, markup.index(start)) if end else None]
+
+
+class TestMirror(unittest.TestCase):
+    """City's frame is the mockup's: its stylesheet, and the classes of each of its sections (#1380)."""
+
+    def test_the_stylesheet_is_the_mockups_helmet_style_with_its_tokens_unchanged(self):
+        helmet = re.search(r"<style>\n(.*?)</style>", MOCKUP, re.S).group(1)
+        self.assertTrue(city.STYLE.startswith("\n" + helmet))
+        self.assertIn(re.search(r"--field:[^}]*", helmet).group(0), city.STYLE)
+
+    def test_each_city_section_uses_only_classes_its_mockup_section_has(self):
+        page = city.render(data(steps=[{"id": i, "step": "Do it", "command": "olivercode owner"} for i in range(1, 8)], busy=True, builders=1,
+                                cards=[city.builder_card("o/r#7", {}, None, {"size": "S", "cost": 0.2, "model": "sonnet", "round": 1, "route": "", "why": "",
+                                                                       "place": 1, "in_stage": "1 min", "in_all": "2 min", "written": 1, "read": 2})]))
+        parts = {"header": ('<header class="bar"', "</header>", '<header class="bar"', "</header>"),
+                 "rail": ('<aside class="rail"', "</aside>", '<aside class="rail"', "</aside>"),
+                 "lede": ('<section class="lede"', "</section>", '<section class="lede"', "</section>")}  # Delivery, Cost and Health get their own rows when #1381, #1382 and #1386 rebuild them from the mockup
+        for name, (ps, pe, ms, me) in parts.items():
+            mine, theirs = section(page, ps, pe), section(MOCKUP, ms, me)
+            extra = [c for c in classes(mine) if c not in set(classes(theirs)) | FOLD]
+            self.assertEqual(extra, [], f"{name} uses classes the mockup section lacks")
+
+    def test_the_header_and_rail_list_their_classes_in_the_mockups_order(self):
+        page = city.render(data(steps=[{"id": 1, "step": "Do it"}], busy=True, builders=1))
+        for start, end in (('<header class="bar"', "</header>"), ('<aside class="rail"', "</aside>")):
+            seen = iter(classes(section(MOCKUP, start, end)))
+            for c in dict.fromkeys(classes(section(page, start, end))):
+                self.assertTrue(any(c == m for m in seen), f"{c} is out of the mockup's order")
+
+    def test_a_folding_section_hides_the_extra_rows_behind_a_see_all_control(self):
+        page = city.render(data(steps=[{"id": i, "step": f"Step {i}"} for i in range(1, 9)]))
+        self.assertIn('<div class="fold" hidden>', page)
+        self.assertIn('<a class="more" href="#" data-fold="See all 8 steps">See all 8 steps</a>', page)
+        self.assertIn('style="font-weight:500;font-size:15px;min-height:44px;display:flex;align-items:center"', MOCKUP)
+        self.assertIn(".more{font-weight:500;font-size:15px;min-height:44px;display:flex;align-items:center}", city.STYLE)
+        self.assertNotIn('data-fold="', city.render(data(steps=[{"id": 1, "step": "One"}])))
+
+    def test_the_reload_script_restores_folds_the_view_and_the_scroll(self):
+        for part in ("sessionStorage", "[data-fold]", "[data-view]", "scrollTo("):
+            self.assertIn(part, city.SCRIPT)

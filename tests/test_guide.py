@@ -177,27 +177,23 @@ class TestCityOpening(unittest.TestCase):
         self.assertIn("\"OliverCode City\" shortcut on the Desktop", text)
         self.assertIn("olivercode status page --open", text)
 
-    def test_the_city_topic_gives_this_computer_first_then_the_phone_steps_unchanged(self):
-        with mock.patch.object(cmd_guide, "city_url", return_value=""):
-            _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
-        self.assertLess(text.index("On this computer"), text.index("To check in from your phone"))
+    def test_the_city_topic_is_for_this_computer_only(self):
+        _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+        self.assertIn("On this computer", text)
         self.assertIn("\"OliverCode City\" shortcut on the Desktop", text)
         self.assertIn("olivercode status page --open", text)
-        steps = "\n".join(f"  {n}. {step}" for n, step in enumerate(cmd_guide.PHONE_STEPS, 1))
-        self.assertIn(steps, text)
+        self.assertNotIn("phone", text.lower())
+        self.assertNotIn("cityArtifact", text)
 
-    def test_the_city_topic_names_both_ways_whether_or_not_the_artifact_is_set(self):
-        for url in ("", "https://claude.ai/artifact/abc"):
-            with mock.patch.object(cmd_guide, "city_url", return_value=url):
-                _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
-            self.assertIn("On this computer", text, url)
-            self.assertIn("olivercode status page --open", text, url)
-            self.assertIn("\"OliverCode City\" shortcut", text, url)
+    def test_the_city_topic_names_both_ways_whatever_the_settings(self):
+        _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+        self.assertIn("On this computer", text)
+        self.assertIn("olivercode status page --open", text)
+        self.assertIn("\"OliverCode City\" shortcut", text)
 
     def test_the_guide_still_names_status_page_open_once_the_owner_deleted_the_shortcut(self):
         # install records the shortcut it wrote and never writes it again, so the guide has no Desktop check: its text is the same either way.
-        with mock.patch.object(cmd_guide, "city_url", return_value=""):
-            _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+        _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
         self.assertIn("olivercode status page --open", text)
 
 

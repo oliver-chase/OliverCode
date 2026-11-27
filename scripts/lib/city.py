@@ -3,7 +3,7 @@
 `olivercode status page [--fetch] [--open] [--root DIR]` writes `city.html` to the OliverCode home, and --open shows it in the default browser. Every write reads the run log, the owner queue, the board copy
 that `board sync` keeps and `city-github.json`. Only `--fetch` calls GitHub: it reads the opened and closed counts and the check results once and saves them
 to `city-github.json` with the time read. The frame is a nav (Today, Delivery, Cost, Health) and a status band that gives the run state, the builder count,
-the needs-you count, the Updated time, an Open on phone link when `cityArtifact` is set (#1362) and a Refresh control. The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
+the needs-you count, the Updated time and a Refresh control. The markup and stylesheet are the mockup's, in docs/city (#1380). The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
 their own module. The Live rail shows a card for each working builder, the queue, and Needs you with the latest owner decision (#1357). The Today section opens with the date, a headline, a paragraph and four answers (#1361).
 """
 
@@ -24,60 +24,161 @@ SHOWN = 5  # owner-queue steps the page lists before it says how many more
 STAGE_LABELS = ("Claimed", "Building", "Validating", "Landing", "Landed")  # the builder card's track, in the order cmd_status.STAGES names them
 
 STYLE = """
-:root{--field:#F6F6F7;--card:#fff;--ink:#17161C;--muted:#5D5C66;--accent:#4C3FB0;--asoft:#EEECF8;--warn:#8A4B00;--warnbg:#FBEEDD;--fail:#B3261E;--failbg:#FAE6E4;
---ok:#2B7A4B;--idle:#5F5E69;--idlebg:#ECECEF;--line:rgb(23 22 28/.10)}
-*{box-sizing:border-box}
-body{margin:0;background:var(--field);color:var(--ink);font:16px/1.5 Inter,system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;overflow-x:hidden}
-h1,h2,h3{font-family:Newsreader,Georgia,serif;font-weight:400;margin:0}h2{font-size:28px}h3{font:500 15px/1.4 Inter,system-ui,sans-serif}p{margin:0}
-a{color:var(--accent)}.small{font-size:14px;color:var(--muted)}
-.wrap{max-width:1360px;margin:0 auto;padding:0 max(16px,2.5vw)}
-.bar{background:var(--card);box-shadow:0 1px 0 var(--line)}.barin{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;padding-block:12px}
-.brand{font:500 26px Newsreader,Georgia,serif}.nav{display:flex;flex-wrap:wrap;gap:4px;flex:1 1 auto}
+body{margin:0}
+a{color:#4C3FB0}a:hover{color:#2F2580}
+.city{--field:#F6F6F7;--card:#FFFFFF;--ink:#17161C;--muted:#5D5C66;--accent:#4C3FB0;--asoft:#EEECF8;--data:#C7C6CF;--data2:#8F8E99;--none:#EFEFF1;--ok:#2B7A4B;--okbg:#E6F2EA;--warn:#8A4B00;--warnbg:#FBEEDD;--fail:#B3261E;--failbg:#FAE6E4;--idle:#5F5E69;--idlebg:#ECECEF;--line:rgb(23 22 28 / .10);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.5;color:var(--ink);background:var(--field);font-variant-numeric:tabular-nums;min-height:100%}
+.city ::selection{background:#DCD8F2}
+.city :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{font-family:Newsreader,Georgia,serif;font-weight:400;margin:0;text-wrap:balance}
+p{margin:0}
+.wrap{max-width:1360px;margin:0 auto;box-sizing:border-box;padding-left:max(16px,2.5vw);padding-right:max(16px,2.5vw)}
+.bar{background:var(--card);box-shadow:0 1px 0 var(--line)}
+.barin{display:flex;flex-wrap:wrap;gap:12px 32px;align-items:center;padding-block:14px}
+.brand{font-family:Newsreader,Georgia,serif;font-size:26px;font-weight:500}
+.nav{display:flex;flex-wrap:wrap;gap:4px;flex:1 1 auto}
 .nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;color:var(--ink);text-decoration:none;font-size:15px}
-.nav a:first-child{background:var(--asoft);color:var(--accent);font-weight:500}
-.status{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:14px}
-.pill{display:inline-flex;align-items:center;gap:8px;padding:5px 13px;border-radius:999px;font-size:14px;font-weight:500;background:var(--card);white-space:nowrap}
+.nav a.on{background:var(--asoft);color:var(--accent);font-weight:500}
+.status{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-size:14px;font-weight:500;white-space:nowrap}
 .pill i{width:8px;height:8px;border-radius:50%;background:currentColor}
-.c-run{color:var(--accent)}.c-idle{color:var(--idle)}.c-wait{color:var(--warn)}.c-fail{color:var(--fail)}
-.b-run{background:var(--asoft)}.b-idle{background:var(--idlebg)}.b-wait{background:var(--warnbg)}.b-fail{background:var(--failbg)}
-.band{border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}.band .pill{align-self:flex-start}
-.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:999px;border:0;font:500 15px Inter,system-ui,sans-serif;
-background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);cursor:pointer;text-decoration:none}
-.body{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:32px;align-items:flex-start;padding-block:32px 64px}
+.p-run{background:var(--asoft);color:var(--accent)}
+.p-fail{background:var(--failbg);color:var(--fail)}
+.p-warn{background:var(--warnbg);color:var(--warn)}
+.p-ok{background:var(--okbg);color:var(--ok)}
+.p-idle{background:var(--idlebg);color:var(--idle)}
+.chipl{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;border-radius:999px;font-size:14px;color:var(--ink);text-decoration:none;box-shadow:inset 0 0 0 1px var(--line)}
+.chipl.warn{color:var(--warn);box-shadow:inset 0 0 0 1px #E9CFA9}
+.upd{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);padding:0 4px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:999px;border:0;font:inherit;font-size:15px;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap}
+.b-pri{background:var(--ink);color:#fff}
+.b-acc{background:var(--accent);color:#fff}
+.b-ghost{background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.btn[disabled]{background:var(--idlebg);color:var(--idle);cursor:not-allowed;box-shadow:none}
+.body{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:32px;align-items:flex-start;padding-block:40px 80px}
 .rail{flex:1 1 340px;max-width:420px;min-width:0;display:flex;flex-direction:column;gap:16px}
-.main{flex:999 1 600px;min-width:0;display:flex;flex-direction:column;gap:48px}
-.card{background:var(--card);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0}
-.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.cnt{font-size:14px;font-weight:500;color:var(--warn);background:var(--warnbg);padding:2px 10px;border-radius:999px}
-.step{display:flex;flex-direction:column;gap:6px;padding:10px 0;overflow-wrap:anywhere}.step+.step{box-shadow:0 -1px 0 var(--line)}
-.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-code{font:13px ui-monospace,"SF Mono",Menlo,monospace;background:var(--field);padding:8px 10px;border-radius:10px;overflow-wrap:anywhere}
-.chap{display:flex;flex-direction:column;gap:12px}.chap>h2{font-size:40px;line-height:1.1}
-.count{font:40px/1 Newsreader,Georgia,serif}
-.read{font-size:17px;max-width:70ch}
-.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:16px;padding-top:8px}
-.ans{display:flex;flex-direction:column;gap:6px;padding-top:14px;box-shadow:0 -2px 0 var(--ink)}
-.ans .q{font-size:14px;color:var(--muted)}.ans .a{font-family:Newsreader,Georgia,serif;font-size:28px;line-height:1.15}.ans .e{font-size:14px;color:var(--muted)}
-.bhead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-.tag{font-size:12px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--idlebg);color:var(--ink);white-space:nowrap}
-.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;margin:0;font-size:14px}.kv dt{color:var(--muted)}.kv dd{margin:0}
+.main{flex:999 1 600px;min-width:0;display:flex;flex-direction:column;gap:64px}
+.card{background:var(--card);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:0 1px 2px rgb(23 22 28 / .05)}
+.railhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.railhead h2{font-size:28px}
+.small{font-size:14px;color:var(--muted)}
+.band{background:var(--asoft);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.band .pill{align-self:flex-start;background:var(--card)}
+.bld{display:flex;flex-direction:column;gap:12px;padding-top:4px}
+.bld+.bld{padding-top:16px;box-shadow:0 -1px 0 var(--line)}
+.bhead{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+.n{font-weight:500;color:var(--accent);text-decoration:none}
+.btitle{font-size:15px;font-weight:500;line-height:1.4;margin-top:2px}
+.tags{display:flex;gap:4px;flex:none}
+.tag{font-size:12px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--idlebg);color:var(--ink)}
+.tag.p0{background:var(--failbg);color:var(--fail)}
 .track{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));font-size:12px;color:var(--muted)}
 .track li{position:relative;padding-top:20px;text-align:center}
 .track li::before{content:"";position:absolute;top:3px;left:50%;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:#DDDCE3;z-index:1}
 .track li::after{content:"";position:absolute;top:8px;right:50%;width:100%;height:2px;background:#DDDCE3}
 .track li:first-child::after{display:none}
 .track li.done::before,.track li.done::after,.track li.now::after{background:var(--ink)}
-.track li.now::before{background:var(--accent);box-shadow:0 0 0 4px var(--asoft)}
+.track li.now::before{background:var(--accent);box-shadow:0 0 0 4px #DCD8F2}
 .track li.now{color:var(--accent);font-weight:500}
-.meter{height:6px;border-radius:999px;background:var(--idlebg);overflow:hidden;margin-top:4px}.meter span{display:block;height:100%;background:var(--ink)}
-@media (max-width:600px){.body{flex-direction:column;padding-block:16px 40px}.rail{max-width:none;width:100%}.chap>h2{font-size:30px}}
+.kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;font-size:14px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.meter{height:6px;border-radius:999px;background:var(--idlebg);overflow:hidden;margin-top:4px}
+.meter span{display:block;height:100%;background:var(--ink)}
+.step{display:flex;flex-direction:column;gap:8px;padding:14px 0}
+.step+.step{box-shadow:0 -1px 0 var(--line)}
+.step h3{font-family:Inter,system-ui,sans-serif;font-size:15px;font-weight:500;line-height:1.4}
+.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+code{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:13px;background:var(--field);padding:8px 10px;border-radius:10px;color:var(--ink)}
+.date{font-size:13px;color:var(--muted)}
+.lede{display:flex;flex-direction:column;gap:20px}
+.lede h1{font-size:56px;line-height:1.05;max-width:900px}
+.read{font-family:Newsreader,Georgia,serif;font-size:22px;line-height:1.45;max-width:760px}
+.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:16px;padding-top:8px}
+.ans{display:flex;flex-direction:column;gap:6px;padding-top:14px;box-shadow:0 -2px 0 var(--ink)}
+.ans .q{font-size:14px;color:var(--muted)}
+.ans .a{font-family:Newsreader,Georgia,serif;font-size:28px;line-height:1.15}
+.ans .e{font-size:14px;color:var(--muted)}
+.chap{display:flex;flex-direction:column;gap:20px}
+.chap>h2{font-size:40px;line-height:1.1}
+.chap>.read{font-size:20px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:16px}
+.bm{background:var(--card);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:8px;min-width:0;box-shadow:0 1px 2px rgb(23 22 28 / .05)}
+.bm .lab{font-size:14px;color:var(--muted)}
+.bm .num{font-family:Newsreader,Georgia,serif;font-size:42px;line-height:1.05}
+.bullet{position:relative;height:8px;border-radius:999px;background:var(--idlebg);margin:6px 0 2px}
+.bullet span{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--ink)}
+.bullet i{position:absolute;top:-5px;width:2px;height:18px;background:var(--accent)}
+.bench{font-size:13px;color:var(--accent);font-weight:500}
+.mean{font-size:14px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:16px;align-items:start}
+.card h3{font-size:24px;line-height:1.2}
+.controls{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--card);border-radius:999px;padding:4px;gap:2px;box-shadow:inset 0 0 0 1px var(--line)}
+.seg button{min-height:36px;min-width:44px;padding:0 14px;border:0;border-radius:999px;background:transparent;font:inherit;font-size:14px;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--ink);color:#fff;font-weight:500}
+.chart{position:relative;height:240px;display:flex;align-items:flex-end;gap:3px;padding-top:28px;box-shadow:0 1px 0 var(--line)}
+.col{flex:1 1 0;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;position:relative}
+.barv{position:relative;border-radius:4px 4px 0 0;min-height:0}
+.peak{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding-bottom:4px;font-size:13px;font-weight:500;white-space:nowrap;color:var(--ink)}
+.xl{display:flex;gap:3px}
+.xl span{flex:1 1 0;min-width:0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:visible;padding-top:8px}
+.avg{position:absolute;left:0;right:0;border-top:1.5px dashed var(--accent);pointer-events:none}
+.avg span{position:absolute;right:0;bottom:2px;font-size:12px;color:var(--accent);font-weight:500;background:var(--card);padding:0 4px}
+.stack{display:flex;height:14px;border-radius:999px;overflow:hidden;gap:2px}
+.keys{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.hbar{display:grid;grid-template-columns:minmax(0,230px) minmax(0,1fr) 48px;gap:12px;align-items:center;padding:5px 0;font-size:14px}
+.hbar .b{height:10px;border-radius:999px;background:var(--data)}
+.hbar .b.top{background:var(--ink)}
+.hbar .c{text-align:right;font-weight:500}
+.row{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;padding:11px 0;font-size:15px}
+.row+.row{box-shadow:0 -1px 0 var(--line)}
+.row .t{flex:1 1 220px;min-width:0}
+.tablebox{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:480px;font-size:14px}
+th{font-weight:500;font-size:13px;color:var(--muted);text-align:left;padding:6px 12px 6px 0}
+td{padding:9px 12px 9px 0;box-shadow:0 -1px 0 var(--line)}
+.r{text-align:right}
+.note{background:var(--warnbg);color:#5E3300;border-radius:14px;padding:12px 16px;font-size:15px}
+.sizerow{display:grid;grid-template-columns:36px minmax(0,1fr);gap:14px;align-items:center;padding:10px 0}
+.sizerow+.sizerow{box-shadow:0 -1px 0 var(--line)}
+.lane{position:relative;height:40px}
+.lane .base{position:absolute;left:0;right:0;top:12px;height:6px;border-radius:999px;background:var(--idlebg)}
+.lane .rng{position:absolute;top:12px;height:6px;background:var(--data);border-radius:999px}
+.lane .med,.lane .hi{position:absolute;top:7px;width:16px;height:16px;margin-left:-8px;border-radius:50%}
+.lane .med{background:var(--ink)}
+.lane .hi{background:#fff;box-shadow:inset 0 0 0 3px var(--ink)}
+.lane .lim{position:absolute;top:2px;width:2px;height:26px;background:var(--accent)}
+.lane small{position:absolute;top:26px;font-size:12px;color:var(--muted);white-space:nowrap;transform:translateX(-50%)}
+.split{display:flex;height:32px;border-radius:10px;overflow:hidden;gap:2px;font-size:13px;font-weight:500}
+.split span{display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden}
+.hooks{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(190px,100%),1fr));gap:8px}
+.hook{border-radius:12px;padding:10px 12px;background:var(--idlebg);display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--muted)}
+.hook b{font-weight:500;font-size:14px;color:var(--ink)}
+.gtrack{position:relative;height:12px;border-radius:999px;background:var(--idlebg)}
+.gtrack span{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--ok)}
+.gtrack i{position:absolute;left:10%;top:-5px;width:2px;height:22px;background:var(--warn)}
+.ghead{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.more{font-weight:500;font-size:15px;min-height:44px;display:flex;align-items:center}
+.fold[hidden]{display:none}
+@media (max-width:600px){.body{flex-direction:column;padding-block:16px 40px}.rail{max-width:none;width:100%}.card{padding:18px}.lede h1{font-size:30px}.read{font-size:18px}.chap>h2{font-size:30px}.answers{grid-template-columns:repeat(2,minmax(0,1fr))}.ans .a{font-size:22px}.bm .num{font-size:34px}.brand{font-size:22px}.main{gap:40px}}
 """
+
+FONTS = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;display=swap">'
 
 SCRIPT = """
 var w=+document.body.dataset.written,age=Math.floor(Date.now()/1000-w),old=document.getElementById("stale");
 if(age>%d){old.hidden=false;old.querySelector("p").textContent="This page is "+(age>=7200?Math.floor(age/3600)+" hours":Math.floor(age/60)+" minutes")+" old, so the figures may have changed. Refresh to rebuild it with the command below."}
 document.addEventListener("click",function(e){var b=e.target.closest("[data-copy]");if(b&&navigator.clipboard){navigator.clipboard.writeText(b.dataset.copy);b.textContent="Copied"}
+var f=e.target.closest("[data-fold]");if(f){e.preventDefault();var o=f.previousElementSibling;o.hidden=!o.hidden;f.textContent=o.hidden?f.dataset.fold:"Show fewer";keep()}
+var v=e.target.closest("[data-view]");if(v)setTimeout(keep,0);
 if(e.target.closest("#refresh"))location.reload()});
+function keep(){try{sessionStorage.setItem("city",JSON.stringify({open:[].map.call(document.querySelectorAll("[data-fold]"),function(f){return !f.previousElementSibling.hidden}),
+view:(document.querySelector("[data-view][aria-pressed=\\"true\\"]")||{dataset:{}}).dataset.view||"",y:scrollY}))}catch(x){}}
+try{var s=JSON.parse(sessionStorage.getItem("city")||"{}");[].forEach.call(document.querySelectorAll("[data-fold]"),function(f,i){if(s.open&&s.open[i]){f.previousElementSibling.hidden=false;f.textContent="Show fewer"}});
+var w2=s.view&&document.querySelector('[data-view="'+s.view+'"]');if(w2)w2.click();scrollTo(0,s.y||0)}catch(x){}
+addEventListener("scroll",function(){clearTimeout(keep.t);keep.t=setTimeout(keep,150)});
 """ % STALE_SECONDS
 
 
@@ -88,7 +189,7 @@ def esc(text) -> str:
 
 def command(text: str) -> str:
     """A command to copy, since a page opened from a file cannot run it."""
-    return f'<div class="acts"><code>{esc(text)}</code><button class="btn" data-copy="{html.escape(text, quote=True)}">Copy</button></div>'
+    return f'<div class="acts"><code>{esc(text)}</code><button class="btn b-ghost" data-copy="{html.escape(text, quote=True)}">Copy</button></div>'
 
 
 def landed_row(row: dict) -> str:
@@ -180,8 +281,7 @@ def gather(slug: str, now: datetime, steps: list[dict], log: list[dict] | None, 
     return {"slug": slug, "now": now, "steps": steps, "building": building, "warnings": warnings, "busy": busy, "builders": len(claims) if busy else 0,
             "cards": cards, "landed": cmd_status.landed_today(log, stamp) if log is not None else None,
             "ready": None if stories is None else status_count(stories, "ready"), "backlog": None if stories is None else status_count(stories, "backlog"),
-            "next": next_up(stories or []), "decision": decision, "github": github, "log": log, "until": gh_budget.blocked_until(""),
-            "artifact": str(local_config.setting("cityArtifact") or "")}
+            "next": next_up(stories or []), "decision": decision, "github": github, "log": log, "until": gh_budget.blocked_until("")}
 
 
 def state(data: dict) -> tuple[str, str, str]:
@@ -233,13 +333,18 @@ def decision_block(rec: dict | None) -> str:
             f'<p class="small">Your words: {esc(words)}</p></div>')
 
 
+def fold(rows: list[str], label: str) -> str:
+    """ROWS after the first SHOWN sit behind a See all control, which the page script opens and remembers across the 60-second reload."""
+    if len(rows) <= SHOWN:
+        return "".join(rows)
+    return f'{"".join(rows[:SHOWN])}<div class="fold" hidden>{"".join(rows[SHOWN:])}</div><a class="more" href="#" data-fold="See all {len(rows)} {label}">See all {len(rows)} {label}</a>'
+
+
 def needs_card(data: dict) -> str:
     steps, now = data["steps"], data["now"]
-    lines = "".join(step_line(s, now) for s in steps[:SHOWN])
-    more = f'<p class="small">and {len(steps) - SHOWN} more. See them with `olivercode owner`.</p>' if len(steps) > SHOWN else ""
-    count = f'<span class="cnt">{len(steps)}</span>' if steps else ""
-    body = lines + more if steps else '<p>Nothing waits on you.</p>'
-    return f'<div class="card" id="needs"><div class="head"><h2>Needs you</h2>{count}</div>{body}{decision_block(data["decision"])}</div>'
+    count = f'<span class="pill p-warn">{len(steps)} step{"" if len(steps) == 1 else "s"}</span>' if steps else ""
+    body = fold([step_line(s, now) for s in steps], "steps") if steps else '<p>Nothing waits on you.</p>'
+    return f'<div class="card" id="needs"><div class="railhead"><h2>Needs you</h2>{count}</div>{body}{decision_block(data["decision"])}</div>'
 
 
 def track(place: int) -> str:
@@ -269,7 +374,7 @@ def builder_card(key: str, mine: dict, item: dict | None, facts: dict) -> str:
     why = f"Round {facts['round']}. {facts['why']}" if facts["why"] else "Not recorded yet."
     time = f"{facts['in_stage']} in {STAGE_LABELS[facts['place']].lower()}, {facts['in_all']} in all"
     tokens = f"{facts['written']:,} written to cache, {facts['read']:,} read from cache"
-    return (f'<div class="step" data-story="{esc(n)}"><div class="bhead"><div><h3>#{esc(n)}</h3><p>{esc(title)}</p></div><div>{tags}</div></div>'
+    return (f'<div class="bld" data-story="{esc(n)}"><div class="bhead"><div><span class="n">#{esc(n)}</span><p class="btitle">{esc(title)}</p></div><div class="tags">{tags}</div></div>'
             f'{track(facts["place"])}<dl class="kv"><dt>Time</dt><dd>{esc(time)}</dd><dt>Model</dt><dd>{esc(model)}</dd><dt>Round</dt><dd>{esc(why)}</dd>'
             f'<dt>Cost</dt><dd>{cost}</dd><dt>Tokens</dt><dd>{esc(tokens)}</dd></dl></div>')
 
@@ -295,10 +400,13 @@ def queue_line(data: dict) -> str:
 
 
 def building_card(data: dict) -> str:
-    body = "".join(data["cards"]) if data["cards"] else "".join(f'<div class="step"><p>{esc(line)}</p></div>' for line in data["building"])
-    warned = "".join(f'<div class="step"><p>{esc(line)}</p></div>' for line in data["warnings"])
-    return (f'<div class="card" id="live"><h2>Building now</h2>{body}{warned}{queue_line(data)}'
-            f'{command("olivercode drain REPO")}</div>')
+    """The Live card: the state band, then a block for each working builder, the queue and the drain command."""
+    css, word, sentence = state(data)
+    body = "".join(data["cards"]) if data["cards"] else "".join(f'<p class="small">{esc(line)}</p>' for line in data["building"])
+    warned = "".join(f'<p class="small">{esc(line)}</p>' for line in data["warnings"])
+    start = command("olivercode drain REPO") if css == "idle" else ""
+    return (f'<div class="card"><div class="railhead"><h2>Live</h2><span class="small">{data["now"].day} {data["now"]:%b, %H:%M} UTC</span></div>'
+            f'<div class="band"><span class="pill p-{css}"><i></i>{word}</span><p>{esc(sentence)}</p></div>{body}{warned}{queue_line(data)}{start}</div>')
 
 
 def money(value: float) -> str:
@@ -365,8 +473,8 @@ def lede(data: dict) -> str:
         cost = f"Cost: {money(sum(costs) / len(costs))} a landed story" if costs else "Cost: no landed story has a cost recorded"
         parts.append(cost + (f", and {share:.1f}% of tokens were read from cache." if share is not None else "."))
     parts.append(checks_line(data["github"]))
-    return (f'<p class="small">{esc(now.strftime("%A"))} {now.day} {esc(now.strftime("%B %Y"))}</p><h2>{esc(headline)}</h2>'
-            f'<p class="read">{esc(" ".join(parts))}</p><div class="answers">{answers(data)}</div>')
+    return (f'<section class="lede" id="today" aria-labelledby="t1"><p class="small">{esc(now.strftime("%A"))} {now.day} {esc(now.strftime("%B %Y"))}</p>'
+            f'<h1 id="t1">{esc(headline)}</h1><p class="read">{esc(" ".join(parts))}</p><div class="answers">{answers(data)}</div></section>')
 
 
 def today(data: dict) -> str:
@@ -384,28 +492,25 @@ def today(data: dict) -> str:
     else:
         pace, read = "Open count and landing rate: not recorded yet.", "Run `olivercode status page --fetch` to read them from GitHub once."
     total = f'<p class="small">{len(landed)} landed for ${cost:.2f} today.</p>' if landed else ""
-    return (f'<section class="chap" id="today" aria-label="Today">{lede(data)}<div class="card"><h3>Landed today</h3>{"".join(f"<p>{esc(r)}</p>" for r in rows)}{total}</div>'
-            f'<div class="card"><h3>Pace</h3><p>{esc(pace)}</p><p class="small">{esc(read)}</p></div></section>')
+    return (f'{lede(data)}<div class="card"><h3>Landed today</h3>{"".join(f"<p>{esc(r)}</p>" for r in rows)}{total}</div>'
+            f'<div class="card"><h3>Pace</h3><p>{esc(pace)}</p><p class="small">{esc(read)}</p></div>')
 
 
 def render(data: dict) -> str:
-    """The whole page as one HTML string."""
-    css, word, sentence = state(data)
+    """The whole page as one HTML string, in the mockup's markup and classes (docs/city/Main.dc.html)."""
+    css, word, _ = state(data)
     now, steps = data["now"], data["steps"]
-    chips = f'<span>{data["builders"]} builder{"" if data["builders"] == 1 else "s"}</span>' + (f'<a href="#needs">{len(steps)} need you</a>' if steps else "")
-    start = command("olivercode drain REPO") if css == "idle" else ""
-    phone = f'<a class="btn" href="{html.escape(data["artifact"], quote=True)}">Open on phone</a>' if data.get("artifact") else ""
+    chips = f'<a class="chipl" href="#live">{data["builders"]} builder{"" if data["builders"] == 1 else "s"}</a>' + (f'<a class="chipl warn" href="#needs">{len(steps)} need you</a>' if steps else "")
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            '<meta http-equiv="refresh" content="60"><title>OliverCode City</title>'
+            f'<meta http-equiv="refresh" content="60"><title>OliverCode City</title>{FONTS}'
             f'<style>{STYLE}</style></head><body data-written="{int(now.timestamp())}"><div class="city"><header class="bar"><div class="wrap barin">'
-            '<span class="brand">OliverCode City</span><nav class="nav" aria-label="Sections"><a href="#today">Today</a><a href="#delivery">Delivery</a>'
+            '<span class="brand">OliverCode City</span><nav class="nav" aria-label="Sections"><a class="on" href="#today">Today</a><a href="#delivery">Delivery</a>'
             '<a href="#cost">Cost</a><a href="#health">Health</a></nav>'
-            f'<div class="status" aria-label="System status"><span class="pill c-{css}"><i></i>{word}</span>{chips}<span>Updated {now:%H:%M} UTC</span>'
-            f'{phone}<button class="btn" id="refresh">Refresh</button></div></div></header>'
-            f'<div class="wrap"><div class="band b-{css}" style="margin-top:16px"><span class="pill c-{css}"><i></i>{word}</span><p>{esc(sentence)}</p>{start}</div>'
-            '<div class="band b-wait" id="stale" hidden style="margin-top:16px"><span class="pill c-wait"><i></i>Out of date</span><p></p>'
+            f'<div class="status" aria-label="System status"><span class="pill p-{css}"><i></i>{word}</span>{chips}'
+            f'<span class="upd"><span class="dot" aria-hidden="true"></span>Updated {now:%H:%M} UTC</span><button class="btn b-ghost" id="refresh">Refresh</button></div></div></header>'
+            '<div class="wrap"><div class="band" id="stale" hidden style="margin-top:16px"><span class="pill p-warn"><i></i>Out of date</span><p></p>'
             f'{command("olivercode status page")}</div></div>'
-            f'<div class="wrap body"><aside class="rail" aria-label="Live status">{needs_card(data)}{building_card(data)}</aside>'
+            f'<div class="wrap body"><aside class="rail" id="live" aria-label="Live status">{building_card(data)}{needs_card(data)}</aside>'
             f'<main class="main">{today(data)}{city_delivery.render(data)}{city_cost.render(data)}{city_health.render(data)}</main></div></div>'
             f'<script>{SCRIPT}</script></body></html>')
 

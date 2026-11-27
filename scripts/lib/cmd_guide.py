@@ -48,25 +48,10 @@ EXAMPLE = (
     "5. When it lands you get the commit, the checks run and the cost in the story comment. If it stops, the comment says why and the card is back on Ready.",
 )
 
-# City, the status page published as an artifact, and how it reaches the phone (#999).
-PHONE_STEPS = (
-    "Install the Claude app on your phone.",
-    "Sign in to the same account as the desktop app.",
-    "Open the pinned OliverCode City artifact.",
-    "Turn on Remote Control for desktop sessions in the desktop app's settings, so you can steer Claude Code from the phone.",
-)
-
-
 def city_on() -> bool:
     """Whether City is switched on, so the guide names it (#1387)."""
     from lib.local_config import setting
     return bool(setting("city"))
-
-
-def city_url() -> str:
-    """The saved City artifact URL, or "" before City is published."""
-    from lib.local_config import setting
-    return str(setting("cityArtifact") or "")
 
 
 # The commands by what the owner wants to do. Every command the launcher lists appears once.
@@ -179,18 +164,15 @@ def plain_guide(oc_root: Path) -> list[str]:
     out += ["Your projects, your rules",
             "  OliverCode uses your repo's rules, validation and permissions. You stay in control of approvals, sensitive actions and anything that needs your judgment.", ""]
     out += ["City",
-            "  City gives you a live view of work, progress and anything waiting on you. On this computer, open the \"OliverCode City\" shortcut on the Desktop to see the live page. Without the shortcut, run `olivercode status page --open`. Set it up in Claude Desktop to use it there and from your phone.", ""] if city else []
+            "  City gives you a live view of work, progress and anything waiting on you. On this computer, open the \"OliverCode City\" shortcut on the Desktop to see the live page. Without the shortcut, run `olivercode status page --open`.", ""] if city else []
     out += ["Run `olivercode guide NAME` for a closer look at any command or skill. " + ("`guide city`, `guide skills` and `guide design`" if city else "`guide skills` and `guide design`") + " cover those topics."]
     return out
 
 
 def _city_topic(oc_root: Path) -> list[str]:
-    url = city_url()
     return ["OliverCode City", "", "On this computer",
             "  1. Open the \"OliverCode City\" shortcut on the Desktop. It opens the live page.",
-            "  2. Without the shortcut, run `olivercode status page --open`.", "",
-            f"  {url}" if url else "  Not set up in the Claude desktop app. Open it and say \"Set up OliverCode City\" to finish, or \"Skip OliverCode City\" to stop the reminder.", "",
-            "To check in from your phone"] + [f"  {n}. {step}" for n, step in enumerate(PHONE_STEPS, 1)]
+            "  2. Without the shortcut, run `olivercode status page --open`."]
 
 
 def _skills_topic(oc_root: Path) -> list[str]:
