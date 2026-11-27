@@ -445,13 +445,23 @@ def write(slug: str | None, root: Path | None = None, fetch: bool = False, now: 
     return 1 if unread else 0
 
 
+def enabled() -> bool:
+    """Whether the owner has turned City on: `city` is true in olivercode.local.json. Off by default until the epic's last story (#1378)."""
+    return bool(local_config.setting("city"))
+
+
 def refresh(root: Path | None = None) -> int:
     """Rewrite the page from local files, quietly. The drain calls it (#1350)."""
+    if not enabled():
+        return 0
     root = root or Path.cwd()
     return write(repo_state.origin(root), root, out=lambda text: None)
 
 
 def command_page(argv: list[str]) -> int:
+    if not enabled():
+        print('City is off. Turn it on by setting "city": true in olivercode.local.json.')
+        return 0
     root, fetch, opening = Path.cwd(), False, False
     args = list(argv)
     if "--fetch" in args:

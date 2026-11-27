@@ -1,5 +1,6 @@
 """Install asks nothing and makes no fleet repo (#993, #1282), and it closes the owner items the removed fleet-sync queued (#1286)."""
 
+import contextlib
 import io
 import json
 import os
@@ -243,6 +244,9 @@ class CityShortcut(unittest.TestCase):
         patch = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(root / "olivercode.local.json"), "OLIVERCODE_HOME": str(self.home)})
         patch.start()
         self.addCleanup(patch.stop)
+        on = mock.patch("lib.city.enabled", return_value=True)  # the city setting is on (#1387); the off tests turn it off
+        on.start()
+        self.addCleanup(on.stop)
 
     def fake_refresh(self, root=None):
         self.home.mkdir(parents=True, exist_ok=True)
@@ -342,6 +346,24 @@ class CityShortcut(unittest.TestCase):
             city.command_page(["--open"])
         self.assertEqual(1, write.call_count)
         opened.assert_called_once_with(self.page.as_uri())
+
+    def test_no_shortcut_and_no_page_while_the_city_setting_is_off(self):
+        from lib import city
+        with mock.patch("lib.city.enabled", return_value=False):
+            out = self.install()
+            printed = io.StringIO()
+            with mock.patch.object(city, "write") as write, mock.patch("lib.city.webbrowser.open") as opened, \
+                    contextlib.redirect_stdout(printed):
+                code = city.command_page(["--open"])
+                city.command_page([])
+        self.assertFalse(self.shortcut().is_symlink())
+        self.assertNotIn("City", out)
+        self.assertEqual(0, self.refreshed.call_count)
+        self.assertEqual(0, code)
+        write.assert_not_called()
+        opened.assert_not_called()
+        self.assertIn("City is off", printed.getvalue())
+        self.assertIn('"city": true', printed.getvalue())
 
     def test_status_page_without_open_does_not_open_a_browser(self):
         from lib import city

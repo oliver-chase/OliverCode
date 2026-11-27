@@ -145,8 +145,10 @@ def _city_shortcut(oc_root: Path, claude_dir: Path, desktop: Path | None = None)
     which stays True after the owner deletes it. A shortcut already on the Desktop that install did not write is left alone. An
     earlier install's .webloc, which macOS cannot open, is removed and replaced by the link."""
     from lib import city  # local import: city reads this module's figures
-    desktop = desktop or _desktop()
     recorded = _record_city(claude_dir)
+    if not city.enabled():
+        return recorded
+    desktop = desktop or _desktop()
     legacy = desktop / CITY_SHORTCUT_WEBLOC
     replacing = recorded and (legacy.is_symlink() or legacy.exists())
     if replacing:

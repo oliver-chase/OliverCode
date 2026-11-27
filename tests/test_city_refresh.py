@@ -26,6 +26,20 @@ class TestCityRefresh(unittest.TestCase):
             agent_loop.log_stage("run-r", "r", "run-end", landed=1, stopped=0)
             self.assertEqual(refresh.call_count, 2)
 
+    def test_no_page_is_written_while_the_city_setting_is_off(self):
+        from lib import city
+        for value in (None, False):
+            with mock.patch("lib.local_config.setting", return_value=value), mock.patch.object(city, "write") as write:
+                self.assertEqual(0, city.refresh(OC_ROOT))
+            write.assert_not_called()
+
+    def test_the_page_is_written_when_the_city_setting_is_on(self):
+        from lib import city
+        with mock.patch("lib.local_config.setting", return_value=True), mock.patch.object(city, "write", return_value=0) as write, \
+                mock.patch.object(city.repo_state, "origin", return_value="o/r"):
+            city.refresh(OC_ROOT)
+        self.assertEqual(1, write.call_count)
+
     def test_a_failed_rewrite_does_not_stop_the_drain(self):
         home = temp_dir(self)
         with mock.patch.object(failure_log, "home", return_value=home), mock.patch("lib.city.refresh", side_effect=ValueError("bad")):

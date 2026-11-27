@@ -51,6 +51,11 @@ class TestGuide(unittest.TestCase):
 
 
 class TestApprovedCopy(unittest.TestCase):
+    def setUp(self):
+        on = mock.patch.object(cmd_guide, "city_on", return_value=True)  # City is on (#1387); TestCityOff covers it off
+        on.start()
+        self.addCleanup(on.stop)
+
     def test_the_headings_print_in_the_archived_order(self):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         positions = [text.index(f"\n{heading}\n") for heading in HEADINGS]
@@ -144,8 +149,28 @@ class TestStatusSteps(unittest.TestCase):
         self.assertIn(free, text)
 
 
+class TestCityOff(unittest.TestCase):
+    """#1387: with the city setting off the guide names no City and has no city topic."""
+
+    def test_the_short_guide_names_no_city(self):
+        with mock.patch.object(cmd_guide, "city_on", return_value=False):
+            _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
+        self.assertNotIn("City", text)
+        self.assertNotIn("guide city", text)
+
+    def test_there_is_no_city_topic(self):
+        with mock.patch.object(cmd_guide, "city_on", return_value=False):
+            code, _ = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+        self.assertEqual(1, code)
+
+
 class TestCityOpening(unittest.TestCase):
     """#1366: the guide names every way to open City on this computer, with or without the Desktop shortcut."""
+
+    def setUp(self):
+        on = mock.patch.object(cmd_guide, "city_on", return_value=True)
+        on.start()
+        self.addCleanup(on.stop)
 
     def test_the_short_guide_names_the_shortcut_and_status_page_open(self):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)

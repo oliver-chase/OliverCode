@@ -15,7 +15,7 @@ HOW_WORK_RUNS = (
     "You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive.",
     "A chat never builds a board story by hand. For unattended execution today, explicitly delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.",
     "The current queue entry points, `olivercode dispatch N` and `olivercode drain REPO`, start isolated Claude Code worktrees, run validation and safely land or report blocked work.",
-    "`olivercode status` and City show current queue/run state; the fuller owner-facing supervision experience is the target described below.",
+    "`olivercode status` shows current queue/run state; the fuller owner-facing supervision experience is the target described below.",
 )
 
 THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost."
@@ -55,6 +55,12 @@ PHONE_STEPS = (
     "Open the pinned OliverCode City artifact.",
     "Turn on Remote Control for desktop sessions in the desktop app's settings, so you can steer Claude Code from the phone.",
 )
+
+
+def city_on() -> bool:
+    """Whether City is switched on, so the guide names it (#1387)."""
+    from lib.local_config import setting
+    return bool(setting("city"))
 
 
 def city_url() -> str:
@@ -169,11 +175,12 @@ def plain_guide(oc_root: Path) -> list[str]:
     out += ["", "What to use when"] + [f"  {task:<32} {tool}" for task, tool in WHEN_TO_USE] + ["", "Commands"]
     for title, cmds in COMMAND_SETS:
         out += [f"  {title}", f"    {cmds}", ""]
+    city = city_on()
     out += ["Your projects, your rules",
-            "  OliverCode uses your repo's rules, validation and permissions. You stay in control of approvals, sensitive actions and anything that needs your judgment.", "",
-            "City",
-            "  City gives you a live view of work, progress and anything waiting on you. On this computer, open the \"OliverCode City\" shortcut on the Desktop to see the live page. Without the shortcut, run `olivercode status page --open`. Set it up in Claude Desktop to use it there and from your phone.", "",
-            "Run `olivercode guide NAME` for a closer look at any command or skill. `guide city`, `guide skills` and `guide design` cover those topics."]
+            "  OliverCode uses your repo's rules, validation and permissions. You stay in control of approvals, sensitive actions and anything that needs your judgment.", ""]
+    out += ["City",
+            "  City gives you a live view of work, progress and anything waiting on you. On this computer, open the \"OliverCode City\" shortcut on the Desktop to see the live page. Without the shortcut, run `olivercode status page --open`. Set it up in Claude Desktop to use it there and from your phone.", ""] if city else []
+    out += ["Run `olivercode guide NAME` for a closer look at any command or skill. " + ("`guide city`, `guide skills` and `guide design`" if city else "`guide skills` and `guide design`") + " cover those topics."]
     return out
 
 
@@ -203,7 +210,7 @@ TOPICS = {"city": _city_topic, "skills": _skills_topic, "design": _design_topic}
 def command_guide(oc_root: Path, name: str | None = None) -> int:
     if name:
         topic = name.lower().removeprefix("olivercode ").strip()
-        if topic in TOPICS:
+        if topic in TOPICS and (topic != "city" or city_on()):
             print("\n".join(TOPICS[topic](oc_root)))
             return 0
         found = explain(oc_root, name)
