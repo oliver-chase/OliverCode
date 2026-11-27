@@ -233,11 +233,9 @@ new_case s10
 mk_oc "$WS/origin"
 git -C "$WS/origin" branch -m main 2>/dev/null
 mk_repo "$WS/app"
-# The fleet is registered upstream and committed there: registering in the clone would leave it dirty, and update refuses a dirty checkout.
-register "$WS/origin" app
-git -C "$WS/origin" add shared/repo-profiles.json && git -C "$WS/origin" -c user.email=rehearsal -c user.name=rehearsal commit -q -m fleet --no-verify
 git clone -q "$WS/origin" "$WS/OliverCode"
 chmod +x "$WS/OliverCode/scripts/olivercode" "$WS/OliverCode"/scripts/*.sh 2>/dev/null
+register "$WS/OliverCode" app  # olivercode.local.json is gitignored, so the clone stays clean for update
 ( cd "$WS/origin" && printf '\n# upstream change\n' >> README.md \
   && git add README.md && git -c user.email=rehearsal -c user.name=rehearsal commit -q -m upstream --no-verify )
 oc_in "$WS/OliverCode" update >/dev/null 2>&1
