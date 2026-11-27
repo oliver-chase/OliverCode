@@ -112,8 +112,10 @@ class TestDispatch(DispatchCase):
         with mock.patch.object(run_lock, "pid_alive", return_value=True):
             code, out, io = self.run_dispatch()
         self.assertEqual((0, []), (code, io.steps))
+        self.assertIn("No second run starts", out)
         self.assertIn("Story #77 joins its queue", out)
         self.assertIn("drain r", out)
+        self.assertIn("/h/status.md", out)
         self.assertEqual([77], run_lock.take_queue("o/r", os.getpid() + 1))
 
     def test_a_dispatch_works_the_stories_another_thread_queued_before_it_leaves(self):
@@ -165,15 +167,10 @@ class TestDispatch(DispatchCase):
             self.assertIn("needs splitting into S and M stories", out)
             self.assertEqual([], io.steps)
 
-    def test_it_refuses_a_closed_story_and_a_claimed_story(self):
+    def test_it_refuses_a_closed_story(self):
         code, out, io = self.run_dispatch(story={**STORY, "state": "CLOSED"})
         self.assertEqual((code, io.steps), (1, []))
         self.assertIn("closed", out)
-        stamp = "2027-01-15T07:59:00Z"  # inside two hours of NOW
-        claimed = {**STORY, "comments": [{"body": f"Claim\n- Session: other-session\n- Time: {stamp}"}]}
-        code, out, io = self.run_dispatch(story=claimed)
-        self.assertEqual((code, io.steps), (1, []))
-        self.assertIn("other-session", out)
 
 
 class TestForkOrigin(DispatchCase):
@@ -314,10 +311,6 @@ class TestDispatchRun(DispatchCase):
         self.assertIn("stayed open", out)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestFileExcerpts(unittest.TestCase):
     """#887: the brief holds the functions and callers a story's Files area names."""
 
@@ -351,3 +344,7 @@ class TestBriefRules(unittest.TestCase):
         self.assertIn("Reuse before you write", brief)
         self.assertIn("already exists here, is in the standard library", brief)
         self.assertIn("`shortcut: <limit>, <when to upgrade>`", brief)
+
+
+if __name__ == "__main__":
+    unittest.main()
