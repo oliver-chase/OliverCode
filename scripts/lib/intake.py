@@ -240,6 +240,7 @@ def render(found: dict) -> str:
 # gates working; the hook-crash rows are the one exception. Every signature is read once and kept in bug-seen.json with the reader's verdict.
 DAILY_CAP = 3
 MAX_READS = 3
+LOG_LINES = 40  # the end of a failing CI job's log, which is where the failure is (#1483)
 CRASH = re.compile(r"^(Drain blocked: (the worker crashed|the landing queue crashed|The model finished, but nothing checked)|Close refused:)")
 BUG_BRIEF = ("You are a fresh reader of one failure OliverCode found. Read it against this checkout with Read, Grep and Glob, and change nothing. Open the files the failure "
              "names before you decide: a doubt you did not check is not an answer. Reply with the first line being exactly one of: BUG, REGRESSION, COVERED #<number> (an open story "
@@ -295,13 +296,18 @@ def ci_candidate(slug: str, gh, branch: str = "staging") -> dict | None:
     bad = next((j for j in get(f"repos/{slug}/actions/runs/{runs[0]['id']}/jobs").get("jobs") or [] if j.get("conclusion") == "failure"), {})
     step = next((s.get("name") for s in bad.get("steps") or [] if s.get("conclusion") == "failure"), "")
     key = f"{slug} {bad.get('name', 'unknown')} / {step or 'unknown'}"
+    log = gh([f"repos/{slug}/actions/jobs/{bad['id']}/logs"]) if bad.get("id") else None
+    tail = "\n".join(log.stdout.splitlines()[-LOG_LINES:]) if log and log.returncode == 0 else ""
     return {"sig": signature("ci", key), "at": runs[0].get("created_at", ""), "branch": branch,
-            "text": f"CI on {branch} failed ({runs[0].get('html_url', '')}).\n- Job: {bad.get('name', 'unknown')}\n- Failing step: {step or 'unknown'}"}
+            "text": f"CI on {branch} failed ({runs[0].get('html_url', '')}).\n- Job: {bad.get('name', 'unknown')}\n- Failing step: {step or 'unknown'}\n\n"
+                    f"The last {LOG_LINES} lines of the job's log:\n{tail or '(the log could not be read)'}"}
 
 
-def parse(text: str) -> tuple[str, str]:
-    """(answer, rest) from the reader's reply: 'bug', 'regression', 'covered #N' or 'not a bug', and the text after the verdict line."""
+def parse(text: str) -> tuple[str | None, str]:
+    """(answer, rest) from the reader's reply: 'bug', 'regression', 'covered #N' or 'not a bug', and the text after the verdict line. None when the reply gives no verdict (#1483)."""
     word, rest = agent_loop.verdict_line(text, r"bug|regression|covered\b[^#]*#\d+|not a bug")
+    if not word:
+        return None, rest
     if word.startswith("covered"):
         return "covered " + re.search(r"#\d+", word).group(0), rest
     return next((a for a in ("bug", "regression") if word.startswith(a)), "not a bug"), rest
@@ -404,6 +410,8 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
         if reply["verdict"] == "none":
             continue  # no answer, so nothing is recorded and the next run reads it again
         answer, rest = parse(reply["text"])
+        if answer is None:
+            continue  # the reader gave no verdict, so nothing is recorded and the next run reads it again (#1483)
         entry = seen[c["sig"]] = {"verdict": answer.split()[0] if answer != "not a bug" else "not a bug", "at": c["at"]}
         if answer.startswith("covered"):
             number = int(answer.split("#")[1])

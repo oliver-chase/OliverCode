@@ -184,6 +184,30 @@ class TestBugIntake(unittest.TestCase):
             self.assertEqual(1, intake.bugs(Path("."), gh=self.gh, read=read, now=now.replace(day=2), say=print))
         self.assertEqual(4, filed.call_count)
 
+    def test_an_unjudged_reply_is_not_recorded_and_the_next_run_reads_it_again(self):  # #1483
+        self.run_bugs("")
+        self.stop("Close refused: no commit")
+        self.assertEqual(0, self.run_bugs("I could not tell from the files I read."))
+        self.assertNotIn(intake.signature("drain", "Close refused: no commit"), json.loads((self.home / "bug-seen.json").read_text())["seen"])
+        self.run_bugs("NOT A BUG\nIt is a feature.")
+        self.assertEqual(2, len(self.prompts))
+
+    def test_a_red_ci_run_carries_the_end_of_the_failing_job_log(self):  # #1483
+        log = "\n".join(f"line {i}" for i in range(1, 101)) + "\n"
+        replies = {"runs?": {"workflow_runs": [{"id": 9, "conclusion": "failure", "created_at": "2999-01-01T00:00:00Z", "html_url": "u"}]},
+                   "jobs": {"jobs": [{"id": 4, "name": "test", "conclusion": "failure", "steps": [{"name": "Run tests", "conclusion": "failure"}]}]}}
+
+        def gh(args):
+            path = args[0]
+            if path.endswith("/logs"):
+                return mock.Mock(returncode=0, stdout=log)
+            return mock.Mock(returncode=0, stdout=json.dumps(replies["runs?" if "runs?" in path else "jobs"]))
+        cand = intake.ci_candidate("o/r", gh)
+        self.assertIn("line 100", cand["text"])
+        self.assertIn(f"line {100 - intake.LOG_LINES + 1}\n", cand["text"])
+        self.assertNotIn("line 1\n", cand["text"])
+        self.assertEqual("staging", cand["branch"])
+
     def test_a_staging_ci_story_is_p1_and_others_p2(self):
         self.assertIn("Priority: P1.", intake.story_text(BODY, {"branch": "staging", "sig": "s", "text": "t"}, 5)[1])
         self.assertIn("Priority: P2.", intake.story_text(BODY, {"branch": "", "sig": "s", "text": "t"}, 5)[1])
