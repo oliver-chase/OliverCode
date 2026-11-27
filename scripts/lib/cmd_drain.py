@@ -467,7 +467,7 @@ class Io:
         now = now or time.time()
         for n, posted in list(self.claimed_at.items()):
             cmd_dispatch._local_claim(self.slug, n, now, write=self.agent)
-            if now - posted < cmd_dispatch.log_action.CLAIM_HOURS * 900 or gh_budget.refusal() or gh_budget.reserve_write():
+            if now - posted < cmd_dispatch.log_action.CLAIM_HOURS * 900 or gh_budget.refusal() or gh_budget.reserve_write(lane="drain"):
                 continue
             body = cmd_dispatch.log_action.build_claim(self.agent, cmd_dispatch.datetime.datetime.fromtimestamp(now, cmd_dispatch.datetime.timezone.utc))
             cmd_dispatch.log_action.post_comment(self.slug, n, body, lambda args: self.gh(["api", *args]))
@@ -477,7 +477,7 @@ class Io:
         """Drop the local claim and post the release comment, so no outcome leaves the story held (#877)."""
         self.claimed_at.pop(n, None)
         cmd_dispatch._local_claim(self.slug, n, time.time(), clear=True)
-        if gh_budget.refusal() or gh_budget.reserve_write():
+        if gh_budget.refusal() or gh_budget.reserve_write(lane="drain"):
             return
         stamp = cmd_dispatch.datetime.datetime.now(cmd_dispatch.datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         try:
@@ -495,7 +495,7 @@ class Io:
             agent_loop.STORY_SIZE[f"story-{n}"] = size
         agent_loop.SPEND.pop(f"story-{n}", None)
         agent_loop.log_stage(f"story-{n}", self.repo.name, "claimed")
-        if gh_budget.refusal() or gh_budget.reserve_write():
+        if gh_budget.refusal() or gh_budget.reserve_write(lane="drain"):
             cfg = backlog_config(self.repo)
             cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": "In Progress"}}]}]))
             return

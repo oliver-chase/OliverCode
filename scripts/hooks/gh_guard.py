@@ -152,7 +152,8 @@ def refusal(command: str, session: str = "") -> str:
     if not why and per_field_edit(command):
         why = ("A per-field `gh project item-edit` spends about five points a card. Put every card and field in one input "
                "file for skills/backlog/scripts/batch_project.py. See docs/RULES.md, Execution.")
-    return why or gh_budget.reserve_call() or (gh_budget.reserve_write() if is_write(command) else "")
+    lane = "drain" if os.environ.get("OLIVERCODE_HEADLESS") == "1" else ""  # model.HEADLESS_ENV: a runner's session spends the drain's share
+    return why or gh_budget.reserve_call() or (gh_budget.reserve_write(lane=lane) if is_write(command) else "")
 
 
 def check(data: dict) -> str:

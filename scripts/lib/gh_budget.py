@@ -4,7 +4,8 @@ GitHub's limit belongs to the account, so several agents calling `gh` at once dr
 all stop at once. This module keeps the state in ~/.olivercode (outside every repo):
 
 - gh-limit.json records when a limit was seen and the time to hold off until
-- a rolling cap on writes per hour, so a burst of board writes stops before GitHub throttles it
+- a rolling cap on writes per hour, so a burst of board writes stops before GitHub throttles it, and the drain
+  is held to a share of that cap, so queued board writes and the owner's sessions keep the rest
 
 `scripts/hooks/gh_guard.py` refuses a `gh` command while the limit holds, and `gh_watch.py` records a
 limit any agent hits, so one agent's failure protects all the others. Standard library only.
@@ -45,6 +46,8 @@ def _env_int(name: str, default: int) -> int:
 # GitHub also throttles a steady burst of writes whatever the points left, so the machine as a whole gets a
 # rolling cap on writes.
 WRITES_PER_HOUR = _env_int("OLIVERCODE_GH_WRITES_PER_HOUR", 90)
+# The most of those the drain and its headless sessions may make, never above the machine's cap (#1478).
+DRAIN_WRITES_PER_HOUR = _env_int("OLIVERCODE_GH_DRAIN_WRITES_PER_HOUR", 60)
 # Every gh call, read or write, counts against a per-minute cap so parallel agents slow down together.
 CALLS_PER_MINUTE = _env_int("OLIVERCODE_GH_CALLS_PER_MINUTE", 30)
 # Stop before GitHub does: below this many GraphQL points every agent holds until the reset. 0 switches it off.
@@ -284,9 +287,12 @@ def _replay(run) -> str:
     return report
 
 
-def _reserve(name: str, window: int, cap: int, now: float) -> float:
-    """Record one call in a rolling window shared by every agent. Returns 0 when it may go ahead, or the time the
-    oldest call leaves the window when the cap is reached (and records nothing)."""
+def _reserve(name: str, window: int, cap: int, now: float, share: int = 0) -> tuple[float, bool]:
+    """Record one call in a rolling window shared by every agent. Returns (0, False) when it may go ahead. When the cap
+    is reached it records nothing and returns the time the oldest call leaves the window. A `share` marks the drain's
+    call, which is also stopped at that many drain calls: then the time is the oldest drain call's, and the flag True.
+    shortcut: a drain call is saved as whole seconds and any other with a fraction, because a drain still running older
+    code subtracts every entry from the time and so each must stay a number; a third lane needs tagged entries."""
     home().mkdir(parents=True, exist_ok=True)
     with open(home() / name, "a+") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
@@ -297,24 +303,32 @@ def _reserve(name: str, window: int, cap: int, now: float) -> float:
             except ValueError:
                 stamps = []
             if len(stamps) >= cap:
-                return stamps[0] + window
-            stamps.append(now)
+                return stamps[0] + window, False
+            mine = [t for t in stamps if isinstance(t, int)]
+            if share and len(mine) >= share:
+                return mine[0] + window, True
+            stamps.append(int(now) if share else float(now))
             fh.seek(0)
             fh.truncate()
             fh.write(json.dumps(stamps))
             fh.flush()
-            return 0.0
+            return 0.0, False
         finally:
             fcntl.flock(fh, fcntl.LOCK_UN)
 
 
-def reserve_write(now: float | None = None) -> str:
+def reserve_write(now: float | None = None, lane: str = "") -> str:
     """Count one GitHub write against the rolling hourly cap shared by every agent. Returns '' when the write may
-    go ahead (and records it), or the text that stops it, naming when the oldest write falls out of the hour."""
-    free_at = _reserve("gh-writes.json", 3600, WRITES_PER_HOUR, now or time.time())
+    go ahead (and records it), or the text that stops it, naming when the oldest write falls out of the hour. The
+    "drain" lane is also stopped at its share of the cap; a board-queue write or an owner session names no lane."""
+    share = min(DRAIN_WRITES_PER_HOUR, WRITES_PER_HOUR) if lane == "drain" else 0
+    free_at, at_share = _reserve("gh-writes.json", 3600, WRITES_PER_HOUR, now or time.time(), share)
     if not free_at:
         return ""
     when = time.strftime("%H:%M", time.localtime(free_at))
+    if at_share:
+        return (f"The drain has made {share} GitHub writes in the last hour, its share of this machine's {WRITES_PER_HOUR}. "
+                f"It may write again after about {when}. See docs/RULES.md, Execution.")
     return (f"This machine has made {WRITES_PER_HOUR} GitHub writes in the last hour, the cap under GitHub's burst limit. "
             f"Write again after about {when}. See docs/RULES.md, Execution.")
 
@@ -323,7 +337,7 @@ def reserve_call(now: float | None = None) -> str:
     """Count one gh call of any kind against a per-minute cap shared by every agent, so a burst from several agents
     slows down before GitHub refuses it. Returns '' when the call may go ahead, or the text naming the wait."""
     now = now or time.time()
-    free_at = _reserve("gh-calls.json", 60, CALLS_PER_MINUTE, now)
+    free_at, _ = _reserve("gh-calls.json", 60, CALLS_PER_MINUTE, now)
     if not free_at:
         return ""
     return (f"This machine has made {CALLS_PER_MINUTE} gh calls in the last minute, the cap under GitHub's limit. "

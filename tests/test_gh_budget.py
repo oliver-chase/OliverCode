@@ -67,8 +67,28 @@ class TestWriteCap(Isolated):
             gh_budget.reserve_write(now=time.time() - 3700)
             self.assertEqual("", gh_budget.reserve_write())
 
+    def _the_drain_is_stopped_at_its_share_while_other_writes_still_pass(self):
+        now = time.time()
+        self.assertEqual({""}, {gh_budget.reserve_write(now=now - 600 + i, lane="drain") for i in range(60)})
+        why = gh_budget.reserve_write(now=now, lane="drain")
+        self.assertIn("The drain has made 60 GitHub writes", why)
+        self.assertIn(time.strftime("%H:%M", time.localtime(now - 600 + 3600)), why)
+        self.assertEqual("", gh_budget.reserve_write(now=now))  # the board queue and the owner's sessions name no lane
+
+    def _a_full_machine_stops_every_lane(self):
+        self.assertEqual({""}, {gh_budget.reserve_write() for _ in range(90)})
+        for lane in ("", "drain"):
+            self.assertIn("This machine has made 90 GitHub writes", gh_budget.reserve_write(lane=lane))
+
+    def _a_share_set_above_the_machine_cap_stops_at_the_cap(self):
+        with mock.patch.object(gh_budget, "WRITES_PER_HOUR", 2), mock.patch.object(gh_budget, "DRAIN_WRITES_PER_HOUR", 5):
+            self.assertEqual(["", ""], [gh_budget.reserve_write(lane="drain") for _ in range(2)])
+            self.assertIn("This machine has made 2 GitHub writes", gh_budget.reserve_write(lane="drain"))
+
     def test_writes_up_to_the_cap_pass_and_the_next_is_refused_with_a_time(self):
-        for step in (self._writes_up_to_the_cap_pass_and_the_next_is_refused_with_a_time, self._a_write_older_than_an_hour_no_longer_counts,):
+        for step in (self._writes_up_to_the_cap_pass_and_the_next_is_refused_with_a_time, self._a_write_older_than_an_hour_no_longer_counts,
+                     self._the_drain_is_stopped_at_its_share_while_other_writes_still_pass, self._a_full_machine_stops_every_lane,
+                     self._a_share_set_above_the_machine_cap_stops_at_the_cap,):
             self.setUp()
             step()
 
@@ -238,6 +258,14 @@ class TestHooks(Isolated):
             out = self.hook(GUARD, {"tool_input": {"command": "gh issue comment 6 -b hi"}})
         self.assertEqual("deny", out["permissionDecision"])
         self.assertIn("writes in the last hour", out["permissionDecisionReason"])
+
+    def test_the_share_setting_holds_a_headless_session_and_not_the_owners(self):
+        close = {"tool_input": {"command": "gh issue close 5"}}
+        self.hook_env = {"OLIVERCODE_GH_DRAIN_WRITES_PER_HOUR": "1", "OLIVERCODE_HEADLESS": "1"}
+        self.assertIsNone(self.hook(GUARD, close))
+        self.assertIn("The drain has made 1 GitHub writes", self.hook(GUARD, close)["permissionDecisionReason"])
+        self.hook_env["OLIVERCODE_HEADLESS"] = ""
+        self.assertIsNone(self.hook(GUARD, close))
 
 
 
