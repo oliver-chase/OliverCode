@@ -20,7 +20,7 @@ from lib import agent_loop, city_cost, city_delivery, city_health, cmd_owner, cm
 
 USAGE = "Usage: olivercode status page [--fetch] [--open] [--root DIR]"
 STALE_SECONDS = 600
-SHOWN = 5  # owner-queue steps the page lists before it says how many more
+SHOWN = 3  # owner-queue steps the page lists before it says how many more
 STAGE_LABELS = ("Claimed", "Building", "Validating", "Landing", "Landed")  # the builder card's track, in the order cmd_status.STAGES names them
 
 STYLE = """
@@ -325,23 +325,28 @@ def ago(stamp, now: datetime) -> str:
 
 
 def step_line(item: dict, now: datetime) -> str:
-    """One owner step: its number and text, its age and session, and the command tried with its error, as a copyable command (#1357)."""
-    source = f"from {esc(item['session'])}" if item.get("session") else "source not recorded"
-    error = f'<p class="small">The error: {esc(item["error"])}</p>' if item.get("error") else ""
-    action = command(item["command"]) if item.get("command") else ""
-    return (f'<div class="step"><h3>#{esc(item.get("id"))} {esc(item.get("step"))}</h3><p class="date">{esc(ago(item.get("created"), now))} · {source}</p>'
-            f'{error}{action}</div>')
+    """One owner step as the mockup's: a short title, its age and source, one plain sentence on what it means, and its action as a button or a copy button (#1382)."""
+    source = "from an agent session" if item.get("session") else "source not recorded"
+    tab = str(item.get("tab") or "")
+    action = (f'<div class="acts"><button class="btn b-ghost" data-copy="{html.escape(str(item["command"]), quote=True)}">Copy command</button></div>'
+              if item.get("command") else (
+        f'<div class="acts"><a class="btn b-ghost" href="{html.escape(tab, quote=True)}">Open</a></div>' if tab.startswith(("http://", "https://")) else ""))
+    return (f'<div class="step"><h3>{esc(item.get("step"))}</h3><p class="date">{esc(ago(item.get("created"), now))} · {source}</p>'
+            f'<p class="small">{esc(cmd_owner.plain(item))}</p>{action}</div>')
 
 
 def decision_block(rec: dict | None) -> str:
-    """The latest owner decision with its date and the owner's words, or nothing when none is recorded (#1357)."""
+    """The mockup's Your latest decision line: the owner's words and the date, or nothing when none is recorded (#1382)."""
     if not rec:
         return ""
-    words = " ".join(str(rec.get("words") or "").split())
+    words = " ".join(str(rec.get("words") or rec.get("decision") or "not recorded").split())
     words = words if len(words) <= 300 else words[:297] + "..."
-    return (f'<div class="step"><h3>Latest decision: {esc(rec.get("decision") or "not recorded")}</h3>'
-            f'<p class="date">{esc(str(rec.get("created", ""))[:10])} · chose {esc(rec.get("choice") or "not recorded")}</p>'
-            f'<p class="small">Your words: {esc(words)}</p></div>')
+    try:
+        when = f"{datetime.fromisoformat(str(rec['created'])).astimezone(timezone.utc):%-d %b, %H:%M} UTC"
+    except (KeyError, TypeError, ValueError):
+        when = "date not recorded"
+    return (f'<div style="display:flex;flex-direction:column;gap:4px;padding-top:12px;box-shadow:0 -1px 0 var(--line)">'
+            f'<span class="small">Your latest decision</span><p>"{esc(words)}"</p><span class="date">{when}</span></div>')
 
 
 def fold(rows: list[str], label: str) -> str:

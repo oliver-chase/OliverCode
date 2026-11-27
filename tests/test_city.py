@@ -191,19 +191,22 @@ class TestCity(unittest.TestCase):
         self.assertIn("2 Ready and 1 in Backlog.", page)
         self.assertIn("Queue: not recorded", city.render(data(ready=None)))
 
-    def test_needs_you_shows_each_step_with_its_age_source_and_copyable_command(self):
+    def test_needs_you_shows_each_step_plainly_with_its_age_source_and_copy_button(self):
         steps = [{"id": 4, "step": "Fix the board groom", "created": "2026-11-22T00:00:00+00:00", "session": "maintain", "command": "olivercode board groom",
                   "error": "boom", "status": "open"}]
         page = self.live([], {}, steps=steps)
-        for part in ("#4 Fix the board groom", "12 h ago · from maintain", "The error: boom", '<code>olivercode board groom</code>', 'data-copy="olivercode board groom"'):
+        for part in ("<h3>Fix the board groom</h3>", "12 h ago · from an agent session", "running it yourself may clear this", 'data-copy="olivercode board groom">Copy command</button>'):
             self.assertIn(part, page)
+        self.assertNotIn("boom", page)
+        self.assertNotIn("maintain", page)
+        self.assertNotIn("<code>olivercode board groom</code>", page)
 
-    def test_needs_you_shows_the_latest_decision_with_its_date_and_the_owners_words(self):
+    def test_needs_you_shows_the_latest_decision_with_the_owners_words_and_date(self):
         decision = {"decision": "D-1", "choice": "Option A", "created": "2026-11-21T09:00:00-05:00", "words": "Go ahead with the tab"}
         page = self.live([], {}, decision=decision)
-        for part in ("Latest decision: D-1", "2026-11-21 · chose Option A", "Your words: Go ahead with the tab"):
+        for part in ("Your latest decision", '"Go ahead with the tab"', "21 Nov, 14:00 UTC"):
             self.assertIn(part, page)
-        self.assertNotIn("Latest decision", city.render(data()))
+        self.assertNotIn("Your latest decision", city.render(data()))
 
     def test_an_age_is_read_from_its_stamp_or_named_as_not_recorded(self):
         self.assertEqual(city.ago("2026-11-22T11:30:00+00:00", NOW), "30 min ago")
@@ -315,6 +318,10 @@ class TestMirror(unittest.TestCase):
         page = city.render(data(steps=[{"id": i, "step": f"Step {i}"} for i in range(1, 9)]))
         self.assertIn('<div class="fold" hidden>', page)
         self.assertIn('<a class="more" href="#" data-fold="See all 8 steps">See all 8 steps</a>', page)
+        self.assertIn('<span class="pill p-warn">8 steps</span>', page)
+        shown, hidden = page.split('<div class="fold" hidden>')
+        self.assertEqual([s for s in range(1, 9) if f"Step {s}</h3>" in shown], [1, 2, 3])
+        self.assertEqual(hidden.count('<div class="step">'), 5)
         self.assertIn('style="font-weight:500;font-size:15px;min-height:44px;display:flex;align-items:center"', MOCKUP)
         self.assertIn(".more{font-weight:500;font-size:15px;min-height:44px;display:flex;align-items:center}", city.STYLE)
         self.assertNotIn('data-fold="', city.render(data(steps=[{"id": 1, "step": "One"}])))

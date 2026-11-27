@@ -172,6 +172,16 @@ def _show(item: dict) -> str:
     return f"  #{item['id']} {item['step']} ({how}; session {item['session']}, {item['created'][:10]})"
 
 
+def plain(item: dict) -> str:
+    """One sentence on what an open step means for the owner, with no path, command or error in it (#1382)."""
+    if item.get("tab"):
+        after = str(item.get("after") or "").strip().rstrip(".")
+        return f"Enter the secret and submit it, then the agent {after}." if after else "Enter the secret and submit it, then the agent carries on."
+    if item.get("command"):
+        return "A command the agent tried did not work, so running it yourself may clear this."
+    return "Only you can decide this, and the work waits until you do."
+
+
 def waiting_steps(session: str) -> str:
     """The two calls that make a session waiting on the owner easy to find: an "Owner ·" title and a pin (#649)."""
     return (f'Title: call set_session_title for {session} with "{OWNER_PREFIX}" in front of its current title.\n'
