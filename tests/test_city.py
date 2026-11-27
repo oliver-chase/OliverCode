@@ -19,7 +19,7 @@ DONE = {"story": "story-7", "repo": "r", "at": NOW.timestamp() - 600, "total": 3
 
 def data(**kw):
     base = {"slug": "o/r", "now": NOW, "steps": [], "building": ["Runner idle: no story is building."], "warnings": [], "busy": False, "builders": 0,
-            "cards": [], "landed": [], "ready": 0, "backlog": 0, "next": "", "decision": None, "github": None, "log": [], "until": 0}
+            "cards": [], "working": [], "pid": None, "landed": [], "ready": 0, "backlog": 0, "next": "", "decision": None, "github": None, "log": [], "until": 0}
     return {**base, **kw}
 
 
@@ -137,11 +137,35 @@ class TestCity(unittest.TestCase):
         got = city.read_github("o/r", NOW, count=lambda s, st: 4, fetch=lambda s, since: rows, runner=lambda args: done)
         self.assertEqual((got["open"], got["opened"], got["closed"], got["checks"]), (4, 1, 1, [{"name": "ci", "conclusion": "failure"}]))
 
-    def live(self, log, claims, stories=None, steps=None, decision=None):
-        """The page's Live rail from gather, with the runner alive and no GitHub hold."""
+    def live(self, log, claims, stories=None, steps=None, decision=None, holder=None, alive=True):
+        """The page's Live rail from gather, with the runner alive and no GitHub hold, unless told otherwise."""
         with mock.patch("lib.gh_budget.blocked_until", return_value=0):
-            found = city.gather("o/r", NOW, steps or [], log, claims, True, None, stories, None, decision)
+            found = city.gather("o/r", NOW, steps or [], log, claims, alive, holder, stories, None, decision)
         return city.render(found)
+
+    def test_the_band_names_each_story_and_its_stage_for_one_or_two_builders(self):
+        log = [{"story": "story-7", "stage": "claimed", "at": ago(10)}, {"story": "story-7", "stage": "validating", "at": ago(2)},
+               {"story": "story-8", "stage": "claimed", "at": ago(10)}, {"story": "story-8", "stage": "building", "at": ago(5)},
+               {"story": "story-8", "round": 1, "stop": "end_turn"}, {"story": "story-8", "round": 2, "model": "sonnet", "stop": "end_turn"}]
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 600}, "o/r#8": {"agent": "drain", "at": NOW.timestamp() - 600}}
+        self.assertIn("Two builders are working. #7 is validating, and #8 is on round 2.", self.live(log, claims))
+        self.assertIn("One builder is working. #7 is validating.", self.live(log, {"o/r#7": claims["o/r#7"]}))
+        self.assertIn("3 builders are working. The stories are listed under Building now.", city.render(data(busy=True, builders=3)))
+
+    def test_a_claim_with_no_runner_says_it_once_with_no_red_band_card_or_path(self):
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
+        page = self.live([], claims, alive=False)
+        self.assertEqual(1, page.count("#7 is claimed but nothing is building. The claim clears by itself at 13:59 UTC."))
+        self.assertIn('<i></i>Idle</span>', page)
+        for part in ('class="pill p-fail"', 'class="bld"', "dispatch-claims", "Runner idle"):
+            self.assertNotIn(part, page)
+
+    def test_the_stop_copy_button_kills_the_run_holding_the_repo_while_it_builds(self):
+        claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 600}}
+        page = self.live([], claims, holder={"pid": 4242})
+        self.assertIn('data-copy="kill 4242">Stop the drain</button>', page)
+        self.assertNotIn("Start the drain", page)
+        self.assertNotIn("Stop the drain", self.live([], claims))
 
     def test_a_builder_card_shows_its_number_track_times_model_cost_and_tokens(self):
         log = [{"story": "story-7", "stage": "claimed", "repo": "r", "at": ago(10), "size": "S"}, {"story": "story-7", "stage": "building", "repo": "r", "at": ago(8)},

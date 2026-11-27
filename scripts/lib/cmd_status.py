@@ -275,8 +275,8 @@ def building_block(now: float, claims: dict, log: list[dict], alive: bool, open_
         rows = [r for r in log if r.get("story") == f"story-{n}"]
         progress = max([float(mine.get("at", 0))] + [_epoch(r.get("at")) for r in rows])
         if not alive:
-            warnings.append(f"Warning: #{n} holds a claim by {mine.get('agent')} but no drain or dispatch process is running. The claim expires by itself "
-                            f"after {log_action.CLAIM_HOURS} hours, or delete its entry in {claims_path()} to release it now.")
+            clears = datetime.fromtimestamp(float(mine.get("at", 0)) + log_action.CLAIM_HOURS * 3600, timezone.utc)
+            lines.append(f"#{n} is claimed but nothing is building. The claim clears by itself at {clears:%H:%M} UTC.")
         elif (now - progress) / 60 > STALL_MINUTES:
             warnings.append(stall_line(n, mine, int((now - progress) // 60), holder))
         else:

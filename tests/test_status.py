@@ -315,10 +315,11 @@ class TestDigest(unittest.TestCase):
         lines = cmd_status.activity(NOW.timestamp(), {}, log, True, 2, "", {"pid": 4242, "who": "drain r"})
         self.assertEqual("Warning: the last run on story-5 stopped with max_turns.", lines[-1])
 
-    def test_a_claim_without_a_live_runner_names_the_stale_claim_and_its_release(self):
+    def test_a_claim_without_a_live_runner_says_it_once_in_a_plain_sentence_with_its_clear_time(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 60}}
         lines = cmd_status.activity(NOW.timestamp(), claims, [], False, 1, "")
-        self.assertIn("#7 holds a claim by drain but no drain or dispatch process is running", lines[-1])
+        self.assertEqual("#7 is claimed but nothing is building. The claim clears by itself at 01:59 UTC.", lines[0])
+        self.assertFalse(any(line.startswith("Warning") or "dispatch-claims" in line or "Runner idle" in line for line in lines))
 
     def test_a_last_run_that_did_not_stop_cleanly_is_warned_with_its_stop_reason(self):
         log = [{"story": "story-5", "round": 3, "stop": "max_turns", "at": "2026-11-23T11:00:00Z"}]

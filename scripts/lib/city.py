@@ -187,9 +187,9 @@ def esc(text) -> str:
     return re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(str(text), quote=True))
 
 
-def command(text: str) -> str:
-    """A command to copy, since a page opened from a file cannot run it."""
-    return f'<div class="acts"><code>{esc(text)}</code><button class="btn b-ghost" data-copy="{html.escape(text, quote=True)}">Copy</button></div>'
+def command(text: str, label: str = "Copy") -> str:
+    """A command to copy, since a page opened from a file cannot run it. LABEL names the button (#1381)."""
+    return f'<div class="acts"><code>{esc(text)}</code><button class="btn b-ghost" data-copy="{html.escape(text, quote=True)}">{label}</button></div>'
 
 
 def landed_row(row: dict) -> str:
@@ -277,11 +277,27 @@ def gather(slug: str, now: datetime, steps: list[dict], log: list[dict] | None, 
     stamp = now.timestamp()
     building, warnings = cmd_status.building_block(stamp, claims, log, alive, None, holder) if log is not None else (["Building: unknown, because the run log could not be read."], [])
     busy = bool(claims) and alive
-    cards = builder_cards(claims, stories, log, stamp) if busy else []
+    working_list = working(claims, log or [], stamp) if busy else []
+    cards = builder_cards(working_list, stories)
     return {"slug": slug, "now": now, "steps": steps, "building": building, "warnings": warnings, "busy": busy, "builders": len(claims) if busy else 0,
-            "cards": cards, "landed": cmd_status.landed_today(log, stamp) if log is not None else None,
+            "working": working_list, "pid": (holder or {}).get("pid"), "cards": cards, "landed": cmd_status.landed_today(log, stamp) if log is not None else None,
             "ready": None if stories is None else status_count(stories, "ready"), "backlog": None if stories is None else status_count(stories, "backlog"),
             "next": next_up(stories or []), "decision": decision, "github": github, "log": log, "until": gh_budget.blocked_until("")}
+
+
+def stage_phrase(facts: dict) -> str:
+    """'is validating' for a story at a stage, or 'is on round 2' for a builder on a later round (States.dc.html, Running) (#1381)."""
+    if facts["stage"] == "building" and (facts["round"] or 0) > 1:
+        return f"is on round {facts['round']}"
+    return f"is {facts['stage']}"
+
+
+def running(working_list: list, n: int) -> str:
+    """The band's sentence while builders work: each story and its stage for one or two builders, and the count for more (#1381)."""
+    if not 0 < len(working_list) <= 2:
+        return f"{n} builder{' is' if n == 1 else 's are'} working. The stories are listed under Building now."
+    told = ", and ".join(f"#{key.rsplit('#', 1)[-1]} {stage_phrase(facts)}" for key, _, facts in working_list)
+    return f"{'One builder is' if len(working_list) == 1 else 'Two builders are'} working. {told}."
 
 
 def state(data: dict) -> tuple[str, str, str]:
@@ -293,7 +309,7 @@ def state(data: dict) -> tuple[str, str, str]:
         return "fail", "Stopped", data["warnings"][0].removeprefix("Warning: ")
     n = data["builders"]
     if data["busy"]:
-        return "run", "Building", f"{n} builder{' is' if n == 1 else 's are'} working. The stories are listed under Building now."
+        return "run", "Building", running(data["working"], n)
     ready = data["ready"]
     if ready:
         return "idle", "Idle", f"No drain is running. {ready} {'story is' if ready == 1 else 'stories are'} Ready, so starting the drain would take them in priority order."
@@ -379,15 +395,15 @@ def builder_card(key: str, mine: dict, item: dict | None, facts: dict) -> str:
             f'<dt>Cost</dt><dd>{cost}</dd><dt>Tokens</dt><dd>{esc(tokens)}</dd></dl></div>')
 
 
-def builder_cards(claims: dict, stories: list[dict] | None, log: list[dict] | None, now: float) -> list[str]:
+def working(claims: dict, log: list[dict], now: float) -> list[tuple[str, dict, dict]]:
+    """Each claimed builder as (key, claim, facts), in claim order, its facts read from the run log since its claim (#1381)."""
+    return [(key, mine, cmd_status.builder_facts(key.rsplit("#", 1)[-1], float(mine.get("at", 0)), log, now)) for key, mine in sorted(claims.items())]
+
+
+def builder_cards(working_list: list[tuple[str, dict, dict]], stories: list[dict] | None) -> list[str]:
     """One card per working builder, in claim order, with its board card when the board copy was read."""
     by_number = {str((i.get("content") or {}).get("number")): i for i in stories or []}
-    cards = []
-    for key, mine in sorted(claims.items()):
-        n = key.rsplit("#", 1)[-1]
-        facts = cmd_status.builder_facts(n, float(mine.get("at", 0)), log or [], now)
-        cards.append(builder_card(key, mine, by_number.get(n), facts))
-    return cards
+    return [builder_card(key, mine, by_number.get(key.rsplit("#", 1)[-1]), facts) for key, mine, facts in working_list]
 
 
 def queue_line(data: dict) -> str:
@@ -404,7 +420,9 @@ def building_card(data: dict) -> str:
     css, word, sentence = state(data)
     body = "".join(data["cards"]) if data["cards"] else "".join(f'<p class="small">{esc(line)}</p>' for line in data["building"])
     warned = "".join(f'<p class="small">{esc(line)}</p>' for line in data["warnings"])
-    start = command("olivercode drain REPO") if css == "idle" else ""
+    start = command("olivercode drain REPO", "Start the drain") if css == "idle" else ""
+    if css == "run" and data["pid"]:  # kill releases the claim and the run lock, and the story goes back to Ready (cmd_status.stall_line) (#1381)
+        start = command(f"kill {data['pid']}", "Stop the drain")
     return (f'<div class="card"><div class="railhead"><h2>Live</h2><span class="small">{data["now"].day} {data["now"]:%b, %H:%M} UTC</span></div>'
             f'<div class="band"><span class="pill p-{css}"><i></i>{word}</span><p>{esc(sentence)}</p></div>{body}{warned}{queue_line(data)}{start}</div>')
 
