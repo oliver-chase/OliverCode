@@ -84,6 +84,7 @@ class Io:
     def __init__(self, repo: Path, slug: str, agent: str = "drain", runner=None, parallel: int | None = None):
         self.repo, self.slug, self.agent, self.runner, self.parallel = repo, slug, agent, runner, parallel
         self.resumed: dict[int, str] = {}  # story number -> the resume note for a branch an earlier session left (#877)
+        self.fetched: set[int] = set()  # stories whose origin fetch this run already made, so a story costs one fetch
         self.claim_start: dict[int, float] = {}  # story number -> when this run claimed it, never refreshed (#1306)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.said: dict[int, str] = {}  # story number -> its last comment, which is the reason a stopped row records (#1291)
@@ -209,10 +210,16 @@ class Io:
         """Tell the repo's run lock which stories are building now (#992)."""
         run_lock.beat(self.slug, os.getpid(), time.time(), building)
 
+    def fetch(self, n: int) -> None:
+        """Fetch origin's default branch once for story n."""
+        if n not in self.fetched:
+            self.fetched.add(n)
+            subprocess.run(["git", "-C", str(self.repo), "fetch", "-q", "origin", self.branch()], capture_output=True, text=True)
+
     def worktree(self, n: int) -> Path:
         """Create story/N's worktree from origin's default branch, or reuse the one a restart finds."""
         path = placement_config().worktrees / f"{self.repo.name}-{n}"
-        subprocess.run(["git", "-C", str(self.repo), "fetch", "-q", "origin", self.branch()], capture_output=True, text=True)  # a base older than origin repeats landed work (#1011)
+        self.fetch(n)  # a base older than origin repeats landed work (#1011)
         problems, self.resumed[n] = cmd_land.resume_worktree(self.repo, path, str(n), f"origin/{self.branch()}")
         if problems:
             raise RuntimeError("; ".join(problems))
@@ -261,9 +268,9 @@ class Io:
 
     def landed(self, worktree: Path, n: int) -> bool:
         """True when a commit made after this claim that names the story is on origin's default branch (#877, #1306). It reads the main checkout, so a builder that landed and
-        removed its worktree still counts, and it fetches first so a landing made by another process is seen."""
+        removed its worktree still counts. It shares the story's one fetch, since a land's push moves origin's ref in this repo."""
         branch = self.branch()
-        subprocess.run(["git", "-C", str(self.repo), "fetch", "-q", "origin", branch], capture_output=True, text=True)
+        self.fetch(n)
         ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", *self.since_claim(n), "--format=%s"], capture_output=True, text=True)
         return ran.returncode == 0 and any(f"(#{n})" in line for line in ran.stdout.splitlines())
 

@@ -41,10 +41,10 @@ class RepoCase(unittest.TestCase):
 
 
 class TestSessionDigest(RepoCase):
-    LINES = ["o/r: 3 open stories.", "Last story landed: #5 Done.", "Read /h/status-digest.md before acting."]
-
     def digest(self, env=None):
-        with mock.patch.dict(os.environ, env or {}), mock.patch("lib.cmd_status.write_digest", return_value=(Path("/h/x"), "t", self.LINES)) as write:
+        (path := self.tmp / "status-digest.md").write_text("# Status digest\nBoard: o/r: 3 open. In the last 7 days 1 closed.\n")
+        self.LINES = ["o/r: 3 open stories.", "No story landing is recorded in the run log yet.", f"Read {path} before acting."]
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.tmp), **(env or {})}), mock.patch("lib.repo_state.origin", return_value="o/r"), mock.patch.object(session, "detach") as write:
             return session.digest_notes(self.repo), write
 
     def test_a_governed_repo_gets_the_three_lines(self):

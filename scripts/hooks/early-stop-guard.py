@@ -212,16 +212,14 @@ OWNER_LIST_FILE_RE = re.compile(r"(morning|owner|current_state|report|handoff)",
 
 def _written_owner_lists(transcript_path: Path) -> str:
     """Text this turn wrote with Write or Edit into a morning, owner-list, report or state file (#622)."""
+    turn = _current_turn(transcript_path)  # read from the end back to the owner's last message, not the whole transcript
     found: list[str] = []
-    try:
-        for b in _transcript_blocks(transcript_path):
-            if b.get("type") == "text" and b.get("_role") == "user":
-                found.clear()
-            i = b.get("input") if b.get("type") == "tool_use" and b.get("name") in ("Write", "Edit") else None
+    for obj in reversed(turn or []):
+        content = obj.get("message", obj).get("content")
+        for b in content if isinstance(content, list) else ():
+            i = b.get("input") if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") in ("Write", "Edit") else None
             if isinstance(i, dict) and OWNER_LIST_FILE_RE.search(str(i.get("file_path", ""))):
                 found.append(str(i.get("content") or i.get("new_string") or ""))
-    except OSError:
-        return ""
     return "\n".join(found)
 
 

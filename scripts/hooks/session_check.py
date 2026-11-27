@@ -59,7 +59,8 @@ def headless() -> bool:
 
 
 def digest_notes(cwd: Path) -> list[str]:
-    """The three session-start lines from a refreshed status digest, or nothing in a headless builder, an ungoverned folder or a failed read (#985)."""
+    """The three session-start lines from the last status digest, or nothing in a headless builder, an ungoverned folder or a failed read (#985).
+    The digest's GitHub reads take seconds, so a detached `olivercode status digest` rewrites it and the hook never waits on it."""
     if headless():
         return []
     try:
@@ -68,11 +69,14 @@ def digest_notes(cwd: Path) -> list[str]:
             return []
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from lib import cmd_status, repo_state
-        done = cmd_status.write_digest(repo_state.origin(root), out=lambda _text: None)
+        slug, path = repo_state.origin(root), cmd_status.digest_path()
+        board = next((line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("Board: ")), "") if path.is_file() else ""
+        detach([sys.executable, str(Path(__file__).resolve().parent.parent / "olivercode"), "status", "digest", "--root", str(root)])
+        open_now = board.removeprefix(f"Board: {slug}: ").split(" open", 1)[0]  # a digest of another repo names another slug, so it gives no count
+        return cmd_status.session_lines(slug, int(open_now), cmd_status.run_log(), path) if open_now.isdigit() else []
     except Exception as exc:  # noqa: BLE001 -- a digest bug never blocks a session
         print(f"session_check: status digest failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         return []
-    return done[2] if done else []
 
 
 def run_notes(cwd: Path) -> list[str]:
@@ -117,8 +121,9 @@ def checkout_notes() -> list[str]:
     """Names an OliverCode checkout that holds commits origin/main lacks (#785); runs no git merge, since scheduled maintenance does the fast-forward (#901)."""
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from lib import main_checkout, maintain
-        ahead = main_checkout.ahead_refusal(maintain.OC_ROOT) or main_checkout.stale_refusal(maintain.OC_ROOT)  # names the commits an ahead checkout holds, with the command that moves them (#785)
+        from lib import main_checkout
+        from lib.local_config import OC_ROOT
+        ahead = main_checkout.ahead_refusal(OC_ROOT) or main_checkout.stale_refusal(OC_ROOT)  # names the commits an ahead checkout holds, with the command that moves them (#785)
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
         print(f"session_check: checkout fast-forward failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         return []
@@ -170,9 +175,12 @@ def _fetch_if_stale(root: Path, fetch_head: Path) -> None:
 
 
 def start_fetch(root: Path) -> None:
-    """Detach one `git fetch` that outlives the hook; the hook never waits on it."""
-    subprocess.Popen(["git", "-C", str(root), "fetch", "--quiet"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+    detach(["git", "-C", str(root), "fetch", "--quiet"])
+
+
+def detach(argv: list[str]) -> None:
+    """Start one command that outlives the hook; the hook never waits on it."""
+    subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 def gh_notes() -> list[str]:

@@ -313,6 +313,9 @@ def load_config(path):
 DIMENSIONS = ["fields", "drift", "duplicates", "groom", "close-gate"]
 
 
+STATUS_DIMENSIONS = ("fields", "drift", "close-gate", "groom")  # duplicates reads no status names
+
+
 def wanted(selected, name):
     """True when no --dimension was given or `name` is one of those given."""
     return not selected or name in selected
@@ -345,7 +348,7 @@ def main():
             else kanban.read_fields_from_gh(config)
         sys.exit(1 if kanban.run(fields, config) else 0)
     items = load_items(config, use_cache=not args.no_cache)
-    finished, open_statuses = resolve_statuses(config, live_status_names(config))
+    finished, open_statuses = resolve_statuses(config, live_status_names(config) if any(wanted(args.dimension, d) for d in STATUS_DIMENSIONS) else {})
 
     checks = []
     if wanted(args.dimension, "fields"):

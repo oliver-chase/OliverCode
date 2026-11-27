@@ -397,7 +397,10 @@ def _other_remote(rest: list[str]) -> bool:
 
 
 def _default_branch(repo: str) -> str:
-    done = subprocess.run(["git", "-C", repo or ".", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True)
+    try:
+        done = subprocess.run(["git", "-C", repo or ".", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired:
+        return "main"
     return done.stdout.strip().removeprefix("origin/") or "main"
 
 
@@ -475,13 +478,12 @@ def evaluate_bash(policy: dict, command: str, repo: str = "", root: Path | None 
             return Decision("deny", "git push --no-verify", "`git push --no-verify` skips every pre-push gate, so the policy refuses it. Run the push without the flag and fix what the gates report. See docs/GATES.md, Pre-push gates.")
         if name == "git" and sub == "push" and _pushes_every_branch(rest):
             return Decision("deny", "git push --mirror", "`git push --mirror`, `--all` and `--prune` update or delete every branch on the remote at once, so the policy denies them. Push the one branch by name. See docs/RULES.md, Execution.")
+        default = _default_branch(repo) if name == "git" and sub == "push" else ""  # one git call per push
         if name == "git" and sub == "push":
-            default = _default_branch(repo)
             gone = [b for b in _deleted_branches(rest) if b in (default, "main", "master")]
             if gone:
                 return Decision("deny", "git push --delete", f"A push that deletes {gone[0]} destroys the default branch on the remote, so the policy denies it. See docs/RULES.md, Execution.")
         if name == "git" and sub == "push" and not _branch_override(env):
-            default = _default_branch(repo)
             stray = [b for b in _pushed_branches(rest, repo) if b not in (default, "main", "master")]
             if stray:
                 return Decision("deny", "git push branch", BRANCH_PUSH_MESSAGE.format(branch=stray[0], default=default))

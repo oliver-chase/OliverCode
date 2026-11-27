@@ -537,7 +537,7 @@ class TestSessionStart(Base):
     def test_a_clean_lagging_checkout_is_left_alone_at_session_start(self):
         self.push_commit()
         before = git(self.main, "rev-parse", "HEAD").stdout
-        with mock.patch.object(maintain, "OC_ROOT", self.main), mock.patch.object(maintain, "fast_forward") as ff:
+        with mock.patch.object(cmd_land.local_config, "OC_ROOT", self.main), mock.patch.object(maintain, "fast_forward") as ff:
             session_check.checkout_notes()
         ff.assert_not_called()
         self.assertEqual(before, git(self.main, "rev-parse", "HEAD").stdout)
@@ -548,7 +548,7 @@ class TestSessionStart(Base):
     def test_an_edited_checkout_stays_as_it_is_and_is_named_at_session_start(self):
         self.push_commit()
         (self.main / "a.txt").write_text("edit")
-        with mock.patch.object(maintain, "OC_ROOT", self.main):
+        with mock.patch.object(cmd_land.local_config, "OC_ROOT", self.main):
             notes = session_check.checkout_notes()
         self.assertIn("trails origin/main by 1", notes[0])  # a merged fix that cannot reach the checkout is named (#823)
         self.assertEqual("edit", (self.main / "a.txt").read_text())
