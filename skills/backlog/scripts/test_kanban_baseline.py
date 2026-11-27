@@ -82,12 +82,11 @@ class Baseline(unittest.TestCase):
         self.assertTrue(any(p.startswith("Size: the board has no single-select Size") for p in problems))
         self.assertTrue(any("Priority: missing option P2" in p for p in problems))
 
-    def test_area_options_come_from_the_repos_config(self):
-        config = {"fields": {"area": {"id": "A", "options": {"backlog": "1", "plan": "2"}}}}
-        problems = check(fixture("board-correct"), config)
-        self.assertEqual(2, len(problems))
-        self.assertTrue(any("missing option plan" in p for p in problems))
-        self.assertTrue(any("extra option audit" in p for p in problems))
+    def test_a_board_without_area_is_clean_and_is_not_reported(self):
+        fields = fixture("board-correct")
+        fields["fields"] = [f for f in fields["fields"] if f["name"] != "Area"]
+        self.assertEqual([], check(fields))
+        self.assertEqual([], check(fixture("board-correct")))
 
     def test_a_status_field_of_the_wrong_type_is_reported(self):
         fields = copy.deepcopy(fixture("board-correct"))

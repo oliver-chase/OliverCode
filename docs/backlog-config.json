@@ -41,19 +41,6 @@
         "Epic": "fa49b04e",
         "Story": "1f939005"
       }
-    },
-    "area": {
-      "id": "PVTSSF_lAHOCyeGV84BoY_xzhoOR-Y",
-      "options": {
-        "audit": "1a0353b5",
-        "backlog": "f3fc0a77",
-        "diagnosing-bugs": "469888f6",
-        "olivercode-adoption": "a3f959e2",
-        "plan": "6af407dd",
-        "skill-creation": "e71ffeff",
-        "growth": "6acde981",
-        "fleet-wide": "dcbe21ce"
-      }
     }
   },
   "closeGateFromIssue": 1291

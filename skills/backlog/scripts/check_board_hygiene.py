@@ -95,9 +95,8 @@ def live_status_names(config):
 
 
 def check_required_fields(items, config, open_statuses=REQUIRED_STATUSES):
-    # Work Type and Area are required only on a board whose config defines the field.
-    required = ("priority", "size") + (("work Type",) if "workType" in config["fields"] else ()) \
-        + (("area",) if "area" in config["fields"] else ())
+    # Work Type is required only on a board whose config defines the field.
+    required = ("priority", "size") + (("work Type",) if "workType" in config["fields"] else ())
     problems = []
     for i in items:
         # A card with no Status is open work too, and its Status is the first gap.

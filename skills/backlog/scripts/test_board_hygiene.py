@@ -15,12 +15,12 @@ from unittest import mock
 
 import check_board_hygiene as bh
 
-CONFIG = {"repoOwner": "o", "repoName": "r", "fields": {"area": {}}}
+CONFIG = {"repoOwner": "o", "repoName": "r", "fields": {}}
 
 
-def item(number, status, area="gtm"):
+def item(number, status):
     content = {"number": number, "repository": "o/r", "title": "t"}
-    return {"content": content, "status": status, "area": area, "priority": "P1", "size": "S", "work Type": "Story"}
+    return {"content": content, "status": status, "priority": "P1", "size": "S", "work Type": "Story"}
 
 
 class DimensionScoping(unittest.TestCase):
@@ -77,8 +77,8 @@ class Drift(unittest.TestCase):
         items = [item(1, "Complete"), item(2, "Backlog"), item(3, "Ready")]
         self.assertEqual([], bh.check_status_drift(items, CONFIG))
 
-    def test_missing_area_is_a_required_field_gap(self):
-        self.assertEqual(1, len(bh.check_required_fields([item(2, "Backlog", area=None)], CONFIG)))
+    def test_an_open_story_without_area_is_not_a_field_gap(self):
+        self.assertEqual([], bh.check_required_fields([item(2, "Backlog")], CONFIG))
         # gh names the Work type key by the board's own spelling, so any case counts as set.
         cfg = {"fields": {"workType": {}}}
         lower = item(5, "Ready")

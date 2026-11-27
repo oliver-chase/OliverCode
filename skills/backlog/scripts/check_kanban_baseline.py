@@ -30,12 +30,6 @@ def read_fields_from_gh(config):
     return json.loads(result.stdout)
 
 
-def area_options(config):
-    """Area option names the repo's config lists, or None when the config names none."""
-    options = ((config or {}).get("fields", {}).get("area") or {}).get("options")
-    return list(options) if options else None
-
-
 def _by_name(fields):
     return {f.get("name", "").lower(): f for f in fields.get("fields", [])}
 
@@ -82,15 +76,7 @@ def check_baseline(fields, baseline, config=None):
         if field is None or field.get("type") != SINGLE_SELECT:
             problems.append(f"{name}: the board has no single-select {name} field. Fix: create it.")
             continue
-        if wanted == "config":
-            expected = area_options(config)
-            if expected is None:
-                if not _option_names(field):
-                    problems.append(f"{name}: the field has no options. Fix: add one option per area of work.")
-            else:
-                problems.extend(_compare_options(name, _option_names(field), expected, name))
-        else:
-            problems.extend(_compare_options(name, _option_names(field), wanted, name))
+        problems.extend(_compare_options(name, _option_names(field), wanted, name))
     return problems
 
 
