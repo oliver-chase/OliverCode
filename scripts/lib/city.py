@@ -1,6 +1,6 @@
 """City v2 (#1356): the page's frame, drawn only from local files, with no GitHub call and no model call.
 
-`olivercode status page [--fetch] [--root DIR]` writes `city.html` to the OliverCode home. Every write reads the run log, the owner queue, the board copy
+`olivercode status page [--fetch] [--open] [--root DIR]` writes `city.html` to the OliverCode home, and --open shows it in the default browser. Every write reads the run log, the owner queue, the board copy
 that `board sync` keeps and `city-github.json`. Only `--fetch` calls GitHub: it reads the opened and closed counts and the check results once and saves them
 to `city-github.json` with the time read. The frame is a nav (Today, Delivery, Cost, Health) and a status band that gives the run state, the builder count,
 the needs-you count, the Updated time and a Refresh control. The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
@@ -12,12 +12,13 @@ from __future__ import annotations
 import html
 import json
 import re
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from lib import agent_loop, city_cost, city_delivery, city_health, cmd_owner, cmd_status, failure_log, gh_budget, local_config, relay, repo_state, run_lock
 
-USAGE = "Usage: olivercode status page [--fetch] [--root DIR]"
+USAGE = "Usage: olivercode status page [--fetch] [--open] [--root DIR]"
 STALE_SECONDS = 600
 SHOWN = 5  # owner-queue steps the page lists before it says how many more
 STAGE_LABELS = ("Claimed", "Building", "Validating", "Landing", "Landed")  # the builder card's track, in the order cmd_status.STAGES names them
@@ -377,14 +378,20 @@ def refresh(root: Path | None = None) -> int:
 
 
 def command_page(argv: list[str]) -> int:
-    root, fetch = Path.cwd(), False
+    root, fetch, opening = Path.cwd(), False, False
     args = list(argv)
     if "--fetch" in args:
         args.remove("--fetch")
         fetch = True
+    if "--open" in args:
+        args.remove("--open")
+        opening = True
     if args[:1] == ["--root"] and len(args) == 2:
         root = Path(args[1]).expanduser()
     elif args:
         print(USAGE)
         return 1
-    return write(repo_state.origin(root), root, fetch=fetch)
+    code = write(repo_state.origin(root), root, fetch=fetch)
+    if opening and page_path().exists():
+        webbrowser.open(page_path().as_uri())
+    return code

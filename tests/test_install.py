@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -274,6 +275,105 @@ class InstallAsksNothing(unittest.TestCase):
         (self.claude / "CLAUDE.md").symlink_to(self.prior / "CLAUDE.md")
         self.assertNotIn("[COPIED]", self.install())
         self.assertFalse(self.config.is_file())
+
+
+class CityShortcut(unittest.TestCase):
+    """Install puts an OliverCode City shortcut on the Desktop once and uninstall removes it; `status page --open` shows the page (#1363)."""
+
+    def setUp(self):
+        root = temp_dir(self)
+        self.claude = root / ".claude"
+        self.desktop = root / "Desktop"
+        self.desktop.mkdir()
+        self.home = root / "home"
+        self.page = self.home / "city.html"
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(root / "olivercode.local.json"), "OLIVERCODE_HOME": str(self.home)})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def fake_refresh(self, root=None):
+        self.home.mkdir(parents=True, exist_ok=True)
+        self.page.write_text("<html>City</html>\n")
+        return 0
+
+    def install(self, refresh=None) -> str:
+        with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
+                mock.patch.object(cmd_install, "_desktop", return_value=self.desktop), \
+                mock.patch.object(cmd_install, "owner_terminal", return_value=False), \
+                mock.patch.object(cmd_install, "_schedule_replay"), mock.patch.object(cmd_install, "_queue_shim"), \
+                mock.patch("lib.city.refresh", side_effect=refresh or self.fake_refresh) as refreshed:
+            _, out = quiet(cmd_install.command_install, REPO_ROOT)
+        self.refreshed = refreshed
+        return out
+
+    def uninstall(self) -> str:
+        with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
+                mock.patch.object(cmd_install, "_desktop", return_value=self.desktop), \
+                mock.patch.object(cmd_install, "_queue_shim"), mock.patch.object(cmd_install, "_claude_settings"), \
+                mock.patch.object(cmd_install, "remove_jobs", return_value=[]):
+            _, out = quiet(cmd_install.command_uninstall, REPO_ROOT)
+        return out
+
+    def shortcut(self) -> Path:
+        return self.desktop / cmd_install.CITY_SHORTCUT
+
+    def test_install_writes_city_first_then_a_webloc_pointing_at_it(self):
+        out = self.install()
+        self.assertEqual(1, self.refreshed.call_count)
+        self.assertTrue(self.page.is_file())
+        with self.shortcut().open("rb") as f:
+            self.assertEqual(self.page.as_uri(), plistlib.load(f)["URL"])
+        self.assertIn("[ADDED] ~/Desktop/OliverCode City.webloc", out)
+
+    def test_a_page_already_written_is_not_rewritten_before_the_shortcut(self):
+        self.home.mkdir(parents=True)
+        self.page.write_text("kept\n")
+        self.install()
+        self.assertEqual(0, self.refreshed.call_count)
+        self.assertEqual("kept\n", self.page.read_text())
+        self.assertTrue(self.shortcut().is_file())
+
+    def test_no_shortcut_when_city_cannot_be_written(self):
+        out = self.install(refresh=lambda root=None: 1)
+        self.assertFalse(self.shortcut().exists())
+        self.assertIn("[WARN] ~/Desktop/OliverCode City.webloc not written", out)
+
+    def test_a_shortcut_the_owner_deleted_is_not_written_again_by_update(self):
+        self.install()
+        self.shortcut().unlink()
+        out = self.install()
+        self.assertFalse(self.shortcut().exists())
+        self.assertNotIn("[ADDED]", out)
+        self.assertTrue(cmd_install._record_city(self.claude))
+
+    def test_a_shortcut_install_did_not_write_is_left_alone_and_survives_uninstall(self):
+        self.shortcut().write_text("the owner's own\n")
+        self.install()
+        self.assertEqual("the owner's own\n", self.shortcut().read_text())
+        self.uninstall()
+        self.assertTrue(self.shortcut().exists())
+
+    def test_uninstall_removes_the_shortcut_install_added(self):
+        self.install()
+        out = self.uninstall()
+        self.assertFalse(self.shortcut().exists())
+        self.assertIn("[REMOVED] ~/Desktop/OliverCode City.webloc", out)
+
+    def test_status_page_open_writes_the_page_and_opens_it_in_the_browser(self):
+        from lib import city
+        with mock.patch.object(city, "write", return_value=0) as write, mock.patch.object(city, "page_path", return_value=self.page), \
+                mock.patch.object(city.repo_state, "origin", return_value="o/r"), mock.patch("lib.city.webbrowser.open") as opened:
+            self.fake_refresh()
+            city.command_page(["--open"])
+        self.assertEqual(1, write.call_count)
+        opened.assert_called_once_with(self.page.as_uri())
+
+    def test_status_page_without_open_does_not_open_a_browser(self):
+        from lib import city
+        with mock.patch.object(city, "write", return_value=0), mock.patch.object(city.repo_state, "origin", return_value="o/r"), \
+                mock.patch("lib.city.webbrowser.open") as opened:
+            city.command_page([])
+        opened.assert_not_called()
 
 
 if __name__ == "__main__":

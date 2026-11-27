@@ -44,6 +44,7 @@ def _backups(path: Path) -> list[Path]:
 
 
 INSTALL_RECORD = ".olivercode-install.json"
+CITY_SHORTCUT = "OliverCode City.webloc"
 
 # The first install's closing text: how work runs, the first steps and the habits that keep it cheap, in 20 lines at most (#972, #991).
 INTRODUCTION = """How OliverCode works
@@ -118,11 +119,45 @@ def _read_record(claude_dir: Path) -> dict | None:
     return links if isinstance(links, dict) else {}
 
 
-def _write_record(claude_dir: Path, links: dict[str, str]) -> None:
+def _write_record(claude_dir: Path, links: dict[str, str], city_shortcut: bool = False) -> None:
     path = claude_dir / INSTALL_RECORD
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps({"links": links}, indent=2, sort_keys=True) + "\n")
+    tmp.write_text(json.dumps({"links": links, "city_shortcut": city_shortcut}, indent=2, sort_keys=True) + "\n")
     tmp.replace(path)
+
+
+def _record_city(claude_dir: Path) -> bool:
+    """True when an install wrote the City shortcut, so install never writes it again and uninstall removes it."""
+    try:
+        return json.loads((claude_dir / INSTALL_RECORD).read_text()).get("city_shortcut") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _desktop() -> Path:
+    return Path.home() / "Desktop"
+
+
+def _city_shortcut(oc_root: Path, claude_dir: Path, desktop: Path | None = None) -> bool:
+    """Put an OliverCode City shortcut on the Desktop, once, pointing at city.html. The page is written first when it is missing,
+    so the shortcut never opens a missing file. Returns whether install has added the shortcut, which stays True after the owner
+    deletes it. A shortcut already on the Desktop that install did not write is left alone."""
+    from lib import city  # local import: city reads this module's figures
+    desktop = desktop or _desktop()
+    recorded = _record_city(claude_dir)
+    link = desktop / CITY_SHORTCUT
+    if recorded or link.exists() or link.is_symlink() or not desktop.is_dir():
+        return recorded
+    page = city.page_path()
+    if not page.exists():
+        city.refresh(oc_root)
+    if not page.exists():
+        print(f"  [WARN] ~/Desktop/{CITY_SHORTCUT} not written: City could not be written to {page} yet. Run `olivercode status page` and install again.")
+        return False
+    with link.open("wb") as f:
+        plistlib.dump({"URL": page.as_uri()}, f)
+    print(f"  [ADDED] ~/Desktop/{CITY_SHORTCUT}")
+    return True
 
 
 def _dangling_from_install(claude_dir: Path, oc_root: Path) -> set[str]:
@@ -513,10 +548,11 @@ def command_install(oc_root: Path) -> int:
     # The local file holds only the keys this version reads, each repo once, and repo paths that exist (#1295).
     for line in _converge_local_config():
         print(f"  {line}")
+    city_added = _city_shortcut(oc_root, claude_dir)
     expected = {k: oc_root / rel for k, rel in RULE_LINKS.items()}
     expected.update({f"skills/{name}": source for name, source in wanted.items()})
     _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, src in expected.items()
-                               if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == src.resolve()})
+                               if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == src.resolve()}, city_added)
 
     broken_settings = False
     # Every repo's validate.sh takes a queue slot through this helper, so no repo script names this checkout (#572).
@@ -670,6 +706,14 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     except ValueError as exc:
         print(f"  [FAIL] ~/.claude/settings.json could not be read ({exc}); left as it is, hooks not removed")
         broken_settings = True
+
+    if _record_city(claude_dir):
+        shortcut = _desktop() / CITY_SHORTCUT
+        if shortcut.is_symlink() or shortcut.exists():
+            shortcut.unlink()
+            print(f"  [REMOVED] ~/Desktop/{CITY_SHORTCUT}")
+        else:
+            print(f"  [ABSENT] ~/Desktop/{CITY_SHORTCUT}")
 
     jobs = remove_jobs(oc_root, run=run)
     if not jobs:
