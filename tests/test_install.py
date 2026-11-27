@@ -198,7 +198,7 @@ class InstallAsksNothing(unittest.TestCase):
         self.assertEqual(own.resolve(), (self.claude / "DESIGN.md").resolve())
 
     def test_install_makes_no_fleet_repo_and_writes_no_fleet_registry(self):
-        beside = REPO_ROOT.parent / "olivercode-fleet"
+        beside = REPO_ROOT.parent / "fleet-beside"
         existed = beside.exists()
         out = self.install()
         self.assertEqual(existed, beside.exists())

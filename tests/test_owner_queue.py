@@ -63,7 +63,7 @@ class TestRemovedJobItems(unittest.TestCase):
             cmd_owner.add("maintain", "maintain health: docs failed")
             cmd_owner.add("maintain", "maintain tidy: 2 worktrees kept")
             cmd_owner.add("maintain", "maintain queues: a denied step")
-            cmd_owner.add("fleet-sync", "Bring tesknota level with origin: 2 uncommitted file(s)", "git status --porcelain", "dirty")
+            cmd_owner.add("fleet-sync", "Bring my-repo level with origin: 2 uncommitted file(s)", "git status --porcelain", "dirty")
             cmd_owner.add("s1", "Pick a price")
             self.assertEqual(["maintain queues: a denied step", "Pick a price"], [i["step"] for i in cmd_owner.open_items()])
             self.assertEqual(3, cmd_owner.retire_removed())

@@ -44,7 +44,7 @@ class StagedGate(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertIn("docs/stories/one.md", done.stdout)
         self.assertIn("docs/note.md is names a fleet repo", done.stdout)
-        self.assertIn("olivercode-fleet", done.stdout)
+        self.assertIn("private fleet repo", done.stdout)
 
     def test_a_staged_config_is_refused(self):
         repo = make_repo(self, {"olivercode.local.json": "{}\n"})

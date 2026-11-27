@@ -131,10 +131,10 @@ class Handoff(unittest.TestCase):
 
     def test_the_number_wraps_after_ten(self):
         self.home.mkdir()
-        (self.home / cmd_handoff.THREAD_NUMBERS).write_text('{"DigiOperator": 10}', encoding="utf-8")
-        self.put("DigiOperator-handoff-2026-11-26.md")
-        _, out = self.run_cmd("read", "DigiOperator")
-        self.assertIn('with "DigiOperator 1"', out)
+        (self.home / cmd_handoff.THREAD_NUMBERS).write_text('{"Shop": 10}', encoding="utf-8")
+        self.put("Shop-handoff-2026-11-26.md")
+        _, out = self.run_cmd("read", "Shop")
+        self.assertIn('with "Shop 1"', out)
 
     def test_a_repo_with_no_number_starts_at_one_and_an_overwritten_handoff_uses_none(self):
         self.put("Pattern-handoff-2026-11-26.md")

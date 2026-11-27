@@ -136,7 +136,7 @@ class TestWaitingLines(unittest.TestCase):
         home = temp_dir(self)
         with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
             cmd_owner.add("maintain", "maintain health: docs failed")
-            cmd_owner.add("fleet-sync", "Bring tesknota level with origin: 2 uncommitted file(s)", "git status --porcelain", "dirty")
+            cmd_owner.add("fleet-sync", "Bring my-repo level with origin: 2 uncommitted file(s)", "git status --porcelain", "dirty")
             cmd_owner.add("s1", "Sign in to the mail host", "gh auth login", "refused")
             self.assertEqual(["- #3 Sign in to the mail host"], cmd_status.waiting_lines())
             self.assertEqual(0, cmd_owner.retire_removed())
@@ -228,11 +228,11 @@ class TestDigest(unittest.TestCase):
     def test_a_story_building_prints_its_stage_its_stage_time_and_its_total(self):
         """#1291: claimed at 09:35 and validating since 09:37, status at 09:40."""
         at = datetime(2026, 11, 22, 9, 40, tzinfo=timezone.utc)
-        claims = {"o/digioperator#853": {"agent": "drain", "at": at.timestamp() - 300}}
-        log = [stage("story-853", "claimed", "09:35", repo="digioperator"), stage("story-853", "building", "09:35", repo="digioperator"), stage("story-853", "validating", "09:37", 120, "digioperator"),
+        claims = {"o/shop#853": {"agent": "drain", "at": at.timestamp() - 300}}
+        log = [stage("story-853", "claimed", "09:35", repo="shop"), stage("story-853", "building", "09:35", repo="shop"), stage("story-853", "validating", "09:37", 120, "shop"),
                {"story": "story-853", "round": 1, "cost_usd": 1.5, "at": "2026-11-22T09:36:00Z"}]
         lines = cmd_status.activity(at.timestamp(), claims, log, True, 5, "P0 #9 First")
-        self.assertEqual(["#853 in digioperator: validating for 3 minutes, 5 minutes in all, $1.50 so far.", "Last landed: none recorded yet.",
+        self.assertEqual(["#853 in shop: validating for 3 minutes, 5 minutes in all, $1.50 so far.", "Last landed: none recorded yet.",
                           "Next Ready: P0 #9 First."], lines)
 
     def test_a_story_with_no_stage_rows_counts_from_its_claim_and_never_prints_a_negative_time(self):

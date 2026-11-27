@@ -701,14 +701,14 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(quiet(cmd_drain.command_drain, ["/nonexistent-repo-xyz"])[0], 1)
 
     def test_a_bare_repo_name_resolves_under_repo_root_from_any_checkout(self):
-        """#1298: a checkout outside repoRoot still finds `tesknota` under repoRoot."""
+        """#1298: a checkout outside repoRoot still finds `my-repo` under repoRoot."""
         root = temp_dir(self)
-        repo = Path(root) / "tesknota"
+        repo = Path(root) / "my-repo"
         (repo / "docs").mkdir(parents=True)
         (repo / "docs" / "backlog-config.json").write_text("{}")
         with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(root=Path(root))), \
                 mock.patch.object(cmd_drain, "OC_ROOT", Path(root) / "_worktrees" / "oc-staging"):
-            self.assertEqual(repo.resolve(), cmd_drain.resolve_repo("tesknota"))
+            self.assertEqual(repo.resolve(), cmd_drain.resolve_repo("my-repo"))
 
     def test_a_bare_repo_name_finds_a_worktree_and_prefers_repo_root(self):
         """#1336: PATH runs a checkout directly under repoRoot, and `oc-staging` sits in repoRoot/_worktrees."""

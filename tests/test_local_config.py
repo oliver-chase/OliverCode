@@ -112,9 +112,9 @@ class ConvergeLocalConfig(unittest.TestCase):
         self.assertTrue(any(line.startswith("[MOVED] repoPaths.alpha") for line in lines), lines)
 
     def test_a_list_names_each_repo_once(self):
-        self.write({"repoRoot": str(self.fleet), "otherDeviceRepos": ["tesknota", "other", "Tesknota"]})
+        self.write({"repoRoot": str(self.fleet), "otherDeviceRepos": ["my-repo", "other", "My-repo"]})
         lines = cmd_install._converge_local_config()
-        self.assertEqual(self.read()["otherDeviceRepos"], ["tesknota", "other"])
+        self.assertEqual(self.read()["otherDeviceRepos"], ["my-repo", "other"])
         self.assertTrue(any(line.startswith("[DEDUPED] otherDeviceRepos") for line in lines), lines)
 
     def test_a_second_run_changes_nothing_and_writes_no_backup(self):

@@ -16,13 +16,12 @@ from pathlib import Path
 
 from lib.fleet_name_check import SYNCED_GATES, fleet_names
 
-FLEET_REPO = "olivercode-fleet"
 # Paths that only ever hold one owner's data.
 PERSONAL_GLOBS = (
     "olivercode.local.json", "*.local.json", "docs/LESSONS.jsonl", ".claude-optimization/memory/*",
     ".claude-optimization/state/*", "stories/*", "docs/stories/*", "queue/*", "owner-queue/*", "docs/owner-queue/*",
 )
-FIX = f"move it to the private {FLEET_REPO} repo and keep it out of this checkout"
+FIX = "move it to the private fleet repo and keep it out of this checkout"
 
 
 def _read(root: Path, rel: str, staged: bool) -> str:
