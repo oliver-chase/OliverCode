@@ -16,7 +16,6 @@ CFG = {"repoOwner": "o", "repoName": "r", "projectId": "P", "fields": {
     "priority": {"id": "FP", "options": {"P1": "OP"}},
     "size": {"id": "FZ", "options": {"L": "OZ"}},
     "workType": {"id": "FW", "options": {"Story": "OW"}},
-    "area": {"id": "FA", "options": {"fleet-wide": "OA"}},
 }}
 
 
@@ -47,14 +46,14 @@ class BatchProject(unittest.TestCase):
         self.cfg.write_text(json.dumps(CFG))
 
     def test_twelve_new_cards_use_one_add_and_four_update_mutations(self):
-        self.input.write_text(json.dumps({"issues": [{"number": n, "fields": {"status": "Ready", "priority": "P1", "size": "L", "workType": "Story", "area": "fleet-wide"}}
+        self.input.write_text(json.dumps({"issues": [{"number": n, "fields": {"status": "Ready", "priority": "P1", "size": "L", "workType": "Story"}}
                                                      for n in range(1, 13)]}))
         runner, out = Runner(), io.StringIO()
         self.assertEqual(0, bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=runner, out=out))
         mutations = [call for call in runner.calls if "mutation" in call]
         self.assertEqual(1, sum("addProject" in call for call in mutations))
-        self.assertEqual(4, sum("updateProject" in call for call in mutations))  # 60 updates, chunks of 15
-        self.assertIn("60 field update(s)", out.getvalue())
+        self.assertEqual(4, sum("updateProject" in call for call in mutations))  # 48 updates, chunks of 15
+        self.assertIn("48 field update(s)", out.getvalue())
 
     def test_a_hold_keeps_work_in_the_shared_queue_without_calling_gh(self):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Ready"}}]}))
@@ -100,6 +99,14 @@ class BatchProject(unittest.TestCase):
         self.assertIn("across 1 queued issue(s)", out.getvalue())
         self.assertIn("dropped #999999", err.getvalue())
         self.assertEqual([], json.loads((Path(self.tmp.name) / "gh-project-queue.json").read_text()))
+
+    def test_an_area_field_is_refused_in_one_line_and_nothing_is_queued(self):
+        self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"area": "fleet-wide"}}]}))
+        err = io.StringIO()
+        self.assertEqual(2, bp.main(["--config", str(self.cfg), "--input", str(self.input)], err=err, out=io.StringIO()))
+        self.assertEqual(1, len(err.getvalue().strip().splitlines()))
+        self.assertIn("the Area field is gone", err.getvalue())
+        self.assertFalse((Path(self.tmp.name) / "gh-project-queue.json").exists())
 
     def test_unknown_config_value_refuses_before_queueing(self):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Nope"}}]}))

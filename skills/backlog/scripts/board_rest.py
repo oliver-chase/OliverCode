@@ -11,7 +11,7 @@ import re
 from urllib.parse import parse_qs, urlparse
 
 VERSION = ["-H", "X-GitHub-Api-Version: 2022-11-28"]
-WANT = ("Status", "Priority", "Size", "Work Type", "Area")
+WANT = ("Status", "Priority", "Size", "Work Type")
 ISSUE_FILTER = '.[] | select(has("pull_request") | not) | {number, state, title}'
 
 

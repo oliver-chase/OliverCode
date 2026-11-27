@@ -42,6 +42,8 @@ def normalize(data, cfg):
             raise ValueError(f"#{issue['number']} needs at least one field")
         values = {}
         for field, value in requested.items():
+            if field == "area":
+                raise ValueError(f"#{issue['number']}: the Area field is gone, so name no area")
             options = fields.get(field, {}).get("options", {})
             if value not in options:
                 raise ValueError(f"#{issue['number']}: {field}={value!r} is not in the config")

@@ -20,7 +20,7 @@ COLORS = ["GRAY", "BLUE", "GREEN", "YELLOW", "ORANGE", "RED", "PINK", "PURPLE"]
 LANE_COLORS = {"backlog": "GRAY", "ready": "BLUE", "in progress": "YELLOW", "qa": "ORANGE", "complete": "GREEN"}
 # GitHub's default Status field ships Todo, In Progress and Done. These carry their items to the baseline lanes.
 DEFAULT_STATUS_MAP = {"todo": "Backlog", "done": "Complete"}
-FIELD_KEYS = {"status": "status", "priority": "priority", "size": "size", "work type": "workType", "area": "area"}
+FIELD_KEYS = {"status": "status", "priority": "priority", "size": "size", "work type": "workType"}
 BATCH = 25
 
 
@@ -199,7 +199,7 @@ def plan_board(board: dict | None, baseline: dict, config: dict | None) -> list[
     """One entry per baseline field: {name, key, action: create|update|ok, plan, field}."""
     specs = [("Status", baseline["lanes"])]
     for name, wanted in baseline["fields"].items():
-        specs.append((name, list(((config or {}).get("fields", {}).get("area") or {}).get("options") or ["General"]) if wanted == "config" else wanted))
+        specs.append((name, wanted))
     plans = []
     for name, desired in specs:
         field = find_field(board, name) if board else None

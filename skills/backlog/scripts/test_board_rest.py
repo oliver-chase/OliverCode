@@ -10,7 +10,6 @@ ITEM = {
     "fields": [
         {"name": "Status", "data_type": "single_select", "value": {"name": {"raw": "Ready"}}},
         {"name": "Work Type", "data_type": "single_select", "value": {"name": {"raw": "Story"}}},
-        {"name": "Area", "data_type": "single_select", "value": None},
     ],
 }
 
@@ -28,7 +27,6 @@ class Shape(unittest.TestCase):
         got = br.shape(ITEM)
         self.assertEqual("Ready", got["status"])
         self.assertEqual("Story", got["work Type"])
-        self.assertIsNone(got["area"])
         self.assertEqual({"number": 7, "title": "A story", "type": "Issue", "repository": "o/r"}, got["content"])
 
 
@@ -62,6 +60,19 @@ class ProjectItems(unittest.TestCase):
 
         br.project_items(self.CFG, run)
         self.assertIn("fields=13", calls[1][-1])
+
+    def test_an_area_field_on_an_old_board_is_not_asked_for(self):
+        calls = []
+
+        def run(args):
+            calls.append(args)
+            if "fields?per_page=100" in args[3]:
+                return lines({"id": 11, "name": "Status"}, {"id": 14, "name": "Area"})
+            return page(ITEM)
+
+        br.project_items(self.CFG, run)
+        self.assertIn("fields=11", calls[1][-1])
+        self.assertNotIn("14", calls[1][-1].split("fields=")[1])
 
     def test_a_user_path_that_fails_falls_to_the_organization_path(self):
         seen = []
