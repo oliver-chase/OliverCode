@@ -22,6 +22,7 @@ This applies to everything written for a person: chat replies, emails, notes, do
 - In an email, the subject states the ask and its date, and the first sentence gives the ask, who owes it and by when
 - In a document, each section answers one question the reader has and describes how things work now
 - Say what you verified, what you found and what is still unknown. Never invent a fact, an owner, a date, a quote, a statistic or a scene
+- During work that takes several steps, say in one or two sentences what each step found and what you check next, naming the figure, story or file. Say nothing when a step changes nothing.
 - Give every action one owner and a date
 - Never use contrast framing: no "not X, but Y", "rather than", "instead of", "less X, more Y", "it is not about X" or "X matters more than Y". State the plain fact
 - Keep process notes, history and implementation detail out of anything a person reads
