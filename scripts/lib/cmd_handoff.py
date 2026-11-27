@@ -1,6 +1,7 @@
 """Launcher command `handoff`: one live handoff per project, deleted once the next thread has read it (#1321).
 
-`olivercode handoff write PROJECT FILE` files FILE as PROJECT-handoff-DATE.md in the handoff folder and deletes the project's other handoffs.
+`olivercode handoff write PROJECT FILE` files FILE as PROJECT-handoff-DATE.md in the handoff folder and deletes the project's other handoffs, then starts the
+next thread in a Terminal tab with Remote Control on and prints its claude.ai/code link, or prints in one line why it could not and the prompt to paste (#1476).
 `olivercode handoff read PROJECT` prints the handoff and deletes it, with no archive copy, then names the reading thread "PROJECT N", N from 1 to 10 (#1353). Only regular files named PROJECT-handoff-*.md count, so
 another project's handoffs and a folder that merely holds the word are left alone. Before write files anything it parses each `olivercode drain`
 and `olivercode dispatch` command in FILE, without running one, and refuses a handoff whose command would print a usage error.
@@ -13,8 +14,10 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 from lib import cmd_dispatch, cmd_drain, cmd_owner, failure_log
@@ -23,6 +26,10 @@ USAGE = "Usage: olivercode handoff write PROJECT FILE | olivercode handoff read 
 COMMAND_RE = re.compile(r"`olivercode\s+(drain|dispatch)\b([^`\n]*)`")  # a backticked command, never a sentence that names one
 FENCED_RE = re.compile(r"\s*(?:\$\s*)?olivercode\s+(drain|dispatch)\b(.*)")  # a whole line inside a code fence
 THREAD_NUMBERS = "thread-numbers.json"  # project -> last thread number, in the OliverCode home, never in the handoff folder
+AUTH_WAIT = 5  # seconds for `claude auth status`, which status_hint also asks inside its 10 second hook limit
+LINK_WAIT = 90  # seconds for the new session to show /rc active
+# The shell command arrives as argv, so nothing in it needs AppleScript quoting.
+TERMINAL_SCRIPT = ("on run argv", 'tell application "Terminal"', "activate", "do script (item 1 of argv)", "end tell", "end run")
 
 
 def handoff_dir() -> Path:
@@ -49,7 +56,7 @@ def unpin_step() -> str:
     return f"Pin: call set_pinned for {session()} with pinned=false."
 
 
-def next_thread(project: str) -> int:
+def next_thread(project: str, save: bool = True) -> int:
     """The next thread number for `project`, 1 to 10 and wrapping. Stored only when a handoff is read, so an overwritten one uses no number."""
     path = failure_log.home() / THREAD_NUMBERS
     try:
@@ -60,7 +67,8 @@ def next_thread(project: str) -> int:
         counts = {}
     last = counts.get(project)
     number = last % 10 + 1 if isinstance(last, int) else 1
-    failure_log.write_atomic(path, json.dumps({**counts, project: number}, indent=2) + "\n")
+    if save:
+        failure_log.write_atomic(path, json.dumps({**counts, project: number}, indent=2) + "\n")
     return number
 
 
@@ -119,6 +127,67 @@ def drain_repo(text: str) -> str | None:
     return None
 
 
+def read_prompt(project: str, folder: Path) -> str:
+    """The next thread's first prompt. It names this launcher by path, since the `olivercode` first on PATH can be another checkout."""
+    launcher = shlex.quote(str(Path(__file__).resolve().parents[1] / "olivercode"))
+    return f"Run {launcher} handoff read {shlex.quote(project)} in {folder} and continue from its Next steps. Use that launcher for every olivercode command."
+
+
+def start_blocker() -> str:
+    """Why this machine cannot start the next thread, or '' when it can."""
+    if not shutil.which("claude"):
+        return "the claude CLI is not on PATH"
+    if not shutil.which("osascript"):
+        return "there is no osascript to open Terminal"
+    try:
+        done = subprocess.run(["claude", "auth", "status"], capture_output=True, text=True, timeout=AUTH_WAIT)
+        signed_in = done.returncode == 0 and json.loads(done.stdout)["loggedIn"] is True
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        signed_in = False
+    return "" if signed_in else "the claude CLI is not signed in"
+
+
+def session_link(session_id: str) -> str:
+    """The session's claude.ai/code link, or '' when none shows in LINK_WAIT seconds. Claude Code puts `bridgeSessionId` in the session's record
+    under its config folder once Remote Control is connected, which is when the session shows /rc active."""
+    records = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "sessions"
+    deadline = time.monotonic() + LINK_WAIT
+    while True:
+        for path in records.glob("*.json"):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+                if record.get("sessionId") == session_id and record.get("bridgeSessionId"):
+                    return f"https://claude.ai/code/{record['bridgeSessionId']}"
+            except (OSError, ValueError, AttributeError):
+                continue
+        if time.monotonic() >= deadline:
+            return ""
+        time.sleep(1)
+
+
+def start_next_thread(project: str, folder: Path) -> str:
+    """Open a Terminal tab running the next thread with Remote Control on. Returns the one line to print: its link, or why there is none."""
+    name = f"{project} {next_thread(project, save=False)}"  # the number `read` gives that thread
+    prompt = read_prompt(project, folder)
+    reason = start_blocker()
+    session_id = str(uuid.uuid4())  # finds this session's record among the others
+    if not reason:
+        command = f"cd {shlex.quote(os.getcwd())} && claude --remote-control {shlex.quote(name)} {shlex.quote(prompt)} --session-id {session_id}"
+        script = [arg for line in TERMINAL_SCRIPT for arg in ("-e", line)]
+        try:
+            done = subprocess.run(["osascript", *script, command], capture_output=True, text=True, timeout=30)
+            if done.returncode != 0:
+                reason = f"Terminal did not open ({' '.join(done.stderr.split()) or f'osascript exit {done.returncode}'})"
+        except (OSError, subprocess.SubprocessError) as exc:
+            reason = f"Terminal did not open ({type(exc).__name__})"
+    if reason:
+        return f"Next thread not started: {reason}. Paste this into a new session: {prompt}"
+    link = session_link(session_id)
+    if link:
+        return f'Next thread "{name}" started with Remote Control on: {link}'
+    return f'Next thread "{name}" opened in Terminal but showed no /rc active in {LINK_WAIT} seconds, so there is no link yet. Look at its Terminal tab.'
+
+
 def write(project: str, draft: Path, folder: Path) -> int:
     try:
         text = draft.read_text(encoding="utf-8")
@@ -140,6 +209,8 @@ def write(project: str, draft: Path, folder: Path) -> int:
             old.unlink()
     print(f"Handoff written: {target}. It is the only {project} handoff.")
     print(unpin_step())
+    sys.stdout.flush()  # the lines above show while the link is waited for
+    print(start_next_thread(project, folder))
     return 0
 
 

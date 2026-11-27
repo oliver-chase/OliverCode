@@ -7,7 +7,7 @@ turn runs and the message never enters the thread. A mixed message goes through 
 starts with "ask:", and every message from another session or a notification, gets nothing. The hook fails open on its own error.
 
 It also flags a long thread once (#1319): when an interactive session's transcript shows over 250,000 tokens of context, the first prompt after that
-gets one line telling the session to write the handoff with `olivercode handoff write` and start and pin the next thread itself (#1321). A marker in the OliverCode home keeps it to once per session, and a
+gets one line telling the session to write the handoff with `olivercode handoff write`, which starts the next thread (#1321, #1476). A marker in the OliverCode home keeps it to once per session, and a
 headless builder is never flagged.
 """
 
@@ -132,10 +132,17 @@ def long_thread_note(data: dict) -> str:
     if marker.exists():
         return ""
     marker.touch()
-    return ("This thread's context is past 250,000 tokens, so each turn costs more than the work in it. When this turn's work is done, write the handoff "
-            "with `olivercode handoff write PROJECT FILE`, then start a new session whose first prompt runs `olivercode handoff read PROJECT` and continues from "
-            "Next steps, pin it, and tell the owner in one line with a link to it. If you have no tool to start or pin a session, give the owner the one line that "
-            "starts the next thread. The owner never has to ask for a handoff.")
+    from lib import cmd_handoff  # imported only for the one long-thread line, not on every prompt
+    blocker = cmd_handoff.start_blocker()
+    if blocker:
+        outcome = (f"This machine cannot start the next thread: {blocker}. Give the owner that reason and this one prompt to paste, with the project's name "
+                   f"for PROJECT: {cmd_handoff.read_prompt('PROJECT', cmd_handoff.handoff_dir())}")
+    else:
+        outcome = ("Tell the owner in one line with the link it prints. If it could not start the thread, give the owner the reason and the prompt to paste "
+                   "that it prints.")
+    return ("This thread's context is past 250,000 tokens, so each turn costs more than the work in it. When this turn's work is done, run "
+            f"`olivercode handoff write PROJECT FILE`, which starts the next thread with Remote Control on. Start no other session. {outcome} "
+            "The owner never has to ask for a handoff.")
 
 
 def block_reason(path: Path) -> str:
