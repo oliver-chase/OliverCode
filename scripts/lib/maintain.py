@@ -635,8 +635,9 @@ def command_maintain(argv: list[str]) -> int:
         print("Usage: olivercode maintain [--fix | --schedule | --unschedule]")
         return 1
     fix = argv == ["--fix"]
-    try:
-        intake.bugs(OC_ROOT)  # the daily run files the bugs the failure and run logs hold, each read once by a fresh reader (#1371)
-    except Exception as exc:  # noqa: BLE001 -- bug intake never stops the daily repair
-        print(f"maintain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
+    for repo in dict.fromkeys([OC_ROOT, *_repos(placement.config())]):  # the daily run files the bugs each repo's failure and run logs hold, each read once by a fresh reader (#1371, #1397)
+        try:
+            intake.bugs(repo)
+        except Exception as exc:  # noqa: BLE001 -- bug intake never stops the daily repair
+            print(f"maintain: bug intake for {repo.name} failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
     return report(run(fix), fix)

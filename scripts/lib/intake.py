@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from lib import agent_loop, failure_log, open_issues
-from lib.local_config import OC_ROOT, backlog_config
+from lib.local_config import OC_ROOT, backlog_config, has_backlog_config
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 
@@ -238,11 +238,10 @@ def render(found: dict) -> str:
 
 # Bug intake (#1371): a failure OliverCode's own code caused becomes one story, once a fresh reader has checked it. The failure log is no source, since its gate blocks are the
 # gates working; the hook-crash rows are the one exception. Every signature is read once and kept in bug-seen.json with the reader's verdict.
-EPIC = 1246
 DAILY_CAP = 3
 MAX_READS = 3
 CRASH = re.compile(r"^(Drain blocked: (the worker crashed|the landing queue crashed|The model finished, but nothing checked)|Close refused:)")
-BUG_BRIEF = ("You are a fresh reader of one failure OliverCode found. Read it against this checkout (staging) with Read, Grep and Glob, and change nothing. Open the files the failure "
+BUG_BRIEF = ("You are a fresh reader of one failure OliverCode found. Read it against this checkout with Read, Grep and Glob, and change nothing. Open the files the failure "
              "names before you decide: a doubt you did not check is not an answer. Reply with the first line being exactly one of: BUG, REGRESSION, COVERED #<number> (an open story "
              "already covers it), or NOT A BUG. A feature, cleanup, refactor or new gate is NOT A BUG. For BUG or REGRESSION write the story after the first line: a line `Title: <short title>`, "
              "then `**As the owner**, I want ..., so that ...`, a gherkin block, `Root cause: <file and line>`, the smallest change that fixes the cause (removing or reusing code before adding any), "
@@ -271,33 +270,33 @@ def read_seen() -> dict:
     return {"created": failure_log.stamp(), "seen": {}}
 
 
-def run_candidates(rows: list[dict]) -> list[dict]:
-    """Stopped rows of the run log that a crash, a fatal stop or a refused close wrote. A failed test, a cap, a held review, a policy stop and the usage limit never match."""
+def run_candidates(rows: list[dict], repo: str = "") -> list[dict]:
+    """Stopped rows of the run log that a crash, a fatal stop or a refused close wrote, for REPO's drain when it is named. A failed test, a cap, a held review, a policy stop and the usage limit never match."""
     return [{"sig": signature("drain", r["reason"]), "at": r.get("at", ""), "branch": "", "text": f"A drain stopped story {r.get('story')}: {r['reason']}"}
-            for r in rows if r.get("stage") == "stopped" and CRASH.match(str(r.get("reason") or ""))]
+            for r in rows if (not repo or r.get("repo") == repo) and r.get("stage") == "stopped" and CRASH.match(str(r.get("reason") or ""))]
 
 
-def hook_candidates() -> list[dict]:
+def hook_candidates(repo: str = "") -> list[dict]:
     return [{"sig": signature("hook", reason), "at": when, "branch": "", "text": f"A guard raised and failed open: {reason}"}
-            for when, _repo, gate, reason in failure_log.entries() if gate == "hook-crash"]
+            for when, where, gate, reason in failure_log.entries() if gate == "hook-crash" and (not repo or where == repo)]
 
 
-def ci_candidate(slug: str, gh) -> dict | None:
-    """The newest completed CI run on staging when it failed, keyed by its failing job and step."""
+def ci_candidate(slug: str, gh, branch: str = "staging") -> dict | None:
+    """The newest completed CI run on the repo's engine branch when it failed, keyed by its failing job and step."""
     def get(path):
         done = gh([path])
         try:
             return json.loads(done.stdout) if done.returncode == 0 else {}
         except ValueError:
             return {}
-    runs = get(f"repos/{slug}/actions/runs?branch=staging&status=completed&per_page=1").get("workflow_runs") or []
+    runs = get(f"repos/{slug}/actions/runs?branch={branch}&status=completed&per_page=1").get("workflow_runs") or []
     if not runs or runs[0].get("conclusion") != "failure":
         return None
     bad = next((j for j in get(f"repos/{slug}/actions/runs/{runs[0]['id']}/jobs").get("jobs") or [] if j.get("conclusion") == "failure"), {})
     step = next((s.get("name") for s in bad.get("steps") or [] if s.get("conclusion") == "failure"), "")
-    key = f"{bad.get('name', 'unknown')} / {step or 'unknown'}"
-    return {"sig": signature("ci", key), "at": runs[0].get("created_at", ""), "branch": "staging",
-            "text": f"CI on staging failed ({runs[0].get('html_url', '')}).\n- Job: {bad.get('name', 'unknown')}\n- Failing step: {step or 'unknown'}"}
+    key = f"{slug} {bad.get('name', 'unknown')} / {step or 'unknown'}"
+    return {"sig": signature("ci", key), "at": runs[0].get("created_at", ""), "branch": branch,
+            "text": f"CI on {branch} failed ({runs[0].get('html_url', '')}).\n- Job: {bad.get('name', 'unknown')}\n- Failing step: {step or 'unknown'}"}
 
 
 def parse(text: str) -> tuple[str, str]:
@@ -309,11 +308,11 @@ def parse(text: str) -> tuple[str, str]:
     return next((a for a in ("bug", "regression") if word.startswith(a)), "not a bug"), rest.strip()
 
 
-def story_text(rest: str, candidate: dict) -> tuple[str, str]:
-    """(title, body): the reader's story with the Epic, Blocked by and Priority lines the runner owns, P1 for staging CI and P2 otherwise."""
+def story_text(rest: str, candidate: dict, epic: int) -> tuple[str, str]:
+    """(title, body): the reader's story with the Epic, Blocked by and Priority lines the runner owns, P1 for CI on the engine branch and P2 otherwise."""
     title = re.search(r"^Title:\s*(.+)$", rest, re.M)
     body = re.sub(r"^Title:.*\n?", "", rest, flags=re.M).strip()
-    tail = f"\n\nEpic: #{EPIC}\nBlocked by: none.\nPriority: {'P1' if candidate['branch'] == 'staging' else 'P2'}.\n\nFound by bug intake ({candidate['sig']}):\n{candidate['text']}\n"
+    tail = f"\n\nEpic: #{epic}\nBlocked by: none.\nPriority: {'P1' if candidate['branch'] else 'P2'}.\n\nFound by bug intake ({candidate['sig']}):\n{candidate['text']}\n"
     return (title.group(1).strip() if title else "Fix a failure OliverCode found")[:120], body + tail
 
 
@@ -331,12 +330,38 @@ def file_story(slug: str, root: Path, title: str, body: str, gh) -> int | None:
     return n
 
 
+def own_code(root: Path, rest: str) -> bool:
+    """True when the story's Root cause line names a file of OliverCode's own checkout, which a drain of another repo does not hold."""
+    m = re.search(r"^Root cause:\s*`?([^\s`:]+)", rest, re.M)
+    if not m or agent_loop.is_engine_repo(root):
+        return False
+    path = Path(m.group(1))
+    if path.is_absolute():
+        return OC_ROOT in path.parents and root not in path.parents
+    return (OC_ROOT / path).exists() and not (root / path).exists()
+
+
+def destination(where: Path, root: Path) -> tuple[str, int] | None:
+    """(repo slug, error epic) a story files under: ROOT's own repo, or the origin of the user's OliverCode checkout for a fault in OliverCode's code. None when no epic is named."""
+    cfg = backlog_config(where)
+    epic = cfg.get("errorEpic")
+    slug = agent_loop.origin_of(where) if where != root else f"{cfg['repoOwner']}/{cfg['repoName']}"
+    return (slug, int(epic)) if slug and isinstance(epic, int) else None
+
+
 def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.datetime | None = None, say=print) -> int:
     """Read the new candidates (a drain stop, red CI on staging, a hook crash) with a fresh reader and file a story for each bug or regression. Returns how many stories were filed.
     A signature already in bug-seen.json starts no reader: a covered, not-a-bug or filed one is skipped, a recurrence of a closed story reopens it, and a bug the daily cap held is filed."""
     from check_story_format import check_body  # noqa: PLC0415
-    cfg = backlog_config(root)
-    slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
+    if not has_backlog_config(root):
+        say(f"Bug intake files nothing for {root.name}: it has no docs/backlog-config.json.")
+        return 0
+    own = destination(root, root)
+    if not own:
+        say(f"Bug intake files nothing for {root.name}: its backlog config names no errorEpic.")
+        return 0
+    slug, _ = own
+    branch = agent_loop.default_branch(root)
     gh = gh or (lambda args: subprocess.run(["gh", "api", *args], capture_output=True, text=True, timeout=60))
     opened = open_issues.fetch(slug)
     if opened is None:
@@ -348,7 +373,8 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
 
     def file_entry(sig: str, entry: dict) -> bool:
         nonlocal filed
-        if filed >= DAILY_CAP or not (n := file_story(slug, root, entry["title"], entry["body"], gh)):
+        where = Path(entry.get("repo") or root)
+        if filed >= DAILY_CAP or not (dest := destination(where, root)) or not (n := file_story(dest[0], where, entry["title"], entry["body"], gh)):
             return False
         entry.update(story=n, filed_on=today)
         filed += 1
@@ -359,9 +385,9 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
         if entry["verdict"] in ("bug", "regression") and not entry.get("story"):
             new += file_entry(sig, entry)
     rows = [json.loads(l) for l in agent_loop.run_log_lines() if l.startswith("{")]
-    ci = ci_candidate(slug, gh)
+    ci = ci_candidate(slug, gh, branch)
     reads = 0
-    for c in [*run_candidates(rows), *hook_candidates(), *([ci] if ci else [])]:
+    for c in [*run_candidates(rows, root.name), *hook_candidates(root.name), *([ci] if ci else [])]:
         entry = seen.get(c["sig"])
         if c["at"] < data["created"]:
             continue  # written before bug-seen.json was made, so it is never read
@@ -375,7 +401,7 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
             break
         reads += 1
         titles = "\n".join(f"- #{i['number']} {i.get('title', '')}" for i in opened)
-        reply = read(f"The failure:\n{c['text']}\n\nThe open stories:\n{titles}\n", root, "bug-intake", "", brief=BUG_BRIEF, say=say)
+        reply = read(f"The failure:\n{c['text']}\n\nOliverCode's own code is at {OC_ROOT}.\n\nThe open stories:\n{titles}\n", root, "bug-intake", "", brief=BUG_BRIEF, say=say)
         if reply["verdict"] == "none":
             continue  # no answer, so nothing is recorded and the next run reads it again
         answer, rest = parse(reply["text"])
@@ -385,8 +411,12 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
             entry["story"] = number
             gh(["-X", "POST", f"repos/{slug}/issues/{number}/comments", "-f", f"body=Another occurrence of a failure this story covers ({c['sig']}):\n{c['text']}"])
         elif answer != "not a bug":
-            entry["title"], entry["body"] = story_text(rest, c)
-            if check_body(entry["body"], files=True, blocker=True, root=root):
+            where = OC_ROOT if own_code(root, rest) else root
+            if not (dest := destination(where, root)):
+                continue  # the checkout's config names no errorEpic, so nothing is filed or recorded
+            entry["repo"] = str(where)
+            entry["title"], entry["body"] = story_text(rest, c, dest[1])
+            if check_body(entry["body"], files=True, blocker=True, root=where):
                 entry["verdict"] = "not a bug"  # a story that fails the format check is never filed
                 continue
             new += file_entry(c["sig"], entry)

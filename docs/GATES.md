@@ -92,7 +92,7 @@ The secret patterns live once in `core/hooks/secret-patterns.sh`, and `scripts/b
 
 ## Repeated blockers
 
-`olivercode maintain --fix` reads the failure log with no model call. A gate and reason that appear 3 or more times, from a guard the tree still has, are reported with the latest time. It files nothing, and a blocker seen twice is not reported. A guard that raises and fails open writes gate `hook-crash` with the exception, which bug intake reads: it takes only OliverCode's own faults (a drain crash, a fatal stop, a refused close, red CI on staging, a hook crash), has a fresh reader check each signature once, and files a story for a bug or regression. Gate blocks never file a story.
+`olivercode maintain --fix` reads the failure log with no model call. A gate and reason that appear 3 or more times, from a guard the tree still has, are reported with the latest time. It files nothing, and a blocker seen twice is not reported. A guard that raises and fails open writes gate `hook-crash` with the exception, which bug intake reads: it runs per repo (the drained repo, or each registered repo under `maintain --fix`), takes a drain crash, a fatal stop, a refused close, red CI on the repo's engine branch and a hook crash, has a fresh reader check each signature once, and files a story for a bug or regression in that repo under the `errorEpic` of its own `docs/backlog-config.json`. A fault in OliverCode's own code files in the origin of the user's OliverCode checkout under that checkout's `errorEpic`. A repo with no backlog config files nothing and the run says which file is missing. Gate blocks never file a story.
 
 ## Engine-only check
 

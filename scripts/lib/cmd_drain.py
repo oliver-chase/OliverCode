@@ -352,8 +352,8 @@ class Io:
         return bool(agent_loop.setting("engineBranch")) and agent_loop.is_engine_repo(self.repo)
 
     def find_bugs(self) -> None:
-        """Read the stops this run wrote, and red CI, for faults in OliverCode itself (#1371)."""
-        intake.bugs(OC_ROOT)
+        """Read the stops this run wrote, and red CI, for bugs, filed in this repo, or in OliverCode's origin for a fault in its own code (#1371, #1397)."""
+        intake.bugs(self.repo)
 
     def stopped(self, n: int, reason: str) -> None:
         """Append the stopped row that says why a story left the status line (#1291)."""

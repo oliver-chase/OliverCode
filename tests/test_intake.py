@@ -102,9 +102,9 @@ class TestBugIntake(unittest.TestCase):
             self.prompts.append((task, k))
             return {"verdict": "findings", "text": answer}
         with mock.patch.object(intake.open_issues, "fetch", return_value=opened or []), \
-                mock.patch.object(intake, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
+                mock.patch.object(intake, "backlog_config", return_value={"repoOwner": "o", "repoName": "r", "errorEpic": 5}), \
                 mock.patch.object(intake, "file_story", side_effect=lambda slug, root, t, b, gh: 77), \
-                mock.patch.object(intake, "ci_candidate", return_value=None):
+                mock.patch.object(intake, "has_backlog_config", return_value=True), mock.patch.object(intake, "ci_candidate", return_value=None):
             return intake.bugs(Path("."), gh=self.gh, read=read, say=lambda *_: None)
 
     def test_only_a_crash_a_fatal_stop_or_a_refused_close_is_a_candidate(self):
@@ -163,8 +163,8 @@ class TestBugIntake(unittest.TestCase):
         for i in "abcd":
             self.stop(f"Close refused: reason {i}x")
         now = intake.datetime.datetime(2999, 1, 1, tzinfo=intake.datetime.timezone.utc)
-        with mock.patch.object(intake.open_issues, "fetch", return_value=[]), mock.patch.object(intake, "ci_candidate", return_value=None), \
-                mock.patch.object(intake, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), \
+        with mock.patch.object(intake.open_issues, "fetch", return_value=[]), mock.patch.object(intake, "ci_candidate", return_value=None), mock.patch.object(intake, "has_backlog_config", return_value=True), \
+                mock.patch.object(intake, "backlog_config", return_value={"repoOwner": "o", "repoName": "r", "errorEpic": 5}), \
                 mock.patch.object(intake, "file_story", return_value=77) as filed:
             read = lambda *a, **k: {"verdict": "findings", "text": "BUG\n" + BODY}
             self.assertEqual(3, intake.bugs(Path("."), gh=self.gh, read=read, now=now, say=print))
@@ -172,8 +172,8 @@ class TestBugIntake(unittest.TestCase):
         self.assertEqual(4, filed.call_count)
 
     def test_a_staging_ci_story_is_p1_and_others_p2(self):
-        self.assertIn("Priority: P1.", intake.story_text(BODY, {"branch": "staging", "sig": "s", "text": "t"})[1])
-        self.assertIn("Priority: P2.", intake.story_text(BODY, {"branch": "", "sig": "s", "text": "t"})[1])
+        self.assertIn("Priority: P1.", intake.story_text(BODY, {"branch": "staging", "sig": "s", "text": "t"}, 5)[1])
+        self.assertIn("Priority: P2.", intake.story_text(BODY, {"branch": "", "sig": "s", "text": "t"}, 5)[1])
 
 
 if __name__ == "__main__":
