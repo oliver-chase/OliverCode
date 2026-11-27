@@ -1,13 +1,14 @@
 """Launcher command `handoff`: one live handoff per project, deleted once the next thread has read it (#1321).
 
 `olivercode handoff write PROJECT FILE` files FILE as PROJECT-handoff-DATE.md in the handoff folder and deletes the project's other handoffs.
-`olivercode handoff read PROJECT` prints the handoff and deletes it, with no archive copy. Only regular files named PROJECT-handoff-*.md count, so
+`olivercode handoff read PROJECT` prints the handoff and deletes it, with no archive copy, then names the reading thread "PROJECT N", N from 1 to 10 (#1353). Only regular files named PROJECT-handoff-*.md count, so
 another project's handoffs and a folder that merely holds the word are left alone. Before write files anything it parses each `olivercode drain`
 and `olivercode dispatch` command in FILE, without running one, and refuses a handoff whose command would print a usage error.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -16,11 +17,12 @@ import sys
 import time
 from pathlib import Path
 
-from lib import cmd_dispatch, cmd_drain
+from lib import cmd_dispatch, cmd_drain, cmd_owner, failure_log
 
 USAGE = "Usage: olivercode handoff write PROJECT FILE | olivercode handoff read PROJECT"
 COMMAND_RE = re.compile(r"`olivercode\s+(drain|dispatch)\b([^`\n]*)`")  # a backticked command, never a sentence that names one
 FENCED_RE = re.compile(r"\s*(?:\$\s*)?olivercode\s+(drain|dispatch)\b(.*)")  # a whole line inside a code fence
+THREAD_NUMBERS = "thread-numbers.json"  # project -> last thread number, in the OliverCode home, never in the handoff folder
 
 
 def handoff_dir() -> Path:
@@ -32,6 +34,34 @@ def handoffs(project: str, folder: Path) -> list[Path]:
     pattern = re.compile(rf"{re.escape(project)}-handoff-.+\.md")
     found = [p for p in folder.glob("*.md") if p.is_file() and pattern.fullmatch(p.name)] if folder.is_dir() else []
     return sorted(found, key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def session() -> str:
+    return os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+
+
+def unpin_step() -> str:
+    """The pin call for the thread that wrote the handoff. An open owner-queue item that names it keeps its pin."""
+    if session() and any(i["session"] == session() for i in cmd_owner.open_items()):
+        return "Pin: leave it pinned, since an open owner-queue item names this session."
+    if not session():
+        return "Pin: call set_pinned for this session with pinned=false, unless `olivercode owner list` shows an open item for this session."
+    return f"Pin: call set_pinned for {session()} with pinned=false."
+
+
+def next_thread(project: str) -> int:
+    """The next thread number for `project`, 1 to 10 and wrapping. Stored only when a handoff is read, so an overwritten one uses no number."""
+    path = failure_log.home() / THREAD_NUMBERS
+    try:
+        counts = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        counts = {}
+    if not isinstance(counts, dict):
+        counts = {}
+    last = counts.get(project)
+    number = last % 10 + 1 if isinstance(last, int) else 1
+    failure_log.write_atomic(path, json.dumps({**counts, project: number}, indent=2) + "\n")
+    return number
 
 
 def command_errors(text: str) -> list[str]:
@@ -89,6 +119,7 @@ def write(project: str, draft: Path, folder: Path) -> int:
         if old.resolve() != target.resolve():
             old.unlink()
     print(f"Handoff written: {target}. It is the only {project} handoff.")
+    print(unpin_step())
     return 0
 
 
@@ -97,10 +128,13 @@ def read(project: str, folder: Path) -> int:
     if not found:
         print(f"No {project} handoff in {folder}.")
         return 1
-    sys.stdout.write(found[0].read_text(encoding="utf-8"))
+    text = found[0].read_text(encoding="utf-8")
+    name = f"{project} {next_thread(project)}"  # numbered before the delete, so a failed save leaves the handoff for the next read
+    sys.stdout.write(text)
     for path in found:  # a second one is stale, so it goes too and one handoff is never left behind
         path.unlink()
     print(f"\nHandoff read and deleted: {found[0].name}. No copy is kept.")
+    print(f'Title: call set_session_title for {session() or "this session"} with "{name}", keeping an "{cmd_owner.OWNER_PREFIX}" prefix in front if its current title has one.')
     return 0
 
 

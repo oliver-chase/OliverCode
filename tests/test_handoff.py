@@ -1,5 +1,6 @@
 """One live handoff per project, deleted once read, and a draft whose command would print a usage error is never filed (#1321)."""
 
+import json
 import os
 import sys
 import unittest
@@ -9,7 +10,7 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_drain, cmd_handoff  # noqa: E402
+from lib import cmd_drain, cmd_handoff, cmd_owner  # noqa: E402
 
 
 class Handoff(unittest.TestCase):
@@ -17,7 +18,8 @@ class Handoff(unittest.TestCase):
         self.tmp = temp_dir(self)
         self.folder = self.tmp / "Claude"
         self.folder.mkdir()
-        self.env = mock.patch.dict(os.environ, {"OLIVERCODE_HANDOFF_DIR": str(self.folder)})
+        self.home = self.tmp / "home"
+        self.env = mock.patch.dict(os.environ, {"OLIVERCODE_HANDOFF_DIR": str(self.folder), "OLIVERCODE_HOME": str(self.home)})
         self.env.start()
         self.addCleanup(self.env.stop)
 
@@ -104,6 +106,44 @@ class Handoff(unittest.TestCase):
             errors = cmd_handoff.command_errors("```\n$ olivercode dispatch abc\n```\nolivercode drain a b")
         self.assertEqual(1, len(errors))
         self.assertTrue(errors[0].startswith("line 2:"))
+
+    def test_the_old_thread_unpins_itself_unless_the_owner_queue_names_it(self):
+        draft = self.tmp / "draft.md"
+        draft.write_text("Next steps: read the board.", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "s1"}):
+            _, out = self.run_cmd("write", "OliverCode", str(draft))
+            self.assertIn("call set_pinned for s1 with pinned=false", out)
+            with mock.patch.object(cmd_owner, "open_items", return_value=[{"session": "s1", "status": "open"}]):
+                draft.write_text("Next steps: read the board.", encoding="utf-8")
+                _, out = self.run_cmd("write", "OliverCode", str(draft))
+            self.assertNotIn("set_pinned", out)
+            self.assertIn("leave it pinned", out)
+
+    def test_the_new_thread_is_numbered_from_the_stored_count(self):
+        self.home.mkdir()
+        (self.home / cmd_handoff.THREAD_NUMBERS).write_text('{"OliverCode": 2}', encoding="utf-8")
+        self.put("OliverCode-handoff-2026-11-26.md", "continue here")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "s2"}):
+            _, out = self.run_cmd("read", "OliverCode")
+        self.assertIn('call set_session_title for s2 with "OliverCode 3"', out)
+        self.assertIn("Owner ·", out)
+        self.assertEqual({"OliverCode": 3}, json.loads((self.home / cmd_handoff.THREAD_NUMBERS).read_text(encoding="utf-8")))
+
+    def test_the_number_wraps_after_ten(self):
+        self.home.mkdir()
+        (self.home / cmd_handoff.THREAD_NUMBERS).write_text('{"DigiOperator": 10}', encoding="utf-8")
+        self.put("DigiOperator-handoff-2026-11-26.md")
+        _, out = self.run_cmd("read", "DigiOperator")
+        self.assertIn('with "DigiOperator 1"', out)
+
+    def test_a_repo_with_no_number_starts_at_one_and_an_overwritten_handoff_uses_none(self):
+        self.put("Pattern-handoff-2026-11-26.md")
+        draft = self.tmp / "draft.md"
+        draft.write_text("next", encoding="utf-8")
+        self.run_cmd("write", "OliverCode", str(draft))
+        self.assertFalse((self.home / cmd_handoff.THREAD_NUMBERS).exists())
+        _, out = self.run_cmd("read", "Pattern")
+        self.assertIn('with "Pattern 1"', out)
 
     def test_a_bad_call_prints_the_usage(self):
         self.assertEqual(1, self.run_cmd("write", "OliverCode")[0])
