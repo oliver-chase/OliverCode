@@ -97,6 +97,9 @@ class FakeIo:
         self.moved.append(n)
         return True, ""
     def release(self, n): self.released.append(n)
+    def set_card(self, n, fields): self.cards = getattr(self, "cards", []) + [(n, fields)]
+    parks = {}  # story number -> the cause its parking comment names (#1348)
+    def parked_for(self, n): return self.parks.get(n, "")
     def keep_open(self, n, reason=""): self.kept.append(n)
     def save_work(self, wt, n): return self.saves.get(n, [])
     saves = {}  # story number -> the files its stopped builder's work was saved with (#1328)
@@ -409,6 +412,28 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(1, out.count("its card says Size XL but its text says M"))
         self.assertIn("needs splitting", cmd_drain.skip_reason(issue(2, "Size: L", size="S")))
         self.assertEqual("", cmd_drain.skip_reason(issue(3, size="XL")))  # a short body with no Size line reads as XS
+
+    def test_a_mismatched_card_is_set_from_the_text_and_a_parked_story_returns_when_its_cause_is_gone(self):
+        """#1348: the card follows the text Size; Backlog stories parked for an overlap or a fitting Size go to Ready with one comment; a text Size XL stays."""
+        io = FakeIo([issue(1, "Size: S", size="XL"), issue(2, "Size: S", status="Backlog"), issue(3, "Size: XL", status="Backlog")], cap=4)
+        io.parks = {2: "overlap", 3: "size"}
+        self.run_drain(io)
+        self.assertIn((1, {"size": "S"}), io.cards)
+        self.assertIn((2, {"status": "Ready"}), io.cards)
+        self.assertEqual([2], [n for n, b in io.comments if b.startswith("Back to Ready:")])
+        self.assertNotIn((3, {"status": "Ready"}), io.cards)
+        self.assertNotIn(3, io.started)
+
+    def test_the_parking_cause_reads_each_comment_in_order(self):
+        """#1348: a story parked, returned and parked again reads as parked, and a comment's own blank lines do not split it."""
+        def io_for(*bodies):
+            out = "".join(json.dumps(b) + "\n" for b in bodies)
+            return cmd_drain.Io(Path("/repo"), "o/r", runner=lambda args: subprocess.CompletedProcess(args, 0, out, ""))
+        park, back = "#5 shares a.py in its Files area.", "Back to Ready: the drain builds stories that share files one after the other."
+        self.assertEqual("overlap", io_for(park, back, park).parked_for(1))
+        self.assertEqual("", io_for(park, back).parked_for(1))
+        self.assertEqual("size", io_for("Parked.\n\nSize XL is too large for one builder session.").parked_for(1))
+        self.assertEqual("", io_for("Size XL is too large for one builder session.\n\nBack to Ready: its text Size S fits one builder.").parked_for(1))
 
     def test_a_full_machine_waits_for_a_free_builder_and_never_reads_the_load(self):
         """#1055: no free builder means wait, then start; the load average plays no part."""

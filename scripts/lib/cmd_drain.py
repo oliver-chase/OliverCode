@@ -45,6 +45,8 @@ def notify(text: str) -> None:
 
 
 NO_AREA = "it names no Files area"
+PARKED = re.compile(r"shares [^\n]* in its Files area|Size \w+ is too large for one builder", re.I)
+RETURNED = "Back to Ready:"
 
 
 def skip_reason(issue: dict, repo: Path | None = None) -> str:
@@ -322,6 +324,22 @@ class Io:
     def stopped(self, n: int, reason: str) -> None:
         """Append the stopped row that says why a story left the status line (#1291)."""
         agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=reason)
+
+    def set_card(self, n: int, fields: dict) -> None:
+        """Queue a board write of `fields` on story n's card (#1348)."""
+        cfg = backlog_config(self.repo)
+        cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": fields}]}]))
+
+    def parked_for(self, n: int) -> str:
+        """The cause a Backlog story was parked for ('overlap' or 'size'), or '' when its latest comment about it is not a parking or none is (#1348)."""
+        raw = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments", "--paginate", "--jq", ".[].body | @json"])
+        cause = ""
+        for body in (json.loads(line) for line in (raw.stdout.splitlines() if raw.returncode == 0 else []) if line.strip()):
+            if RETURNED in body:
+                cause = ""
+            elif m := PARKED.search(body):
+                cause = "overlap" if "Files area" in m.group(0) else "size"
+        return cause
 
     def keep_open(self, n: int, reason: str = "") -> None:
         """After a builder that did not land: say why on the story, reopen it when something closed it, and put its card back to Ready (#877)."""
@@ -622,7 +640,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     waiting: deque = deque()  # committed stories the queue has not taken yet
     committed: dict = {}  # number -> issue of each story committed and not yet landed or sent back to a builder
     landing: dict = {}  # the one batch in flight: its future -> its stories
-    waits, reported, filled, mismatched = 0, set(), set(), set()
+    waits, reported, filled, mismatched, unparked = 0, set(), set(), set(), set()
     stopped = False
     hold_waited = False
 
@@ -735,6 +753,13 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()} | set(committed)
             todo = []
             for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
+                if issue.get("status") == "Backlog" and issue["number"] not in unparked and not owner_gated(issue):  # a story parked for an overlap or a Size returns once that cause is gone (#1348)
+                    unparked.add(issue["number"])
+                    cause = io.parked_for(issue["number"])
+                    if cause and not (cause == "size" and cmd_groom.size_of(issue) in ("L", "XL")):
+                        io.set_card(issue["number"], {"status": "Ready"})
+                        io.comment(issue["number"], f"{RETURNED} " + ("the drain builds stories that share files one after the other." if cause == "overlap" else f"its text Size {cmd_groom.size_of(issue)} fits one builder."))
+                        issue["status"] = "Ready"
                 why = skip_reason(issue, io.repo)
                 if why == NO_AREA and issue["number"] not in filled:  # a Ready story gets its Files area once per drain, just before it builds (#1316)
                     filled.add(issue["number"])
@@ -751,7 +776,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     continue
                 if re.search(r"Size:\s*(XS|S|M|L|XL)\b", issue.get("body") or "") and (text_size := cmd_groom.size_of(issue)) != str(issue["size"]).strip().upper() and issue["number"] not in mismatched:
                     mismatched.add(issue["number"])
-                    say(f"#{issue['number']}: its card says Size {issue['size']} but its text says {text_size}; drain uses {text_size} (#1342).")
+                    say(f"#{issue['number']}: its card says Size {issue['size']} but its text says {text_size}; the card is set to {text_size} (#1342, #1348).")
+                    io.set_card(issue["number"], {"size": text_size})
                 if held := io.blockers(issue):  # a story waits until every blocker is closed, and the skip names the blocker (#1064)
                     if (issue["number"], tuple(held)) not in reported:
                         reported.add((issue["number"], tuple(held)))
