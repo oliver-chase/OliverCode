@@ -159,13 +159,14 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], st["closed"])
 
     def test_the_real_ci_read_names_a_failed_run_on_the_default_branch_in_one_call(self):  # #1482
-        for conclusion, expected in (("failure", "CI run https://ci.test/9 failed"), ("success", "")):
+        red = "CI run https://ci.test/9 failed"
+        for newest_first, expected in ((("failure", "failure"), red), (("failure", "success"), ""), (("success", "failure"), ""), (("failure",), "")):  # #1492
             calls = []
-            reply = json.dumps({"workflow_runs": [{"id": 9, "conclusion": conclusion, "html_url": "https://ci.test/9"}]})
+            reply = json.dumps({"workflow_runs": [{"id": 9 - n, "conclusion": c, "html_url": f"https://ci.test/{9 - n}"} for n, c in enumerate(newest_first)]})
             io = cmd_drain.Io(Path("/repo"), "o/r", runner=lambda args: calls.append(args) or subprocess.CompletedProcess(args, 0, reply, ""))
             with mock.patch.object(io, "branch", return_value="staging"):
                 self.assertEqual(expected, io.ci_failure())
-            self.assertEqual([["api", "repos/o/r/actions/runs?branch=staging&status=completed&per_page=1"]], calls)
+            self.assertEqual([["api", "repos/o/r/actions/runs?branch=staging&status=completed&per_page=2"]], calls)
 
     def test_every_priority_builds_again_once_the_base_passes_after_a_landing(self):  # #1431
         io = FakeIo([issue(1, "Priority: P1"), issue(2, "Priority: P0")], cap=1)

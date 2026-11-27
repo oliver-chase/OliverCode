@@ -158,9 +158,9 @@ class Io:
             shutil.rmtree(wt, ignore_errors=True)
 
     def ci_failure(self) -> str:
-        """The newest completed CI run on origin's default branch when it failed, named by its address, else "" (#1482).
+        """The newest completed CI run on origin's default branch, named by its address, when it and the one before it failed, else "" (#1482). One flaky run is not a red staging (#1492).
         shortcut: a run that cannot be read counts as passing, upgrade when a story is seen to land on red CI after a failed read."""
-        run = intake.failed_ci_run(self.slug, lambda args: self.gh(["api", *args]), self.branch())
+        run = intake.failed_ci_run(self.slug, lambda args: self.gh(["api", *args]), self.branch(), runs=2)
         return f"CI run {run.get('html_url', '')} failed" if run else ""
 
     def list_open(self) -> list[dict] | None:

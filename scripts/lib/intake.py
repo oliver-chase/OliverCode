@@ -301,10 +301,10 @@ def api_json(gh, path: str) -> dict:
         return {}
 
 
-def failed_ci_run(slug: str, gh, branch: str = "staging") -> dict:
-    """The newest completed CI run on the branch when it failed, else {}. A failed read is {} too."""
-    runs = api_json(gh, f"repos/{slug}/actions/runs?branch={branch}&status=completed&per_page=1").get("workflow_runs") or []
-    return runs[0] if runs and runs[0].get("conclusion") == "failure" else {}
+def failed_ci_run(slug: str, gh, branch: str = "staging", runs: int = 1) -> dict:
+    """The newest completed CI run on the branch when the newest `runs` of them all failed, else {}. A failed read is {} too."""
+    found = api_json(gh, f"repos/{slug}/actions/runs?branch={branch}&status=completed&per_page={runs}").get("workflow_runs") or []
+    return found[0] if len(found) >= runs and all(r.get("conclusion") == "failure" for r in found) else {}
 
 
 def ci_candidate(slug: str, gh, branch: str = "staging") -> dict | None:
