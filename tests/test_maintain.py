@@ -387,7 +387,7 @@ class TestStateFolder(Base):
         self.assertTrue(live.exists())
 
     def test_a_log_over_its_limit_is_cut_to_its_newest_whole_lines(self):
-        log = self.home / "commands.log"
+        log = self.home / "maintenance.log"
         lines = [f"line {n:03d}\n" for n in range(40)]  # 9 bytes each, so 11 whole lines fit in 100 bytes
         log.write_text("".join(lines))
         os.utime(log, (1, 1))  # quiet for a long time, so a run may cut it
@@ -398,13 +398,13 @@ class TestStateFolder(Base):
         self.assertEqual(lines[-11:], log.read_text().splitlines(keepends=True))
 
     def test_a_log_written_within_the_last_hour_is_left_for_a_quieter_run(self):
-        log = self.home / "commands.log"
+        log = self.home / "maintenance.log"
         log.write_text("".join(f"line {n:03d}\n" for n in range(40)))
         self.assertEqual([], maintain.check_state(True, self.home, self.LIMITS))
         self.assertEqual(360, log.stat().st_size)
 
     def test_a_clean_home_reports_nothing(self):
-        (self.home / "commands.log").write_text("short\n")
+        (self.home / "maintenance.log").write_text("short\n")
         self.assertEqual([], maintain.check_state(True, self.home, self.LIMITS))
 
     def test_health_fails_over_the_entry_limit_and_passes_under_it(self):

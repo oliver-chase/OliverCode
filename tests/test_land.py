@@ -35,7 +35,7 @@ class Base(unittest.TestCase):
         (seed / "scripts" / "validate.sh").write_text("exit 0\n")
         (seed / "a.txt").write_text("a")
         git(seed, "add", "."); git(seed, "commit", "-q", "-m", "one"); git(seed, "push", "-q", "origin", "main")
-        git(root, "clone", "-q", str(origin), str(root / "main"))
+        git(root, "clone", "-q", "-c", "maintenance.auto=false", "-c", "gc.auto=0", str(origin), str(root / "main"))  # a clone skips scratch_repo's maintenance settings, so a copy could meet its lock half-gone
         git(root / "main", "config", "user.email", "t@example.invalid"); git(root / "main", "config", "user.name", "T")
         git(root / "main", "worktree", "add", "-q", "-b", "story/9", str(root / "wt"), "origin/main")
         (root / "wt" / "b.txt").write_text("b")

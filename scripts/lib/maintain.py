@@ -472,6 +472,10 @@ def check_failure_gaps(fix: bool) -> list[Problem]:
 STATE_STEP = "state"
 OUTPUT_SUFFIXES = (".out", ".log", ".txt")
 RETIRED_OUTPUTS = ("burndown.json", "gap-sweep-state.json", "sweep-state.json", "work-map-state.json")  # written by removed jobs under names that differ from theirs
+UNREAD_STATE = ("684-close.md", "blocker-seen.json", "commands.log", "conform-due.json", "disabled-launchagents", "drain-*.out", "first-context.jsonl", "first-run.json",
+                "fleet-staging", "fleet-sync.out", "groom-state.json*", "handoff-starts.json", "hookspath-watch.log", "inbox", "lesson-flags", "limits.json",
+                "manager-edits.jsonl", "manager.json*", "migrations.json", "owner-decisions.jsonl*", "owner-morning.md", "owner-prompts.json", "owner-report.md", "pending-starts*",
+                "retired-sessions.json", "retro.json", "structure-lessons.jsonl", "trace-checks.json", "trace.jsonl", "usage-profile.json", "validate-slots")  # names no code reads or writes (#1429)
 PREFIX = "com.olivercode."
 LOG_QUIET_SECONDS = 3600  # a log written more recently than this may have a live writer, so it waits for a quieter run
 
@@ -529,6 +533,13 @@ def check_state(fix: bool, home: Path | None = None, limits: dict | None = None)
                 path.unlink(missing_ok=True)
         found.append(Problem(STATE_STEP, f"{len(dead)} output file(s) of removed jobs: {_names(dead)}", fixable=True,
                              fixed=fix and not any(p.exists() for p in dead)))
+    unread = sorted({q for pattern in UNREAD_STATE for q in home.glob(pattern)})
+    if unread:
+        if fix:
+            for path in unread:
+                shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink(missing_ok=True)
+        found.append(Problem(STATE_STEP, f"{len(unread)} file(s) no code reads: {_names(unread)}", fixable=True,
+                             fixed=fix and not any(p.exists() for p in unread)))
     logs = sorted(p for p in home.iterdir() if p.suffix in (".log", ".out") and p.is_file()) if home.is_dir() else []
     quiet = [p for p in logs if time.time() - p.stat().st_mtime >= LOG_QUIET_SECONDS]  # a log still being written is cut by a later run
     big = [p for p in quiet if cap and p.stat().st_size > cap and p not in dead]

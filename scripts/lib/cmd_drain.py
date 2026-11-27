@@ -926,6 +926,7 @@ def detach(argv: list[str], repo: Path, spawn=subprocess.Popen) -> int:
     """Start this drain again as its own session with its output in a log, so it outlives the chat or terminal that started it (#1276)."""
     log = failure_log.home() / "logs"
     log.mkdir(mode=0o700, exist_ok=True)
+    agent_loop.roll(log / f"drain-{repo.name}.log")
     with open(log / f"drain-{repo.name}.log", "a", encoding="utf-8") as out:
         spawn([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "drain", *argv, "--foreground"], stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
     print(f"Drain started for {repo.name} in its own process. Log: {out.name}. Follow it with `olivercode watch {repo.name}`.")

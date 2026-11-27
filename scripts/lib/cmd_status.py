@@ -432,12 +432,9 @@ def digest_path() -> Path:
 
 
 def run_log() -> list[dict]:
-    """The run-log rows, oldest first. A line that is not a JSON object is skipped, and a missing log reads as empty."""
-    path = failure_log.home() / "run-log.jsonl"
-    if not path.is_file():
-        return []
+    """The run-log rows, oldest first, its backup before the live log. A line that is not a JSON object is skipped, and a missing log reads as empty."""
     rows = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in agent_loop.run_log_lines():
         try:
             row = json.loads(line)
         except ValueError:

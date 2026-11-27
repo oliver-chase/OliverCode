@@ -358,7 +358,7 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
     for sig, entry in seen.items():  # a bug the cap held waits in bug-seen.json until the next day
         if entry["verdict"] in ("bug", "regression") and not entry.get("story"):
             new += file_entry(sig, entry)
-    rows = [json.loads(l) for l in (failure_log.home() / "run-log.jsonl").read_text(encoding="utf-8").splitlines() if l.startswith("{")] if (failure_log.home() / "run-log.jsonl").is_file() else []
+    rows = [json.loads(l) for l in agent_loop.run_log_lines() if l.startswith("{")]
     ci = ci_candidate(slug, gh)
     reads = 0
     for c in [*run_candidates(rows), *hook_candidates(), *([ci] if ci else [])]:

@@ -204,11 +204,7 @@ def restart_model(session: str, base: str) -> str:
     """The model a story's next build starts on (#1015): one level above `base` when its last build reached RESTART_ROUND, which the run log keeps,
     so an escalation survives a restart. `base` for a story whose last build did not get that far, or whose log cannot be read."""
     reached = 0
-    try:
-        lines = (failure_log.home() / "run-log.jsonl").read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return base
-    for line in lines:
+    for line in run_log_lines():
         try:
             row = json.loads(line)
         except ValueError:
@@ -266,14 +262,44 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     return {"verdict": "none", "text": failure}
 
 
-def log_review(story: str, verdict: str, text: str) -> None:
-    """Append the reader's pass or findings for a story to the run log. A log that cannot be written never stops a loop."""
+LOG_CAP = 262144  # bytes a log grows to before it rolls (#1429)
+
+
+def roll(path: Path) -> None:
+    """Move a log over LOG_CAP to its one backup `<name>.1`, so the next append starts a small live log. A log that cannot be moved is left as it is."""
     try:
-        with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000],
-                                 "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}) + "\n")
+        if path.stat().st_size > LOG_CAP:
+            os.replace(path, path.with_name(path.name + ".1"))
     except OSError:
         pass
+
+
+def run_log_lines() -> list[str]:
+    """The run log's lines, oldest first: its backup `run-log.jsonl.1` before the live log, so a roll never hides history. A part that cannot be read is skipped."""
+    lines = []
+    for path in (failure_log.home() / "run-log.jsonl.1", failure_log.home() / "run-log.jsonl"):
+        try:
+            lines += path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            pass
+    return lines
+
+
+def append_run_log(row: dict) -> None:
+    """Append one JSON row to the run log, rolling it first. A log that cannot be written never stops a loop."""
+    path = failure_log.home() / "run-log.jsonl"
+    roll(path)
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except OSError:
+        pass
+
+
+def log_review(story: str, verdict: str, text: str) -> None:
+    """Append the reader's pass or findings for a story to the run log. A log that cannot be written never stops a loop."""
+    append_run_log({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000],
+                    "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
 
 
 def start_size(session_id: str, projects: Path | None = None) -> int | None:
@@ -313,11 +339,7 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
         row["start_tokens"] = start_tokens
     if why:
         row["route"] = why  # the rule that chose the model the build started on (#1026)
-    try:
-        with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row) + "\n")
-    except OSError:
-        pass
+    append_run_log(row)
 
 
 STORY_SIZE: dict[str, str] = {}  # story -> its board Size, set when the drain claims it, so every later row carries it (#1301)
@@ -339,11 +361,7 @@ def log_stage(story: str, repo: str, stage: str, started_at: float | None = None
     if STORY_SIZE.get(story):
         row["size"] = STORY_SIZE[story]
     row.update(extra)
-    try:
-        with open(failure_log.home() / "run-log.jsonl", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row) + "\n")
-    except OSError:
-        pass
+    append_run_log(row)
     refresh_city(now)
 
 
