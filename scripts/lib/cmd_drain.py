@@ -4,7 +4,8 @@ It lists open stories through REST (epics, claimed and owner-gated stories are s
 and never two whose stories name the same files, then drives each one run -> validate -> `olivercode land` -> comment and close on REST. A builder that exits
 before its story lands restarts on the same worktree, up to RESTARTS times, then the blocker is commented on the story and drain moves on. `olivercode dispatch N`
 builds one story through the same `work_story`. A drain whose own code moved under it starts itself again, and one whose validation calls a command
-that is gone starts no new story (#1480). Every outside effect goes through the `Io` object, so tests inject fakes and never touch the machine or GitHub.
+that is gone starts no new story (#1480). A story whose validation fails the way the base branch's does is held with no restart (#1481). Every outside
+effect goes through the `Io` object, so tests inject fakes and never touch the machine or GitHub.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from pathlib import Path
 from lib import agent_loop, cmd_dispatch, cmd_land, cmd_owner, failure_log, gh_budget, gitfiles, intake, local_config, model, policy, run_lock, validated
 from lib.open_issues import fetch as fetch_open, owner_gated, rank
 from lib.cmd_land import command_land
+from lib.validate_gates import PROGRESS
 from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
 from lib.placement import config as placement_config
 
@@ -53,16 +55,47 @@ RETURNED = "Back to Ready:"
 HELD = "Held by the fresh reader"  # how a held comment starts, and FINDING what its finding follows, so the next build can read it back (#1474)
 FINDING = "\n\nFinding:\n"
 GONE = "is not a valid command"  # what `olivercode` prints for a command it no longer has (#1480)
+# Lines that differ between two runs of one failure or say nothing of it: validate_gates' timings, land's own closing lines and the smoke banner (#1481)
+NOISE = (PROGRESS, "=== validate: never started", "validate: gates took", "=== validate: python smoke tests FAILED", "--- validate failed", "RESULT ")
+SMOKE_SUMMARY = re.compile(r"Ran \d+ tests across \d+ modules, \d+ failed: (.+)")  # smoke_runner's line naming the failed modules
 
 
-class CommandGone(RuntimeError):
-    """A failed validation called a command that no longer exists. The fault is in the code that ran it, so the story counts no failure (#1480)."""
+class NotTheStorys(RuntimeError):
+    """A failed validation the story did not cause, so it counts no failure and starts no restart. The message is the failing line, `key` is where the
+    run's state keeps the story and `cause` is what its comment says."""
+
+    key = cause = ""
+
+
+class CommandGone(NotTheStorys):
+    """A failed validation called a command that no longer exists. The fault is in the code that ran it (#1480)."""
+
+    key, cause = "gone", "validation calls a command that is gone"
+
+
+class BaseFails(NotTheStorys):
+    """The base branch fails validation with the story's own failing line, so the fault is in the branch or the machine (#1481)."""
+
+    key, cause = "base", "the base branch fails validation with the same failing line"
 
 
 def stop_if_gone(tail: str) -> None:
     """Raise CommandGone with the line of a failed validation's tail that says a command is gone (#1480)."""
     if line := next((line.strip() for line in tail.splitlines() if GONE in line), ""):
         raise CommandGone(line)
+
+
+def failing_line(tail: str) -> str:
+    """The line a story's failed validation and the base's are compared by (#1481): the last one that says FAIL or BLOCKED or names the failed smoke
+    modules, since a gate that passed may print after the one that failed, else the last line. Timing lines are left out, and the smoke line loses its counts."""
+    lines = []
+    for line in (raw.strip() for raw in tail.splitlines()):
+        if not line or line.startswith(NOISE):
+            continue
+        if smoke := SMOKE_SUMMARY.match(line):  # a story that adds tests changes the counts and how a module is split
+            line = "smoke tests FAILED: " + ", ".join(sorted({name.split("#")[0] for name in smoke[1].split(", ")}))
+        lines.append(line)
+    return ([line for line in lines if "FAIL" in line or "BLOCKED" in line] or lines or ["validation failed"])[-1]
 
 
 def skip_reason(issue: dict, repo: Path | None = None) -> str:
@@ -129,8 +162,8 @@ class Io:
         """The repo's own validation command, which a story needs before a builder starts (#1012)."""
         return agent_loop.validation_command(self.repo)
 
-    def base_failure(self) -> str:
-        """The last line of the validation's output when it fails on a worktree of origin's default branch, else "" (#1431). A tree with a recorded pass is not validated again, and a timeout is rerun once and then read as unknown (#1436).
+    def base_failure(self, fresh: bool = False) -> str:
+        """The failing line of the validation's output when it fails on a worktree of origin's default branch, else "" (#1431). A tree with a recorded pass is not validated again unless `fresh`, since an old pass says nothing about the machine now (#1481), and a timeout is rerun once and then read as unknown (#1436).
         shortcut: a base that cannot be fetched or checked out counts as passing, upgrade when a drain needs to stop on an unreadable base."""
         git = ["git", "-C", str(self.repo)]
         if subprocess.run([*git, "fetch", "-q", "origin", self.branch()], capture_output=True, text=True).returncode:
@@ -144,7 +177,7 @@ class Io:
             cmd_land.prepare_worktree(wt, self.repo)
             if agent_loop.validation_command(wt) is None:
                 return ""
-            if validated.is_validated(validated.working_tree(wt)):  # land recorded a full pass for this tree, so nothing is learned by running it again (#1436)
+            if not fresh and validated.is_validated(validated.working_tree(wt)):  # land recorded a full pass for this tree, so nothing is learned by running it again (#1436)
                 return ""
             code, tail = agent_loop.validate_code(wt)
             if code == agent_loop.TIMED_OUT:  # a slow machine is not a red staging: rerun once, then build everything
@@ -152,7 +185,7 @@ class Io:
                 if code == agent_loop.TIMED_OUT:
                     print("Base validation timed out twice, so staging is unknown and stories of every priority build (#1436).")
                     return ""
-            return "" if code == 0 else (tail.strip().splitlines() or ["validation failed"])[-1]
+            return "" if code == 0 else failing_line(tail)
         finally:
             subprocess.run([*git, "worktree", "remove", "--force", str(wt)], capture_output=True, text=True)
             shutil.rmtree(wt, ignore_errors=True)
@@ -297,11 +330,18 @@ class Io:
         def check(cwd):  # raising here ends the loop before the failed round counts toward a fix round or a larger model (#1480)
             passed, tail = agent_loop.validate(cwd)
             if not passed:
-                stop_if_gone(tail)
+                self.blame(tail)
             return passed, tail
 
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, check=check,
                                    rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.repo.name)
+
+    def blame(self, tail: str) -> None:
+        """Raise when a failed validation is not the story's own: it calls a command that is gone (#1480), or the base, validated now, fails with the same failing line (#1481)."""
+        stop_if_gone(tail)
+        line = failing_line(tail)
+        if self.base_failure(fresh=True) == line:
+            raise BaseFails(line)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
         """The policy ask that stopped story/N's builder in this run, or None (#1058)."""
@@ -379,9 +419,11 @@ class Io:
             agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=f"Landing refused: {refused.group(1)}")
             if refused.group(1) == "validate-failed" and (log := re.search(r"\(log: (.+?)\)", out.stdout)):
                 try:  # land prints only the result, so the validation's tail is read from its log
-                    stop_if_gone(agent_loop.gate_tail(Path(log.group(1)).read_text(encoding="utf-8", errors="replace")))
+                    text = Path(log.group(1)).read_text(encoding="utf-8", errors="replace")
                 except OSError:
-                    pass
+                    text = ""
+                if text:
+                    self.blame(agent_loop.gate_tail(text))
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
     def stack(self, items: list[tuple[Path, int]]) -> bool:
@@ -504,7 +546,8 @@ class Io:
         self.claimed_at[n] = self.claim_start[n] = now
         if size:
             agent_loop.STORY_SIZE[f"story-{n}"] = size
-        agent_loop.SPEND.pop(f"story-{n}", None)
+        agent_loop.STORY_SLUG[f"story-{n}"] = self.slug
+        agent_loop.SPEND[f"story-{n}"] = agent_loop.logged_spend(f"story-{n}", self.slug)  # the ceiling covers what earlier drains spent (#1481)
         agent_loop.log_stage(f"story-{n}", self.repo.name, "claimed")
         if gh_budget.refusal() or gh_budget.reserve_write(lane="drain"):
             cfg = backlog_config(self.repo)
@@ -586,8 +629,8 @@ def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str]
             if n not in state.get("limited", []):  # the usage limit already sent its own notification
                 notify(f"#{n} didn't land yet. It'll try again on its own.")  # the reason stays in the story comment and the run log (#1325, #1374)
         return closed, used
-    except CommandGone as exc:  # the drain sends the one notification for it (#1480)
-        put_back_gone(io, state, n, str(exc))
+    except NotTheStorys as exc:
+        put_back(io, state, n, exc)
         return False, 0
     except CloseRefused:  # a refused close leaves the story with the gate's message and its one stopped row (#1011)
         return False, 0
@@ -596,10 +639,12 @@ def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str]
             io.release(n)
 
 
-def put_back_gone(io, state: dict, n: int, line: str) -> None:
-    """Record a story whose validation called a command that is gone, comment the line and put the story back on Ready. No builder restarts for it (#1480)."""
-    state.setdefault("gone", {})[n] = line
-    io.comment(n, f"Drain stopped: validation calls a command that is gone, so this story counts no failure. Line: {line}")
+def put_back(io, state: dict, n: int, exc: NotTheStorys) -> None:
+    """Record a story whose failed validation it did not cause, comment the reason and the line and put the story back on Ready. No builder restarts for it, and this run does not take it again (#1480, #1481)."""
+    state.setdefault(exc.key, {})[n] = str(exc)
+    if isinstance(exc, BaseFails):  # for a gone command the drain sends the one notification (#1480)
+        notify(f"#{n} didn't land yet. It'll try again on its own.")
+    io.comment(n, f"Drain stopped: {exc.cause}, so this story counts no failure. Line: {exc}")
     io.keep_open(n)
 
 
@@ -722,7 +767,8 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
 def land_batch(io, batch: list[tuple[dict, Path, int]], say=print) -> list[tuple[dict, Path, int, str, str]]:
     """Validate and land the committed stories of one batch, one batch at a time (#1317). Two or more first stack and pass one quick validation, which
     each story's own land reuses. A batch that fails that validation lands each story on its own, so each is validated alone and only the failing one fails.
-    One story lands as it always did. Returns (issue, worktree, attempt, "closed" | "failed" | "refused" | "gone", note) per story."""
+    One story lands as it always did. Returns (issue, worktree, attempt, "closed" | "failed" | "refused" | "blameless", note) per story, where a
+    blameless story's note is the NotTheStorys that says why."""
     if len(batch) > 1:
         io.stack([(wt, issue["number"]) for issue, wt, _ in batch])
     rows = []
@@ -733,8 +779,8 @@ def land_batch(io, batch: list[tuple[dict, Path, int]], say=print) -> list[tuple
             rows.append((issue, wt, attempt, "closed" if closed else "failed", note))
         except CloseRefused:  # the refusal is already on the story with its one stopped row
             rows.append((issue, wt, attempt, "refused", ""))
-        except CommandGone as exc:
-            rows.append((issue, wt, attempt, "gone", str(exc)))
+        except NotTheStorys as exc:
+            rows.append((issue, wt, attempt, "blameless", exc))
     return rows
 
 
@@ -768,7 +814,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     skipped = state.setdefault("skipped", {})  # story number -> why the run did not start it (#1456)
     stopped = False
     hold_waited = False
-    checked, base_red, told = None, "", ""  # closed count at the last base check, its failing line, the red lines last said
+    checked, base_red, told = (None, 0), "", ""  # closed and base-held counts at the last base check, its failing line, the red lines last said
     state.setdefault("head", io.code_head())  # the code this run started on (#1480)
 
     def halted() -> bool:
@@ -801,9 +847,9 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 continue
             if status == "closed":
                 state["closed"].append(n)
-            elif status == "gone":
+            elif status == "blameless":
                 try:
-                    put_back_gone(io, state, n, note)
+                    put_back(io, state, n, note)
                 except Exception:
                     pass
             else:
@@ -852,7 +898,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 continue
             if closed:
                 state["closed"].append(issue["number"])
-            elif issue["number"] not in state.get("limited", ()) and issue["number"] not in state.get("gone", ()):  # neither is a failed round (#1299, #1480)
+            elif not any(issue["number"] in state.get(k, ()) for k in ("limited", "gone", "base")):  # none of these is a failed round (#1299, #1480, #1481)
                 state["blocked"].append(issue["number"])
         io.beat([i["number"] for i in running.values()])
 
@@ -898,7 +944,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     return 1
                 say("Drain stopped: the open stories were not read.")
                 return 1
-            skip = set(state["closed"]) | set(state["blocked"]) | {i["number"] for i in running.values()} | set(committed)
+            skip = set(state["closed"]) | set(state["blocked"]) | set(state.get("base", ())) | {i["number"] for i in running.values()} | set(committed)
             todo = []
             for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
                 if issue.get("status") == "Backlog" and issue["number"] not in unparked and not owner_gated(issue):  # a story parked for an overlap or a Size returns once that cause is gone (#1348)
@@ -939,9 +985,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 skipped.pop(issue["number"], None)  # a story that starts was not skipped at the run's end
                 todo.append(issue)
             if todo:
-                if checked != len(state["closed"]):  # the base is checked once per run and again after each landing (#1431)
-                    checked = len(state["closed"])
-                    base_red = io.base_failure()
+                counts = len(state["closed"]), len(state.get("base", ()))
+                if checked != counts:  # the base is checked once per run and again after each landing (#1431) or story it held, then afresh (#1481)
+                    base_red = io.base_failure(fresh=counts[1] > checked[1])
+                    checked = counts
                 red = "; ".join(filter(None, (base_red, io.ci_failure())))  # CI ends on its own time, so each batch of picks reads it (#1482)
                 if red and red != told:
                     say(f"Staging fails validation: {red}. Only P0 stories build until it passes.")
@@ -1124,7 +1171,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
                 io.find_bugs()
             except Exception as exc:  # noqa: BLE001 -- bug intake never hides the run's end
                 print(f"drain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-            landed, retry = len(state["closed"]), len(state["blocked"])
+            landed, retry = len(state["closed"]), len(state["blocked"]) + len(state.get("base", ()))
             notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.{skipped_summary({n: k for n, k in state['skipped'].items() if n not in state['closed']})}")
         if on_main:
             signal.signal(signal.SIGTERM, previous)

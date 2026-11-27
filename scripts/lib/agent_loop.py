@@ -101,17 +101,17 @@ TIMED_OUT = 124  # the exit validate_gates.py gives when a run passes its time b
 
 
 def validate_code(cwd: str | Path) -> tuple[int, str]:
-    """(exit code, the end of its output). A pass is recorded for the worktree's tree, so land reuses it and never runs the same validation again."""
+    """(exit code, the end of its output, both streams merged as land logs them, so two runs of one failure compare equal (#1481)). A pass is recorded for the worktree's tree, so land reuses it and never runs the same validation again."""
     command = validation_command(cwd)
     if command is None:
         return 1, NO_VALIDATION
     try:
-        ran = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=VALIDATE_TIMEOUT)
+        ran = subprocess.run(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", timeout=VALIDATE_TIMEOUT)
     except subprocess.TimeoutExpired:
         return TIMED_OUT, f"Validation ran past {VALIDATE_TIMEOUT} seconds and was stopped."
     if ran.returncode == 0:
         validated.record(Path(cwd))
-    return ran.returncode, gate_tail(ran.stdout + ran.stderr)
+    return ran.returncode, gate_tail(ran.stdout)
 
 
 def validate(cwd: str | Path) -> tuple[bool, str]:
@@ -304,6 +304,20 @@ def run_log_lines() -> list[str]:
     return lines
 
 
+def logged_spend(story: str, slug: str) -> float:
+    """Dollars the run log's cost rows hold for a story of repo `slug`, reader reviews included, so its ceiling survives a new drain (#1481).
+    shortcut: a row that names no repo counts for every repo, and a row older than the log's one backup is forgotten; upgrade when a story is capped by either."""
+    total = 0.0
+    for line in run_log_lines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("story") in (story, f"{story}-review") and row.get("slug", slug) == slug and not row.get("reader_failed"):  # as in SPEND (#1489)
+            total += float(row.get("cost_usd") or 0)
+    return total
+
+
 def append_run_log(row: dict) -> None:
     """Append one JSON row to the run log, rolling it first. A log that cannot be written never stops a loop."""
     try:
@@ -353,10 +367,13 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
     if STORY_SIZE.get(story):
         row["size"] = STORY_SIZE[story]
+    owner = story.removesuffix("-review")
+    if STORY_SLUG.get(owner):
+        row["slug"] = STORY_SLUG[owner]  # which repo's story this cost is, since two repos reuse a number (#1481)
     if reader_failed:
         row["reader_failed"] = True  # its cost is logged and counts against no ceiling (#1489)
     else:
-        SPEND[story.removesuffix("-review")] = SPEND.get(story.removesuffix("-review"), 0.0) + float(reply.get("cost_usd") or 0)
+        SPEND[owner] = SPEND.get(owner, 0.0) + float(reply.get("cost_usd") or 0)
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
@@ -365,7 +382,8 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
 
 
 STORY_SIZE: dict[str, str] = {}  # story -> its board Size, set when the drain claims it, so every later row carries it (#1301)
-SPEND: dict[str, float] = {}  # story -> dollars its rounds and reader reviews have cost since the drain claimed it, across builder restarts (#1318)
+STORY_SLUG: dict[str, str] = {}  # story -> its repo's 'owner/name', set when the drain claims it, so every cost row names it (#1481)
+SPEND: dict[str, float] = {}  # story -> dollars its rounds and reader reviews have cost: read from the run log at each claim, then added to by every round (#1318, #1481)
 STAGE_START: dict[str, float] = {}  # story -> when its current stage began, so each row says how long the stage before it took (#1291)
 CITY_AT = 0.0  # when the drain last rewrote city.html (#1350)
 CITY_EVERY = 60  # seconds between rewrites

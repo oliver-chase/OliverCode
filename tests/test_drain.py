@@ -68,7 +68,8 @@ class FakeIo:
     def pending(self, n): return False
     no_validation = False
     red = []  # the failing line the base check returns on each call, "" once the list is spent (#1431)
-    def base_failure(self):
+    def base_failure(self, fresh=False):
+        self.fresh_checks = [*getattr(self, "fresh_checks", []), fresh]
         self.base_checks = getattr(self, "base_checks", 0) + 1
         return self.red.pop(0) if self.red else ""
     ci = []  # the failed CI run each read returns, "" once the list is spent (#1482)
@@ -1393,6 +1394,176 @@ class StaleCode(unittest.TestCase):
         git(repo, "commit", "--allow-empty", "-qm", "base")
         with mock.patch.object(cmd_drain, "OC_ROOT", repo):
             self.assertEqual(git(repo, "rev-parse", "HEAD").stdout.strip(), io.code_head())
+
+
+BROKEN = "FAIL: tests/test_machine.py"
+
+
+class NotTheStorysFailure(unittest.TestCase):
+    """#1481: a failure the base shares costs the story nothing, and its ceiling covers what earlier drains spent."""
+
+    def setUp(self):
+        self.home = temp_dir(self)
+        mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)}).start()
+        self.notify = mock.patch.object(cmd_drain, "notify").start()
+        self.addCleanup(mock.patch.stopall)
+        for table in (cmd_drain.agent_loop.STORY_SIZE, cmd_drain.agent_loop.STORY_SLUG, cmd_drain.agent_loop.SPEND):
+            mock.patch.dict(table).start()
+        self.repo = temp_dir(self)
+        scratch_repo(self.repo, branch="main")
+        (self.repo / "scripts").mkdir(exist_ok=True)
+        (self.repo / "scripts" / "validate.sh").write_text("exit 1\n")
+        self.io = cmd_drain.Io(self.repo, "o/r")
+
+    def build(self, base):
+        """Story 5's real build with each validation failing on BROKEN and the base check answering `base`. Returns (outcome or error, models, base calls)."""
+        models, calls = [], []
+        reply = {"code": 0, "text": "done", "tokens": 1, "session_id": ""}
+        with mock.patch.object(cmd_drain.agent_loop.model, "run_cli", lambda *a, **k: models.append(k["model"]) or reply), \
+                mock.patch.object(cmd_drain.agent_loop, "validate", return_value=(False, f"gate\n{BROKEN}\n")), \
+                mock.patch.object(self.io, "base_failure", lambda fresh=False: calls.append(fresh) or base):
+            try:
+                out, _ = quiet(self.io.build, issue(5, "Size: S"), self.repo, "")
+            except cmd_drain.BaseFails as exc:
+                out = exc
+        return out, models, calls
+
+    def test_a_base_that_fails_the_same_way_stops_the_build_before_any_failure_counts(self):
+        out, models, calls = self.build(BROKEN)
+        self.assertIsInstance(out, cmd_drain.BaseFails)
+        self.assertEqual((BROKEN, 1, [True]), (str(out), len(models), calls))  # one session, and the base was validated afresh
+
+    def test_a_base_that_passes_or_fails_differently_counts_the_failure_and_steps_up(self):
+        for base in ("", "FAIL: another gate"):
+            out, models, calls = self.build(base)
+            self.assertEqual((False, 3, 3), (out["done"], out["rounds"], len(calls)), base)
+            self.assertNotEqual(models[0], models[-1], base)
+
+    def test_the_story_is_held_with_the_reason_and_is_neither_restarted_nor_blocked(self):
+        io = FakeIo([issue(1), issue(2)], cap=1)
+        real = io.build
+        def build(i, wt, note):
+            if i["number"] == 1:
+                io.started.append(1)
+                raise cmd_drain.BaseFails(BROKEN)
+            return real(i, wt, note)
+        io.build = build
+        st = state()
+        quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
+        quiet(cmd_drain.drain, io, st, sleep=lambda s: None)  # a second pass of the same run does not take the held story again
+        self.assertEqual(([1, 2], [2], [], [1], 0), (io.started, io.closed, st["blocked"], io.kept, st["restarts"][1]))
+        self.assertEqual([1], [n for n, _ in io.comments])
+        self.assertEqual([mock.call("#1 didn't land yet. It'll try again on its own.")], self.notify.call_args_list)
+        self.assertEqual([False, True], io.fresh_checks[:2])  # the held story has the base validated again before the next pick
+        self.assertIn("base branch fails validation with the same failing line", io.comments[0][1])
+        self.assertIn(BROKEN, io.comments[0][1])
+
+    def test_a_landing_that_fails_like_the_base_holds_the_story_with_no_fix_round(self):
+        io = FakeIo([issue(1)], cap=1)
+        io.land = mock.Mock(side_effect=cmd_drain.BaseFails(BROKEN))
+        st = state()
+        quiet(cmd_drain.drain, io, st, sleep=lambda s: None)
+        self.assertEqual(([1], [], [1], [1]), (io.started, st["blocked"], io.kept, io.released))
+        self.assertIn(BROKEN, io.comments[0][1])
+        self.assertEqual([mock.call("#1 didn't land yet. It'll try again on its own.")], self.notify.call_args_list)
+
+    def test_the_runs_last_message_counts_a_story_the_base_held_as_one_that_tries_again(self):
+        io = FakeIo([issue(1)], cap=1)
+        io.land = mock.Mock(side_effect=cmd_drain.BaseFails(BROKEN))
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=self.repo), mock.patch.object(cmd_drain, "slug_of", return_value="o/r"), \
+                mock.patch.object(cmd_drain.cmd_dispatch, "is_engine", return_value=False):
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], io_factory=lambda *a, **k: io, sleep=lambda s: None)
+        self.assertEqual(mock.call("Done: 0 stories landed. 1 will try again."), self.notify.call_args)
+
+    def test_a_failed_landing_compares_the_validations_last_line_and_not_lands_own(self):
+        log = self.home / "land-r-5.log"
+        log.write_text(f"gate\n{BROKEN}\n--- validate failed, rerun\ngate\n{BROKEN}\n--- validate failed, rerun\nRESULT validate-failed\n")
+        ran = subprocess.CompletedProcess([], 1, f"RESULT validate-failed (log: {log})\n", "")
+        with mock.patch.object(cmd_drain.agent_loop, "log_stage"), mock.patch.object(cmd_drain.subprocess, "run", return_value=ran):
+            with mock.patch.object(self.io, "base_failure", return_value=BROKEN), self.assertRaises(cmd_drain.BaseFails):
+                self.io.land(Path("/wt/5"), 5)
+            with mock.patch.object(self.io, "base_failure", return_value=""):
+                self.assertFalse(self.io.land(Path("/wt/5"), 5)[0])
+
+    def real(self, script):
+        """A worktree whose validation is `script`, committed on main, with the repo as its own origin."""
+        repo = temp_dir(self)
+        scratch_repo(repo, branch="main")
+        (repo / "scripts").mkdir(exist_ok=True)
+        (repo / "scripts" / "validate.sh").write_text(script)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "validation", "--no-verify")
+        git(repo, "remote", "add", "origin", str(repo))
+        return repo
+
+    def gates(self, failed, nap=0, ran=10):
+        """A validation on the real gate runner: a smoke gate naming `failed`, then a slower or faster gate that passes and prints after it."""
+        summary = f"  Ran {ran} tests across 2 modules, 1 failed: {failed}"
+        smoke = f"sleep {nap}; echo '{summary}'; echo '=== validate: python smoke tests FAILED ==='; exit 1"
+        runner = REPO_ROOT / "scripts" / "lib" / "validate_gates.py"
+        return f'exec "{sys.executable}" -B "{runner}" "smoke={smoke}" "limits=echo limits ok"\n'
+
+    def verdicts(self, base, story):
+        """Whether the build's check and a failed landing each blame the base, with both validations really run."""
+        self.io = cmd_drain.Io(self.real(base), "o/r")
+        wt, log = self.real(story), self.home / "land-r-5.log"
+        with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(worktrees=temp_dir(self))):
+            passed, tail = cmd_drain.agent_loop.validate(wt)
+            with open(log, "w", encoding="utf-8") as fh:
+                self.assertEqual((False, False), (passed, cmd_drain.cmd_land._validates(wt, fh)))
+                fh.write("RESULT validate-failed\n")
+            found = []
+            ran = subprocess.CompletedProcess([], 1, f"RESULT validate-failed (log: {log})\n", "")
+            real_run = subprocess.run
+            def run(command, *a, **k):
+                return ran if "land" in command else real_run(command, *a, **k)
+            with mock.patch.object(cmd_drain.agent_loop, "log_stage"), mock.patch.object(cmd_drain.subprocess, "run", run):
+                for check in (lambda: self.io.blame(tail), lambda: self.io.land(wt, 5)):
+                    try:
+                        check()
+                        found.append(False)
+                    except cmd_drain.BaseFails:
+                        found.append(True)
+        return found
+
+    def test_two_real_gate_runs_of_one_failure_match_whatever_their_timings_and_test_counts(self):
+        self.assertEqual([True, True], self.verdicts(self.gates("test_machine"), self.gates("test_machine#2", nap=1.1, ran=12)))
+
+    def test_two_real_gate_runs_that_fail_different_modules_do_not_match(self):
+        self.assertEqual([False, False], self.verdicts(self.gates("test_machine"), self.gates("test_story")))
+
+    def test_a_validation_that_writes_to_both_streams_matches_on_the_build_and_the_landing(self):
+        script = "echo 'FAIL: tests/test_machine.py' >&2\necho gate done\nexit 1\n"
+        self.assertEqual([True, True], self.verdicts(script, script + "# the story's copy\n"))
+
+    def test_a_fresh_base_check_validates_a_tree_that_has_a_recorded_pass(self):
+        with mock.patch.object(cmd_drain.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")), \
+                mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(worktrees=temp_dir(self))), \
+                mock.patch.object(cmd_drain.cmd_land, "prepare_worktree"), \
+                mock.patch.object(cmd_drain.validated, "is_validated", return_value=True), mock.patch.object(cmd_drain.validated, "working_tree", return_value="t"), \
+                mock.patch.object(cmd_drain.agent_loop, "validation_command", return_value=["true"]), \
+                mock.patch.object(cmd_drain.agent_loop, "validate_code", return_value=(1, f"gate\n{BROKEN}")):
+            self.assertEqual(("", BROKEN), (self.io.base_failure(), self.io.base_failure(fresh=True)))
+
+    def test_a_new_drain_starts_a_storys_ceiling_from_what_the_run_log_says_it_spent(self):
+        rows = [{"story": "story-5", "round": 1, "cost_usd": 1.50, "slug": "o/r"}, {"story": "story-5-review", "round": 1, "cost_usd": 0.20, "slug": "o/r"},
+                {"story": "story-5", "round": 2, "cost_usd": 0.10},  # a row from before rows named their repo
+                {"story": "story-5", "round": 3, "cost_usd": None, "slug": "o/r"}, {"story": "story-5-review", "round": 1, "cost_usd": 9.0, "slug": "o/r", "reader_failed": True},
+                {"story": "story-5", "round": 1, "cost_usd": 9.0, "slug": "o/other"},
+                {"story": "story-51", "round": 1, "cost_usd": 9.0, "slug": "o/r"}]
+        (self.home / "run-log.jsonl.1").write_text(json.dumps(rows[0]) + "\n")
+        (self.home / "run-log.jsonl").write_text("not json\n" + "".join(json.dumps(r) + "\n" for r in rows[1:]))
+        self.io.claim(5, "S")
+        self.assertAlmostEqual(1.80, cmd_drain.agent_loop.SPEND["story-5"])
+        sessions = []
+        reply = {"code": 0, "text": "done", "tokens": 1, "session_id": "", "cost_usd": 0.25}
+        with mock.patch.object(cmd_drain.agent_loop.model, "run_cli", lambda *a, **k: sessions.append(1) or reply), \
+                mock.patch.object(cmd_drain.agent_loop, "validate", return_value=(False, "own failure")), mock.patch.object(self.io, "base_failure", return_value=""):
+            out, _ = quiet(self.io.build, issue(5, "Size: S", size="S"), self.repo, "")
+        self.assertEqual((True, 1), (out["capped"], len(sessions)))  # $1.80 is under $2.00, and one round takes it past
+        self.assertIn("$2.05", out["reason"])
+        self.io.claim(5, "S")  # the next drain reads the row that round wrote
+        self.assertAlmostEqual(2.05, cmd_drain.agent_loop.SPEND["story-5"])
 
 
 class DetachedRun(unittest.TestCase):

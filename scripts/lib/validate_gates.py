@@ -141,6 +141,7 @@ def run_gates(gates: list[tuple[str, str]], timeout: float | None = None, out=sy
                 out.write(logs[name].read_text(encoding="utf-8", errors="replace"))
             if name in stalled:
                 print(f"=== validate: stalled gate '{name}': no result within the {timeout:.0f}s budget ===", file=out)
+    out.flush()  # a caller that merges the streams then never gets the summary line inside the replay (#1481)
     print(f"validate: gates took {time.monotonic() - run_began:.0f}s in all, at most {max_gates} at once, load {_load():.1f} "
           f"on {os.cpu_count() or 1} cores. Gate seconds: "
           + ", ".join(f"{n} {took[n]:.0f}" for n, _ in gates if n in took), file=err)
