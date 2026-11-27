@@ -3,7 +3,8 @@
 
 The input is JSON: {"issues": [{"number": 42, "fields": {"status": "Ready"}}]}.
 Several callers append to ~/.olivercode/gh-project-queue.json under one lock; the caller that
-can run drains compatible work in one add mutation and update chunks of fifteen.
+can run drains compatible work in one add mutation and update chunks of fifteen. The gh-replay job calls
+replay() once a hold ends, so work queued during the hold is sent without another caller (#1475).
 """
 from __future__ import annotations
 
@@ -21,6 +22,10 @@ import board_mirror  # noqa: E402
 import gh_budget  # noqa: E402
 
 CHUNK = 15
+
+
+class Held(RuntimeError):
+    """A hold or the hourly write cap stopped the call before gh ran, so the work waits for a later run."""
 
 
 def load(path):
@@ -78,7 +83,7 @@ def request(runner, query, write=True):
     """Run one mutation, retrying one transient gateway failure without multiplying writes."""
     why = gh_budget.refusal() or (gh_budget.reserve_write() if write else "")
     if why:
-        raise RuntimeError(why)
+        raise Held(why)
     last = ""
     for _ in range(2):
         done = runner(["api", "graphql", "-f", f"query={query}"])
@@ -119,8 +124,8 @@ def mutation_updates(cfg, updates):
     return f"mutation{{{' '.join(bits)}}}"
 
 
-# GitHub's answer when a number is no issue in the repo, which no retry changes.
-PERMANENT = re.compile(r"Could not resolve to an? (Issue|PullRequest)|NOT_FOUND")
+# GitHub's answer when a number is no issue in the repo, or its card is archived, which no retry changes.
+PERMANENT = re.compile(r"Could not resolve to an? (Issue|PullRequest)|NOT_FOUND|The item is archived and cannot be updated")
 
 
 def drain(cfg, issues, runner):
@@ -154,6 +159,66 @@ def merge_issues(issues):
     return list(merged.values())
 
 
+def send(cfg, runner, err=sys.stderr):
+    """Send this project's queued jobs and rewrite the queue without the ones GitHub accepted or that can never succeed.
+    Returns (count, updates, dropped), or the error that keeps the work queued for a later run."""
+    def take(queue):
+        matching = [item for item in queue if item["cfg"]["projectId"] == cfg["projectId"]]
+        other = [item for item in queue if item not in matching]
+        merged = merge_issues([issue for item in matching for issue in item["issues"]])
+        try:
+            result = drain(cfg, merged, runner)
+        except (RuntimeError, KeyError, TypeError) as exc:
+            # A rate limit or hold keeps the work for a later run.
+            if isinstance(exc, Held) or (isinstance(exc, RuntimeError) and gh_budget.is_limit(str(exc))):
+                return (exc, queue)
+            # Apply each issue alone. Only a failure that would repeat on every run, a number that is no issue or a
+            # field the config no longer has, leaves the queue; any other error keeps the issue for the next run.
+            count = updates = 0
+            dropped, kept = [], []
+            for i, issue in enumerate(merged):
+                try:
+                    c, u = drain(cfg, [issue], runner)
+                except (KeyError, TypeError) as one:
+                    dropped.append(f"#{issue['number']}: the config has no {one}")
+                    continue
+                except RuntimeError as one:
+                    if isinstance(one, Held) or gh_budget.is_limit(str(one)):
+                        return (one, other + [{"cfg": cfg, "issues": kept + merged[i:]}])
+                    if PERMANENT.search(str(one)):
+                        dropped.append(f"#{issue['number']}: {' '.join(str(one).split())}")
+                    else:
+                        kept.append(issue)
+                        print(f"batch_project: kept #{issue['number']} queued after: {one}", file=err)
+                    continue
+                count, updates = count + c, updates + u
+            return ((count, updates, dropped), other + ([{"cfg": cfg, "issues": kept}] if kept else []))
+        return ((*result, []), other)
+    return with_queue(take)
+
+
+def report(result, out, err):
+    """Print what a send did and return its exit code."""
+    if isinstance(result, RuntimeError):
+        print(f"batch_project: {result}; rate-limited work stays queued", file=err)
+        return 1
+    count, updates, dropped = result
+    board_mirror.invalidate()  # the board changed, so the shared item list is stale
+    print(f"batch_project: applied {updates} field update(s) across {count} queued issue(s)", file=out)
+    for line in dropped:
+        print(f"batch_project: dropped {line}; it cannot succeed, so it left the queue", file=err)
+    return 1 if dropped else 0
+
+
+def replay(runner=run_gh, out=sys.stdout, err=sys.stderr):
+    """The gh-replay job's share of the queue (#1475): once no hold is on, send every project's queued jobs as main does.
+    A hold leaves them queued without a call. Returns the exit code."""
+    if gh_budget.refusal():
+        return 0
+    configs = with_queue(lambda queue: (list({item["cfg"]["projectId"]: item["cfg"] for item in queue}.values()), queue))
+    return max([report(send(cfg, runner, err), out, err) for cfg in configs], default=0)
+
+
 def main(argv=None, runner=run_gh, out=sys.stdout, err=sys.stderr):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
@@ -174,48 +239,7 @@ def main(argv=None, runner=run_gh, out=sys.stdout, err=sys.stderr):
     if hold:
         print(f"batch_project: queued {len(issues)} issue(s); {hold}", file=out)
         return 0
-    def take(queue):
-        matching = [item for item in queue if item["cfg"]["projectId"] == cfg["projectId"]]
-        other = [item for item in queue if item not in matching]
-        merged = merge_issues([issue for item in matching for issue in item["issues"]])
-        try:
-            result = drain(cfg, merged, runner)
-        except (RuntimeError, KeyError, TypeError) as exc:
-            # A rate limit or hold keeps the work for a later run.
-            if isinstance(exc, RuntimeError) and (gh_budget.is_limit(str(exc)) or gh_budget.refusal()):
-                return (exc, queue)
-            # Apply each issue alone. Only a failure that would repeat on every run, a number that is no issue or a
-            # field the config no longer has, leaves the queue; any other error keeps the issue for the next run.
-            count = updates = 0
-            dropped, kept = [], []
-            for i, issue in enumerate(merged):
-                try:
-                    c, u = drain(cfg, [issue], runner)
-                except (KeyError, TypeError) as one:
-                    dropped.append(f"#{issue['number']}: the config has no {one}")
-                    continue
-                except RuntimeError as one:
-                    if gh_budget.is_limit(str(one)) or gh_budget.refusal():
-                        return (one, other + [{"cfg": cfg, "issues": kept + merged[i:]}])
-                    if PERMANENT.search(str(one)):
-                        dropped.append(f"#{issue['number']}: {one}")
-                    else:
-                        kept.append(issue)
-                        print(f"batch_project: kept #{issue['number']} queued after: {one}", file=err)
-                    continue
-                count, updates = count + c, updates + u
-            return ((count, updates, dropped), other + ([{"cfg": cfg, "issues": kept}] if kept else []))
-        return ((*result, []), other)
-    result = with_queue(take)
-    if isinstance(result, RuntimeError):
-        print(f"batch_project: {result}; rate-limited work stays queued", file=err)
-        return 1
-    count, updates, dropped = result
-    board_mirror.invalidate()  # the board changed, so the shared item list is stale
-    print(f"batch_project: applied {updates} field update(s) across {count} queued issue(s)", file=out)
-    for line in dropped:
-        print(f"batch_project: dropped {line}; it cannot succeed, so it left the queue", file=err)
-    return 1 if dropped else 0
+    return report(send(cfg, runner, err), out, err)
 
 
 if __name__ == "__main__":

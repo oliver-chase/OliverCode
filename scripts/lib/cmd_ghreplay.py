@@ -8,18 +8,25 @@ job starts no Claude session.
 
 from __future__ import annotations
 
+import io
 import sys
 
 from lib import failure_log, gh_budget, launchd
 from lib.cli import newer_python
 from lib.local_config import OC_ROOT
 
+sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
+import batch_project  # noqa: E402
+
 LABEL = "com.olivercode.gh-replay"
 
 
 def run() -> str:
-    """One replay run of the gh queue. With the queue empty the run returns '', so an idle job prints nothing to its log."""
-    return gh_budget.replay() or ""
+    """One replay run of the gh queue, then of the board queue (#1475). With both queues empty the run returns '', so an idle
+    job prints nothing to its log."""
+    board_out, board_err = io.StringIO(), io.StringIO()
+    batch_project.replay(out=board_out, err=board_err)
+    return "\n".join(part for part in (gh_budget.replay(), board_out.getvalue().strip(), board_err.getvalue().strip()) if part)
 
 
 def plist() -> dict:

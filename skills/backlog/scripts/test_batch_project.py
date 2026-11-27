@@ -112,3 +112,48 @@ class BatchProject(unittest.TestCase):
         self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Nope"}}]}))
         self.assertEqual(2, bp.main(["--config", str(self.cfg), "--input", str(self.input)], err=io.StringIO()))
 
+    def queue(self):
+        return json.loads((Path(self.tmp.name) / "gh-project-queue.json").read_text())
+
+    def test_the_replay_waits_for_a_hold_then_sends_the_queued_writes(self):
+        self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Ready"}}]}))
+        bp.gh_budget.note_limit(seconds=60)
+        bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=Runner(), out=io.StringIO())
+        held = Runner()
+        self.assertEqual(0, bp.replay(runner=held, out=io.StringIO(), err=io.StringIO()))
+        self.assertEqual([], held.calls)
+        self.assertEqual(1, len(self.queue()))
+        bp.gh_budget.clear()
+        out = io.StringIO()
+        self.assertEqual(0, bp.replay(runner=held, out=out, err=io.StringIO()))
+        self.assertIn("applied 1 field update(s) across 1 queued issue(s)", out.getvalue())
+        self.assertEqual([], self.queue())
+
+    def test_the_write_cap_keeps_queued_work_without_a_write(self):
+        self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Ready"}}]}))
+        runner = Runner()
+        with mock.patch.object(bp.gh_budget, "WRITES_PER_HOUR", 1):
+            bp.gh_budget.reserve_write()
+            self.assertEqual(1, bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=runner, out=io.StringIO(), err=io.StringIO()))
+        self.assertFalse([call for call in runner.calls if "addProject" in call or "updateProject" in call])
+        self.assertEqual(1, len(self.queue()))
+
+    def test_an_archived_card_leaves_the_queue_on_one_line_and_is_not_sent_again(self):
+        archived = "The item is archived and cannot be updated"
+        fake, updates = Runner(), []
+        def runner(args):
+            if "updateProject" in args[-1]:
+                updates.append(args[-1])
+                return subprocess.CompletedProcess(args, 1, "", archived)
+            return fake(args)
+        self.input.write_text(json.dumps({"issues": [{"number": 1, "fields": {"status": "Ready"}}]}))
+        err = io.StringIO()
+        self.assertEqual(1, bp.main(["--config", str(self.cfg), "--input", str(self.input)], runner=runner, err=err, out=io.StringIO()))
+        dropped = [line for line in err.getvalue().splitlines() if "dropped" in line]
+        self.assertEqual(1, len(dropped))
+        self.assertIn("dropped #1: The item is archived and cannot be updated", dropped[0])
+        self.assertEqual([], self.queue())
+        updates.clear()
+        self.assertEqual(0, bp.replay(runner=runner, out=io.StringIO(), err=io.StringIO()))
+        self.assertEqual([], updates)
+
