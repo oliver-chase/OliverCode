@@ -75,7 +75,14 @@ def is_epic(issue: dict) -> bool:
 
 
 def new_state() -> dict:
-    return {"closed": [], "blocked": [], "sessions": 0, "tokens": 0, "restarts": {}}
+    return {"closed": [], "blocked": [], "sessions": 0, "tokens": 0, "restarts": {}, "skipped": {}}
+
+
+def skipped_summary(skipped: dict) -> str:
+    """The run-end sentence naming how many stories the run did not start for each reason, or '' when it started every one it met (#1456). `skipped` maps a story number to its reason."""
+    labels = {"blocker": "blocked by an open story", "owner": "owner-gated", "size": "too large to build and not split"}
+    counts = [f"{n} {labels[k]}" for k in labels if (n := sum(1 for v in skipped.values() if v == k))]
+    return f" Not started: {', '.join(counts)}." if counts else ""
 
 
 class Io:
@@ -682,6 +689,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     committed: dict = {}  # number -> issue of each story committed and not yet landed or sent back to a builder
     landing: dict = {}  # the one batch in flight: its future -> its stories
     waits, reported, filled, mismatched, unparked = 0, set(), set(), set(), set()
+    skipped = state.setdefault("skipped", {})  # story number -> why the run did not start it (#1456)
     stopped = False
     hold_waited = False
     checked, red, red_told = None, "", False  # closed count at the last base check, its failing line, whether the owner was told
@@ -810,6 +818,10 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     else:
                         why += " and none could be found"
                 if why:  # each skipped story is named once per drain, with the reason (#1014)
+                    if owner_gated(issue):
+                        skipped[issue["number"]] = "owner"
+                    elif "needs splitting" in why:
+                        skipped[issue["number"]] = "size"
                     if issue["number"] not in reported:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")
@@ -821,10 +833,12 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     say(f"#{issue['number']}: its card says Size {issue['size']} but its text says {text_size}; the card is set to {text_size} (#1342, #1348).")
                     io.set_card(issue["number"], {"size": text_size})
                 if held := io.blockers(issue):  # a story waits until every blocker is closed, and the skip names the blocker (#1064)
+                    skipped[issue["number"]] = "blocker"
                     if (issue["number"], tuple(held)) not in reported:
                         reported.add((issue["number"], tuple(held)))
                         say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
                     continue
+                skipped.pop(issue["number"], None)  # a story that starts was not skipped at the run's end
                 todo.append(issue)
             if todo and checked != len(state["closed"]):  # the base is checked once per run and again after each landing (#1431)
                 checked = len(state["closed"])
@@ -1007,7 +1021,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
             except Exception as exc:  # noqa: BLE001 -- bug intake never hides the run's end
                 print(f"drain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
             landed, retry = len(state["closed"]), len(state["blocked"])
-            notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.")
+            notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.{skipped_summary({n: k for n, k in state['skipped'].items() if n not in state['closed']})}")
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)

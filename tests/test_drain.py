@@ -1238,6 +1238,16 @@ class DetachedRun(unittest.TestCase):
         self.assertEqual(1, len(calls))
         self.assertIn("Done: 2 stories landed. 1 will try again.", calls[0].args[0][2])
 
+    def test_a_run_end_notification_counts_each_reason_a_story_was_not_started(self):  # #1456
+        def work(io, st, sleep=None):
+            st["skipped"].update({4: "blocker", 5: "owner", 6: "size", 7: "size", 8: "size"})
+            st["closed"].append(8)  # a story that landed was started, so it is not counted
+            return 0
+        with mock.patch.object(cmd_drain, "drain", work), mock.patch.object(cmd_drain.subprocess, "run") as run:
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
+        calls = [c for c in run.call_args_list if c.args and c.args[0][0] == "osascript"]
+        self.assertIn("Not started: 1 blocked by an open story, 1 owner-gated, 2 too large to build and not split.", calls[-1].args[0][2])
+
     def test_notify_sends_nothing_and_does_not_raise_without_osascript(self):
         with mock.patch.object(cmd_drain.subprocess, "run", side_effect=FileNotFoundError):
             cmd_drain.notify("anything")
