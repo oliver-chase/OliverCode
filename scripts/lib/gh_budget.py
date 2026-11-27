@@ -404,8 +404,8 @@ def _read_rows(now: float, window: int) -> list[dict]:
 
 
 def note_before(key: str, fetch=None, now: float | None = None) -> None:
-    """Remember the GraphQL points and REST requests left before a gh call, keyed by the tool call. The reading is the cached one
-    from points_reading, so this adds no rate-limit call of its own. Fails open."""
+    """Remember the GraphQL points and REST requests left before a gh call, keyed by the tool call. The reading is a fresh one, so the
+    drop measured in note_after is real. Fails open."""
     try:
         now = now or time.time()
         path = home() / "gh-pending.json"
@@ -414,7 +414,7 @@ def note_before(key: str, fetch=None, now: float | None = None) -> None:
         except (OSError, ValueError):
             pending = {}
         pending = {k: v for k, v in pending.items() if now - v["t"] < 600}
-        left = points_reading(fetch, now)
+        left = points_reading(fetch, now, fresh=True)
         if "remaining" not in left:  # the read failed, so there is nothing to measure this call against
             return
         pending[key] = {"t": now, "remaining": left["remaining"], "rest": left.get("rest")}
@@ -425,16 +425,15 @@ def note_before(key: str, fetch=None, now: float | None = None) -> None:
 
 
 def note_after(key: str, session: str, command: str, fetch=None, now: float | None = None) -> None:
-    """Log what a finished gh call spent: the drop in GraphQL points and in REST requests since note_before. The readings come
-    from the one-minute cache, so a call that finishes within a minute of its start can show no spend, and the figures are
-    approximate when other agents spend at the same moment. One line per call in ~/.olivercode/gh-cost.jsonl, kept for 24 hours."""
+    """Log what a finished gh call spent: the drop in GraphQL points and in REST requests since note_before. Both readings are fresh,
+    and the figures are approximate when other agents spend at the same moment. One line per call in ~/.olivercode/gh-cost.jsonl, kept for 24 hours."""
     try:
         now = now or time.time()
         path = home() / "gh-pending.json"
         pending = json.loads(path.read_text(encoding="utf-8"))
         before = pending.pop(key)
         path.write_text(json.dumps(pending), encoding="utf-8")
-        left = points_reading(fetch, now)
+        left = points_reading(fetch, now, fresh=True)
         if "remaining" not in left:
             return
         points = max(0, before["remaining"] - left["remaining"])

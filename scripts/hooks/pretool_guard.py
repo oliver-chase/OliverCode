@@ -80,7 +80,11 @@ def verdicts(data: dict) -> list[tuple[str, str]]:
     if command and not any(kind == "deny" for kind, _ in found):
         why = _safely(gh_guard.check, data)
         if why:
-            _found(found, "gh_guard", "deny", why, cwd)
+            # A commit chained to a gh step still runs: only the gh step is held, so the verdict is an ask with the rewritten command.
+            mixed = _safely(gh_guard.hold_only_gh, command, why)
+            if mixed:
+                data["_gh_hold"] = (why, mixed)
+            _found(found, "gh_guard", "ask" if mixed else "deny", why, cwd)
     # A memory write that states a rule is refused; it comes last so another guard's reason is not hidden by it.
     why = _safely(memory_guard.reason, data)
     if why:
@@ -98,9 +102,14 @@ def main() -> int:
     found = verdicts(data)
     if found:
         kind, reason = next((v for v in found if v[0] == "deny"), found[0])
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                 "permissionDecision": kind,
-                                                 "permissionDecisionReason": reason}}))
+        held = data.get("_gh_hold")
+        if held and kind == "ask":
+            # Another guard's ask must not drop the hold, so the rewritten command runs whichever ask comes first, and every ask's reason is shown.
+            reason = " ".join(r for k, r in found if k == "ask")
+        out = {"hookEventName": "PreToolUse", "permissionDecision": kind, "permissionDecisionReason": reason}
+        if held and kind == "ask":
+            out["updatedInput"] = {**data["tool_input"], "command": held[1]}
+        print(json.dumps({"hookSpecificOutput": out}))
         return 0
     return 0
 

@@ -333,15 +333,15 @@ class TestCostLog(Isolated):
 
 
 class TestPointsReading(Isolated):
-    def test_a_minute_holds_one_rate_limit_call_however_many_gh_calls_run(self):
-        reading = {"remaining": 4000, "reset": 0, "rest": 4900}
-        with mock.patch.object(gh_budget, "_fetch_points", return_value=reading) as fetch:
+    def test_each_cost_reading_asks_the_rate_limit_afresh(self):
+        with mock.patch.object(gh_budget, "_fetch_points", return_value={"remaining": 4000, "reset": 0, "rest": 4900}) as fetch:
             for n in range(5):
                 gh_budget.note_before(f"k{n}", now=100 + n)
+                self.assertEqual(2 * n + 1, fetch.call_count)
                 gh_budget.note_after(f"k{n}", "s1", "gh x", now=100 + n)
-            self.assertEqual(1, fetch.call_count)
+            self.assertEqual(10, fetch.call_count)
             gh_budget.note_before("late", now=100 + gh_budget.POINTS_TTL + 1)
-            self.assertEqual(2, fetch.call_count)
+            self.assertEqual(11, fetch.call_count)
 
 
 class TestGuardCheck(Isolated):
