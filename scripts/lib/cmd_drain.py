@@ -49,6 +49,8 @@ def notify(text: str) -> None:
 NO_AREA = "it names no Files area"
 PARKED = re.compile(r"shares [^\n]* in its Files area|Size \w+ is too large for one builder", re.I)
 RETURNED = "Back to Ready:"
+HELD = "Held by the fresh reader"  # how a held comment starts, and FINDING what its finding follows, so the next build can read it back (#1474)
+FINDING = "\n\nFinding:\n"
 
 
 def skip_reason(issue: dict, repo: Path | None = None) -> str:
@@ -239,14 +241,27 @@ class Io:
         problems, self.resumed[n] = cmd_land.resume_worktree(self.repo, path, str(n), f"origin/{self.branch()}")
         if problems:
             raise RuntimeError("; ".join(problems))
+        if self.resumed[n] and (finding := self.held_finding(n)):
+            self.resumed[n] += cmd_land.HELD_NOTE.format(finding=finding)
         return path
+
+    def held_finding(self, n: int) -> str:
+        """The finding in story n's latest held comment, or '' when it has none (#1474). Only the repo's own people are read, since the text goes into a builder's brief.
+        shortcut: a failed read counts as no finding, upgrade when a resumed build is seen to miss one."""
+        raw = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments", "--paginate", "--jq", ".[] | {body, author_association} | @json"])
+        finding = ""
+        for row in (json.loads(line) for line in (raw.stdout.splitlines() if raw.returncode == 0 else []) if line.strip()):
+            body = row.get("body") or ""
+            if body.startswith(HELD) and row.get("author_association") in ("OWNER", "MEMBER", "COLLABORATOR"):
+                finding = body.partition(FINDING)[2]
+        return finding
 
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names, and the
         model is the one the brief names (#1015), with a small story getting a third round (#890)."""
         n, size = issue["number"], intake.size_of(issue)
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree)) if part)
-        brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note=note or self.resumed.get(n, ""))
+        brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note="\n".join(filter(None, (note, self.resumed.get(n, "")))))  # a restart keeps the resume note and its finding (#1474)
         builder, _reader, why = intake.models(issue, f"story-{n}")
         files = intake.files_area(issue.get("body") or "")
         review = agent_loop.review_mode(size, issue.get("labels") or (), files, intake.priority_of(issue))
@@ -540,7 +555,7 @@ def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str]
 
 def held_comment(worktree: Path, finding: str) -> str:
     """The one comment a held story gets: that nothing was pushed, where the branch is kept, and the finding itself (#975)."""
-    return f"Held by the fresh reader, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.\n\nFinding:\n{finding[:2000]}"
+    return f"{HELD}, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.{FINDING}{finding[:2000]}"
 
 
 def policy_stop_in(repo: str, start: str) -> dict | None:

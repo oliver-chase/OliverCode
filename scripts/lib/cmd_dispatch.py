@@ -30,6 +30,7 @@ HEADLESS_RULES = """Builder rules:
 - Commit on the branch only, by explicit path, and reference the story as (#{n}) in every message
 - Commit and stop. The runner validates the commit, lands it with `olivercode land`, logs the story and closes it, so you never validate, land, log or close
 - Leave production deploys, payments, credentials and the owner's rules files (CLAUDE.md, VOICE.md, DESIGN.md) to the owner
+- Every scenario is your own to deliver, and a step left to the owner is not done. When you cannot meet one, stop and name it, and never commit a partial story as finished
 - Read an issue and its comments over REST with `gh api repos/OWNER/REPO/issues/N` and `.../issues/N/comments`, which spend no GraphQL points. `gh issue` and `gh project` spend the shared 5,000-point GraphQL hour
 - {model}. When you wait for a result, end your turn and never poll
 - Reuse before you write: check in order whether the code needs to exist, already exists here, is in the standard library, is in an installed dependency, or fits one line. Write the minimum only after that

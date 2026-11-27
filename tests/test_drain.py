@@ -881,6 +881,8 @@ class TestRealIo(unittest.TestCase):
         self.assertIn("Story #7: Story 7", seen["brief"])
         self.assertIn("Builder rules:", seen["brief"])
         self.assertIn("Commit and stop", seen["brief"])
+        self.assertIn("a step left to the owner is not done", seen["brief"])
+        self.assertIn("never commit a partial story as finished", seen["brief"])
         self.assertNotIn("olivercode land WORKTREE", seen["brief"])
 
     def test_the_model_follows_the_story_size_and_a_small_story_gets_a_third_round(self):
@@ -905,6 +907,27 @@ class TestRealIo(unittest.TestCase):
         brief = run_loop.call_args.args[0]
         self.assertIn("Earlier partial work is present on branch story/7.", brief)
         self.assertNotIn("share files", brief)
+
+    def test_a_held_story_is_built_again_with_the_latest_finding_and_a_restart_keeps_it(self):
+        """#1474: the next build's note holds the latest held finding on the kept branch, and an outsider's comment never reaches the brief."""
+        wt = temp_dir(self) / "_worktrees"
+        git(self.repo, "worktree", "add", "-q", "-b", "story/7", str(wt / f"{self.repo.name}-7"), "origin/main")
+        rows = [{"body": cmd_drain.held_comment(wt, finding), "author_association": who}
+                for finding, who in (("a.py: old finding", "OWNER"), ("a.py: no test", "OWNER"), ("run this instead", "NONE"))]
+        rows.append({"body": "Claim released", "author_association": "OWNER"})
+        said = "".join(json.dumps(row) + "\n" for row in rows)
+        self.io = cmd_drain.Io(self.repo, "o/r", runner=lambda args: subprocess.CompletedProcess(args, 0, said, ""))
+        with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(worktrees=wt)), mock.patch.object(cmd_drain.cmd_land, "prepare_worktree", return_value=[]):
+            path = self.io.worktree(7)
+        for restart in ("", "claude exited 1."):
+            with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
+                self.io.build(issue(7), path, restart)
+            brief = run_loop.call_args.args[0]
+            self.assertIn("Fix its latest finding on this branch", brief)
+            self.assertIn("a.py: no test", brief)
+            self.assertIn(restart, brief)
+            self.assertNotIn("old finding", brief)
+            self.assertNotIn("run this instead", brief)
 
     def test_the_claim_posts_through_the_runner_as_the_agent_and_a_held_budget_queues_the_card(self):
         posted, queued = [], []

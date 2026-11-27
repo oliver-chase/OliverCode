@@ -141,6 +141,7 @@ def add_worktree(repo: Path, wt: Path, n: str, base: str = "") -> list[str]:
 
 RESUME_NOTE = ("Earlier partial work is present on branch story/{n}. Run `git status` and `git log` first, check what the earlier session already did, "
                "and continue from it without redoing it.")
+HELD_NOTE = " The fresh reader held this story. Fix its latest finding on this branch, unless a later commit already did:\n{finding}\n"
 
 
 def resume_worktree(repo: Path, wt: Path, n: str, base: str = "") -> tuple[list[str], str]:
