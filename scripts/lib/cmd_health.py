@@ -10,7 +10,7 @@ from pathlib import Path
 from lib import claude_settings as _claude_settings
 from lib import queue_shim as _queue_shim
 from lib.health_checks import (
-    _check_activation_links, _check_managed_hooks_only, _check_stopped_hooks, _check_memory, _check_commits_behind, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
+    _check_activation_links, _check_managed_hooks_only, _check_stopped_hooks, install_linked, _check_memory, _check_commits_behind, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
     _check_placement_drift, _check_vault_skill_links, _check_python, _check_launcher, _check_path_checkout, _check_gh_version, _check_gh_auth, _check_sleep, _check_worktree_hooks, _check_clean_clone_suite, _check_state_folder,
 )
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
@@ -92,13 +92,12 @@ def command_health() -> int:
     # Claude Code hooks. Only a machine where install linked this checkout is expected
     # to carry them; a fresh clone or CI runner has not installed, which is a skip.
     print("\nClaude Code hooks:")
-    claude_md = _claude_dir() / "CLAUDE.md"
     # A registered hook whose script is gone is reported whether or not install linked this checkout (#1270).
     gone = _claude_settings.dead(_claude_dir() / "settings.json")
     if gone:
         t.fail(f"~/.claude/settings.json runs {len(gone)} hook script(s) that do not exist: "
                f"{', '.join(gone)} — run `olivercode install`")
-    if not (claude_md.is_symlink() and claude_md.resolve() == (OC_ROOT / "CLAUDE.md").resolve()):
+    if not install_linked(OC_ROOT):
         t.warn("install has not linked this checkout on this machine — hooks not checked")
     else:
         lacking = _claude_settings.missing(_claude_dir() / "settings.json")

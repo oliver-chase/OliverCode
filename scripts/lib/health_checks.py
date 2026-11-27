@@ -451,9 +451,18 @@ def stopped_hook(repo: Path, oc_root: Path = OC_ROOT, private: bool = False) -> 
     return "; ".join(repo_gates.hook_problems(repo, repo_gates.hook_templates(oc_root), private))
 
 
+def install_linked(oc_root: Path) -> bool:
+    """True when ~/.claude/CLAUDE.md links to this checkout, so install ran on this machine."""
+    claude_md = _claude_dir() / "CLAUDE.md"
+    return claude_md.is_symlink() and claude_md.resolve() == (oc_root / "CLAUDE.md").resolve()
+
+
 def _check_stopped_hooks(oc_root: Path, private: dict[str, Path]) -> tuple[int, int, int]:
     """Fail OliverCode and each private repo whose git runs no gates, such as an unset core.hooksPath, and name the fix (#1286)."""
     print("\nCommit hooks:")
+    if not install_linked(oc_root):
+        print("  [WARN] install has not linked this checkout on this machine, so commit hooks are not checked")
+        return 0, 0, 1
     passed = failed = 0
     for name, path in [(oc_root.name, oc_root), *private.items()]:
         if not (path / ".git").exists():
