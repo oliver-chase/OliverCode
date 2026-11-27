@@ -6,9 +6,12 @@ status-digest.md (cmd_status.digest_path). A message that is only a status quest
 turn runs and the message never enters the thread. A mixed message goes through with the lines added as context. Every other prompt, a prompt that
 starts with "ask:", and every message from another session or a notification, gets nothing. The hook fails open on its own error.
 
+It numbers a new OliverCode chat (#1488): on the first prompt of an interactive session that starts in a checkout of the OliverCode repo or names OliverCode, it
+records the next thread number and gives the calls that title and pin the session. A `handoff read` prompt is left to that command, which numbers its thread.
+
 It also flags a long thread once (#1319): when an interactive session's transcript shows over 250,000 tokens of context, the first prompt after that
-gets one line telling the session to write the handoff with `olivercode handoff write`, which starts the next thread (#1321, #1476). A marker in the OliverCode home keeps it to once per session, and a
-headless builder is never flagged.
+gets one line telling the session to write the handoff with `olivercode handoff write`, which prints the calls that start the next thread (#1321, #1488).
+A marker in the OliverCode home keeps it to once per session, and a headless builder is never flagged.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -35,6 +39,9 @@ STATUS_RE = re.compile(r"\bwhat(?:'s| is| are)\s+(?:the\s+)?status\b|\bstatus\s+
                        r"|\bwhen\s+(?:will|is|does)\s+(?:it|this|that|everything|the\s+\w+)\s+(?:finish|land|complete|be\s+done|be\s+ready|done|ready)\b",
                        re.IGNORECASE | re.MULTILINE)
 ASK_RE = re.compile(r"\s*ask:", re.IGNORECASE)  # the owner's way to force a model turn on a status question
+OC_ROOT = Path(__file__).resolve().parents[2]
+NAMES_OC_RE = re.compile(r"\bolivercode\b", re.IGNORECASE)
+HANDOFF_READ_RE = re.compile(r"""olivercode['"]?\s+handoff\s+read\b""", re.IGNORECASE)  # the launcher path may be quoted
 # Words that may remain once the status phrase is cut out: a message that leaves any other word, such as "and fix the parser", also asks for work.
 FILLER = {"a", "about", "along", "and", "any", "are", "board", "done", "far", "finish", "how", "i", "is", "it", "left", "now", "of", "on", "please",
           "queue", "ready", "right", "so", "still", "status", "that", "the", "this", "thanks", "what", "when", "whats", "will", "you", "everything"}
@@ -120,11 +127,48 @@ def context_tokens(transcript: Path) -> int:
     return 0
 
 
+def interactive_session(data: dict) -> str:
+    """The session's id, or '' for a headless builder or input with no id."""
+    if os.environ.get("OLIVERCODE_HEADLESS") == "1":  # model.HEADLESS_ENV
+        return ""
+    return re.sub(r"[^\w-]", "", str(data.get("session_id") or ""))
+
+
+def shared_git_dir(folder: str) -> str:
+    """The .git folder a checkout shares with its worktrees, or '' outside a repo."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}  # an inherited GIT_DIR would answer for every folder
+    done = subprocess.run(["git", "-C", folder, "rev-parse", "--path-format=absolute", "--git-common-dir"], env=env,
+                          capture_output=True, text=True, timeout=3)
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def in_olivercode(folder: str) -> bool:
+    """Whether `folder` is in any checkout of the repo this hook runs from, which may itself be a worktree."""
+    found = shared_git_dir(folder) if folder else ""
+    return bool(found) and found == shared_git_dir(str(OC_ROOT))
+
+
+def new_thread_note(data: dict) -> str:
+    """The calls that number and pin a new OliverCode chat (#1488), or ''. Only a first prompt counts, so a later mention never takes the pin."""
+    prompt, session = str(data.get("prompt") or ""), interactive_session(data)
+    if not session or not from_owner(prompt) or HANDOFF_READ_RE.search(prompt):
+        return ""
+    if context_tokens(Path(str(data.get("transcript_path") or ""))):  # a model call is on record, so this is not the first prompt
+        return ""
+    if not (NAMES_OC_RE.search(prompt) or in_olivercode(str(data.get("cwd") or ""))):
+        return ""
+    from lib import cmd_handoff  # imported only for a new OliverCode chat, not on every prompt
+    number, steps = cmd_handoff.claim_thread("OliverCode", session)
+    if not steps:
+        return ""
+    return f"This is a new OliverCode chat, thread {number}. Make these calls before the turn's work:\n" + "\n".join(steps)
+
+
 def long_thread_note(data: dict) -> str:
     """One line, once per session, when an interactive thread's context passes LONG_TOKENS; '' for a short thread, a headless builder or a repeat."""
-    session = re.sub(r"[^\w-]", "", str(data.get("session_id") or ""))
+    session = interactive_session(data)
     transcript = str(data.get("transcript_path") or "")
-    if not session or not transcript or os.environ.get("OLIVERCODE_HEADLESS") == "1":  # model.HEADLESS_ENV
+    if not session or not transcript:
         return ""
     if context_tokens(Path(transcript)) < LONG_TOKENS:
         return ""
@@ -132,17 +176,9 @@ def long_thread_note(data: dict) -> str:
     if marker.exists():
         return ""
     marker.touch()
-    from lib import cmd_handoff  # imported only for the one long-thread line, not on every prompt
-    blocker = cmd_handoff.start_blocker()
-    if blocker:
-        outcome = (f"This machine cannot start the next thread: {blocker}. Give the owner that reason and this one prompt to paste, with the project's name "
-                   f"for PROJECT: {cmd_handoff.read_prompt('PROJECT', cmd_handoff.handoff_dir())}")
-    else:
-        outcome = ("Tell the owner in one line with the link it prints. If it could not start the thread, give the owner the reason and the prompt to paste "
-                   "that it prints.")
     return ("This thread's context is past 250,000 tokens, so each turn costs more than the work in it. When this turn's work is done, run "
-            f"`olivercode handoff write PROJECT FILE`, which starts the next thread with Remote Control on. Start no other session. {outcome} "
-            "The owner never has to ask for a handoff.")
+            "`olivercode handoff write PROJECT FILE` and make the calls it prints, which start the next thread in the desktop app. Start no other "
+            "session. Tell the owner in one line. The owner never has to ask for a handoff.")
 
 
 def block_reason(path: Path) -> str:
@@ -168,7 +204,7 @@ def main() -> int:
         print(json.dumps({"decision": "block", "reason": block_reason(cmd_status.digest_path()),
                           "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context(prompt)}}))
         return 0
-    text = "\n".join(part for part in (context(prompt), long_thread_note(data)) if part)
+    text = "\n".join(part for part in (context(prompt), new_thread_note(data), long_thread_note(data)) if part)
     if text:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}))
     return 0

@@ -2,17 +2,15 @@
 
 import json
 import os
-import shlex
-import shutil
 import subprocess
 import sys
 import unittest
 from unittest import mock
 
-from _support import REPO_ROOT, load_script, quiet, temp_dir
+from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
 
 hint = load_script("scripts/hooks/status_hint.py")
-from lib import cmd_handoff  # noqa: E402  (the hint's load puts scripts/ on the path)
+from lib import cmd_handoff, cmd_owner  # noqa: E402  (the hint's load puts scripts/ on the path)
 
 DIGEST = """# Status digest
 Written 2026-11-23 13:00 UTC.
@@ -90,83 +88,101 @@ class StatusOnly(unittest.TestCase):
         self.assertEqual("", self.run_hook("fix the parser bug").stdout)
 
 
-def fake_claude(folder, signed_in=True):
-    """A `claude` in `folder` that answers `auth status`."""
-    path = folder / "claude"
-    path.write_text(f"#!/bin/sh\necho '{json.dumps({'loggedIn': signed_in})}'\nexit {0 if signed_in else 1}\n", encoding="utf-8")
-    path.chmod(0o755)
-
-
-class NextThread(unittest.TestCase):
-    """#1476: writing the handoff starts the next thread with Remote Control on, or says in one line why it cannot."""
+class NewThread(unittest.TestCase):
+    """#1488: a new OliverCode chat takes the next thread number and the pin, once, however it starts."""
 
     def setUp(self):
         self.tmp = temp_dir(self, resolve=True)
-        self.draft = self.tmp / "draft.md"
-        self.draft.write_text("Next steps: read the board.", encoding="utf-8")
-        self.records = self.tmp / "config" / "sessions"
-        self.records.mkdir(parents=True)
-        env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.tmp / "home"), "CLAUDE_CONFIG_DIR": str(self.tmp / "config"),
-                                           "PATH": f"{self.tmp}{os.pathsep}{os.environ['PATH']}"})
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        (self.home / cmd_handoff.THREAD_NUMBERS).write_text('{"OliverCode": 8}', encoding="utf-8")
+        (self.home / cmd_handoff.THREAD_SESSIONS).write_text(
+            json.dumps({"sessions": {"A": {"OliverCode": 8}}, "pinned": {"OliverCode": "A"}}), encoding="utf-8")
+        env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)})
         env.start()
         self.addCleanup(env.stop)
-        cwd = os.getcwd()
-        os.chdir(self.tmp)
-        self.addCleanup(os.chdir, cwd)
+        os.environ.pop("OLIVERCODE_HEADLESS", None)  # restored with the patch
 
-    def terminal(self, connects=True, status=0):
-        """A fake osascript: it logs its arguments and, when the session connects, writes the record Claude Code would."""
-        path = self.tmp / "osascript"
-        path.write_text(f"""#!{sys.executable}
-import json, sys
-open({str(self.tmp / "argv.json")!r}, "w").write(json.dumps(sys.argv[1:]))
-if {status}:
-    sys.exit("not allowed to control Terminal")
-if {connects}:
-    record = {{"sessionId": sys.argv[-1].split()[-1], "bridgeSessionId": "session_abc"}}
-    open({str(self.records / "7.json")!r}, "w").write(json.dumps(record))
-""", encoding="utf-8")
-        path.chmod(0o755)
+    def run_hook(self, prompt="we need to go back to olivercode", session="B", cwd=None, transcript="absent.jsonl"):
+        script = str(REPO_ROOT / "scripts" / "hooks" / "status_hint.py")
+        data = {"prompt": prompt, "session_id": session, "cwd": str(cwd or self.tmp), "transcript_path": str(self.tmp / transcript)}
+        done = subprocess.run([sys.executable, script], input=json.dumps(data), capture_output=True, text=True)
+        self.assertEqual((0, ""), (done.returncode, done.stderr))
+        return json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"] if done.stdout else ""
 
-    def write(self):
-        code, out = quiet(cmd_handoff.write, "Shop", self.draft, self.tmp)
-        self.assertEqual(0, code)
-        return out
+    def state(self):
+        return json.loads((self.home / cmd_handoff.THREAD_SESSIONS).read_text(encoding="utf-8"))
 
-    def test_it_opens_terminal_with_remote_control_in_the_same_folder_and_prints_the_link(self):
-        fake_claude(self.tmp)
-        self.terminal()
-        out = self.write()
-        argv = json.loads((self.tmp / "argv.json").read_text(encoding="utf-8"))
-        self.assertIn("do script (item 1 of argv)", argv)
-        words = shlex.split(argv[-1])
-        self.assertEqual(["cd", str(self.tmp), "&&", "claude", "--remote-control", "Shop 1"], words[:6])
-        self.assertIn(f"{REPO_ROOT / 'scripts' / 'olivercode'} handoff read Shop in {self.tmp}", words[6])
-        self.assertIn("https://claude.ai/code/session_abc", out)
-        self.assertFalse((self.tmp / "home" / cmd_handoff.THREAD_NUMBERS).exists())
+    def last_number(self):
+        return json.loads((self.home / cmd_handoff.THREAD_NUMBERS).read_text(encoding="utf-8"))["OliverCode"]
 
-    def test_a_session_that_never_connects_is_said_to_have_no_link(self):
-        fake_claude(self.tmp)
-        self.terminal(connects=False)
-        with mock.patch.object(cmd_handoff, "LINK_WAIT", 0):
-            out = self.write()
-        self.assertIn("showed no /rc active", out)
-        self.assertNotIn("claude.ai/code", out)
+    def test_a_chat_opened_by_hand_that_names_olivercode_is_numbered_and_pinned(self):
+        out = self.run_hook()
+        self.assertIn('call set_session_title for B with "OliverCode 9"', out)
+        self.assertIn("call set_pinned for B with pinned=true", out)
+        self.assertIn("call set_pinned for A with pinned=false", out)
+        self.assertEqual({"OliverCode": 9}, self.state()["sessions"]["B"])
+        self.assertEqual("B", self.state()["pinned"]["OliverCode"])
 
-    def test_a_machine_that_cannot_start_it_gets_one_line_with_the_reason_and_the_prompt(self):
-        self.terminal(status=1)
-        which = shutil.which
-        cases = (("not on PATH", True, lambda name: None if name == "claude" else which(name)),
-                 ("not signed in", False, which), ("not allowed to control Terminal", True, which))
-        for reason, signed_in, found in cases:
-            fake_claude(self.tmp, signed_in)
-            self.draft.write_text("Next steps: read the board.", encoding="utf-8")
-            with mock.patch.object(cmd_handoff.shutil, "which", side_effect=found):
-                lines = [line for line in self.write().splitlines() if "not started" in line]
-            self.assertEqual(1, len(lines), reason)
-            self.assertIn(reason, lines[0])
-            self.assertIn("Paste this into a new session: Run ", lines[0])
-            self.assertIn("handoff read Shop", lines[0])
+    def test_a_chat_in_the_olivercode_repo_is_numbered_whatever_the_prompt_says(self):
+        for session, cwd in (("B", REPO_ROOT), ("C", REPO_ROOT / "scripts")):
+            self.assertIn(f"call set_pinned for {session} with pinned=true", self.run_hook("fix the parser", session, cwd))
+        self.assertEqual(10, self.last_number())
+
+    def test_the_main_checkout_counts_when_the_hook_runs_from_a_worktree(self):
+        main, worktree = scratch_repo(self.tmp / "OC", branch="main"), self.tmp / "oc-staging"
+        git(main, "commit", "-q", "--allow-empty", "-m", "first")
+        git(main, "worktree", "add", "-q", str(worktree))
+        with mock.patch.object(hint, "OC_ROOT", worktree):
+            out = hint.new_thread_note({"prompt": "fix the parser", "session_id": "B", "cwd": str(main)})
+        self.assertIn("call set_pinned for B with pinned=true", out)
+
+    def test_a_chat_about_something_else_is_left_alone(self):
+        self.assertEqual("", self.run_hook("fix the parser"))
+        self.assertEqual(8, self.last_number())
+
+    def test_a_session_is_numbered_once(self):
+        self.run_hook()
+        self.assertEqual("", self.run_hook("more olivercode work"))
+        self.assertEqual({"OliverCode": 9}, self.state()["sessions"]["B"])
+        self.assertEqual(9, self.last_number())
+
+    def test_a_later_prompt_of_an_unnumbered_chat_takes_no_pin(self):
+        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 50}}}) + "\n", encoding="utf-8")
+        self.assertEqual("", self.run_hook(transcript="t.jsonl"))
+        self.assertEqual(8, self.last_number())
+
+    def test_a_handoff_thread_holds_the_one_number_handoff_read_gives_it(self):
+        prompt = cmd_handoff.read_prompt("OliverCode", self.tmp)
+        quoted = "Run '/a b/scripts/olivercode' handoff read OliverCode in /tmp"
+        for text in (prompt, quoted):
+            self.assertEqual("", self.run_hook(text, cwd=REPO_ROOT), text)
+        (self.tmp / "OliverCode-handoff-2026-11-27.md").write_text("next", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "B"}):
+            quiet(cmd_handoff.read, "OliverCode", self.tmp)
+        self.assertEqual("", self.run_hook())
+        self.assertEqual({"OliverCode": 9}, self.state()["sessions"]["B"])
+        self.assertEqual(9, self.last_number())
+
+    def test_an_open_owner_item_keeps_the_old_pin(self):
+        cmd_owner.add("A", "approve the deploy")
+        out = self.run_hook()
+        self.assertNotIn("pinned=false", out)
+        self.assertIn("names A, so leave it pinned", out)
+
+    def test_the_title_call_keeps_the_owner_prefix(self):
+        self.assertIn(f'keeping an "{cmd_owner.OWNER_PREFIX}" prefix in front', self.run_hook())
+
+    def test_a_headless_builder_and_a_message_from_another_session_are_left_alone(self):
+        self.assertEqual("", self.run_hook("<cross-session-message>olivercode</cross-session-message>"))
+        os.environ["OLIVERCODE_HEADLESS"] = "1"
+        self.assertEqual("", self.run_hook(cwd=REPO_ROOT))
+        self.assertEqual(8, self.last_number())
+
+    def test_the_session_map_keeps_its_newest_twenty(self):
+        for number in range(25):
+            cmd_handoff.claim_thread("OliverCode", f"s{number}")
+        self.assertEqual([f"s{n}" for n in range(5, 25)], list(self.state()["sessions"]))
 
 
 class LongThread(unittest.TestCase):
@@ -181,10 +197,9 @@ class LongThread(unittest.TestCase):
         self.transcript.write_text(json.dumps({"message": {"usage": {"input_tokens": 1}}}) + "\n"
                                    + json.dumps({"message": {"usage": usage}}) + "\n", encoding="utf-8")
 
-    def run_hook(self, session="s1", headless=False, signed_in=True):
+    def run_hook(self, session="s1", headless=False):
         script = str(REPO_ROOT / "scripts" / "hooks" / "status_hint.py")
-        fake_claude(self.tmp, signed_in)
-        env = dict(os.environ, OLIVERCODE_HOME=str(self.tmp), PATH=f"{self.tmp}{os.pathsep}{os.environ['PATH']}")
+        env = dict(os.environ, OLIVERCODE_HOME=str(self.tmp))
         env.pop("OLIVERCODE_HEADLESS", None)
         if headless:
             env["OLIVERCODE_HEADLESS"] = "1"
@@ -197,15 +212,11 @@ class LongThread(unittest.TestCase):
         self.assertEqual("", self.run_hook())
         self.assertIn("olivercode handoff write", self.run_hook(session="s2"))
 
-    def test_the_line_says_handoff_write_starts_the_next_thread(self):
+    def test_the_line_says_handoff_write_gives_the_calls_that_start_the_next_thread(self):
         self.write(260_000)
-        self.assertIn("`olivercode handoff write PROJECT FILE`, which starts the next thread", self.run_hook())
-
-    def test_on_a_machine_that_cannot_start_it_the_line_gives_the_reason_and_the_prompt(self):
-        self.write(260_000)
-        out = self.run_hook(signed_in=False)
-        self.assertIn("the claude CLI is not signed in", out)
-        self.assertIn("handoff read PROJECT in ", out)
+        out = self.run_hook()
+        self.assertIn("`olivercode handoff write PROJECT FILE` and make the calls it prints, which start the next thread in the desktop app", out)
+        self.assertNotIn("Remote Control", out)
 
     def test_a_short_thread_and_a_headless_builder_get_nothing(self):
         self.write(200_000)

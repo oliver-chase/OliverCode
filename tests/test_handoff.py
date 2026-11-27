@@ -125,17 +125,83 @@ class Handoff(unittest.TestCase):
         self.assertEqual(1, len(errors))
         self.assertTrue(errors[0].startswith("line 2:"))
 
-    def test_the_old_thread_unpins_itself_unless_the_owner_queue_names_it(self):
+    def write_draft(self, session="s1"):
         draft = self.tmp / "draft.md"
         draft.write_text("Next steps: read the board.", encoding="utf-8")
-        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "s1"}):
-            _, out = self.run_cmd("write", "OliverCode", str(draft))
-            self.assertIn("call set_pinned for s1 with pinned=false", out)
-            with mock.patch.object(cmd_owner, "open_items", return_value=[{"session": "s1", "status": "open"}]):
-                draft.write_text("Next steps: read the board.", encoding="utf-8")
-                _, out = self.run_cmd("write", "OliverCode", str(draft))
-            self.assertNotIn("set_pinned", out)
-            self.assertIn("leave it pinned", out)
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": session}):
+            return self.run_cmd("write", "OliverCode", str(draft))[1]
+
+    def read_as(self, session):
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": session}):
+            return self.run_cmd("read", "OliverCode")[1]
+
+    def test_write_prints_the_desktop_calls_and_starts_nothing_itself(self):
+        self.home.mkdir()
+        (self.home / cmd_handoff.THREAD_NUMBERS).write_text('{"OliverCode": 8}', encoding="utf-8")
+        with mock.patch("subprocess.run") as run, mock.patch("subprocess.Popen") as popen:
+            out = self.write_draft()
+        run.assert_not_called()
+        popen.assert_not_called()
+        self.assertIn(f"call start_session with this prompt: {cmd_handoff.read_prompt('OliverCode', self.folder)}", out)
+        self.assertIn('call set_session_title for the new session with "OliverCode 9"', out)
+        self.assertIn("call set_pinned for the new session with pinned=true", out)
+        self.assertIn("call set_pinned for s1 with pinned=false", out)
+        self.assertNotIn("Remote Control", out)
+
+    def test_the_new_thread_keeps_the_number_write_gave_it_and_repeats_no_call_it_already_got(self):
+        self.home.mkdir()
+        (self.home / cmd_handoff.THREAD_NUMBERS).write_text('{"OliverCode": 8}', encoding="utf-8")
+        self.write_draft()
+        out = self.read_as("s2")
+        before, _, if_missing = out.partition('Thread: this one is "OliverCode 9". If its title says so and it is pinned, no rename or pin step is needed.')
+        self.assertNotIn("set_session_title", before)
+        self.assertNotIn("set_pinned", before)
+        self.assertIn("If either is missing, make these calls:", if_missing)
+        state = json.loads((self.home / cmd_handoff.THREAD_SESSIONS).read_text(encoding="utf-8"))
+        self.assertEqual(({"OliverCode": 9}, "s2", {}), (state["sessions"]["s2"], state["pinned"]["OliverCode"], state["reserved"]))
+
+    def test_a_thread_that_did_not_get_writes_calls_is_given_its_title_and_the_pin(self):
+        cmd_handoff.claim_thread("OliverCode", "s1")
+        self.write_draft()
+        out = self.read_as("pasted")
+        self.assertIn('call set_session_title for pasted with "OliverCode 2"', out)
+        self.assertIn("call set_pinned for pasted with pinned=true", out)
+        self.assertIn("call set_pinned for s1 with pinned=false", out)
+
+    def test_a_chat_opened_between_write_and_read_loses_the_pin(self):
+        cmd_handoff.claim_thread("OliverCode", "s1")
+        self.write_draft()
+        cmd_handoff.claim_thread("OliverCode", "by-hand")
+        before, _, if_missing = self.read_as("s2").partition("Thread: this one is")
+        self.assertIn("call set_pinned for by-hand with pinned=false", before)
+        self.assertNotIn("by-hand", if_missing)
+
+    def test_a_numbered_session_that_reads_a_handoff_gets_no_pin_call(self):
+        cmd_handoff.claim_thread("OliverCode", "s2")
+        cmd_handoff.claim_thread("OliverCode", "s1")
+        self.write_draft()
+        out = self.read_as("s2")
+        self.assertIn('"OliverCode 1", and no new name is needed', out)
+        self.assertNotIn("set_pinned", out)
+
+    def test_write_also_unpins_a_newer_thread_that_took_the_pin(self):
+        cmd_handoff.claim_thread("OliverCode", "newer")
+        out = self.write_draft()
+        self.assertIn("call set_pinned for s1 with pinned=false", out)
+        self.assertIn("call set_pinned for newer with pinned=false", out)
+
+    def test_the_old_thread_unpins_itself_unless_the_owner_queue_names_it(self):
+        with mock.patch.object(cmd_owner, "open_items", return_value=[{"session": "s1", "status": "open"}]):
+            out = self.write_draft()
+        self.assertNotIn("pinned=false", out)
+        self.assertIn("leave it pinned", out)
+
+    def test_a_thread_write_did_not_name_is_pinned_in_place_of_the_old_one(self):
+        cmd_handoff.claim_thread("OliverCode", "s1")
+        self.put("OliverCode-handoff-2026-11-26.md")
+        out = self.read_as("s2")
+        self.assertIn("call set_pinned for s2 with pinned=true", out)
+        self.assertIn("call set_pinned for s1 with pinned=false", out)
 
     def test_the_new_thread_is_numbered_from_the_stored_count(self):
         self.home.mkdir()
@@ -156,10 +222,8 @@ class Handoff(unittest.TestCase):
 
     def test_a_repo_with_no_number_starts_at_one_and_an_overwritten_handoff_uses_none(self):
         self.put("Pattern-handoff-2026-11-26.md")
-        draft = self.tmp / "draft.md"
-        draft.write_text("next", encoding="utf-8")
-        self.run_cmd("write", "OliverCode", str(draft))
-        self.assertFalse((self.home / cmd_handoff.THREAD_NUMBERS).exists())
+        for _ in range(2):
+            self.assertIn('with "OliverCode 1"', self.write_draft())
         _, out = self.run_cmd("read", "Pattern")
         self.assertIn('with "Pattern 1"', out)
 
