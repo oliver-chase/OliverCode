@@ -99,6 +99,26 @@ def command_errors(text: str) -> list[str]:
     return errors
 
 
+def drain_repo(text: str) -> str | None:
+    """The repo named by the first `olivercode drain REPO` in `text` that resolves, or None. A handoff that names no drain gets no watch line (#1434)."""
+    fenced = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        for name, tail in (FENCED_RE.findall(line) if fenced else COMMAND_RE.findall(line)):
+            if name != "drain":
+                continue
+            try:
+                words = shlex.split(tail)
+            except ValueError:
+                words = tail.split()
+            repos = [w.rstrip(".,;:)") for i, w in enumerate(words) if not w.startswith("-") and not (i and words[i - 1] == "--parallel")]
+            if repos and cmd_drain.resolve_repo(repos[0]) is not None:
+                return repos[0]
+    return None
+
+
 def write(project: str, draft: Path, folder: Path) -> int:
     try:
         text = draft.read_text(encoding="utf-8")
@@ -135,6 +155,9 @@ def read(project: str, folder: Path) -> int:
         path.unlink()
     print(f"\nHandoff read and deleted: {found[0].name}. No copy is kept.")
     print(f'Title: call set_session_title for {session() or "this session"} with "{name}", keeping an "{cmd_owner.OWNER_PREFIX}" prefix in front if its current title has one.')
+    repo = drain_repo(text)
+    if repo:
+        print(f"Watch: run `olivercode watch {repo}` in the background, so this thread is woken when the run ends.")
     return 0
 
 

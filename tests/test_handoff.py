@@ -63,6 +63,24 @@ class Handoff(unittest.TestCase):
         self.assertTrue(other.exists())
         self.assertEqual([other], list(self.folder.iterdir()))
 
+    def test_read_of_a_handoff_that_names_a_drain_says_to_watch_it(self):
+        self.put("OliverCode-handoff-2026-11-26.md", "Run `olivercode drain OliverCode --parallel 2` next.")
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=Path("/r")):
+            _, out = self.run_cmd("read", "OliverCode")
+        self.assertEqual(1, out.count("olivercode watch OliverCode"))
+        self.assertIn("in the background", out)
+
+    def test_read_of_a_handoff_with_no_drain_prints_no_watch_line(self):
+        self.put("OliverCode-handoff-2026-11-26.md", "Next steps: read the board.")
+        _, out = self.run_cmd("read", "OliverCode")
+        self.assertNotIn("olivercode watch", out)
+
+    def test_read_ignores_a_drain_that_does_not_resolve(self):
+        self.put("OliverCode-handoff-2026-11-26.md", "Run `olivercode drain nowhere-repo` next.")
+        with mock.patch.object(cmd_drain, "resolve_repo", return_value=None):
+            _, out = self.run_cmd("read", "OliverCode")
+        self.assertNotIn("olivercode watch", out)
+
     def test_read_with_no_handoff_says_so(self):
         self.assertEqual(1, self.run_cmd("read", "OliverCode")[0])
 
