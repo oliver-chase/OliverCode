@@ -442,7 +442,57 @@ class TestLoop(unittest.TestCase):
         out = self.loop(run, [(True, "")])
         self.assertEqual((False, 3), (out["done"], len(run.prompts)))
         self.assertIn("nothing is pushed", out["reason"])
-        self.assertEqual("claude exited 1.", out["held"])
+        self.assertEqual("claude exited 1 in attempt 2.", out["reader_failed"])
+        self.assertNotIn("held", out)
+
+    def rows(self):
+        return [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()]
+
+    def test_a_reader_stopped_on_its_turn_cap_is_asked_again_with_twice_the_turns(self):  # #1489
+        replies, turns = [{**reply("", code=1), "stop": "max_turns"}, reply("PASS")], []
+
+        def run(prompt, cwd, **kw):
+            turns.append(kw["max_turns"])
+            return replies.pop(0)
+
+        out = agent_loop.review("the story", self.repo, "s1", "gate", run=run, say=lambda *_: None)
+        self.assertEqual("pass", out["verdict"])
+        self.assertEqual([agent_loop.READER_TURNS, 2 * agent_loop.READER_TURNS], turns)
+
+    def test_a_reader_that_failed_for_another_cause_is_asked_again_with_the_same_turns(self):  # #1489
+        replies, turns = [{**reply("", code=1), "stop": "error_during_execution"}, reply("PASS")], []
+
+        def run(prompt, cwd, **kw):
+            turns.append(kw["max_turns"])
+            return replies.pop(0)
+
+        agent_loop.review("the story", self.repo, "s1", "gate", run=run, say=lambda *_: None)
+        self.assertEqual([agent_loop.READER_TURNS] * 2, turns)
+
+    def test_each_failed_reader_attempt_logs_its_stop_reason_stderr_and_cost_and_counts_against_no_ceiling(self):  # #1489
+        self.addCleanup(agent_loop.SPEND.pop, "s1", None)
+        agent_loop.SPEND.pop("s1", None)
+        failed = {**reply("", code=1), "stop": "api_error", "stderr": "rate limited", "cost_usd": 0.4}
+        out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(failed, model.ModelTimeout("too slow", "sid")), say=lambda *_: None)
+        first, second = [r for r in self.rows() if r["story"] == "s1-review"]
+        self.assertEqual((1, "api_error", "rate limited", 0.4), tuple(first[k] for k in ("round", "stop", "stderr_tail", "cost_usd")))
+        self.assertEqual((2, "timeout", "too slow"), tuple(second[k] for k in ("round", "stop", "stderr_tail")))
+        self.assertEqual(0.0, agent_loop.SPEND.get("s1", 0.0))
+        self.assertEqual("too slow", out["text"])
+
+    def test_the_failure_names_the_stop_reason(self):  # #1489
+        capped = {**reply("", code=1), "stop": "max_turns", "stderr": "boom"}
+        out = agent_loop.review("the story", self.repo, "s1", "gate", run=Scripted(capped, capped), say=lambda *_: None)
+        self.assertEqual("claude exited 1 in attempt 2, stop reason max_turns. stderr: boom", out["text"])
+
+    def test_a_build_the_reader_failed_on_steps_no_later_build_up(self):  # #1489
+        self.loop(Scripted(reply(), reply(), reply(), reply(code=1), reply(code=1)), [(False, "a"), (False, "b"), (True, "")], model_name="haiku", rounds=3)
+        self.assertEqual("haiku", agent_loop.restart_model("s1", "haiku"))
+
+    def test_a_reader_failure_keeps_the_step_up_the_build_before_it_earned(self):  # #1489
+        rows = [{"story": "story-7", "round": r} for r in (1, 2, 3, 1)] + [{"story": "story-7", "round": 1, "resumed": True}, {"story": "story-7", "review": "none"}]
+        (self.home / "run-log.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        self.assertEqual("sonnet", agent_loop.restart_model("story-7", "haiku"))
 
     def test_a_diff_over_the_limit_is_cut_and_the_marker_names_each_file_the_reader_did_not_see(self):
         full = ("diff --git a/scripts/a.py b/scripts/a.py\n+ok\n" "diff --git a/scripts/b.py b/scripts/b.py\n+" + "y" * agent_loop.DIFF_LIMIT + "\n"

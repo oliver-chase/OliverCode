@@ -195,15 +195,23 @@ def escalate(model_name: str, failures: int) -> str:
 
 def restart_model(session: str, base: str) -> str:
     """The model a story's next build starts on (#1015): one level above `base` when its last build reached RESTART_ROUND, which the run log keeps,
-    so an escalation survives a restart. `base` for a story whose last build did not get that far, or whose log cannot be read."""
-    reached = 0
+    so an escalation survives a restart. `base` for a story whose last build did not get that far, or whose log cannot be read. A build the reader
+    failed on is left out, so the build before it still decides (#1489)."""
+    reached = before = 0
     for line in run_log_lines():
         try:
             row = json.loads(line)
         except ValueError:
             continue
-        if isinstance(row, dict) and row.get("story") == session and isinstance(row.get("round"), int):
-            reached = 1 if row["round"] == 1 else max(reached, row["round"])  # a round 1 starts a new build
+        if not isinstance(row, dict) or row.get("story") != session:
+            continue
+        if row.get("review") == "none":
+            reached = before
+        elif isinstance(row.get("round"), int):
+            if row["round"] == 1 and not row.get("resumed"):  # a new build
+                before, reached = reached, 1
+            else:
+                reached = max(reached, row["round"])
     return escalate(base, 2) if reached >= RESTART_ROUND else base
 
 
@@ -241,26 +249,31 @@ def verdict_line(text: str, answers: str) -> tuple[str, str]:
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
            max_turns: int = READER_TURNS, attempts: int = 2, brief: str = REVIEW_BRIEF) -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Only a PASS verdict that the reply never takes back passes (#1015, #1477).
-    A reader that exits non-zero or replies with nothing is asked once more, and a second failure returns verdict 'none' so the story is held.
+    A reader that exits non-zero or replies with nothing is asked once more, with twice the turns after a stop on the turn cap, and a second failure
+    returns verdict 'none' with its cause, so nothing is pushed. Every attempt gets a run-log row (#1489).
     `brief` swaps the question: bug intake asks about a failure, not a diff (#1371).
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
     prompt = brief.format(task=task, diff=branch_diff(cwd) if "{diff}" in brief else "", tail=tail)
-    failure = ""
+    failure, turns = "", max_turns
     for attempt in range(1, attempts + 1):
         try:
-            reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=max_turns, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
+            reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=turns, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
+            reply = {"stop": "timeout" if isinstance(exc, model.ModelTimeout) else "", "stderr": failure}
         else:
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
                 verdict = "pass" if verdict_line(text, "pass")[0] and not TAKEN_BACK.search(text) else "findings"
-                log_round(f"{session}-review", 1, model_name, reply)
+                log_round(f"{session}-review", attempt, model_name, reply)
                 log_review(session, verdict, text)
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
                 return {"verdict": verdict, "text": text}
-            failure = f"claude exited {reply['code']}." if reply.get("code", 0) != 0 else "The reader replied with nothing."
+            failure = exit_reason(reply, attempt, unit="attempt") if reply.get("code", 0) != 0 else "The reader replied with nothing."
+        if reply.get("stop") == "max_turns":
+            turns = max_turns * 2
+        log_round(f"{session}-review", attempt, model_name, reply, reader_failed=True)
         say(f"Review: no verdict on attempt {attempt}. {failure}")
     log_review(session, "none", failure)
     return {"verdict": "none", "text": failure}
@@ -327,7 +340,7 @@ def start_size(session_id: str, projects: Path | None = None) -> int | None:
     return None
 
 
-def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "") -> None:
+def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "", reader_failed: bool = False) -> None:
     """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost, stop reason and write time, and on a session's first round the tokens it started with (#878, #987).
     A log that cannot be written never stops a loop."""
     usage = reply.get("usage") or {}
@@ -338,7 +351,10 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}  # when the row was written, so a stall shows as no newer row (#987)
     if STORY_SIZE.get(story):
         row["size"] = STORY_SIZE[story]
-    SPEND[story.removesuffix("-review")] = SPEND.get(story.removesuffix("-review"), 0.0) + float(reply.get("cost_usd") or 0)
+    if reader_failed:
+        row["reader_failed"] = True  # its cost is logged and counts against no ceiling (#1489)
+    else:
+        SPEND[story.removesuffix("-review")] = SPEND.get(story.removesuffix("-review"), 0.0) + float(reply.get("cost_usd") or 0)
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
@@ -382,9 +398,9 @@ def refresh_city(now: float) -> None:
         pass
 
 
-def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
-    """Why a round ended in a non-zero exit, with the CLI's own stop reason and the tail of its stderr, so the run log and the story comment can be diagnosed (#877)."""
-    why = f"claude exited {reply['code']} in round {n}"
+def exit_reason(reply: dict, n: int, resumed: bool = False, unit: str = "round") -> str:
+    """Why a round or a reader attempt ended in a non-zero exit, with the CLI's own stop reason and the tail of its stderr, so the run log and the story comment can be diagnosed (#877)."""
+    why = f"claude exited {reply['code']} in {unit} {n}"
     if reply.get("stop"):
         why += f", stop reason {reply['stop']}"
     if resumed:
@@ -397,7 +413,7 @@ def exit_reason(reply: dict, n: int, resumed: bool = False) -> str:
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
              run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
-    finds a problem, or when the reader gave no verdict twice, so nothing is pushed (#975, #1015). Every story is read before it lands (#1015).
+    finds a problem (#975, #1015), or 'reader_failed' with the cause when the reader gave no verdict twice (#1489). Either way nothing is pushed.
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
     `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
     return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode, repo)
@@ -463,8 +479,8 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                         "rounds": n, "tokens": tokens, "summary": summary}
             verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
                              max_turns=READER_TURNS, attempts=2)
-            if verdict["verdict"] == "none":  # the reader gave no verdict twice, so the story is held for a retry and nothing lands (#1015)
-                return {"done": False, "held": verdict["text"], "reason": f"The fresh reader gave no verdict, so nothing is pushed: {verdict['text'][:300]}",
+            if verdict["verdict"] == "none":  # the reader failed twice, so nothing lands, and its failure is no finding (#1015, #1489)
+                return {"done": False, "reader_failed": verdict["text"], "reason": f"The reader failed, so nothing is pushed: {verdict['text']}",
                         "rounds": n, "tokens": tokens, "summary": summary}
             if verdict["verdict"] == "findings":
                 findings += 1

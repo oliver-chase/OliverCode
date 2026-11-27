@@ -682,6 +682,9 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
         if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
             io.comment(n, held_comment(worktree, out["held"]))
             return False, tokens
+        if out.get("reader_failed"):  # no finding, so the comment never starts with HELD, and no builder restarts (#1489)
+            io.comment(n, f"Drain stopped: reader failed, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready. {out['reader_failed']}")
+            return False, tokens
         if out.get("usage_limit"):  # the story goes back to Ready unblocked, and the drain starts no new builder (#1299)
             state.setdefault("limited", []).append(n)
             io.comment(n, f"Drain stopped: {out['reason']}")

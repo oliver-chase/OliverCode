@@ -537,6 +537,20 @@ class DrainCase(unittest.TestCase):
         self.assertIn("scripts/a.py: no test", io.comments[0][1])
         self.assertIn("nothing was pushed", io.comments[0][1])
 
+    def test_a_failed_reader_stops_the_story_with_its_cause_and_is_never_read_back_as_a_finding(self):  # #1489
+        cause = "claude exited 1 in attempt 2, stop reason max_turns."
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "reader_failed": cause, "reason": "The reader failed"}]})
+        _, _, st = self.run_drain(io)
+        self.assertEqual(([1], [1], [1], set()), (io.started, io.kept, st["blocked"], io.on_main))
+        self.assertEqual([1], [n for n, _ in io.comments])
+        body = io.comments[0][1]
+        for part in ("reader failed", "stop reason max_turns", "nothing was pushed"):
+            self.assertIn(part, body)
+        self.assertNotIn(cmd_drain.HELD, body)
+        rows = json.dumps({"body": body, "author_association": "OWNER"})
+        reader = cmd_drain.Io(Path("/nonexistent"), "o/r", runner=lambda args: subprocess.CompletedProcess(args, 0, rows, ""))
+        self.assertEqual("", reader.held_finding(1))
+
     def test_a_refused_push_starts_no_second_builder_and_says_why(self):
         """#1296: a push the repo refused is not the builder's to fix, so the story stops after one build with the push error."""
         io = FakeIo([issue(1)], land_ok=False)
