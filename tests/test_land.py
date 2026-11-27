@@ -99,56 +99,29 @@ class TestLandResumes(Base):
     def test_a_second_land_for_a_running_story_refuses_and_names_the_log(self):
         logs = self.root / "logs"
         logs.mkdir()
-        (logs / "land-main-9.lock").write_text(str(os.getppid()))
-        code, out = self.land()
+        with cmd_land._claim(logs / "land-main-9.lock"):
+            code, out = self.land()
         self.assertEqual(1, code)
-        self.assertIn("already running", out)
+        self.assertIn(f"already running (pid {os.getpid()})", out)
         self.assertIn("land-main-9.log", out)
 
-    def test_a_second_claim_fails_while_the_first_holds_and_succeeds_after_release_or_when_the_holder_is_gone(self):
-        lock = self.root / "claim.lock"
-        holder = os.getppid()
-        with mock.patch.object(cmd_land.os, "getpid", return_value=holder):
-            self.assertIsNone(cmd_land._claim(lock))
-        self.assertEqual(str(holder), lock.read_text())
-        self.assertEqual(holder, cmd_land._claim(lock))
-        self.assertEqual(str(holder), lock.read_text(), "a refused claim leaves the holder's file alone")
-        lock.unlink()
-        self.assertIsNone(cmd_land._claim(lock))
-        self.assertEqual(str(os.getpid()), lock.read_text())
-        lock.write_text("999999999")
-        self.assertIsNone(cmd_land._claim(lock))
-        self.assertEqual(str(os.getpid()), lock.read_text())
-
-    def test_the_claim_file_is_created_exclusively(self):
-        lock = self.root / "claim.lock"
-        flags = []
-        real = os.open
-        def spy(path, flag, *rest):
-            flags.append(flag)
-            return real(path, flag, *rest)
-        with mock.patch.object(cmd_land.os, "open", spy):
-            cmd_land._claim(lock)
-        self.assertEqual([os.O_CREAT | os.O_EXCL | os.O_WRONLY], flags)
-
     def test_only_one_of_two_simultaneous_claims_wins(self):
-        import subprocess, sys
+        import sys
         lock = self.root / "race.lock"
-        code = ("import sys; sys.path.insert(0, %r); from pathlib import Path; from lib import cmd_land; "
-                "print(cmd_land._claim(Path(%r)), flush=True); sys.stdin.read()" % (str(__import__('_support').REPO_ROOT / "scripts"), str(lock)))
+        code = ("import sys; sys.path.insert(0, %r); from pathlib import Path; from lib import cmd_land\n"
+                "with cmd_land._claim(Path(%r)) as held: print(held or 'won', flush=True); sys.stdin.read()" % (str(__import__('_support').REPO_ROOT / "scripts"), str(lock)))
         procs = [subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) for _ in range(6)]
-        results = [p.stdout.readline().strip() for p in procs]  # each claimer stays alive until its stdin closes, so a winner never looks stale
+        results = [p.stdout.readline().strip() for p in procs]  # each claimer holds until its stdin closes
         for p in procs:
             p.communicate()
-        self.assertEqual(1, results.count("None"), results)
+        self.assertEqual(1, results.count("won"), results)
 
-    def test_a_stale_lock_does_not_block_and_is_removed_after_the_land(self):
+    def test_a_lock_file_no_process_holds_does_not_block_a_land(self):
         logs = self.root / "logs"
         logs.mkdir()
         (logs / "land-main-9.lock").write_text("999999999")
         code, out = self.land()
         self.assertEqual(0, code, out)
-        self.assertFalse((logs / "land-main-9.lock").exists())
 
     def test_a_land_waits_for_a_running_version_cut_then_continues(self):
         logs = self.root / "logs"
@@ -486,7 +459,7 @@ class TestLandsOnAnyDefaultBranch(Base):
         git(self.wt, "add", "."); git(self.wt, "commit", "-qm", "Use npm (#9)")
         shutil.copytree(self.main, engine, symlinks=True, ignore=shutil.ignore_patterns("*.lock"))
         engine_head = git(engine, "rev-parse", "HEAD").stdout
-        with mock.patch.object(cmd_land, "OC_ROOT", engine), mock.patch.object(cmd_land, "_validate_once", return_value=True) as ran:
+        with mock.patch.object(cmd_land, "OC_ROOT", engine), mock.patch.object(cmd_land, "_validates", return_value=True) as ran:
             code, out = self.land()
         self.assertEqual(0, code, out)
         self.assertIn("RESULT pushed", out)
@@ -496,15 +469,13 @@ class TestLandsOnAnyDefaultBranch(Base):
 
 
 class TestUnfinishedWork(Base):
-    def test_work_that_fails_validation_gets_a_handover_and_no_pushed_branch(self):
+    def test_work_that_fails_validation_keeps_its_worktree_and_pushes_no_branch(self):
         (self.wt / "scripts" / "validate.sh").write_text("exit 1\n")
         git(self.wt, "commit", "-qam", "break validation")
         code, out = self.land()
         self.assertEqual(1, code)
-        handover = (self.root / "logs" / "handover-main-9.md").read_text()
-        self.assertIn("validate-failed", handover)
-        self.assertIn("never pushed", handover)
-        self.assertIn("Handover written", out)
+        self.assertIn("RESULT validate-failed", out)
+        self.assertIn("No branch was pushed", out)
         self.assertTrue(self.wt.exists())
         remote = git(self.main, "ls-remote", "--heads", "origin").stdout
         self.assertNotIn("story/9", remote)

@@ -31,12 +31,9 @@ def _exclusive(slug: str):
     """Serialize every read-modify-write of one repo's record across processes."""
     target = path(slug)
     target.parent.mkdir(parents=True, exist_ok=True)
-    with open(target.with_suffix(".lock"), "w") as handle:
+    with open(target.with_suffix(".lock"), "w") as handle:  # closing the file drops the flock
         fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            yield target
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+        yield target
 
 
 def _read(target: Path) -> dict:
