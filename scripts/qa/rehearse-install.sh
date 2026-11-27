@@ -59,9 +59,13 @@ mk_oc() { # $1 = dest
   done)
   chmod +x "$dest/scripts/olivercode" "$dest"/scripts/*.sh "$dest"/scripts/qa/*.sh "$dest"/.githooks/* 2>/dev/null
   git -C "$dest" init -q .
+  # The source's origin URL, as in clone mode: the engine tests need a checkout that has the identity a real clone has.
+  local origin_url
+  origin_url="$(git -C "$REPO" remote get-url origin 2>/dev/null)" && git -C "$dest" remote add origin "$origin_url"
   git -C "$dest" add -A >/dev/null 2>&1
-  # The identity has no "@": an email literal would trip the PII gate.
-  git -C "$dest" -c user.email=rehearsal -c user.name=rehearsal commit -q -m base --no-verify >/dev/null 2>&1
+  # The identity has no "@": an email literal would trip the PII gate. It is under five characters, as the leak scan
+  # takes a longer author name for an owner and finds it in this very script.
+  git -C "$dest" -c user.email=rh -c user.name=rh commit -q -m base --no-verify >/dev/null 2>&1
 }
 
 mk_repo() { # $1 = dest, $2 = optional rules filename
@@ -283,10 +287,12 @@ say "--- S10: update pulls the tracking branch and re-syncs ---"
 new_case s10
 mk_oc "$WS/origin"
 git -C "$WS/origin" branch -m main 2>/dev/null
+mk_repo "$WS/app"
+# The fleet is registered upstream and committed there: registering in the clone would leave it dirty, and update refuses a dirty checkout.
+register "$WS/origin" app
+git -C "$WS/origin" add shared/repo-profiles.json && git -C "$WS/origin" -c user.email=rehearsal -c user.name=rehearsal commit -q -m fleet --no-verify
 git clone -q "$WS/origin" "$WS/OliverCode"
 chmod +x "$WS/OliverCode/scripts/olivercode" "$WS/OliverCode"/scripts/*.sh 2>/dev/null
-mk_repo "$WS/app"
-register "$WS/OliverCode" app
 ( cd "$WS/origin" && printf '\n# upstream change\n' >> README.md \
   && git add README.md && git -c user.email=rehearsal -c user.name=rehearsal commit -q -m upstream --no-verify )
 oc_in "$WS/OliverCode" update >/dev/null 2>&1
@@ -313,7 +319,7 @@ mkdir -p "$WS/ungated" && git -C "$WS/ungated" init -q . && git -C "$WS/ungated"
 say "--- S12: zero-config clone basics ---"
 new_case s12
 mk_oc "$WS/OliverCode"
-for cmd in "--help" "health" "skills"; do
+for cmd in "--help" "health" "place"; do
   oc_in "$WS/OliverCode" $cmd >/dev/null 2>&1 \
     && ok "olivercode $cmd" s12 || bad "olivercode $cmd" s12
 done
