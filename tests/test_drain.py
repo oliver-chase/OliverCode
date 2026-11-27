@@ -814,6 +814,23 @@ class TestRealIo(unittest.TestCase):
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.io = cmd_drain.Io(self.repo, "o/r")
 
+    def test_the_base_check_runs_under_worktrees_and_leaves_no_worktree(self):
+        """#1433: the check's worktree sits in repoRoot/_worktrees, not the temp folder, and is gone when it ends, passed or failed."""
+        git(self.repo, "remote", "add", "origin", str(self.repo))
+        root = temp_dir(self)
+        seen = []
+        for passed, expected in ((True, ""), (False, "boom")):
+            def validate(wt, quick=False):
+                seen.append(Path(wt).parent)
+                return passed, "boom"
+            with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(worktrees=root / "_worktrees")), \
+                    mock.patch.object(cmd_drain.cmd_land, "prepare_worktree"), \
+                    mock.patch.object(cmd_drain.agent_loop, "validation_command", return_value=["true"]), \
+                    mock.patch.object(cmd_drain.agent_loop, "validate", validate):
+                self.assertEqual(expected, self.io.base_failure())
+            self.assertNotIn("-base-", git(self.repo, "worktree", "list").stdout)
+        self.assertEqual([root / "_worktrees"] * 2, seen)
+
     def test_the_brief_is_built_by_the_real_rules_without_a_missing_key(self):
         seen = {}
         with mock.patch.object(cmd_drain.agent_loop, "run_loop", lambda brief, wt, name, **kw: seen.update(brief=brief) or {"done": True}):

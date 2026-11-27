@@ -109,7 +109,9 @@ class Io:
         git = ["git", "-C", str(self.repo)]
         if subprocess.run([*git, "fetch", "-q", "origin", self.branch()], capture_output=True, text=True).returncode:
             return ""
-        wt = Path(tempfile.mkdtemp(prefix=f"{self.repo.name}-base-"))
+        folder = placement_config().worktrees  # under repoRoot/_worktrees, where the temp folder's size slowed the check 12-fold (#1433)
+        folder.mkdir(parents=True, exist_ok=True)
+        wt = Path(tempfile.mkdtemp(prefix=f"{self.repo.name}-base-", dir=folder))
         try:
             if subprocess.run([*git, "worktree", "add", "--detach", "-f", str(wt), f"origin/{self.branch()}"], capture_output=True, text=True).returncode:
                 return ""
