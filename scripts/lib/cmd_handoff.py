@@ -140,7 +140,7 @@ def command_errors(text: str) -> list[str]:
             continue
         for name, tail in (FENCED_RE.findall(line) if fenced else COMMAND_RE.findall(line)):
             try:
-                words = shlex.split(tail)
+                words = shlex.split(tail, comments=True)  # a trailing `# note` is not an argument
             except ValueError:
                 words = tail.split()
             if words:
@@ -176,7 +176,7 @@ def drain_repo(text: str) -> str | None:
             if name != "drain":
                 continue
             try:
-                words = shlex.split(tail)
+                words = shlex.split(tail, comments=True)  # a trailing `# note` is not an argument
             except ValueError:
                 words = tail.split()
             repos = [w.rstrip(".,;:)") for i, w in enumerate(words) if not w.startswith("-") and not (i and words[i - 1] == "--parallel")]

@@ -62,7 +62,12 @@ def command_gated(argv: list[str]) -> int:
     if not check.strip() or not command:
         print(USAGE)
         return 1
-    return run_gated(job or os.environ.get("OLIVERCODE_JOB") or Path(shlex.split(check)[0]).name, check, command)
+    try:
+        name = job or os.environ.get("OLIVERCODE_JOB") or Path(shlex.split(check)[0]).name
+    except ValueError:  # an unbalanced quote in CHECK
+        print(USAGE)
+        return 1
+    return run_gated(name, check, command)
 
 
 def wrapper_line(text: str, is_task: bool, name: str) -> str:

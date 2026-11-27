@@ -169,7 +169,7 @@ class InstallAsksNothing(unittest.TestCase):
     def install(self, terminal: bool = True) -> str:
         with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
                 mock.patch.object(cmd_install, "owner_terminal", return_value=terminal), \
-                mock.patch.object(cmd_install, "_schedule_replay"), mock.patch.object(cmd_install, "_queue_shim"), \
+                mock.patch.object(cmd_install, "_schedule_jobs"), mock.patch.object(cmd_install, "_queue_shim"), \
                 mock.patch.object(cmd_install, "board_step"), \
                 mock.patch("builtins.input", side_effect=AssertionError("install read input")), \
                 mock.patch("sys.stdin", io.StringIO("")):
@@ -248,7 +248,7 @@ class CityShortcut(unittest.TestCase):
         with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
                 mock.patch.object(cmd_install, "_desktop", return_value=self.desktop), \
                 mock.patch.object(cmd_install, "owner_terminal", return_value=False), \
-                mock.patch.object(cmd_install, "_schedule_replay"), mock.patch.object(cmd_install, "_queue_shim"), \
+                mock.patch.object(cmd_install, "_schedule_jobs"), mock.patch.object(cmd_install, "_queue_shim"), \
                 mock.patch("lib.city.refresh", side_effect=refresh or self.fake_refresh) as refreshed:
             _, out = quiet(cmd_install.command_install, REPO_ROOT)
         self.refreshed = refreshed

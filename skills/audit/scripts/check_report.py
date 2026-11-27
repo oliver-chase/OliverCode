@@ -146,6 +146,9 @@ def main(argv):
             return 2
     if "--repo" in argv:
         i = argv.index("--repo")
+        if i + 1 >= len(argv):
+            print(__doc__.strip())
+            return 2
         repo, argv = argv[i + 1], argv[:i] + argv[i + 2:]
     if len(argv) != 2:
         print(__doc__.strip())

@@ -74,7 +74,7 @@ class TestInstallKeepsTheUsersOwnRulesFiles(unittest.TestCase):
     def install(self, claude, env=None):
         out = io.StringIO()
         with mock.patch.object(cmd_install, "_claude_dir", return_value=claude), mock.patch.object(cmd_install, "owner_terminal", return_value=False), \
-                mock.patch.object(cmd_install, "_schedule_replay"), \
+                mock.patch.object(cmd_install, "_schedule_jobs"), \
                 mock.patch.object(cmd_install, "_queue_shim"), mock.patch.dict("os.environ", env or {}), contextlib.redirect_stdout(out):
             cmd_install.command_install(REPO_ROOT)
         return out.getvalue()
@@ -106,7 +106,7 @@ class TestInstallCommand(unittest.TestCase):
         out = io.StringIO()
         with mock.patch.object(cmd_install, "_claude_dir", return_value=claude), \
                 mock.patch.object(cmd_install, "owner_terminal", return_value=owner), \
-                mock.patch.object(cmd_install, "_schedule_replay"), \
+                mock.patch.object(cmd_install, "_schedule_jobs"), \
                 mock.patch.object(cmd_install, "_queue_shim"), \
                 mock.patch.object(cmd_install, "board_step"), \
                 contextlib.redirect_stdout(out):

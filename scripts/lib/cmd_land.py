@@ -210,9 +210,11 @@ def story_body(wt: Path, story: str) -> str | None:
     return _gh(f"repos/{slug}/issues/{story}", "--jq", '.body // ""') if slug else None
 
 
-def _story_comment(wt: Path, story: str, text: str) -> None:
-    """Post text on the story. A failed post changes nothing about the landing, whose log already says it (#1073)."""
-    if slug := _story_slug(wt):
+def _story_comment(wt: Path, story: str, text: str, told: set[str]) -> None:
+    """Post text on the story unless this land already did, as `told` records, so a retry repeats no comment. A failed post changes nothing about
+    the landing, whose log already says it (#1073)."""
+    if text not in told and (slug := _story_slug(wt)):
+        told.add(text)
         _gh(f"repos/{slug}/issues/{story}/comments", "-f", f"body={text}")
 
 
@@ -322,7 +324,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         log.write(f"Refused: story #{story} could not be read over REST, so its Files area is unknown and nothing landed.\n")
         return "scope-unchecked", ""
     area, declared = intake.files_area(body), intake.removed_tests(body)
-    deadline, attempt = time.monotonic() + BUDGET, 0
+    deadline, attempt, told = time.monotonic() + BUDGET, 0, set()
     while attempt < TRIES or time.monotonic() < deadline:
         if attempt >= TRIES:
             log.write("--- main moved again, waiting to retry\n")
@@ -341,7 +343,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         if outside:
             names = ", ".join(outside)
             log.write(f"Note: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}).\n")
-            _story_comment(wt, story, f"This commit changes files outside the Files area: {names}. The Files area is {', '.join(area)}.")
+            _story_comment(wt, story, f"This commit changes files outside the Files area: {names}. The Files area is {', '.join(area)}.", told)
         # a Removes tests entry excuses a test only in a file the Files area lists by name, and a test file listed nowhere there refuses the commit (#1484)
         unlisted = [p for p in dict.fromkeys(entry.partition("::")[0] for entry in declared) if p not in area]
         gone, excused = _removed_whole(wt, base, declared)
@@ -350,10 +352,10 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         if found:
             log.write(f"Refused: this commit weakens a test, so nothing landed: {'; '.join(found)}.\n")
             return "weakened-test", ""
-        if gone:  # shortcut: a land that retries repeats this comment, as it does the Files area one; post once when the repeats bother a reader
+        if gone:
             names = ", ".join(gone)
             log.write(f"Removed tests that story #{story} names: {names}.\n")
-            _story_comment(wt, story, f"This commit removes the tests the story names: {names}.")
+            _story_comment(wt, story, f"This commit removes the tests the story names: {names}.", told)
         tree = _git(wt, "rev-parse", "HEAD^{tree}").stdout.strip()
         passed = validated.recorded_pass(tree) if tree else None  # a pass on record for this tree stands; a rebase that changed it has none (#910)
         if passed:

@@ -190,8 +190,11 @@ TOPICS = {"city": _city_topic, "skills": _skills_topic, "design": _design_topic}
 
 
 def command_guide(oc_root: Path, name: str | None = None) -> int:
-    if name:
+    if name is not None:
         topic = name.lower().removeprefix("olivercode ").strip()
+        if not topic:
+            print("Usage: olivercode guide [NAME]")
+            return 1
         if topic in TOPICS and (topic != "city" or city_on()):
             print("\n".join(TOPICS[topic](oc_root)))
             return 0

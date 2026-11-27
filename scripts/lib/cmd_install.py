@@ -191,14 +191,17 @@ def _dangling_from_install(claude_dir: Path, oc_root: Path) -> set[str]:
     return {k for k, b in bases.items() if counts[b] >= 2}
 
 
-def _schedule_replay() -> None:
-    """Load the launchd job that replays queued gh writes at each GraphQL reset (`olivercode gh-limit --schedule`, #704).
-    Only on a Mac and only for the real home folder, so a test or a relocated HOME never loads a job."""
+def _schedule_jobs() -> None:
+    """Load the launchd job that replays queued gh writes at each GraphQL reset (`olivercode gh-limit --schedule`, #704)
+    and the daily maintenance job (`olivercode maintain --schedule`, #1395). Only on a Mac and only for the real home folder, so a test or a relocated HOME never loads a job."""
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
-    from lib import cmd_ghreplay
-    print("  [JOB] " + ("GitHub replay job loaded" if cmd_ghreplay.schedule(True) == 0 else "GitHub replay job failed; run `olivercode gh-limit --schedule`"))
+    from lib import cmd_ghreplay, maintain
+    for name, module, command in (("GitHub replay job", cmd_ghreplay, "gh-limit"), ("daily maintenance job", maintain, "maintain")):
+        if os.environ.get("XPC_SERVICE_NAME") == module.LABEL:
+            continue  # `maintain --fix` runs install from inside its own job, and reloading that job would kill the run
+        print(f"  [JOB] {name} " + ("loaded" if module.schedule(True) == 0 else f"failed; run `olivercode {command} --schedule`"))
 
 
 REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep", "lessons", "fleet-sync", "issues-page"))
@@ -262,7 +265,7 @@ def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run, sta
 
 
 def _retire_removed_jobs(oc_root: Path) -> None:
-    """Remove the jobs of removed commands, and any other job of this checkout the code no longer defines, under the same real-home rule as the replay job."""
+    """Remove the jobs of removed commands, and any other job of this checkout the code no longer defines, under the same real-home rule as the scheduled jobs."""
     real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
     if real is None or Path.home().resolve() != real.resolve():
         return
@@ -587,7 +590,7 @@ def command_install(oc_root: Path) -> int:
         else:
             print(f"  [WARN] {problem}; to fix it run `{fix}`")
 
-    _schedule_replay()
+    _schedule_jobs()
     _retire_removed_jobs(oc_root)
     close_fleet_sync_items()
 

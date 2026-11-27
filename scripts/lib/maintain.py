@@ -5,7 +5,7 @@ a dangling activation link, prunes a worktree whose folder is gone, deletes merg
 from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live (#997): a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
 that drifted, a repo inside a synced folder, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
 With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scripts/run-tests.sh and records the commit, exit code and test count for `olivercode health` (#977).
-`--schedule` installs a daily launchd job that runs `maintain --fix`.
+`--schedule` installs a daily launchd job that runs `maintain --fix`, and `olivercode install` loads it too.
 """
 
 from __future__ import annotations
@@ -44,7 +44,10 @@ class Problem:
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
+    try:
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
+    except subprocess.SubprocessError as exc:  # a slow fetch is one failed row, never a crash of the whole run
+        return subprocess.CompletedProcess(args, 124, "", f"git {args[0]} did not finish: {exc}")
 
 
 def _repos(cfg: placement.Config) -> list[Path]:
@@ -258,9 +261,11 @@ def check_main_checkout(fix: bool, root: Path | None = None) -> list[Problem]:
     """The OliverCode checkout that runs the hooks fast-forwards to origin/main when it is clean, and reports its lag when it has
     local edits or its own commits, because the hooks and gates it runs are then older than main's."""
     root = root or OC_ROOT
-    behind, state = main_checkout_lag(root, fetch=True)
+    fetched = _git(root, "fetch", "-q", "origin")
+    failed = [Problem("checkout", f"{root}: git fetch failed: {fetched.stderr.strip()[:200]}", fixable=True)] if fetched.returncode else []
+    behind, state = main_checkout_lag(root)
     from lib import main_checkout
-    drifted = [Problem("checkout", line) for line in main_checkout.drift(root)]
+    drifted = failed + [Problem("checkout", line) for line in main_checkout.drift(root)]
     if not behind:
         return drifted
     problem = Problem("checkout", f"{root} is {behind} commit(s) behind origin/main and {state}" + ("" if state == "clean" else ", so it was not updated"),
@@ -589,7 +594,8 @@ def report(problems: list[Problem], fix: bool) -> int:
     if not problems:
         lines.append("  [OK] nothing to repair")
     text = "\n".join(lines)
-    print(text)
+    if left:  # a run that leaves no failure prints nothing; the log still records it
+        print(text)
     log = failure_log.home() / "maintenance.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     failure_log.append_private(log, text + "\n")
@@ -630,7 +636,8 @@ def command_maintain(argv: list[str]) -> int:
     fix = argv == ["--fix"]
     for repo in dict.fromkeys([OC_ROOT, *_repos(placement.config())]):  # the daily run files the bugs each repo's failure and run logs hold, each read once by a fresh reader (#1371, #1397)
         try:
-            intake.bugs(repo)
+            with contextlib.redirect_stdout(io.StringIO()):  # a clean daily run prints nothing, and a failure still reaches stderr
+                intake.bugs(repo)
         except Exception as exc:  # noqa: BLE001 -- bug intake never stops the daily repair
             print(f"maintain: bug intake for {repo.name} failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
     return report(run(fix), fix)

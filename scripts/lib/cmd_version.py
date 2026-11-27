@@ -6,11 +6,10 @@ OliverCode runs the same files it ships to fleet repos, so the cut and the docs 
 from __future__ import annotations
 
 import importlib.util
-import os
 import subprocess
 from datetime import date
 
-from lib import cmd_land, denials, failure_log, launchd
+from lib import cmd_land, denials, launchd
 from lib.local_config import OC_ROOT
 
 LABEL = "com.olivercode.version-cut"
@@ -56,13 +55,13 @@ def cut_and_land(cutter, day: str, story: str) -> int:
     directory = cmd_land.log_dir()
     directory.mkdir(parents=True, exist_ok=True)
     lock = directory / cmd_land.CUT_LOCK
-    if cmd_land.cut_running(directory):
-        return print("version-cut: a cut is already running.") or 1
-    failure_log.write_private(lock, str(os.getpid()))  # renamed into place, so a reader never sees a half-written pid
-    try:
-        return _cut_and_land(cutter, day, story)
-    finally:
-        lock.unlink(missing_ok=True)
+    with cmd_land._claim(lock) as running:  # a flock, so two cuts never both start
+        if running:
+            return print("version-cut: a cut is already running.") or 1
+        try:
+            return _cut_and_land(cutter, day, story)
+        finally:
+            lock.write_text("")  # emptied, never removed (see _claim), so no land waits on a pid the system hands out again
 
 
 def _cut_and_land(cutter, day: str, story: str) -> int:

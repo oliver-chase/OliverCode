@@ -39,7 +39,11 @@ def add(repo: Path, rid: str, text: str, paths: str, forbid: str) -> None:
 def violations(repo: Path) -> list[str]:
     out = []
     for rule in load(repo):
-        pattern = re.compile(rule.get("forbid", "(?!)"))
+        try:
+            pattern = re.compile(rule.get("forbid", "(?!)"))
+        except (re.error, TypeError):
+            out.append(f"owner rule {rule.get('id')} has a forbid pattern that is not a valid regex, so it checked nothing")
+            continue
         for glob in rule.get("paths", []):
             for path in sorted(repo.glob(glob)):
                 if path.is_file() and pattern.search(path.read_text(encoding="utf-8", errors="replace")):

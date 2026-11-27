@@ -338,7 +338,7 @@ class CutAndLand(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(0, cmd_version.command_version_cut(["--day", "2026-11-01", "--commit", "--story", "638"]))
         self.assertEqual([True], seen)
-        self.assertFalse((logs / "version-cut.lock").exists())
+        self.assertEqual("", (logs / "version-cut.lock").read_text())
 
     def test_version_cut_is_the_same_command_as_version_cut_commit(self):
         with mock.patch.object(cmd_version, "cut_and_land", return_value=0) as cut, contextlib.redirect_stdout(io.StringIO()):
@@ -348,9 +348,8 @@ class CutAndLand(unittest.TestCase):
     def test_a_second_cut_while_one_runs_refuses(self):
         logs = self.oc.parent / "logs"
         logs.mkdir()
-        (logs / "version-cut.lock").write_text(str(os.getppid()))
         out = io.StringIO()
-        with mock.patch.object(cmd_version.cmd_land, "LOG_DIR", logs), contextlib.redirect_stdout(out):
+        with mock.patch.object(cmd_version.cmd_land, "LOG_DIR", logs), cmd_version.cmd_land._claim(logs / "version-cut.lock"), contextlib.redirect_stdout(out):
             self.assertEqual(1, cmd_version.command_version_cut(["--day", "2026-11-01", "--commit", "--story", "638"]))
         self.assertIn("already running", out.getvalue())
         self.assertEqual([], self.landed)

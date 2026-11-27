@@ -130,7 +130,10 @@ def checkouts(base: Path, depth: int = MAX_DEPTH):
 
 
 def _git(path: Path, *args: str, timeout: int = 30) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True, timeout=timeout)
+    try:
+        return subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True, timeout=timeout)
+    except subprocess.SubprocessError as exc:  # a slow fetch is one failed row, never a crash of the whole run
+        return subprocess.CompletedProcess(args, 124, "", f"git {args[0]} did not finish: {exc}")
 
 
 def linked_worktrees(cfg: Config) -> list[tuple[Path, Path]]:
@@ -143,7 +146,7 @@ def linked_worktrees(cfg: Config) -> list[tuple[Path, Path]]:
             continue
         try:
             out = _git(repo, "worktree", "list", "--porcelain").stdout
-        except (OSError, subprocess.SubprocessError):
+        except OSError:
             continue
         for line in out.splitlines():
             if line.startswith("worktree "):
@@ -235,16 +238,18 @@ def worktrees(cfg: Config | None = None) -> list[Worktree]:
         seen.add(repo.resolve())
         try:
             # Ignored files count when they hold local secrets or settings, which a worktree removal would delete.
-            status = _git(repo, "status", "--short", "--ignored").stdout.splitlines()
-            dirty = any(not line.startswith("!!") or LOCAL_ONLY.search(line[3:]) for line in status if line.strip())
+            status = _git(repo, "status", "--short", "--ignored")
+            dirty = any(not line.startswith("!!") or LOCAL_ONLY.search(line[3:]) for line in status.stdout.splitlines() if line.strip())
             head = _git(repo, "rev-parse", "--abbrev-ref", "origin/HEAD")
             default = head.stdout.strip() if head.returncode == 0 and head.stdout.strip() != "origin/HEAD" else "origin/main"
             merged = _git(repo, "merge-base", "--is-ancestor", "HEAD", default).returncode == 0
-            common = Path(_git(repo, "rev-parse", "--git-common-dir").stdout.strip()).resolve().parent
-            branch = _git(repo, "branch", "--show-current").stdout.strip()
-        except (OSError, subprocess.SubprocessError):
+            common = _git(repo, "rev-parse", "--git-common-dir")
+            branch = _git(repo, "branch", "--show-current")
+        except OSError:
             continue
-        found.append(Worktree(repo, branch, dirty, merged, common))
+        if status.returncode or common.returncode or branch.returncode:
+            continue  # an unread status or branch looks clean and unclaimed, so `clean` would remove the worktree
+        found.append(Worktree(repo, branch.stdout.strip(), dirty, merged, Path(common.stdout.strip()).resolve().parent))
     return found
 
 
@@ -272,7 +277,10 @@ def held_reason(wt: Worktree) -> str:
 def _last_touched(wt: Worktree) -> float:
     """The newest change time of the folder, its .git file and the index git keeps for it. Any git command a builder runs
     rewrites that index, so an idle worktree shows its age and an active one shows it. 0 when none of them can be read."""
-    gitdir = _git(wt.path, "rev-parse", "--git-dir").stdout.strip()
+    found = _git(wt.path, "rev-parse", "--git-dir")
+    if found.returncode:
+        return 0.0  # without the index's age an active worktree looks idle
+    gitdir = found.stdout.strip()
     stamps = []
     for path in (wt.path, wt.path / ".git", wt.path / gitdir / "index"):
         try:
@@ -361,8 +369,11 @@ def remote_branches(cfg: Config | None = None, apply: bool = False) -> list[str]
             lines.append(f"FAILED {repo.name}: could not fetch origin, so no remote branch was checked")
             continue
         default = _default_ref(repo)
-        listing = _git(repo, "worktree", "list", "--porcelain").stdout.splitlines()
-        busy = {line[len("branch refs/heads/"):] for line in listing if line.startswith("branch refs/heads/")}
+        listing = _git(repo, "worktree", "list", "--porcelain")
+        if listing.returncode:
+            lines.append(f"FAILED {repo.name}: could not list its worktrees, so no remote branch was checked")
+            continue
+        busy = {line[len("branch refs/heads/"):] for line in listing.stdout.splitlines() if line.startswith("branch refs/heads/")}
         merged = _git(repo, "branch", "-r", "--merged", default, "--format=%(refname:short)").stdout.split()
         for ref in sorted(merged):
             name = ref[len("origin/"):] if ref.startswith("origin/") else ""

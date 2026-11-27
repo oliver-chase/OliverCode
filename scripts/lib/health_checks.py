@@ -394,6 +394,8 @@ def _check_clean_clone_suite(record: Path | None = None, now: float | None = Non
         return 0, 0, 1
     try:
         data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise ValueError("not an object")
     except (OSError, ValueError):
         print(f"  [FAIL] {path} does not parse; run `olivercode maintain --fix` to rewrite it")
         return 0, 1, 0
@@ -550,7 +552,11 @@ def _check_gh_auth(runner=None) -> tuple[int, int, int]:
         print("  [WARN] gh is not installed or did not answer, so its sign-in was not checked. Install it from https://cli.github.com")
         return 0, 0, 1
     if result.returncode == 0:
-        if "project" not in _scopes(result):
+        scopes = _scopes(result)
+        if scopes is None:
+            print("  [WARN] gh is signed in and lists no token scopes, as with a fine-grained token, so its project scope is unknown")
+            return 0, 0, 1
+        if "project" not in scopes:
             print("  [FAIL] gh is signed in without the project scope, so no board can take a story. Run: gh auth refresh -s project")
             return 0, 1, 0
         print("  [OK] gh is signed in with the repo and project scopes")
@@ -559,11 +565,12 @@ def _check_gh_auth(runner=None) -> tuple[int, int, int]:
     return 0, 0, 1
 
 
-def _scopes(result) -> set[str]:
-    """The token scopes `gh auth status` lists. It reads the token's own record, so no GraphQL point is spent (#994)."""
+def _scopes(result) -> set[str] | None:
+    """The token scopes `gh auth status` lists, or None when it prints no scopes line, so they are unknown. It reads the token's own record,
+    so no GraphQL point is spent (#994)."""
     text = f"{result.stdout or ''}{result.stderr or ''}"
     found = re.search(r"Token scopes:\s*(.+)", text)
-    return set(re.findall(r"'([^']+)'", found.group(1))) if found else set()
+    return set(re.findall(r"'([^']+)'", found.group(1))) if found else None
 
 
 def gh_ready() -> str:
@@ -574,7 +581,8 @@ def gh_ready() -> str:
         return "gh is not installed or did not answer. Install it from https://cli.github.com, then run: gh auth login"
     if result.returncode:
         return "gh is not signed in. Run: gh auth login, then gh auth refresh -s project"
-    if "project" not in _scopes(result):
+    scopes = _scopes(result)
+    if scopes is not None and "project" not in scopes:
         return "gh is signed in without the project scope. Run: gh auth refresh -s project"
     return ""
 

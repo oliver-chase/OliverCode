@@ -766,7 +766,7 @@ class TestStoryReads(Base):
     def test_the_comment_posts_to_the_story_over_rest(self):
         with mock.patch.object(cmd_land, "_story_slug", return_value="acme/widgets"), \
                 mock.patch.object(cmd_land.subprocess, "run") as run:
-            REAL_STORY_COMMENT(self.wt, "9", "Landing refused.")
+            REAL_STORY_COMMENT(self.wt, "9", "Landing refused.", set())
         self.assertEqual(["gh", "api", "repos/acme/widgets/issues/9/comments", "-f", "body=Landing refused."], run.call_args.args[0])
 
 

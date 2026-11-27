@@ -16,9 +16,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
-    from lib.failure_log import home
+    from lib.failure_log import home, locked, write_private
 except ImportError:  # loaded bare, with scripts/lib on the path
-    from failure_log import home
+    from failure_log import home, locked, write_private
 
 KEEP_LINES = 200
 MAX_AGE = timedelta(days=7)
@@ -51,12 +51,13 @@ def record(root: Path, tree: str | None = None) -> None:
     line = json.dumps({"tree": tree or working_tree(root), "time": datetime.now(timezone.utc).strftime(STAMP), "exit": 0})
     target = path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        lines = target.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        lines = []
     (home() / "launcher").write_text(str(Path(__file__).resolve().parent.parent / "olivercode") + "\n", encoding="utf-8")
-    target.write_text("\n".join((lines + [line])[-KEEP_LINES:]) + "\n", encoding="utf-8")
+    with locked(target):  # held across the append and the trim, so two drains that record at once keep both rows
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+        lines = target.read_text(encoding="utf-8").splitlines()
+        if len(lines) > KEEP_LINES:
+            write_private(target, "\n".join(lines[-KEEP_LINES:]) + "\n")
 
 
 def has_writer(root: Path) -> bool:

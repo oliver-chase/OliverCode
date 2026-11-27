@@ -58,15 +58,15 @@ class TestInstall(HomeCase):
         linked = [p for p in (self.tmp / ".claude" / "skills").iterdir() if p.is_symlink()]
         self.assertGreater(len(linked), 0, "no skills were linked")
 
-    def test_install_loads_the_gh_replay_job_only_for_the_real_home(self):
-        with mock.patch("lib.cmd_ghreplay.schedule", return_value=0) as sched:
+    def test_install_loads_its_jobs_only_for_the_real_home(self):
+        with mock.patch("lib.cmd_ghreplay.schedule", return_value=0) as sched, mock.patch("lib.maintain.schedule", return_value=0) as daily, mock.patch.dict(os.environ, {"XPC_SERVICE_NAME": "0"}):
             cmd_install.command_install(self.root)  # HOME is a temp folder here
             sched.assert_not_called()
             real = self.tmp  # a home that matches the account's own home folder
             with mock.patch("pwd.getpwuid", return_value=mock.Mock(pw_dir=str(real))), \
                  mock.patch.object(cmd_install.sys, "platform", "darwin"):
-                cmd_install._schedule_replay()
-            sched.assert_called_once_with(True)
+                cmd_install._schedule_jobs()
+            self.assertEqual([sched.call_args_list, daily.call_args_list], [[mock.call(True)]] * 2)
 
     def test_existing_real_claude_md_is_backed_up_not_destroyed(self):
         claude_dir = self.tmp / ".claude"
