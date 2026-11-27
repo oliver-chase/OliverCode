@@ -53,7 +53,7 @@ INTRODUCTION = """How OliverCode works
   The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost.
 
 First steps, in order
-  1. Register your repos: olivercode discover --root <folder holding your repos> --register
+  1. Find your repos: olivercode discover --root <folder holding your repos>
   2. Check this machine: olivercode health
   3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`. A chat never builds a board story by hand.
 
@@ -193,7 +193,7 @@ def _schedule_replay() -> None:
     print("  [JOB] " + ("GitHub replay job loaded" if cmd_ghreplay.schedule(True) == 0 else "GitHub replay job failed; run `olivercode gh-limit --schedule`"))
 
 
-REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep", "lessons"))
+REMOVED_JOBS = tuple("com.olivercode." + name for name in ("city", "workmap", "idle-sessions", "review", "gap-sweep", "burndown", "sweep", "lessons", "fleet-sync"))
 
 
 def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[str]:
@@ -211,10 +211,21 @@ def retire_removed_jobs(home: Path | None = None, run=subprocess.run) -> list[st
     return gone
 
 
+def close_fleet_sync_items() -> list[int]:
+    """Mark each open owner item the removed fleet-sync command queued as done, with the reason. Returns the ids it closed."""
+    from lib import cmd_owner
+    closed = [i["id"] for i in cmd_owner.items() if i["status"] == "open" and i.get("session") == "fleet-sync"]
+    for item_id in closed:
+        cmd_owner.close(item_id, "fleet-sync was removed, so nothing brings this repo level any more")
+    if closed:
+        print(f"  [QUEUE] closed {len(closed)} owner item(s) from the removed fleet-sync command")
+    return closed
+
+
 def _defined_labels() -> list[str]:
     """The labels of the jobs this code creates."""
-    from lib import cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain
-    return [m.LABEL for m in (cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain)]
+    from lib import cmd_boardsweep, cmd_ghreplay, cmd_version, maintain
+    return [m.LABEL for m in (cmd_boardsweep, cmd_ghreplay, cmd_version, maintain)]
 
 
 def _checkout_job_labels(oc_root: Path, folder: Path) -> list[str]:
@@ -377,13 +388,6 @@ def _converge_local_config() -> list[str]:
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
     return [*lines, f"previous olivercode.local.json kept at {backup}"]
-
-
-def registered_repos() -> list[tuple[str, Path]]:
-    """OliverCode and each cloned repo in the fleet registry: the repos install gives a board (#994)."""
-    from lib.repo_profiles import iter_fleet, load_repo_profiles
-    profiles, _ = load_repo_profiles(OC_ROOT)
-    return [("OliverCode", OC_ROOT), *[(name, path) for name, _, path in iter_fleet(profiles, OC_ROOT.parent) if (path / ".git").exists()]]
 
 
 def board_config(path: Path) -> dict | None:
@@ -601,6 +605,7 @@ def command_install(oc_root: Path) -> int:
 
     _schedule_replay()
     _retire_removed_jobs(oc_root)
+    close_fleet_sync_items()
 
     broken = _broken_links(skills_dir)
     if broken:
@@ -624,7 +629,7 @@ def command_install(oc_root: Path) -> int:
             print(f"  {b}")
         print()
     if owner_terminal():
-        board_step(registered_repos())
+        board_step([("OliverCode", OC_ROOT)])
     else:
         print("Board step skipped here. Run `olivercode install` in your own terminal, or `olivercode backlog-setup DIR --apply` for each repo.")
     print(closing_lines(oc_root))

@@ -1,15 +1,14 @@
-"""An OliverCode clone is engine only: personal files are refused at commit and flagged by conform.
+"""An OliverCode clone is engine only: personal files are refused at commit and failed by validation.
 
-A personal file is one that belongs to a single owner: this machine's config, a filled-in fleet registry,
-local memory, a story or queue item, or any file whose path or text names a repo in the owner's fleet. All of
-those live in the private olivercode-fleet repo. The commit gate runs this module through docs/SUITE-CHECKS.json
-on the staged files, and `olivercode conform` runs it on the whole checkout.
+A personal file is one that belongs to a single owner: this machine's config,
+local memory, a story or queue item, or any file whose path or text names another of the owner's repos. All of
+those live in a private repo. The commit gate runs this module through docs/SUITE-CHECKS.json
+on the staged files, and on the whole checkout.
 """
 
 from __future__ import annotations
 
 import fnmatch
-import json
 import re
 import subprocess
 import sys
@@ -36,16 +35,9 @@ def _read(root: Path, rel: str, staged: bool) -> str:
         return ""
 
 
-def _filled_registry(text: str) -> bool:
-    try:
-        return bool(json.loads(text).get("profiles"))
-    except (ValueError, AttributeError):
-        return False
-
-
 def personal_findings(root: Path, paths: list[str], staged: bool = False) -> list[str]:
     """One line per personal file among PATHS: the file, why it is personal and the fix."""
-    names = fleet_names(root)
+    names = fleet_names()
     pattern = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(n) for n in names) + r")(?![A-Za-z0-9])", re.IGNORECASE) if names else None
     found = []
     for rel in paths:
@@ -54,8 +46,6 @@ def personal_findings(root: Path, paths: list[str], staged: bool = False) -> lis
             continue
         if any(fnmatch.fnmatch(rel, g) for g in PERSONAL_GLOBS) and not rel.endswith(".example.json"):
             why = "personal to one owner"
-        elif rel == "shared/repo-profiles.json" and _filled_registry(_read(root, rel, staged)):
-            why = "a filled-in fleet registry"
         elif pattern and rel not in SYNCED_GATES and (hit := pattern.search(rel) or pattern.search(_read(root, rel, staged))):
             why = "names a fleet repo"
         else:

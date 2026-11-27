@@ -51,7 +51,7 @@ scripts/olivercode health
 
 `health` checks that every symlink resolves into this checkout. Keep the backups until everything is verified.
 
-The first `install` on a machine ends with a short introduction to how work runs, the three first steps and the "Using it well" habits: register your repos, run `health`, file your first story. A repeat install prints one line that points to `olivercode guide`, which opens with the same explanation as the README's "How work runs" section. A status question in a session is answered from the status digest by `status_hint.py` with no model turn: a message that is only a status question is blocked and its digest lines are shown as the reason, and a message that also asks for work goes through with those lines as context. Start a message with `ask:` to send a status question to the model anyway. `install` adds that hook, and `health` fails until it is in place.
+The first `install` on a machine ends with a short introduction to how work runs, the three first steps and the "Using it well" habits: find your repos with `discover`, run `health`, file your first story. A repeat install prints one line that points to `olivercode guide`, which opens with the same explanation as the README's "How work runs" section. A status question in a session is answered from the status digest by `status_hint.py` with no model turn: a message that is only a status question is blocked and its digest lines are shown as the reason, and a message that also asks for work goes through with those lines as context. Start a message with `ask:` to send a status question to the model anyway. `install` adds that hook, and `health` fails until it is in place.
 
 Before the install step writes `permissions.allow`, run `scripts/olivercode install --show-allow` and show the user its output. Each line names one rule, whether it is already present, and what it permits. One yes from the user lets `install` write the missing ones beside their own rules, and `olivercode health` fails when any is missing later.
 
@@ -63,28 +63,24 @@ Sort your old `~/.claude/CLAUDE.md` into your fork's `CLAUDE.md` (machine-global
 
 Start from `core/templates/project/CLAUDE.md`, keep only what is specific to the repo and verify every pointer with `ls`. Merge an `AGENTS.md`, `.cursorrules` or similar file into `CLAUDE.md`. If another tool still reads the original, keep it as a one-line pointer to `CLAUDE.md`, and otherwise delete it in the same commit. Never leave both files carrying live rules.
 
-## Step 5: register your fleet
+## Step 5: find your repos
 
-`install` makes no fleet repo and asks nothing. Run `scripts/olivercode init-fleet` to scaffold your private `olivercode-fleet` and push it, or clone the one your GitHub account already holds. Then run `scripts/olivercode discover --root <dir> --register` for each folder that holds the repos the user confirmed. It writes each new repo into the registry this checkout reads, with its `name`, `path` and the validation command the repo names. Remove any repo the user did not confirm, and set the command by hand for each repo it names as having none.
+`install` asks nothing and makes no repo. Run `scripts/olivercode discover --root <dir>` for each folder that holds the repos the user confirmed. It lists each repo with the validation command the repo names. Name each private repo in `privateRepos` in `olivercode.local.json`, and set the command by hand for each repo it names as having none.
 
-Your fleet's own stories, registry, owner-rule carriers and owner queue live in that private fleet repo and never in this one. File a story about one of your repos there, and keep this repo's issues to the engine.
-
-```bash
-scripts/olivercode conform --offline     # lists your repos by name; hook checks fail until Step 6
-```
+Your own stories for your other repos belong in those repos, and this repo's issues stay on the engine.
 
 ## Step 6: install enforcement
 
 ```bash
-scripts/olivercode sync-hooks            # writes .githooks/ and sets core.hooksPath in every fleet repo
-scripts/olivercode conform --offline     # hooks pass now; template checks stay FAIL until Step 6b
+scripts/olivercode sync-hooks            # writes .githooks/ and sets core.hooksPath in OliverCode and each private repo
+scripts/olivercode health                # hooks pass now
 ```
 
-`sync-hooks` expects the fleet repos as siblings of the OliverCode checkout (see "Folder structure"). A repo reported as `[SKIP] not present on this machine` is one it did not govern, and the exit code does not show them, so read that list. `--commit --story REF` commits the hook files it changed and pushes nothing.
+`sync-hooks` reads OliverCode and the repos in `privateRepos`. A repo reported as `[SKIP] not present on this machine` is one it did not govern, and the exit code does not show them, so read that list. `--commit --story REF` commits the hook files it changed and pushes nothing.
 
 Give your OliverCode checkout its own board before the first commit. Run `gh auth login`, then `gh auth refresh -s project`, then `scripts/olivercode backlog-setup --apply`. The `docs/backlog-config.json` you received names the repo it came from, so the commit-msg gate skips story checks until this replaces it.
 
-`docs/GATES.md` says when hook enforcement fails open. Run `scripts/olivercode conform` at setup and on a schedule to find it fleet-wide.
+`docs/GATES.md` says when hook enforcement fails open. `olivercode health` finds it.
 
 ### Step 6b: stamp the project template into a repo
 
@@ -101,7 +97,7 @@ The manifest gives every file a mode: `presence` files are created only if absen
 
 ```bash
 bash scripts/validate.sh
-scripts/olivercode conform --offline
+scripts/olivercode health
 scripts/olivercode guide
 cd <one of your repos> && bash "$OC/scripts/qa/probe-secret-gate.sh"    # writes a fake secret, commits, expects a block
 ```
@@ -114,7 +110,7 @@ Confirm anything you moved exists at its new home, tell the human what you could
 
 ## Keep the machine awake
 
-Sessions stop when the Mac sleeps. `olivercode health` prints one warning when `pmset -g` shows a system sleep timer above zero, and `olivercode conform` reports the same line as the `sleep-setting` row. To clear it, open System Settings, then Battery or Energy, and turn off sleep on power adapter, or run `caffeinate -dimsu` in a terminal before leaving.
+Sessions stop when the Mac sleeps. `olivercode health` prints one warning when `pmset -g` shows a system sleep timer above zero,. To clear it, open System Settings, then Battery or Energy, and turn off sleep on power adapter, or run `caffeinate -dimsu` in a terminal before leaving.
 
 ## Staying current
 
@@ -128,7 +124,7 @@ git fetch upstream && git merge upstream/main        # resolve conflicts deliber
 bash scripts/qa/rehearse-install.sh && scripts/olivercode sync-hooks
 ```
 
-Your own state lives outside the tracked files, so an update never touches it. Settings such as the audit mode sit in the git-ignored `olivercode.local.json`, and a key you never set takes the default a release ships. Other state sits under `~/.olivercode`. Your own repo and Project go in `docs/backlog-config.local.json` and your fleet in `shared/repo-profiles.local.json`, both git-ignored, and each overrides the tracked example. When a release moves a state file, install moves your copy once and keeps a backup in `~/.olivercode/backups`.
+Your own state lives outside the tracked files, so an update never touches it. Settings such as the audit mode sit in the git-ignored `olivercode.local.json`, and a key you never set takes the default a release ships. Other state sits under `~/.olivercode`. Your own repo and Project go in `docs/backlog-config.local.json`, which is git-ignored and overrides the tracked example. When a release moves a state file, install moves your copy once and keeps a backup in `~/.olivercode/backups`.
 
 ### Installed checkout stays level with origin
 
@@ -147,9 +143,9 @@ Then delete the checkout. `uninstall` keeps everything of yours in `~/.claude` a
 
 ## Folder structure
 
-`sync-hooks` and `conform` look for fleet repos as siblings of the OliverCode checkout.
+`sync-hooks` and `health` look for your private repos at the paths `privateRepos` names.
 
-A repo outside that layout gets an explicit `path` in the registry (absolute, `~`-relative or fleet-root-relative), which `discover` emits. When your repos share a parent that is not OliverCode's, pass `--root`:
+When your repos share a parent that is not OliverCode's, pass `--root`:
 
 ```bash
 scripts/olivercode sync-hooks --root /path/to/where/your/repos/live
@@ -158,7 +154,6 @@ scripts/olivercode health     --root /path/to/where/your/repos/live
 
 Machine paths go in `olivercode.local.json` at the OliverCode root, which is gitignored. Copy `olivercode.local.example.json` and fill in:
 
-- `fleetRegistry`: the path of the fleet registry file. `init-fleet` names the registry it makes, and `~/.olivercode/fleet/repo-profiles.json` is the default when unset. With no registry at that path or under `privateRepos`, the fleet commands say no fleet is set and name `olivercode init-fleet`
 - `privateRepos`: private repos that get the private hook variant and a hook check
 - `skillsRoot`: the folder for personal skills, which the skill checks read
 - `repoRoot`: the one folder that holds every repo, `~/Developer/Repos` in the example. Any folder outside the synced ones works. Worktrees go in `_worktrees` and backups in `_archive` under it. It must sit outside every synced folder
@@ -166,7 +161,7 @@ Machine paths go in `olivercode.local.json` at the OliverCode root, which is git
 - `otherDeviceRepos` and `otherDeviceOwners`: repo names and GitHub accounts that belong to another of your devices. Every fleet walk skips the repos, `olivercode health` fails for a checkout of either under `repoRoot` and names the fix, and the clone guard refuses to clone them. No agent creates a GitHub repo for a folder that has no origin and reports the folder to the owner
 - `watchRoots` and `allowOutside`: the folders `olivercode place` scans for strays, and checkouts allowed to stay elsewhere
 - `repoPaths`: a repo outside the fleet folder
-- `liveCopies`: each path a running bot reads, mapped to its agent copy. `install` and `conform` fail when OliverCode runs from a live path and name the agent copy to use
+- `liveCopies`: each path a running bot reads, mapped to its agent copy. `install` fails when OliverCode runs from a live path and name the agent copy to use
 - `maxBuilders`: how many builder sessions drain and dispatch run at once across every repo on this machine. Unset, it is half the cores or the memory in GB less 4, whichever is smaller, which is 4 on an 8-core 8 GB Mac
 - `auditMode`: `full` or `gated`. Unset, the audit stops at its report and filed issues, and `python3 skills/audit/scripts/audit_mode.py set full|gated` stores the opt-in to fix them too
 - `voiceFile`: the owner's own voice file, which `install` links as `~/.claude/VOICE.md` in place of `docs/VOICE.md`
@@ -186,7 +181,7 @@ Each headless session starts with the project's settings only by default: `claud
 
 ## Restoring on a new machine
 
-Clone OliverCode and each fleet repo side by side, copy `olivercode.local.example.json` to `olivercode.local.json`, fill in this machine's paths and name the registry's repo under `privateRepos`. Then run Step 0, Step 2 for `install`, Step 6 for enforcement and Step 7 to prove a gate blocks. Steps 1, 3, 4 and 5 are done, because the rules and the registry come back with the clones. Marketplace plugins, application plugins and MCP server authorization need a person. A restore is finished when `health` is HEALTHY and a planted secret is refused by a real commit.
+Clone OliverCode and each fleet repo side by side, copy `olivercode.local.example.json` to `olivercode.local.json`, fill in this machine's paths and name each private repo under `privateRepos`. Then run Step 0, Step 2 for `install`, Step 6 for enforcement and Step 7 to prove a gate blocks. Steps 1, 3, 4 and 5 are done, because the rules come back with the clones. Marketplace plugins, application plugins and MCP server authorization need a person. A restore is finished when `health` is HEALTHY and a planted secret is refused by a real commit.
 
 ## Launcher commands
 
@@ -195,13 +190,13 @@ Clone OliverCode and each fleet repo side by side, copy `olivercode.local.exampl
 In a repo with commit gates, a new interactive session refreshes `status-digest.md` through the session-start hook, with no model call, and prints three lines: the open count, the last story landed and the path to read before acting. A headless builder session gets none of them. The digest holds the open stories in priority order, the last five landed, what waits on the owner, the latest decisions and the run log, within 1,500 tokens. `--root DIR` overrides where fleet repos are looked for (the default is the parent of this checkout), and unknown arguments exit non-zero.
 
 - `version-cut` reads the commits on main for one day, picks MAJOR, MINOR or PATCH from `docs/VERSIONING.md`, sets `VERSION` and writes that version's `CHANGELOG.md` section. `--commit` commits the two files with `OLIVERCODE_VERSION_CUT=1`, which the `version-files` gate requires
-- `board sync` keeps each board in step with its issues, because GitHub has no API for the built-in "Item closed" and "Auto-add to project" workflows. It reads each board and its repo's issues through REST, moves the card of every closed issue to Status Complete and adds every open issue that has no card with Status Backlog, through `batch_project.py`, which queues the writes while GraphQL is on hold. `--dry-run` reports without writing, `--schedule` loads the `com.olivercode.board-sweep` launchd job that runs it every thirty minutes, and `olivercode conform` fails a board on a machine where that job is not loaded (#798)
+- `board sync` keeps each board in step with its issues, because GitHub has no API for the built-in "Item closed" and "Auto-add to project" workflows. It reads each board and its repo's issues through REST, moves the card of every closed issue to Status Complete and adds every open issue that has no card with Status Backlog, through `batch_project.py`, which queues the writes while GraphQL is on hold. `--dry-run` reports without writing, `--schedule` loads the `com.olivercode.board-sweep` launchd job that runs it every thirty minutes
 - `docs-check` fails when a command in the launcher table is named in neither `README.md` nor this file, when the gates table in `docs/GATES.md` and `core/hooks/gates/` differ, when `skills/INDEX.md` and `skills/` differ, or when `README.md` and `docs/` do not link each other. `validate.sh` runs it, and `bootstrap` ships it to fleet repos
 - `backlog-setup` works from `shared/kanban-baseline.json`: it reuses or creates the repo's Project, adds the missing Status lanes and fields, writes `docs/backlog-config.json`, creates the `owner-action` and `program` labels and installs the commit-msg hook. It saves every item's field values to `backlog-backups/` in the repo's git directory first, and exits non-zero when the counts per option differ afterwards
 - `dispatch N` checks the claim and the machine's builder limit, posts the claim and builds the story in one fresh headless session, and the runner validates, lands and closes it through the same code `drain` uses. `drain REPO` works a repo's open stories in priority order the same way, with as many builders as the machine-wide limit allows less what other repos' runs are building, and only stories whose files areas do not overlap run together. `drain REPO --parallel N` holds exactly N for that run. Validation still runs one at a time through its queue, and each landing rebases onto the commits that landed before it
 - `land WORKTREE STORY` rebases the worktree on origin/main, runs `scripts/validate.sh` up to twice unless the runner already recorded a pass for the same tree (the log names the record it used, #910), pushes `HEAD:main` (retrying while main moves, see "A land resumes and retries"), fast-forwards a clean main checkout and deletes the worktree and its branches. Work that does not land stays in its worktree with a handover file at `~/.olivercode/land/handover-REPO-N.md`
 - `limits check` prints the tracked line count against the one ceiling number in `docs/LIMITS.json` (tests are not counted) and exits 0 always. A count over the ceiling prints a warning and blocks nothing, and `validate.sh` and `land` never edit the file. Edit the number by hand to accept growth
-- `board` (`groom` reports and `sync`), `fleet-sync`, `maintain` and `gh-limit` run without a model call, and each takes `--schedule` where `--help` shows it. `gh-limit clear` lifts the shared GitHub rate-limit hold
+- `board` (`groom` reports and `sync`), `maintain` and `gh-limit` run without a model call, and each takes `--schedule` where `--help` shows it. `gh-limit clear` lifts the shared GitHub rate-limit hold
 - `owner` and `decisions` keep the owner's steps and decisions in `~/.olivercode/`
 - `install` links `docs/VOICE.md` and `docs/DESIGN.md` into `~/.claude`, links each skill, merges the hook entries listed in `docs/RULES.md` ("Execution") into `~/.claude/settings.json` and sets `core.hooksPath` to `.githooks` here when unset. Any other file at a target path moves to `<name>.pre-olivercode` and is printed. `uninstall` reverses exactly that
 - `validated record|check SHA` keeps the passing full validations that the pre-push hook requires before a push to main
@@ -246,25 +241,23 @@ Git runs hooks only when `core.hooksPath` resolves to a directory holding an exe
 
 ```bash
 git config --get core.hooksPath      # expect: .githooks
-scripts/olivercode conform --offline # FAILs with the exact reason if any repo is in that state
-scripts/olivercode sync-hooks        # repairs it across the fleet and the private repos
+scripts/olivercode health            # FAILs with the exact reason if OliverCode or a private repo is in that state
+scripts/olivercode sync-hooks        # repairs it in OliverCode and the private repos
 ```
 
 Use the relative `.githooks` and never an absolute path, because an absolute one breaks silently when the repo moves.
 
-### Fleet hooks report drift after a gate edit
+### Hooks report drift after a gate edit
 
-`conform` compares each fleet repo's live hook against the templates built from `core/hooks/`, so every fleet repo diverges after a gate change until `scripts/olivercode sync-hooks` re-syncs it.
+`health` compares each repo's live hook against the templates built from `core/hooks/`, so every repo diverges after a gate change until `scripts/olivercode sync-hooks` re-syncs it.
 
 ### `validate.sh` fails with "not a git repository"
 
 `validate.sh` runs `.githooks/pre-commit`, which calls `git diff --cached`, so it needs a real `.git`. An extracted archive without `git init` fails this way, and that is expected.
 
-### Conform batches its calls and fixes what it finds
+### Commits from sync-hooks and backlog-setup
 
-`olivercode conform` reads delete-on-merge and admin rights for every registered repo in one GitHub query, calls `git ls-remote` once per repo and checks repos in parallel up to the CPU count. `sync-hooks --commit --story REF` and `backlog-setup --apply --commit --story REF` each land every change in one repo as one commit through the helper in `scripts/lib/gitfiles.py`, which never pushes and never skips the repo's hooks.
-
-`olivercode conform --fix --story REF` runs each local fix (hooks with the queue block, managed files, the permission policy), commits them together per repo, sets delete-on-merge only on repos the signed-in owner administers, and puts every other failure on the owner queue with its exact command. A repo with uncommitted changes in a file a fix would touch is skipped with the reason. It then checks again and prints what still fails.
+`sync-hooks --commit --story REF` and `backlog-setup --apply --commit --story REF` each land every change in one repo as one commit through the helper in `scripts/lib/gitfiles.py`, which never pushes and never skips the repo's hooks.
 
 ### `run-tests.sh` ends with an import error on a module name
 

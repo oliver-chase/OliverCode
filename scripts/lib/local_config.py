@@ -59,21 +59,10 @@ def _path(value: str | None) -> Path | None:
 
 
 def private_repos() -> dict[str, Path]:
-    """Private repos outside the fleet, by name: each gets the private hook variant, a hook
+    """Private repos, by name: each gets the private hook variant, a hook
     check, a push and a backlog search."""
     repos = {name: Path(p).expanduser() for name, p in load_local().get("privateRepos", {}).items()}
     return repos
-
-
-DEFAULT_FLEET_REGISTRY = "~/.olivercode/fleet/repo-profiles.json"
-
-
-def fleet_registry_path() -> Path:
-    """Where this machine keeps the fleet registry: `fleetRegistry` in olivercode.local.json, else the default
-    under ~/.olivercode. `olivercode init-fleet` creates the file there. The environment variable
-    OLIVERCODE_FLEET_REGISTRY wins over both."""
-    value = os.environ.get("OLIVERCODE_FLEET_REGISTRY") or load_local().get("fleetRegistry") or DEFAULT_FLEET_REGISTRY
-    return Path(value).expanduser()
 
 
 def skills_root() -> Path | None:
@@ -85,16 +74,10 @@ def other_device() -> tuple[set[str], set[str]]:
     """(repo names, GitHub accounts) that belong to another of the owner's devices, lowercased.
 
     `otherDeviceRepos` names repos that never belong on this machine and `otherDeviceOwners` names the GitHub
-    accounts or orgs whose repos stay off it. Every fleet walk skips the first, and `health` and the clone
-    guard refuse a checkout of either (#637)."""
+    accounts or orgs whose repos stay off it. The clone guard and `health` refuse a checkout of either (#637)."""
     local = load_local()
     return ({str(n).lower() for n in local.get("otherDeviceRepos", [])},
             {str(o).lower() for o in local.get("otherDeviceOwners", [])})
-
-
-def repo_paths() -> dict[str, Path]:
-    """Fleet repos that do not sit beside OliverCode on this machine, by profile name."""
-    return {name: Path(p).expanduser() for name, p in load_local().get("repoPaths", {}).items()}
 
 
 def voice_file(oc_root: Path = OC_ROOT) -> Path:

@@ -11,7 +11,7 @@ launcher = load_script("scripts/olivercode", "olivercode_launcher_guide")
 from lib import cli, cmd_guide, cmd_install  # noqa: E402
 
 # The fleet commands #1286 removes. The guide names none of them.
-FLEET = ("discover", "init-fleet", "fleet-sync", "conform", "policy")
+FLEET = ("discover", "policy")
 # The headings the approved copy prints, in order.
 HEADINGS = ("How work runs", "How the work is split", "Getting started", "How it works", "An example", "Using it well",
             "What to use when", "Commands", "Your projects, your rules", "City")

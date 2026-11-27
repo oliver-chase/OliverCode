@@ -1,4 +1,4 @@
-"""Launcher commands that act on the fleet: conform, backlog-setup, sync-hooks and update."""
+"""Launcher commands that act on OliverCode and its private repos: backlog-setup, sync-hooks and update."""
 
 from __future__ import annotations
 
@@ -9,121 +9,14 @@ import sys
 from pathlib import Path
 
 from lib import backlog_setup as _backlog_setup
-from lib import conform as _conform
 from lib import repo_gates, repo_profiles
 from lib import update_state
 from lib import validate_snippet as _snippet
 from lib.cli import require_dir, take_flag
 from lib.gitfiles import commit_after, commit_changes
-from lib import cmd_owner as _owner
 from lib.local_config import OC_ROOT
 from lib import repo_state as _repo_state
 from lib.local_config import private_repos as _private_repos
-from lib.repo_profiles import iter_fleet as _iter_fleet
-from lib.repo_profiles import NO_FLEET, load_repo_profiles, registry_file, registry_gap
-
-
-def command_conform(oc_root: Path, target: Path | None, fleet_root: Path | None, offline: bool, hooks_only: bool = False, fix: bool = False, story: str = "") -> int:
-    """`olivercode conform [DIR] [--fix --story REF]`: one repo, or the registered fleet, against docs/CONTRACT.md. `--fix` repairs what it can in one commit per repo."""
-    print("OliverCode conformance")
-    print("=" * 40)
-    if target:
-        if not target.is_dir():
-            print(f"  [FAIL] {target} is not a directory.")
-            return 1
-        profiles, _ = load_repo_profiles(oc_root)
-        if _repo_state.skipped(target.name, target):
-            return 0
-        profile = next((p for n, p, path in _iter_fleet(profiles, fleet_root or oc_root.parent, skip_archived=False) if path.resolve() == target.resolve()), {})
-        private = target.resolve() in {p.resolve() for p in _private_repos().values()}
-        repos = [(target.name, target, bool(profile.get("private")) or private, profile.get("hookVariant", ""))]
-    else:
-        repos = []
-        profiles, _ = load_repo_profiles(oc_root)
-        private = {p.resolve() for p in _private_repos().values()}
-        for name, profile, path in _iter_fleet(profiles, fleet_root or oc_root.parent):
-            if not (path / ".git").exists():
-                print(f"  [INFO] {name} is not cloned on this machine")
-                continue
-            repos.append((name, path, bool(profile.get("private")) or path.resolve() in private, profile.get("hookVariant", "")))
-        gap = registry_gap(oc_root)
-        if gap:
-            print(f"  [FAIL] {gap}")
-            return 1
-        if not repos:
-            fleet_message = NO_FLEET[0].upper() + NO_FLEET[1:]
-            if private:
-                print(f"  [FAIL] the fleet registry is empty in {registry_file(oc_root)}, so no repo was checked. {fleet_message}")
-                return 1
-            print(f"  [SKIP] no fleet registered in {registry_file(oc_root)}. {fleet_message}")
-    results, settings = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)
-    failed = 0
-    for (name, _, _, _), rows in zip(repos, results):
-        failed += _conform.render(name, rows)
-    print(f"\nChecked {len(repos)} repo(s): {failed} requirement(s) failed")
-    if fix and failed:
-        failed = _fix_fleet(oc_root, repos, results, settings, offline, hooks_only, story)
-    return 1 if failed else 0
-
-
-def _local_fix(oc_root: Path, repo: Path, kinds: set[str], private: bool, variant: str) -> tuple[tuple[str, ...] | None, object]:
-    """(the paths the repo's local fixes touch, None when unknown; the function that applies them)."""
-    manifest = json.loads((oc_root / "shared" / "project-bootstrap-manifest.json").read_text()).get("templatedFiles", [])
-    touches: list[str] = []
-    if "hooks" in kinds:
-        touches += MANAGED_PATHS
-    if "managed-files" in kinds:
-        touches += [e["target"] for e in manifest if e.get("mode") == "strict"]
-    if "permission-policy" in kinds:
-        touches.append(".olivercode/policy.json")
-
-    def apply() -> None:
-        if "hooks" in kinds:
-            templates = repo_gates.hook_templates(oc_root)
-            if variant:
-                _install_pre_push(repo, templates)
-                _set_hooks_path(repo)
-            else:
-                _install_hook_pair(repo, templates, private_repo=private)
-            _queue_block(oc_root, repo.name, repo)
-        if "managed-files" in kinds:
-            subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), "bootstrap", str(repo)], capture_output=True, text=True)
-        if "permission-policy" in kinds:
-            subprocess.run([sys.executable, str(oc_root / "scripts" / "olivercode"), "policy", "init", str(repo)], capture_output=True, text=True)
-    return tuple(touches), apply
-
-
-def _fix_fleet(oc_root: Path, repos: list, results: list, settings: dict | None, offline: bool, hooks_only: bool, story: str) -> int:
-    """`conform --fix` (#778): per repo, run each local fix, commit them together, set GitHub settings the owner owns, queue the owner steps, then check again."""
-    print("\nFixing")
-    print("=" * 40)
-    for (name, path, private, variant), rows in zip(repos, results):
-        failing = [r for r in rows if r.status == "fail"]
-        local = {r.requirement for r in failing if _conform.fix_kind(r) == "local"}
-        if _repo_state.archived(path):
-            print(f"  [SKIP] {name}: archived on GitHub, nothing to fix")
-            continue
-        if local:
-            touches, apply = _local_fix(oc_root, path, local, private, variant)
-            result = commit_after(path, apply, f"Bring the repo in line with the OliverCode contract ({story})",
-                                  "Fixes: " + ", ".join(sorted(local)) + " (olivercode conform --fix).", touches)
-            print(f"  [{'SKIP' if result.startswith('not committed') else 'FIX'}] {name}: {result}")
-        slug = _conform.repo_slug(path)
-        owned = bool(((settings or {}).get(f"{slug[0]}/{slug[1]}".lower()) or {}).get("viewerCanAdminister")) if slug else False
-        for row in (r for r in failing if _conform.fix_kind(r) != "local"):
-            if _conform.fix_kind(row) == "github" and owned and not offline:
-                done = subprocess.run(["gh", "repo", "edit", f"{slug[0]}/{slug[1]}", "--delete-branch-on-merge"], capture_output=True, text=True)
-                print(f"  [{'FIX' if done.returncode == 0 else 'FAIL'}] {name}: {row.requirement} set on GitHub")
-                if done.returncode == 0:
-                    continue
-            item = _owner.add("conform", f"{name}: {row.requirement} needs the owner", command=row.fix.strip("`"), error=row.detail or row.requirement)
-            print(f"  [OWNER] {name}: {row.requirement} is owner queue item {item['id']}: {row.fix}")
-    print("\nChecking again")
-    print("=" * 40)
-    again, _ = _conform.check_fleet(repos, oc_root=oc_root, offline=offline, hooks_only=hooks_only)
-    left = sum(_conform.render(name, rows) for (name, _, _, _), rows in zip(repos, again))
-    print(f"\nAfter --fix: {left} requirement(s) still fail")
-    return left
 
 
 def command_backlog_setup(argv: list[str]) -> int:
@@ -290,12 +183,8 @@ def _sync_one(name: str, repo_path: Path, failed: list[str], install, ok_line: s
         return False
 
 
-def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None, commit: bool = False, story: str | None = None) -> int:
-    """Converge hooks + core.hooksPath across every fleet repo and every private repo.
-
-    fleet_root defaults to OliverCode's parent (the sibling-repos layout). A fork whose
-    repos live elsewhere passes --root; without that, every repo would silently SKIP as
-    "not present on this machine" and the command would still report success.
+def command_sync_hooks(oc_root: Path, commit: bool = False, story: str | None = None) -> int:
+    """Converge hooks + core.hooksPath in OliverCode and every private repo.
 
     With commit=True each repo's changed hook files are then committed by path under `story`
     (see _commit_synced). The default writes files and commits nothing.
@@ -304,35 +193,9 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None, commit: bo
         print("sync-hooks --commit needs --story REF, the story from your backlog that the commit cites.")
         return 1
     templates_dir = repo_gates.hook_templates(oc_root)
-    fleet_root = fleet_root or oc_root.parent
     updated = 0
     skipped = 0
     failed_repos: list[str] = []
-
-    profiles, _ = load_repo_profiles(oc_root)
-    for name, profile, repo_path in _iter_fleet(profiles, fleet_root):
-        if not (repo_path / ".git").exists():
-            print(f"  [SKIP] {name}: not present on this machine")
-            skipped += 1
-            continue
-        variant = profile.get("hookVariant")
-        if variant:
-            # Declared variant: overwriting its pre-commit would destroy a considered customization.
-            # `health` reports it as a WARN. Remove the profile field
-            # to bring the repo back under the template.
-            if _sync_one(name, repo_path, failed_repos, lambda: (_install_pre_push(repo_path, templates_dir), _set_hooks_path(repo_path), _queue_block(oc_root, name, repo_path)),
-                         f"  [SKIP] {name}: declared hook variant ({variant}) — pre-commit left untouched, pre-push and commit-msg synced, hooksPath set", commit, story):
-                skipped += 1
-            continue
-        # A private repo gets the private variant, which drops the PII gate (it holds
-        # personal data by design). Declared per
-        # profile, so every private repo gets its hook from sync-hooks and none is
-        # installed by hand and left to go stale on the next template change.
-        is_private = bool(profile.get("private"))
-        variant_note = "private-variant " if is_private else ""
-        if _sync_one(name, repo_path, failed_repos, lambda: (_install_hook_pair(repo_path, templates_dir, private_repo=is_private), _queue_block(oc_root, name, repo_path)),
-                     f"  [OK] {name}: {variant_note}hooks synced, hooksPath set", commit, story):
-            updated += 1
 
     for name, root in _private_repos().items():
         if (root / ".git").exists():
@@ -351,7 +214,7 @@ def command_sync_hooks(oc_root: Path, fleet_root: Path | None = None, commit: bo
 
 
 def command_update(oc_root: Path | None = None, story: str | None = None) -> int:
-    """Pull this checkout's tracking branch, re-run install, converge fleet hooks, then run conform on the fleet.
+    """Pull this checkout's tracking branch, re-run install, sync the hooks of OliverCode's private repos.
 
     A dirty, mid-rebase or diverged checkout is refused before anything changes (update_state.py).
 
@@ -387,7 +250,4 @@ def command_update(oc_root: Path | None = None, story: str | None = None) -> int
     launcher = [sys.executable, str(root / "scripts" / "olivercode")]
     install_code = subprocess.run([*launcher, "install"]).returncode
     sync_code = subprocess.run([*launcher, "sync-hooks", *(["--commit", "--story", story] if story else [])]).returncode
-    conform_code = subprocess.run([*launcher, "conform"]).returncode
-    if conform_code:
-        print("Conform found failures in the fleet. Each Fix line above names the repair; `olivercode conform --fix --story N` applies the ones it can.")
-    return install_code or sync_code or conform_code
+    return install_code or sync_code

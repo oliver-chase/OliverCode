@@ -42,7 +42,6 @@ class LocalConfig(unittest.TestCase):
     def test_unset_means_this_machine_has_none(self):
         self.assertEqual(local_config.private_repos(), {})
         self.assertIsNone(local_config.skills_root())
-        self.assertEqual(local_config.repo_paths(), {})
 
     def test_the_file_supplies_paths_with_tilde_expanded(self):
         self.write({"privateRepos": {"notes": "~/v"}, "skillsRoot": "/s"})
@@ -62,10 +61,6 @@ class LocalConfig(unittest.TestCase):
         self.assertEqual((local_config.skills_root(), local_config.private_repos()), (Path("/s2"), {}))
         os.environ["OLIVERCODE_LOCAL_CONFIG"] = os.devnull
         self.assertEqual((local_config.skills_root(), local_config.private_repos()), (None, {}))
-
-    def test_repo_paths_expand_a_tilde(self):
-        self.write({"repoPaths": {"alpha": "~/work/alpha"}})
-        self.assertEqual(local_config.repo_paths(), {"alpha": Path.home() / "work" / "alpha"})
 
 
 class ConvergeLocalConfig(unittest.TestCase):

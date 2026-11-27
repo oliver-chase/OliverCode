@@ -1,8 +1,8 @@
 """Tests for repo_gates.hook_problems() and _install_hook_pair() in scripts/olivercode.
 
 When core.hooksPath is unset or points elsewhere, or the hook is missing, not executable or
-the wrong variant, git runs weaker gates or none and says nothing. `olivercode conform` is the
-fleet-wide detector, so it must not report OK in any of those states.
+the wrong variant, git runs weaker gates or none and says nothing. `olivercode health` is the
+detector for OliverCode and each private repo, so it must not report OK in any of those states.
 """
 
 import os
@@ -10,13 +10,13 @@ import shutil
 import unittest
 from unittest import mock
 
-from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
+from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
 
 TEMPLATES = REPO_ROOT / "core" / "templates" / "project"
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 from lib import cmd_fleet  # noqa: E402  (load_script put scripts/ on the path)
 repo_gates = load_script("scripts/lib/repo_gates.py")
-from lib import conform  # noqa: E402
+from lib import health_checks  # noqa: E402
 
 
 class TestHookProblems(unittest.TestCase):
@@ -152,9 +152,9 @@ class TestInstallHookPair(unittest.TestCase):
 
 
 class TestSessionNotesForStoppedGates(unittest.TestCase):
-    """An unset core.hooksPath is a FAIL row in conform and a note in the session, so policy cannot turn off silently."""
+    """An unset core.hooksPath fails health and a note in the session, so policy cannot turn off silently."""
 
-    def test_unset_hooks_path_fails_conform_and_the_session_names_the_fix(self):
+    def test_unset_hooks_path_fails_health_and_the_session_names_the_fix(self):
         session_check = load_script("scripts/hooks/session_check.py", "session_check_510")
         repo = temp_dir(self, "olivercode-stopped-gates-", resolve=True)
         scratch_repo(repo)
@@ -166,12 +166,15 @@ class TestSessionNotesForStoppedGates(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.assertEqual([], session_check.notes(repo, claude), "gates are on, so nothing to say")
-        row = conform.hooks(repo, oc_root=REPO_ROOT)
-        self.assertEqual("pass", row.status)
+        self.assertEqual("", health_checks.stopped_hook(repo, REPO_ROOT, private=False))
 
         git(repo, "config", "--unset", "core.hooksPath")
-        row = conform.hooks(repo, oc_root=REPO_ROOT)
-        self.assertEqual(("fail", "olivercode sync-hooks --commit --story N"), (row.status, row.fix))
+        self.assertNotEqual("", health_checks.stopped_hook(repo, REPO_ROOT, private=False))
+        with mock.patch.object(health_checks, "OC_ROOT", REPO_ROOT):
+            result, out = quiet(health_checks._check_stopped_hooks, REPO_ROOT, {"notes": repo})
+        self.assertEqual((1, 1), result[:2])
+        self.assertIn("[FAIL] notes", out)
+        self.assertIn("Fix: olivercode sync-hooks --commit --story N", out)
         note = " ".join(session_check.notes(repo, claude))
         self.assertIn("core.hooksPath is unset", note)
         self.assertIn("olivercode sync-hooks", note)

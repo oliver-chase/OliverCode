@@ -1,5 +1,4 @@
-"""Remote branches (#657): conform fails for an origin branch besides the default, `clean --apply` deletes the merged ones,
-and conform flags a repo that keeps merged branches on GitHub. Each test runs against a real bare origin."""
+"""Remote branches (#657): `clean --apply` deletes the merged origin branches and keeps the rest. Each test runs against a real bare origin."""
 
 import sys
 import unittest
@@ -8,7 +7,7 @@ from unittest import mock
 from _support import REPO_ROOT, git, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import conform, placement  # noqa: E402
+from lib import placement  # noqa: E402
 
 
 def make_pair(case):
@@ -42,76 +41,6 @@ def origin_branches(origin):
 
 def config(root):
     return placement.Config(root=root, worktrees=root / "_worktrees", archive=root / "_archive", watch=[], allow=[])
-
-
-class ConformBranches(unittest.TestCase):
-    def setUp(self):
-        self.root, self.work, self.origin = make_pair(self)
-        patch = mock.patch.object(placement, "_open_pr", return_value=False)  # no open pull request, so a merged story/* branch may go (#1045)
-        patch.start()
-        self.addCleanup(patch.stop)
-
-    def test_origin_with_only_its_default_branch_passes(self):
-        self.assertEqual(conform.branches(self.work, offline=False).status, "pass")
-
-    def test_a_merged_remote_branch_fails_and_is_named_safe_to_delete(self):
-        push_branch(self.work, "story/done", merged=True)
-        row = conform.branches(self.work, offline=False)
-        self.assertEqual(row.status, "fail")
-        self.assertIn("story/done (merged into main, safe to delete)", row.detail)
-        self.assertIn("olivercode clean --apply", row.fix)
-
-    def test_a_merged_branch_clean_keeps_is_not_called_safe_to_delete(self):
-        push_branch(self.work, "feature-x", merged=True)
-        row = conform.branches(self.work, offline=False)
-        self.assertIn("feature-x (merged into main, not a story branch, so clean leaves it)", row.detail)
-        self.assertNotIn("safe to delete", row.detail)
-
-    def test_a_merged_story_branch_with_an_open_pull_request_is_not_called_safe_to_delete(self):
-        push_branch(self.work, "story/held", merged=True)
-        with mock.patch.object(placement, "_open_pr", return_value=True):
-            row = conform.branches(self.work, offline=False)
-        self.assertIn("story/held (merged into main, kept by clean", row.detail)
-        self.assertNotIn("safe to delete", row.detail)
-
-    def test_an_unmerged_remote_branch_fails_and_is_named_with_its_commits(self):
-        push_branch(self.work, "story/open", merged=False)
-        row = conform.branches(self.work, offline=False)
-        self.assertEqual(row.status, "fail")
-        self.assertIn("story/open (has commits not on main)", row.detail)
-
-    def test_offline_skips_and_a_repo_with_no_origin_skips(self):
-        push_branch(self.work, "story/open", merged=False)
-        self.assertEqual(conform.branches(self.work, offline=True).status, "skip")
-        local = scratch_repo(self.root / "local", branch="main")
-        self.assertEqual(conform.branches(local, offline=False).status, "skip")
-
-
-class DeleteOnMerge(unittest.TestCase):
-    def setUp(self):
-        self.root, self.work, _ = make_pair(self)
-        (self.work / "docs").mkdir()
-        (self.work / "docs" / "backlog-config.json").write_text('{"repoOwner": "acme", "repoName": "widgets"}')
-
-    def answer(self, returncode, stdout):
-        return mock.patch("lib.conform.subprocess.run", return_value=mock.Mock(returncode=returncode, stdout=stdout))
-
-    def test_offline_skips_without_asking_github(self):
-        with mock.patch("lib.conform.subprocess.run") as run:
-            self.assertEqual(conform.delete_on_merge(self.work, offline=True).status, "skip")
-        run.assert_not_called()
-
-    def test_a_repo_that_keeps_merged_branches_fails_with_the_gh_fix(self):
-        with self.answer(0, "false\n"):
-            row = conform.delete_on_merge(self.work, offline=False)
-        self.assertEqual(row.status, "fail")
-        self.assertIn("gh repo edit acme/widgets --delete-branch-on-merge", row.fix)
-
-    def test_a_repo_that_deletes_merged_branches_passes_and_an_unreachable_github_skips(self):
-        with self.answer(0, "true\n"):
-            self.assertEqual(conform.delete_on_merge(self.work, offline=False).status, "pass")
-        with self.answer(1, ""):
-            self.assertEqual(conform.delete_on_merge(self.work, offline=False).status, "skip")
 
 
 class CleanRemoteBranches(unittest.TestCase):

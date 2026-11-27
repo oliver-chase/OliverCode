@@ -29,82 +29,49 @@ class TestCommandSyncHooks(ScratchHome):
         self.fleet.mkdir()
         self.private = {}
 
-    def sync(self, profiles):
-        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(profiles, None)), \
-                mock.patch.object(cmd_fleet, "_private_repos", return_value=self.private):
-            return quiet(launcher.command_sync_hooks, self.oc, self.fleet)
+    def sync(self, private=None):
+        with mock.patch.object(cmd_fleet, "_private_repos", return_value=private if private is not None else self.private):
+            return quiet(launcher.command_sync_hooks, self.oc)
 
-    def test_a_fleet_repo_gets_the_public_hooks_and_a_hooks_path(self):
-        repo = scratch_repo(self.fleet / "alpha")
+    def test_a_private_repo_gets_the_private_variant_as_its_live_hook_and_a_hooks_path(self):
+        repo = scratch_repo(self.tmp / "vault")
         (repo / ".githooks").mkdir()
         (repo / ".githooks" / "pre-commit-private").write_text("stale\n")
-        code, out = self.sync({"alpha": {}})
+        code, out = self.sync({"vault": repo})
         self.assertEqual(code, 0)
-        self.assertIn("[OK] alpha: hooks synced", out)
+        self.assertIn("[OK] vault: private-variant hook synced", out)
         self.assertEqual(["commit-msg", "pre-commit", "pre-push"], sorted(p.name for p in (repo / ".githooks").iterdir()))
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), (TEMPLATES / "pre-commit").read_bytes())
+        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), (TEMPLATES / "pre-commit-private").read_bytes())
         self.assertTrue(os.access(repo / ".githooks" / "pre-commit", os.X_OK))
         self.assertEqual(git(repo, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
-        for name in ("pre-push", "commit-msg"):
-            self.assertTrue((repo / ".githooks" / name).is_file(), name)
-
-    def test_a_private_profile_gets_the_private_variant_as_its_live_hook(self):
-        repo = scratch_repo(self.fleet / "vault")
-        (repo / ".githooks").mkdir()
-        (repo / ".githooks" / "pre-commit-private").write_text("stale\n")
-        self.sync({"vault": {"private": True}})
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(),
-                         (TEMPLATES / "pre-commit-private").read_bytes())
         self.assertFalse((repo / ".githooks" / "pre-commit-private").exists())
 
-    def test_a_repo_missing_from_this_machine_is_skipped(self):
-        code, out = self.sync({"ghost": {}})
-        self.assertEqual(code, 0)
-        self.assertIn("[SKIP] ghost: not present on this machine", out)
-        self.assertFalse((self.fleet / "ghost").exists())
-
-    def test_a_declared_variant_keeps_its_pre_commit_and_still_gets_pre_push(self):
-        repo = scratch_repo(self.fleet / "custom")
-        (repo / ".githooks").mkdir()
-        (repo / ".githooks" / "pre-commit").write_text("custom\n")
-        _, out = self.sync({"custom": {"hookVariant": "bespoke"}})
-        self.assertEqual((repo / ".githooks" / "pre-commit").read_text(), "custom\n")
-        self.assertTrue((repo / ".githooks" / "pre-push").is_file())
-        self.assertIn("declared hook variant (bespoke)", out)
-        hooks_path = subprocess.run(["git", "-C", str(repo), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
-        self.assertEqual(".githooks", hooks_path)
-
-    def test_a_private_repo_outside_the_fleet_is_synced_with_the_private_variant(self):
+    def test_a_private_repo_outside_repo_root_is_synced_with_the_private_variant(self):
         repo = scratch_repo(self.tmp / "elsewhere" / "notes")
-        self.private = {"notes": repo}
-        _, out = self.sync({})
+        _, out = self.sync({"notes": repo})
         self.assertIn("[OK] notes", out)
         self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(),
                          (TEMPLATES / "pre-commit-private").read_bytes())
 
     def test_a_private_repo_with_no_git_folder_is_skipped(self):
-        self.private = {"notes": self.tmp / "nowhere"}
-        _, out = self.sync({})
+        _, out = self.sync({"notes": self.tmp / "nowhere"})
         self.assertIn("[SKIP] notes: no .git", out)
 
     def test_with_the_harness_config_it_touches_nothing_outside_the_temp_dir(self):
         """No fixture config: the machine's olivercode.local.json must not reach the run."""
         self.assertEqual(os.environ["OLIVERCODE_LOCAL_CONFIG"], os.devnull)
-        self.assertEqual(({}, {}), (cmd_fleet._private_repos(), local_config.repo_paths()))
-        (self.oc / "shared").mkdir()
-        (self.oc / "shared" / "repo-profiles.json").write_text('{"profiles": {}}')
+        self.assertEqual({}, cmd_fleet._private_repos())
         scratch_repo(self.fleet / "alpha")
-        with mock.patch.object(cmd_fleet, "registry_gap", return_value=None):
-            code, out = quiet(launcher.command_sync_hooks, self.oc, self.fleet)
+        code, out = quiet(launcher.command_sync_hooks, self.oc)
         self.assertEqual(code, 0)
         self.assertIn("0 target(s) synced, 0 skipped.", out)
         self.assertFalse((self.fleet / "alpha" / ".githooks").exists())
 
     def test_a_second_run_changes_nothing(self):
         repo = scratch_repo(self.fleet / "alpha")
-        self.sync({"alpha": {}})
+        self.sync({"alpha": repo})
         first = (repo / ".githooks" / "pre-commit").read_bytes()
-        code, _ = self.sync({"alpha": {}})
+        code, _ = self.sync({"alpha": repo})
         self.assertEqual(code, 0)
         self.assertEqual((repo / ".githooks" / "pre-commit").read_bytes(), first)
 
@@ -130,11 +97,10 @@ class TestSyncHooksCommit(ScratchHome):
         return repo
 
     def sync(self, *, commit=True, story="acme/widgets#7", archived=None):
-        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=({"alpha": {}}, None)), \
-                mock.patch.object(cmd_fleet, "_private_repos", return_value={}), \
+        with mock.patch.object(cmd_fleet, "_private_repos", return_value={"alpha": self.fleet / "alpha"}), \
                 mock.patch.object(cmd_fleet._repo_state, "archived", return_value=archived), \
                 mock.patch.dict(os.environ, git_env(), clear=True):
-            return quiet(launcher.command_sync_hooks, self.oc, self.fleet, commit=commit, story=story)
+            return quiet(launcher.command_sync_hooks, self.oc, commit=commit, story=story)
 
     def test_a_changed_hook_is_committed_by_path_and_an_unrelated_staged_file_stays_staged(self):
         repo = self.repo()

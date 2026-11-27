@@ -4,7 +4,7 @@
     queue_bypass.py [REPO_ROOT]
 
 The entry point is `bash scripts/validate.sh`: its managed block takes a slot in the per-user validation queue before any gate
-starts, so a builder, `olivercode land`, a hook, the nightly and conform all wait their turn there. Earlier queue stories
+starts, so a builder, `olivercode land`, a hook, the nightly job all wait their turn there. Earlier queue stories
 (#506, #519, #548, #572) were each undone by a script that started the test suite or a copy of validate.sh around the queue,
 so this gate reads every tracked script and fails, naming the script and the entry point, when one of these holds:
 

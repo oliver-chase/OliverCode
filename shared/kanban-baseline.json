@@ -1,6 +1,6 @@
 {
   "_comment": "The one definition of the baseline kanban Project board every repo runs. skills/backlog/scripts/check_kanban_baseline.py compares a live board's field list with this file. Lane and option names are compared without regard to case.",
-  "workflows": "Two board workflows are on in every board and GitHub has no API to set them: Item closed sets Status to Complete, and Auto-add to project uses the filter is:issue is:open. backlog-setup prints the steps, conform names a board with either one off, and docs/SETUP.md (Board workflows are set at install) describes them.",
+  "workflows": "Two board workflows are on in every board and GitHub has no API to set them: Item closed sets Status to Complete, and Auto-add to project uses the filter is:issue is:open. backlog-setup prints the steps, and docs/SETUP.md (Board workflows are set at install) describes them.",
   "rule": "The board has no pull-request lane and no status that a pull request sets. A lane is an option of the Status field, and its name never refers to a pull request, a review of one or a merge.",
   "lanes": ["Backlog", "Ready", "In Progress", "QA", "Complete"],
   "forbiddenLanePatterns": ["pull request", "\\bprs?\\b", "in review", "under review", "\\breview\\b", "\\bmerged?\\b"],

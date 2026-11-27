@@ -29,7 +29,7 @@ run_build_hooks() {
 }
 
 run_consistency() {
-  # Fail-closed check that no tracked file names a fleet repo (scripts/lib/fleet_name_check.py)
+  # Fail-closed check that no tracked file names another of the owner's repos (scripts/lib/fleet_name_check.py)
   echo "=== validate: checking fleet names ==="
   local out
   if ! out="$(python3 -c '
@@ -48,36 +48,6 @@ sys.exit(1 if failures else 0)
     exit 1
   fi
   echo "=== validate: fleet names passed ==="
-}
-
-run_hook_state() {
-  # Hook enforcement fails open: an unset or broken core.hooksPath means git runs no hooks and prints
-  # nothing. This step reports it where agents already look, since CLAUDE.md has them run validate.sh
-  # before every commit.
-  #
-  # Advisory, never fatal. A fork, a fresh clone, or a checkout with no fleet
-  # registered has nothing to check and must still pass -- that property is what
-  # rehearse-install.sh guards.
-  #
-  # --hooks-only checks only that git runs each repo's gates, the one fact this step exists for, so it never
-  # reads a repo's files, which in a synced folder can take many minutes.
-  echo "=== validate: checking fleet conformance ==="
-  local out checked
-  out="$(python3 "${SCRIPT_DIR}/olivercode" conform --offline --hooks-only 2>&1)" && local rc=0 || local rc=$?
-
-  # Say which case it is: a fork with no fleet must not get a green line asserting a fleet was verified.
-  checked="$(printf '%s\n' "$out" | sed -n 's/^Checked \([0-9]*\) repo.*/\1/p')"
-  if [[ "$rc" -eq 0 && "${checked:-0}" -eq 0 ]]; then
-    echo "  [SKIP] no fleet repos registered — nothing to check."
-    echo "         Register repos in the registry's repo-profiles.json (see docs/SETUP.md)."
-  elif [[ "$rc" -eq 0 ]]; then
-    echo "  [OK] git runs the gates in all $checked registered repo(s). \`olivercode conform\` checks the rest of docs/CONTRACT.md"
-  else
-    printf '%s\n' "$out" | grep -E '^\s+\[FAIL\]|^         Fix:' || true
-    echo "  [WARN] a repo above does not conform — the Fix line under each failure repairs it."
-    echo "         A repo with stopped hooks is ungoverned: git runs no hooks and says nothing."
-    echo "         Advisory here by design: a fork with no fleet must still pass."
-  fi
 }
 
 run_docs_check() {
@@ -141,7 +111,7 @@ run_smoke_tests() {
 }
 
 # The gates that share no state, in the order their output is replayed. Each is `bash validate.sh --gate NAME`.
-GATES=(precommit fleet bloat quality refs docs limits bypass smoke hookstate)
+GATES=(precommit fleet bloat quality refs docs limits bypass smoke)
 
 run_gate() {
   case "$1" in
@@ -154,7 +124,6 @@ run_gate() {
     limits) run_limits_check ;;
     bypass) run_queue_bypass ;;
     smoke) run_smoke_tests ;;
-    hookstate) run_hook_state ;;
     *) echo "validate: no gate named '$1'" >&2; exit 2 ;;
   esac
 }
@@ -180,7 +149,7 @@ main() {
       echo "Options:"
       echo "  (no args)              Run pre-commit gates, fleet names, reference integrity, bloat,"
       echo "                         code quality, the docs and size limit checks, the queue bypass check, smoke tests (tests/ and the"
-      echo "                         skills' own script tests, if present) and fleet conformance, in"
+      echo "                         skills' own script tests, if present), in"
       echo "                         parallel inside one queue slot, printing each gate as it starts and finishes"
       echo "                         OLIVERCODE_VALIDATE_TIMEOUT (seconds) is the run's budget and"
       echo "                         OLIVERCODE_VALIDATE_GATES caps the gates at once (default: cores);"

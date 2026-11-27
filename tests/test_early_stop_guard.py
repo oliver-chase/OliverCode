@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 GUARD = Path(__file__).resolve().parent.parent / "scripts" / "hooks" / "early-stop-guard.py"
-REAL_CLOSING = ("Another session has an uncommitted edit to `shared/repo-profiles.json` in OliverCode. "
+REAL_CLOSING = ("Another session has an uncommitted edit to `shared/kanban-baseline.json` in OliverCode. "
                 "It isn't mine, so I left it alone. Phase 2 rewrites that same file, so I'll check with "
                 "whichever session made the edit before I start.")
 

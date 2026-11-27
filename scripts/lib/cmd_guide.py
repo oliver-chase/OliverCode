@@ -63,7 +63,7 @@ def city_url() -> str:
     return str(setting("cityArtifact") or "")
 
 
-# The commands by what the owner wants to do. Every command the launcher lists appears once, except the fleet commands #1286 removes.
+# The commands by what the owner wants to do. Every command the launcher lists appears once.
 COMMAND_SETS = (
     ("Install and keep things up to date", "install · uninstall · update · bootstrap · sync-hooks"),
     ("Check and maintain your setup", "health · maintain · limits · place · clean"),
@@ -150,11 +150,8 @@ def status_steps(oc_root: Path) -> list[str]:
 
 def plain_guide(oc_root: Path) -> list[str]:
     """The guide, short enough to read in under a minute (#1177). The long parts live behind `olivercode guide city`, `guide skills` and `guide design`."""
-    from lib import repo_profiles
-    try:
-        count = len(repo_profiles.load_repo_profiles(oc_root)[0])
-    except (OSError, ValueError):
-        count = 0
+    from lib import local_config
+    count = len(local_config.private_repos())
     out = ["OliverCode", "",
            "OliverCode lets you hand Claude Code work to complete on its own. You keep working normally, and OliverCode runs delegated work, checks it and gets it across the finish line.", "",
            "How work runs"] + [f"  {sentence}" for sentence in HOW_WORK_RUNS] + [f"  {THREAD_LINE}", "",

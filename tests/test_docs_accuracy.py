@@ -61,10 +61,9 @@ class TestDocsAccuracy(unittest.TestCase):
             "Scheduled jobs": ["scripts/lib/schedules.py"],
             "Rules, voice and design files": ["docs/RULES.md", "docs/VOICE.md", "docs/DESIGN.md"],
             "Skills": ["skills/INDEX.md"],
-            "Fleet checks": ["scripts/lib/conform.py"],
             "Decisions": ["scripts/lib/decisions.py"],
         }
-        self.assertEqual(15, len(rows))
+        self.assertEqual(14, len(rows))
         self.assertEqual(set(parts), {cells[1] for cells in rows})
         self.assertTrue(all(len(cells) == 3 for cells in rows))
         missing = [path for paths in parts.values() for path in paths if not (REPO_ROOT / path).is_file()]

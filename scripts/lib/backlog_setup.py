@@ -1,7 +1,6 @@
 """One repeatable setup and repair for a repo's GitHub Project board.
 
-`olivercode backlog-setup [DIR] [--apply]` calls `run_setup`, and `olivercode conform` calls
-`boards_health`. The baseline itself lives once in `shared/kanban-baseline.json`, and the
+`olivercode backlog-setup [DIR] [--apply]` calls `run_setup`. `boards_health` lists the drift of a set of boards. The baseline itself lives once in `shared/kanban-baseline.json`, and the
 comparison lives once in `skills/backlog/scripts/check_kanban_baseline.py`, which this module imports.
 
 Every GitHub call goes through the injectable `Api` in `lib/board_api.py`, so the unit tests run with a fake runner and no network.
@@ -370,8 +369,7 @@ def board_status(target: Path, api: Api, oc_root: Path = OC_ROOT) -> tuple[str, 
 
 
 def boards_health(repos: list[tuple[str, Path]], api: Api, oc_root: Path = OC_ROOT, out=print, check_hook: bool = True) -> tuple[int, int, int]:
-    """Per repo: does its board match the baseline and, with `check_hook`, does it carry the commit-msg hook. Lists the fix. conform passes
-    check_hook=False, because its hooks row already reports the hook."""
+    """Per repo: does its board match the baseline and, with `check_hook`, does it carry the commit-msg hook. Lists the fix."""
     passed = failed = skipped = 0
     seen: set[Path] = set()
     for name, path in repos:

@@ -249,8 +249,7 @@ class TestAForkCarryingTheOwnersConfig(unittest.TestCase):
     def test_the_sweep_skips_the_inherited_config(self):
         from lib import cmd_sweep
         repo = self.fork()
-        with mock.patch.object(cmd_sweep, "OC_ROOT", repo), mock.patch.object(cmd_sweep, "load_repo_profiles", return_value=({}, None)), \
-                mock.patch.object(cmd_sweep, "backlog_config", return_value={"projectOwner": "owner", "projectNumber": 15}):
+        with mock.patch.object(cmd_sweep, "OC_ROOT", repo), mock.patch.object(cmd_sweep, "backlog_config", return_value={"projectOwner": "owner", "projectNumber": 15}):
             self.assertEqual([], cmd_sweep.boards())
 
 

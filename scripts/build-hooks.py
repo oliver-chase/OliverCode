@@ -3,7 +3,7 @@
 
 OliverCode's own .githooks are links to these templates. The public and private templates run the same
 gates, so each gate's body lives once in core/hooks/gates/ and this script assembles every variant. The
-built hooks are gitignored (HOOK-OUTPUTS-1), so install, bootstrap, sync-hooks, conform and validate.sh
+built hooks are gitignored (HOOK-OUTPUTS-1), so install, bootstrap, sync-hooks and validate.sh
 run this script before they read them. A hook is rewritten only when its build differs, through a
 temporary file and a rename, so parallel runs never leave a half-written hook.
 

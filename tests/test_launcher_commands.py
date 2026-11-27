@@ -349,9 +349,9 @@ class TestUninstall(HomeCase):
         return path
 
     def test_removes_every_job_this_checkout_creates_and_boots_each_out(self):
-        from lib import cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain
-        labels = [m.LABEL for m in (cmd_boardsweep, cmd_fleetsync, cmd_ghreplay, cmd_version, maintain)]
-        self.assertEqual(5, len(set(labels)))
+        from lib import cmd_boardsweep, cmd_ghreplay, cmd_version, maintain
+        labels = [m.LABEL for m in (cmd_boardsweep, cmd_ghreplay, cmd_version, maintain)]
+        self.assertEqual(4, len(set(labels)))
         labels.append("com.olivercode.from-a-newer-version")  # not in this code, but it runs this checkout
         plists = [self._plist(label, self.root) for label in labels]
         other = self._plist("com.olivercode.other-checkout", self.tmp / "elsewhere")
@@ -502,7 +502,7 @@ class TestUninstall(HomeCase):
         self.assertTrue((self.claude / "CLAUDE.md").is_symlink())
         # Every command that takes no extra word refuses one before it acts.
         for cmd in ("install", "health", "update", "sync-hooks",
-                    "conform . ", "discover --root . "):
+                    "discover --root . "):
             with self.subTest(cmd):
                 done = subprocess.run([sys.executable, str(LAUNCHER), *cmd.split(), "--bogus"],
                                       capture_output=True, text=True, cwd=str(self.tmp), env=env)

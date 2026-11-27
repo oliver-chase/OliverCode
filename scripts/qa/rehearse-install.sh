@@ -6,7 +6,7 @@
 # a folder under the sandbox, and the script stops if that folder is anywhere else.
 #
 # Cases: a fresh clone's commands, the adoption skill, a virgin machine, an existing
-# ~/.claude, a scattered fleet, --root layouts, discover, bootstrap, hookVariant, the full
+# ~/.claude, discover, bootstrap, the full
 # backout, idempotency, update, the no-commit probe, zero-config basics and a fork's first commit. Every claim is a
 # sentence in README.md or docs/SETUP.md, so a failure means the code or that sentence is wrong.
 #
@@ -78,22 +78,12 @@ mk_repo() { # $1 = dest, $2 = optional rules filename
   git -C "$1" -c user.email=rehearsal -c user.name=rehearsal commit -q -m init --no-verify >/dev/null 2>&1
 }
 
-register() { # $1 = oc dir, $2.. = "name[:path][|hook variant reason]" entries
+register() { # $1 = oc dir, $2.. = names of repos under $WS that olivercode.local.json lists in privateRepos
   local oc="$1"; shift
-  HOME="$H" python3 - "$oc/shared/repo-profiles.json" "$@" <<'PY'
+  HOME="$H" python3 - "$oc/olivercode.local.json" "$WS" "$@" <<'PY'
 import json, sys
-p = sys.argv[1]
-d = json.load(open(p))
-tmpl = next(iter(d["profiles"].values()), None) or d["_exampleProfile"]
-d["profiles"] = {}
-for spec in sys.argv[2:]:
-    spec, _, variant = spec.partition("|")
-    name, _, path = spec.partition(":")
-    e = json.loads(json.dumps(tmpl)); e["name"] = name
-    if path: e["path"] = path
-    if variant: e["hookVariant"] = variant
-    d["profiles"][name] = e
-json.dump(d, open(p, "w"), indent=2)
+p, ws = sys.argv[1:3]
+json.dump({"privateRepos": {name: f"{ws}/{name}" for name in sys.argv[3:]}}, open(p, "w"))
 PY
 }
 
@@ -128,10 +118,10 @@ ADOPT="$H/.claude/skills/olivercode-adoption/SKILL.md"
   && ok "adoption skill resolves in a fresh clone, before any setup" s1 || bad "adoption skill resolves in a fresh clone, before any setup" s1
 [ -e "$ADOPT" ] && ok "adoption skill linked into ~/.claude/skills" s1 || bad "adoption skill linked into ~/.claude/skills" s1
 register "$WS/OliverCode" app-a app-b
-oc sync-hooks 2>&1 | grep -q "app-a: hooks synced" && ok "sync-hooks reaches fleet" s1 || bad "sync-hooks reaches fleet" s1
+oc sync-hooks 2>&1 | grep -q "app-a: private-variant hook synced" && ok "sync-hooks reaches the private repos" s1 || bad "sync-hooks reaches the private repos" s1
 probe_blocked "$WS/app-a" && ok "secret blocked in app-a (Gate 1 line seen)" s1 || bad "secret blocked in app-a" s1
 probe_blocked "$WS/app-b" && ok "secret blocked in app-b (Gate 1 line seen)" s1 || bad "secret blocked in app-b" s1
-oc conform --offline 2>&1 | grep -A24 "^app-a" | grep -q "\[OK\] hooks" && ok "conform confirms the adopted fleet's hooks" s1 || bad "conform confirms the adopted fleet's hooks" s1
+oc health 2>&1 | grep -q "\[OK\] git runs the gates in 3 repo(s)" && ok "health confirms the private repos' hooks" s1 || bad "health confirms the private repos' hooks" s1
 
 # ------------------------------------------------- S2 existing ~/.claude preserved
 say "--- S2: existing ~/.claude (real rules + vendor skill + foreign symlink) ---"
@@ -150,34 +140,6 @@ grep -q "my precious rules" "$H/.claude/CLAUDE.md.pre-olivercode" 2>/dev/null \
 [ -L "$H/.claude/skills/other-skill" ] && [ "$(readlink "$H/.claude/skills/other-skill")" = "$H/elsewhere/other-skill" ] \
   && ok "foreign symlink untouched" s2 || bad "foreign symlink untouched" s2
 
-# --------------------------------------------- S3 scattered fleet via profile path
-say "--- S3: scattered repos, explicit path field, no shared parent ---"
-new_case s3
-mk_oc "$WS/OliverCode"
-mkdir -p "$WS/deep/work/clients" "$WS/side"
-mk_repo "$WS/deep/work/clients/api"; mk_repo "$WS/side/tool"
-register "$WS/OliverCode" "api:$WS/deep/work/clients/api" "tool:$WS/side/tool"
-oc sync-hooks 2>&1 | grep -q "api: hooks synced" && ok "path field resolves absolute" s3 || bad "path field resolves absolute" s3
-probe_blocked "$WS/deep/work/clients/api" && ok "secret blocked in scattered repo" s3 || bad "secret blocked in scattered repo" s3
-oc conform --offline 2>&1 | grep -q "^api$" && ok "conform finds scattered repo" s3 || bad "conform finds scattered repo" s3
-
-# ------------------------------------------------------------- S4 --root layout
-say "--- S4: fleet shares a parent that is not OliverCode's parent ---"
-new_case s4
-mkdir -p "$WS/tools" "$WS/code"
-mk_oc "$WS/tools/OliverCode"; mk_repo "$WS/code/web"; mk_repo "$WS/code/api"
-oc4() { oc_in "$WS/tools/OliverCode" "$@"; }
-register "$WS/tools/OliverCode" web api
-oc4 sync-hooks --root "$WS/code" 2>&1 | grep -q "web: hooks synced" && ok "--root honored by sync-hooks" s4 || bad "--root honored by sync-hooks" s4
-probe_blocked "$WS/code/web" && ok "secret blocked under --root" s4 || bad "secret blocked under --root" s4
-oc4 conform --offline --root "$WS/code" 2>&1 | grep -q "^web$" && ok "--root honored by conform" s4 || bad "--root honored by conform" s4
-# A wrong --root must not read as success.
-oc4 sync-hooks --root "$WS/nowhere" >/dev/null 2>&1 \
-  && bad "nonexistent --root should hard-error" s4 || ok "nonexistent --root hard-errors" s4
-mkdir -p "$WS/emptydir"
-oc4 sync-hooks --root "$WS/emptydir" 2>&1 | grep -q "0 target(s) synced" \
-  && ok "wrong --root reports 0 synced and fails" s4 || bad "wrong --root reports 0 synced and fails" s4
-
 # --------------------------------------------------------------- S5 discover
 say "--- S5: discover on a messy existing setup ---"
 new_case s5
@@ -187,8 +149,6 @@ out5="$( oc_in "$WS/OliverCode" discover --root "$WS" 2>&1 )"
 echo "$out5" | grep -q "AGENTS.md"     && ok "discover flags AGENTS.md" s5     || bad "discover flags AGENTS.md" s5
 echo "$out5" | grep -q ".cursorrules"  && ok "discover flags .cursorrules" s5  || bad "discover flags .cursorrules" s5
 echo "$out5" | grep -qi "hooksPath"    && ok "discover reports hook state" s5  || bad "discover reports hook state" s5
-echo "$out5" | sed -n '/^{/,/^}/p' | python3 -c "import json,sys; d=json.load(sys.stdin); assert all('path' in v for v in d.values()), 'no path'" 2>/dev/null \
-  && ok "emitted profile skeleton is valid JSON with paths" s5 || bad "emitted profile skeleton is valid JSON with paths" s5
 
 # --------------------------------------------------------------- S6 bootstrap
 say "--- S6: bootstrap a repo (dry-run, real, presence vs strict, idempotent) ---"
@@ -205,21 +165,6 @@ grep -q "hand-written" "$WS/newrepo/CLAUDE.md" && ok "presence file not clobbere
 run1="$( oc_in "$WS/OliverCode" bootstrap "$WS/newrepo" 2>&1 )"
 run2="$( oc_in "$WS/OliverCode" bootstrap "$WS/newrepo" 2>&1 )"
 [ "$run1" = "$run2" ] && ok "bootstrap idempotent (same report twice)" s6 || bad "bootstrap idempotent (same report twice)" s6
-
-# --------------------------------------------------------------- S7 hookVariant
-say "--- S7: a repo with a declared hook variant ---"
-new_case s7
-mk_oc "$WS/OliverCode"; mk_repo "$WS/special"
-mkdir -p "$WS/special/.githooks"
-printf '#!/usr/bin/env bash\necho custom-gate\nexit 0\n' > "$WS/special/.githooks/pre-commit"
-chmod +x "$WS/special/.githooks/pre-commit"
-git -C "$WS/special" config core.hooksPath .githooks
-register "$WS/OliverCode" "special|custom governance path"
-oc sync-hooks 2>&1 | grep -q "special: declared hook variant" && ok "variant skipped by sync-hooks" s7 || bad "variant skipped by sync-hooks" s7
-grep -q "custom-gate" "$WS/special/.githooks/pre-commit" && ok "variant hook not overwritten" s7 || bad "variant hook not overwritten" s7
-h7="$(oc conform --offline 2>&1)"
-echo "$h7" | grep -A24 "^special" | grep -q "declared hook variant" && ok "conform reports the variant with a note" s7 || bad "conform reports the variant with a note" s7
-echo "$h7" | grep -A24 "^special" | grep -q "\[FAIL\] hooks" && bad "variant does not fail the hooks check" s7 || ok "variant does not fail the hooks check" s7
 
 # --------------------------------------------------------------- S8 backout
 say "--- S8: the documented backout removes everything ---"
@@ -297,7 +242,7 @@ chmod +x "$WS/OliverCode/scripts/olivercode" "$WS/OliverCode"/scripts/*.sh 2>/de
   && git add README.md && git -c user.email=rehearsal -c user.name=rehearsal commit -q -m upstream --no-verify )
 oc_in "$WS/OliverCode" update >/dev/null 2>&1
 grep -q "upstream change" "$WS/OliverCode/README.md" && ok "update pulled upstream commit" s10 || bad "update pulled upstream commit" s10
-[ -x "$WS/app/.githooks/pre-commit" ] && ok "update re-synced fleet hooks" s10 || bad "update re-synced fleet hooks" s10
+[ -x "$WS/app/.githooks/pre-commit" ] && ok "update re-synced the private repos' hooks" s10 || bad "update re-synced the private repos' hooks" s10
 
 # ------------------------------------------------- S11 probe in a no-commit repo
 say "--- S11: the probe script works in a repo with no commits ---"

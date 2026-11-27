@@ -1,13 +1,13 @@
 """OliverCode's issues, comments and commit messages never name the owner's other repos.
 
-The names come from the local registry through fleet_name_check.fleet_names, read from the main checkout when
+The names come from the checkouts under repoRoot and privateRepos through fleet_name_check.fleet_names, read from the main checkout when
 this is a linked worktree, so no repo name is ever written
 in a tracked file. This module refuses a text that names one (a commit message, a story body, a comment) and
 lists the existing issues and comments that already do. It edits nothing on GitHub.
 
 Usage: python3 -m lib.repo_name_guard --text-file FILE      (exit 1 and the lines to reword when FILE names a repo)
        python3 -m lib.repo_name_guard --scan-issues [--repo OWNER/NAME]   (prints the numbers that name a repo)
-A checkout with an empty registry has no names, so it passes.
+A machine with no other checkout and no private repo has no names, so it passes.
 """
 
 from __future__ import annotations
@@ -38,13 +38,13 @@ def _main_checkout(root: Path) -> Path | None:
 
 
 def default_names(root: Path = ROOT) -> list[str]:
-    """The registry names for `root`. A worktree has no local registry, so it reads its main checkout's."""
-    names = fleet_names(root)
+    """The other repo names for `root`. A worktree has no olivercode.local.json, so it reads its main checkout's."""
+    names = fleet_names()
     main = None if names else _main_checkout(root)
     if main is None:
         return names
     code = ("import json, sys; from pathlib import Path; sys.path.insert(0, sys.argv[1] + '/scripts'); "
-            "from lib.fleet_name_check import fleet_names; print(json.dumps(fleet_names(Path(sys.argv[1]))))")
+            "from lib.fleet_name_check import fleet_names; print(json.dumps(fleet_names()))")
     done = subprocess.run([sys.executable, "-c", code, str(main)], capture_output=True, text=True, timeout=60)
     try:
         found = json.loads(done.stdout or "[]")

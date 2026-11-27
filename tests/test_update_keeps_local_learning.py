@@ -80,7 +80,7 @@ class ScenarioOneKeepsLocalOverrides(Checkout):
 
         code, calls, _ = self.update()
 
-        self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]))
+        self.assertEqual((code, calls), (0, ["install", "sync-hooks"]))
         self.assertEqual((self.clone / "skills" / "shipped" / "SKILL.md").read_text(), "shipped v2")
         link = self.home / ".claude" / "skills" / "shipped"
         self.assertEqual(link.resolve(), (self.ohome / "skills" / "shipped").resolve())
@@ -149,7 +149,7 @@ class ScenarioTwoRefusesADirtyOrDivergedCheckout(Checkout):
         git(self.seed, "commit", "-q", "-am", "local work (#661)")
         git(self.seed, "push", "-q", "origin", "main")
         code, calls, out = self.update()
-        self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]), out)
+        self.assertEqual((code, calls), (0, ["install", "sync-hooks"]), out)
         self.assertIn("olivercode-local", out)
         self.assertIn("origin/main", out)
         self.assertEqual(git(self.clone, "rev-parse", "olivercode-local"), mine)

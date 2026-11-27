@@ -1,9 +1,9 @@
 """Tracked files must not name another fleet repo.
 
-The fleet's repo names live in the local registry, which is private and never tracked. A tracked
-line that names one of them leaks the operator's other projects into the public repo. The check reads
-the names from the registry this checkout uses, then fails on each tracked line that names one, with
-the file and line. A checkout whose registry is empty, such as a fork, has no names to find and passes.
+The owner's other repo names are the git checkouts directly under repoRoot and the names in `privateRepos` in
+olivercode.local.json, both private to the machine. A tracked line that names one of them leaks the operator's
+other projects into the public repo. The check fails on each tracked line that names one, with the file and line.
+A machine with no other checkout and no private repo, such as a fork's, has no names to find and passes.
 """
 
 from __future__ import annotations
@@ -12,7 +12,8 @@ import re
 from pathlib import Path
 
 from lib.gitfiles import tracked_files
-from lib.repo_profiles import load_repo_profiles
+from lib import placement
+from lib.local_config import private_repos
 
 # The framework's own name is in every path and every doc, so it is never a fleet name to find.
 OWN_NAMES = frozenset({"olivercode"})
@@ -22,19 +23,18 @@ OWN_NAMES = frozenset({"olivercode"})
 SYNCED_GATES = frozenset({"core/hooks/gates/owner-identifiers.sh", ".githooks/pre-commit"})
 
 
-def fleet_names(repo_root: Path) -> list[str]:
-    """The lowercased fleet repo names in this checkout's registry, longest first."""
+def fleet_names() -> list[str]:
+    """The lowercased names of the git checkouts directly under repoRoot and of the private repos, longest first."""
     try:
-        profiles, _source = load_repo_profiles(repo_root)
-    except (OSError, ValueError):
-        # A fork with no registry, or a damaged one, has no names to find, and the check must not crash validation.
-        return []
-    names = {name.lower() for name in profiles}
+        found = {d.name.lower() for d in placement.config().root.iterdir() if (d / ".git").is_dir()}  # a linked worktree's .git is a file
+    except OSError:
+        found = set()  # no repoRoot folder, so only the private repos are named, and validation must not crash
+    names = found | {name.lower() for name in private_repos()}
     return sorted(names - OWN_NAMES, key=lambda n: (-len(n), n))
 
 
 def check_all(repo_root: Path) -> list[str]:
-    names = fleet_names(repo_root)
+    names = fleet_names()
     if not names:
         return []
     alternatives = "|".join(re.escape(n) for n in names)

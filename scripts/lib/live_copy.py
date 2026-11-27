@@ -1,8 +1,8 @@
 """A launcher that runs from a live bot's folder.
 
 `liveCopies` in `olivercode.local.json` maps each path a running bot reads to the agent copy of
-that repo. An install or update run from the live path writes into the bot, so `conform` and
-`install` refuse it and name the agent copy to use instead.
+that repo. An install or update run from the live path writes into the bot, so
+`install` refuses it and name the agent copy to use instead.
 """
 
 from __future__ import annotations

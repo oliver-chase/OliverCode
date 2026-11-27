@@ -19,7 +19,7 @@ from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
 launcher = load_script("scripts/olivercode", "olivercode_launcher_archived")
 archived_guard = load_script("scripts/hooks/archived_guard.py", "archived_guard_under_test")
 pretool = load_script("scripts/hooks/pretool_guard.py", "pretool_guard_archived_test")
-from lib import cmd_fleet, maintain, placement, repo_profiles, repo_state  # noqa: E402
+from lib import cmd_fleet, maintain, placement, repo_state  # noqa: E402
 
 AUDIT = str(REPO_ROOT / "skills" / "audit" / "scripts")
 sys.path.insert(0, AUDIT)
@@ -121,53 +121,24 @@ class TestRepoState(unittest.TestCase):
 
 
 class TestEveryCommandSkips(FakeGh):
-    def profiles(self):
-        return {"old-app": {}, "live-app": {}}
-
-    def test_the_fleet_iterator_skips_it_once_and_names_why(self):
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            names = [n for n, _p, _path in repo_profiles.iter_fleet(self.profiles(), self.fleet)]
-            names += [n for n, _p, _path in repo_profiles.iter_fleet(self.profiles(), self.fleet)]
-        self.assertEqual(["live-app", "live-app"], names)
-        self.assertEqual(1, out.getvalue().count("skip old-app: archived on GitHub"))
-        lookup = [n for n, _p, _path in repo_profiles.iter_fleet(self.profiles(), self.fleet, skip_archived=False)]
-        self.assertEqual(["old-app", "live-app"], lookup)
-        self.assertEqual(2, len(set(self.calls())), "one gh call per repo, then the cache answers")
-
-    def test_discover_does_not_list_or_register_it(self):
+    def test_discover_does_not_list_it(self):
         oc = self.tmp / "oc"
-        (oc / "shared").mkdir(parents=True)
-        code, out = quiet(launcher.command_discover, oc, [self.fleet], True)
+        oc.mkdir()
+        code, out = quiet(launcher.command_discover, oc, [self.fleet])
         self.assertEqual(0, code)
         self.assertIn("skip old-app: archived on GitHub", out)
-        registry = json.loads((oc / "shared" / "repo-profiles.local.json").read_text())["profiles"]
-        self.assertEqual(["live-app"], list(registry))
+        self.assertIn("live-app", out)
+        self.assertNotRegex(out, r"old-app\s+rules=")
 
     def test_sync_hooks_leaves_it_untouched(self):
         shutil_templates = REPO_ROOT / "core" / "templates" / "project"
-        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(self.profiles(), None)), \
-                mock.patch.object(cmd_fleet, "_private_repos", return_value={"vault": self.old}), \
+        with mock.patch.object(cmd_fleet, "_private_repos", return_value={"old-app": self.old, "live-app": self.live}), \
                 mock.patch.object(cmd_fleet.repo_gates, "hook_templates", return_value=shutil_templates):
-            code, out = quiet(launcher.command_sync_hooks, REPO_ROOT, self.fleet)
+            code, out = quiet(launcher.command_sync_hooks, REPO_ROOT)
         self.assertEqual(0, code, out)
         self.assertIn("skip old-app: archived on GitHub", out)
         self.assertFalse((self.old / ".githooks").exists())
         self.assertTrue((self.live / ".githooks" / "pre-commit").is_file())
-
-    def test_conform_skips_it_in_the_fleet_and_on_its_own(self):
-        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=(self.profiles(), None)), \
-                mock.patch.object(cmd_fleet, "registry_gap", return_value=""), \
-                mock.patch.object(cmd_fleet._conform, "check_repo", return_value=[]) as check:
-            code, out = quiet(launcher.command_conform, REPO_ROOT, None, self.fleet, True)
-            self.assertEqual([self.live], [c.args[0] for c in check.call_args_list])
-            self.assertIn("skip old-app: archived on GitHub", out)
-            check.reset_mock()
-            repo_state.forget_said()
-            code, out = quiet(launcher.command_conform, REPO_ROOT, self.old, None, True)
-        self.assertEqual(0, code)
-        check.assert_not_called()
-        self.assertIn("skip old-app: archived on GitHub", out)
 
     def test_fleet_check_skips_it(self):
         out = io.StringIO()

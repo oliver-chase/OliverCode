@@ -342,7 +342,7 @@ def _open_pr(repo: Path, name: str) -> bool:
 
 
 def prunable_remote(repo: Path, name: str) -> bool:
-    """True when clean --apply may delete this merged origin branch: a story/* branch with no open pull request. conform names the same ones."""
+    """True when clean --apply may delete this merged origin branch: a story/* branch with no open pull request."""
     return name.startswith("story/") and not _open_pr(repo, name)
 
 

@@ -205,8 +205,8 @@ def check_git_sync(cfg: placement.Config, fix: bool) -> list[Problem]:
 def check_synced(cfg: placement.Config, fleet: list[Path] | None = None, home: Path | None = None) -> list[Problem]:
     """A repo inside a synced folder loses working files whenever the sync service evicts them, so it is reported with the move."""
     if fleet is None:
-        from lib.repo_profiles import iter_fleet, load_repo_profiles
-        fleet = [p for _n, _pr, p in iter_fleet(load_repo_profiles(OC_ROOT)[0], cfg.root)]
+        from lib.local_config import private_repos
+        fleet = list(private_repos().values())
     found = []
     place = placement.synced_place(cfg.root, home)
     if place:
@@ -551,7 +551,7 @@ def check_state(fix: bool, home: Path | None = None, limits: dict | None = None)
 
 
 def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> list[Problem]:
-    fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's registry
+    fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's private repos
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
                 *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_groom(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_gaps(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]

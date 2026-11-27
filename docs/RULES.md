@@ -16,7 +16,7 @@ A generated report or cache is ignored and never tracked. Downstream repos inher
 - Claude Code is the sole runtime and Anthropic the sole model provider
 - `core/templates/project/` is the single template home. Documents, governance scripts and the built hooks ship to downstream repos from there through the bootstrap manifest and `sync-hooks`
 - The hooks are written in `core/hooks/` and built into `core/templates/project/`, untracked, by `scripts/build-hooks.py`, which every command that reads them runs first. `.githooks/` links to the built files. Edit the gate files and never a built hook
-- Validation is `bash scripts/validate.sh` from the repo root, which wraps `.githooks/pre-commit` and the tests in `tests/`. Downstream repos declare their own validation command in the registry's `repo-profiles.json`, which lives in the private repo that `olivercode discover` names
+- Validation is `bash scripts/validate.sh` from the repo root, which wraps `.githooks/pre-commit` and the tests in `tests/`. Downstream repos name their own validation command in their `CLAUDE.md`, and `olivercode discover` finds it from their `validate.sh`, `package.json` or `Makefile`
 
 ## Execution
 
@@ -56,7 +56,7 @@ A step only the owner can take (a sign-up, a payment, a key, a one-time code) is
 
 ## Project structure
 
-These rules apply to every repo under `<fleet-root>/*`, and `olivercode conform` checks them (`docs/CONTRACT.md`). Every repo has `README.md`, `CLAUDE.md` (the only agent-rules file), `docs/repo-structure-contract.md` and a `docs/backlog-config.json` that names its one GitHub Project, which `skills/backlog/SKILL.md` governs. Every commit message carries a story reference such as `(#53)`. Every behavior change updates or adds tests, and every story has at least one negative-path assertion.
+These rules apply to every repo under `<fleet-root>/*` (`docs/CONTRACT.md`). Every repo has `README.md`, `CLAUDE.md` (the only agent-rules file), `docs/repo-structure-contract.md` and a `docs/backlog-config.json` that names its one GitHub Project, which `skills/backlog/SKILL.md` governs. Every commit message carries a story reference such as `(#53)`. Every behavior change updates or adds tests, and every story has at least one negative-path assertion.
 
 Managed files stay byte-identical across repos where `shared/project-bootstrap-manifest.json` marks them strict (`QUALITY_BASELINE.md`, the hooks, the template's structure check and `duplication_check.py`). A change is made first in OliverCode and then synced.
 
@@ -97,7 +97,7 @@ Every README and document in OliverCode and in each repo it governs follows this
 
 ### The README
 
-A README opens with the repo name and one sentence on what the repo does, gives install commands a reader can run at once, explains how the system works and ends with a documentation table that links every document. `olivercode conform` checks the title and the section order, and the docs check checks the table.
+A README opens with the repo name and one sentence on what the repo does, gives install commands a reader can run at once, explains how the system works and ends with a documentation table that links every document. The docs check checks the table.
 
 ### Files and where they live
 
@@ -113,7 +113,7 @@ The runner builds each story in its own worktree under `_worktrees` in `repoRoot
 
 Work ends landed or discarded and never parks on a branch. Before a session stops or reports, it lands what passes validation, fixes what fails, and discards what is superseded with its reason on the story. The pre-push hook and the policy guard refuse any other branch.
 
-`olivercode backlog-setup` creates or repairs a repo's Project to the baseline and `olivercode conform` lists any repo whose board differs.
+`olivercode backlog-setup` creates or repairs a repo's Project to the baseline.
 
 ### CLAUDE.md
 

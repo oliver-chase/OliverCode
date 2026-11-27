@@ -1,4 +1,4 @@
-"""Install asks nothing and makes no fleet repo, a local fleet folder passes health only as a repo, and init-fleet reuses it (#993, #1282)."""
+"""Install asks nothing and makes no fleet repo (#993, #1282), and it closes the owner items the removed fleet-sync queued (#1286)."""
 
 import io
 import json
@@ -14,71 +14,9 @@ from unittest import mock
 from _support import REPO_ROOT, quiet, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_initfleet, cmd_install, health_checks  # noqa: E402
+from lib import cmd_install, cmd_owner, health_checks  # noqa: E402
 
 IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.invalid", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}
-
-
-class FleetRepo(unittest.TestCase):
-    def setUp(self):
-        patch = mock.patch.dict(os.environ, IDENTITY)
-        patch.start()
-        self.addCleanup(patch.stop)
-
-    def commits(self, dest: Path) -> int:
-        done = subprocess.run(["git", "-C", str(dest), "rev-list", "--count", "HEAD"], capture_output=True, text=True)
-        return int(done.stdout.strip()) if done.returncode == 0 else 0
-
-    def local_repo(self, dest: Path, scaffold: bool = False) -> None:
-        """A fleet folder that is already a git repo with one commit, as an earlier install left it."""
-        if scaffold:
-            shutil.copytree(cmd_initfleet.TEMPLATE, dest)
-        for step in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "--allow-empty", "-m", "Start"]):
-            subprocess.run(["git", "-C", str(dest), *step], check=True, capture_output=True)
-
-    def test_the_template_holds_config_only_and_no_board_config(self):
-        names = {p.name for p in cmd_initfleet.TEMPLATE.iterdir()}
-        self.assertEqual(names, {"repo-profiles.json", "owner-rules.json", "owner-queue.jsonl", "review-config.json", "CLAUDE.md"})
-
-    def test_a_loose_folder_fails_health_and_stays_untouched_until_made_a_repo(self):
-        dest = temp_dir(self) / "fleet"
-        dest.mkdir()
-        (dest / "repo-profiles.json").write_text('{"repos": []}')
-        self.assertEqual((0, 1, 0), quiet(health_checks._check_fleet_repo, dest)[0])
-        self.assertEqual('{"repos": []}', (dest / "repo-profiles.json").read_text())
-        self.assertFalse((dest / ".git").exists())
-        self.local_repo(dest)
-        self.assertEqual((1, 0, 0), quiet(health_checks._check_fleet_repo, dest)[0])
-        self.assertEqual(1, self.commits(dest))
-
-    def test_a_local_fleet_repo_takes_the_owner_and_name_in_its_placeholders(self):
-        dest = temp_dir(self) / "fleet"
-        shutil.copytree(cmd_initfleet.TEMPLATE, dest)
-        self.assertTrue(cmd_initfleet.fill_placeholders(dest, "me", "fleet"))
-        self.assertIn('"me/fleet"', (dest / "review-config.json").read_text())
-        self.assertFalse(cmd_initfleet.fill_placeholders(dest, "me", "fleet"))
-
-    def test_init_fleet_on_the_local_repo_adds_a_remote_and_nests_no_repo(self):
-        dest = temp_dir(self) / "fleet"
-        self.local_repo(dest, scaffold=True)
-        calls = []
-
-        def runner(args):
-            calls.append(args)
-            if args[:3] == ["gh", "api", "repos/me/olivercode-fleet"] and ".name" in args:
-                return 1, "gh: Not Found (HTTP 404)"
-            if args[:3] == ["gh", "api", "repos/me/olivercode-fleet"] and args[-1] == ".private":
-                return 0, "true"
-            if args[:3] == ["gh", "api", "repos/me/olivercode-fleet/collaborators?affiliation=direct"]:
-                return 0, "[]"
-            return 0, ""
-
-        code = quiet(cmd_initfleet.command_init_fleet, ["--owner", "me", "--dir", str(dest)], runner)[0]
-        self.assertEqual(0, code)
-        git = [args[3:] for args in calls if args[:2] == ["git", "-C"]]
-        self.assertIn(["remote", "add", "origin", "https://github.com/me/olivercode-fleet.git"], git)
-        self.assertNotIn("init", [step[0] for step in git])
-        self.assertEqual([dest / ".git"], list(dest.rglob(".git")))
 
 
 class BoardStep(unittest.TestCase):
@@ -137,6 +75,21 @@ class BoardStep(unittest.TestCase):
         with self.gh(0), mock.patch("lib.cmd_fleet.command_backlog_setup") as setup:
             quiet(cmd_install.board_step, [("widget", repo)])
         setup.assert_not_called()
+
+
+class RetiredFleetSync(unittest.TestCase):
+    """Install closes the owner items the removed fleet-sync command queued and leaves every other item open (#1286)."""
+
+    def test_only_the_open_fleet_sync_items_are_closed_with_the_reason(self):
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            mine = cmd_owner.add("fleet-sync", "alpha is behind", command="git pull", error="diverged")
+            other = cmd_owner.add("conform", "beta needs you", command="x", error="y")
+            self.assertEqual([mine["id"]], quiet(cmd_install.close_fleet_sync_items)[0])
+            by_id = {i["id"]: i for i in cmd_owner.items()}
+            self.assertEqual(("done", "open"), (by_id[mine["id"]]["status"], by_id[other["id"]]["status"]))
+            self.assertIn("fleet-sync was removed", by_id[mine["id"]]["reason"])
+            self.assertEqual([], quiet(cmd_install.close_fleet_sync_items)[0])
 
 
 class WhoBuilds(unittest.TestCase):

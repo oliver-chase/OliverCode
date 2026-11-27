@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code SessionStart hook: tells the session, once, what would silently fail here.
 
-`olivercode conform` only sees the repos in its registry and only when someone runs it.
+`olivercode health` only sees OliverCode and its private repos, and only when someone runs it.
 This runs in every session, in whatever folder it starts, and names these gaps:
 
 - the repo ships commit gates but git is not pointed at them (commits will be refused

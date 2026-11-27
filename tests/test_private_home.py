@@ -12,7 +12,6 @@ from unittest import mock
 from _support import REPO_ROOT, load_script
 
 failure_log = load_script("scripts/lib/failure_log.py", "failure_log")
-repo_profiles = load_script("scripts/lib/repo_profiles.py", "repo_profiles")
 
 
 def mode(path: Path) -> int:
@@ -67,18 +66,6 @@ class RepoNamesStayLocal(unittest.TestCase):
         text = (REPO_ROOT / ".gitignore").read_text().split()
         for entry in (".claude-optimization/audits/", ".claude-optimization/scratch/", "olivercode.local.json", "scratch/"):
             self.assertIn(entry, text)
-
-    def test_the_write_target_is_the_local_file_and_a_loader_reads_it(self):
-        with tempfile.TemporaryDirectory() as t:
-            root = Path(t)
-            (root / "shared").mkdir()
-            tracked = root / "shared" / "repo-profiles.json"
-            tracked.write_text(json.dumps({"profiles": {}}))
-            local = root / "shared" / "repo-profiles.local.json"
-            self.assertEqual(local, repo_profiles.registry_write_file(root))
-            local.write_text(json.dumps({"profiles": {"mine": {}}}))
-            self.assertEqual(local, repo_profiles.registry_file(root))
-            self.assertEqual(["mine"], list(repo_profiles.load_repo_profiles(root)[0]))
 
 
 if __name__ == "__main__":

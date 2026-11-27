@@ -9,8 +9,8 @@ What the harness covers today:
 - `olivercode run` and `olivercode dispatch`: Claude Code headless on a task or a board story, with the repo's own validation between rounds
 - `olivercode drain` and `olivercode land`: a repo's open stories worked in priority order, each rebased, validated and pushed to main
 - Shared instructions, voice and design standards, and skills that install into `~/.claude`
-- Commit and push gates that refuse unsafe or incomplete work, with checks that the gates still run in every fleet repo
-- Fleet checks for layout, boards, ledgers, tests, research and machine health, plus scheduled jobs that report on boards and sync repos with no model call
+- Commit and push gates that refuse unsafe or incomplete work, with a health check that the gates still run in OliverCode and each private repo
+- Machine health and placement checks, plus scheduled jobs that report on boards with no model call
 - A GitHub budget and a validation queue that every session shares
 - A decision ledger that keeps the owner's exact words for each decision
 
@@ -58,7 +58,6 @@ Think of a professional kitchen. Claude Code is a talented chef who can cook any
 | The nightly close-down checklist | Scheduled jobs | Health, maintenance and board reports, with no model |
 | The recipe binder every cook follows | Rules, voice and design files | Loaded into every session |
 | The training manuals | Skills | How to audit, file a story, plan and diagnose a bug |
-| The franchise inspection | Fleet checks | Checks every one of your repos against the same standard |
 | The decision log | Decisions | What you decided, in your own words |
 
 Each ticket gets a cook who starts fresh and leaves when the plate goes out, which is why a story costs a fraction of what a long chat costs.
@@ -82,17 +81,16 @@ From a project directory:
 
 ```bash
 python3 /path/to/OliverCode/scripts/olivercode bootstrap .
-python3 /path/to/OliverCode/scripts/olivercode discover --root /path/to/your/repos --register
+python3 /path/to/OliverCode/scripts/olivercode discover --root /path/to/your/repos
 python3 /path/to/OliverCode/scripts/olivercode sync-hooks
 ```
 
-`bootstrap` adds the managed project files, `discover --register` adds the repo to the fleet, and `sync-hooks` installs the current hooks in every registered repo and sets Git's `core.hooksPath`. The project declares its own validation command and keeps project-specific behavior in its own repository.
+`bootstrap` adds the managed project files, `discover` lists the repo and its validation command, and `sync-hooks` installs the current hooks in OliverCode and each private repo and sets Git's `core.hooksPath`. The project declares its own validation command and keeps project-specific behavior in its own repository.
 
-Check the installation and registered projects with:
+Check the installation with:
 
 ```bash
 python3 scripts/olivercode health
-python3 scripts/olivercode conform
 ```
 
 ## Commands
@@ -102,15 +100,15 @@ python3 scripts/olivercode conform
 | Job | Commands |
 | --- | --- |
 | Install and update | `olivercode install`, `olivercode uninstall`, `olivercode update`, `olivercode bootstrap`, `olivercode sync-hooks`, `olivercode place`, `olivercode clean`, `olivercode worktree`, `olivercode commit-check` |
-| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode conform`, `olivercode maintain`, `olivercode limits` |
+| Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode maintain`, `olivercode limits` |
 | Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode watch`, `olivercode land`, `olivercode promote`, `olivercode wip`, `olivercode validated`, `olivercode queue` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board groom`, `olivercode board sync`, `olivercode gh-limit`, `olivercode gated` |
 | Owner and decisions | `olivercode owner`, `olivercode decisions`, `olivercode handoff` |
-| Fleet and policy | `olivercode discover`, `olivercode init-fleet`, `olivercode fleet-sync`, `olivercode policy` |
+| Fleet and policy | `olivercode discover`, `olivercode policy` |
 | Orientation | `olivercode guide` |
 
-The scheduled jobs (`board sync`, `fleet-sync`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
+The scheduled jobs (`board sync`, `maintain`, `gh-limit`, `version-cut`) take `--schedule` to install a launchd job and `--unschedule` to remove it.
 
 ## Skills
 

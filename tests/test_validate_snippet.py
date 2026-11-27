@@ -169,11 +169,10 @@ class TestSyncHooksInsertsAndCommits(unittest.TestCase):
         return repo
 
     def sync(self, commit=True):
-        with mock.patch.object(cmd_fleet, "load_repo_profiles", return_value=({"alpha": {}}, None)), \
-                mock.patch.object(cmd_fleet, "_private_repos", return_value={}), \
+        with mock.patch.object(cmd_fleet, "_private_repos", return_value={"alpha": self.fleet / "alpha"}), \
                 mock.patch.object(cmd_fleet._repo_state, "archived", return_value=None), \
                 mock.patch.dict(os.environ, git_env(), clear=True):
-            return quiet(launcher.command_sync_hooks, self.oc, self.fleet, commit=commit, story="acme/widgets#7")
+            return quiet(launcher.command_sync_hooks, self.oc, commit=commit, story="acme/widgets#7")
 
     def test_sync_hooks_inserts_the_block_and_commit_includes_validate_sh_by_path(self):
         repo = self.repo()

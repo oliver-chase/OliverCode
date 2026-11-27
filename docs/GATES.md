@@ -2,7 +2,7 @@
 
 This file lists every check that can block a commit or a push, what each blocks and which repos run it. A failed gate blocks the commit.
 
-The gates guard against honest mistakes and careless agents. A commit that rewrites the hooks in the same commit is out of scope, because git runs the hook from the working tree, and `olivercode conform` catches a changed hook afterwards.
+The gates guard against honest mistakes and careless agents. A commit that rewrites the hooks in the same commit is out of scope, because git runs the hook from the working tree, and `olivercode health` catches a changed hook afterwards.
 
 ## Validation
 
@@ -16,16 +16,16 @@ The gates guard against honest mistakes and careless agents. A commit that rewri
 
 ### Throughput and the one entry point
 
-Every validation waits in the per-user queue, so at most a few run at once however many builders, landings and hooks ask. `bash scripts/validate.sh` is the one entry point: its managed block takes a slot before any gate starts, and `olivercode land`, the builders, `fleet-sync`, the audit's done check and conform all start validation through it.
+Every validation waits in the per-user queue, so at most a few run at once however many builders, landings and hooks ask. `bash scripts/validate.sh` is the one entry point: its managed block takes a slot before any gate starts, and `olivercode land`, the builders, the audit's done check and health all start validation through it.
 
 - The gates that share no state (pre-commit, fleet names, bloat, code quality, references, docs, size limits, queue bypass, smoke tests and hook state) run in parallel inside the run's one slot, at most `OLIVERCODE_VALIDATE_GATES` at once (default: the core count). A `=== validate: gate ... ===` line prints as each gate starts and as it finishes with its seconds, and `olivercode land` shows the same lines while its full log fills. Their output replays in the order above with the same `=== validate: ... ===` lines, and any failing gate fails the run with that gate's exit code. The smoke tests run one process per test module, `OLIVERCODE_VALIDATE_JOBS` at a time (default: the core count)
 - The slot count is `OLIVERCODE_VALIDATE_SLOTS`, default an eighth of the machine's cores and at least 1, so an 8-core machine runs one validation at a time. A slot is reclaimed when its holder is gone or its pid belongs to another process, and a slot held for more than 4 hours is reaped even when its holder lives. A run that has waited an hour goes ahead and says so on stderr. Missing, old and damaged state is repaired with a line that names the repair
 - A run keeps a time budget of `OLIVERCODE_VALIDATE_TIMEOUT` seconds (default 5 minutes, set from measured runs with headroom and scaled up to twice by the machine's load per core). Past it, the run stops the gates still running and fails with exit 124 and a line that names each one, its seconds and the load, with the command that reruns that gate alone
-- The queue bypass gate (`scripts/lib/queue_bypass.py`) fails when a tracked `scripts/validate.sh` has no queue block, when a script starts the test suite (`python3 -m unittest`, `pytest`, `npm test`, `run-tests.sh`) outside the queue, or when a script starts `validate.sh` with its queue variables replaced. The finding names the script and line and the entry point to use. Tests, docs and Markdown may name these commands. `olivercode conform` runs the same check on every registered repo and fails a repo whose `validate.sh` no longer runs it, and the docs check fails when a gate script this file names has no script or hook that runs it
+- The queue bypass gate (`scripts/lib/queue_bypass.py`) fails when a tracked `scripts/validate.sh` has no queue block, when a script starts the test suite (`python3 -m unittest`, `pytest`, `npm test`, `run-tests.sh`) outside the queue, or when a script starts `validate.sh` with its queue variables replaced. The finding names the script and line and the entry point to use. Tests, docs and Markdown may name these commands. The docs check fails when a gate script this file names has no script or hook that runs it
 
-Hook drift fails validation: OliverCode's hook, the public template and the private template run the same gates, each gate's body lives once in `core/hooks/gates/`, and `scripts/build-hooks.py` assembles the four hooks (two pre-commit templates, pre-push and commit-msg) from one ordered gate list. The built hooks are untracked, and install, bootstrap, sync-hooks, conform and `validate.sh` build them before reading them.
+Hook drift fails validation: OliverCode's hook, the public template and the private template run the same gates, each gate's body lives once in `core/hooks/gates/`, and `scripts/build-hooks.py` assembles the four hooks (two pre-commit templates, pre-push and commit-msg) from one ordered gate list. The built hooks are untracked, and install, bootstrap, sync-hooks and `validate.sh` build them before reading them.
 
-`validate.sh` also reports fleet hook state through `olivercode conform --offline --hooks-only`. That report is advisory, because hook enforcement fails open: a repo with an unset or broken `core.hooksPath` runs no gates and prints nothing.
+Hook enforcement fails open: a repo with an unset or broken `core.hooksPath` runs no gates and prints nothing. `olivercode health` fails for OliverCode and each repo in `privateRepos` whose `core.hooksPath` is unset and names `olivercode sync-hooks` as the fix.
 
 `.github/workflows/framework-ci.yml` runs health, `validate.sh` and the install rehearsal on every push to main or staging and on every pull request into main, so `olivercode promote` finds a passing check on staging's head before it fast-forwards main to it. `validate.sh` includes `tests/test_drain_canary.py` through the smoke tests, so each run drives a fake story through the drain. Until the owner turns the workflow on in GitHub Actions, the local commands are the enforcement.
 
@@ -40,7 +40,7 @@ Each row gives the gate's number in OliverCode's hook, in an adopted repo's hook
 | Owner identifiers | A staged file that names an identifier the gate derives from git and config, described below. Markdown and tests are scanned. It names the file and line, and skips where nothing can be derived | 3 | 3 | 2 |
 | Version files | A staged `VERSION` or `CHANGELOG.md`. The daily cut (`olivercode version-cut`) sets `OLIVERCODE_VERSION_CUT=1` for its own commit, and `validate.sh --tree` skips the gate because it stages nothing (`docs/VERSIONING.md`) | after 3 | after 3 | after 2 |
 
-`sync-hooks` deploys `core/templates/project/pre-commit` to every fleet repo, and `core/templates/project/pre-commit-private` to every repo in `privateRepos` in `olivercode.local.json` and every fleet repo whose profile sets `"private": true`. A repo with its own hook declares `hookVariant: "<reason>"` in its profile (`shared/repo-profiles.json`), which makes `sync-hooks` skip it and `conform` pass it with a note.
+`sync-hooks` deploys `core/templates/project/pre-commit` to OliverCode, and `core/templates/project/pre-commit-private` to every repo in `privateRepos` in `olivercode.local.json`.
 
 The private variant drops the PII gate because a private repo holds personal data by design. `build-hooks.py` generates OliverCode's own hook and the two templates and never a variant repo's hook.
 
@@ -64,7 +64,7 @@ Inside Claude Code, `scripts/hooks/commit_guard.py` refuses `--no-verify` and `-
 
 ## Commit-message gate
 
-Git shows a commit message only to the `commit-msg` hook, so these checks are a hook of their own. The hook runs every check, prints every blocking finding together with a count and refuses once at the end. `olivercode commit-check FILE_OR_TEXT` runs the same checks on a draft message in the current repo, commits nothing, queues no card and logs no refusal, so a builder sees every finding before committing. Every repo that `sync-hooks`, `olivercode bootstrap` or `olivercode backlog-setup` manages gets the same one, and `conform` fails a repo whose `commit-msg` copy is missing or differs from the template.
+Git shows a commit message only to the `commit-msg` hook, so these checks are a hook of their own. The hook runs every check, prints every blocking finding together with a count and refuses once at the end. `olivercode commit-check FILE_OR_TEXT` runs the same checks on a draft message in the current repo, commits nothing, queues no card and logs no refusal, so a builder sees every finding before committing. Every repo that `sync-hooks`, `olivercode bootstrap` or `olivercode backlog-setup` manages gets the same one.
 
 | Gate | What it blocks |
 |------|---------------|
@@ -72,7 +72,7 @@ Git shows a commit message only to the `commit-msg` hook, so these checks are a 
 | Story exists | A reference to a story absent from its repo: `#N` is checked in the repo that `docs/backlog-config.json` names and `owner/repo#N` in the repo it spells out, through `gh api`. It fails open with a warning when `gh` or GitHub is unavailable, and a repo without the config skips it |
 | Test with code | A commit that changes any file outside a test path except documentation and data (such as `.md`, `.json`, `.csv`, `.html` and `LICENSE`) and changes no test, unless the message has a line `No test: <reason>` |
 | Co-author form | A `Co-Authored-By` line in any other form than `Co-Authored-By: Name <email>`, or a Claude co-author without Anthropic's noreply address. A commit with no co-author line passes |
-| Other repo names | In an OliverCode checkout only, a message that names a repo from the local registry. The hook says to write "another repo" instead. `log_action.py` and `complete_story.py` refuse the same text before they post, and `python3 scripts/lib/repo_name_guard.py --scan-issues` lists the issues that already name one |
+| Other repo names | In an OliverCode checkout only, a message that names another of the owner's repos, found as a git checkout directly under `repoRoot` or in `privateRepos` in `olivercode.local.json`. The hook says to write "another repo" instead. `log_action.py` and `complete_story.py` refuse the same text before they post, and `python3 scripts/lib/repo_name_guard.py --scan-issues` lists the issues that already name one |
 | Closes card | A message with `closes #N` or `resolves #N` queues Status Complete for that card through `batch_project.py`, and refuses the commit with the fix when the config or the backlog scripts are missing or the queue rejects the request. A bare `(#N)` queues nothing |
 | Voice (warning) | In a repo that ships `docs/VOICE.md`, a bullet that ends in a period or a contrast phrase such as "rather than" or "instead of" prints a warning. It never blocks and is not counted as a finding |
 
@@ -97,7 +97,7 @@ The daily `olivercode board groom --all`, which `maintain --fix` runs, reads the
 
 ## Engine-only check
 
-The engine-only check, `scripts/lib/engine_only.py`, keeps an OliverCode clone free of personal files. The commit gate runs it through `docs/SUITE-CHECKS.json` and refuses a staged config, filled-in registry, memory file, story, queue item or file that names a fleet repo, with a message that points at the private olivercode-fleet repo. `olivercode conform` runs the same check on the whole checkout and fails with the file and the fix
+The engine-only check, `scripts/lib/engine_only.py`, keeps an OliverCode clone free of personal files. The commit gate runs it through `docs/SUITE-CHECKS.json` and refuses a staged config, memory file, story, queue item or file that names another of the owner's repos, with a message that points at a private repo. Validation runs the same check on the whole checkout and fails with the file and the fix
 
 ## Rename check
 

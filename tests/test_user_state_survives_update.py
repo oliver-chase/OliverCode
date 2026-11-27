@@ -14,7 +14,7 @@ from test_update_keeps_local_learning import Checkout, git, write
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "skills" / "audit" / "scripts"))
 import audit_mode  # noqa: E402
-from lib import local_config, repo_profiles  # noqa: E402
+from lib import local_config  # noqa: E402
 
 USER_FILES = ("olivercode.local.json", "shared/repo-profiles.local.json", "docs/backlog-config.local.json")
 
@@ -54,7 +54,7 @@ class UntrackedFilesDoNotBlockTheUpdate(WithIgnore):
         write(self.clone, "notes.txt", "mine")
         self.release("skills/shipped/SKILL.md", "shipped v2")
         code, calls, out = self.update()
-        self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]), out)
+        self.assertEqual((code, calls), (0, ["install", "sync-hooks"]), out)
         self.assertEqual((self.clone / "skills" / "shipped" / "SKILL.md").read_text(), "shipped v2")
         self.assertEqual((self.clone / "notes.txt").read_text(), "mine")
         settings = json.loads((self.clone / "olivercode.local.json").read_text())
@@ -81,7 +81,7 @@ class AUserWhoCannotPushIsNotToldToPush(Checkout):
         subprocess.run(fix, shell=True, check=True, capture_output=True, env={**os.environ, **{"GIT_CONFIG_GLOBAL": os.devnull}})
         self.assertEqual(git(self.clone, "rev-parse", "olivercode-local"), mine)
         code, calls, out = self.update()
-        self.assertEqual((code, calls), (0, ["install", "sync-hooks", "conform"]), out)
+        self.assertEqual((code, calls), (0, ["install", "sync-hooks"]), out)
 
 
 class AReleaseAddsADefault(unittest.TestCase):
@@ -108,18 +108,9 @@ class TrackedConfigIsNotUserConfig(unittest.TestCase):
         (repo / "docs" / "backlog-config.json").unlink()
         self.assertEqual(local_config.backlog_config(repo)["repoOwner"], "me")
 
-    def test_a_fork_registers_its_fleet_in_the_ignored_local_registry(self):
-        fork = temp_dir(self)
-        write(fork, "shared/repo-profiles.json", '{"profiles": {}}')
-        self.assertEqual(repo_profiles.registry_write_file(fork), fork / "shared" / "repo-profiles.local.json")
-        write(fork, "shared/repo-profiles.local.json", '{"profiles": {"mine": {}}}')
-        self.assertEqual(repo_profiles.load_repo_profiles(fork)[0], {"mine": {}})
-
     def test_no_tracked_config_holds_a_user_value(self):
-        profiles = json.loads((REPO_ROOT / "shared" / "repo-profiles.json").read_text())
-        self.assertEqual(profiles["profiles"], {}, "shared/repo-profiles.json names a user's repos")
         example = json.loads((REPO_ROOT / "olivercode.local.example.json").read_text())
-        paths = [example["skillsRoot"], *example["privateRepos"].values(), *example["repoPaths"].values(),
+        paths = [example["skillsRoot"], *example["privateRepos"].values(),
                  *example["liveCopies"].keys(), *example["liveCopies"].values()]
         self.assertTrue(all("path/" in p for p in paths), paths)
         backlog = json.loads((REPO_ROOT / "shared" / "backlog-config.example.json").read_text())

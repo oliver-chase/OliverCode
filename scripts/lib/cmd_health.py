@@ -10,15 +10,13 @@ from pathlib import Path
 from lib import claude_settings as _claude_settings
 from lib import queue_shim as _queue_shim
 from lib.health_checks import (
-    _check_activation_links, _check_managed_hooks_only, _check_fleet_locations, _check_memory, _check_commits_behind, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
-    _check_placement_drift, _check_vault_skill_links, _check_python, _check_launcher, _check_path_checkout, _check_gh_version, _check_gh_auth, _check_sleep, _check_worktree_hooks, _check_clean_clone_suite, _check_fleet_repo, _check_state_folder,
+    _check_activation_links, _check_managed_hooks_only, _check_stopped_hooks, _check_memory, _check_commits_behind, _check_oversized_tracked, _check_remotes_resolve, _check_voice_copies,
+    _check_placement_drift, _check_vault_skill_links, _check_python, _check_launcher, _check_path_checkout, _check_gh_version, _check_gh_auth, _check_sleep, _check_worktree_hooks, _check_clean_clone_suite, _check_state_folder,
 )
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 from lib.local_config import private_repos as _private_repos
 from lib.local_config import skills_root as _skills_root
 from lib import repo_state as _repo_state
-from lib.repo_profiles import iter_fleet as _iter_fleet
-from lib.repo_profiles import load_repo_profiles
 
 
 def _placement_root() -> Path:
@@ -76,10 +74,9 @@ class _HealthTally:
         return f"HEALTHY — {self.passed} checks passed"
 
 
-def command_health(fleet_root: Path | None = None) -> int:
+def command_health() -> int:
     """Run health checks on this machine's setup: Claude Code hooks, control plane, skill links, remotes.
 
-    What a repo must match is `command_conform`'s job (docs/CONTRACT.md).
     """
     print("OliverCode Health Check")
     print("=" * 40)
@@ -135,7 +132,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     if behind:
         t.warn(f"this checkout is {behind} commit(s) behind origin/main and {state}. `olivercode maintain --fix` fast-forwards a clean one")
     from lib import main_checkout
-    for repo in [OC_ROOT, *(p for _n, _pr, p in _iter_fleet(load_repo_profiles(OC_ROOT)[0], fleet_root or OC_ROOT.parent))]:
+    for repo in [OC_ROOT, *_private_repos().values()]:
         for line in main_checkout.drift(repo):
             t.warn(line)
 
@@ -164,7 +161,7 @@ def command_health(fleet_root: Path | None = None) -> int:
                     t.fail(f"{rel} — not found")
 
     # 3. Placement drift (spec: docs/RULES.md "Skill placement").
-    # Everything here reads OUTSIDE OC_ROOT (private repos, sibling fleet repos), so it
+    # Everything here reads OUTSIDE OC_ROOT (private repos), so it
     # must degrade to WARN, never FAIL, when that context isn't present — a standalone
     # clone with no private repos around it is still a valid, healthy checkout.
     passed, failed, skipped = _check_placement_drift(OC_ROOT)
@@ -189,7 +186,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     # Permission policy and the context budget (lib/policy.py, lib/context_budget.py).
     print("\nPolicy and context budget:")
     from lib import context_budget, policy
-    gaps = [r for r in [OC_ROOT, *(p for _n, _pr, p in _iter_fleet(load_repo_profiles(OC_ROOT)[0], fleet_root or OC_ROOT.parent))]
+    gaps = [r for r in [OC_ROOT, *_private_repos().values()]
             if (r / ".git").exists() and not (r / policy.POLICY_FILE).is_file()]
     for r in gaps:
         t.warn(f"{r.name} has no permission policy, so no command or path is limited. Run `olivercode policy init {r}` for the default")
@@ -205,7 +202,7 @@ def command_health(fleet_root: Path | None = None) -> int:
     t.add(*_check_memory(OC_ROOT))
     t.add(*_check_commits_behind(OC_ROOT))
     t.add(*_check_clean_clone_suite())
-    t.add(*_check_fleet_repo())
+    t.add(*_check_stopped_hooks(OC_ROOT, _private_repos()))
     t.add(*_check_state_folder())
 
     print("\nActivation links:")
@@ -243,15 +240,9 @@ def command_health(fleet_root: Path | None = None) -> int:
         t.ok(f"every board was groomed within {cmd_groom.STALE_HOURS} hours")
 
     # Repos to check for remote reachability and oversized files: the private repos,
-    # this framework repo, and every fleet repo that exists on disk.
+    # and this framework repo.
     topo_repos: list[tuple[str, Path]] = [(n, p) for n, p in _private_repos().items() if (p / ".git").exists() and not _repo_state.skipped(n, p)]
     topo_repos.append((OC_ROOT.name, OC_ROOT))
-    _profiles, _ = load_repo_profiles(OC_ROOT)
-    for name, _profile, repo_path in _iter_fleet(_profiles, fleet_root or OC_ROOT.parent):
-        if repo_path.is_dir():
-            topo_repos.append((name, repo_path))
-
-    t.add(*_check_fleet_locations(_profiles, fleet_root or OC_ROOT.parent))
     t.add(*_check_oversized_tracked(topo_repos))
     t.add(*_check_remotes_resolve(topo_repos))
 

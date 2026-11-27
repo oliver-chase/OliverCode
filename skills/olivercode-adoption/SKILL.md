@@ -1,6 +1,6 @@
 ---
 name: olivercode-adoption
-description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set up OliverCode', 'onboard my repos', 'point my CLAUDE.md files at OliverCode'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, register the fleet, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
+description: "Use when adopting OliverCode into a machine the user forked or cloned. Triggers: 'set up OliverCode', 'onboard my repos', 'point my CLAUDE.md files at OliverCode'. Also use when a fresh OliverCode checkout needs to get running. Walks the whole install: discover what exists, classify it, install activation, list the repos, install enforcement, prove the gates block. Works for a clean machine or a messy existing setup. Optimizes and points. Never amputates."
 ---
 
 # OliverCode adoption
@@ -42,9 +42,9 @@ The whole adoption. Most setups tangle all three in one file.
 - *cannot classify* → leave it exactly where it is and say so
 Present as a table with your proposed bucket per item. Get agreement before moving anything.
 
-**2. Which repos are in the fleet?**
+**2. Which repos are live?**
 `discover` lists what exists. Only the user knows which repos are live, which they retired, and
-which they do not want governed. Do not register a repo they did not confirm.
+which they do not want governed. Do not name a repo they did not confirm.
 
 ## What you discover and the user confirms
 
@@ -59,7 +59,7 @@ Follow `docs/SETUP.md` Steps 0 to 8 in order, from the OliverCode checkout. It h
 - **Step 2, install.** Run `olivercode install --show-allow` first and show the user the proposed allow rules with the one line each says it permits. Ask once: "Add these rules to your allow list?" On a yes, install writes them, and on a no, run install and tell the user that `olivercode health` will fail until they are added. Run it only after the user sees decision 1, because their existing `~/.claude/CLAUDE.md` is often their whole ruleset. `install` makes its own backup, so never copy one first
 - **Step 3, merge rules.** Every path added to the fork's `CLAUDE.md` must resolve from any directory, so write OliverCode's own files as `$OC/...`
 - **Step 4, repo `CLAUDE.md` files.** Run `ls` on every path you leave in the file, because an agent silently proceeds past a pointer that does not resolve. Never invent repo content: when a file has none left, say so and ask
-- **Step 5, register.** Run `olivercode init-fleet` first and tell the user the new private repo it reports, then add each repo's confirmed validation command
+- **Step 5, find the repos.** Run `olivercode discover --root DIR`, name each private repo in `privateRepos`, and note each repo's confirmed validation command
 - **Step 6, enforcement.** Tell the user plainly when hook enforcement fails open (`docs/GATES.md`), and point at `docs/SETUP.md` ("Troubleshooting")
 - **Step 6c, board sync.** A new board needs no web toggles. Filing a story adds its card, and closing it sets Status to Complete. Run `olivercode board sync --schedule` so the sweep keeps every board in step with its issues. On Linux it prints the crontab line to add and exits 1, because launchd needs macOS
 - **Step 7, proof.** Quote the probe's actual output. A commit that succeeds means the hooks are not installed

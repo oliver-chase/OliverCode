@@ -364,11 +364,6 @@ class TestOtherDevice(unittest.TestCase):
         os.environ["OLIVERCODE_LOCAL_CONFIG"] = str(local)
         self.addCleanup(lambda: os.environ.__setitem__("OLIVERCODE_LOCAL_CONFIG", old) if old is not None else os.environ.pop("OLIVERCODE_LOCAL_CONFIG"))
 
-    def test_the_fleet_walk_skips_a_listed_repo_and_keeps_the_others(self):
-        from lib import repo_profiles
-        names = [n for n, _p, _path in repo_profiles.iter_fleet({"work-assets": {}, "mine": {}}, self.root)]
-        self.assertEqual(["mine"], names)
-
     def test_a_clone_by_name_or_owner_is_found_by_health_with_its_fix(self):
         by_name = scratch_repo(self.root / "work-assets")
         by_owner = scratch_repo(self.root / "thing")

@@ -1,4 +1,4 @@
-"""Topology checks: a moved repo, a remote that no longer exists and a tracked file over GitHub's size limit.
+"""Topology checks: a remote that no longer exists and a tracked file over GitHub's size limit.
 
 The gates cover the content of a commit. These checks read outside the framework repo, so each degrades to WARN
 when that context is absent and a standalone clone stays HEALTHY. `health_checks.py` re-exports them for `cmd_health.py`.
@@ -10,30 +10,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from lib.repo_profiles import configured_location, iter_fleet
-
 GITHUB_FILE_LIMIT = 100 * 1024 * 1024
-
-
-def _check_fleet_locations(profiles: dict, fleet_root: Path) -> tuple[int, int, int]:
-    """A registered repo that has a configured location but no repo there has moved, and that is a FAIL.
-
-    Without this a moved repo dropped out of every later check and the report still read healthy.
-    A repo with no configured location was never cloned on this machine, which is only a note.
-    """
-    print("\nFleet repo locations:")
-    passed = failed = 0
-    for name, profile, path in iter_fleet(profiles, fleet_root):
-        if (path / ".git").exists():
-            passed += 1
-            continue
-        where = configured_location(name, profile)
-        if where is None:
-            print(f"  [INFO] {name} is not cloned on this machine")
-            continue
-        print(f"  [FAIL] {name}: no repo at {path}. Update {where}")
-        failed += 1
-    return passed, failed, 0
 
 
 def _check_remotes_resolve(repos: list[tuple[str, Path]]) -> tuple[int, int, int]:

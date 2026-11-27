@@ -1,4 +1,4 @@
-"""The main checkout of a fleet repo holds only landed work (#664).
+"""The main checkout of OliverCode or a private repo holds only landed work (#664).
 
 `reason` is the pretool guard: an edit or commit in the main checkout is refused. `drift` is the check `olivercode health` and the
 nightly job run: it names a main checkout that is ahead of origin, mid-rebase or holds conflict markers, each with its fix.
@@ -11,8 +11,7 @@ from pathlib import Path
 
 from lib import update_state
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")  # the tools that change a file
-from lib.local_config import OC_ROOT
-from lib.repo_profiles import iter_fleet, load_repo_profiles
+from lib.local_config import OC_ROOT, private_repos
 
 MARKERS = r"^(<<<<<<<|>>>>>>>) "
 
@@ -22,12 +21,11 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def fleet_roots() -> list[Path]:
-    profiles = load_repo_profiles(OC_ROOT)[0]
-    return [OC_ROOT.resolve(), *(p.resolve() for _n, _pr, p in iter_fleet(profiles, OC_ROOT.parent, skip_archived=False))]
+    return [OC_ROOT.resolve(), *(p.resolve() for p in private_repos().values())]
 
 
 def is_main_checkout(root: Path | None) -> bool:
-    """A fleet repo's own checkout, not one of its linked worktrees."""
+    """The own checkout of OliverCode or a private repo, not one of its linked worktrees."""
     return bool(root) and (root / ".git").is_dir() and root.resolve() in fleet_roots()
 
 
@@ -46,7 +44,7 @@ def _shell_writes(command: str, cwd: Path) -> list[Path]:
 
 
 def reason(data: dict) -> str:
-    """The refusal for an edit or commit made in the main checkout of a fleet repo, or an empty string."""
+    """The refusal for an edit or commit made in the main checkout of OliverCode or a private repo, or an empty string."""
     import commit_guard
     import repo_gates
     tool_input = data.get("tool_input") or {}

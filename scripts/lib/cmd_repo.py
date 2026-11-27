@@ -8,9 +8,8 @@ import subprocess
 from pathlib import Path
 
 from lib.cli import reject_extra as _reject_extra
-from lib import repo_gates, repo_profiles, repo_state
+from lib import repo_gates, repo_state
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
-from lib.repo_profiles import REGISTRY_NAME, registry_file, registry_write_file
 
 
 def _report_claude_dir(oc_root: Path) -> None:
@@ -93,17 +92,15 @@ def _git_entries(root: Path):
             yield Path(here) / ".git"
 
 
-def command_discover(oc_root: Path, roots: list[Path], register: bool = False) -> int:
+def command_discover(oc_root: Path, roots: list[Path]) -> int:
     """Find git repos under the given roots and report what governance they already have.
 
     Adoption docs assume you know where your repos are. Someone folding this into an
     existing, un-tidy setup often does not: repos spread over several directories,
     agent-rules files under three different names, hooks installed in some places and
-    not others. This is the inventory step made mechanical. It changes no repo. Without
-    --register it prints a profile per repo, and with it writes each repo that is not yet
-    registered into the registry, with the validation command the repo itself names.
+    not others. This is the inventory step made mechanical. It changes no repo.
     """
-    print("OliverCode discover — " + ("scan and register" if register else "read-only scan"))
+    print("OliverCode discover — read-only scan")
     print("=" * 40)
     found: list[tuple[str, Path, str, str]] = []
     for root in roots:
@@ -135,36 +132,7 @@ def command_discover(oc_root: Path, roots: list[Path], register: bool = False) -
     print("auto-load in Claude Code — merge them into CLAUDE.md (docs/SETUP.md Step 4).")
 
     _report_claude_dir(oc_root)
-    skeleton = {
-        name: {"name": name, "path": str(repo), "canonicalValidationCommand": _validation_command(repo)}
-        for name, repo, _, _ in found
-    }
-    path = registry_file(oc_root)
-    if not register:
-        print(f"\nProfiles for {registry_write_file(oc_root)}. Run again with --register to add the new ones there:\n")
-        print(json.dumps(skeleton, indent=2))
-        return 0
-    tracked = Path(oc_root) / "shared" / REGISTRY_NAME
-    path = registry_write_file(oc_root)
-    source = path if path.is_file() else tracked
-    data = json.loads(source.read_text()) if source.is_file() else {"profiles": {}}
-    profiles = data.setdefault("profiles", {})
-    added = [name for name in skeleton if name not in profiles]
-    for name in added:
-        profiles[name] = skeleton[name]
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    os.chmod(path, 0o600)
-    print(f"\nRegistered {len(added)} repo(s) in {path}: {', '.join(added) or 'none new'}.")
-    unknown = [n for n in added if profiles[n]["canonicalValidationCommand"] == "<command>"]
-    if unknown:
-        print(f"Set canonicalValidationCommand by hand for: {', '.join(unknown)}. Nothing in those repos names one.")
-    print("Next: `olivercode conform` checks each registered repo.")
     return 0
-
-
-def _validation_command(repo: Path) -> str:
-    """The validation command a repo names itself, found by the detector conform and fleet-sync share (lib/repo_profiles.py)."""
-    return repo_profiles.validation_command(repo) or "<command>"
 
 
 def repo_visibility(slug: tuple[str, str] | None) -> tuple[str, str]:

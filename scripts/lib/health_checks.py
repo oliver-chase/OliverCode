@@ -1,6 +1,6 @@
 """Health checks: vault skill links, voice and design copies, placement drift, memory, version, Python and launcher.
 
-`health_topology.py` holds the fleet-location, remote and oversized-file checks, and this file re-exports them. `cmd_health.py` imports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
+`health_topology.py` holds the remote and oversized-file checks, and this file re-exports them. `cmd_health.py` imports these names. Every check returns (passed, failed, skipped) for the launcher's tally.
 """
 
 from __future__ import annotations
@@ -19,11 +19,12 @@ from lib import failure_log
 from lib.cli import MIN_PYTHON, MIN_PYTHON_TEXT, PYTHON_FIX, gh_problem, python_version
 from lib.local_config import claude_dir as _claude_dir
 from lib.limits import LIMITS_FILE
-from lib.local_config import OC_ROOT, design_file, fleet_registry_path
+from lib import repo_gates, repo_profiles
+from lib.local_config import OC_ROOT, design_file
 
 from lib.skill_links import broken_links, link_states
 from lib.skills_catalog import skill_dirs
-from lib.health_topology import _check_fleet_locations, _check_oversized_tracked, _check_remotes_resolve  # noqa: E401,F401
+from lib.health_topology import _check_oversized_tracked, _check_remotes_resolve  # noqa: E401,F401
 
 
 def _check_vault_skill_links(skills_root: Path | None, oc_skills: Path | None = None) -> tuple[int, int, int]:
@@ -441,19 +442,32 @@ def _check_state_folder(home: Path | None = None, limits: dict | None = None) ->
     return 1, 0, 0
 
 
-def _check_fleet_repo(dest: Path | None = None) -> tuple[int, int, int]:
-    """The fleet folder holds the registry and owner rules, and it must be a git repo (#993). Health only reads: a loose folder fails
-    and names the command that makes it a repo."""
-    dest = dest or fleet_registry_path().parent
-    print("\nFleet repo:")
-    if not (dest / "repo-profiles.json").exists():
-        print("  [INFO] no fleet folder here yet; `olivercode install` makes one")
-        return 0, 0, 1
-    if not (dest / ".git").exists():
-        print(f"  [FAIL] {dest} is a loose folder, not a git repo; run `git -C {dest} init` and commit its files")
-        return 0, 1, 0
-    print(f"  [OK] {dest} is a git repo")
-    return 1, 0, 0
+def stopped_hook(repo: Path, oc_root: Path = OC_ROOT, private: bool = False) -> str:
+    """Why git runs none of the repo's commit gates, or "" when it runs them. A repo that runs its own hooks folder passes."""
+    if repo_profiles.own_hooks_path(repo):
+        return ""
+    if repo.resolve() == oc_root.resolve():
+        return repo_gates.gate_problem(repo)
+    return "; ".join(repo_gates.hook_problems(repo, repo_gates.hook_templates(oc_root), private))
+
+
+def _check_stopped_hooks(oc_root: Path, private: dict[str, Path]) -> tuple[int, int, int]:
+    """Fail OliverCode and each private repo whose git runs no gates, such as an unset core.hooksPath, and name the fix (#1286)."""
+    print("\nCommit hooks:")
+    passed = failed = 0
+    for name, path in [(oc_root.name, oc_root), *private.items()]:
+        if not (path / ".git").exists():
+            continue
+        why = stopped_hook(path, oc_root, private=path != oc_root)
+        if why:
+            fix = repo_gates.fix_command(path) if path == oc_root else "olivercode sync-hooks --commit --story N"
+            print(f"  [FAIL] {name}: {why}. Fix: {fix}")
+            failed += 1
+        else:
+            passed += 1
+    if passed and not failed:
+        print(f"  [OK] git runs the gates in {passed} repo(s)")
+    return passed, failed, 0
 
 
 def _check_python() -> tuple[int, int, int]:

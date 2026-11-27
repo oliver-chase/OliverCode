@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 
 from lib.local_config import OC_ROOT, backlog_config
-from lib.repo_profiles import iter_fleet, load_repo_profiles
 
 
 def _verify(config: Path) -> None:
@@ -22,13 +21,8 @@ def _verify(config: Path) -> None:
 
 
 def boards() -> list[tuple[str, Path]]:
-    """(name, backlog config) for OliverCode and every cloned fleet repo whose board has a config, one per Project."""
+    """(name, backlog config) for OliverCode, when its board has a config, one per Project."""
     repos = [("OliverCode", OC_ROOT)]
-    try:
-        profiles, _ = load_repo_profiles(OC_ROOT)
-        repos += [(name, path) for name, _, path in iter_fleet(profiles, OC_ROOT.parent) if (path / ".git").exists()]
-    except (OSError, ValueError):
-        pass
     found, seen = [], set()
     for name, path in repos:
         config = path / "docs" / "backlog-config.json"
