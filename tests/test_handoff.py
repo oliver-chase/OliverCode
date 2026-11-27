@@ -64,6 +64,13 @@ class Handoff(unittest.TestCase):
     def test_read_with_no_handoff_says_so(self):
         self.assertEqual(1, self.run_cmd("read", "OliverCode")[0])
 
+    def test_with_no_folder_set_the_handoff_folder_is_the_working_directory(self):
+        os.environ.pop("OLIVERCODE_HANDOFF_DIR")
+        cwd = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, cwd)
+        self.assertEqual(self.tmp.resolve(), cmd_handoff.handoff_dir().resolve())
+
     def test_a_folder_that_looks_like_a_handoff_is_untouched(self):
         folder = self.folder / "OliverCode-handoff-2026-11-26.md"
         folder.mkdir()

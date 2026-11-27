@@ -24,7 +24,7 @@ FENCED_RE = re.compile(r"\s*(?:\$\s*)?olivercode\s+(drain|dispatch)\b(.*)")  # a
 
 
 def handoff_dir() -> Path:
-    return Path(os.environ.get("OLIVERCODE_HANDOFF_DIR") or "~/Desktop/Claude").expanduser()
+    return Path(os.environ.get("OLIVERCODE_HANDOFF_DIR") or Path.cwd()).expanduser()
 
 
 def handoffs(project: str, folder: Path) -> list[Path]:
