@@ -19,7 +19,10 @@ def fleet_root(environ=None):
 
 
 FLEET_ROOT = fleet_root()
-TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.(?:test|spec)\.[^/]*$")
+ACCEPTED_FILE = "docs/AUDIT-ACCEPTED.md"
+# One `Accepted: <kind> <where> - <reason>` row; a quoted where may hold a space. A row with no reason after the dash does not count.
+ACCEPTED = re.compile(r"^Accepted:[ \t]*(\S+)[ \t]+(\"[^\"]*\"|\S+)[ \t]+-[ \t]*\S", re.M)
+TEST =re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.[^/]*$|\.(?:test|spec)\.[^/]*$")
 
 
 def is_test(rel):
@@ -84,6 +87,11 @@ def read(repo, rel):
         return (Path(repo) / rel).read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         return ""
+
+
+def accepted(repo):
+    """{(kind, where)} of the accepted rows in the repo's accepted-rows file: the findings the owner decided to keep."""
+    return {(k, w.strip('"')) for k, w in ACCEPTED.findall(read(repo, ACCEPTED_FILE))}
 
 
 def git(repo, *args):

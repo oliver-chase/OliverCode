@@ -18,12 +18,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _fleet import FLEET_ROOT, validation_command
+from _fleet import FLEET_ROOT, accepted, validation_command
 
 HERE = Path(__file__).resolve().parent
 # "personal" counts only with its reason after a dash or colon.
 VERDICT = re.compile(r"^\W*Sharing:\W*\s*(portable\b|personal(?=[ \t]*[-:\u2013\u2014][ \t]*\S))", re.I | re.M)
-ACCEPTED = re.compile(r"^Accepted:[ \t]*(\S+)[ \t]+(\"[^\"]*\"|\S+)[ \t]+-[ \t]*\S", re.M)  # a row without its reason does not count
 ROW = re.compile(r"^([a-z-]+)\s+(\"[^\"]*\"|\S+)")
 PERSONAL_BLOCKERS = {"secret-file", "history-secret"}
 HYGIENE = FLEET_ROOT / "backlog" / "scripts" / "check_board_hygiene.py"
@@ -34,11 +33,6 @@ PROGRAM = "program"  # an open issue of a fleet program tracked on its own epic,
 def sh(cmd, cwd):
     done = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True, text=True)
     return done.returncode, done.stdout + done.stderr
-
-
-def accepted(repo):
-    f = Path(repo) / "docs" / "AUDIT-ACCEPTED.md"
-    return {(k, w.strip('"')) for k, w in ACCEPTED.findall(f.read_text(encoding="utf-8"))} if f.exists() else set()
 
 
 def rows(output):

@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-from _fleet import git, read, scan_root, tracked
+from _fleet import ACCEPTED_FILE, accepted, git, read, scan_root, tracked
 
 SECRET_NAME = re.compile(r"(^|/)(\.env(?!\.[^/]*(example|sample|template)$)(\.[^/]+)?|id_rsa(?![^/]*\.pub$)[^/]*|[^/]*\.(pem|key|p12)|([^/]*[-_.])?(token|credentials)s?([-_.][^/]*)?\.json)$", re.I)
 HOME = re.compile(r"/(?:Users|home)/([A-Za-z0-9._-]+)/")
@@ -31,7 +31,6 @@ SECRET_VALUE = r"(api[_-]?key|secret|token|passw(or)?d)[\"']?[ ]*[:=][ ]*[\"']?[
 PERSONAL = re.compile(r"Apple (Notes|Photos|Reminders)|iCloud|Obsidian|Instagram|personal vault|\bmy (family|kids|health|finances)\b", re.I)
 QUIET = {"LICENSE", "LICENSE.md", "CHANGELOG.md", "AUTHORS", ".mailmap", "COPYING"}
 # done_check.py reads the accepted rows from this file, so it names each accepted address by design.
-ACCEPTED_FILE = "docs/AUDIT-ACCEPTED.md"
 
 
 def identities(repo):
@@ -69,8 +68,8 @@ def scan(repo):
     shas = git(repo, "log", "--all", "-E", "-i", "-G", SECRET_VALUE, "--format=%h").split()
     if shas:
         where = f"{len(shas)}-commits"
-        kept = re.search(rf"^Accepted:[ \t]*history-secret[ \t]+{where}[ \t]+-[ \t]*\S", texts.get(ACCEPTED_FILE, ""), re.M)
-        detail = "accepted in docs/AUDIT-ACCEPTED.md" if kept else "a diff changes a secret-shaped value; revoke it first, then decide on a history rewrite"
+        kept = ("history-secret", where) in accepted(repo)
+        detail = f"accepted in {ACCEPTED_FILE}" if kept else "a diff changes a secret-shaped value; revoke it first, then decide on a history rewrite"
         rows.append(("history-secret", where, detail))
     names = {Path(f).name for f in files}
     if not any(n.startswith(("LICENSE", "COPYING")) for n in names):
