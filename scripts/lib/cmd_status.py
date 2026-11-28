@@ -268,10 +268,12 @@ def parked_rows(log: list[dict], repo: str = "", since: float = 0.0) -> list[dic
 
 
 def parked_line(row: dict) -> str:
-    """'#7 in repo: parked (its Files area names 6 files, more than 5). Split into #8, #9.' from a parked row (#1502)."""
+    """'#7 Fix the gate in repo: parked (its Files area names 6 files, more than 5). Split into #8, #9.' from a parked row, on one line (#1502, #1505).
+    A row logged with no title names the story by its number."""
     into = ", ".join(f"#{n}" for n in row.get("into") or [])
     tail = f" {'Split into' if row.get('split') else 'Stories filed from it:'} {into}." if into else ""
-    return f"#{str(row.get('story')).rsplit('-', 1)[-1]} in {row.get('repo')}: parked ({row.get('reason', '')}).{tail}"
+    title = f" {_text(row['title'], 90)}" if row.get("title") else ""
+    return f"#{str(row.get('story')).rsplit('-', 1)[-1]}{title} in {row.get('repo')}: parked ({_text(row.get('reason'), 300)}).{tail}"
 
 
 def _restarting(rows: list[dict]) -> bool:
@@ -465,8 +467,8 @@ def landed_today(log: list[dict], now: float) -> list[dict]:
 
 
 def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]:
-    """The Building and Landed today sections for this machine, read from the claims, the run log, the process table, the run lock and the digest (#1334).
-    A run log that cannot be read is named as unknown, and nothing is guessed from it."""
+    """The Building and Landed today sections for this machine, read from the claims, the run log, the process table, the run lock and the digest (#1334),
+    then a Parked section when a story was parked in the last DAYS days (#1505). A run log that cannot be read is named as unknown, and nothing is guessed from it."""
     stamp = now.timestamp()
     try:
         log = run_log()
@@ -483,7 +485,7 @@ def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]
     ended = [r for r in log if r.get("stage") == "run-end"]
     lines = ["Building:"] + building + ([f"Next Ready: {ready}."] if ready else []) + warnings
     parked = [parked_line(r) for r in parked_rows(log, since=stamp - DAYS * 86400)]
-    return lines + ["", "Landed today:"] + landed + ([run_end_line(ended[-1])] if ended else []) + ([""] + [f"Parked or split in the last {DAYS} days:"] + parked if parked else [])
+    return lines + ["", "Landed today:"] + landed + ([run_end_line(ended[-1])] if ended else []) + (["", "Parked:"] + parked if parked else [])
 
 
 def pace_lines(now: datetime, open_now: int | None, rows: list[dict] | None, slug: str) -> list[str]:

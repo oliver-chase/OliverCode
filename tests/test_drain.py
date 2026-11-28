@@ -1707,7 +1707,7 @@ class SplitStories(unittest.TestCase):
         self.assertIn("state_reason=not_planned", self.closes()[0])
         self.assertIn("Split into #8, #9", self.io.said[1])
         self.assertEqual([(1, "Backlog"), (1, "Complete")], self.cards)
-        self.assertEqual([([8, 9], True)], [(r["into"], r["split"]) for r in self.parked()])
+        self.assertEqual([([8, 9], True, "Story 1")], [(r["into"], r["split"], r["title"]) for r in self.parked()])
 
     def test_a_split_that_does_not_finish_leaves_the_parent_open_in_backlog_with_the_reason(self):
         for filed, text, code, body, why in (([], "It holds one fix.", 0, SIX, "did not finish: It holds one fix."), ([], "SPLIT DONE", 0, SIX, "filed 0 stories"),

@@ -408,6 +408,35 @@ class TestOwnerZone(unittest.TestCase):
         self.assertEqual("No drain is running.", lines[-1])
 
 
+class TestParked(unittest.TestCase):
+    """#1505: status and watch name each parked story, its title and the reason on one line."""
+
+    def parked(self, reason="the fresh reader held an earlier build"):
+        return dict(stage("story-7", "parked", "11:00"), reason=reason, title="Fix the gate", into=[], split=False)
+
+    def page(self, log):
+        out = io.StringIO()
+        with mock.patch.object(cmd_status, "run_log", return_value=log), mock.patch.object(cmd_status, "live_claims", return_value={}), \
+                mock.patch.object(cmd_status, "runner_alive", return_value=False), mock.patch.object(cmd_status, "digest_path", return_value=Path("/none")):
+            cmd_status.run("o/r", count=lambda s, state: 1, fetch=lambda s, since: [], now=NOW, out=lambda t: out.write(t + "\n"), waiting=lambda: [])
+        return out.getvalue()
+
+    def test_status_names_a_parked_story_its_title_and_its_reason_in_a_parked_section(self):
+        text = self.page([self.parked("bundled; not split: the splitting session did not finish:\nIt holds\none fix.")])
+        self.assertIn("\nParked:\n#7 Fix the gate in r: parked (bundled; not split: the splitting session did not finish: It holds one fix.).\n", text)
+
+    def test_status_prints_no_parked_section_when_nothing_is_parked(self):
+        self.assertNotIn("Parked", self.page([stage("story-7", "claimed", "09:00"), stage("story-7", "landed", "09:10")]))
+
+    def test_watch_prints_one_line_naming_a_story_as_it_is_parked_and_its_reason(self):
+        log, lines = [], []
+        with mock.patch.object(cmd_status, "run_log", side_effect=lambda: list(log)), mock.patch.object(cmd_status, "live_claims", return_value={}), \
+                mock.patch.object(cmd_status, "digest_path", return_value=Path("/none")), mock.patch.object(cmd_status.run_lock, "active", return_value={}), \
+                mock.patch("lib.cmd_drain.resolve_repo", return_value=Path("/x/r")), mock.patch("lib.cmd_drain.slug_of", return_value="o/r"):
+            cmd_status.command_watch(["r"], sleep=lambda s: None if log else log.append(self.parked()), out=lines.append, alive=lambda: False)
+        self.assertEqual(["06:00 EST #7 Fix the gate in r: parked (the fresh reader held an earlier build)."], [l for l in lines if "#7" in l])
+
+
 class TestWatchUntilExit(unittest.TestCase):
     """#1490: `watch REPO --until-exit` prints nothing while the drain runs and one line when it ends."""
 

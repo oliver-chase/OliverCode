@@ -423,7 +423,7 @@ class Io:
                 self.set_card(n, {"status": "Done" if "Done" in lanes else "Complete"})
         if problem:
             self.comment(n, f"{PARK}{why}. Not split: {problem}. It stays in Backlog and is not built." + (f" Filed from it: {named}." if named else ""))
-        agent_loop.log_stage(story, self.repo.name, "parked", reason=f"{why}; not split: {problem}" if problem else why, into=numbers, split=not problem)
+        agent_loop.log_stage(story, self.repo.name, "parked", reason=f"{why}; not split: {problem}" if problem else why, into=numbers, split=not problem, title=issue.get("title", ""))
         return {"into": numbers, "problem": problem, "tokens": tokens}
 
     def config_path(self) -> Path:
