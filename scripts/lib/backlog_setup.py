@@ -134,9 +134,9 @@ def hooks_dir_for(target: Path) -> tuple[Path, bool]:
     return (path if path.is_absolute() else target / path), not configured
 
 
-def commit_msg_problem(target: Path, oc_root: Path) -> str:
+def commit_msg_problem(target: Path, templates: Path) -> str:
     """Why the repo's commit-msg hook would not run or differs from the template, or "" when it is right."""
-    template = repo_gates.hook_templates(oc_root) / "commit-msg"
+    template = templates / "commit-msg"
     hooks, _ = hooks_dir_for(target)
     hook = hooks / "commit-msg"
     if not hook.is_file():
@@ -258,10 +258,11 @@ def _run_setup(target, apply, api, oc_root, out) -> int:
 
     # 4. Hook
     hooks, unset = hooks_dir_for(target)
-    if commit_msg_problem(target, oc_root):
+    templates = repo_gates.hook_templates(oc_root)
+    if commit_msg_problem(target, templates):
         changes.append(f"install the story-reference commit-msg hook in {hooks}")
         if apply:
-            deploy_hook(hooks, repo_gates.hook_templates(oc_root), "commit-msg")
+            deploy_hook(hooks, templates, "commit-msg")
     if unset:
         changes.append("set core.hooksPath to .githooks")
         if apply:
@@ -348,13 +349,14 @@ def boards_health(repos: list[tuple[str, Path]], api: Api, oc_root: Path = OC_RO
     """Per repo: does its board match the baseline and, with `check_hook`, does it carry the commit-msg hook. Lists the fix."""
     passed = failed = skipped = 0
     seen: set[Path] = set()
+    templates = repo_gates.hook_templates(oc_root) if check_hook else None
     for name, path in repos:
         if Path(path).resolve() in seen:
             continue
         seen.add(Path(path).resolve())
         fix = FIX.format(path=path)
         status, problems = board_status(path, api, oc_root)
-        hook = commit_msg_problem(path, oc_root) if check_hook else ""
+        hook = commit_msg_problem(path, templates) if check_hook else ""
         optout = (hooks_dir_for(path)[0] / "commit-msg.optout").exists()
         if status == "ok" and (not hook or optout):
             out(f"  [OK] {name}: board matches the baseline" + (", commit-msg hook present" if check_hook else ""))

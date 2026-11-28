@@ -11,6 +11,7 @@ import itertools
 import json
 import re
 import unittest
+from unittest import mock
 
 from _support import REPO_ROOT, git, load_script, scratch_repo, temp_dir
 
@@ -226,7 +227,7 @@ class TestNewRepo(SetupCase):
 
     def test_apply_installs_the_hook(self):
         self.run_setup()
-        self.assertEqual("", backlog_setup.commit_msg_problem(self.repo, REPO_ROOT))
+        self.assertEqual("", backlog_setup.commit_msg_problem(self.repo, backlog_setup.repo_gates.hook_templates(REPO_ROOT)))
         self.assertEqual(".githooks", git(self.repo, "config", "--get", "core.hooksPath").stdout.strip())
 
     def test_a_second_run_changes_nothing_and_says_so(self):
@@ -453,6 +454,13 @@ class TestHealth(SetupCase):
         self.run_setup()
         (passed, failed, skipped), text = self.health()
         self.assertEqual((1, 0, 0), (passed, failed, skipped))
+
+    def test_the_hooks_are_built_once_for_many_repos(self):
+        self.run_setup()
+        repos = [("a", self.repo), ("b", self.repo / "b"), ("c", self.repo / "c")]
+        with mock.patch.object(backlog_setup.repo_gates, "hook_templates", wraps=backlog_setup.repo_gates.hook_templates) as built:
+            backlog_setup.boards_health(repos, backlog_setup.Api(self.fake.runner), REPO_ROOT, out=lambda _: None)
+        built.assert_called_once()
 
     def test_an_unreadable_board_is_a_warning(self):
         self.run_setup()
