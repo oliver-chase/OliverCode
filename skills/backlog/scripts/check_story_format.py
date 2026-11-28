@@ -14,6 +14,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from lib import intake  # noqa: E402  the land gate's reader of the Removes tests line (#1540)
+
 STORY_SENTENCE = re.compile(r"\bAs (?:the|an?)\s+[^,\n]+?,?\s+I want\s+.+?,\s*so that\s+\S", re.I | re.S)
 EPIC_LINE = re.compile(r"^\s*Epic:\s*(?:[\w.-]+/[\w.-]+)?#\d+\s*$", re.M)
 BLOCKER_LINE = re.compile(r"^\s*(?:[-*]\s*)?Blocked by:\s*(?:none\b|(?:[\w.-]+/[\w.-]+)?#\d+)", re.I | re.M)
@@ -184,6 +187,12 @@ def size_problems(body, size, title=""):
     return problems
 
 
+def removes_form_problems(body):
+    """(part, fix) for each Removes tests entry without "::", which the land gate drops without a word (#1540)."""
+    return [(f"Removes tests entry \"{t}\" has no file", "write it as FILE.py::test_a_thing, or FILE.py::Class::test_a_thing")
+            for line in intake.REMOVES.findall(body) for t in intake._tokens(line) if "::" not in t]
+
+
 def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False, root=None, files=False, fit=False, title=""):
     """Return a list of (missing part, fix) for the body. An empty list means it is complete.
 
@@ -241,6 +250,7 @@ def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False
         problems.append(("Files area", "add a `Files area:` line naming the files the story changes, not a folder, as in " + TEMPLATE))
     if kind == "Story":
         problems += size_problems(body, s.group(1).upper() if s else "", title)
+    problems += removes_form_problems(body)
     for entry in files_of(body):
         if entry.endswith("/") or (root is not None and (Path(root) / entry).is_dir()):
             problems.append((f"Files area names the folder {entry}",

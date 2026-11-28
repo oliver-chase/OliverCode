@@ -157,6 +157,25 @@ class StorySize(unittest.TestCase):
         self.assertIn("scripts/lib/a.py", part)
         self.assertIn("remove the tests in their own story", fix)
 
+    def test_a_removes_tests_entry_without_a_file_is_refused_with_the_form(self):
+        alone = body("story-good.body").replace("Files area: skills/backlog/scripts/check_story_format.py",
+                                                "Removes tests: test_a_thing\nFiles area: tests/test_x.py")
+        [(part, fix)] = sf.check_body(alone)
+        self.assertEqual('Removes tests entry "test_a_thing" has no file', part)
+        self.assertEqual("write it as FILE.py::test_a_thing, or FILE.py::Class::test_a_thing", fix)
+
+    def test_entries_in_the_land_gates_form_pass_the_removes_check(self):
+        line = "Removes tests: tests/test_x.py::Thing::test_a, tests/test_x.py::test_b\nFiles area: tests/test_x.py"
+        alone = body("story-good.body").replace("Files area: skills/backlog/scripts/check_story_format.py", line)
+        self.assertEqual([], sf.check_body(alone))
+
+    def test_the_removes_check_splits_entries_as_the_land_gate_does(self):
+        from lib import intake
+        self.assertIs(sf.intake, intake)
+        line = "**Removes tests:** `tests/test_x.py::test_a`, bare_name, (tests/test_x.py::test_b)\nFiles area: tests/test_x.py"
+        alone = body("story-good.body").replace("Files area: skills/backlog/scripts/check_story_format.py", line)
+        self.assertEqual(["bare_name"], [p.split('"')[1] for p, _ in sf.check_body(alone) if p.startswith("Removes tests entry")])
+
     def test_the_template_story_passes_every_check_the_command_runs(self):
         example = re.findall(r"````markdown\n(.*?)````", TEMPLATE.read_text(encoding="utf-8"), re.S)[0]
         self.assertEqual([], sf.check_body(example, blocker=True, line_numbers=True, files=True, fit=True))
