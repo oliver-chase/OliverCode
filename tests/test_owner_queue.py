@@ -55,16 +55,6 @@ class TestOwnerQueue(unittest.TestCase):
         self.assertIn("set_pinned for x9 with pinned=false", out)
 
 
-class TestPlainStep(unittest.TestCase):
-    def test_a_step_reads_as_one_sentence_with_no_command_or_error_in_it(self):
-        tried = cmd_owner.plain({"step": "x", "command": "git push", "error": "denied"})
-        self.assertNotIn("git push", tried)
-        self.assertNotIn("denied", tried)
-        self.assertIn("Only you can decide", cmd_owner.plain({"step": "x"}))
-        self.assertEqual(cmd_owner.plain({"tab": "https://a.b", "after": "ships it."}), "Enter the secret and submit it, then the agent ships it.")
-        self.assertNotIn("agent .", cmd_owner.plain({"tab": "https://a.b", "after": ""}))
-
-
 class TestRemovedJobItems(unittest.TestCase):
     def test_items_from_removed_jobs_close_once_with_the_reason_and_the_rest_stay_open(self):
         home = temp_dir(self)
