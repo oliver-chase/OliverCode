@@ -318,6 +318,15 @@ class TestDigest(unittest.TestCase):
         self.assertIn("Benchmark: 21 minutes and $0.14 (API-price yardstick, not spend)", line)
         self.assertIn("Ceiling: $1.00 (API-price yardstick, not spend)", line)
 
+    def test_a_landing_with_no_recorded_cost_leaves_the_size_median_cost_as_it_was(self):
+        """#1533: a chat build's rows hold no price."""
+        log = [r for n in range(5) for r in self.sized(n, "XS")]
+        for n in range(5, 11):
+            rows = self.sized(n, "XS")
+            del rows[2]["cost_usd"]
+            log += rows
+        self.assertIn("$0.10 (API-price equivalent, not billed)", cmd_status.size_lines(log, NOW.timestamp())[0])
+
     def test_a_size_without_a_ceiling_shows_none(self):
         line = cmd_status.size_lines([r for n in range(5) for r in self.sized(n, "L")], NOW.timestamp())[0]
         self.assertNotIn("Ceiling", line)

@@ -74,6 +74,26 @@ class TestCityCost(unittest.TestCase):
         extra = {c for m in mine for c in m.split()} - theirs
         self.assertEqual(extra, set(), "the Cost section uses classes its mockup section lacks")
 
+    def unpriced(self, n, size):
+        rows = stages(n, size, 0, model="opus")
+        del rows[1]["cost_usd"]
+        return rows
+
+    def test_a_landing_with_no_recorded_cost_leaves_every_cost_figure_as_it_was(self):
+        """#1533: a chat build's rows hold tokens and no price."""
+        page = city_cost.render({"log": LOG + self.unpriced(8, "XL") + self.unpriced(9, "S")})
+        for part in ("rounds cost $3.60, or $1.20 for each landed story", "$3.60 over 3 landings", "Sonnet did 50% of the rounds and 89% of the spend.",
+                     'aria-label="S: median $0.40, highest $0.40, limit $2.00"'):
+            self.assertIn(part, page)
+        for part in ("Opus", 'aria-label="XL:', "<b>$0.00</b>"):
+            self.assertNotIn(part, page)
+
+    def test_a_log_with_only_unpriced_rounds_says_no_cost_is_recorded_and_still_shows_tokens(self):
+        page = city_cost.render({"log": self.unpriced(9, "L")})
+        for part in ("No round in the run log has a cost recorded.", "No round has a cost recorded.", "No landed story has a cost recorded.", "Read from cache"):
+            self.assertIn(part, page)
+        self.assertNotIn("$0.00", page)
+
     def test_a_missing_log_or_empty_log_says_so(self):
         self.assertIn("could not be read", city_cost.render({"log": None}))
         self.assertIn("No round is recorded", city_cost.render({"log": []}))

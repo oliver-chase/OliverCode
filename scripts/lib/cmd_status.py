@@ -155,8 +155,13 @@ def _story_rows(log: list[dict], story: str, upto: str = "") -> list[dict]:
     return rows[max((i for i, r in enumerate(rows) if r.get("stage") == "claimed"), default=0):]
 
 
+def priced(rows: list[dict]) -> list[dict]:
+    """The rows in ROWS that record a cost. A chat build's token rows hold none (#1533), so no cost figure counts them as free."""
+    return [r for r in rows if r.get("cost_usd") is not None]
+
+
 def _cost(rows: list[dict]) -> float:
-    return sum(float(r.get("cost_usd") or 0) for r in rows if "round" in r)
+    return sum(float(r["cost_usd"]) for r in priced(rows) if "round" in r)
 
 
 def _tokens(rows: list[dict]) -> int:
@@ -451,7 +456,7 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
             continue
         by_size.setdefault(claimed["size"], []).append({
             "minutes": (_epoch(rows[-1].get("at")) - _epoch(claimed.get("at"))) / 60, "rounds": sum(1 for r in rows if "round" in r and "stage" not in r),
-            "cost": _cost(rows), "tokens": _tokens(rows), "first": sum(1 for r in rows if r.get("stage") == "validating") <= 1})
+            "cost": _cost(rows), "priced": bool(priced(rows)), "tokens": _tokens(rows), "first": sum(1 for r in rows if r.get("stage") == "validating") <= 1})
     lines = []
     for size in sorted(by_size, key=lambda k: ["XS", "S", "M", "L", "XL"].index(k) if k in ("XS", "S", "M", "L", "XL") else 9):
         found = by_size[size]
@@ -459,11 +464,12 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
             lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days, too few to compare.")
             continue
         bench = BENCHMARKS.get(size)
+        costs = [f["cost"] for f in found if f["priced"]]
         against = f" Benchmark: {bench[0]} minutes and ${bench[1]:.2f} ({YARDSTICK_NOTE})." if bench else " No benchmark is set for this size."
         ceiling = f" Ceiling: ${agent_loop.COST_CEILING[size]:.2f} ({YARDSTICK_NOTE})." if size in agent_loop.COST_CEILING else ""
         lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days. Median {median([f['minutes'] for f in found]):.1f} minutes, "
                      f"{median([f['rounds'] for f in found]):g} rounds, "
-                     f"{spend_words(median([f['tokens'] for f in found]), median([f['cost'] for f in found])) or 'no tokens or cost recorded'}, "
+                     f"{spend_words(median([f['tokens'] for f in found]), median(costs) if costs else 0) or 'no tokens or cost recorded'}, "
                      f"{round(100 * sum(f['first'] for f in found) / len(found))}% passed validation first time.{against}{ceiling}")
     return lines
 

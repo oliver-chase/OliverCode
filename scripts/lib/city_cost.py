@@ -32,11 +32,12 @@ def spend(rows: list[dict]) -> float:
 
 
 def landed_stories(log: list[dict]) -> list[dict]:
-    """Each landed story as {story, size, cost}: its cost is its rounds between the claim and the landing, reader reviews included."""
+    """Each landed story that records a cost, as {story, size, cost}: its cost is its rounds between the claim and the landing, reader reviews included."""
     found = []
     for row in cmd_status.landings(log):
-        claimed = cmd_status._story_rows(log, row["story"], upto="landed")[0]
-        found.append({"story": row["story"], "size": claimed.get("size") or "", "cost": row["cost"]})
+        rows = cmd_status._story_rows(log, row["story"], upto="landed")
+        if cmd_status.priced(rows):
+            found.append({"story": row["story"], "size": rows[0].get("size") or "", "cost": row["cost"]})
     return found
 
 
@@ -80,7 +81,7 @@ def tiles(rows: list[dict], landed: list[dict], kinds: dict, share: float | None
         story = tile("Cost per landed story", money(average), pct(average, limit), f"{money(sum(costs))} over {len(costs)} landings",
                      f"Against the {money(limit)} M limit. The median landed story cost {money(cmd_status.median(costs))}.", mark=True)
     else:
-        story = tile("Cost per landed story", "not recorded", 0, "No story has landed.", "")
+        story = tile("Cost per landed story", "not recorded", 0, "No landed story has a cost recorded.", "")
     cache = tile("Cache share", f"{share:.1f}%" if share is not None else "not recorded", share or 0, "Higher is cheaper",
                  f"{kinds['Read from cache']:,} tokens were read from cache.")
     worst = []
@@ -95,8 +96,10 @@ def tiles(rows: list[dict], landed: list[dict], kinds: dict, share: float | None
     else:
         ceiling = tile("Highest story against its limit", "not recorded", 0, "No landed story has a limit to measure against.", "")
     per_round = {m: spend(rs) / len(rs) for m, rs in by_model_rows(rows).items()}
-    each = spend(rows) / len(rows)
-    if len(per_round) > 1:
+    each = spend(rows) / len(rows) if rows else 0
+    if not rows:
+        rounded = tile("Cost per round", "not recorded", 0, "No round has a cost recorded.", "")
+    elif len(per_round) > 1:
         priciest, cheapest = max(per_round, key=per_round.get), min(per_round, key=per_round.get)
         rounded = tile("Cost per round", money(each), pct(each, per_round[priciest]), f"Against {priciest.title()} at {money(per_round[priciest])}",
                        f"{cheapest.title()} rounds cost {money(per_round[cheapest])} each.", mark=True)
@@ -107,6 +110,8 @@ def tiles(rows: list[dict], landed: list[dict], kinds: dict, share: float | None
 
 def by_model(rows: list[dict]) -> str:
     """Each model's share of the rounds and of the spend, as two bars and a key."""
+    if not rows:
+        return card("Spend and rounds by model", '<p class="mean">No round has a cost recorded.</p>')
     models = sorted(by_model_rows(rows).items(), key=lambda kv: -spend(kv[1]))
     total, count = spend(rows), len(rows)
     most, most_rounds = max(models, key=lambda kv: len(kv[1]))
@@ -140,7 +145,7 @@ def by_size(landed: list[dict]) -> str:
                      f'<span class="base"></span><span class="rng" style="left:{place(median, scale)};width:{100 * (top - median) / scale:.1f}%"></span>'
                      f'<span class="med" style="left:{place(median, scale)}"></span><span class="hi" style="left:{place(top, scale)}"></span>{marks}'
                      f'<small style="left:{place(median, scale)}">{money(median)}</small><small style="left:{place(top, scale)}">{money(top)}</small></div></div>')
-    body = "".join(lanes) or '<p class="mean">No landed story has a size recorded.</p>'
+    body = "".join(lanes) or '<p class="mean">No landed story has both a size and a cost recorded.</p>'
     lead = f'<p class="mean">{esc("; ".join(leads))}.</p>' if leads else ""
     keys = ('<div class="keys"><span><span class="sw" style="background:var(--ink);border-radius:50%"></span>Median</span>'
             '<span><span class="sw" style="background:#fff;box-shadow:inset 0 0 0 2px var(--ink);border-radius:50%"></span>Highest</span>'
@@ -185,7 +190,7 @@ def tokens(rows: list[dict], kinds: dict, share: float | None) -> str:
 def priciest(landed: list[dict]) -> str:
     top = sorted(landed, key=lambda s: -s["cost"])[:SHOWN_STORIES]
     if not top:
-        return card("Most expensive landed stories", '<p class="mean">No story has landed.</p>')
+        return card("Most expensive landed stories", '<p class="mean">No landed story has a cost recorded.</p>')
     lead = f"The most expensive landed story cost {money(top[0]['cost'])}, review included."
     lines = "".join(f'<div class="row"><span class="n">#{esc(s["story"].rsplit("-", 1)[-1])}</span><span class="t">{esc(s["size"] or "size not recorded")}</span>'
                     f'<b>{money(s["cost"])}</b></div>' for s in top)
@@ -226,11 +231,12 @@ def render(data: dict) -> str:
     if not rows:
         return head + '<p class="mean">No round is recorded in the run log yet.</p>' + github_budget() + "</section>"
     landed = landed_stories(log)
-    total = spend(rows)
+    paid = cmd_status.priced(rows)  # every cost figure reads these, and the token figures read every round
     kinds, share = token_kinds(rows)
     costs = [s["cost"] for s in landed]
-    lead = f"The run log's rounds cost {money(total)}" + (f", or {money(sum(costs) / len(costs))} for each landed story" if costs else "") + "."
+    lead = (f"The run log's rounds cost {money(spend(paid))}" + (f", or {money(sum(costs) / len(costs))} for each landed story" if costs else "") + "."
+            if paid else "No round in the run log has a cost recorded.")
     if share is not None:
         lead += f" Caching kept it low: {share:.1f}% of tokens came from cache."
-    return (head + f'<p class="read">{esc(lead)}</p><div class="tiles">{tiles(rows, landed, kinds, share)}</div>'
-            f'<div class="grid2">{by_model(rows)}{by_size(landed)}{routes(rows)}{tokens(rows, kinds, share)}{priciest(landed)}{github_budget()}</div></section>')
+    return (head + f'<p class="read">{esc(lead)}</p><div class="tiles">{tiles(paid, landed, kinds, share)}</div>'
+            f'<div class="grid2">{by_model(paid)}{by_size(landed)}{routes(rows)}{tokens(rows, kinds, share)}{priciest(landed)}{github_budget()}</div></section>')

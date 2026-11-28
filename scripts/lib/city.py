@@ -479,7 +479,8 @@ def lede(data: dict) -> str:
         parts = ["Delivery and Cost are unknown, because the run log could not be read."]
     else:
         spent = sum(r["cost"] or 0 for r in landed)
-        headline = f"{len(landed)} landed today for {money(spent)}, and {len(data['steps'])} waiting on you."
+        paid = f" for {money(spent)}" if spent or not landed else ""  # a day of unpriced landings names no figure (#1533)
+        headline = f"{len(landed)} landed today{paid}, and {len(data['steps'])} waiting on you."
         parts = [f"Delivery: {landed_week(log, now.timestamp())} landed in the last {cmd_status.DAYS} days."]
         costs, share = landed_costs(log), city_cost.token_kinds(city_cost.rounds(log))[1]
         cost = f"Cost: {money(sum(costs) / len(costs))} a landed story" if costs else "Cost: no landed story has a cost recorded"

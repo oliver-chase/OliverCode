@@ -386,13 +386,15 @@ class TestLandChatTelemetry(Base):
             usage = {"input_tokens": n, "output_tokens": 2, "cache_read_input_tokens": 3, "cache_creation_input_tokens": 4}
             return json.dumps({"type": "assistant", "timestamp": at, "message": {"id": mid, "model": model, "usage": usage}})
         (projects / "sess.jsonl").write_text(line("a", "lead-model", 10) + "\n" + line("a", "lead-model", 10) + "\n")
-        (projects / "sess" / "subagents" / "agent-1.jsonl").write_text(line("b", "sub-model", 7) + "\n")
+        (projects / "sess" / "subagents" / "workflows" / "wf_1").mkdir(parents=True)
+        (projects / "sess" / "subagents" / "workflows" / "wf_1" / "agent-1.jsonl").write_text(line("b", "sub-model", 7) + "\n")
         p = mock.patch.object(usage_sessions, "transcript", return_value=projects / "sess.jsonl"); p.start(); self.addCleanup(p.stop)
 
     def rows(self):
         return [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()] if (self.home / "run-log.jsonl").exists() else []
 
     def test_a_session_landing_writes_claimed_thread_subagent_and_landed_rows_with_no_cost(self):
+        began = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(cmd_land._began(self.wt)))  # read before landing removes the worktree
         with mock.patch.object(cmd_land.time, "time", side_effect=lambda r=time.time: r() + 10):
             code, _ = quiet(cmd_land.command_land, [str(self.wt), "9", "--session", "sess"])
         self.assertEqual(0, code)
@@ -400,10 +402,20 @@ class TestLandChatTelemetry(Base):
         self.assertEqual(["claimed", None, None, "landed"], [r.get("stage") for r in rows])
         self.assertEqual(["thread", "thread", "subagent", "thread"], [usage_sessions.runner(r) for r in rows])
         self.assertEqual("S", rows[0]["size"])
+        self.assertEqual(began, rows[0]["at"])
+        self.assertLess(rows[0]["at"], rows[-1]["at"])
         thread, sub = rows[1], rows[2]
         self.assertEqual((10, 2, 3, 4, "lead-model"), tuple(thread[k] for k in ("input", "output", "cache_read", "cache_write", "model")))
         self.assertEqual((7, "sub-model"), (sub["input"], sub["model"]))
         self.assertTrue(all("round" in r and "cost_usd" not in r for r in (thread, sub)))
+
+    def test_the_window_starts_at_the_first_reflog_entry_and_not_at_its_commits_date(self):
+        with mock.patch.dict(os.environ, {"GIT_COMMITTER_DATE": "2020-01-01T00:00:00Z"}):
+            git(self.wt, "commit", "-q", "--allow-empty", "-m", "an old base (#9)")
+        old = self.root / "later"
+        before = int(time.time())
+        git(self.wt, "worktree", "add", "-q", "--detach", str(old), "HEAD")
+        self.assertGreaterEqual(cmd_land._began(old), before)
 
     def test_a_landing_with_no_session_writes_no_token_rows(self):
         self.assertEqual(0, self.land()[0])

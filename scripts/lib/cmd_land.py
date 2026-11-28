@@ -470,25 +470,29 @@ def _claim(lock: Path):
         yield ""
 
 
+def _stamp(at: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(at))
+
+
 def log_chat_build(wt: Path, story: str, session: str, size: str, began: float) -> None:
     """Write a chat build's run-log rows (#1533): claimed, the lead thread's tokens, one row per subagent transcript, and landed, from BEGAN (the branch's first reflog entry) to now.
     The rows carry no cost_usd, since a transcript holds no price, and a `round` so status counts their tokens."""
     key, repo, end = f"story-{story}", _repo_name(wt), time.time()
     agent_loop.STORY_SIZE[key] = size
-    agent_loop.log_stage(key, repo, "claimed", runner="thread")
+    agent_loop.log_stage(key, repo, "claimed", runner="thread", at=_stamp(began))  # the claim is when the window began, so time to land is not zero
     lead = usage_sessions.transcript(session)
     if lead:
-        for runner, path in [("thread", lead), *(("subagent", p) for p in sorted((lead.parent / session / "subagents").glob("*.jsonl")))]:
+        for runner, path in [("thread", lead), *(("subagent", p) for p in sorted((lead.parent / session / "subagents").rglob("*.jsonl")))]:  # a workflow's agents sit a folder deeper
             tokens = usage_sessions.usage_between(path, began, end)
             if tokens["model"]:
-                agent_loop.append_run_log({"story": key, "repo": repo, "runner": runner, "round": 1, "size": size, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(end)), **tokens})
+                agent_loop.append_run_log({"story": key, "repo": repo, "runner": runner, "round": 1, "size": size, "at": _stamp(end), **tokens})
     agent_loop.log_stage(key, repo, "landed", started_at=began, runner="thread")
 
 
 def _began(wt: Path) -> float:
     """When the worktree's branch got its first reflog entry, as epoch seconds; now when it has none."""
-    stamps = gitfiles.run(wt, "reflog", "show", "--format=%ct", "HEAD").stdout.split()
-    return float(stamps[-1]) if stamps else time.time()
+    entries = gitfiles.run(wt, "reflog", "show", "--date=unix", "--format=%gd", "HEAD").stdout.split()  # HEAD@{seconds}: the entry's own time, not its commit's
+    return float(entries[-1].partition("{")[2].rstrip("}")) if entries else time.time()
 
 
 def command_land(argv: list[str]) -> int:
