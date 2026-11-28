@@ -332,7 +332,7 @@ class Io:
 
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names, and the
-        model is the one the brief names (#1015), with a small story getting a third round (#890)."""
+        model is the one the brief names (#1015)."""
         n, size = issue["number"], intake.size_of(issue)
         extras = "".join(part + "\n" for part in (cmd_dispatch.file_excerpts(issue.get("body") or "", worktree)) if part)
         brief = cmd_dispatch.headless_brief(n, issue, self.agent, worktree, extras, note="\n".join(filter(None, (note, self.resumed.get(n, "")))))  # a restart keeps the resume note and its finding (#1474)
@@ -348,8 +348,7 @@ class Io:
                 self.blame(tail)
             return passed, tail
 
-        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, check=check,
-                                   rounds=agent_loop.MAX_ROUNDS + (1 if size in intake.SMALL else 0), review_mode=review, repo=self.repo.name)
+        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, check=check, review_mode=review, repo=self.repo.name)
 
     def blame(self, tail: str) -> None:
         """Raise when a failed validation is not the story's own: it calls a command that is gone (#1480), or the base, validated now, fails with the same failing line (#1481)."""
@@ -567,7 +566,7 @@ class Io:
         if size:
             agent_loop.STORY_SIZE[f"story-{n}"] = size
         agent_loop.STORY_SLUG[f"story-{n}"] = self.slug
-        agent_loop.SPEND[f"story-{n}"] = agent_loop.logged_spend(f"story-{n}", self.slug)  # the ceiling covers what earlier drains spent (#1481)
+        agent_loop.SPEND[f"story-{n}"] = agent_loop.logged_spend(f"story-{n}", self.slug)  # the backstop covers what earlier drains spent (#1481)
         agent_loop.log_stage(f"story-{n}", self.repo.name, "claimed")
         if gh_budget.refusal() or gh_budget.reserve_write(lane="drain"):
             cfg = backlog_config(self.repo)
@@ -755,7 +754,7 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
             io.comment(n, f"Drain stopped: {out['reason']}")
             notify("Paused at the Claude usage limit. Picks up when it resets.")
             return False, tokens
-        if out.get("capped"):  # the story spent its size's ceiling, so no restart; the stopped row takes this comment as its reason (#1318)
+        if out.get("capped"):  # the story spent the backstop, so no restart; the stopped row takes this comment as its reason (#1318, #1513)
             io.comment(n, f"Drain stopped: {out['reason']}")
             return False, tokens
         if out.get("fatal"):  # a reason a restart cannot fix blocks the story and starts no new session (#1012)

@@ -395,13 +395,13 @@ class DrainCase(unittest.TestCase):
         self.assertIn("usage limit", io.comments[0][1])
         self.assertIn("Drain stopped for the usage limit", out)
 
-    def test_a_story_at_its_ceiling_starts_no_restart_and_keeps_the_spend_in_its_comment(self):  # #1318
-        capped = {"done": False, "capped": True, "reason": "Spend $0.60 reached the ceiling of $0.50 for a XS story, so no further round starts."}
+    def test_a_story_at_the_backstop_starts_no_restart_and_keeps_the_spend_in_its_comment(self):  # #1318
+        capped = {"done": False, "capped": True, "reason": "Spend $12.10 reached the backstop of $12.00, so no further round starts."}
         io = FakeIo([issue(1)], builds={1: [capped]})
         _, _, st = self.run_drain(io)
         self.assertEqual((io.started, io.kept, st["blocked"]), ([1], [1], [1]))
-        self.assertIn("$0.60", io.comments[0][1])
-        self.assertIn("$0.50", io.comments[0][1])
+        self.assertIn("$12.10", io.comments[0][1])
+        self.assertIn("$12.00", io.comments[0][1])
 
     def test_restarts_an_early_exit_then_lands(self):
         io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "claude exited 1"}]})
@@ -958,11 +958,11 @@ class TestRealIo(unittest.TestCase):
         self.assertIn("never commit a partial story as finished", seen["brief"])
         self.assertNotIn("olivercode land WORKTREE", seen["brief"])
 
-    def test_the_model_follows_the_story_size_and_a_small_story_gets_a_third_round(self):
-        for size, labels, model_name, rounds in (("XS", [], "haiku", 3), ("L", [], "sonnet", 2), ("M", ["design"], "opus", 2)):
+    def test_the_model_follows_the_story_size(self):
+        for size, labels, model_name in (("XS", [], "haiku"), ("L", [], "sonnet"), ("M", ["design"], "opus")):
             with mock.patch.object(cmd_drain.agent_loop, "run_loop", return_value={"done": True}) as run_loop:
                 self.io.build(issue(7, f"Do it.\nSize: {size}", labels=labels), Path("/wt/7"), "")
-            self.assertEqual((model_name, rounds), (run_loop.call_args.kwargs["model_name"], run_loop.call_args.kwargs["rounds"]), size)
+            self.assertEqual(model_name, run_loop.call_args.kwargs["model_name"], size)
 
     def test_the_claimed_row_and_each_round_row_carry_the_board_size(self):
         """#1301: the claim registers the story's size, so its claimed row and its round rows carry it."""
@@ -1412,7 +1412,7 @@ BROKEN = "FAIL: tests/test_machine.py"
 
 
 class NotTheStorysFailure(unittest.TestCase):
-    """#1481: a failure the base shares costs the story nothing, and its ceiling covers what earlier drains spent."""
+    """#1481: a failure the base shares costs the story nothing, and its backstop covers what earlier drains spent."""
 
     def setUp(self):
         self.home = temp_dir(self)
@@ -1428,11 +1428,12 @@ class NotTheStorysFailure(unittest.TestCase):
         self.io = cmd_drain.Io(self.repo, "o/r")
 
     def build(self, base):
-        """Story 5's real build with each validation failing on BROKEN and the base check answering `base`. Returns (outcome or error, models, base calls)."""
-        models, calls = [], []
+        """Story 5's real build with each validation failing on BROKEN and the base check answering `base`. The output changes for three rounds and then repeats.
+        Returns (outcome or error, models, base calls)."""
+        models, calls, gates = [], [], iter("abcc")
         reply = {"code": 0, "text": "done", "tokens": 1, "session_id": ""}
         with mock.patch.object(cmd_drain.agent_loop.model, "run_cli", lambda *a, **k: models.append(k["model"]) or reply), \
-                mock.patch.object(cmd_drain.agent_loop, "validate", return_value=(False, f"gate\n{BROKEN}\n")), \
+                mock.patch.object(cmd_drain.agent_loop, "validate", lambda cwd: (False, f"gate {next(gates)}\n{BROKEN}\n")), \
                 mock.patch.object(self.io, "base_failure", lambda fresh=False: calls.append(fresh) or base):
             try:
                 out, _ = quiet(self.io.build, issue(5, "Size: S"), self.repo, "")
@@ -1448,7 +1449,7 @@ class NotTheStorysFailure(unittest.TestCase):
     def test_a_base_that_passes_or_fails_differently_counts_the_failure_and_steps_up(self):
         for base in ("", "FAIL: another gate"):
             out, models, calls = self.build(base)
-            self.assertEqual((False, 3, 3), (out["done"], out["rounds"], len(calls)), base)
+            self.assertEqual((False, 4, 4), (out["done"], out["rounds"], len(calls)), base)
             self.assertNotEqual(models[0], models[-1], base)
 
     def test_the_story_is_held_with_the_reason_and_is_neither_restarted_nor_blocked(self):
@@ -1557,8 +1558,8 @@ class NotTheStorysFailure(unittest.TestCase):
                 mock.patch.object(cmd_drain.agent_loop, "validate_code", return_value=(1, f"gate\n{BROKEN}")):
             self.assertEqual(("", BROKEN), (self.io.base_failure(), self.io.base_failure(fresh=True)))
 
-    def test_a_new_drain_starts_a_storys_ceiling_from_what_the_run_log_says_it_spent(self):
-        rows = [{"story": "story-5", "round": 1, "cost_usd": 1.50, "slug": "o/r"}, {"story": "story-5-review", "round": 1, "cost_usd": 0.20, "slug": "o/r"},
+    def test_a_new_drain_starts_a_storys_backstop_from_what_the_run_log_says_it_spent(self):
+        rows = [{"story": "story-5", "round": 1, "cost_usd": 11.50, "slug": "o/r"}, {"story": "story-5-review", "round": 1, "cost_usd": 0.20, "slug": "o/r"},
                 {"story": "story-5", "round": 2, "cost_usd": 0.10},  # a row from before rows named their repo
                 {"story": "story-5", "round": 3, "cost_usd": None, "slug": "o/r"}, {"story": "story-5-review", "round": 1, "cost_usd": 9.0, "slug": "o/r", "reader_failed": True},
                 {"story": "story-5", "round": 1, "cost_usd": 9.0, "slug": "o/other"},
@@ -1566,16 +1567,16 @@ class NotTheStorysFailure(unittest.TestCase):
         (self.home / "run-log.jsonl.1").write_text(json.dumps(rows[0]) + "\n")
         (self.home / "run-log.jsonl").write_text("not json\n" + "".join(json.dumps(r) + "\n" for r in rows[1:]))
         self.io.claim(5, "S")
-        self.assertAlmostEqual(1.80, cmd_drain.agent_loop.SPEND["story-5"])
+        self.assertAlmostEqual(11.80, cmd_drain.agent_loop.SPEND["story-5"])
         sessions = []
         reply = {"code": 0, "text": "done", "tokens": 1, "session_id": "", "cost_usd": 0.25}
         with mock.patch.object(cmd_drain.agent_loop.model, "run_cli", lambda *a, **k: sessions.append(1) or reply), \
                 mock.patch.object(cmd_drain.agent_loop, "validate", return_value=(False, "own failure")), mock.patch.object(self.io, "base_failure", return_value=""):
             out, _ = quiet(self.io.build, issue(5, "Size: S", size="S"), self.repo, "")
-        self.assertEqual((True, 1), (out["capped"], len(sessions)))  # $1.80 is under $2.00, and one round takes it past
-        self.assertIn("$2.05", out["reason"])
+        self.assertEqual((True, 1), (out["capped"], len(sessions)))  # $11.80 is under $12.00, and one round takes it past
+        self.assertIn("$12.05", out["reason"])
         self.io.claim(5, "S")  # the next drain reads the row that round wrote
-        self.assertAlmostEqual(2.05, cmd_drain.agent_loop.SPEND["story-5"])
+        self.assertAlmostEqual(12.05, cmd_drain.agent_loop.SPEND["story-5"])
 
 
 class Remembering(FakeIo):

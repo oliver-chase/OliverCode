@@ -69,7 +69,6 @@ WAIT_LINE = re.compile(r"\b(?:wait\w*|until|after|once|data|window)\b", re.I)
 WAIT_DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 WAIT_SPAN = re.compile(r"\b(\d+)[- ]days?\s+(?:of\s+)?(?:data|window|wait)|\bwait\w*\s+(?:for\s+)?(\d+)\s+days?\b", re.I)
 WAIT_DAYS = 14
-SMALL = ("XS", "S")
 
 
 def _tokens(text: str) -> list[str]:

@@ -84,7 +84,7 @@ class TestValidateOnce(unittest.TestCase):
     def test_every_story_validates_whatever_its_review(self):
         for mode in ("none", "full"):
             with self.subTest(mode=mode), mock.patch.object(agent_loop, "validate", return_value=(False, "bad")) as check:
-                agent_loop.run_loop("do it", self.repo, "s1", run=Scripted(reply("built")), say=lambda *_: None, rounds=1, review_mode=mode)
+                agent_loop.run_loop("do it", self.repo, "s1", run=Scripted(reply("built"), model.ModelError("stop")), say=lambda *_: None, review_mode=mode)
             check.assert_called_once_with(str(self.repo))
 
 
@@ -284,29 +284,78 @@ class TestLoop(unittest.TestCase):
         checks = iter(results)
         return agent_loop.run_loop("do it", self.repo, "s1", run=run, check=lambda cwd: next(checks), say=lambda *_: None, **kw)
 
-    def test_a_story_at_its_sizes_ceiling_starts_no_further_round_and_one_under_it_fixes(self):  # #1318
-        for key in ("s1",):
-            self.addCleanup(agent_loop.STORY_SIZE.pop, key, None)
-            self.addCleanup(agent_loop.SPEND.pop, key, None)
-        agent_loop.STORY_SIZE["s1"] = "XS"
-        costly = {**reply(), "cost_usd": 0.60}
-        agent = Scripted(costly, costly)
-        out = self.loop(agent, [(False, "fail"), (False, "fail")], rounds=3)
-        self.assertEqual(2, len(agent.prompts))  # $0.60 is under $1.00, so the fix round ran
-        self.assertTrue(out["capped"])  # $1.20 has reached it
-        self.assertIn("$1.20", out["reason"])
-        self.assertIn("$1.00", out["reason"])
+    def test_each_changed_failure_starts_another_fix_session_on_the_same_worktree(self):  # #1513
+        seen, replies = [], [reply() for _ in range(5)]
 
-    def test_an_s_story_under_its_ceiling_fixes_and_an_m_story_past_its_ceiling_stops(self):  # #1491
-        self.assertEqual({"XS": 1.00, "S": 2.00, "M": 4.00}, agent_loop.COST_CEILING)
-        self.addCleanup(agent_loop.STORY_SIZE.pop, "s1", None)
+        def run(prompt, cwd, **kw):
+            seen.append(cwd)
+            return replies.pop(0)
+
+        out = self.loop(run, [(False, "a"), (False, "b"), (False, "a"), (False, "c"), (True, "")], review_mode="none")
+        self.assertEqual((True, 5, [str(self.repo)] * 5), (out["done"], out["rounds"], seen))
+
+    def test_the_same_failing_test_names_twice_in_a_row_stop_the_builder_whatever_the_timestamps_and_line_order(self):  # #1513
+        first = "2026-11-27T01:00:00Z start\nFAIL: test_b (m.T.test_b)\n  line 4\nERROR: test_a (m.T.test_a)\nRan 2 tests in 0.512s"
+        second = "ERROR: test_a (m.T.test_a)\n  line 9, another message\nFAIL: test_b (m.T.test_b)\nRan 3 tests in 12.1s"
+        out = self.loop(Scripted(reply(), reply()), [(False, first), (False, second)])
+        self.assertEqual((False, True, 2), (out["done"], out["stuck"], out["rounds"]))
+        self.assertIn("rounds 1 and 2 failed validation the same way", out["reason"])
+        self.assertIn("test_a (m.T.test_a); test_b (m.T.test_b)", out["reason"])
+        self.assertNotIn("capped", out)
+
+    def test_output_that_names_no_test_is_compared_by_its_lines_without_timestamps_order_or_gate_progress(self):  # #1513
+        first = (f"{agent_loop.PROGRESS}'refs' passed in 3s ===\n10:01:02 BLOCKED: broken link in docs/a.md\n"
+                 "log at /var/folders/ab/T/tmp1x/out after 4.2s\nvalidate: gates took 9s in all, load 3.1")
+        second = (f"log at /var/folders/cd/T/tmp9z/out after 11s\n2026-11-27 10:09:59 BLOCKED: broken link in docs/a.md\n"
+                  f"{agent_loop.PROGRESS}'docs' started (2 running, 1 waiting) ===")
+        out = self.loop(Scripted(reply(), reply()), [(False, first), (False, second)])
+        self.assertTrue(out["stuck"])
+        self.assertIn("BLOCKED: broken link in docs/a.md", out["reason"])
+
+    def test_a_different_test_name_or_a_different_line_is_a_changed_failure(self):  # #1513
+        for first, second in (("FAIL: test_a (m.T.test_a)", "FAIL: test_b (m.T.test_b)"), ("FAILED t.py::test_a - boom", "FAILED t.py::test_b - boom"),
+                              ("line 4: boom", "line 9: boom")):
+            with self.subTest(first=first):
+                self.assertNotEqual(agent_loop.failure_key(first), agent_loop.failure_key(second))
+        self.assertEqual(agent_loop.failure_key("FAILED t.py::test_a - boom"), agent_loop.failure_key("FAILED t.py::test_a - another"))
+
+    def test_a_failing_test_named_above_the_tail_still_counts_as_a_change(self):  # #1513
+        noise = "\n" + "x\n" * agent_loop.TAIL_LINES
+        z = "FAIL: test_z (m.T.test_z)" + noise
+        first, second = agent_loop.gate_tail("FAIL: test_a (m.T.test_a)\n" + z), agent_loop.gate_tail(z)
+        self.assertEqual(first, second)  # the fix session sees the same tail both times
+        out = self.loop(Scripted(reply(), reply(), reply()), [(False, first), (False, second), (True, "")], review_mode="none")
+        self.assertEqual((True, 3), (out["done"], out["rounds"]))
+
+    def test_a_last_line_longer_than_the_tail_is_compared_whole(self):  # #1513
+        long = "x" * agent_loop.TAIL_CHARS
+        first, second = agent_loop.gate_tail("boom " + long), agent_loop.gate_tail("bang " + long)
+        self.assertNotEqual(first.key, second.key)
+        self.assertTrue(first.key)
+
+    def test_lines_cut_by_length_or_shifted_by_gate_progress_compare_the_same(self):  # #1513
+        body = "\n".join(f"line {i} " + "x" * 200 for i in range(agent_loop.TAIL_LINES))
+        progress = f"\n{agent_loop.PROGRESS}'docs' passed in 3s ==="
+        self.assertEqual(agent_loop.gate_tail(body + "\nafter 1s").key, agent_loop.gate_tail(body + "\nafter 12.5s" + progress * 3).key)
+
+    def test_a_story_whose_failures_keep_changing_stops_at_the_backstop_and_names_it(self):  # #1513
+        self.assertEqual(3 * agent_loop.COST_CEILING["M"], agent_loop.BACKSTOP)
         self.addCleanup(agent_loop.SPEND.pop, "s1", None)
-        for size, spent, rounds in (("S", 1.58, 1), ("M", 4.60, 0)):
-            with self.subTest(size=size):
-                agent_loop.STORY_SIZE["s1"], agent_loop.SPEND["s1"] = size, spent
-                agent = Scripted(reply())
-                out = self.loop(agent, [(False, "fail")], rounds=1)
-                self.assertEqual((rounds, rounds == 0), (len(agent.prompts), bool(out.get("capped"))))
+        agent_loop.SPEND["s1"] = 10.90  # carried from earlier drains
+        costly = {**reply(), "cost_usd": 0.60}
+        agent = Scripted(costly, costly, costly)
+        out = self.loop(agent, [(False, "a"), (False, "b")])
+        self.assertEqual((True, 2), (out["capped"], len(agent.prompts)))  # $11.50 is under it, $12.10 has reached it
+        self.assertIn("Spend $12.10 reached the backstop of $12.00", out["reason"])
+        again = self.loop(agent, [])
+        self.assertEqual((True, 0, 2), (again["capped"], again["rounds"], len(agent.prompts)))
+
+    def test_the_board_size_sets_no_ceiling_of_its_own(self):  # #1513
+        for table in (agent_loop.STORY_SIZE, agent_loop.SPEND):
+            self.addCleanup(table.pop, "s1", None)
+        agent_loop.STORY_SIZE["s1"], agent_loop.SPEND["s1"] = "XS", 4.60
+        out = self.loop(Scripted(reply()), [(True, "")], review_mode="none")
+        self.assertTrue(out["done"])
 
     def test_the_model_follows_the_size_and_only_a_design_label_takes_the_largest(self):
         self.assertEqual(["haiku", "haiku", "sonnet", "sonnet", "opus"],
@@ -353,7 +402,7 @@ class TestLoop(unittest.TestCase):
 
     def test_a_small_story_moves_up_one_level_after_a_second_failed_validation(self):
         run = Scripted(reply(), reply(), reply(), reply("PASS"))
-        out = self.loop(run, [(False, "a"), (False, "b"), (True, "")], model_name="haiku", rounds=3)
+        out = self.loop(run, [(False, "a"), (False, "b"), (True, "")], model_name="haiku")
         self.assertTrue(out["done"])
         self.assertEqual(["haiku", "haiku", "sonnet", "sonnet"], run.models)  # three builder rounds, then the Sonnet reader
 
@@ -391,18 +440,20 @@ class TestLoop(unittest.TestCase):
         self.assertEqual("", run.resumes[2])  # a new session, never the builder's resumed one (#1064)
         self.assertIn("one commit", run.prompts[2])
 
-    def test_a_second_finding_holds_the_story_and_nothing_is_pushed(self):
-        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("scripts/b.py: still wrong"))
+    def test_a_repeated_finding_holds_the_story_whatever_its_timestamps_and_line_order(self):  # #1513
+        run = Scripted(reply("built"), reply("scripts/a.py: no test\nscripts/b.py: wrong at 10:00:01"), reply("fixed"),
+                       reply("scripts/b.py: wrong at 11:22:33\n\nscripts/a.py: no test"))
         out = self.loop(run, [(True, ""), (True, "")])
-        self.assertFalse(out["done"])
-        self.assertEqual("scripts/b.py: still wrong", out["held"])
-        self.assertIn("nothing is pushed", out["reason"])
-        self.assertEqual(4, len(run.prompts))
+        self.assertEqual((False, True, 4), (out["done"], out["stuck"], len(run.prompts)))
+        self.assertIn("scripts/a.py: no test", out["held"])
+        self.assertIn("repeated its finding, so nothing is pushed", out["reason"])
 
-    def test_a_finding_in_the_last_round_still_gets_its_one_fix_session(self):
-        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("PASS"))
-        out = self.loop(run, [(True, ""), (True, "")], rounds=1)
-        self.assertEqual((True, 4), (out["done"], len(run.prompts)))
+    def test_each_changed_finding_gets_another_fix_session_and_the_reader_reads_again(self):  # #1513
+        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("scripts/b.py: still wrong"), reply("fixed"), reply("PASS"))
+        out = self.loop(run, [(True, ""), (True, ""), (True, "")])
+        self.assertEqual((True, 3, 6), (out["done"], out["rounds"], len(run.prompts)))
+        self.assertIn("scripts/b.py: still wrong", run.prompts[4])
+        self.assertNotIn("held", out)
 
     def test_a_finding_after_a_failed_validation_still_gets_one_fix_session(self):
         run = Scripted(reply("built"), reply("fixed"), reply("scripts/a.py: no test"), reply("fixed again"), reply("PASS"))
@@ -498,7 +549,7 @@ class TestLoop(unittest.TestCase):
         self.assertEqual("claude exited 1 in attempt 2, stop reason max_turns. stderr: boom", out["text"])
 
     def test_a_build_the_reader_failed_on_steps_no_later_build_up(self):  # #1489
-        self.loop(Scripted(reply(), reply(), reply(), reply(code=1), reply(code=1)), [(False, "a"), (False, "b"), (True, "")], model_name="haiku", rounds=3)
+        self.loop(Scripted(reply(), reply(), reply(), reply(code=1), reply(code=1)), [(False, "a"), (False, "b"), (True, "")], model_name="haiku")
         self.assertEqual("haiku", agent_loop.restart_model("s1", "haiku"))
 
     def test_a_reader_failure_keeps_the_step_up_the_build_before_it_earned(self):  # #1489
@@ -585,8 +636,8 @@ class TestLoop(unittest.TestCase):
         self.assertEqual(1, len(run.prompts))
 
     def test_a_restart_after_three_rounds_starts_the_next_build_one_level_up(self):
-        run = Scripted(reply("built"), reply("fixed"), reply("again"))
-        out = self.loop(run, [(False, "a"), (False, "b"), (False, "c")], model_name="haiku", rounds=3)
+        run = Scripted(reply("built"), reply("fixed"), reply("again"), reply("once more"))
+        out = self.loop(run, [(False, "a"), (False, "b"), (False, "c"), (False, "c")], model_name="haiku")
         self.assertFalse(out["done"])
         self.assertEqual(["haiku", "haiku", "sonnet"], run.models[:3])
         self.assertEqual("sonnet", agent_loop.restart_model("s1", "haiku"))
@@ -619,10 +670,10 @@ class TestLoop(unittest.TestCase):
     def test_a_worktree_that_lost_its_validate_script_is_not_read_as_done(self):
         """#1011: the directory is still there, so a missing script means nothing checked the result."""
         def deletes(prompt, cwd, **kw):
-            (self.repo / "scripts" / "validate.sh").unlink()
+            (self.repo / "scripts" / "validate.sh").unlink(missing_ok=True)
             return reply("Done.")
 
-        out = agent_loop.run_loop("do it", self.repo, "s1", run=deletes, say=lambda *_: None, rounds=1)
+        out = agent_loop.run_loop("do it", self.repo, "s1", run=deletes, say=lambda *_: None)
         self.assertFalse(out["done"])
 
     def test_a_passing_validation_ends_the_loop_in_one_round(self):
@@ -657,11 +708,6 @@ class TestLoop(unittest.TestCase):
         for part in ("do it", "THE DIFF", "line 99", "line 40"):
             self.assertIn(part, run.prompts[1])
         self.assertNotIn("line 39\n", run.prompts[1])
-
-    def test_validation_that_keeps_failing_stops_after_the_rounds_and_says_so(self):
-        out = self.loop(Scripted(reply(), reply()), [(False, "a"), (False, "b")], rounds=2)
-        self.assertEqual((False, 2), (out["done"], out["rounds"]))
-        self.assertIn("after 2 rounds", out["reason"])
 
     def test_a_claude_error_exit_stops_the_loop(self):
         out = self.loop(Scripted(reply(code=1)), [])

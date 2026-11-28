@@ -1,8 +1,8 @@
 """OliverCode's own agent loop: Claude Code headless does the work, OliverCode owns the rounds around it.
 
-The builder session runs `claude -p` on the task and exits at its commit. The runner then runs the repo's own validation directly, outside any session. A pass ends the loop. A failure starts one short fix session whose brief is the story, the diff and the last 60 lines of the gate (#888). The loop stops when validation passes, after
-MAX_ROUNDS rounds, when `claude` exits with an error or when the session's token budget refuses the next call, and a stopped loop leaves the
-working tree as it is. The model's tools run under the installed pretool guards, and the repo's commit gates run on every commit it makes.
+The builder session runs `claude -p` on the task and exits at its commit. The runner then runs the repo's own validation directly, outside any session. A pass ends the loop. A failure starts one short fix session whose brief is the story, the diff and the last 60 lines of the gate (#888). Each later failure that differs from the last round's earns another. The loop
+stops when validation passes, when two rounds in a row fail the same way, when the story's spend reaches BACKSTOP, when `claude` exits with an error or when
+the session's token budget refuses the next call, and a stopped loop leaves the working tree as it is. The model's tools run under the installed pretool guards, and the repo's commit gates run on every commit it makes.
 """
 
 from __future__ import annotations
@@ -17,19 +17,26 @@ from pathlib import Path
 
 from lib import failure_log, model, usage_sessions, validated
 from lib.local_config import OC_ROOT, setting
+from lib.validate_gates import PROGRESS
 
-MAX_ROUNDS = 2  # the builder session and one short fix session (#888)
 USAGE_LIMIT = re.compile(r"usage limit|\d+-hour limit|weekly limit|limit reached", re.I)  # what the CLI says when the account's allowance is spent (#1299)
 USAGE_LIMIT_REASON = "Claude usage limit reached"
 RESUMABLE = ("max_turns", "timeout")  # stops that leave a healthy session worth one more round (#877)
 CONTINUE = "Your session stopped before you finished ({why}). Continue from where you left off, commit by explicit path and stop."
 TAIL_LINES = 60
+TAIL_CHARS = 6000
 DIFF_LIMIT = 40_000
 VALIDATE_TIMEOUT = 3600
 DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment and cold review
 LADDER = ("haiku", "sonnet", "opus")
-COST_CEILING = {"XS": 1.00, "S": 2.00, "M": 4.00}  # dollars a story may spend, reader reviews included, before no further round starts (#1318); shortcut: L and XL have no ceiling, add one once their spend is measured
-RESTART_ROUND = MAX_ROUNDS + 1  # a story whose last build reached this round starts its next build one level up (#1015)
+BACKSTOP = 12.00  # dollars any story may spend, reader reviews included and carried across drains, before no further round starts: three times the old M ceiling (#1513)
+COST_CEILING = {"XS": 1.00, "S": 2.00, "M": 4.00}  # the per-size cost status and city measure landed stories against; it stops no build (#1513)
+RESTART_ROUND = 3  # a story whose last build reached this round starts its next build one level up (#1015)
+# unittest's and pytest's lines that name a failing test
+FAILED_TEST = re.compile(r"^(?:(?:FAIL|ERROR): (\w+ \([\w.]+\).*)|FAILED (\S+::\S+))", re.M)
+# what differs between two runs of one failure: dates and times, durations, addresses and temporary paths
+VARYING = re.compile(r"\d{4}-\d\d-\d\d(?:[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:?\d\d)?)?|\b\d\d:\d\d:\d\d(?:\.\d+)?"
+                     r"|\b\d+(?:\.\d+)? ?(?:ms|s|seconds?)\b|\b0x[0-9a-fA-F]+|(?:/private)?/(?:var/folders|tmp)/[^\s'\":]+")
 READER = "sonnet"  # the least capable model that reads a commit: no story is read by anything weaker (#1015)
 RISKY_FILES = ("cmd_land.py", "cmd_drain.py", "agent_loop.py", "log_action.py", "complete_story.py")  # landing, claims, gates and the loop itself (#1026)
 RISKY_DIRS = ("core/hooks", "scripts/hooks")
@@ -120,9 +127,31 @@ def validate(cwd: str | Path) -> tuple[bool, str]:
     return code == 0, tail
 
 
-def gate_tail(output: str) -> str:
+class Tail(str):
+    """The end of a failed gate's output, with the failure_key of the whole output as `key`, since the cut can drop what tells two failures apart (#1513)."""
+
+    key: frozenset[str]
+
+
+def gate_tail(output: str) -> Tail:
     """The last TAIL_LINES lines of a gate's output, which is all a fix session sees of the failure (#888)."""
-    return "\n".join(output.strip().splitlines()[-TAIL_LINES:])[-6000:]
+    tail = Tail("\n".join(output.strip().splitlines()[-TAIL_LINES:])[-TAIL_CHARS:])
+    tail.key = failure_key(output)
+    return tail
+
+
+def comparable(lines) -> frozenset[str]:
+    """Lines as two rounds' failures are compared (#1513): in no order, with timestamps and the rest of VARYING left out."""
+    return frozenset(filter(None, (VARYING.sub("", line).strip() for line in lines)))
+
+
+def failure_key(output: str) -> frozenset[str]:
+    """What one failed validation is compared to the last by (#1513): the names of every failing test in its output, or its last TAIL_LINES whole
+    lines when it names none, gate progress and timing lines aside."""
+    if named := [a or b for a, b in FAILED_TEST.findall(output)]:
+        return comparable(named)
+    lines = [line for line in output.strip().splitlines() if not line.startswith((PROGRESS, "validate: gates took"))]
+    return comparable(lines[-TAIL_LINES:])
 
 
 def branch_diff(cwd: str | Path) -> str:
@@ -305,7 +334,7 @@ def run_log_lines() -> list[str]:
 
 
 def logged_spend(story: str, slug: str) -> float:
-    """Dollars the run log's cost rows hold for a story of repo `slug`, reader reviews included, so its ceiling survives a new drain (#1481).
+    """Dollars the run log's cost rows hold for a story of repo `slug`, reader reviews included, so its spend toward BACKSTOP survives a new drain (#1481).
     shortcut: a row that names no repo counts for every repo, and a row older than the log's one backup is forgotten; upgrade when a story is capped by either."""
     total = 0.0
     for line in run_log_lines():
@@ -371,7 +400,7 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
     if STORY_SLUG.get(owner):
         row["slug"] = STORY_SLUG[owner]  # which repo's story this cost is, since two repos reuse a number (#1481)
     if reader_failed:
-        row["reader_failed"] = True  # its cost is logged and counts against no ceiling (#1489)
+        row["reader_failed"] = True  # its cost is logged and never counts toward BACKSTOP (#1489)
     else:
         SPEND[owner] = SPEND.get(owner, 0.0) + float(reply.get("cost_usd") or 0)
     if start_tokens is not None:
@@ -430,30 +459,31 @@ def exit_reason(reply: dict, n: int, resumed: bool = False, unit: str = "round")
     return why + (f" stderr: {tail[-300:]}" if tail else "")
 
 
-def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "", rounds: int = MAX_ROUNDS,
+def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "",
              run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
-    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'held' with the reader's finding when a second read still
-    finds a problem (#975, #1015), or 'reader_failed' with the cause when the reader gave no verdict twice (#1489). Either way nothing is pushed.
+    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'stuck' when two rounds in a row failed the same way and
+    'capped' when the story's spend reached BACKSTOP (#1513). A reader that repeats its finding adds 'held' with it (#975, #1015), and a reader that gave
+    no verdict twice adds 'reader_failed' with the cause (#1489). Either way nothing is pushed.
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
     `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
-    return _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why, review_mode, repo)
+    return _loop(task, cwd, session, max_turns, model_name, run, check, say, why, review_mode, repo)
 
 
-def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, why="", review_mode="full", repo="") -> dict:
+def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", review_mode="full", repo="") -> dict:
     run, check = run or model.run_cli, check or (validate)
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
-    start, failures, findings, fix_owed, n = model_name, 0, 0, False, 0
-    while n < rounds or fix_owed:  # a reader's finding is owed one fix session even after the last round (#975)
-        ceiling, spent = COST_CEILING.get(STORY_SIZE.get(session, "")), SPEND.get(session, 0.0)
-        if ceiling is not None and spent >= ceiling:  # the story has spent its size's ceiling, so no further round starts (#1318)
-            return {"done": False, "capped": True, "reason": f"Spend ${spent:.2f} reached the ceiling of ${ceiling:.2f} for a {STORY_SIZE[session]} story, so no further round starts.",
+    start, failures, last, n = model_name, 0, None, 0  # `last` is the previous round's failure: who reported it and what it said
+    while True:  # a failure that changed earns another fix session on the same worktree (#1513)
+        spent = SPEND.get(session, 0.0)
+        if spent >= BACKSTOP:  # a story whose failures keep changing still ends (#1513)
+            return {"done": False, "capped": True, "reason": f"Spend ${spent:.2f} reached the backstop of ${BACKSTOP:.2f}, so no further round starts.",
                     "rounds": n, "tokens": tokens, "summary": summary}
         n += 1
         if repo and n > 1:
             log_stage(session, repo, "building")  # a fix round is building time again (#1291)
-        fix_owed, model_name = False, escalate(start, failures)
+        model_name = escalate(start, failures)
         resumed = False
         while True:
             try:
@@ -504,16 +534,22 @@ def _loop(task, cwd, session, max_turns, model_name, rounds, run, check, say, wh
                 return {"done": False, "reader_failed": verdict["text"], "reason": f"The reader failed, so nothing is pushed: {verdict['text']}",
                         "rounds": n, "tokens": tokens, "summary": summary}
             if verdict["verdict"] == "findings":
-                findings += 1
-                if findings == 1:  # one fix session, then the reader reads again (#975)
-                    say(f"Round {n}: the reader found a problem. One fix session, then the reader reads again.")
-                    prompt, claude_session, fix_owed = review_brief(task, cwd, verdict["text"]), "", True
-                    continue
-                return {"done": False, "held": verdict["text"], "reason": f"The fresh reader reports a problem, so nothing is pushed: {verdict['text'][:300]}",
-                        "rounds": n, "tokens": tokens, "summary": summary}
+                # shortcut: a reworded finding counts as a new one and only BACKSTOP ends it, upgrade when the run log shows a reader rewording one finding
+                finding = ("reader", comparable(verdict["text"].splitlines()))
+                if finding == last:
+                    return {"done": False, "stuck": True, "held": verdict["text"], "reason": f"Stuck: the fresh reader repeated its finding, so nothing is pushed: {verdict['text'][:300]}",
+                            "rounds": n, "tokens": tokens, "summary": summary}
+                last = finding
+                say(f"Round {n}: the reader found a problem. A fix session, then the reader reads again.")
+                prompt, claude_session = review_brief(task, cwd, verdict["text"]), ""
+                continue
             return {"done": True, "reason": "The repo's validation passes.", "rounds": n, "tokens": tokens, "summary": summary}
         failures += 1
         say(f"Round {n}: validation failed.")
+        failure = ("validation", tail.key if isinstance(tail, Tail) else failure_key(tail))  # a plain string, such as a timeout's, is its own whole output
+        if failure == last:
+            repeated = sorted(line for line in failure[1] if "FAIL" in line or "BLOCKED" in line) or sorted(failure[1])
+            return {"done": False, "stuck": True, "reason": f"Stuck: rounds {n - 1} and {n} failed validation the same way, so no further round starts. "
+                    f"The tree is as the last round left it. Repeated: {'; '.join(repeated)[:600] or 'no output'}", "rounds": n, "tokens": tokens, "summary": summary}
+        last = failure
         prompt, claude_session = fix_brief(task, cwd, tail), ""  # a fresh session: the builder's context and its expired cache are not carried over (#888)
-    return {"done": False, "reason": f"Validation still failed after {rounds} rounds. The tree is as the last round left it.",
-            "rounds": rounds, "tokens": tokens, "summary": summary}
