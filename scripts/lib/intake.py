@@ -361,18 +361,42 @@ def own_code(root: Path, rest: str) -> bool:
     return (OC_ROOT / path).exists() and not (root / path).exists()
 
 
-def destination(where: Path, root: Path) -> tuple[str, int] | None:
-    """(repo slug, error epic) a story files under: ROOT's own repo, or the origin of the user's OliverCode checkout for a fault in OliverCode's code. None when no epic is named."""
+def gh_api(args):
+    return subprocess.run(["gh", "api", *args], capture_output=True, text=True, timeout=60)
+
+
+def epic_state(slug: str, epic: int, gh=gh_api) -> str:
+    """'open' when the epic is open, 'gone' when GitHub reports it closed or deleted, else 'unreadable' (a hold or a failed read) (#1567)."""
+    done = gh([f"repos/{slug}/issues/{epic}"])
+    if done.returncode:
+        return "gone" if "HTTP 404" in str(done.stderr or "") else "unreadable"
+    try:
+        state = json.loads(done.stdout).get("state")
+    except (ValueError, AttributeError):
+        return "unreadable"
+    return {"open": "open", "closed": "gone"}.get(state, "unreadable")
+
+
+def epic_of(where: Path, root: Path, gh=gh_api) -> tuple[str, int, str] | None:
+    """(repo slug, error epic, epic_state) a story files under: ROOT's own repo, or the origin of the user's OliverCode checkout for a fault in
+    OliverCode's code. None when no epic is named."""
     cfg = backlog_config(where)
     epic = cfg.get("errorEpic")
     slug = agent_loop.origin_of(where) if where != root else f"{cfg['repoOwner']}/{cfg['repoName']}"
-    return (slug, int(epic)) if slug and isinstance(epic, int) else None
+    return (slug, int(epic), epic_state(slug, int(epic), gh)) if slug and isinstance(epic, int) else None
+
+
+def destination(where: Path, root: Path, gh=gh_api) -> tuple[str, int] | None:
+    """(repo slug, error epic) a story files under, only while that epic is open (#1567). None when no epic is named, or it is closed, deleted or unreadable."""
+    found = epic_of(where, root, gh)
+    return (found[0], found[1]) if found and found[2] == "open" else None
 
 
 def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.datetime | None = None, say=print) -> int:
     """Read the new candidates (a drain stop, red CI on staging, a hook crash) with a fresh reader and file a story for each bug or regression. Returns how many stories were filed.
     A signature already in bug-seen.json starts no reader: a covered, not-a-bug or filed one is skipped, a recurrence of a closed story reopens it, and a held bug is filed.
-    A bug is held when the daily cap is spent or its repo names no errorEpic, and only the second is said, with the key and the file (#1511)."""
+    A bug is held when the daily cap is spent, its repo names no errorEpic, or its errorEpic is closed or deleted. The last two are said once per repo,
+    with the key and the file (#1511, #1567). An epic that cannot be read is held and not said (#1567)."""
     from check_story_format import check_body  # noqa: PLC0415
     if not has_backlog_config(root):
         say(f"Bug intake files nothing for {root.name}: it has no docs/backlog-config.json.")
@@ -380,7 +404,7 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
     cfg = backlog_config(root)
     slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
     branch = agent_loop.default_branch(root)
-    gh = gh or (lambda args: subprocess.run(["gh", "api", *args], capture_output=True, text=True, timeout=60))
+    gh = gh or gh_api
     opened = open_issues.fetch(slug)
     if opened is None:
         return 0  # GitHub is held or unreadable, so the next run reads again
@@ -395,14 +419,19 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
         where = Path(entry.get("repo") or root)
         if not has_backlog_config(where):
             return False  # a held bug whose repo was deleted or moved waits and never stops the run (#1511)
-        if not (dest := destination(where, root)):
-            if where not in told and not isinstance(backlog_config(where).get("errorEpic"), int):
+        found = epic_of(where, root, gh)
+        if not found or found[2] != "open":  # held: a closed or deleted epic is said once per repo, an unreadable one is held silently (#1567)
+            gone = bool(found) and found[2] == "gone"
+            if where not in told and (gone or not isinstance(backlog_config(where).get("errorEpic"), int)):
                 told.add(where)
                 config = where / (BACKLOG_CONFIG if (where / BACKLOG_CONFIG).is_file() else LOCAL_BACKLOG_CONFIG)
-                say(f"Bug intake has a bug to file and no epic to file it under: add the errorEpic key, set to an epic's issue number, to {config}.")
+                if gone:
+                    say(f"Bug intake has a bug to file and its errorEpic #{found[1]} is closed or deleted: set the errorEpic key, to an open epic's issue number, in {config}.")
+                else:
+                    say(f"Bug intake has a bug to file and no epic to file it under: add the errorEpic key, set to an epic's issue number, to {config}.")
             return False
-        body = entry["body"].replace("\n\nEpic: #0\n", f"\n\nEpic: #{dest[1]}\n")
-        if filed >= DAILY_CAP or not (n := file_story(dest[0], where, entry["title"], body, gh)):
+        body = entry["body"].replace("\n\nEpic: #0\n", f"\n\nEpic: #{found[1]}\n")
+        if filed >= DAILY_CAP or not (n := file_story(found[0], where, entry["title"], body, gh)):
             return False
         entry.update(story=n, filed_on=today, body=body)
         filed += 1
@@ -448,7 +477,7 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
             gh(["-X", "POST", f"repos/{slug}/issues/{number}/comments", "-f", f"body=Another occurrence of a failure this story covers ({c['sig']}):\n{c['text']}"])
         elif answer != "not a bug":
             where = OC_ROOT if own_code(root, rest) else root
-            dest = destination(where, root)
+            dest = destination(where, root, gh)
             entry["repo"] = str(where)
             entry["title"], entry["body"] = story_text(rest, c, dest[1] if dest else 0)  # #0 until the repo names an errorEpic
             if check_body(entry["body"], files=True, blocker=True, root=where, fit=True, title=entry["title"]):

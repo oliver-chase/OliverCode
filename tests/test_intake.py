@@ -101,11 +101,19 @@ class TestBugIntake(unittest.TestCase):
             fh.write(json.dumps({"story": "story-9", "stage": stage, "reason": reason, "at": at}) + "\n")
 
     def gh(self, args):
+        if args[0].startswith("repos/o/r/issues/") and "POST" not in args:  # the errorEpic's own read: open unless a test says otherwise
+            return mock.Mock(returncode=0, stdout=json.dumps({"number": 5, "state": "open"}), stderr="")
         self.calls.append(args)
         out = {"number": 50 + len(self.calls)} if "POST" in args and any(a.endswith("/issues") for a in args) else {}
-        return mock.Mock(returncode=0, stdout=json.dumps(out))
+        return mock.Mock(returncode=0, stdout=json.dumps(out), stderr="")
 
-    def run_bugs(self, answer, opened=None, cfg=None, say=lambda *_: None):
+    def epic_gh(self, reply):
+        """A gh whose read of the errorEpic gets REPLY, and whose other calls are self.gh."""
+        def gh(args):
+            return reply if args[0] == "repos/o/r/issues/5" else self.gh(args)
+        return gh
+
+    def run_bugs(self, answer, opened=None, cfg=None, say=lambda *_: None, gh=None):
         def read(task, *a, **k):
             self.prompts.append((task, k))
             return {"verdict": "findings", "text": answer}
@@ -113,7 +121,7 @@ class TestBugIntake(unittest.TestCase):
                 mock.patch.object(intake, "backlog_config", return_value=cfg or {"repoOwner": "o", "repoName": "r", "errorEpic": 5}), \
                 mock.patch.object(intake, "file_story", side_effect=lambda slug, root, t, b, gh: self.bodies.append(b) or 77), \
                 mock.patch.object(intake, "has_backlog_config", return_value=True), mock.patch.object(intake, "ci_candidate", return_value=None):
-            return intake.bugs(Path("."), gh=self.gh, read=read, say=say)
+            return intake.bugs(Path("."), gh=gh or self.gh, read=read, say=say)
 
     def test_only_a_crash_a_fatal_stop_or_a_refused_close_is_a_candidate(self):
         rows = [{"stage": "stopped", "reason": r} for r in ("Drain blocked: the worker crashed with ValueError()", "Drain blocked: the landing queue crashed with x.",
@@ -178,6 +186,26 @@ class TestBugIntake(unittest.TestCase):
         saved = json.loads(intake.seen_path().read_text())["seen"]
         self.assertEqual(77, saved["here"]["story"])
         self.assertNotIn("story", saved["gone"])
+
+    def test_a_bug_is_held_and_the_owner_is_told_the_key_when_its_errorEpic_is_deleted_or_closed(self):  # #1567
+        self.run_bugs("")
+        self.stop("Close refused: no commit")
+        for reply in (mock.Mock(returncode=1, stdout="", stderr="gh: Not Found (HTTP 404)"),
+                      mock.Mock(returncode=0, stdout=json.dumps({"number": 5, "state": "closed"}), stderr="")):
+            said = []
+            self.assertEqual(0, self.run_bugs("BUG\n" + BODY, gh=self.epic_gh(reply), say=said.append))
+            self.assertEqual([], self.bodies)  # the story is never filed under the epic
+            self.assertEqual(1, len(said))
+            self.assertIn("errorEpic #5 is closed or deleted", said[0])
+            self.assertIn("docs/backlog-config", said[0])
+
+    def test_a_bug_is_held_silently_when_its_errorEpic_cannot_be_read(self):  # #1567
+        self.run_bugs("")
+        self.stop("Close refused: no commit")
+        said = []
+        self.assertEqual(0, self.run_bugs("BUG\n" + BODY, gh=self.epic_gh(mock.Mock(returncode=1, stdout="", stderr="gh: Server Error (HTTP 500)")), say=said.append))
+        self.assertEqual([], self.bodies)
+        self.assertEqual([], said)
 
     def test_not_a_bug_is_recorded_and_files_nothing(self):
         self.run_bugs("")
