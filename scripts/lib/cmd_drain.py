@@ -853,6 +853,16 @@ def _stop_on_term(signum, frame):
     raise KeyboardInterrupt
 
 
+def log_queue(io, state: dict, stories: list[dict]) -> None:
+    """Log a queue row when the stories this run can still start have changed, in the order it takes them. `status` and `watch` name the next Ready story
+    from the latest row, so they never read the board themselves (#1570)."""
+    from lib import cmd_status
+    ready = [[i["number"], cmd_status._story_line(i)[2:]] for i in stories[:cmd_status.OPEN_SHOWN]]  # the digest's own wording for a story
+    if ready != state.get("ready"):
+        state["ready"] = ready
+        agent_loop.log_stage(f"run-{io.repo.name}", io.repo.name, "queue", slug=io.slug, ready=ready)
+
+
 def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     """Run the loop until no story is left to start. Returns 0 when it ended, 1 when GitHub could not be read. A stop (Ctrl-C or SIGTERM) releases
     the claims of the stories it was building and returns to Ready without waiting for their builders (#1076). No new story starts once OliverCode's
@@ -1055,17 +1065,21 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         state["red"] = red
                     todo = [i for i in todo if intake.priority_of(i) == "P0"]
             busy = [intake.files_area(i.get("body") or "") for i in [*running.values(), *committed.values()]]  # a story building, validating or landing holds its files; one overlap rule, shared with the planner (#1014)
-            started = False
+            started, taken = False, set()  # `taken`: the stories another session claims, which this run cannot start
             for issue in todo:
                 if state.get("limited") or halted() or len(running) >= io.capacity():  # no builder starts once one has hit the usage limit (#1299) or the run is halted (#1480)
                     break
                 areas = intake.files_area(issue.get("body") or "")
-                if any(intake.overlaps(areas, b) for b in busy) or io.claimed(issue):
+                if any(intake.overlaps(areas, b) for b in busy):
+                    continue
+                if io.claimed(issue):
+                    taken.add(issue["number"])
                     continue
                 io.claim(issue["number"], issue.get("size") or "")
                 running[pool.submit(work_story, io, issue, state, enqueue)] = issue
                 busy.append(areas)
                 started = True
+            log_queue(io, state, [i for i in todo if i["number"] not in taken | {r["number"] for r in running.values()}])
             start_batch()
             io.beat([i["number"] for i in running.values()])
             if not running and not landing:
@@ -1229,7 +1243,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
                    else f"Stories wait because the base branch fails validation: {next(iter(state['base'].values()))}." if state.get("base")
                    else "")  # `watch --until-exit` prints it (#1490)
             left = {n: text for n, text in state["why"].items() if n not in state["closed"]}
-            agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
+            agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", slug=slug, landed=len(state["closed"]), stopped=len(state["blocked"]),
                                 **({"reason": why} if why else {}), **({"skipped": left} if left else {}))
             try:
                 from lib import cmd_status

@@ -1933,6 +1933,29 @@ class DetachedRun(unittest.TestCase):
                 self.assertIn(f"Skipped {skip}", line)
         self.assertEqual(1, len(lines))
 
+    def test_status_and_watch_name_the_ready_story_the_drain_can_start_and_none_once_it_can_start_none(self):  # #1570
+        from lib import cmd_status
+        stories = [issue(1, "Priority: P0", status="Backlog"), issue(2, "Priority: P0", labels=("owner-action",)), issue(3, "Priority: P0", labels=("epic",)),
+                   issue(4, "Priority: P2", title="Ready one")]
+        waiting = FakeIo(stories, cap=0)  # no builder slot frees up, so the run ends with #4 still to start
+        with mock.patch.object(cmd_drain, "notify"):
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: waiting, sleep=lambda s: None)
+        queued = [r for r in self.rows() if r["stage"] == "queue"]
+        self.assertEqual(1, len(queued))  # an unchanged list is logged once
+        self.assertEqual("P2 #4 Ready one", cmd_status.next_ready(self.rows(), "o/r"))
+        with mock.patch.object(cmd_drain, "notify"):
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo(stories))
+        self.assertEqual("", cmd_status.next_ready(self.rows(), "o/r"))
+        self.assertEqual("o/r", self.rows()[-1]["slug"])
+
+    def test_a_story_another_session_claims_is_not_one_the_drain_can_start(self):  # #1570
+        from lib import cmd_status
+        io = FakeIo([issue(1)])
+        io.claims = {1}
+        quiet(cmd_drain.drain, io, cmd_drain.new_state(), sleep=lambda s: None)
+        self.assertEqual("", cmd_status.next_ready(self.rows(), "o/r"))
+        self.assertEqual([[]], [r["ready"] for r in self.rows() if r["stage"] == "queue"])
+
     def test_notify_sends_nothing_and_does_not_raise_without_osascript(self):
         with mock.patch.object(cmd_drain.subprocess, "run", side_effect=FileNotFoundError):
             cmd_drain.notify("anything")

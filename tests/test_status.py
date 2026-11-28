@@ -22,6 +22,11 @@ def stage(story: str, name: str, hhmm: str, seconds: int = 0, repo: str = "r") -
     return {"story": story, "repo": repo, "stage": name, "at": f"2026-11-22T{hhmm}:00Z", "seconds": seconds}
 
 
+def queue(ready: list, slug: str = "o/r", hhmm: str = "09:00") -> dict:
+    repo = slug.rsplit("/", 1)[-1]
+    return {**stage(f"run-{repo}", "queue", hhmm, repo=repo), "slug": slug, "ready": ready}
+
+
 def issue(created: str, closed: str | None = None, reason: str = "completed") -> dict:
     return {"created_at": created + "T00:00:00Z", "closed_at": closed + "T00:00:00Z" if closed else None, "state_reason": reason if closed else None}
 
@@ -445,29 +450,55 @@ class TestOwnerZone(unittest.TestCase):
                stage("story-2", "claimed", "09:00"), stage("story-2", "landed", "10:00", 60)]
         self.assertEqual(["story-2"], [f["story"] for f in cmd_status.landed_today(log, NOW.timestamp())])
 
-    def test_next_ready_names_the_first_open_story_with_no_live_claim(self):
-        digest = "# Status digest\nWritten 2026-11-22 12:00 UTC.\n\n## Open, 2 in priority order\n- P0 #1479 Staging CI passes again\n- P1 #1289 Next story\n\n## Landed\n- none\n"
-        with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / "status-digest.md"
-            path.write_text(digest, encoding="utf-8")
-            self.assertEqual("P0 #1479 Staging CI passes again", cmd_status.next_ready(path))
-            self.assertEqual("P1 #1289 Next story", cmd_status.next_ready(path, {"o/r#1479": {"agent": "drain", "at": 0}}))
+    def test_next_ready_names_the_first_story_the_drain_can_start_with_no_live_claim(self):
+        log = [queue([[1479, "P0 #1479 Staging CI passes again"], [1289, "P1 #1289 Next story"]])]
+        self.assertEqual("P0 #1479 Staging CI passes again", cmd_status.next_ready(log, "o/r"))
+        self.assertEqual("P1 #1289 Next story", cmd_status.next_ready(log, "o/r", {"o/r#1479": {"agent": "drain", "at": 0}}))
+        self.assertEqual("P1 #1289 Next story", cmd_status.next_ready(log + [stage("story-1479", "landed", "09:00")], "o/r"))
+        self.assertEqual("", cmd_status.next_ready(log, "o/other"))
+        self.assertEqual("", cmd_status.next_ready([], "o/r"))
 
     def test_watch_opens_with_the_building_block_the_landings_and_next_ready_then_streams(self):
-        log = [stage("story-7", "claimed", "09:00"), stage("story-5", "claimed", "08:00"), stage("story-5", "landed", "09:17", 120)]
+        log = [stage("story-7", "claimed", "09:00"), stage("story-5", "claimed", "08:00"), stage("story-5", "landed", "09:17", 120),
+               queue([[7, "P0 #7 Building story"], [9, "P1 #9 First"]])]
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 120}}
         lines = []
-        with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / "status-digest.md"
-            path.write_text("# Status digest\n\n## Open, 2 in priority order\n- P0 #7 Building story\n- P1 #9 First\n\n## Landed\n- none\n", encoding="utf-8")
-            with mock.patch.object(cmd_status, "run_log", return_value=log), mock.patch.object(cmd_status, "live_claims", return_value=claims), \
-                    mock.patch.object(cmd_status, "digest_path", return_value=path):
-                code = cmd_status.command_watch([], sleep=lambda s: None, out=lines.append, alive=lambda: False)
+        with mock.patch.object(cmd_status, "run_log", return_value=log), mock.patch.object(cmd_status, "live_claims", return_value=claims):
+            code = cmd_status.command_watch([], sleep=lambda s: None, out=lines.append, alive=lambda: False)
         self.assertEqual(0, code)
         self.assertTrue(lines[0].startswith("#7 is claimed but nothing is building. The claim clears by itself at "))
         self.assertTrue(lines[1].startswith("Last landed: #5 in r at 2026-11-22 04:17 EST. Building took"))
         self.assertEqual("Next Ready: P1 #9 First.", lines[2])
         self.assertEqual("No drain is running.", lines[-1])
+
+
+class TestRunCount(unittest.TestCase):
+    """#1570: status and both forms of watch count a run that restarted itself, and only the repo's own."""
+
+    def test_status_and_both_watches_count_the_stories_landed_before_a_restart(self):
+        def end(repo, hhmm, landed):
+            return {**stage(f"run-{repo}", "run-end", hhmm, repo=repo), "slug": f"o/{repo}", "landed": landed, "stopped": 0}
+
+        before = [end("r", "07:00", 9), stage("run-r", "restarting", "09:00"), end("r", "09:00", 4), end("other", "09:10", 7)]
+        after = [queue([], hhmm="09:11"), end("r", "09:30", 0)]
+        streamed, exited, log = [], [], list(before)
+        with mock.patch.object(cmd_status, "run_log", side_effect=lambda: list(log)), mock.patch.object(cmd_status, "live_claims", return_value={}), \
+                mock.patch.object(cmd_status, "runner_alive", return_value=False), mock.patch.object(cmd_status.run_lock, "active", return_value={}), \
+                mock.patch("lib.cmd_drain.resolve_repo", return_value=Path("/x/r")), mock.patch("lib.cmd_drain.slug_of", return_value="o/r"):
+            cmd_status.command_watch(["r"], sleep=lambda s: log.extend(after) if len(log) == len(before) else None, out=streamed.append, alive=lambda: True)
+            status = cmd_status.live_lines(NOW, 1, "o/r")
+            cmd_status.command_watch(["r", "--until-exit"], out=exited.append, sleep=lambda s: None, alive=lambda: False)
+        want = "Last run ended 2026-11-22 04:30 EST: 4 stories landed, 0 stopped."
+        self.assertIn(want, status)
+        self.assertEqual(want, streamed[-1])
+        self.assertIn("Last run ended 2026-11-22 04:00 EST: 4 stories landed, 0 stopped.", streamed)  # watch's opening block, before the new run ends
+        self.assertEqual([f"{want} No story it could start was left."], exited)
+        self.assertFalse(any("queue" in line or line.startswith("Next Ready") for line in status + streamed))
+
+    def test_a_run_end_row_with_no_slug_is_matched_by_the_repos_name(self):
+        log = [{**stage("run-r", "run-end", "09:00"), "landed": 2}, {**stage("run-other", "run-end", "09:10", repo="other"), "landed": 7}]
+        self.assertEqual(["Last run ended 2026-11-22 04:00 EST: 2 stories landed, 0 stopped."], cmd_status.last_run(log, "o/r"))
+        self.assertEqual([], cmd_status.last_run(log, "o/none"))
 
 
 class TestWatchFollowsRestart(unittest.TestCase):

@@ -11,7 +11,6 @@ alone (#892), and the session-start hook refreshes it and prints `session_lines`
 from __future__ import annotations
 
 import json
-import re
 import statistics
 import subprocess
 import sys
@@ -109,25 +108,17 @@ def repo_claims(claims: dict, slug: str) -> dict:
     return {key: mine for key, mine in claims.items() if not slug or key.rsplit("#", 1)[0] == slug}
 
 
-def next_ready(path: Path, claims: dict = {}) -> str:
-    """The first open story in the status digest with no live claim in CLAIMS, which is the next Ready story in priority order (#1486), or '' when no
-    digest is written or every open story is claimed. A story that a builder holds is building, not Ready."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    parts = text.split("\n## Open,", 1)
-    if len(parts) < 2:
-        return ""
-    held = {key.rsplit("#", 1)[-1] for key in claims}
-    for line in parts[1].splitlines()[1:]:
-        if line.startswith("## "):
-            break
-        if not line.startswith("- "):
-            continue
-        number = re.search(r"#(\d+)", line)
-        if number is None or number.group(1) not in held:
-            return line[2:]
+def next_ready(log: list[dict], slug: str = "", claims: dict = {}) -> str:
+    """The first story with no live claim in CLAIMS among those SLUG's drain last said it can start (#1486, #1570), or of any repo's drain with no slug.
+    '' when no drain has said, or it said none. A story landed or closed since then is left out."""
+    # shortcut: the list is as old as the drain's last pass, so a card moved while no drain runs shows after the next run; read the board when status may spend a call.
+    latest = {r.get("slug"): i for i, r in enumerate(log) if r.get("stage") == "queue" and (not slug or r.get("slug") == slug)}
+    for i in sorted(latest.values(), reverse=True):
+        row = log[i]
+        done = {r.get("story") for r in log[i + 1:] if r.get("repo") == row.get("repo") and r.get("stage") in ("landed", "closed")}
+        for n, line in row.get("ready", []):
+            if f"{row.get('slug')}#{n}" not in claims and f"story-{n}" not in done:
+                return line
     return ""
 
 
@@ -236,6 +227,22 @@ def run_end_line(row: dict) -> str:
     return f"Last run ended {local_config.local_time(_epoch(row.get('at')), '%Y-%m-%d %H:%M %Z')}: {row.get('landed', 0)} {'story' if row.get('landed', 0) == 1 else 'stories'} landed, {row.get('stopped', 0)} stopped."
 
 
+def run_total(rows: list[dict]) -> dict:
+    """The last row of ROWS, one run from run_rows, with its landed and stopped counts summed over the run and the runs that restarted into it (#1490, #1570)."""
+    ends = [r for r in rows if r["stage"] == "run-end"]
+    return {**rows[-1], **{key: sum(r.get(key, 0) for r in ends) for key in ("landed", "stopped")}}
+
+
+def last_run(log: list[dict], slug: str = "") -> list[str]:
+    """run_end_line for the latest run-end row of SLUG's repo, or of any repo with no slug, counting only that repo's run, or nothing (#1570). A row
+    written before run-end rows named their slug is matched by the repo's name."""
+    for i in range(len(log) - 1, -1, -1):
+        row = log[i]
+        if row.get("stage") == "run-end" and (not slug or (row["slug"] == slug if "slug" in row else row.get("repo") == slug.rsplit("/", 1)[-1])):
+            return [run_end_line(run_total(run_rows(log[:i + 1], row.get("repo"))))]
+    return []
+
+
 def skip_text(row: dict) -> str:
     """' Skipped #1: its board Status is Backlog, not Ready.' for each story a run-end row says the run did not start, or '' (#1510)."""
     return "".join(f" Skipped #{n}: {why}." for n, why in row.get("skipped", {}).items())
@@ -243,10 +250,10 @@ def skip_text(row: dict) -> str:
 
 def watch_line(row: dict, log: list[dict]) -> str:
     """One plain line for a new stage row, stamped with the row's time in the owner's zone (#1486): '14:40 EST #7 in repo: validating', '14:40 EST #7 in repo:
-    landed. Building took ...', '14:40 EST #7 in repo: stopped (Landing refused: weakened-test)'. A run-end row already carries its time (#1276)
-    and is followed by the stories its run skipped (#1510)."""
+    landed. Building took ...', '14:40 EST #7 in repo: stopped (Landing refused: weakened-test)'. A run-end row already carries its time (#1276),
+    counts the runs in LOG that restarted into it (#1570) and is followed by the stories its run skipped (#1510). LOG ends at a run-end ROW."""
     if row["stage"] == "run-end":
-        return run_end_line(row) + skip_text(row)
+        return run_end_line(run_total(run_rows(log, row.get("repo")))) + skip_text(row)
     stamp = local_config.local_time(_epoch(row.get("at")) or time.time(), "%H:%M %Z")
     n = str(row.get("story")).rsplit("-", 1)[-1]
     if row["stage"] == "landed":
@@ -283,15 +290,14 @@ def exit_line(repo: str, rows: list[dict]) -> str:
         return f"No drain is running for {repo}."
     last = rows[-1]
     if last["stage"] == "run-end":
-        ends = [r for r in rows if r["stage"] == "run-end"]
-        counts = {key: sum(r.get(key, 0) for r in ends) for key in ("landed", "stopped")}
+        counted = run_total(rows)
         why = "It logged a restart and the new run never started." if _restarting(rows) else last.get("reason") or "No story it could start was left."
     else:
         done = {r.get("story") for r in rows if r["stage"] in ("landed", "closed")}
         stopped = {r.get("story") for r in rows if r["stage"] == "stopped" and str(r.get("story")).startswith("story-")} - done
-        counts = {"landed": len(done), "stopped": len(stopped)}
+        counted = {**last, "landed": len(done), "stopped": len(stopped)}
         why = "It logged no run-end row, so no drain finished it."
-    return f"{run_end_line({**last, **counts})} {' '.join(why.split())}{skip_text(last)}"
+    return f"{run_end_line(counted)} {' '.join(why.split())}{skip_text(last)}"
 
 
 def wait_for_exit(repo: str, alive, sleep, out) -> int:
@@ -316,7 +322,7 @@ def wait_for_exit(repo: str, alive, sleep, out) -> int:
 def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> int:
     """`watch [REPO]` opens with what is building, the last three landings and the next Ready story, as status shows them (#1486). Then it prints one
     line per stage row added to the run log from now on, each stamped in the owner's zone, and ends with the run-end row or when no drain holds the repo's
-    run lock for three checks in a row. It reads the log and the digest only: no model and no GitHub call (#1276, #1486).
+    run lock for three checks in a row. A queue row is not printed. It reads the log and the claims only: no model and no GitHub call (#1276, #1486).
     `watch REPO --until-exit` prints only the one line of wait_for_exit, which is the form a session runs in the background (#1490)."""
     from lib import cmd_drain
     until_exit = "--until-exit" in argv
@@ -332,14 +338,14 @@ def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> i
     log = run_log()
     stamp = time.time()
     claims = repo_claims(live_claims(stamp), slug)
-    for line in activity(stamp, claims, log, alive(), None, next_ready(digest_path(), claims), run_lock.active(slug, stamp) if slug else None):
+    for line in activity(stamp, claims, log, alive(), None, next_ready(log, slug, claims), run_lock.active(slug, stamp) if slug else None, slug):
         out(line)
     seen, idle, prev = len(log), 0, None
     while idle < 3:
         log = run_log()
-        for row in log[seen:]:
-            if row.get("stage") and (not repo or row.get("repo") == repo.name):
-                out(watch_line(row, log))
+        for i, row in enumerate(log[seen:], seen):
+            if row.get("stage") not in (None, "queue") and (not repo or row.get("repo") == repo.name):
+                out(watch_line(row, log[:i + 1]))
                 # a run-end right after a restarting row is the old run handing over to the new one, so the watch keeps reading (#1494)
                 ends = row["stage"] == "run-end" and prev != "restarting"
                 prev = row["stage"]
@@ -384,15 +390,14 @@ def building_block(now: float, claims: dict, log: list[dict], alive: bool, open_
     return lines, warnings
 
 
-def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, ready: str, holder: dict | None = None) -> list[str]:
-    """The building lines, then the last three landings from the run log's landed rows and the next Ready story, then the warnings (#987). It reads only what
-    it is given."""
+def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, ready: str, holder: dict | None = None,
+             slug: str = "") -> list[str]:
+    """The building lines, then the last three landings from the run log's landed rows, the last run of SLUG's repo and the next Ready story, then the
+    warnings (#987). It reads only what it is given."""
     lines, warnings = building_block(now, claims, log, alive, open_now, holder)
     done = landings(log)[:3]
     lines += [landing_line(row, "Last landed" if i == 0 else "Landed before that") for i, row in enumerate(done)] or ["Last landed: none recorded yet."]
-    ended = [r for r in log if r.get("stage") == "run-end"]
-    if ended:
-        lines.append(run_end_line(ended[-1]))
+    lines += last_run(log, slug)
     if ready:
         lines.append(f"Next Ready: {ready}.")
     return lines + warnings
@@ -446,7 +451,7 @@ def landed_today(log: list[dict], now: float) -> list[dict]:
 
 
 def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]:
-    """The Building and Landed today sections for this machine, read from the claims, the run log, the process table, the run lock and the digest (#1334).
+    """The Building and Landed today sections for this machine, read from the claims, the run log, the process table and the run lock (#1334).
     A run log that cannot be read is named as unknown, and nothing is guessed from it."""
     stamp = now.timestamp()
     try:
@@ -456,14 +461,13 @@ def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]
     holder = run_lock.active(slug, stamp) if slug else {}
     claims = live_claims(stamp)
     building, warnings = building_block(stamp, claims, log, runner_alive(), open_now, holder)
-    ready = next_ready(digest_path(), repo_claims(claims, slug))
+    ready = next_ready(log, slug, claims)
     found, last = landed_today(log, stamp), landings(log)
     landed = [landing_line(row, "Landed") for row in found] or ["Nothing has landed today."]
     if not found:
         landed.append(landing_line(last[0], "Last landed") if last else "Last landed: none recorded yet.")
-    ended = [r for r in log if r.get("stage") == "run-end"]
     lines = ["Building:"] + building + ([f"Next Ready: {ready}."] if ready else []) + warnings
-    return lines + ["", "Landed today:"] + landed + ([run_end_line(ended[-1])] if ended else [])
+    return lines + ["", "Landed today:"] + landed + last_run(log, slug)
 
 
 def pace_lines(now: datetime, open_now: int | None, rows: list[dict] | None, slug: str) -> list[str]:
