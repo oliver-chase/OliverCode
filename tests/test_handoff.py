@@ -84,6 +84,17 @@ class Handoff(unittest.TestCase):
     def test_read_with_no_handoff_says_so(self):
         self.assertEqual(1, self.run_cmd("read", "OliverCode")[0])
 
+    def test_read_with_no_handoff_prints_no_detach_line(self):
+        code, out = self.run_cmd("read", "OliverCode")
+        self.assertEqual(1, code)
+        self.assertNotIn("Detach:", out)
+
+    def test_read_says_to_detach_self_only_when_the_session_nests(self):
+        self.put("OliverCode-handoff-2026-11-26.md")
+        out = self.read_as("s2")
+        self.assertIn('Detach: if this session nests under the session that started it, call detach_session with "self".', out)
+        self.assertIn("Skip the call when this session is already at the top level or the owner placed it.", out)
+
     def test_with_no_folder_set_the_handoff_folder_is_the_working_directory(self):
         os.environ.pop("OLIVERCODE_HANDOFF_DIR")
         cwd = os.getcwd()
@@ -147,6 +158,17 @@ class Handoff(unittest.TestCase):
         self.assertIn("call set_pinned for the new session with pinned=true", out)
         self.assertIn("call set_pinned for s1 with pinned=false", out)
         self.assertNotIn("Remote Control", out)
+
+    def test_write_says_to_detach_the_new_session_right_after_start(self):
+        self.home.mkdir()
+        out = self.write_draft()
+        lines = out.splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith("Start:"))
+        detach = next(i for i, line in enumerate(lines) if line.startswith("Detach:"))
+        title = next(i for i, line in enumerate(lines) if line.startswith("Title:"))
+        self.assertEqual(start + 1, detach)
+        self.assertLess(detach, title)
+        self.assertIn("call detach_session for the new session", lines[detach])
 
     def test_the_new_thread_keeps_the_number_write_gave_it_and_repeats_no_call_it_already_got(self):
         self.home.mkdir()

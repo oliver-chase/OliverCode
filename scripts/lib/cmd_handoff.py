@@ -195,6 +195,7 @@ def next_thread_steps(project: str, folder: Path) -> list[str]:
     """The calls the writing thread makes to start the next one in the desktop app, with its name and the pin."""
     number, old = reserve_thread(project, session())
     steps = [f"Start: call start_session with this prompt: {read_prompt(project, folder)}",
+             "Detach: call detach_session for the new session, so it sits at the top level of the sidebar and not under this one.",
              f'Title: call set_session_title for the new session with "{project} {number}".',
              "Pin: call set_pinned for the new session with pinned=true.",
              unpin_step(session())]
@@ -236,7 +237,8 @@ def read(project: str, folder: Path) -> int:
     for path in found:  # a second one is stale, so it goes too and one handoff is never left behind
         path.unlink()
     print(f"\nHandoff read and deleted: {found[0].name}. No copy is kept.")
-    print("\n".join(steps) or f'Thread: this one is "{project} {number}", and no new name is needed.')
+    detach = 'Detach: if this session nests under the session that started it, call detach_session with "self". Skip the call when this session is already at the top level or the owner placed it.'
+    print("\n".join([detach, *(steps or [f'Thread: this one is "{project} {number}", and no new name is needed.'])]))
     repo = drain_repo(text)
     if repo:
         print(f"Watch: run `olivercode watch {repo} --until-exit` in the background, so this thread wakes only when the drain ends. Never use Monitor for it.")
