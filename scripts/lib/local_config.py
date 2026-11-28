@@ -30,7 +30,7 @@ REAL_LOCAL_FILE = LOCAL_FILE
 # Every key this version reads, with the default a release ships (None where the code finds its own, such as repoRoot).
 # Install removes any saved key not listed here (#1295), so a key the code starts reading is listed here in the same change.
 DEFAULTS: dict = {
-    "allowOutside": [], "allowedAuthors": [], "auditMode": None, "city": False, "deleteMergedRemoteBranches": False,
+    "allowOutside": [], "allowedAuthors": [], "auditMode": None, "deleteMergedRemoteBranches": False,
     "designFile": None, "engineBranch": None, "fleetRegistry": None, "liveCopies": {}, "maxBuilders": None,
     "otherDeviceOwners": [], "otherDeviceRepos": [], "privateRepos": {}, "repoPaths": {}, "repoRoot": None, "schedules": {},
     "skillsRoot": None, "timeZone": "America/New_York", "voiceFile": None, "watchRoots": None,
@@ -143,7 +143,7 @@ def max_builders() -> int:
     return default_builders()
 
 
-DEFAULT_ZONE = "America/New_York"  # the zone City's times show in when the local file names no timeZone (#1386)
+DEFAULT_ZONE = "America/New_York"  # the zone local_time formats in when the local file names no timeZone (#1386)
 
 
 def zone():

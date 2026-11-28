@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -88,6 +89,19 @@ class ConvergeLocalConfig(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(path)], check=True)
         subprocess.run(["git", "-C", str(path), "remote", "add", "origin", f"https://github.com/me/{origin}.git"], check=True)
         return path
+
+    def test_the_owner_zone_shows_its_daylight_abbreviation(self):
+        """#1386: local_time formats in the owner's timeZone, with the abbreviation that zone has at that time."""
+        self.write({"timeZone": "America/Los_Angeles"})
+        self.assertEqual("05:00 PDT", local_config.local_time(datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)))
+
+    def test_no_time_zone_set_shows_new_york_in_winter(self):
+        self.write({})
+        self.assertEqual("07:00 EST", local_config.local_time(datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)))
+
+    def test_a_zone_the_database_does_not_hold_falls_back_to_new_york(self):
+        self.write({"timeZone": "Mars/Olympus"})
+        self.assertEqual("07:00 EST", local_config.local_time(datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)))
 
     def test_a_key_the_version_no_longer_reads_is_removed_once_backed_up_and_named(self):
         self.write({"pushRepos": ["old"], "maxBuilders": 3, "repoRoot": str(self.fleet)})

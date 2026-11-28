@@ -289,10 +289,8 @@ class RetiredCityShortcut(unittest.TestCase):
         with mock.patch.object(cmd_install, "_claude_dir", return_value=self.claude), \
                 mock.patch.object(cmd_install, "_desktop", return_value=self.desktop), \
                 mock.patch.object(cmd_install, "owner_terminal", return_value=False), \
-                mock.patch.object(cmd_install, "_schedule_jobs"), mock.patch.object(cmd_install, "_queue_shim"), \
-                mock.patch("lib.city.refresh") as refreshed:
+                mock.patch.object(cmd_install, "_schedule_jobs"), mock.patch.object(cmd_install, "_queue_shim"):
             _, out = quiet(cmd_install.command_install, REPO_ROOT)
-        self.refreshed = refreshed
         return out
 
     def uninstall(self) -> str:
@@ -320,7 +318,6 @@ class RetiredCityShortcut(unittest.TestCase):
         out = self.install()
         self.assertFalse(self.shortcut().is_symlink() or self.shortcut().exists())
         self.assertFalse(self.page.exists())
-        self.assertEqual(0, self.refreshed.call_count)
         self.assertNotIn("City", out)
 
     def test_an_earlier_shortcut_is_removed_once_and_the_record_drops_the_key(self):
