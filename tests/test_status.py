@@ -492,7 +492,7 @@ class TestRunCount(unittest.TestCase):
         self.assertIn(want, status)
         self.assertEqual(want, streamed[-1])
         self.assertIn("Last run ended 2026-11-22 04:00 EST: 4 stories landed, 0 stopped.", streamed)  # watch's opening block, before the new run ends
-        self.assertEqual([f"{want} No story it could start was left."], exited)
+        self.assertEqual([f"{want} No story it could start was left.\nNext: nothing is left to build."], exited)
         self.assertFalse(any("queue" in line or line.startswith("Next Ready") for line in status + streamed))
 
     def test_a_run_end_row_with_no_slug_is_matched_by_the_repos_name(self):
@@ -570,19 +570,32 @@ class TestWatchUntilExit(unittest.TestCase):
     def test_it_is_quiet_while_stories_land_and_stop_then_prints_the_counts_and_why(self):
         old = [self.end("08:00", 9, 9)]
         lines, _ = self.watch([old, [stage("story-1", "landed", "09:00")], [stage("story-2", "stopped", "09:05")], [self.end("09:10", 1, 1)]])
-        self.assertEqual(["Last run ended 2026-11-22 04:10 EST: 1 story landed, 1 stopped. No story it could start was left."], lines)
+        self.assertEqual(["Last run ended 2026-11-22 04:10 EST: 1 story landed, 1 stopped. No story it could start was left.",
+                          "Next: start the drain again without asking the owner: `olivercode drain r`."], "\n".join(lines).split("\n"))
 
     def test_a_run_that_restarts_is_followed_into_the_new_run_and_both_are_counted(self):
         lines, _ = self.watch([[], [stage("run-r", "restarting", "09:00"), self.end("09:00", 2, 0)], [stage("story-3", "claimed", "09:01")],
                                [self.end("09:30", 1, 1, reason="The run stopped for the usage limit: x.")]])
-        self.assertEqual(["Last run ended 2026-11-22 04:30 EST: 3 stories landed, 1 stopped. The run stopped for the usage limit: x."], lines)
+        self.assertEqual(["Last run ended 2026-11-22 04:30 EST: 3 stories landed, 1 stopped. The run stopped for the usage limit: x.",
+                          "Next: wait for the usage limit or GitHub hold to clear, or diagnose the failure and file it; no owner step is needed."], "\n".join(lines).split("\n"))
 
     def test_a_drain_that_dies_with_no_run_end_row_is_counted_from_its_story_rows(self):
         log = [self.end("08:00", 9, 9), stage("story-1", "stopped", "09:00"), stage("story-1", "landed", "09:05"), stage("story-2", "stopped", "09:06"),
                stage("run-r", "stopped", "09:07")]
         lines, sleeps = self.watch([log], alive=False)
         self.assertEqual(3, sleeps)
-        self.assertEqual(["Last run ended 2026-11-22 04:07 EST: 1 story landed, 1 stopped. It logged no run-end row, so no drain finished it."], lines)
+        self.assertEqual(["Last run ended 2026-11-22 04:07 EST: 1 story landed, 1 stopped. It logged no run-end row, so no drain finished it.",
+                          "Next: start the drain again without asking the owner: `olivercode drain r`."], "\n".join(lines).split("\n"))
+
+    def test_a_run_that_landed_nothing_never_says_to_start_the_drain_again(self):
+        lines, _ = self.watch([[self.end("09:00", 0, 2, skipped={"7": "blocker"})]], alive=False)
+        self.assertNotIn("start the drain", "\n".join(lines))
+        self.assertIn("Next: wait for the usage limit or GitHub hold to clear, or diagnose the failure and file it", "\n".join(lines))
+
+    def test_when_only_owner_work_is_left_the_next_line_names_the_split_and_the_gated_stories_once(self):
+        lines, _ = self.watch([[self.end("09:00", 2, 0, skipped={"5": "size", "9": "owner"})]], alive=False)
+        self.assertEqual("Next: split #5, which needs splitting, and name #9 to the owner once, as owner-gated.", "\n".join(lines).split("\n")[-1])
+        self.assertEqual(1, "\n".join(lines).count("#9 to the owner once"))
 
     def test_a_run_that_ended_before_the_watch_and_a_repo_with_no_run_each_print_one_line(self):
         self.assertEqual(1, len(self.watch([[self.end("08:00", 2, 0)]], alive=False)[0]))

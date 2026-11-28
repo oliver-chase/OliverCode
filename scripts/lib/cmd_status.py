@@ -283,21 +283,37 @@ def run_rows(log: list[dict], repo: str) -> list[dict]:
     return rows[start:]
 
 
+def next_step(repo: str, counted: dict, skipped: dict, limited: bool) -> str:
+    """The `Next:` line after a run's end (#1571). A run that landed a story and left one to build or retry tells the session to start the drain
+    again, unless a usage limit or GitHub hold stopped it. Otherwise the step names the owner's work, or the step that needs no owner."""
+    can_build = counted["stopped"] > 0 or any(k in ("blocker", "other") for k in skipped.values())
+    if not can_build:
+        size = ", ".join(f"#{n}" for n, k in skipped.items() if k == "size")
+        owner = ", ".join(f"#{n}" for n, k in skipped.items() if k == "owner")
+        steps = ([f"split {size}, which needs splitting"] if size else []) + ([f"name {owner} to the owner once, as owner-gated"] if owner else [])
+        return f"Next: {', and '.join(steps)}." if steps else "Next: nothing is left to build."
+    if counted["landed"] and not limited:
+        return f"Next: start the drain again without asking the owner: `olivercode drain {repo}`."
+    return "Next: wait for the usage limit or GitHub hold to clear, or diagnose the failure and file it; no owner step is needed."
+
+
 def exit_line(repo: str, rows: list[dict]) -> str:
-    """The one line `watch --until-exit` prints for the run in ROWS: its landed and stopped counts and why it ended (#1490), then each story it
-    skipped and why (#1510). A run with no run-end row is counted from its story rows."""
+    """The lines `watch --until-exit` prints for the run in ROWS: its landed and stopped counts and why it ended (#1490), then each story it
+    skipped and why (#1510), then a `Next:` line (#1571). A run with no run-end row is counted from its story rows."""
     if not rows:
         return f"No drain is running for {repo}."
     last = rows[-1]
     if last["stage"] == "run-end":
         counted = run_total(rows)
         why = "It logged a restart and the new run never started." if _restarting(rows) else last.get("reason") or "No story it could start was left."
+        limited = any(word in (last.get("reason") or "") for word in ("usage limit", "rate limit"))
     else:
         done = {r.get("story") for r in rows if r["stage"] in ("landed", "closed")}
         stopped = {r.get("story") for r in rows if r["stage"] == "stopped" and str(r.get("story")).startswith("story-")} - done
         counted = {**last, "landed": len(done), "stopped": len(stopped)}
         why = "It logged no run-end row, so no drain finished it."
-    return f"{run_end_line(counted)} {' '.join(why.split())}{skip_text(last)}"
+        limited = False
+    return f"{run_end_line(counted)} {' '.join(why.split())}{skip_text(last)}\n{next_step(repo, counted, last.get('skipped', {}), limited)}"
 
 
 def wait_for_exit(repo: str, alive, sleep, out) -> int:
