@@ -336,6 +336,24 @@ class TestFailureGaps(unittest.TestCase):
         self.assertEqual(3, len(failure_log.entries()))  # the run adds no finding to the log it reads
         self.assertEqual([], sorted(p.name for p in self.home.iterdir() if "candidate" in p.name or "outbox" in p.name))
 
+    def test_a_repeat_gate_block_is_reported_with_its_count_and_time_and_queues_no_owner_step(self):
+        """#1569: a gate blocked 3 or more times stays in the maintenance report, and the owner queue holds only owner steps."""
+        from lib import cmd_owner
+        problem = maintain.Problem("blocker", "gate 4: land interrupted blocked 3 times, latest 2026-11-28T06:00:00Z", fixable=False)
+        for _ in range(2):
+            code, _ = quiet(maintain.report, [problem], True)
+        self.assertEqual(1, code)
+        self.assertEqual([], [i for i in cmd_owner.items() if i["status"] == "open"])
+        log = (self.home / "maintenance.log").read_text()
+        self.assertIn("[REPORTED] blocker: gate 4: land interrupted blocked 3 times, latest 2026-11-28T06:00:00Z", log)
+        self.assertNotIn("NEEDS A DECISION", log)
+
+    def test_a_maintain_problem_that_needs_a_decision_still_queues_an_owner_step(self):
+        from lib import cmd_owner
+        quiet(maintain.report, [maintain.Problem("placement", "repo out of place: /x. move it", fixable=False)], True)
+        self.assertEqual(["maintain placement: repo out of place: /x. move it"],
+                         [i["step"] for i in cmd_owner.open_items()])
+
 
 class TestStateFolder(Base):
     LIMITS = {"stateEntries": 80, "stateBytes": 52428800, "stateLogBytes": 100}

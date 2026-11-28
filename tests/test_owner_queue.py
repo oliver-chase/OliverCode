@@ -73,6 +73,22 @@ class TestRemovedJobItems(unittest.TestCase):
             self.assertEqual(["maintain queues: a denied step", "Pick a price"], [i["step"] for i in cmd_owner.open_items()])
 
 
+class TestRepeatBlockerItems(unittest.TestCase):
+    def test_old_blocker_lines_close_once_with_the_reason_and_no_other_step_is_touched(self):
+        """#1569: the open "maintain blocker:" lines from before the fix are retired, and listed no more."""
+        home = temp_dir(self)
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)}):
+            cmd_owner.add("maintain", "maintain blocker: gate 4: land interrupted blocked 3 times, latest 2026-11-20T06:00:00Z")
+            cmd_owner.add("maintain", "maintain blocker: gate 4: land interrupted blocked 4 times, latest 2026-11-21T06:00:00Z")
+            cmd_owner.add("s1", "Pick a price")
+            self.assertEqual(["Pick a price"], [i["step"] for i in cmd_owner.open_items()])
+            self.assertEqual(2, cmd_owner.retire_removed())
+            self.assertEqual(0, cmd_owner.retire_removed())
+            closed = [i for i in cmd_owner.items() if i["status"] == "done"]
+            self.assertEqual({"a repeat gate block stays in the maintenance report (#1569)"}, {i["reason"] for i in closed})
+            self.assertEqual(["Pick a price"], [i["step"] for i in cmd_owner.open_items()])
+
+
 class TestPreparedOwnerSteps(unittest.TestCase):
     def run_cmd(self, *argv):
         buf = io.StringIO()

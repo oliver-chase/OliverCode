@@ -565,6 +565,8 @@ def report(problems: list[Problem], fix: bool) -> int:
             state = "FIXED"
         elif p.fixable and not fix:
             state = "FIXABLE (run with --fix)"
+        elif p.step == "blocker":  # a repeat gate block is reported only; no owner decision settles it (#1569)
+            state = "REPORTED"
         else:
             state = "NEEDS A DECISION" if not p.fixable else "NOT FIXED"
         lines.append(f"  [{state}] {p.step}: {p.text}")

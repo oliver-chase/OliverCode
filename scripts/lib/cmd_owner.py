@@ -127,23 +127,31 @@ def close(item_id: int, reason: str = "") -> None:
 REMOVED_STEPS = ("maintain health:", "maintain tidy:", "maintain branches:", "maintain suite:")
 REMOVED_BRING = re.compile(r"Bring .+ level with origin: ")
 REMOVED_REASON = "the job that wrote it was removed"
+# A repeat gate block is reported by maintain and never queued for the owner, since no owner decision settles it (#1569).
+REPORT_ONLY_STEPS = ("maintain blocker:",)
+REPORT_ONLY_REASON = "a repeat gate block stays in the maintenance report (#1569)"
 
 
-def _removed(item: dict) -> bool:
+def _retire_reason(item: dict) -> str:
+    """Why an open item is closed without the owner's answer, or "" when it is still the owner's to act on."""
     step = str(item.get("step", ""))
-    return step.startswith(REMOVED_STEPS) or bool(REMOVED_BRING.match(step))
+    if step.startswith(REPORT_ONLY_STEPS):
+        return REPORT_ONLY_REASON
+    if step.startswith(REMOVED_STEPS) or REMOVED_BRING.match(step):
+        return REMOVED_REASON
+    return ""
 
 
 def open_items() -> list[dict]:
-    """The open steps whose job still runs. An item a removed job wrote is left out even before retire_removed closes it."""
-    return [i for i in items() if i["status"] == "open" and not _removed(i)]
+    """The open steps the owner still has to act on. An item retired by _retire_reason is left out even before retire_removed closes it."""
+    return [i for i in items() if i["status"] == "open" and not _retire_reason(i)]
 
 
 def retire_removed() -> int:
-    """Close each open item a removed job wrote, once, with the reason it was closed. Returns how many it closed (#1246)."""
-    gone = [i for i in items() if i["status"] == "open" and _removed(i)]
-    for item in gone:
-        close(item["id"], REMOVED_REASON)
+    """Close each open item that no longer belongs in the queue, once, with the reason it was closed. Returns how many it closed (#1246, #1569)."""
+    gone = [(i, _retire_reason(i)) for i in items() if i["status"] == "open" and _retire_reason(i)]
+    for item, reason in gone:
+        close(item["id"], reason)
     return len(gone)
 
 
