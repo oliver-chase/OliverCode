@@ -23,6 +23,7 @@ Documentation coverage: two scripts have no docs. Next: document them in #27.
 Functionality gaps: nothing found, so no story is needed for this lens.
 Portability and sharing: a personal email sits in history. Next: remove it, in #30.
 Test necessity: three tests duplicate one another. Next: cut the duplicates in #24.
+Design: nothing found, so no fix is needed for this lens.
 | Lens | Finding | Issue |
 |---|---|---|
 | Autonomy and user flow | cards need a mouse | #26 |
@@ -32,6 +33,7 @@ Test necessity: three tests duplicate one another. Next: cut the duplicates in #
 | Unused parts | dead file | #24 |
 | Cost in use | whole file read | #29 |
 | Voice | contrast framing | #28 |
+| Design | Checked, nothing found | |
 | Documentation coverage | two scripts undocumented | #27 |
 | Functionality gaps | Checked, nothing found | |
 | Portability and sharing | personal email in history | #30 |
@@ -66,7 +68,7 @@ class ReportCheckTest(unittest.TestCase):
     def test_a_complete_report_passes(self):
         self.assertEqual(problems(GOOD), [])
         # Each lens in references/lenses.md has its own pattern here, so a renamed or added lens fails this test.
-        headings = re.findall(r"^## \d+\. (.+)$", (Path(__file__).parent.parent / "references" / "lenses.md").read_text(), re.M)
+        headings = re.findall(r"^## \d+[a-z]?\. (.+)$",(Path(__file__).parent.parent / "references" / "lenses.md").read_text(), re.M)
         for heading in headings:
             self.assertTrue(any(re.search(rx, heading, re.I) for rx in check_report.LENSES.values()), heading)
 
@@ -132,3 +134,4 @@ class ReportCheckTest(unittest.TestCase):
         self.assertTrue(check_report.unread(root, "Deferred: c.py"))
         self.assertTrue(check_report.unread(root, "Deferred: b.py. Full coverage."))
         self.assertTrue(check_report.unread(root, "b.py was not read"))
+        self.assertTrue(any("b.py" in p for p in check_report.unread(root, "Deferred: ab.py")))

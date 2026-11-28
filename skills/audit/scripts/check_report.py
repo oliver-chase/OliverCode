@@ -19,6 +19,7 @@ LENSES = {
     "over-engineering and unused parts": r"over-engineer|unused",
     "cost in use": r"cost in use|cost to",
     "voice": r"voice",
+    "design": r"design",
     "documentation coverage": r"documentation|doc coverage",
     "functionality gaps": r"gap",
     "portability and sharing": r"portab|sharing|shareable",
@@ -115,17 +116,23 @@ def check(text):
     return problems
 
 
+def named(path, text):
+    """True when text names path as a whole file path, so "ab.py" does not name "b.py" and "src/b.py" does not name "b.py"."""
+    return re.search(r"(?<![\w/-])" + re.escape(path) + r"(?![\w/-]|\.\w)", text) is not None
+
+
 def unread(repo, text=""):
     """The coverage gate: a whole-repo report goes out only once the ledger lists nothing as pending, or, for an audit
     that stopped, once it lists every unread file as deferred and claims no full coverage."""
     rows = audit_ledger.pending(repo)
     if not rows:
         return []
-    if re.search(r"\bdeferred\b", text, re.I) and all(p in text for p in rows) \
+    if re.search(r"\bdeferred\b", text, re.I) and all(named(p, text) for p in rows) \
             and not re.search(r"full coverage|every file (was |were )?read|all files (were )?read", text, re.I):
         return []
     lines = sum(audit_ledger.line_count(repo, p) for p in rows)
-    return [f"{len(rows)} files ({lines} lines) in {repo} are still unread. Fix: run the next reader wave from `audit_ledger.py --batches 3000`, mark each batch, and report when --pending lists nothing. A stopped audit instead lists each unread file as deferred and claims no full coverage"]
+    uncovered = [p for p in rows if not named(p, text)] or rows
+    return [f"{len(rows)} files ({lines} lines) in {repo} are still unread, not covered: {', '.join(uncovered)}. Fix: run the next reader wave from `audit_ledger.py --batches 3000`, mark each batch, and report when --pending lists nothing. A stopped audit instead lists each unread file as deferred and claims no full coverage"]
 
 
 SMALL_ROUTES = ("plan", "docs", "changes")
