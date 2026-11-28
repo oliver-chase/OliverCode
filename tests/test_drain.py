@@ -944,13 +944,10 @@ class TestRealIo(unittest.TestCase):
     """How a headless builder finishes a story (docs/SETUP.md), #877: the real Io builds the real brief, makes a prepared worktree and reads the landing from git."""
 
     def setUp(self):
-        home, self.repo = temp_dir(self), temp_dir(self)
-        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(home)})
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
         patcher.start()
         self.addCleanup(patcher.stop)
-        scratch_repo(self.repo, branch="main")
-        git(self.repo, "commit", "--allow-empty", "-qm", "base")
-        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.repo = self.scratch()
         self.io = cmd_drain.Io(self.repo, "o/r")
 
     def test_the_base_check_runs_under_worktrees_and_leaves_no_worktree(self):
@@ -1120,9 +1117,17 @@ class TestRealIo(unittest.TestCase):
         git(self.repo, "commit", "-qm", subject)
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
 
-    def mate_io(self, notes: list) -> cmd_drain.Io:
+    def scratch(self) -> Path:
+        """A fresh repo whose origin's default branch is its one base commit, so each case adds its own commits."""
+        repo = temp_dir(self)
+        scratch_repo(repo, branch="main")
+        git(repo, "commit", "--allow-empty", "-qm", "base")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        return repo
+
+    def mate_io(self, notes: list, repo: Path = None) -> cmd_drain.Io:
         """An Io whose REST reads return the story's comments as `notes`."""
-        return cmd_drain.Io(self.repo, "o/r", "dispatch", lambda args: subprocess.CompletedProcess(args, 0, json.dumps(notes), ""))
+        return cmd_drain.Io(repo or self.repo, "o/r", "dispatch", lambda args: subprocess.CompletedProcess(args, 0, json.dumps(notes), ""))
 
     def test_a_mate_is_recognized_when_a_lead_commit_changed_its_files_and_its_close_was_refused(self):
         """#988: the lead commit is named, and the mate's work is not built again."""
@@ -1133,26 +1138,48 @@ class TestRealIo(unittest.TestCase):
         self.assertEqual("Fix the thing (#976)", lead[1])
         self.assertEqual(git(self.repo, "rev-parse", "HEAD").stdout.strip(), lead[0])
 
-    def test_a_story_is_built_as_before_without_a_refused_close_an_overlapping_file_or_a_comment(self):
-        self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
+    def test_a_mate_is_not_recognized_without_a_refusal_an_overlapping_file_a_comment_or_a_lead_of_its_own(self):
+        """#988: each row is a case that reads as not a mate; the positive case above is the one that is recognized."""
+        lead = [("Fix the thing (#976)", "scripts/lib/cmd_drain.py")]
+        own = lead + [("Fix the story (#974)", "scripts/lib/cmd_drain.py")]
         refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
-        mate = {**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}
-        self.assertIsNone(self.mate_io([]).landed_lead(mate))
-        self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_land.py"), "comments": 1}))
-        self.assertIsNone(self.mate_io(refused).landed_lead(issue(974, "Files area: scripts/lib/cmd_drain.py")))
+        for commits, area, comments, notes, why in (
+            (lead, "scripts/lib/cmd_drain.py", 1, [], "no refusal is recorded"),
+            (lead, "scripts/lib/cmd_land.py", 1, refused, "the lead changed no file in the area"),
+            (lead, "scripts/lib/cmd_drain.py", 0, refused, "the story has no comment"),
+            (own, "scripts/lib/cmd_drain.py", 1, refused, "the story's own commit is on main"),
+        ):
+            with self.subTest(why):
+                repo = self.scratch()
+                for subject, path in commits:
+                    (repo / path).parent.mkdir(parents=True, exist_ok=True)
+                    (repo / path).write_text(subject + "\n", encoding="utf-8")
+                    git(repo, "add", path)
+                    git(repo, "commit", "-qm", subject)
+                    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+                mate = {**issue(974, f"Files area: {area}"), "comments": comments}
+                self.assertIsNone(self.mate_io(notes, repo).landed_lead(mate))
 
-    def test_a_story_with_its_own_commit_on_main_is_not_a_mate(self):
-        self.commit_file("scripts/lib/cmd_drain.py", "Fix the thing (#976)")
-        self.commit_file("scripts/lib/cmd_drain.py", "Fix the story (#974)")
-        refused = [{"body": "Close refused by complete_story.py: no commit for (#974) is on origin/main"}]
-        self.assertIsNone(self.mate_io(refused).landed_lead({**issue(974, "Files area: scripts/lib/cmd_drain.py"), "comments": 1}))
-
-    def test_head_that_names_the_story_and_sits_on_the_default_branch_is_landed(self):
-        git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
-        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-        self.assertTrue(self.io.landed(self.repo, 7))
-        self.assertFalse(self.io.landed(self.repo, 8))
-        self.assertEqual(self.io.commits(self.repo), 0)
+    def test_a_story_lands_only_on_a_commit_on_origin_that_names_it_and_a_gone_worktree_still_counts(self):
+        """#1011: each row is one case of `landed` and `commits`: the commits its repo gets (subject, on origin's default branch), the worktree
+        asked (None is the repo), the story, what `landed` returns and what `commits` counts (None is not checked)."""
+        for commits, wt, n, landed, count in (
+            ([("Fix the thing (#7)", True)], None, 7, True, 0),  # the head names the story and sits on the default branch
+            ([("Fix the thing (#7)", True)], None, 8, False, 0),  # story 8 is not named, so it is not landed
+            ([("Fix the thing (#7)", False)], None, 7, False, 1),  # the head is ahead of the default branch, so it is not landed
+            ([("Fix the thing (#7)", True)], "/no/such/worktree", 7, True, None),  # a worktree that is gone still counts
+            ([("Fix the thing (#7)", True)], "/no/such/worktree", 70, False, None),
+        ):
+            with self.subTest(story=n, worktree=wt):
+                repo = self.scratch()
+                for subject, on_origin in commits:
+                    git(repo, "commit", "--allow-empty", "-qm", subject)
+                    if on_origin:
+                        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+                io = cmd_drain.Io(repo, "o/r")
+                self.assertEqual(landed, io.landed(Path(wt or repo), n))
+                if count is not None:
+                    self.assertEqual(count, io.commits(repo))
 
     def test_a_commit_made_before_the_claim_is_not_landed_and_one_after_it_is(self):
         """#1306: an older commit that names the story does not close it; a commit made after the claim does."""
@@ -1167,17 +1194,6 @@ class TestRealIo(unittest.TestCase):
         git(self.repo, "commit", "--allow-empty", "-qm", "Rest of the thing (#7)")
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.assertTrue(self.io.landed(self.repo, 7))
-
-    def test_head_ahead_of_the_default_branch_is_not_landed(self):
-        git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
-        self.assertFalse(self.io.landed(self.repo, 7))
-        self.assertEqual(self.io.commits(self.repo), 1)
-
-    def test_a_commit_on_the_default_branch_counts_as_landed_when_the_worktree_is_gone(self):
-        git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
-        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-        self.assertTrue(self.io.landed(Path("/no/such/worktree"), 7))
-        self.assertFalse(self.io.landed(Path("/no/such/worktree"), 70))
 
     def test_close_by_script_logs_the_commit_and_gives_the_gate_a_run_output_line(self):
         git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")
