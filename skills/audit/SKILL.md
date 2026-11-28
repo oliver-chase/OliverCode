@@ -25,7 +25,7 @@ Load the file of the route the request names. A request that fits two routes run
 
 | The request names | Route | Load |
 |---|---|---|
-| A repo, a suite, a system, or nothing ("audit this") | Whole target; to done only on "audit and fix" | `references/system.md`, `references/done.md` |
+| A repo, a suite, a system, or nothing ("audit this") | Whole target; to done only on "audit and fix" | `references/system.md` |
 | A skill, a skill family or a skills folder | Skills | `references/skills.md` |
 | The Claude config (`~/.claude`) | Skills, then Docs | `references/skills.md`, `references/docs.md` |
 | The docs, a README, or "are these accurate" | Docs | `references/docs.md` |
@@ -33,7 +33,7 @@ Load the file of the route the request names. A request that fits two routes run
 | A plan file, or a plan about to run | Plan | `references/plan.md` |
 | "Security audit" | Security: proven boundary crossings only | `references/security.md` |
 
-Every route loads `references/lenses.md`. A target with a user interface also loads `references/frontend-ux.md`.
+The whole-target, skills, docs and changes routes also load `references/lenses.md`; the plan and security routes do not. A target with a user interface also loads `references/frontend-ux.md`.
 
 ## The procedure
 
