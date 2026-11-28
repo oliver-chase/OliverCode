@@ -99,6 +99,26 @@ class TestDispatch(unittest.TestCase):
                 self.assertIsNone(run_main({**BASH, "tool_input": {"command": command}}), command)
 
 
+AGENT = {"tool_name": "Agent", "tool_input": {"prompt": "read", "subagent_type": "general-purpose"}, "cwd": "/tmp"}
+
+
+class TestAgentDefaultModel(unittest.TestCase):
+    def test_an_agent_call_with_no_model_is_allowed_on_sonnet(self):
+        with quiet_guards():
+            out = run_main(AGENT)
+        self.assertEqual({"hookEventName": "PreToolUse", "permissionDecision": "allow",
+                          "updatedInput": {**AGENT["tool_input"], "model": "sonnet"}}, out)
+
+    def test_another_guards_deny_or_ask_wins_and_no_allow_is_printed(self):
+        for kind in ("deny", "ask"):
+            decision = policy.Decision(kind, "paths", "Held.")
+            with self.subTest(kind=kind), quiet_guards(policy_guard__decide=(decision, "repo")), \
+                    mock.patch.object(pretool.policy, "log_block"):
+                out = run_main(AGENT)
+                self.assertEqual((kind, "Held."), (out["permissionDecision"], out["permissionDecisionReason"]))
+                self.assertNotIn("updatedInput", out)
+
+
 class TestRegistration(unittest.TestCase):
     def test_one_entry_replaces_the_four_pre_tool_guards(self):
         # One process per Bash, Edit or Write call. The start-session guard matches only its own tool.

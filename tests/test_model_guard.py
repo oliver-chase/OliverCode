@@ -48,6 +48,23 @@ class TestModelGuard(unittest.TestCase):
         self.assertEqual("", self.check("claude-sonnet-5-5"))
         self.assertEqual("", self.check(None))
 
+    def default(self, owner_says=None, **extra):
+        tmp, data = call(extra.pop("model", None), owner_says)
+        self.addCleanup(tmp.cleanup)
+        data["tool_input"].update(extra)
+        return guard.default_input(data)
+
+    def test_an_unnamed_model_becomes_sonnet_for_a_general_purpose_or_untyped_call(self):
+        self.assertEqual({"prompt": "read", "model": "sonnet"}, self.default())
+        self.assertEqual({"prompt": "read", "subagent_type": "general-purpose", "model": "sonnet"},
+                         self.default(["audit the repo"], subagent_type="general-purpose"))  # a tool result that says opus is not the owner
+
+    def test_no_model_is_added_when_the_owner_named_opus_or_the_call_or_its_type_sets_one(self):
+        self.assertIsNone(self.default(["Use Opus for the review please"]))
+        self.assertIsNone(self.default(subagent_type="Explore"))
+        self.assertIsNone(self.default(model="sonnet"))
+        self.assertIsNone(guard.default_input({"tool_name": "Bash", "tool_input": {}}))
+
     def test_other_tools_pass_and_an_unreadable_transcript_raises_for_the_pretool_guard_to_fail_open(self):
         self.assertEqual("", guard.reason({"tool_name": "Bash", "tool_input": {"model": "opus"}}))
         with self.assertRaises(OSError):

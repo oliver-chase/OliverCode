@@ -3,7 +3,7 @@
 
 One hook parses the input once per tool call and asks each guard in turn: commit_guard (a commit that would skip the repo's gates),
 archived_guard (a commit or push in a repo GitHub archived or deleted), placement_guard (a clone or worktree outside its home), main_checkout (an edit or commit in a fleet repo's main checkout), policy_guard (the repo's policy.json) and gh_guard
-(the shared GitHub budget), reset_guard (a `git reset --hard` in a main checkout or a tree with uncommitted changes), model_guard (a subagent on a model other than Sonnet that the owner never named) and watch_guard (a watch that wakes a session on every drain event).  A deny from any guard wins over an ask. Each guard fails open on its own bug, so
+(the shared GitHub budget), reset_guard (a `git reset --hard` in a main checkout or a tree with uncommitted changes), model_guard (a subagent on a model other than Sonnet that the owner never named) and watch_guard (a watch that wakes a session on every drain event).  A deny from any guard wins over an ask. When no guard has an opinion, model_guard may allow an Agent call with Sonnet added. Each guard fails open on its own bug, so
 one broken guard never disables the others and never blocks a command.
 """
 
@@ -115,6 +115,10 @@ def main() -> int:
             out["updatedInput"] = {**data["tool_input"], "command": held[1]}
         print(json.dumps({"hookSpecificOutput": out}))
         return 0
+    # Only a call no guard denied or held is allowed with its input changed.
+    updated = _safely(model_guard.default_input, data)
+    if updated:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": updated}}))
     return 0
 
 
