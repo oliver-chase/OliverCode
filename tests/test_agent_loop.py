@@ -327,6 +327,20 @@ class TestLoop(unittest.TestCase):
         self.assertTrue(out["idle"])
         self.assertEqual(["s1", "s1-review", "s1"], calls)
 
+    def test_a_round_with_no_commit_on_the_branch_starts_no_reader_and_returns_to_the_drain(self):  # #1547
+        run, calls = self.repo_run(lambda: (self.repo / "half.py").write_text("x = 1\n"))  # changed and never committed
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        out = self.loop(run, [(True, "")])
+        self.assertEqual((True, 1, ["s1"]), (out["done"], out["rounds"], calls))  # done sends it to the drain's landing step
+        self.assertIn("no commit on the branch", out["reason"])
+
+    def test_a_round_with_a_commit_on_the_branch_starts_the_reader(self):  # #1547
+        run, calls = self.repo_run(lambda: git(self.repo, "commit", "-qm", "work", "--allow-empty"))  # an empty diff, yet a commit that could land
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        with mock.patch.object(agent_loop, "review", return_value={"verdict": "pass", "text": "PASS"}) as read:
+            out = self.loop(run, [(True, "")])
+        self.assertEqual((True, 1, ["s1"]), (out["done"], read.call_count, calls))
+
     def test_a_round_that_commits_edits_or_adds_a_file_is_progress_and_resets_the_count(self):  # #1531
         def commit():
             git(self.repo, "commit", "-qm", "more", "--allow-empty")

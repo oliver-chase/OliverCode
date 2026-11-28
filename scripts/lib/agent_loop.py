@@ -546,6 +546,10 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
             if review_mode == "none" and not intake.removed_tests(task):  # a declared test removal is read whatever the lane (#1484)
                 return {"done": True, "reason": "The repo's validation passes; routine story review is covered by validation and commit gates.",
                         "rounds": n, "tokens": tokens, "summary": summary}
+            # the commit count, not an empty branch_diff: commits that cancel out would still land, so they are read, as is a count git cannot give
+            if gitfiles.out(cwd, "rev-list", "--count", f"origin/{default_branch(cwd)}..HEAD").strip() == "0":
+                return {"done": True, "reason": "The repo's validation passes, and there is no commit on the branch to read.",  # done: the drain's landing step decides (#1547)
+                        "rounds": n, "tokens": tokens, "summary": summary}
             verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
                              max_turns=READER_TURNS, attempts=2)
             if verdict["verdict"] == "none":  # the reader failed twice, so nothing lands, and its failure is no finding (#1015, #1489)
