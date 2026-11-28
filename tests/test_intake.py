@@ -33,6 +33,13 @@ class TestFit(unittest.TestCase):
         self.assertEqual("Related: #7 (Files area overlaps)", once.splitlines()[-1])
         self.assertEqual(once, twice)
 
+    def test_the_story_map_keeps_its_shape_and_a_hold_raises(self):
+        row = {"number": 4, "title": "t", "body": "b", "labels": [{"name": "x"}], "state": "open"}
+        with mock.patch.object(intake.open_issues, "fetch", return_value=[row]):
+            self.assertEqual({4: {"number": 4, "title": "t", "body": "b", "labels": ["x"]}}, intake.open_stories("o/r"))
+        with mock.patch.object(intake.open_issues, "fetch", return_value=None):
+            self.assertRaisesRegex(RuntimeError, "held", intake.open_stories, "o/r")
+
     def test_a_path_not_on_main_and_not_created_is_printed(self):
         with mock.patch.object(intake, "tracked", return_value={"a.py"}):
             _, lines = intake.fit("Files area: a.py, b.py, c.py, word\nCreates: c.py\n", "New", {}, ".")

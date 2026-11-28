@@ -135,6 +135,10 @@ class TestDispatch(DispatchCase):
         code, out = quiet(cmd_dispatch.command_dispatch, ["77"], runner=runner_for(STORY, [], ()), busy=FREE, clock=lambda: NOW, repo=cmd_dispatch.OC_ROOT, io=io)
         self.assertEqual((1, []), (code, io.steps))
         self.assertEqual([cmd_dispatch.ENGINE_REFUSAL], out.strip().splitlines())
+        with mock.patch.object(cmd_dispatch.local_config, "backlog_config", return_value={"repoOwner": "o", "repoName": "r"}), mock.patch.object(cmd_dispatch.open_issues, "fetch", return_value=None):
+            code, out = quiet(cmd_dispatch.command_dispatch, ["--plan"], repo=Path("/nowhere"))
+        self.assertEqual(1, code)
+        self.assertIn("held", out)
 
     def test_dry_run_claims_and_builds_nothing(self):
         code, out, io = self.run_dispatch(argv=("77", "--dry-run"))

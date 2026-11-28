@@ -210,7 +210,10 @@ def _plan(repo) -> int:
     """`dispatch --plan`: print the parallel groups, the models, the stories to rewrite and the long waits (#794)."""
     try:
         cfg = local_config.backlog_config(repo)
-        print(intake.render(intake.plan(intake.gh_issues(f"{cfg['repoOwner']}/{cfg['repoName']}"))))
+        opened = open_issues.fetch(f"{cfg['repoOwner']}/{cfg['repoName']}")
+        if opened is None:
+            return _refuse("the plan was not built: GitHub is held or the read failed, so no issues were read")
+        print(intake.render(intake.plan(opened)))
     except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as exc:
         return _refuse(f"the plan was not built: {exc}")
     return 0

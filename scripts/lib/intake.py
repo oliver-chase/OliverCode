@@ -23,14 +23,6 @@ SIZES = ((500, "XS"), (1000, "S"), (2000, "M"), (4000, "L"))
 FIELDS_LINE = r"^(?=(?:Priority|Size|Work type):)"  # a story's own fields start their line; quoted ones sit inside a scenario (#1514)
 
 
-def gh_issues(slug: str) -> list[dict]:
-    done = subprocess.run(["gh", "issue", "list", "--repo", slug, "--state", "open", "--limit", "500",
-                           "--json", "number,title,body,labels"], capture_output=True, text=True, timeout=120)
-    if done.returncode:
-        raise RuntimeError((done.stderr or done.stdout).strip()[:120] or "gh issue list failed")
-    return json.loads(done.stdout or "[]")
-
-
 def priority_of(story):
     """The Priority line the story states, else P0 for security and data loss, P1 for a defect, P2 for the rest."""
     text = f"{story.get('title') or ''}\n{story.get('body') or ''}"
@@ -166,13 +158,11 @@ def plan(issues: list[dict], today: datetime.date | None = None) -> dict:
 
 
 def open_stories(slug):
-    """{number: {title, body, labels}} of the repo's open issues, over REST."""
-    done = subprocess.run(["gh", "api", f"repos/{slug}/issues?state=open&per_page=100", "--paginate", "--jq",
-                           '.[] | select(has("pull_request") | not) | {number, title, body, labels: [.labels[].name]}'],
-                          capture_output=True, text=True, timeout=120)
-    if done.returncode:
-        raise RuntimeError(f"could not read the open issues of {slug}")
-    return {o["number"]: o for o in (json.loads(l) for l in done.stdout.splitlines() if l.strip())}
+    """{number: {number, title, body, labels: [names]}} of the repo's open issues, over REST. A GitHub hold or a failed read raises RuntimeError."""
+    opened = open_issues.fetch(slug)
+    if opened is None:
+        raise RuntimeError(f"GitHub is held or the read failed, so the open issues of {slug} were not read")
+    return {o["number"]: {**{k: o[k] for k in ("number", "title", "body")}, "labels": [l["name"] for l in o["labels"]]} for o in opened}
 
 
 RELATED = re.compile(r"^Related:.*$", re.M)
