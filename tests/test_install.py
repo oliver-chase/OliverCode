@@ -326,8 +326,6 @@ class CityShortcut(unittest.TestCase):
         out = self.uninstall()
         self.assertFalse(self.shortcut().is_symlink() or self.shortcut().exists())
         self.assertIn("[REMOVED] ~/Desktop/OliverCode City.html", out)
-
-    def test_uninstall_removes_an_earlier_webloc_install_added(self):
         self.install()
         legacy = self.desktop / cmd_install.CITY_SHORTCUT_WEBLOC
         legacy.write_text("earlier\n")
@@ -341,8 +339,11 @@ class CityShortcut(unittest.TestCase):
                 mock.patch.object(city.repo_state, "origin", return_value="o/r"), mock.patch("lib.city.webbrowser.open") as opened:
             self.fake_refresh()
             city.command_page(["--open"])
-        self.assertEqual(1, write.call_count)
-        opened.assert_called_once_with(self.page.as_uri())
+            self.assertEqual(1, write.call_count)
+            opened.assert_called_once_with(self.page.as_uri())
+            city.command_page([])
+            self.assertEqual(2, write.call_count)
+            self.assertEqual(1, opened.call_count)
 
     def test_no_shortcut_and_no_page_while_the_city_setting_is_off(self):
         from lib import city
@@ -361,13 +362,6 @@ class CityShortcut(unittest.TestCase):
         opened.assert_not_called()
         self.assertIn("City is off", printed.getvalue())
         self.assertIn('"city": true', printed.getvalue())
-
-    def test_status_page_without_open_does_not_open_a_browser(self):
-        from lib import city
-        with mock.patch.object(city, "write", return_value=0), mock.patch.object(city.repo_state, "origin", return_value="o/r"), \
-                mock.patch("lib.city.webbrowser.open") as opened:
-            city.command_page([])
-        opened.assert_not_called()
 
 
 class UninstallLeavesNothing(unittest.TestCase):
