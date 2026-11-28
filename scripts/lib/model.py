@@ -64,7 +64,8 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
     `stop` is the CLI's own stop reason: its `terminal_reason` ('max_turns' when the turn cap ended the session), else its result subtype, and '' when it gave none (#877).
     `stderr` is the last STDERR_TAIL characters of what the CLI wrote to stderr.
     `project_only` runs the session with the project's settings and OliverCode's own hooks, with the owner's ~/.claude settings left out (#911). None reads PROJECT_ENV, which is project-only unless it is "0" (#1016), and
-    `settings` names which setup ran: 'project' or 'current'. The installed OliverCode hooks run on every tool the call uses, because Claude Code loads them from ~/.claude."""
+    `settings` names which setup ran: 'project' or 'current'. The installed OliverCode hooks run on every tool the call uses, because Claude Code loads them from ~/.claude.
+    `allowed_tools` is both the tools the session loads (`--tools`) and the ones it may use (`--allowedTools`); an empty value passes neither flag, so the default set loads (#1546)."""
     if not available():
         raise ModelError("The claude command is not on PATH. Install Claude Code and sign in with `claude`.")
     if project_only is None:
@@ -74,7 +75,7 @@ def run_cli(prompt: str, cwd: str, allowed_tools: str = ALLOWED_TOOLS, max_turns
     if project_only:
         argv += ["--setting-sources", "project,local", "--settings", project_settings()]
     if allowed_tools:
-        argv += ["--allowedTools", allowed_tools]
+        argv += ["--tools", allowed_tools, "--allowedTools", allowed_tools]  # --tools loads only these; --allowedTools alone approves them and still loads every built-in (#1546)
     if system:
         argv += ["--append-system-prompt", system]
     if model:

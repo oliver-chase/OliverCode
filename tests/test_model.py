@@ -51,6 +51,18 @@ class TestRunCli(unittest.TestCase):
         self.assertEqual({"mcpServers": {}}, json.loads(argv[argv.index("--mcp-config") + 1]))
         self.assertEqual("Read,Edit,Write,Bash,Grep,Glob", argv[argv.index("--allowedTools") + 1])
 
+    def test_the_tools_flag_loads_only_the_allowed_tools(self):
+        run, _ = self.call(allowed_tools="Read,Grep,Glob")
+        argv = run.call_args_list[0][0][0]
+        self.assertEqual("Read,Grep,Glob", argv[argv.index("--tools") + 1])
+        self.assertEqual("Read,Grep,Glob", argv[argv.index("--allowedTools") + 1])
+
+    def test_an_empty_allowed_tools_passes_no_tools_flag(self):
+        run, _ = self.call(allowed_tools="")
+        argv = run.call_args_list[0][0][0]
+        self.assertNotIn("--tools", argv)
+        self.assertNotIn("--allowedTools", argv)
+
     def test_every_token_kind_and_the_cost_come_back(self):
         _, out = self.call()
         self.assertEqual({"input": 3, "output": 4, "cache_read": 100, "cache_write": 50}, out["usage"])
