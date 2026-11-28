@@ -13,7 +13,7 @@ from lib.cli import COMMANDS
 # How work runs, printed first (#972). cmd_install's introduction and the first install's closing text quote these lines.
 HOW_WORK_RUNS = (
     "You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive.",
-    "A chat never builds a board story by hand. For unattended execution today, explicitly delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.",
+    "The one-story rule is stated in `CLAUDE.md`. For unattended execution today, explicitly delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.",
     "The current queue entry points, `olivercode dispatch N` and `olivercode drain REPO`, start isolated Claude Code worktrees, run validation and safely land or report blocked work.",
     "`olivercode status` shows the open count, each run's state and what is next.",
 )

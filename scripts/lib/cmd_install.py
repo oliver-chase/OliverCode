@@ -55,7 +55,7 @@ INTRODUCTION = """How OliverCode works
 First steps, in order
   1. Find your repos: olivercode discover --root <folder holding your repos>
   2. Check this machine: olivercode health
-  3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`. A chat never builds a board story by hand.
+  3. File your first story: say what you want in Claude Code, then build it with `olivercode dispatch N` or `olivercode drain REPO`. The one-story rule is stated in `CLAUDE.md`.
 
 Using it well
 """ + "\n".join(f"  {habit}" for habit in cmd_guide.USING_IT_WELL) + """
