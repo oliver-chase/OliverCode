@@ -1,5 +1,5 @@
-"""What drain, dispatch and filing read from a story: its Size and Priority, its Files area, the filing fit check (#1004), the
-repeated-blocker report and bug intake (#1371). Only bug intake files a story, and only for a fault in OliverCode's own code (#1275). Standard library only."""
+"""What drain, dispatch and filing read from a story: its Size and Priority, its Files area, the filing fit check, the
+repeated-blocker report and bug intake. Only bug intake files a story, and only for a fault in OliverCode's own code. Standard library only."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def guard_exists(gate: str) -> bool:
 
 
 def repeated_blockers(repeats=None) -> list[str]:
-    """One report line for each blocker the failure log holds 3 or more times, from a guard the tree still has. It files and edits nothing (#1275)."""
+    """One report line for each blocker the failure log holds 3 or more times, from a guard the tree still has. It files and edits nothing."""
     repeats = failure_log.repeated() if repeats is None else repeats
     return [f"{gate}: {reason}"[:100] + f" blocked {len(times)} times, latest {times[-1]}"
             for (gate, reason), times in sorted(repeats.items()) if guard_exists(gate)]
@@ -80,17 +80,17 @@ def files_area(body: str) -> list[str]:
 
 
 def removed_tests(body: str) -> list[str]:
-    """The `file::test` names on the story's `Removes tests:` lines, the tests it removes by design (#1484), or [] when it has none."""
+    """The `file::test` names on the story's `Removes tests:` lines, the tests it removes by design, or [] when it has none."""
     return [t for line in REMOVES.findall(body or "") for t in _tokens(line) if "::" in t]
 
 
 def folders(area: list[str], root) -> list[str]:
-    """The Files area entries that name a folder: a path ending in "/" or a folder under root. One overlaps every story inside it (#1077)."""
+    """The Files area entries that name a folder: a path ending in "/" or a folder under root. One overlaps every story inside it."""
     return [p for p in area if p.endswith("/") or (root is not None and (Path(root) / p).is_dir())]
 
 
 def creates(body: str) -> list[str]:
-    """The paths on the story's `Creates:` line, the new files it adds (#1004), or [] when it has none."""
+    """The paths on the story's `Creates:` line, the new files it adds, or [] when it has none."""
     return _listed(CREATES, body)
 
 
@@ -102,7 +102,7 @@ def overlaps(a: list[str], b: list[str]) -> bool:
 def in_area(path: str, area: list[str]) -> bool:
     """True when the path is inside the area or is any test file (test_*.py). The rules ask for a test with every change, and a module's test
     often has another name (cmd_status.py is tested in test_status.py) or covers a neighbour, so refusing it threw away finished builds.
-    The landing's weakened-test check still guards every test file (#1073, #1078)."""
+    The landing's weakened-test check still guards every test file."""
     name = Path(path).name
     return overlaps([path], area) or (name.startswith("test_") and name.endswith(".py"))
 
@@ -127,7 +127,7 @@ def long_wait(body: str, today: datetime.date | None = None) -> str:
 
 
 def models(story: dict, session: str = "") -> tuple[str, str, str]:
-    """(builder model, reader model, the rule that chose the builder) a story starts on (#1015, #1026): the builder is the one agent_loop starts with,
+    """(builder model, reader model, the rule that chose the builder) a story starts on: the builder is the one agent_loop starts with,
     after a restart escalation, and the reader is never weaker than Sonnet. The brief and the status line name all three, so they say what the runner does."""
     base, why = agent_loop.route(size_of(story), story.get("labels") or (), files_area(story.get("body") or ""), priority_of(story))
     builder = agent_loop.restart_model(session, base)
@@ -170,7 +170,7 @@ PATH_LIKE = re.compile(r"[/.]")
 
 
 def related_to(body, stories):
-    """Numbers of the open stories whose Files area shares a file or folder with this body's (#1004). No model call."""
+    """Numbers of the open stories whose Files area shares a file or folder with this body's. No model call."""
     mine = files_area(body)
     return sorted(n for n, s in stories.items() if overlaps(mine, files_area(s.get("body") or "")))
 
@@ -189,13 +189,13 @@ def tracked(root):
 
 
 def missing(body, on_main):
-    """The Files area paths that are not on main and that no Creates line names (#1004). A word with no slash or dot is not a path."""
+    """The Files area paths that are not on main and that no Creates line names. A word with no slash or dot is not a path."""
     made = {p.rstrip("/") for p in creates(body)}
     return [p for p in files_area(body) if PATH_LIKE.search(p) and p.rstrip("/") not in on_main and p.rstrip("/") not in made]
 
 
 def fit(body, title, stories, root):
-    """(the body, the lines to print) at filing (#1004). Open stories that share a Files area path get one Related line, which replaces an
+    """(the body, the lines to print) at filing. Open stories that share a Files area path get one Related line, which replaces an
     earlier one. Each named path that is not on main and not created prints with the story's title. Filing goes on either way."""
     numbers = related_to(body, stories)
     if numbers:
@@ -208,7 +208,7 @@ def fit(body, title, stories, root):
 
 
 def command_fit(argv):
-    """`olivercode board fit BODY_FILE --title TITLE --config FILE` (#1004): rewrites BODY_FILE with its Related line and prints each
+    """`olivercode board fit BODY_FILE --title TITLE --config FILE`: rewrites BODY_FILE with its Related line and prints each
     missing path. It calls no model and returns 0 on a finding too, since the story still files."""
     opts = dict(zip(argv[1::2], argv[2::2]))
     if len(argv) != 5 or argv[0].startswith("--") or set(opts) != {"--title", "--config"}:
@@ -315,7 +315,7 @@ def ci_candidate(slug: str, gh, branch: str = "staging") -> dict | None:
 
 
 def parse(text: str) -> tuple[str | None, str]:
-    """(answer, rest) from the reader's reply: 'bug', 'regression', 'covered #N' or 'not a bug', and the text after the verdict line. None when the reply gives no verdict (#1483)."""
+    """(answer, rest) from the reader's reply: 'bug', 'regression', 'covered #N' or 'not a bug', and the text after the verdict line. None when the reply gives no verdict."""
     word, rest = agent_loop.verdict_line(text, r"bug|regression|covered\b[^#]*#\d+|not a bug")
     if not word:
         return None, rest

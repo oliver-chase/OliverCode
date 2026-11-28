@@ -8,7 +8,7 @@ The full MIT and Apache-2.0 terms are in each source's LICENSE file, linked belo
 
 - Source: https://github.com/cloudflare/security-audit-skill
 - License: [MIT](https://github.com/cloudflare/security-audit-skill/blob/main/LICENSE)
-- Copyright: Copyright (c) 2025-2026 Cloudflare, Inc.
+- Copyright: Copyright (c) 2025-2026 Cloudflare, Inc
 - OliverCode files that adapt it: none yet
 
 ## mattpocock/skills

@@ -2,9 +2,9 @@
 
 Each step returns the problems it found and, with --fix, repairs the ones that cannot lose work: it re-points
 a dangling activation link, prunes a worktree whose folder is gone, deletes merged local branches, downloads git files that iCloud evicted
-from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live (#997): a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
+from disk, moves .git out of a synced folder, and clears numbered sync-conflict copies (hygiene.py). It also keeps the OliverCode home to what is live: a lock no process holds, the output of a removed job and a log over its size limit are removed or cut. A problem that is not safe to change on its own (hooks
 that drifted, a repo inside a synced folder, a checkout outside repoRoot, a doc that trails its code, a failing health check) is reported, written to the failure log, and left alone.
-With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scripts/run-tests.sh and records the commit, exit code and test count for `olivercode health` (#977).
+With --fix the daily run also tests a fresh clone of OliverCode's HEAD with scripts/run-tests.sh and records the commit, exit code and test count for `olivercode health`.
 `--schedule` installs a daily launchd job that runs `maintain --fix`, and `olivercode install` loads it too.
 """
 
@@ -168,7 +168,7 @@ def check_hooks_path(cfg: placement.Config, fix: bool) -> list[Problem]:
 
 
 def check_worktree_hooks(cfg: placement.Config) -> list[Problem]:
-    """Each linked worktree whose commit hooks predate origin/main, named once (#902, #1499). Left alone: a rebase is the owner's call."""
+    """Each linked worktree whose commit hooks predate origin/main, named once. Left alone: a rebase is the owner's call."""
     from lib.health_checks import stale_hook_text, stale_worktree_hooks
     return [Problem("hooks", stale_hook_text(path, why)) for path, why in stale_worktree_hooks(placement.worktrees(cfg))]
 
@@ -358,7 +358,7 @@ def check_retired_jobs(fix: bool, agents: Path | None = None) -> list[Problem]:
 
 
 def check_job_python(agents: Path | None = None) -> list[Problem]:
-    """The installed daily job must run a python3 at the minimum; the plist names the one it runs (#621)."""
+    """The installed daily job must run a python3 at the minimum; the plist names the one it runs."""
     plist_file = (agents or launchd.agents_dir()) / f"{LABEL}.plist"
     try:
         exe = plistlib.loads(plist_file.read_bytes())["ProgramArguments"][0]
@@ -372,7 +372,7 @@ def check_job_python(agents: Path | None = None) -> list[Problem]:
 
 
 def check_queues(fix: bool) -> list[Problem]:
-    """Closes each denied-step owner line whose check now passes, once `maintain --fix` runs. It creates no issue (#971)."""
+    """Closes each denied-step owner line whose check now passes, once `maintain --fix` runs. It creates no issue."""
     if not fix:
         return []
     from lib import denials
@@ -384,7 +384,7 @@ def check_queues(fix: bool) -> list[Problem]:
 
 
 def check_outsiders(fix: bool) -> list[Problem]:
-    """Queues each issue or pull request by an author outside `allowedAuthors` for the owner once (#826)."""
+    """Queues each issue or pull request by an author outside `allowedAuthors` for the owner once."""
     from lib import cmd_sweep, outsiders
     try:
         cfgs = [json.loads(p.read_text()) for _, p in cmd_sweep.boards()] if fix else []
@@ -395,7 +395,7 @@ def check_outsiders(fix: bool) -> list[Problem]:
 
 
 def suite_record(code: int, out: str) -> dict:
-    """The record of one clean-clone run: the commit it tested, its exit code, its test count and the modules that failed (#977).
+    """The record of one clean-clone run: the commit it tested, its exit code, its test count and the modules that failed.
     The count is the summary line smoke_runner prints last, since a failed module's own `Ran` line comes first."""
     commit = re.search(r"on commit (\w+)", out)
     ran = re.findall(r"Ran (\d+) tests across", out)
@@ -410,7 +410,7 @@ def run_clean_clone_suite(root: Path) -> dict:
 
 
 def check_suite(fix: bool, root: Path | None = None, record: Path | None = None) -> list[Problem]:
-    """The daily job runs the clean-clone suite once and writes its record for `olivercode health` (#977). A failing run is a problem that names its modules."""
+    """The daily job runs the clean-clone suite once and writes its record for `olivercode health`. A failing run is a problem that names its modules."""
     if not fix:
         return []
     from lib.health_checks import suite_record_path
@@ -437,7 +437,7 @@ def engine_slug() -> str:
 
 
 def failure_gaps() -> list[tuple[str, str, str]]:
-    """(repo, title, body) for each failing check the nightly run can name a repo for (#978): a worktree whose commit hooks predate
+    """(repo, title, body) for each failing check the nightly run can name a repo for: a worktree whose commit hooks predate
     origin/main is filed under its own origin, and a scheduled task that starts a model with no gate command is filed under OliverCode,
     because a task names no repo of its own."""
     from lib import placement, schedules
@@ -459,7 +459,7 @@ def failure_gaps() -> list[tuple[str, str, str]]:
 
 
 def check_failure_gaps(fix: bool) -> list[Problem]:
-    """The daily run reports each failing check as a problem that names its repo and fix (#978). It files no story and writes no list (#1275).
+    """The daily run reports each failing check as a problem that names its repo and fix. It files no story and writes no list.
     A gate blocked 3 or more times is reported with its reason and latest time. A check that cannot read its inputs is reported."""
     if not fix:
         return []
@@ -483,7 +483,7 @@ LOG_QUIET_SECONDS = 3600  # a log written more recently than this may have a liv
 
 
 def _removed_outputs() -> set[str]:
-    """The file names a removed job wrote: its name with each output suffix, plus the RETIRED_OUTPUTS (#997)."""
+    """The file names a removed job wrote: its name with each output suffix, plus the RETIRED_OUTPUTS."""
     from lib.cmd_install import REMOVED_JOBS
     return {label[len(PREFIX):] + suffix for label in REMOVED_JOBS for suffix in OUTPUT_SUFFIXES} | set(RETIRED_OUTPUTS)
 
@@ -502,7 +502,7 @@ def _free_lock(path: Path, remove: bool) -> bool:
 
 
 def _cut_log(path: Path, cap: int) -> None:
-    """Keep the newest whole lines of a log within `cap` bytes. The file is rewritten in place, so a process that holds it open keeps its handle (#997)."""
+    """Keep the newest whole lines of a log within `cap` bytes. The file is rewritten in place, so a process that holds it open keeps its handle."""
     with path.open("rb") as handle:
         handle.seek(-(cap + 1), os.SEEK_END)  # one byte before the window says whether it starts on a line
         window = handle.read()
@@ -517,7 +517,7 @@ def _names(paths: list[Path]) -> str:
 
 
 def check_state(fix: bool, home: Path | None = None, limits: dict | None = None) -> list[Problem]:
-    """The OliverCode home keeps only what is live (#997). It reports each lock file no process holds, each output file of a removed job and
+    """The OliverCode home keeps only what is live. It reports each lock file no process holds, each output file of a removed job and
     each log over `stateLogBytes` in docs/LIMITS.json, with its count. With --fix it removes the locks and outputs and cuts the logs. A lock a live
     process holds is never touched."""
     from lib.health_checks import state_limits
@@ -566,7 +566,7 @@ def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> 
 
 
 def _queue_decision(p: Problem) -> None:
-    """Queue a problem only the owner can settle in the owner queue, once while it stays open (#629)."""
+    """Queue a problem only the owner can settle in the owner queue, once while it stays open."""
     from lib import cmd_owner
     step = f"maintain {p.step}: {p.text.splitlines()[0]}"
     if any(i["status"] == "open" and i["step"] == step for i in cmd_owner.items()):

@@ -1,10 +1,10 @@
-"""City v2 (#1356): the page's frame, drawn only from local files, with no GitHub call and no model call.
+"""City v2: the page's frame, drawn only from local files, with no GitHub call and no model call.
 
 `olivercode status page [--fetch] [--open] [--root DIR]` writes `city.html` to the OliverCode home, and --open shows it in the default browser. Every write reads the run log, the owner queue, the board copy
 that `board sync` keeps and `city-github.json`. Only `--fetch` calls GitHub: it reads the opened and closed counts and the check results once and saves them
 to `city-github.json` with the time read. The frame is a nav (Today, Delivery, Cost, Health) and a status band that gives the run state, the builder count,
-the needs-you count, the Updated time and a Refresh control. The markup and stylesheet are the mockup's, in docs/city (#1380). The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
-their own module. The Live rail shows a card for each working builder, the queue, and Needs you with the latest owner decision (#1357). The Today section opens with the date, a headline, a paragraph and four answers (#1361).
+the needs-you count, the Updated time and a Refresh control. The markup and stylesheet are the mockup's, in docs/city. The page reloads itself every 60 seconds. The Delivery, Cost and Health sections each render in
+their own module. The Live rail shows a card for each working builder, the queue, and Needs you with the latest owner decision. The Today section opens with the date, a headline, a paragraph and four answers.
 """
 
 from __future__ import annotations
@@ -189,7 +189,7 @@ def esc(text) -> str:
 
 
 def command(text: str, label: str = "Copy") -> str:
-    """A command to copy, since a page opened from a file cannot run it. LABEL names the button (#1381)."""
+    """A command to copy, since a page opened from a file cannot run it. LABEL names the button."""
     return f'<div class="acts"><code>{esc(text)}</code><button class="btn b-ghost" data-copy="{html.escape(text, quote=True)}">{label}</button></div>'
 
 
@@ -207,7 +207,7 @@ def saved_github() -> dict | None:
 
 
 def read_github(slug: str, now: datetime, count=None, fetch=cmd_status.recent, runner=cmd_status.issue_count.gh_list) -> dict:
-    """The one GitHub read: opened and closed counts over the last week and the check results on main (CI runs on main only, #1354). A figure that could not be read is None."""
+    """The one GitHub read: opened and closed counts over the last week and the check results on main (CI runs on main only). A figure that could not be read is None."""
     open_now = (count or cmd_status.issue_count.count_issues)(slug, "open")
     rows = fetch(slug, now - timedelta(days=cmd_status.DAYS))
     since = now - timedelta(days=cmd_status.DAYS)
@@ -240,7 +240,7 @@ def status_count(stories: list[dict], status: str) -> int:
 
 
 def next_up(stories: list[dict]) -> str:
-    """The first Ready story in priority order, as '#N title (P1)', or '' when none is Ready (#1357)."""
+    """The first Ready story in priority order, as '#N title (P1)', or '' when none is Ready."""
     ready = [i for i in stories if str(i.get("status", "")).lower() == "ready"]
     if not ready:
         return ""
@@ -251,7 +251,7 @@ def next_up(stories: list[dict]) -> str:
 
 
 def latest_decision() -> dict | None:
-    """The newest owner decision in relays.jsonl, or None when none is recorded or the file cannot be read (#1357)."""
+    """The newest owner decision in relays.jsonl, or None when none is recorded or the file cannot be read."""
     try:
         found = relay.records()
     except OSError:
@@ -282,14 +282,14 @@ def gather(slug: str, now: datetime, steps: list[dict], log: list[dict] | None, 
 
 
 def stage_phrase(facts: dict) -> str:
-    """'is validating' for a story at a stage, or 'is on round 2' for a builder on a later round (States.dc.html, Running) (#1381)."""
+    """'is validating' for a story at a stage, or 'is on round 2' for a builder on a later round (States.dc.html, Running)."""
     if facts["stage"] == "building" and (facts["round"] or 0) > 1:
         return f"is on round {facts['round']}"
     return f"is {facts['stage']}"
 
 
 def running(working_list: list, n: int) -> str:
-    """The band's sentence while builders work: each story and its stage for one or two builders, and the count for more (#1381)."""
+    """The band's sentence while builders work: each story and its stage for one or two builders, and the count for more."""
     if not 0 < len(working_list) <= 2:
         return f"{n} builder{' is' if n == 1 else 's are'} working. The stories are listed under Building now."
     told = ", and ".join(f"#{key.rsplit('#', 1)[-1]} {stage_phrase(facts)}" for key, _, facts in working_list)
@@ -314,7 +314,7 @@ def state(data: dict) -> tuple[str, str, str]:
 
 
 def ago(stamp, now: datetime) -> str:
-    """How long before NOW a step was queued, read from its ISO stamp, or a note that the stamp is not recorded (#1357)."""
+    """How long before NOW a step was queued, read from its ISO stamp, or a note that the stamp is not recorded."""
     try:
         seconds = int((now - datetime.fromisoformat(str(stamp))).total_seconds())
     except (TypeError, ValueError):
@@ -325,7 +325,7 @@ def ago(stamp, now: datetime) -> str:
 
 
 def step_line(item: dict, now: datetime) -> str:
-    """One owner step as the mockup's: a short title, its age and source, one plain sentence on what it means, and its action as a button or a copy button (#1382)."""
+    """One owner step as the mockup's: a short title, its age and source, one plain sentence on what it means, and its action as a button or a copy button."""
     source = "from an agent session" if item.get("session") else "source not recorded"
     tab = str(item.get("tab") or "")
     action = (f'<div class="acts"><button class="btn b-ghost" data-copy="{html.escape(str(item["command"]), quote=True)}">Copy command</button></div>'
@@ -336,7 +336,7 @@ def step_line(item: dict, now: datetime) -> str:
 
 
 def decision_block(rec: dict | None) -> str:
-    """The mockup's Your latest decision line: the owner's words and the date, or nothing when none is recorded (#1382)."""
+    """The mockup's Your latest decision line: the owner's words and the date, or nothing when none is recorded."""
     if not rec:
         return ""
     words = " ".join(str(rec.get("words") or rec.get("decision") or "not recorded").split())
@@ -369,7 +369,7 @@ def track(place: int) -> str:
 
 def builder_card(key: str, mine: dict, item: dict | None, facts: dict) -> str:
     """One working builder: its number, title, size and priority, the five-stage track, its times, model and route, its round and why, its cost against
-    the size's limit from COST_CEILING, and its tokens written to and read from cache. A figure the files do not hold says so (#1357)."""
+    the size's limit from COST_CEILING, and its tokens written to and read from cache. A figure the files do not hold says so."""
     n = key.rsplit("#", 1)[-1]
     title = ((item or {}).get("content") or {}).get("title") or "Title not recorded, because the board copy was not read."
     size, priority = (item or {}).get("size") or facts["size"], (item or {}).get("priority")
@@ -394,7 +394,7 @@ def builder_card(key: str, mine: dict, item: dict | None, facts: dict) -> str:
 
 
 def working(claims: dict, log: list[dict], now: float) -> list[tuple[str, dict, dict]]:
-    """Each claimed builder as (key, claim, facts), in claim order, its facts read from the run log since its claim (#1381)."""
+    """Each claimed builder as (key, claim, facts), in claim order, its facts read from the run log since its claim."""
     return [(key, mine, cmd_status.builder_facts(key.rsplit("#", 1)[-1], float(mine.get("at", 0)), log, now)) for key, mine in sorted(claims.items())]
 
 
@@ -405,7 +405,7 @@ def builder_cards(working_list: list[tuple[str, dict, dict]], stories: list[dict
 
 
 def queue_line(data: dict) -> str:
-    """The queue: the next Ready story and the Ready and Backlog counts from the board copy, or a note that it was not read (#1357)."""
+    """The queue: the next Ready story and the Ready and Backlog counts from the board copy, or a note that it was not read."""
     if data["ready"] is None:
         return '<p class="small">Queue: not recorded, because the board copy was not read.</p>'
     up = f"Next: {esc(data['next'])}." if data["next"] else "Next: no story is Ready."
@@ -426,17 +426,17 @@ def building_card(data: dict) -> str:
 
 
 def landed_week(log: list[dict], stamp: float) -> int:
-    """Stories landed in the last DAYS days, read from the run log's landed rows (#1361)."""
+    """Stories landed in the last DAYS days, read from the run log's landed rows."""
     return sum(1 for f in cmd_status.landings(log) if f["at"] >= stamp - cmd_status.DAYS * city_delivery.DAY)
 
 
 def landed_costs(log: list[dict]) -> list[float]:
-    """The cost of each landed story whose cost is recorded (#1361)."""
+    """The cost of each landed story whose cost is recorded."""
     return [float(s["cost"]) for s in city_cost.landed_stories(log) if s["cost"]]
 
 
 def checks_line(github: dict | None) -> str:
-    """The Health sentence for the Today paragraph: the checks on main, read by `--fetch` (#1361)."""
+    """The Health sentence for the Today paragraph: the checks on main, read by `--fetch`."""
     runs = (github or {}).get("checks")
     if runs is None:
         return "Health: checks on main are not recorded yet."
@@ -451,7 +451,7 @@ def answer(question: str, word: str, evidence: str) -> str:
 
 
 def answers(data: dict) -> str:
-    """The four answers, each a one-word answer and one line of evidence. A figure the files do not hold is Unknown, and a single day of data is shown as a figure, never a trend (#1361)."""
+    """The four answers, each a one-word answer and one line of evidence. A figure the files do not hold is Unknown, and a single day of data is shown as a figure, never a trend."""
     log, steps, stamp = data["log"], data["steps"], data["now"].timestamp()
     css, _, sentence = state(data)
     working = {"fail": ("No", sentence), "wait": ("Paused", sentence), "run": ("Yes", sentence)}.get(css, ("Idle", sentence))
@@ -472,7 +472,7 @@ def answers(data: dict) -> str:
 
 
 def lede(data: dict) -> str:
-    """The date, a one-line headline and a short paragraph, all built from the Delivery, Cost and Health figures, then the four answers (#1361)."""
+    """The date, a one-line headline and a short paragraph, all built from the Delivery, Cost and Health figures, then the four answers."""
     log, landed, now = data["log"], data["landed"] or [], data["now"]
     if log is None:
         headline = "The run log could not be read, so the figures are unknown."
@@ -549,12 +549,12 @@ def write(slug: str | None, root: Path | None = None, fetch: bool = False, now: 
 
 
 def enabled() -> bool:
-    """Whether the owner has turned City on: `city` is true in olivercode.local.json. Off by default until the epic's last story (#1378)."""
+    """Whether the owner has turned City on: `city` is true in olivercode.local.json. Off by default until the epic's last story."""
     return bool(local_config.setting("city"))
 
 
 def refresh(root: Path | None = None) -> int:
-    """Rewrite the page from local files, quietly. The drain calls it (#1350)."""
+    """Rewrite the page from local files, quietly. The drain calls it."""
     if not enabled():
         return 0
     root = root or Path.cwd()

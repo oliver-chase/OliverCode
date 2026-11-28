@@ -1,4 +1,4 @@
-"""`olivercode guide`: how work runs, the first steps and every command grouped by the job it does, one plain line each, in the order of the README table (#985).
+"""`olivercode guide`: how work runs, the first steps and every command grouped by the job it does, one plain line each, in the order of the README table.
 
 `olivercode guide NAME` says what one command, gate, guard, scheduled job or skill does and where it lives, read from the launcher's command table, docs/GATES.md,
 the hooks' own docstrings and the skills' own descriptions, so it cannot drift from them."""
@@ -15,18 +15,17 @@ HOW_WORK_RUNS = (
     "You work in Claude Code normally: exploration, strategic conversation, planning, debugging and paired coding remain interactive.",
     "A chat never builds a board story by hand. For unattended execution today, explicitly delegated work is represented by a story on the repo's board; the owner may need to create or choose that story before it can run.",
     "The current queue entry points, `olivercode dispatch N` and `olivercode drain REPO`, start isolated Claude Code worktrees, run validation and safely land or report blocked work.",
-    "`olivercode status` shows current queue/run state; the fuller owner-facing supervision experience is the target described below.",
+    "`olivercode status` shows the open count, each run's state and what is next.",
 )
 
 THREAD_LINE = "The thread that started a run is the one to steer it. `olivercode status` answers status from any thread or terminal at no token cost."
 
-# The owner-facing architecture, printed after how work runs.
+# How the work is split today, printed after how work runs.
 ARCHITECTURE = (
-    "Front door — give an outcome, context and priorities; ordinary interactive Claude Code stays interactive.",
-    "Autonomous orchestration — understand, plan, decompose when useful, route, prioritize and coordinate work.",
-    "Execution — manage isolated Claude Code sessions, parallelism, resumption and routine recovery.",
-    "Quality and delivery — validate proportionally to risk, repair failures, review when warranted, integrate safely and clean up.",
-    "Supervision — monitor truthful progress, detect stalls, notify on meaningful changes and ask for decisions only when needed.",
+    "Claude Code — you think, plan and debug together in the chat. Nothing is queued until you hand it over.",
+    "Dispatch and drain — `olivercode dispatch N` and `olivercode drain REPO` build queued stories in isolated worktrees, run the repo's validation and land the commit or report why it is blocked.",
+    "Status and watch — `olivercode status` and `olivercode watch REPO` show each run's progress at no token cost.",
+    "Owner list — `olivercode owner list` shows the steps that need you.",
 )
 
 # The habits that keep OliverCode cheap, printed by the guide and by the first install's introduction, one line each (#991).
@@ -36,7 +35,7 @@ USING_IT_WELL = (
     "Let OliverCode determine scope, split work and identify dependencies when doing so improves the result.",
     "Use `olivercode status` to see progress, blockers, completed work and decisions that need you.",
     "Keep owner decisions for genuine trade-offs, permissions, production actions and ambiguous requirements.",
-    "Use the current `olivercode dispatch N` and `olivercode drain REPO` entry points for queued execution until the owner front door is fully implemented.",
+    "Use `olivercode dispatch N` and `olivercode drain REPO` to run queued stories.",
 )
 
 # An example of one story from the first thread to the landed commit, printed after how it works.
@@ -49,7 +48,7 @@ EXAMPLE = (
 )
 
 def city_on() -> bool:
-    """Whether City is switched on, so the guide names it (#1387)."""
+    """Whether City is switched on, so the guide names it."""
     from lib.local_config import setting
     return bool(setting("city"))
 
@@ -130,7 +129,7 @@ def explain(oc_root: Path, name: str) -> list[str]:
 
 
 def status_steps(oc_root: Path) -> list[str]:
-    """How to follow a run from a terminal, at no token cost (#1059, #1517). Install's closing lines, the adoption skill and `olivercode guide status` all print these."""
+    """How to follow a run from a terminal, at no token cost. Install's closing lines, the adoption skill and `olivercode guide status` all print these."""
     return [
         "1. In the Terminal app, run `olivercode watch REPO`. It prints a line as each story is claimed, builds, validates, lands or stops, with its time, tokens and API-price equivalent.",
         "2. Run `olivercode status`. It shows the open count, the landing pace and what is next.",
@@ -141,7 +140,7 @@ def status_steps(oc_root: Path) -> list[str]:
 
 
 def plain_guide(oc_root: Path) -> list[str]:
-    """The guide, short enough to read in under a minute (#1177). The long parts live behind `olivercode guide city`, `guide skills` and `guide design`."""
+    """The guide, short enough to read in under a minute. The long parts live behind `olivercode guide city`, `guide skills` and `guide design`."""
     from lib import local_config
     count = len(local_config.private_repos())
     out = ["OliverCode", "",

@@ -14,8 +14,8 @@ description: "Use when the user says 'make a plan', 'write this up as a plan fir
 
 ## Questions
 
-- Each open decision is asked as one question that states a recommended answer, so "yes" accepts it.
-- Before asking, read the answer from the repo's code or docs. Ask the owner only what they alone can decide.
+- Each open decision is asked as one question that states a recommended answer, so "yes" accepts it
+- Before asking, read the answer from the repo's code or docs. Ask the owner only what they alone can decide
 
 ## Claims discipline
 
