@@ -383,13 +383,16 @@ class Io:
         the claim's own work (#1306). A story with no claim in this run is not filtered."""
         return [f"--since={int(self.claim_start[n])}"] if n in self.claim_start else []
 
+    def landing_sha(self, n: int) -> str:
+        """The sha of the newest commit on origin's default branch, made after this claim, that names the story, or '' when there is none (#877, #1306)."""
+        ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{self.branch()}", "-n", "400", *self.since_claim(n), "--format=%H%x09%s"], capture_output=True, text=True)
+        return next((line.split("\t")[0] for line in ran.stdout.splitlines() if f"(#{n})" in line), "")
+
     def landed(self, worktree: Path, n: int) -> bool:
         """True when a commit made after this claim that names the story is on origin's default branch (#877, #1306). It reads the main checkout, so a builder that landed and
         removed its worktree still counts. It shares the story's one fetch, since a land's push moves origin's ref in this repo."""
-        branch = self.branch()
         self.fetch(n)
-        ran = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", *self.since_claim(n), "--format=%s"], capture_output=True, text=True)
-        return ran.returncode == 0 and any(f"(#{n})" in line for line in ran.stdout.splitlines())
+        return bool(self.landing_sha(n))
 
     def landed_lead(self, issue: dict) -> tuple[str, str] | None:
         """(sha, subject) of the newest commit on origin's default branch that names another story and changed a file in this story's Files area.
@@ -450,11 +453,9 @@ class Io:
     def close_by_script(self, worktree: Path, n: int, why: str, stage: str = "landed") -> tuple[bool, str]:
         """Log the builder entry for the commit that names the story on origin's default branch, then close the story through complete_story.py
         with the landing's output as its Run output (#912). `stage` is the run log row for the close: "landed" for a build, "closed" for a story already waiting in QA (#1377). Returns (closed, the refusal when the close was not made)."""
-        branch = self.branch()
-        log = subprocess.run(["git", "-C", str(self.repo), "log", f"origin/{branch}", "-n", "400", *self.since_claim(n), "--format=%H%x09%s"], capture_output=True, text=True)
-        sha = next((line.split("\t")[0] for line in log.stdout.splitlines() if f"(#{n})" in line), "")
+        sha = self.landing_sha(n)
         if not sha:
-            return False, f"no commit for (#{n}) is on origin/{branch}"
+            return False, f"no commit for (#{n}) is on origin/{self.branch()}"
         files = subprocess.run(["git", "-C", str(self.repo), "diff-tree", "--no-commit-id", "--name-only", "-r", sha], capture_output=True, text=True).stdout.split()
         config = self.repo / (LOCAL_BACKLOG_CONFIG if (self.repo / LOCAL_BACKLOG_CONFIG).is_file() else BACKLOG_CONFIG)
         scripts = OC_ROOT / "skills" / "backlog" / "scripts"

@@ -1161,6 +1161,8 @@ class TestRealIo(unittest.TestCase):
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.io.claim_start[7] = time.time()
         self.assertFalse(self.io.landed(self.repo, 7))
+        for n in (7, 8):  # #1451: a close is refused for a commit older than the claim and for no commit at all
+            self.assertEqual((False, f"no commit for (#{n}) is on origin/main"), self.io.close_by_script(self.repo, n, "pushed"))
         self.io.claim_start[7] = time.time() - 3600
         git(self.repo, "commit", "--allow-empty", "-qm", "Rest of the thing (#7)")
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
