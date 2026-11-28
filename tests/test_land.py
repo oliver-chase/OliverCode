@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -13,7 +14,7 @@ from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 session_check = load_script("scripts/hooks/session_check.py", "session_check_land")
-from lib import agent_loop, cmd_dispatch, cmd_land, intake, maintain, validated  # noqa: E402
+from lib import agent_loop, cmd_dispatch, cmd_land, intake, maintain, usage_sessions, validated  # noqa: E402
 
 REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
 
@@ -367,6 +368,46 @@ class TestLand(Base):
     def test_the_launcher_refuses_a_bad_argument_list(self):
         self.assertEqual(2, quiet(cmd_land.command_land, ["only-one"])[0])
         self.assertEqual(2, quiet(cmd_land.command_land, [str(self.wt), "x"])[0])
+
+
+class TestLandChatTelemetry(Base):
+    """A chat landing writes run-log rows from the session's transcripts (#1533)."""
+
+    def setUp(self):
+        super().setUp()
+        self.home = self.root / "home"
+        p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)}); p.start(); self.addCleanup(p.stop)
+        p = mock.patch.object(cmd_land.agent_loop, "refresh_city"); p.start(); self.addCleanup(p.stop)
+        self.body = "Size: S"
+        projects = self.root / "projects" / "p"
+        (projects / "sess" / "subagents").mkdir(parents=True)
+        def line(mid, model, n):
+            at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 5))
+            usage = {"input_tokens": n, "output_tokens": 2, "cache_read_input_tokens": 3, "cache_creation_input_tokens": 4}
+            return json.dumps({"type": "assistant", "timestamp": at, "message": {"id": mid, "model": model, "usage": usage}})
+        (projects / "sess.jsonl").write_text(line("a", "lead-model", 10) + "\n" + line("a", "lead-model", 10) + "\n")
+        (projects / "sess" / "subagents" / "agent-1.jsonl").write_text(line("b", "sub-model", 7) + "\n")
+        p = mock.patch.object(usage_sessions, "transcript", return_value=projects / "sess.jsonl"); p.start(); self.addCleanup(p.stop)
+
+    def rows(self):
+        return [json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()] if (self.home / "run-log.jsonl").exists() else []
+
+    def test_a_session_landing_writes_claimed_thread_subagent_and_landed_rows_with_no_cost(self):
+        with mock.patch.object(cmd_land.time, "time", side_effect=lambda r=time.time: r() + 10):
+            code, _ = quiet(cmd_land.command_land, [str(self.wt), "9", "--session", "sess"])
+        self.assertEqual(0, code)
+        rows = self.rows()
+        self.assertEqual(["claimed", None, None, "landed"], [r.get("stage") for r in rows])
+        self.assertEqual(["thread", "thread", "subagent", "thread"], [usage_sessions.runner(r) for r in rows])
+        self.assertEqual("S", rows[0]["size"])
+        thread, sub = rows[1], rows[2]
+        self.assertEqual((10, 2, 3, 4, "lead-model"), tuple(thread[k] for k in ("input", "output", "cache_read", "cache_write", "model")))
+        self.assertEqual((7, "sub-model"), (sub["input"], sub["model"]))
+        self.assertTrue(all("round" in r and "cost_usd" not in r for r in (thread, sub)))
+
+    def test_a_landing_with_no_session_writes_no_token_rows(self):
+        self.assertEqual(0, self.land()[0])
+        self.assertEqual([], self.rows())
 
 
 class TestLandReusesAPass(Base):

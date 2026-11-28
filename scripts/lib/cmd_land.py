@@ -25,7 +25,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, run_lock, validated
+from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, run_lock, usage_sessions, validated
 from lib.validate_gates import PROGRESS  # the lines that also print on the terminal while a land validates (#776)
 from lib.local_config import OC_ROOT
 from lib import gitfiles
@@ -35,7 +35,7 @@ TRIES = 4
 BUDGET = 600  # seconds a land keeps retrying after TRIES clean rebases while main keeps moving (#784)
 PAUSE = 5
 SLOWER = 1.25  # staging whose quick validation takes this many times main's promotes nothing (#1305)
-USAGE = "Usage: olivercode land WORKTREE STORY"
+USAGE = "Usage: olivercode land WORKTREE STORY [--session SESSION_ID]"
 CUT_LOCK = "version-cut.lock"
 TEST_FILE = re.compile(r"(^|/)(tests?|__tests__)/|(^|/)test_[^/]*$|[._](test|spec)\.\w+$")
 VALIDATION_FILE = re.compile(r"validat|\.githooks/|\.github/workflows/")
@@ -470,7 +470,31 @@ def _claim(lock: Path):
         yield ""
 
 
+def log_chat_build(wt: Path, story: str, session: str, size: str, began: float) -> None:
+    """Write a chat build's run-log rows (#1533): claimed, the lead thread's tokens, one row per subagent transcript, and landed, from BEGAN (the branch's first reflog entry) to now.
+    The rows carry no cost_usd, since a transcript holds no price, and a `round` so status counts their tokens."""
+    key, repo, end = f"story-{story}", _repo_name(wt), time.time()
+    agent_loop.STORY_SIZE[key] = size
+    agent_loop.log_stage(key, repo, "claimed", runner="thread")
+    lead = usage_sessions.transcript(session)
+    if lead:
+        for runner, path in [("thread", lead), *(("subagent", p) for p in sorted((lead.parent / session / "subagents").glob("*.jsonl")))]:
+            tokens = usage_sessions.usage_between(path, began, end)
+            if tokens["model"]:
+                agent_loop.append_run_log({"story": key, "repo": repo, "runner": runner, "round": 1, "size": size, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(end)), **tokens})
+    agent_loop.log_stage(key, repo, "landed", started_at=began, runner="thread")
+
+
+def _began(wt: Path) -> float:
+    """When the worktree's branch got its first reflog entry, as epoch seconds; now when it has none."""
+    stamps = gitfiles.run(wt, "reflog", "show", "--format=%ct", "HEAD").stdout.split()
+    return float(stamps[-1]) if stamps else time.time()
+
+
 def command_land(argv: list[str]) -> int:
+    session = ""
+    if len(argv) == 4 and argv[2] == "--session":
+        session, argv = argv[3], argv[:2]
     if len(argv) != 2 or argv[0].startswith("-") or not argv[1].lstrip("#").isdigit() or not (Path(argv[0]) / ".git").exists():
         print(USAGE)
         return 2
@@ -479,6 +503,7 @@ def command_land(argv: list[str]) -> int:
     folder.mkdir(parents=True, exist_ok=True)
     while cut_running(folder):  # a land waits until a running version cut finishes (#789)
         time.sleep(PAUSE)
+    began = _began(wt)
     key = f"{_repo_name(wt)}-{story}"
     path = folder / f"land-{key}.log"
     with _claim(folder / f"land-{key}.lock") as running:
@@ -490,6 +515,8 @@ def command_land(argv: list[str]) -> int:
             line = f"RESULT {result} {sha}".strip()
             log.write(line + "\n")
     print(f"{line} (log: {path})")
+    if session and result == "pushed":
+        log_chat_build(wt, story, session, intake.size_of({"body": story_body(wt, story) or ""}), began)
     if result in ("dirty-worktree", "no-validate"):
         print(refusal(wt)[1])
     if result != "pushed":
