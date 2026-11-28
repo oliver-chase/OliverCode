@@ -517,3 +517,35 @@ class TestWorkflows(SetupCase):
         self.assertIn("/projects/1/workflows", self.text)
         self.assertIn("Item closed", self.text)
         self.assertIn("is:issue is:open", self.text)
+
+
+class TestNextSteps(SetupCase):
+    def test_workflows_are_optional_and_never_asked_off(self):
+        self.run_setup()
+        self.assertIn("are optional", self.text)
+        self.assertNotIn("turn those off", self.text)
+        self.assertNotIn("need you", self.text)
+        self.assertNotIn("Open the Project's Workflows page and turn", self.text)
+
+    def test_apply_names_each_written_file_that_is_not_committed(self):
+        self.run_setup()
+        self.assertIn("not committed yet", self.text)
+        self.assertIn("docs/backlog-config.json", self.text)
+        self.assertIn(".githooks/commit-msg", self.text)
+
+    def test_committed_files_are_not_listed(self):
+        self.run_setup()
+        git(self.repo, "add", "-A")
+        git(self.repo, "-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "-q", "--no-verify", "-m", "setup")
+        self.run_setup()
+        self.assertNotIn("not committed yet", self.text)
+
+    def test_issues_with_no_size_get_the_ready_and_size_step(self):
+        self.seed_existing_board()
+        self.run_setup()
+        self.assertIn("1 issue has no Size yet", self.text)
+        self.assertIn("built only in Ready with a Size", self.text)
+
+    def test_no_size_step_when_every_issue_has_a_size(self):
+        self.run_setup()
+        self.assertNotIn("no Size yet", self.text)

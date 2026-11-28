@@ -35,11 +35,37 @@ WORKFLOW_URL = "https://github.com/users/{owner}/projects/{number}/workflows"
 
 
 def workflow_steps(owner: str, number: int) -> list[str]:
-    """The two workflow toggles GitHub offers no API for, with the board's page and the clicks."""
-    return [f"Two board workflows need you, because GitHub has no API for them. Open {WORKFLOW_URL.format(owner=owner, number=number)}, "
-            "pick each workflow in the left list, set the value, save, then reload to check it is on:",
-            "  - Item closed: turn it on and " + WORKFLOWS[0][1],
-            "  - Auto-add to project: choose this repo, " + WORKFLOWS[1][1] + ", then turn it on"]
+    """The two built-in board workflows, which are optional because the suite keeps the board in step itself."""
+    return [f"Two built-in board workflows are optional, because filing a story adds its card, closing one sets Status to Complete and `olivercode board sync` keeps the rest in step. "
+            f"To turn them on, open {WORKFLOW_URL.format(owner=owner, number=number)}, pick each workflow in the left list, set the value and save:",
+            "  - Item closed: " + WORKFLOWS[0][1],
+            "  - Auto-add to project: choose this repo and " + WORKFLOWS[1][1]]
+
+
+def uncommitted_lines(target: Path, paths: list[Path]) -> list[str]:
+    """One line naming each written file that git does not yet have committed, or [] when all are committed."""
+    names = [str(p.relative_to(target)) if p.is_relative_to(target) else str(p) for p in paths if p.exists()]
+    if not names:
+        return []
+    done = subprocess.run(["git", "-C", str(target), "status", "--porcelain", "--untracked-files=all", "--", *names],
+                          capture_output=True, text=True)
+    left = [ln[3:].strip() for ln in done.stdout.splitlines() if ln.strip()]
+    if not left:
+        return []
+    return ["These files were written and are not committed yet. Commit them so the board setup travels with the repo:"] + \
+           [f"  - {n}" for n in left]
+
+
+def unsized_line(board: dict) -> str:
+    """A next step when open issues sit on the board with no Size, or "" when every card has one."""
+    size = next((f for f in board["fields"] if f["name"].lower() == "size"), None)
+    if not size:
+        return ""
+    n = sum(1 for i in board["items"] if size["id"] not in i["values"])
+    if not n:
+        return ""
+    return (f"{n} issue{' has' if n == 1 else 's have'} no Size yet. An issue is built only in Ready with a Size, "
+            "so set a Size on each one and move it to Ready when it is wanted.")
 
 
 def write_snapshot(snapshot: dict, target: Path, stamp: str) -> Path:
@@ -286,8 +312,13 @@ def _run_setup(target, apply, api, oc_root, out) -> int:
             out(f"  - {c}")
     else:
         out("Nothing to change. The repo is already set up.")
-    out(kanban.NOT_VISIBLE)
     if apply and board:
+        written = [cfg_path, hooks / "commit-msg"]
+        for line in uncommitted_lines(target, written):
+            out(line)
+        line = unsized_line(board)
+        if line:
+            out(line)
         for line in workflow_steps(owner, board["number"]):
             out(line)
     if not apply and changes:

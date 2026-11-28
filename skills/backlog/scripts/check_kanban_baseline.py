@@ -13,7 +13,8 @@ from pathlib import Path
 BASELINE_PATH = Path(__file__).resolve().parents[3] / "shared" / "kanban-baseline.json"
 SINGLE_SELECT = "ProjectV2SingleSelectField"
 NOT_VISIBLE = ("A board's built-in workflows, such as one that moves an item when a pull request merges, "
-               "do not appear in the field list. Open the Project's Workflows page and turn those off by hand.")
+               "do not appear in the field list, so this check cannot see them. If one sets Status from a pull request, "
+               "turn it off on the Project's Workflows page.")
 
 
 def load_baseline(path=BASELINE_PATH):
