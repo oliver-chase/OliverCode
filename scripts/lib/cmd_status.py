@@ -33,6 +33,8 @@ DIGEST_CHARS = 3  # characters per token in the estimate: English runs near four
 OPEN_SHOWN = 10  # the open stories the digest lists, highest priority first
 DIGEST_ITEMS = 5  # the latest decisions and the latest run-log rows the digest keeps before it trims to the limit
 MIN_SIZED = 5  # stories of one size that must reach staging in the window before status compares them (#1301)
+PRICE_NOTE = "API-price equivalent, not billed"  # the label on every dollar figure a build produces: builds run on the subscription, so nothing is billed (#1526)
+YARDSTICK_NOTE = "API-price yardstick, not spend"  # the label on a benchmark or ceiling dollar figure
 BENCHMARKS = {"XS": (21, 0.14)}  # size -> (minutes, dollars) from the 23 Nov baseline in #1246; shortcut: only XS is measured, add a size once its baseline is set
 USAGE = "Usage: olivercode status [--root DIR] | olivercode status digest [--root DIR] | olivercode status page [--fetch] [--open] [--root DIR]"
 
@@ -157,6 +159,23 @@ def _cost(rows: list[dict]) -> float:
     return sum(float(r.get("cost_usd") or 0) for r in rows if "round" in r)
 
 
+def _tokens(rows: list[dict]) -> int:
+    """The input, output, cache_read and cache_write tokens of the round rows in ROWS."""
+    return sum(int(r.get(k) or 0) for r in rows if "round" in r for k in ("input", "output", "cache_read", "cache_write"))
+
+
+def token_words(count: float) -> str:
+    """COUNT as '1.2 million tokens' from a million up, else '310,000 tokens'."""
+    count = round(count)
+    return f"{count / 1_000_000:.1f} million tokens" if count >= 1_000_000 else f"{count:,} token{'' if count == 1 else 's'}"
+
+
+def spend_words(tokens: float, cost: float) -> str:
+    """'310,000 tokens and $0.77 (API-price equivalent, not billed)', with only the part that was recorded, or '' when neither was."""
+    dollars = f"${cost:.2f} ({PRICE_NOTE})" if cost else ""
+    return " and ".join(part for part in (token_words(tokens) if tokens else "", dollars) if part)
+
+
 def story_stage(n: str, claim_at: float, log: list[dict]) -> tuple[str, str | None, float, float]:
     """(stage, repo, since, began) for story N from its stage rows: `since` is when its latest stage began and `began` when it was claimed. A claim with no
     stage rows yet counts as claimed at the claim's own time (#1291)."""
@@ -171,8 +190,9 @@ def building_line(n: str, slug: str, claim_at: float, log: list[dict], now: floa
     """'#7 in repo: validating for 3 minutes, 5 minutes in all' from the story's stage rows. The stage time runs from the latest stage row and the total from the
     claimed row (#1291)."""
     stage, repo, since, began = story_stage(n, claim_at, log)
-    spent = _cost(_story_rows(log, f"story-{n}"))
-    return (f"#{n} in {repo or slug.rsplit('/', 1)[-1]}: {stage} for {minutes(now - since)}, {minutes(now - began)} in all" + (f", ${spent:.2f} so far." if spent else "."))
+    rows = _story_rows(log, f"story-{n}")
+    spent = spend_words(_tokens(rows), _cost(rows))
+    return (f"#{n} in {repo or slug.rsplit('/', 1)[-1]}: {stage} for {minutes(now - since)}, {minutes(now - began)} in all" + (f", {spent} so far." if spent else "."))
 
 
 STAGES = ("claimed", "building", "validating", "landing", "landed")  # the five stages a builder card's track shows, in order (#1357)
@@ -219,13 +239,14 @@ def landings(log: list[dict]) -> list[dict]:
                 took[before["stage"]] += int(row.get("seconds") or 0)
         first = stages[0]
         found.append({"story": story, "repo": done.get("repo", ""), "at": _epoch(done.get("at")), "build": took["building"], "check": took["validating"],
-                      "land": took["landing"], "total": _epoch(done.get("at")) - _epoch(first.get("at")), "cost": _cost(rows)})
+                      "land": took["landing"], "total": _epoch(done.get("at")) - _epoch(first.get("at")), "cost": _cost(rows), "tokens": _tokens(rows)})
     return sorted(found, key=lambda f: f["at"], reverse=True)
 
 
 def landing_detail(row: dict) -> str:
     """'Building took 3 minutes and $0.77, validation 1 minute, landing 2 minutes, 7 minutes in all.' for a landed row from landings (#1291)."""
-    cost = f" and ${row['cost']:.2f}" if row["cost"] else ""
+    spent = spend_words(row.get("tokens", 0), row["cost"])
+    cost = f" and {spent}" if spent else ""
     return f"Building took {minutes(row['build'])}{cost}, validation {minutes(row['check'])}, landing {minutes(row['land'])}, {minutes(row['total'])} in all."
 
 
@@ -424,7 +445,7 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
             continue
         by_size.setdefault(claimed["size"], []).append({
             "minutes": (_epoch(rows[-1].get("at")) - _epoch(claimed.get("at"))) / 60, "rounds": sum(1 for r in rows if "round" in r and "stage" not in r),
-            "cost": _cost(rows), "first": sum(1 for r in rows if r.get("stage") == "validating") <= 1})
+            "cost": _cost(rows), "tokens": _tokens(rows), "first": sum(1 for r in rows if r.get("stage") == "validating") <= 1})
     lines = []
     for size in sorted(by_size, key=lambda k: ["XS", "S", "M", "L", "XL"].index(k) if k in ("XS", "S", "M", "L", "XL") else 9):
         found = by_size[size]
@@ -432,10 +453,11 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
             lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days, too few to compare.")
             continue
         bench = BENCHMARKS.get(size)
-        against = f" Benchmark: {bench[0]} minutes and ${bench[1]:.2f}." if bench else " No benchmark is set for this size."
-        ceiling = f" Ceiling: ${agent_loop.COST_CEILING[size]:.2f}." if size in agent_loop.COST_CEILING else ""
+        against = f" Benchmark: {bench[0]} minutes and ${bench[1]:.2f} ({YARDSTICK_NOTE})." if bench else " No benchmark is set for this size."
+        ceiling = f" Ceiling: ${agent_loop.COST_CEILING[size]:.2f} ({YARDSTICK_NOTE})." if size in agent_loop.COST_CEILING else ""
         lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days. Median {median([f['minutes'] for f in found]):.1f} minutes, "
-                     f"{median([f['rounds'] for f in found]):g} rounds, ${median([f['cost'] for f in found]):.2f}, "
+                     f"{median([f['rounds'] for f in found]):g} rounds, "
+                     f"{spend_words(median([f['tokens'] for f in found]), median([f['cost'] for f in found])) or 'no tokens or cost recorded'}, "
                      f"{round(100 * sum(f['first'] for f in found) / len(found))}% passed validation first time.{against}{ceiling}")
     return lines
 
@@ -553,9 +575,9 @@ def _run_line(row: dict) -> str:
         finding = "" if row["review"] == "pass" else f" Findings: {_text(row.get('findings'))}"
         return f"- {story} review {_text(row['review'], 20)}.{finding}"
     cost = row.get("cost_usd")
-    spent = "cost unknown" if cost is None else f"cost ${float(cost):.2f}"
-    return (f"- {story} round {_text(row.get('round'), 5)} on {_text(row.get('model'), 40)}: "
-            f"{row.get('input', 0)} in and {row.get('output', 0)} out tokens, {spent}")
+    spent = "cost unknown" if cost is None else f"cost ${float(cost):.2f} ({PRICE_NOTE})"
+    return (f"- {story} round {_text(row.get('round'), 5)} on {_text(row.get('model'), 40)}: {row.get('input', 0)} input, {row.get('output', 0)} output, "
+            f"{row.get('cache_read', 0)} cache read and {row.get('cache_write', 0)} cache write tokens, {spent}")
 
 
 def landed(rows: list[dict]) -> list[dict]:

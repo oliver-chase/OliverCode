@@ -188,7 +188,12 @@ class TestDigest(unittest.TestCase):
         body = target.read_text(encoding="utf-8")
         self.assertIn("o/r: 14 open.", body)
         self.assertIn("- D1: chose A on 2026-11-22 in thread T1. Words: Option A", body)
-        self.assertIn("- #7 round 1 on claude-haiku-5-5: 1200 in and 300 out tokens, cost $0.01", body)
+        self.assertIn("- #7 round 1 on claude-haiku-5-5: 1200 input, 300 output, 0 cache read and 0 cache write tokens, cost $0.01 (API-price equivalent, not billed)", body)
+
+    def test_a_digest_round_line_counts_every_token_and_labels_the_cost(self):
+        """#1526."""
+        row = {"story": "#7", "round": 2, "model": "m", "input": 1, "output": 2, "cache_read": 3, "cache_write": 4, "cost_usd": 0.5}
+        self.assertEqual("- #7 round 2 on m: 1 input, 2 output, 3 cache read and 4 cache write tokens, cost $0.50 (API-price equivalent, not billed)", cmd_status._run_line(row))
 
     def test_a_review_row_names_its_findings(self):
         _, _, target = self.write([], [{"story": "#7", "review": "findings", "findings": "The gate fails on line 3."}])
@@ -232,8 +237,39 @@ class TestDigest(unittest.TestCase):
         log = [stage("story-853", "claimed", "09:35", repo="shop"), stage("story-853", "building", "09:35", repo="shop"), stage("story-853", "validating", "09:37", 120, "shop"),
                {"story": "story-853", "round": 1, "cost_usd": 1.5, "at": "2026-11-22T09:36:00Z"}]
         lines = cmd_status.activity(at.timestamp(), claims, log, True, 5, "P0 #9 First")
-        self.assertEqual(["#853 in shop: validating for 3 minutes, 5 minutes in all, $1.50 so far.", "Last landed: none recorded yet.",
+        self.assertEqual(["#853 in shop: validating for 3 minutes, 5 minutes in all, $1.50 (API-price equivalent, not billed) so far.", "Last landed: none recorded yet.",
                           "Next Ready: P0 #9 First."], lines)
+
+    def rounds(self, n: int, count: int) -> list[dict]:
+        return [{"story": f"story-{n}", "round": i + 1, "cost_usd": 0.5, "input": 100_000, "output": 20_000, "cache_read": 150_000, "cache_write": 40_000,
+                 "at": "2026-11-22T09:36:00Z"} for i in range(count)]
+
+    def test_a_story_still_building_shows_its_tokens_so_far(self):
+        """#1526: two finished rounds of 310,000 tokens each."""
+        at = datetime(2026, 11, 22, 9, 40, tzinfo=timezone.utc)
+        claims = {"o/shop#9": {"agent": "drain", "at": at.timestamp() - 300}}
+        log = [stage("story-9", "claimed", "09:35", repo="shop")] + self.rounds(9, 2)
+        line = cmd_status.activity(at.timestamp(), claims, log, True, 5, "")[0]
+        self.assertTrue(line.endswith(", 620,000 tokens and $1.00 (API-price equivalent, not billed) so far."), line)
+
+    def test_a_story_with_a_claim_and_no_rounds_shows_no_figure(self):
+        at = datetime(2026, 11, 22, 9, 40, tzinfo=timezone.utc)
+        claims = {"o/shop#9": {"agent": "drain", "at": at.timestamp() - 300}}
+        line = cmd_status.activity(at.timestamp(), claims, [stage("story-9", "claimed", "09:35", repo="shop")], True, 5, "")[0]
+        self.assertNotIn("token", line)
+        self.assertNotIn("$", line)
+        self.assertTrue(line.endswith("5 minutes in all."), line)
+
+    def test_a_landed_story_shows_the_sum_of_all_four_token_counts_and_the_label(self):
+        log = [stage("story-5", "claimed", "09:00"), stage("story-5", "building", "09:00", 0)] + self.rounds(5, 4) + [stage("story-5", "validating", "09:12", 720),
+               stage("story-5", "landing", "09:15", 180), stage("story-5", "landed", "09:17", 120)]
+        detail = cmd_status.landing_detail(cmd_status.landings(log)[0])
+        self.assertIn("Building took 12 minutes and 1.2 million tokens and $2.00 (API-price equivalent, not billed), validation", detail)
+
+    def test_token_words_reads_in_plain_numbers(self):
+        self.assertEqual("310,000 tokens", cmd_status.token_words(310_000))
+        self.assertEqual("1.2 million tokens", cmd_status.token_words(1_240_000))
+        self.assertEqual("1 token", cmd_status.token_words(1))
 
     def test_a_story_with_no_stage_rows_counts_from_its_claim_and_never_prints_a_negative_time(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() + 90}}
@@ -245,7 +281,7 @@ class TestDigest(unittest.TestCase):
                stage("story-5", "validating", "09:12", 720), {"story": "story-5-review", "round": 1, "cost_usd": 0.5, "at": "2026-11-22T09:14:00Z"},
                stage("story-5", "landing", "09:15", 180), stage("story-5", "landed", "09:17", 120)]
         lines = cmd_status.activity(NOW.timestamp(), {}, log, False, 0, "")
-        self.assertEqual("Last landed: #5 in r at 2026-11-22 04:17 EST. Building took 12 minutes and $2.50, validation 3 minutes, landing 2 minutes, 17 minutes in all.", lines[1])
+        self.assertEqual("Last landed: #5 in r at 2026-11-22 04:17 EST. Building took 12 minutes and $2.50 (API-price equivalent, not billed), validation 3 minutes, landing 2 minutes, 17 minutes in all.", lines[1])
 
     def test_the_last_landing_is_the_runners_landed_row_and_never_a_closed_issue(self):
         """#1291: an issue closed as not planned leaves no landed row, so the line names the story the runner landed."""
@@ -268,8 +304,19 @@ class TestDigest(unittest.TestCase):
     def test_a_size_with_five_landings_shows_its_medians_beside_the_benchmark(self):
         """#1301."""
         log = [r for n in range(5) for r in self.sized(n, "XS", retry=n == 0)]
-        self.assertEqual(["XS stories: 5 reached staging in the last 7 days. Median 10.0 minutes, 1 rounds, $0.10, 80% passed validation first time. "
-                          "Benchmark: 21 minutes and $0.14. Ceiling: $1.00."], cmd_status.size_lines(log, NOW.timestamp()))
+        self.assertEqual(["XS stories: 5 reached staging in the last 7 days. Median 10.0 minutes, 1 rounds, $0.10 (API-price equivalent, not billed), 80% passed validation first time. "
+                          "Benchmark: 21 minutes and $0.14 (API-price yardstick, not spend). Ceiling: $1.00 (API-price yardstick, not spend)."], cmd_status.size_lines(log, NOW.timestamp()))
+
+    def test_size_lines_show_median_tokens_beside_median_dollars(self):
+        """#1526."""
+        log = [r for n in range(5) for r in self.sized(n, "XS")]
+        for r in log:
+            if "round" in r:
+                r.update(input=100_000, output=20_000, cache_read=150_000, cache_write=40_000)
+        line = cmd_status.size_lines(log, NOW.timestamp())[0]
+        self.assertIn("1 rounds, 310,000 tokens and $0.10 (API-price equivalent, not billed), 100%", line)
+        self.assertIn("Benchmark: 21 minutes and $0.14 (API-price yardstick, not spend)", line)
+        self.assertIn("Ceiling: $1.00 (API-price yardstick, not spend)", line)
 
     def test_a_size_without_a_ceiling_shows_none(self):
         line = cmd_status.size_lines([r for n in range(5) for r in self.sized(n, "L")], NOW.timestamp())[0]
