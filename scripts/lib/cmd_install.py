@@ -63,6 +63,14 @@ Using it well
 
 Run `olivercode guide` for the full overview."""
 
+# Install cannot sign the owner in or set their git identity, and a session or a pipe never reaches the board step that checks gh (#1509).
+OWNER_STEPS = """Steps only you can take, which install cannot do for you (skip any you have done)
+  gh auth login                              sign in to GitHub
+  gh auth refresh -s project                 add the project scope the board needs
+  claude                                     sign in to Claude Code, then exit
+  git config --global user.name "Your Name"
+  git config --global user.email "<your email>\""""
+
 
 def closing_lines(oc_root: Path) -> str:
     """Install's last lines on every install: the status steps from `olivercode guide status` and a pointer to the adoption skill (#1059)."""
@@ -615,6 +623,8 @@ def command_install(oc_root: Path) -> int:
         for b in backups:
             print(f"  {b}")
         print()
+    print(OWNER_STEPS)
+    print()
     if owner_terminal():
         board_step([("OliverCode", OC_ROOT)])
     else:

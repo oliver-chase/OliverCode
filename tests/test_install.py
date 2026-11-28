@@ -176,6 +176,12 @@ class InstallAsksNothing(unittest.TestCase):
             _, out = quiet(cmd_install.command_install, REPO_ROOT)
         return out
 
+    def test_install_from_a_session_or_a_pipe_names_each_step_only_the_owner_can_take(self):
+        out = self.install(terminal=False)
+        for step in ("gh auth login", "gh auth refresh -s project", "Claude Code", "git config --global user.name", "git config --global user.email"):
+            self.assertIn(step, out)
+        self.assertNotIn("GAP", out)
+
     def test_install_with_a_terminal_and_empty_stdin_finishes_and_links_the_shipped_design(self):
         out = self.install()
         self.assertEqual((REPO_ROOT / "docs" / "DESIGN.md").resolve(), (self.claude / "DESIGN.md").resolve())
