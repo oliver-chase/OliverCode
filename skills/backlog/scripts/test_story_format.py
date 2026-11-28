@@ -29,6 +29,139 @@ def with_blocker(text):
     return text.replace("Priority:", "Blocked by: none.\nPriority:", 1)
 
 
+def with_fit(text):
+    return text.replace("finds none.", "finds none. Second opinion agreed.\n\nFit: extends the backup job.", 1)
+
+
+def sized(size, text=None):
+    return (text or body("story-good.body")).replace("Size: S.", f"Size: {size}.")
+
+
+class StorySize(unittest.TestCase):
+    """#1437: filing refuses a story the drain cannot build or rarely lands."""
+
+    def test_an_l_or_xl_story_is_refused_and_names_the_split(self):
+        for size in ("L", "XL"):
+            [(part, fix)] = sf.check_body(sized(size))
+            self.assertEqual(f"Size {size} is too large for a Story", part)
+            self.assertEqual("a Story is S or M at most, and the work becomes an Epic over S and M stories split by file group", fix)
+            done = subprocess.run([sys.executable, str(HERE / "check_story_format.py"), "--offline"],
+                                  input=with_fit(with_blocker(sized(size))), capture_output=True, text=True)
+            self.assertEqual(1, done.returncode)
+            self.assertIn(fix, done.stdout)
+
+    def test_the_fields_line_wins_over_fields_a_scenario_quotes(self):
+        quoting = body("story-good.body").replace("Given the nightly backup job ran and exited with an error",
+                                                  "Given a body with `Size: L. Work type: Epic.`")
+        self.assertEqual([], sf.check_body(quoting))
+        self.assertEqual("Story", sf.kind_of(quoting))
+        self.assertEqual(["Size L is too large for a Story"], parts_of(sized("L", quoting.replace("`Size: L.", "`Size: S."))))
+
+    def test_an_epic_keeps_any_size(self):
+        for size in ("L", "XL"):
+            self.assertEqual([], sf.check_body(body("epic-good.body").replace("Size: M.", f"Size: {size}."), fit=True))
+
+    def test_xs_s_and_m_stories_pass(self):
+        for size in ("XS", "S", "M"):
+            self.assertEqual([], sf.check_body(sized(size)))
+
+    def test_a_missing_fit_line_or_second_opinion_result_is_named(self):
+        good = with_fit(body("story-good.body"))
+        self.assertEqual([], parts_of(good, fit=True))
+        self.assertEqual(["Fit line"], parts_of(good.replace("Fit:", "Notes:"), fit=True))
+        self.assertEqual(["Fit line"], parts_of(good.replace("Fit: extends the backup job.", "Fit:\n\nMore."), fit=True))
+        self.assertEqual(["Second-opinion result"], parts_of(good.replace("opinion agreed", "opinion pending"), fit=True))
+        for result in ("opinion differed and the owner picked one script", "opinion skipped: a one-line change"):
+            self.assertEqual([], parts_of(good.replace("opinion agreed", result), fit=True))
+
+    def test_more_than_five_files_is_refused(self):
+        five = body("story-good.body").replace("Files area: skills/backlog/scripts/check_story_format.py",
+                                               "Files area: a.py, b.py, c.py, d.py, e.py")
+        self.assertEqual([], sf.check_body(five))
+        [(part, fix)] = sf.check_body(five.replace("e.py", "e.py, f.py"))
+        self.assertEqual("Files area names 6 files", part)
+        self.assertEqual("split it into stories of five files or fewer, one fix each", fix)
+
+    def test_only_paths_are_counted_as_files(self):
+        def area(text, extra=""):
+            return sf.check_body(body("story-good.body").replace(
+                "Files area: skills/backlog/scripts/check_story_format.py", extra + "Files area: " + text))
+        for five in ("a.py, b.py, c.py, d.py and e.py", "a.py (new), b.py, c.py, d.py, `e.py` (a new file).",
+                     "a.py, b.py, c.py, Makefile and LICENSE", "a.py, b.py, c.py, d.py, and the new e.py"):
+            self.assertEqual([], area(five), five)
+        for six in ("a.py, b.py, c.py, d.py, e.py, Makefile", "a.py, b.py, c.py, d.py, Makefile and LICENSE",
+                    "a.py b.py c.py d.py e.py f.py"):
+            self.assertEqual(["Files area names 6 files"], [p for p, _ in area(six)], six)
+        removes = "Removes tests: tests/test_a.py::test_x\n"
+        self.assertEqual([], area("tests/test_a.py and tests/test_b.py (new)", removes))
+        [(part, _)] = area("tests/test_a.py and Makefile", removes)
+        self.assertEqual("Removes tests: story also changes Makefile", part)
+
+    def test_a_line_count_target_in_a_scenario_is_refused_and_a_quoted_one_is_not(self):
+        def given(text):
+            return sf.check_body(body("story-good.body").replace("Then no message is sent", text))
+        for target in ("Then it works in about 2,500 lines", "Then the module is under 300 lines", "Then it is 90 lines or fewer"):
+            [(part, fix)] = given(target)
+            self.assertTrue(part.startswith("Line target"), part)
+            self.assertEqual("state the behavior to keep, one module per story, with no line target", fix)
+        for allowed in ('Then it refuses "under 300 lines"', "Then it prints the last 40 lines", "Then a change of 20 changed lines or fewer passes"):
+            self.assertEqual([], given(allowed))
+
+    def test_an_m_story_that_shrinks_or_removes_code_is_refused(self):
+        good = body("story-good.body")
+        for title in ("Remove the dead helpers", "Cut the unused commands", "The scripts shrink", "Merge two modules", "Consolidate duplicate code"):
+            [(_, fix)] = sf.check_body(sized("M"), title=title)
+            self.assertEqual("file one S story per module", fix)
+            self.assertEqual([], sf.check_body(good, title=title))
+        asked = sized("M").replace("a failed nightly backup to message me the same day", "the backup scripts consolidated")
+        self.assertEqual(["Size M for a story that shrinks or removes code"], parts_of(asked))
+        for title in ("Unused and disabled features are removed", "Tests: wording-only tests are cut to their protection"):
+            self.assertEqual(["Size M for a story that shrinks or removes code"], parts_of(sized("M"), title=title))
+        merging = asked.replace("the backup scripts consolidated", "the backup job to merge its duplicate helpers")
+        self.assertEqual(["Size M for a story that shrinks or removes code"], parts_of(merging))
+
+    def test_every_form_of_a_shrink_is_refused(self):
+        refused = ["Size M for a story that shrinks or removes code"]
+        for ask in ("the dead code to be removed", "the drain module to shrink", "OliverCode to remove the unused commands",
+                    "the runner to consolidate the duplicate helpers into one", "the unused scripts to be fully removed from the repo",
+                    "the drain module should shrink"):
+            asked = sized("M").replace("a failed nightly backup to message me the same day", ask)
+            self.assertEqual(refused, parts_of(asked), ask)
+        for title in ("Removing the dead helpers", "Cutting the unused commands", "Shrinking the drain module",
+                      "Merging the duplicate helpers", "Consolidating the test helpers", "Removal of dead code",
+                      "Drain: removing the unused functions"):
+            self.assertEqual(refused, parts_of(sized("M"), title=title), title)
+
+    def test_an_m_story_that_only_mentions_a_removal_passes(self):
+        for title in ("The drain removes a worktree before its hooks run", "A merged story is closed the same day",
+                      "Remove the stale lock before the hooks run", "The landing refuses a removed test"):
+            self.assertEqual([], sf.check_body(sized("M"), title=title))
+        for ask in ("the drain to run a worktree's hooks before it removes the worktree",
+                    "the drain to remove a worktree only after its hooks run",
+                    "the drain to remove the test worktrees", "the script to merge into main"):
+            self.assertEqual([], sf.check_body(sized("M").replace("a failed nightly backup to message me the same day", ask)))
+        outcome = sized("M").replace("so that", "so that dead code is removed and")
+        self.assertEqual([], sf.check_body(outcome))
+
+    def test_the_command_reads_the_title(self):
+        done = subprocess.run([sys.executable, str(HERE / "check_story_format.py"), "--offline", "--title", "Remove the dead code"],
+                              input=with_fit(with_blocker(sized("M"))), capture_output=True, text=True)
+        self.assertEqual(1, done.returncode)
+        self.assertIn("file one S story per module", done.stdout)
+
+    def test_a_story_that_removes_tests_changes_only_tests(self):
+        line = "Removes tests: tests/test_a.py::test_x\nFiles area: tests/test_a.py, skills/x/scripts/test_b.py"
+        alone = body("story-good.body").replace("Files area: skills/backlog/scripts/check_story_format.py", line)
+        self.assertEqual([], sf.check_body(alone))
+        [(part, fix)] = sf.check_body(alone.replace("test_b.py", "test_b.py, scripts/lib/a.py"))
+        self.assertIn("scripts/lib/a.py", part)
+        self.assertIn("remove the tests in their own story", fix)
+
+    def test_the_template_story_passes_every_check_the_command_runs(self):
+        example = re.findall(r"````markdown\n(.*?)````", TEMPLATE.read_text(encoding="utf-8"), re.S)[0]
+        self.assertEqual([], sf.check_body(example, blocker=True, line_numbers=True, files=True, fit=True))
+
+
 class StoryFormat(unittest.TestCase):
     def test_a_files_area_that_names_a_folder_is_rejected_and_a_file_is_not(self):
         """#1077: a folder in the Files area holds every other story back, so filing names it; a file with no extension passes."""
@@ -199,7 +332,7 @@ class StoryFormat(unittest.TestCase):
 
     def test_the_command_reads_stdin_and_sets_the_exit_status(self):
         script = str(HERE / "check_story_format.py")
-        good = subprocess.run([sys.executable, script, "--offline"], input=with_blocker(body("story-good.body")),
+        good = subprocess.run([sys.executable, script, "--offline"], input=with_fit(with_blocker(body("story-good.body"))),
                               capture_output=True, text=True)
         bad = subprocess.run([sys.executable, script, str(HERE / "fixtures" / "story-no-gherkin.body"), "--offline"],
                              capture_output=True, text=True)

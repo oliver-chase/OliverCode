@@ -258,7 +258,7 @@ BUG_BRIEF = ("You are a fresh reader of one failure OliverCode found. Read it ag
              "names before you decide: a doubt you did not check is not an answer. Reply with the first line being exactly one of: BUG, REGRESSION, COVERED #<number> (an open story "
              "already covers it), or NOT A BUG. A feature, cleanup, refactor or new gate is NOT A BUG. For BUG or REGRESSION write the story after the first line: a line `Title: <short title>`, "
              "then `**As the owner**, I want ..., so that ...`, a gherkin block, `Root cause: <file and line>`, the smallest change that fixes the cause (removing or reusing code before adding any), "
-             "`Existing coverage checked: <what you searched>`, `Size: XS|S|M|L|XL. Work type: Story.` and `Files area: <files, not folders>`. Leave out the Epic, Blocked by and Priority lines, "
+             "`Existing coverage checked: <what you searched>`, `Size: XS|S|M. Work type: Story.` and `Files area: <five files at most, not folders>`. No scenario sets a line-count target, and the title and story sentence of an M story never ask to remove, cut, shrink, merge or consolidate code. Leave out the Epic, Blocked by and Priority lines, "
              "which the runner adds. For the other answers give one sentence why. " + agent_loop.VERDICT_FIRST + "\n\n{task}{diff}{tail}")
 
 
@@ -335,9 +335,13 @@ def parse(text: str) -> tuple[str | None, str]:
 
 
 def story_text(rest: str, candidate: dict, epic: int) -> tuple[str, str]:
-    """(title, body): the reader's story with the Epic, Blocked by and Priority lines the runner owns, P1 for CI on the engine branch and P2 otherwise."""
+    """(title, body): the reader's story with the lines the runner owns: the second-opinion result, a Fit line when the reader wrote none,
+    Epic, Blocked by and Priority, P1 for CI on the engine branch and P2 otherwise."""
     title = re.search(r"^Title:\s*(.+)$", rest, re.M)
     body = re.sub(r"^Title:.*\n?", "", rest, flags=re.M).strip()
+    body = re.sub(r"^(\W*Existing coverage checked:.*)$", r"\1 Second opinion skipped: bug intake's one fresh reader wrote this story.", body, count=1, flags=re.M)
+    if not re.search(r"^\W*Fit:", body, re.M):
+        body += "\n\nFit: the smallest change at the root cause, in the code that exists."
     tail = f"\n\nEpic: #{epic}\nBlocked by: none.\nPriority: {'P1' if candidate['branch'] else 'P2'}.\n\nFound by bug intake ({candidate['sig']}):\n{candidate['text']}\n"
     return (title.group(1).strip() if title else "Fix a failure OliverCode found")[:120], body + tail
 
@@ -450,7 +454,7 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
                 continue  # the checkout's config names no errorEpic, so nothing is filed or recorded
             entry["repo"] = str(where)
             entry["title"], entry["body"] = story_text(rest, c, dest[1])
-            if check_body(entry["body"], files=True, blocker=True, root=where):
+            if check_body(entry["body"], files=True, blocker=True, root=where, fit=True, title=entry["title"]):
                 entry["verdict"] = "not a bug"  # a story that fails the format check is never filed
                 continue
             new += file_entry(c["sig"], entry)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check that an issue body follows references/story-template.md.
 
-Usage: check_story_format.py [BODY_FILE|-] [--kind story|epic] [--offline]
+Usage: check_story_format.py [BODY_FILE|-] [--kind story|epic] [--title TITLE] [--offline]
 Reads the body from BODY_FILE, or from stdin when the file is omitted or "-". Prints each
 missing part with its fix and exits 1 when any part is missing, 0 when the body is complete,
 2 on a usage error. A story also lists each open story whose Files area shares a file or folder
@@ -27,9 +27,35 @@ COVERAGE_LINE = re.compile(r"^\s*(?:[-*]\s*)?Existing coverage checked:\s*\S", r
 STEP = re.compile(r"^\s*(Given|When|Then|And|But)\b", re.I)
 COVERAGE_TEXT = re.compile(r"^\s*(?:[-*]\s*)?Existing coverage checked:(.*)$", re.I | re.M)
 AREA = re.compile(r"^\W*Files area:\W*(.+)$", re.I | re.M)
+FIELDS_LINE = r"^(?=(?:Priority|Size|Work type):)"  # a story's own fields start their line (#1514)
+FIT_LINE = re.compile(r"^[ \t*-]*Fit:[ \t*]*\S", re.I | re.M)
+SECOND_OPINION = re.compile(r"\bsecond[- ]opinion[\s:,]+(?:(?:dis)?agreed|differed|skipped)\b", re.I)
+ASK_TEXT = re.compile(r"\bAs (?:the|an?)\s.*?\bI want\s+(.*?)(?=,?\s*\bso that\b|\n\s*\n|\Z)", re.I | re.S)
+SCENARIO_LINE = re.compile(r"^\s*(?:Scenario(?: Outline)?:|Given\b|When\b|Then\b|And\b|But\b).*$", re.M)
+QUOTED = re.compile(r'"[^"\n]*"|`[^`\n]*`')
+LINE_TARGET = re.compile(r"\b(?:under|below|within|(?:fewer|less|no more) than|at most|(?:in|to) (?:about|around|roughly))\s+"
+                         r"(?:(?:about|around|roughly)\s+)?~?\d[\d,]*\s+lines?\b|\b\d[\d,]*\s+lines?\s+or\s+(?:fewer|less)\b", re.I)
+# shortcut: word lists, so other words ("delete", "drop") pass, and a sentence ending "tries to remove tests" or "when its
+# tests are removed" is refused; tighten them when either is filed. The code noun is the verb's object or subject, so a bug
+# where code removes something else passes.
+CODE_NOUN = r"(?:code|modules?|scripts?|functions?|helpers?|commands?|hooks?|features?|tests?|lines|duplicat\w*)\b"
+OBJECT = r"(?:\s+(?!(?:before|after|when|while|if|because|from|until|unless|that|which)\b)[\w'-]+,?){0,4}?\s+" + CODE_NOUN
+NOUN_ENDS = r"(?=\s*(?:$|[,.;:]|(?:and|down|from|in|into|to|with)\b))"  # so "test" in "test worktrees" is not the noun
+SHRINK = re.compile(
+    # leading: "Remove the dead helpers", "Removing the dead helpers", "Tests: consolidation of the test helpers"
+    r"^(?:[\w-]+:\s*)?(?:to\s+)?(?:remov(?:es?|ing|al\s+of)|cut(?:s|ting)?|shrink(?:s|ing)?|merg(?:es?|ing)"
+    r"|consolidat(?:es?|ing|ion\s+of))\b" + OBJECT
+    # asked of someone: "OliverCode to remove the unused commands"
+    + r"|\bto\s+(?:remove|cut|shrink|merge|consolidate)\b" + OBJECT + NOUN_ENDS
+    # the result: "unused features are removed", "the dead code to be removed", "the drain module to shrink"
+    + r"|\b" + CODE_NOUN + r"(?:\s+files)?(?:\s+(?:should|must|can|will|to))?(?:\s+(?:are|is|be|being|gets?))?(?:\s+\w+ly)?"
+    r"\s+(?:removed|cut|merged|consolidated|shrunk|shrinks?)" + NOUN_ENDS, re.I)
+TEST_PATH = re.compile(r"(?:^|/)(?:tests?|__tests__|fixtures)/|(?:^|/)test_[^/]*$|[._](?:test|spec)\.\w+$")
+REMOVES_TESTS = re.compile(r"^\W*Removes tests:", re.I | re.M)
 
 PRIORITIES = ("P0", "P1", "P2")
 SIZES = ("XS", "S", "M", "L", "XL")
+MAX_FILES = 5
 WORK_TYPES = ("Story", "Epic")
 
 TEMPLATE = "references/story-template.md"
@@ -65,9 +91,14 @@ def gherkin_problems(body):
     return problems
 
 
+def field(pattern, body):
+    """The pattern's match on a fields line, else its first one, since a scenario may quote another story's fields."""
+    return re.search(FIELDS_LINE + ".*?" + pattern.pattern, body, re.M | re.I) or pattern.search(body)
+
+
 def kind_of(body, kind=None):
     """The kind a body is checked as: the one asked for, else its Work type line, else a story."""
-    wt = WORK_TYPE.search(body)
+    wt = field(WORK_TYPE, body)
     return (kind or (wt.group(1) if wt else "Story")).capitalize()
 
 
@@ -117,7 +148,43 @@ def overlap_problems(body, stories):
     return problems
 
 
-def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False, root=None, files=False):
+def paths_of(body):
+    """The Files area paths the size limits count. A note in brackets and a joining word are not paths, and a word with
+    no slash or dot counts only when it stands alone, as `Makefile` does (#1437)."""
+    area = AREA.search(body)
+    text = re.sub(r"(?<!\S)\([^()]*\)", " ", area.group(1)) if area else ""
+    paths = set()
+    # shortcut: extensionless files separated by spaces alone are not counted, split on them when a story files that
+    for item in re.split(r"[,;]|(?<!\S)(?:and|plus|&)(?!\S)", text):
+        words = [w for w in (t.strip("`.,;*()") for t in item.split()) if w]
+        paths.update(w for w in words if len(words) == 1 or re.search(r"[/.]", w))
+    return paths
+
+
+def size_problems(body, size, title=""):
+    """(part, fix) for each way a story is too large for the drain to build and land (#1437)."""
+    problems = []
+    if size in ("L", "XL"):
+        problems.append((f"Size {size} is too large for a Story",
+                         "a Story is S or M at most, and the work becomes an Epic over S and M stories split by file group"))
+    entries = paths_of(body)
+    if len(entries) > MAX_FILES:
+        problems.append((f"Files area names {len(entries)} files", "split it into stories of five files or fewer, one fix each"))
+    target = LINE_TARGET.search(QUOTED.sub("", "\n".join(SCENARIO_LINE.findall(body))))
+    if target:
+        problems.append((f"Line target \"{target.group(0)}\" in a scenario",
+                         "state the behavior to keep, one module per story, with no line target"))
+    ask = ASK_TEXT.search(body.replace("*", ""))
+    if size == "M" and any(SHRINK.search(text.strip()) for text in (title, ask.group(1) if ask else "")):
+        problems.append(("Size M for a story that shrinks or removes code", "file one S story per module"))
+    outside = sorted(e for e in entries if not TEST_PATH.search(e))
+    if REMOVES_TESTS.search(body) and outside:
+        problems.append((f"Removes tests: story also changes {', '.join(outside)}",
+                         "remove the tests in their own story, whose Files area names only test files"))
+    return problems
+
+
+def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False, root=None, files=False, fit=False, title=""):
     """Return a list of (missing part, fix) for the body. An empty list means it is complete.
 
     `coverage=False` skips the Existing coverage checked line, for a scan of stories filed before it was required.
@@ -125,9 +192,11 @@ def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False
     and the library default leaves them off so intake's scan and the generated bodies are judged as they were.
     `files=True` requires the Files area line of a story, which dispatch needs; the command sets it (#1274).
     `root` is the repo the story changes, so a Files area entry that is a folder there is named.
+    `fit=True` requires a story's Fit line and a second-opinion result on its coverage line; the command and bug intake set it.
+    A story's size limits always apply, and the shrink rule reads `title` and what the story sentence asks for (#1437).
     """
     problems = []
-    wt = WORK_TYPE.search(body)
+    wt = field(WORK_TYPE, body)
     work_type = wt.group(1).capitalize() if wt else None
     kind = kind_of(body, kind)
 
@@ -144,12 +213,19 @@ def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False
     if coverage and kind == "Story" and not COVERAGE_LINE.search(body):
         problems.append(("Existing coverage checked line",
                          "add `Existing coverage checked:` naming the code, doc or issue you searched and what you found, as in " + TEMPLATE))
+    if fit and kind == "Story":
+        if not FIT_LINE.search(body):
+            problems.append(("Fit line", "add `Fit:` answering the fit check, as in " + TEMPLATE))
+        covered = COVERAGE_TEXT.search(body)
+        if covered and not SECOND_OPINION.search(covered.group(1)):
+            problems.append(("Second-opinion result", "add `second opinion agreed`, `differed` or `skipped` and why to the "
+                                                      "`Existing coverage checked:` line, as in " + TEMPLATE))
     p = PRIORITY.search(body + " ")
     if not p:
         problems.append(("Priority", "add `Priority: P0`, `P1` or `P2`"))
     elif p.group(1).upper() not in PRIORITIES:
         problems.append((f"Priority \"{p.group(1)}\" is not valid", "use P0, P1 or P2"))
-    s = SIZE.search(body + " ")
+    s = field(SIZE, body + " ")
     if not s:
         problems.append(("Size", "add `Size: XS`, `S`, `M`, `L` or `XL`"))
     elif s.group(1).upper() not in SIZES:
@@ -163,6 +239,8 @@ def check_body(body, kind=None, coverage=True, blocker=False, line_numbers=False
                          f"set `Work type: {kind}`"))
     if files and kind == "Story" and not AREA.search(body):
         problems.append(("Files area", "add a `Files area:` line naming the files the story changes, not a folder, as in " + TEMPLATE))
+    if kind == "Story":
+        problems += size_problems(body, s.group(1).upper() if s else "", title)
     for entry in files_of(body):
         if entry.endswith("/") or (root is not None and (Path(root) / entry).is_dir()):
             problems.append((f"Files area names the folder {entry}",
@@ -181,6 +259,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("body_file", nargs="?", default="-", help="issue body file, or - for stdin")
     ap.add_argument("--kind", choices=("story", "epic"), help="check as this kind; default reads Work type")
+    ap.add_argument("--title", default="", help="issue title, read by the size check")
     ap.add_argument("--offline", action="store_true", help="skip the read of open stories that lists the overlaps")
     args = ap.parse_args(argv)
     try:
@@ -193,7 +272,7 @@ def main(argv=None):
         return 1
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     root = (top.stdout.strip() or None) if top.returncode == 0 else None
-    problems = check_body(body, args.kind, blocker=True, line_numbers=True, files=True, root=root)
+    problems = check_body(body, args.kind, blocker=True, line_numbers=True, files=True, root=root, fit=True, title=args.title)
     if not args.offline and kind_of(body, args.kind) == "Story":
         try:
             problems += overlap_problems(body, open_stories(root))

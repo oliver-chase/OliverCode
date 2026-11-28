@@ -208,6 +208,13 @@ class TestBugIntake(unittest.TestCase):
         self.assertNotIn("line 1\n", cand["text"])
         self.assertEqual("staging", cand["branch"])
 
+    def test_the_story_writer_adds_the_fit_line_and_the_second_opinion_result(self):  # #1437
+        from check_story_format import check_body
+        for reply in (BODY, BODY.replace("Fit: reuses.\n\n", "")):
+            body = intake.story_text(reply, {"branch": "", "sig": "s", "text": "t"}, 5)[1]
+            self.assertEqual([], check_body(body, files=True, blocker=True, fit=True))
+            self.assertEqual(1, body.count("Fit:"))
+
     def test_a_staging_ci_story_is_p1_and_others_p2(self):
         self.assertIn("Priority: P1.", intake.story_text(BODY, {"branch": "staging", "sig": "s", "text": "t"}, 5)[1])
         self.assertIn("Priority: P2.", intake.story_text(BODY, {"branch": "", "sig": "s", "text": "t"}, 5)[1])
