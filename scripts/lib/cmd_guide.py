@@ -47,12 +47,6 @@ EXAMPLE = (
     "5. When it lands you get the commit, the checks run and the cost in the story comment. If it stops, the comment says why and the card is back on Ready.",
 )
 
-def city_on() -> bool:
-    """Whether City is switched on, so the guide names it."""
-    from lib.local_config import setting
-    return bool(setting("city"))
-
-
 # The commands by what the owner wants to do. Every command the launcher lists appears once.
 COMMAND_SETS = (
     ("Install and keep things up to date", "install · uninstall · update · bootstrap · sync-hooks"),
@@ -140,7 +134,7 @@ def status_steps(oc_root: Path) -> list[str]:
 
 
 def plain_guide(oc_root: Path) -> list[str]:
-    """The guide, short enough to read in under a minute. The long parts live behind `olivercode guide city`, `guide skills` and `guide design`."""
+    """The guide, short enough to read in under a minute. The long parts live behind `olivercode guide skills` and `guide design`."""
     from lib import local_config
     count = len(local_config.private_repos())
     out = ["OliverCode", "",
@@ -160,19 +154,10 @@ def plain_guide(oc_root: Path) -> list[str]:
     out += ["", "What to use when"] + [f"  {task:<32} {tool}" for task, tool in WHEN_TO_USE] + ["", "Commands"]
     for title, cmds in COMMAND_SETS:
         out += [f"  {title}", f"    {cmds}", ""]
-    city = city_on()
     out += ["Your projects, your rules",
             "  OliverCode uses your repo's rules, validation and permissions. You stay in control of approvals, sensitive actions and anything that needs your judgment.", ""]
-    out += ["City",
-            "  City gives you a live view of work, progress and anything waiting on you. On this computer, open the \"OliverCode City\" shortcut on the Desktop to see the live page. Without the shortcut, run `olivercode status page --open`.", ""] if city else []
-    out += ["Run `olivercode guide NAME` for a closer look at any command or skill. " + ("`guide city`, `guide skills` and `guide design`" if city else "`guide skills` and `guide design`") + " cover those topics."]
+    out += ["Run `olivercode guide NAME` for a closer look at any command or skill. `guide skills` and `guide design` cover those topics."]
     return out
-
-
-def _city_topic(oc_root: Path) -> list[str]:
-    return ["OliverCode City", "", "On this computer",
-            "  1. Open the \"OliverCode City\" shortcut on the Desktop. It opens the live page.",
-            "  2. Without the shortcut, run `olivercode status page --open`."]
 
 
 def _skills_topic(oc_root: Path) -> list[str]:
@@ -186,7 +171,7 @@ def _design_topic(oc_root: Path) -> list[str]:
     return ["Your design file", "", "  Set designFile in olivercode.local.json to your own path, then run `olivercode install` to link it as ~/.claude/DESIGN.md."]
 
 
-TOPICS = {"city": _city_topic, "skills": _skills_topic, "design": _design_topic}
+TOPICS = {"skills": _skills_topic, "design": _design_topic}
 
 
 def command_guide(oc_root: Path, name: str | None = None) -> int:
@@ -195,7 +180,7 @@ def command_guide(oc_root: Path, name: str | None = None) -> int:
         if not topic:
             print("Usage: olivercode guide [NAME]")
             return 1
-        if topic in TOPICS and (topic != "city" or city_on()):
+        if topic in TOPICS:
             print("\n".join(TOPICS[topic](oc_root)))
             return 0
         found = explain(oc_root, name)

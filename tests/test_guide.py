@@ -4,8 +4,6 @@ import contextlib
 import io
 import re
 import unittest
-from unittest import mock
-
 from _support import REPO_ROOT, load_script, quiet
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher_guide")
@@ -15,7 +13,7 @@ from lib import cli, cmd_guide, cmd_install  # noqa: E402
 FLEET = ("discover", "policy")
 # The headings the approved copy prints, in order.
 HEADINGS = ("How work runs", "How the work is split", "Getting started", "How it works", "An example", "Using it well",
-            "What to use when", "Commands", "Your projects, your rules", "City")
+            "What to use when", "Commands", "Your projects, your rules")
 
 
 def _names():
@@ -56,11 +54,6 @@ class TestGuide(unittest.TestCase):
 
 
 class TestApprovedCopy(unittest.TestCase):
-    def setUp(self):
-        on = mock.patch.object(cmd_guide, "city_on", return_value=True)  # City is on (#1387); TestCityOff covers it off
-        on.start()
-        self.addCleanup(on.stop)
-
     def test_the_headings_print_in_the_archived_order(self):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         positions = [text.index(f"\n{heading}\n") for heading in HEADINGS]
@@ -76,7 +69,7 @@ class TestApprovedCopy(unittest.TestCase):
         _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
         for name in FLEET:
             self.assertNotRegex(text, rf"\b{name}\b", name)
-        for gone in ("status publish", "candidates", "olivercode story"):  # `status page` is real since #1363, so the guide names it
+        for gone in ("status publish", "candidates", "olivercode story", "status page", "guide city"):  # retired commands and topics the guide must not name
             self.assertNotIn(gone, text)
 
 
@@ -159,41 +152,12 @@ class TestStatusSteps(unittest.TestCase):
         self.assertIn(free, text)
 
 
-class TestCityOff(unittest.TestCase):
-    """#1387: with the city setting off the guide names no City and has no city topic."""
+class TestRetiredCity(unittest.TestCase):
+    """#1561: the guide has no City topic, and `guide city` is an unknown name."""
 
-    def test_the_short_guide_names_no_city(self):
-        with mock.patch.object(cmd_guide, "city_on", return_value=False):
-            _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertNotIn("City", text)
-        self.assertNotIn("guide city", text)
-
-    def test_there_is_no_city_topic(self):
-        with mock.patch.object(cmd_guide, "city_on", return_value=False):
-            code, _ = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
+    def test_guide_city_exits_one(self):
+        code, _ = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
         self.assertEqual(1, code)
-
-
-class TestCityOpening(unittest.TestCase):
-    """#1366: the guide names every way to open City on this computer, with or without the Desktop shortcut."""
-
-    def setUp(self):
-        on = mock.patch.object(cmd_guide, "city_on", return_value=True)
-        on.start()
-        self.addCleanup(on.stop)
-
-    def test_the_short_guide_names_the_shortcut_and_status_page_open(self):
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT)
-        self.assertIn("\"OliverCode City\" shortcut on the Desktop", text)
-        self.assertIn("olivercode status page --open", text)
-
-    def test_the_city_topic_is_for_this_computer_only(self):
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
-        self.assertIn("On this computer", text)
-        self.assertIn("\"OliverCode City\" shortcut on the Desktop", text)
-        self.assertIn("olivercode status page --open", text)
-        self.assertNotIn("phone", text.lower())
-        self.assertNotIn("cityArtifact", text)
 
 
 class TestLauncherSetupDoc(unittest.TestCase):
