@@ -284,6 +284,12 @@ def _restarting(rows: list[dict]) -> bool:
     return [r["stage"] for r in rows[-2:]] == ["restarting", "run-end"]
 
 
+def _drain_holds(rows: list[dict], alive) -> bool:
+    """True while a drain holds the repo: its run lock, or a drain process between a restart's two runs (#1494, #1535)."""
+    # shortcut: between a restart's two runs any drain process counts as alive, so match this repo's process if another repo's drain ever holds a watch open.
+    return alive() or (_restarting(rows) and runner_alive())
+
+
 def run_rows(log: list[dict], repo: str) -> list[dict]:
     """REPO's stage rows of its latest run, with the runs before it that restarted into it (#1490)."""
     rows = [r for r in log if r.get("repo") == repo and r.get("stage")]
@@ -325,8 +331,7 @@ def wait_for_exit(repo: str, alive, sleep, out) -> int:
         rows = run_rows(log, repo)
         if rows and rows[-1]["stage"] == "run-end" and ends(log)[-1:] != before and not _restarting(rows):
             break
-        # shortcut: between a restart's two runs any drain process counts as alive, so match this repo's process if another repo's drain ever holds a watch open.
-        idle = 0 if alive() or (_restarting(rows) and runner_alive()) else idle + 1
+        idle = 0 if _drain_holds(rows, alive) else idle + 1
         sleep(2)
     out(exit_line(repo, run_rows(run_log(), repo)))
     return 0
@@ -365,7 +370,8 @@ def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> i
                 if ends:
                     return 0
         seen = len(log)
-        idle = 0 if alive() else idle + 1
+        # a restart's gap counts as alive too, so the watch keeps following the new run (#1535)
+        idle = 0 if _drain_holds(run_rows(log, repo.name) if repo else [], alive) else idle + 1
         sleep(2)
     out("No drain is running" + (f" for {repo.name}" if repo else "") + ".")
     return 0

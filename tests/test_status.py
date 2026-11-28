@@ -455,6 +455,49 @@ class TestOwnerZone(unittest.TestCase):
         self.assertEqual("No drain is running.", lines[-1])
 
 
+class TestWatchFollowsRestart(unittest.TestCase):
+    """#1535: `watch REPO` keeps following a drain through its restart gap and says no drain runs only once no drain comes back."""
+
+    def watch(self, batches, drain_alive):
+        """Run the watch over a log that grows by one batch at each sleep. Returns the lines it printed, its exit code and the sleeps it took."""
+        log, lines, steps = list(batches[0]), [], []
+
+        def sleep(_seconds):
+            steps.append(1)
+            self.assertLess(len(steps), 60)
+            log.extend(batches[len(steps)] if len(steps) < len(batches) else [])
+
+        with mock.patch.object(cmd_status, "run_log", side_effect=lambda: list(log)), mock.patch.object(cmd_status, "activity", return_value=[]), \
+                mock.patch.object(cmd_status, "live_claims", return_value={}), mock.patch.object(cmd_status.run_lock, "active", return_value={}), \
+                mock.patch.object(cmd_status, "runner_alive", return_value=drain_alive), mock.patch("lib.cmd_drain.resolve_repo", return_value=Path("/x/r")), \
+                mock.patch("lib.cmd_drain.slug_of", return_value="o/r"):
+            code = cmd_status.command_watch(["r"], sleep=sleep, out=lines.append)
+        return lines, code, len(steps)
+
+    def test_the_gap_in_a_restart_is_followed_and_the_claimed_row_is_printed(self):
+        restart = [stage("run-r", "restarting", "09:00"), stage("run-r", "run-end", "09:00")]
+        quiet = [[] for _ in range(15)]
+        lines, code, _ = self.watch([[], restart, *quiet, [stage("story-3", "claimed", "09:01")], [stage("story-3", "landed", "09:20", 60)],
+                                     [stage("run-r", "run-end", "09:30")]], drain_alive=True)
+        self.assertEqual(0, code)
+        self.assertNotIn("No drain is running for r.", lines)
+        self.assertTrue(any("#3" in line and "claimed" in line for line in lines))
+        self.assertTrue(any("landed" in line for line in lines))
+
+    def test_a_restart_that_never_comes_back_ends_with_no_drain_running_after_three_checks(self):
+        lines, code, sleeps = self.watch([[], [stage("run-r", "restarting", "09:00"), stage("run-r", "run-end", "09:00")]], drain_alive=False)
+        self.assertEqual(0, code)
+        self.assertEqual("No drain is running for r.", lines[-1])
+        self.assertEqual(3, sleeps)
+
+    def test_a_run_end_that_does_not_follow_a_restart_prints_its_line_and_exits(self):
+        end = stage("run-r", "run-end", "09:00")
+        log_at_end = [end]
+        lines, code, _ = self.watch([[], [end]], drain_alive=False)
+        self.assertEqual(0, code)
+        self.assertEqual([cmd_status.watch_line(end, log_at_end)], lines)
+
+
 class TestWatchUntilExit(unittest.TestCase):
     """#1490: `watch REPO --until-exit` prints nothing while the drain runs and one line when it ends."""
 
