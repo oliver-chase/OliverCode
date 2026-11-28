@@ -69,7 +69,6 @@ class VaultSkillLinks(HealthBase):
         (self.linked / "misdirected").symlink_to(broken)
         self.assertEqual((0, 3, 0), self.check())
 
-
     def test_a_skill_folder_inside_the_checkout_is_left_to_the_placement_check(self):
         """One dangling link must not print a FAIL here and a second one from the placement drift check."""
         self.linked.mkdir(parents=True)
@@ -224,19 +223,17 @@ class LauncherLink(HealthBase):
         link.symlink_to(real)
         self.assertEqual(quiet(health._check_launcher, self.oc, link)[0], (1, 0, 0))
 
-    def test_a_wrapper_with_a_spaced_project_folder_fails_naming_it(self):
-        wrapper = self.root / "olivercode"
-        wrapper.write_text(f'#!/bin/bash\nPROJECT="{self.root}/Old Vault/OliverCode"\nexec python3 "$PROJECT/scripts/olivercode" "$@"\n')
-        result, out = quiet(health._check_launcher, self.oc, wrapper)
-        self.assertEqual(result, (0, 1, 0))
-        self.assertIn("Old Vault/OliverCode", out)
-
-    def test_a_wrapper_script_naming_a_missing_launcher_fails(self):
-        wrapper = self.root / "olivercode"
-        wrapper.write_text(f"#!/bin/sh\nexec python3 {self.root}/old/scripts/olivercode \"$@\"\n")
-        result, out = quiet(health._check_launcher, self.oc, wrapper)
-        self.assertEqual(result, (0, 1, 0))
-        self.assertIn("old/scripts/olivercode", out)
+    def test_a_wrapper_naming_a_spaced_project_folder_or_a_missing_launcher_fails_naming_it(self):
+        wrappers = (
+            (f'#!/bin/bash\nPROJECT="{self.root}/Old Vault/OliverCode"\nexec python3 "$PROJECT/scripts/olivercode" "$@"\n', "Old Vault/OliverCode"),
+            (f"#!/bin/sh\nexec python3 {self.root}/old/scripts/olivercode \"$@\"\n", "old/scripts/olivercode"),
+        )
+        for text, named in wrappers:
+            wrapper = self.root / "olivercode"
+            wrapper.write_text(text)
+            result, out = quiet(health._check_launcher, self.oc, wrapper)
+            self.assertEqual(result, (0, 1, 0))
+            self.assertIn(named, out)
 
 
 class PathCheckout(HealthBase):
@@ -267,18 +264,13 @@ class PathCheckout(HealthBase):
         result, _ = self.check(str(self.staging / "scripts" / "olivercode"))
         self.assertEqual(result, (1, 0, 0))
 
-    def test_a_symlink_on_path_to_the_linked_checkout_passes(self):
+    def test_a_symlink_on_path_passes_to_the_linked_checkout_and_fails_to_another(self):
         launcher = self.root / "bin" / "olivercode"
         launcher.parent.mkdir()
-        launcher.symlink_to(self.staging / "scripts" / "olivercode")
-        result, _ = self.check(str(launcher))
-        self.assertEqual(result, (1, 0, 0))
-
-    def test_a_symlink_on_path_to_another_checkout_fails(self):
-        launcher = self.root / "bin" / "olivercode"
-        launcher.parent.mkdir()
-        launcher.symlink_to(self.main / "scripts" / "olivercode")
-        self.assertEqual(self.check(str(launcher))[0], (0, 1, 0))
+        for checkout, expected in ((self.staging, (1, 0, 0)), (self.main, (0, 1, 0))):
+            launcher.unlink(missing_ok=True)
+            launcher.symlink_to(checkout / "scripts" / "olivercode")
+            self.assertEqual(self.check(str(launcher))[0], expected)
 
     def test_no_olivercode_on_path_is_skipped(self):
         self.assertEqual(self.check(None)[0], (0, 0, 1))
@@ -365,12 +357,10 @@ class SleepSettings(unittest.TestCase):
         self.assertEqual(result, (1, 0, 0))
         self.assertNotIn("[WARN]", out)
 
-    def test_display_sleep_alone_does_not_warn(self):
-        self.assertIsNone(health.sleep_warning(" sleep                0\n displaysleep         5\n"))
-
-    def test_a_system_sleep_held_by_caffeinate_does_not_count(self):
-        text = " sleep                1 (sleep prevented by caffeinate)\n displaysleep         0\n"
-        self.assertIsNone(health.sleep_warning(text))
+    def test_display_sleep_alone_and_a_sleep_held_by_caffeinate_do_not_warn(self):
+        for text in (" sleep                0\n displaysleep         5\n",
+                     " sleep                1 (sleep prevented by caffeinate)\n displaysleep         0\n"):
+            self.assertIsNone(health.sleep_warning(text))
 
     def test_a_host_that_is_not_macos_skips(self):
         self.assertEqual(quiet(health._check_sleep, lambda: self.UNSAFE, "linux")[0], (0, 0, 0))
@@ -413,6 +403,7 @@ class StaleWorktreeHook(HealthBase):
         git(plain, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.assertEqual("", health.stale_hook(plain))
         self.assertEqual("", health.stale_hook(self.wt, base="origin/nothing"))
+
 
 class TestGhVersion(unittest.TestCase):
     def test_an_old_gh_fails_naming_the_version_and_a_command(self):
