@@ -298,14 +298,6 @@ def _start_checks(runner, slug: str, n: int, story: dict, clock, busy=None) -> i
 def _build(io, cmd_drain, story: dict, n: int, worktree) -> int:
     io.claim(n)
     io.beat([n])
-    state = cmd_drain.new_state()
-    closed, _used = cmd_drain.work_story(io, story, state)
-    branch = f" Branch story/{n} in {worktree}."
-    if into := state.get("split", {}).get(n):  # a split parent is closed without landing (#1502)
-        print(f"Story #{n} was split into {', '.join(f'#{i}' for i in into)} and closed, so it did not land.")
-    elif closed:
-        print(f"Story #{n} landed and closed.{branch}")
-    else:
-        lane = "Backlog" if n in getattr(io, "saved", ()) else "Ready"
-        print(f"Story #{n} stayed open with its card in {lane}; the reason is in its comment.{branch}")
+    closed, _used = cmd_drain.work_story(io, story, cmd_drain.new_state())
+    print(f"Story #{n} {'landed and closed' if closed else 'stayed open and is back on Ready; the reason is in its comment'}. Branch story/{n} in {worktree}.")
     return 0 if closed else 1

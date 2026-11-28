@@ -246,34 +246,10 @@ def watch_line(row: dict, log: list[dict]) -> str:
         return run_end_line(row)
     stamp = local_config.local_time(_epoch(row.get("at")) or time.time(), "%H:%M %Z")
     n = str(row.get("story")).rsplit("-", 1)[-1]
-    if row["stage"] == "parked":
-        return f"{stamp} {parked_line(row)}"
     if row["stage"] == "landed":
         done = next((f for f in landings(log) if f["story"] == row["story"]), None)
         return f"{stamp} #{n} in {row.get('repo')}: landed" + (f". {landing_detail(done)}" if done else ".")
     return f"{stamp} #{n} in {row.get('repo')}: {row['stage']}" + (f" ({row['reason']})" if row.get("reason") else "")
-
-
-def parked_rows(log: list[dict], repo: str = "", since: float = 0.0) -> list[dict]:
-    """The latest `parked` row of each story the drain parked or split since `since`, of REPO when one is named. A story claimed again for a build or
-    landed after it is left out (#1502)."""
-    found: dict = {}
-    for row in log:
-        key = (row.get("repo"), row.get("story"))
-        if row.get("stage") == "parked":
-            found[key] = row
-        elif row.get("stage") in ("building", "landed"):
-            found.pop(key, None)
-    return [r for r in found.values() if (not repo or r.get("repo") == repo) and _epoch(r.get("at")) >= since]
-
-
-def parked_line(row: dict) -> str:
-    """'#7 Fix the gate in repo: parked (its Files area names 6 files, more than 5). Split into #8, #9.' from a parked row, on one line (#1502, #1505).
-    A row logged with no title names the story by its number."""
-    into = ", ".join(f"#{n}" for n in row.get("into") or [])
-    tail = f" {'Split into' if row.get('split') else 'Stories filed from it:'} {into}." if into else ""
-    title = f" {_text(row['title'], 90)}" if row.get("title") else ""
-    return f"#{str(row.get('story')).rsplit('-', 1)[-1]}{title} in {row.get('repo')}: parked ({_text(row.get('reason'), 300)}).{tail}"
 
 
 def _restarting(rows: list[dict]) -> bool:
@@ -306,8 +282,7 @@ def exit_line(repo: str, rows: list[dict]) -> str:
         stopped = {r.get("story") for r in rows if r["stage"] == "stopped" and str(r.get("story")).startswith("story-")} - done
         counts = {"landed": len(done), "stopped": len(stopped)}
         why = "It logged no run-end row, so no drain finished it."
-    parked = " ".join(parked_line(r) for r in parked_rows(rows))
-    return f"{run_end_line({**last, **counts})} {' '.join(why.split())}" + (f" {' '.join(parked.split())}" if parked else "")
+    return f"{run_end_line({**last, **counts})} {' '.join(why.split())}"
 
 
 def wait_for_exit(repo: str, alive, sleep, out) -> int:
@@ -349,8 +324,7 @@ def command_watch(argv: list[str], sleep=time.sleep, out=print, alive=None) -> i
     log = run_log()
     stamp = time.time()
     claims = repo_claims(live_claims(stamp), slug)
-    for line in activity(stamp, claims, log, alive(), None, next_ready(digest_path(), claims), run_lock.active(slug, stamp) if slug else None,
-                         repo.name if repo else ""):
+    for line in activity(stamp, claims, log, alive(), None, next_ready(digest_path(), claims), run_lock.active(slug, stamp) if slug else None):
         out(line)
     seen, idle, prev = len(log), 0, None
     while idle < 3:
@@ -401,9 +375,9 @@ def building_block(now: float, claims: dict, log: list[dict], alive: bool, open_
     return lines, warnings
 
 
-def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, ready: str, holder: dict | None = None, repo: str = "") -> list[str]:
-    """The building lines, then the last three landings from the run log's landed rows and the next Ready story, then the stories of REPO (or of every repo)
-    parked or split in the last DAYS days and the warnings (#987, #1502). It reads only what it is given."""
+def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, ready: str, holder: dict | None = None) -> list[str]:
+    """The building lines, then the last three landings from the run log's landed rows and the next Ready story, then the warnings (#987). It reads only what
+    it is given."""
     lines, warnings = building_block(now, claims, log, alive, open_now, holder)
     done = landings(log)[:3]
     lines += [landing_line(row, "Last landed" if i == 0 else "Landed before that") for i, row in enumerate(done)] or ["Last landed: none recorded yet."]
@@ -412,7 +386,7 @@ def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: i
         lines.append(run_end_line(ended[-1]))
     if ready:
         lines.append(f"Next Ready: {ready}.")
-    return lines + [parked_line(r) for r in parked_rows(log, repo, now - DAYS * 86400)] + warnings
+    return lines + warnings
 
 
 def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
@@ -467,8 +441,8 @@ def landed_today(log: list[dict], now: float) -> list[dict]:
 
 
 def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]:
-    """The Building and Landed today sections for this machine, read from the claims, the run log, the process table, the run lock and the digest (#1334),
-    then a Parked section when a story was parked in the last DAYS days (#1505). A run log that cannot be read is named as unknown, and nothing is guessed from it."""
+    """The Building and Landed today sections for this machine, read from the claims, the run log, the process table, the run lock and the digest (#1334).
+    A run log that cannot be read is named as unknown, and nothing is guessed from it."""
     stamp = now.timestamp()
     try:
         log = run_log()
@@ -484,8 +458,7 @@ def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]
         landed.append(landing_line(last[0], "Last landed") if last else "Last landed: none recorded yet.")
     ended = [r for r in log if r.get("stage") == "run-end"]
     lines = ["Building:"] + building + ([f"Next Ready: {ready}."] if ready else []) + warnings
-    parked = [parked_line(r) for r in parked_rows(log, since=stamp - DAYS * 86400)]
-    return lines + ["", "Landed today:"] + landed + ([run_end_line(ended[-1])] if ended else []) + (["", "Parked:"] + parked if parked else [])
+    return lines + ["", "Landed today:"] + landed + ([run_end_line(ended[-1])] if ended else [])
 
 
 def pace_lines(now: datetime, open_now: int | None, rows: list[dict] | None, slug: str) -> list[str]:

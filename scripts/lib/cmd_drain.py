@@ -4,9 +4,8 @@ It lists open stories through REST (epics, claimed and owner-gated stories are s
 and never two whose stories name the same files, then drives each one run -> validate -> `olivercode land` -> comment and close on REST. A builder that exits
 before its story lands restarts on the same worktree, up to RESTARTS times, then the blocker is commented on the story and drain moves on. `olivercode dispatch N`
 builds one story through the same `work_story`. A drain whose own code moved under it starts itself again, and one whose validation calls a command
-that is gone starts no new story (#1480). A story whose validation fails the way the base branch's does is held with no restart (#1481). A bundled story, and one
-a reader held or its spend ceiling stopped, is split by one session instead of built (#1502). Every outside effect goes through the `Io` object, so
-tests inject fakes and never touch the machine or GitHub.
+that is gone starts no new story (#1480). A story whose validation fails the way the base branch's does is held with no restart (#1481). Every outside
+effect goes through the `Io` object, so tests inject fakes and never touch the machine or GitHub.
 """
 
 from __future__ import annotations
@@ -55,24 +54,6 @@ PARKED = re.compile(r"shares [^\n]* in its Files area|Size \w+ is too large for 
 RETURNED = "Back to Ready:"
 HELD = "Held by the fresh reader"  # how a held comment starts, and FINDING what its finding follows, so the next build can read it back (#1474)
 FINDING = "\n\nFinding:\n"
-CAPPED = "Drain stopped: Spend $"  # how a spend ceiling's comment and stopped row start (#1502)
-PARK = "Parked: "  # how the comment on a story that was split, or could not be, starts (#1502)
-SPLIT_FROM = r"^\W*Split from:\s*#"  # the line each story filed by a split carries, followed by its parent's number
-SPLIT_DONE = "SPLIT DONE"  # the splitting session's last line when its stories cover the whole parent
-SPLIT_TURNS = 60
-TRUSTED = ("OWNER", "MEMBER", "COLLABORATOR")  # the repo's own people, whose text may go into a model's brief
-SPLIT_BRIEF = (
-    "Split story #{n} of {slug} into S stories. The drain does not build it, because {why}.\n"
-    "Read {skill} and file through it (\"File a story or epic\"), with the config {config}. Its scripts sit in the scripts folder beside it. "
-    "Edit no file of the repo, start no agent and write each body to a file under {folder}.\n"
-    "- File {least} or more stories of Size S, each holding one fix, with its own `Files area:` line of at most {most} files and no `## Findings` or `## Fixes` list\n"
-    "- Keep this story's Epic line and Priority, put the line `Split from: #{n}` in each body, name #{n} and the sibling stories on its `Existing coverage checked:` line, and set each card to Ready\n"
-    "- Cover everything this story asks. Copy each part of the reader's finding below into the story that must satisfy it\n"
-    "- A story that must land after another, or after a story that blocks this one, gets GitHub's dependency link: `gh api -X POST repos/{slug}/issues/NUMBER/dependencies/blocked_by -F issue_id=BLOCKER_ID`. A story that #{n} blocks gets the same link to each new story\n"
-    "- Leave #{n} open, since the runner closes it and names the new stories\n"
-    "- Stories already filed from #{n}, which you never file again: {filed}\n"
-    "End your reply with the line `" + SPLIT_DONE + "` only when every part of #{n} is covered. When you cannot split it, file nothing and say why.\n\n"
-    "Story #{n}: {title}\n\n{body}\n\nThe reader's latest finding:\n{finding}\n")
 GONE = "is not a valid command"  # what `olivercode` prints for a command it no longer has (#1480)
 # Lines that differ between two runs of one failure or say nothing of it: validate_gates' timings, land's own closing lines and the smoke banner (#1481)
 NOISE = (PROGRESS, "=== validate: never started", "validate: gates took", "=== validate: python smoke tests FAILED", "--- validate failed", "RESULT ")
@@ -125,7 +106,7 @@ def skip_reason(issue: dict, repo: Path | None = None) -> str:
         return f"its board Status is {issue.get('status') or 'empty'}, not Ready"
     if not issue.get("size"):
         return "it has no Size on the board"
-    if (size := intake.size_of(issue)) in ("L", "XL") and not intake.bundled(issue.get("body") or ""):  # the text's Size routes the builder, so it also decides the refusal (#1342); a bundled one goes on to be split (#1502)
+    if (size := intake.size_of(issue)) in ("L", "XL"):  # the text's Size routes the builder, so it also decides the refusal (#1342)
         return f"its Size is {size}, so it needs splitting into S and M stories"
     area = intake.files_area(issue.get("body") or "")
     if not area:
@@ -161,7 +142,7 @@ class Io:
         self.claim_start: dict[int, float] = {}  # story number -> when this run claimed it, never refreshed (#1306)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.said: dict[int, str] = {}  # story number -> its last comment, which is the reason a stopped row records (#1291)
-        self.saved: set[int] = set()  # stories whose open card goes to Backlog: a stopped builder's work was committed to story/N (#1328), or a split began (#1502)
+        self.saved: set[int] = set()  # stories whose stopped builder's work was committed to story/N, so their card goes to Backlog (#1328)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
@@ -323,112 +304,16 @@ class Io:
             self.resumed[n] += cmd_land.HELD_NOTE.format(finding=finding)
         return path
 
-    def own_comments(self, n: int) -> list[str]:
-        """Story n's comments by the repo's own people, oldest first, since their text may go into a model's brief (#1474).
-        shortcut: a failed read counts as no comment, upgrade when a resumed build or a split is seen to miss one."""
-        raw = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments", "--paginate", "--jq", ".[] | {body, author_association} | @json"])
-        rows = (json.loads(line) for line in (raw.stdout.splitlines() if raw.returncode == 0 else []) if line.strip())
-        return [row.get("body") or "" for row in rows if isinstance(row, dict) and row.get("author_association") in TRUSTED]
-
     def held_finding(self, n: int) -> str:
-        """The finding in story n's latest held comment, or '' when it has none (#1474)."""
-        return next((body.partition(FINDING)[2] for body in reversed(self.own_comments(n)) if body.startswith(HELD)), "")
-
-    def run_rows(self, n: int) -> list[dict]:
-        """The run log's rows for story n and its reader, oldest first.
-        shortcut: a reader's row names no repo, so another repo's story of the same number counts too; upgrade when a split is seen to carry a foreign finding."""
-        from lib import cmd_status  # local import: cmd_status loads modules that import this one
-        return [r for r in cmd_status.run_log() if r.get("story") in (f"story-{n}", f"story-{n}-review") and r.get("repo", self.repo.name) == self.repo.name]
-
-    def split_cause(self, issue: dict) -> str:
-        """Why story N must be split and not built, or '' when it may build (#1502): it is bundled, or an earlier build was held by the reader or
-        reached its spend ceiling, which the run log and the story's comments both record. A Backlog story is split only when this machine's run log
-        shows it stopped and no split was tried, so one that waits for another reason is left alone."""
-        n = issue["number"]
-        rows = self.run_rows(n)
-        stops = [str(r.get("reason") or "") for r in rows if r.get("stage") == "stopped"]
-        backlog = issue.get("status") == "Backlog"
-        if backlog and (not stops or any(r.get("stage") == "parked" for r in rows)):
-            return ""
-        said = self.own_comments(n) if issue.get("comments") else []
-        if backlog and any(body.startswith(PARK) for body in said):
-            return ""
-        if why := intake.bundled(issue.get("body") or ""):
-            return why
-        for text in reversed([*said, *stops]):
-            if text.startswith(HELD):
-                return "the fresh reader held an earlier build"
-            if text.startswith(CAPPED):
-                return "an earlier build reached its spend ceiling"
-        return ""
-
-    def split_children(self, n: int) -> list[dict] | None:
-        """The open stories the repo's own people filed from story n, or None when the open issues cannot be read (#1502)."""
-        opened = fetch_open(self.slug)
-        if opened is None:
-            return None
-        return sorted((i for i in opened if i.get("author_association") in TRUSTED and re.search(rf"{SPLIT_FROM}{n}\b", i.get("body") or "", re.M)),
-                      key=lambda i: i["number"])
-
-    def split(self, issue: dict, why: str) -> dict:
-        """One splitting session on story N, which files S stories through the backlog skill (#1502). The runner reads them back from GitHub, then
-        closes the parent as not planned with a comment naming them. A split that fails leaves the parent open in Backlog with the reason. Returns
-        {'into': the numbers filed, 'problem': why the parent stays open or '', 'tokens': int}, or {'limited': reason, 'tokens': int} at the usage
-        limit, where the story is split by a later run. Either way a `parked` run-log row is what `status` and `watch` show."""
-        n, body = issue["number"], issue.get("body") or ""
-        story = f"story-{n}"
-        self.set_card(n, {"status": "Backlog"})
-        self.saved.add(n)  # an open parent keeps that card, at the usage limit too
-        agent_loop.log_stage(story, self.repo.name, "splitting", reason=why)
-        before = self.split_children(n)
-        least = 1 if not re.search(SPLIT_FROM, body, re.M) else 2  # one rewrite per lineage, so a story from a split that stops again must get smaller
-        problem, reply = "the open stories could not be read" if before is None else "", {}
-        if not problem:
-            found = next((str(r.get("findings")) for r in reversed(self.run_rows(n)) if r.get("review") == "findings"), "")
-            config = self.config_path()
-            with tempfile.TemporaryDirectory(prefix=f"split-{n}-") as folder:
-                prompt = SPLIT_BRIEF.format(n=n, slug=self.slug, why=why, skill=OC_ROOT / "skills" / "backlog" / "SKILL.md", config=config, folder=folder,
-                                            least=least, most=intake.BUNDLE_FILES, filed=", ".join(f"#{i['number']}" for i in before) or "none",
-                                            title=issue.get("title", ""), body=body, finding=found or self.held_finding(n) or "none")  # the run log first: a held comment may name only a reader that failed
-                try:
-                    reply = model.run_cli(prompt, str(self.repo), allowed_tools="Read,Grep,Glob,Bash,Write", max_turns=SPLIT_TURNS,
-                                          session=f"{story}-split", model=agent_loop.LADDER[1])
-                except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
-                    problem = str(exc)
-        tokens, text = reply.get("tokens", 0), (reply.get("text") or "").strip()
-        if reply:
-            agent_loop.log_round(f"{story}-split", 1, agent_loop.LADDER[1], reply)
-            if reply["code"] != 0:
-                if agent_loop.USAGE_LIMIT.search(f"{text}\n{reply.get('stderr') or ''}"):
-                    return {"limited": f"{agent_loop.USAGE_LIMIT_REASON}: {agent_loop.exit_reason(reply, 1, unit='attempt')}", "tokens": tokens}
-                problem = agent_loop.exit_reason(reply, 1, unit="attempt")
-        children = self.split_children(n) or []
-        numbers = [i["number"] for i in children]
-        if not problem:
-            wrong = [f"#{i['number']}" for i in children if intake.size_of(i) not in intake.SMALL
-                     or not intake.files_area(i.get("body") or "") or intake.bundled(i.get("body") or "")]
-            if not text.endswith(SPLIT_DONE):
-                problem = f"the splitting session did not finish: {text[-300:]}"
-            elif len(children) < least:
-                problem = f"it filed {len(children)} stories and needs at least {least}"
-            elif wrong:
-                problem = f"{', '.join(wrong)} is not an S story with one fix and a Files area"
-        named = ", ".join(f"#{i}" for i in numbers)
-        if not problem:
-            self.comment(n, f"{PARK}{why}. Split into {named}, so this story is closed and is not built.")
-            if self.gh(["api", "-X", "PATCH", f"repos/{self.slug}/issues/{n}", "-f", "state=closed", "-f", "state_reason=not_planned"]).returncode != 0:
-                problem = "GitHub did not close it"
-            else:
-                lanes = backlog_config(self.repo).get("fields", {}).get("status", {}).get("options", {})
-                self.set_card(n, {"status": "Done" if "Done" in lanes else "Complete"})
-        if problem:
-            self.comment(n, f"{PARK}{why}. Not split: {problem}. It stays in Backlog and is not built." + (f" Filed from it: {named}." if named else ""))
-        agent_loop.log_stage(story, self.repo.name, "parked", reason=f"{why}; not split: {problem}" if problem else why, into=numbers, split=not problem, title=issue.get("title", ""))
-        return {"into": numbers, "problem": problem, "tokens": tokens}
-
-    def config_path(self) -> Path:
-        """The repo's backlog config, the local one when it has one."""
-        return self.repo / (LOCAL_BACKLOG_CONFIG if (self.repo / LOCAL_BACKLOG_CONFIG).is_file() else BACKLOG_CONFIG)
+        """The finding in story n's latest held comment, or '' when it has none (#1474). Only the repo's own people are read, since the text goes into a builder's brief.
+        shortcut: a failed read counts as no finding, upgrade when a resumed build is seen to miss one."""
+        raw = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments", "--paginate", "--jq", ".[] | {body, author_association} | @json"])
+        finding = ""
+        for row in (json.loads(line) for line in (raw.stdout.splitlines() if raw.returncode == 0 else []) if line.strip()):
+            body = row.get("body") or ""
+            if body.startswith(HELD) and row.get("author_association") in ("OWNER", "MEMBER", "COLLABORATOR"):
+                finding = body.partition(FINDING)[2]
+        return finding
 
     def build(self, issue: dict, worktree: Path, note: str) -> dict:
         """One headless builder session on the story: the brief holds the code the story names, and the
@@ -558,7 +443,7 @@ class Io:
         if not sha:
             return False, f"no commit for (#{n}) is on origin/{branch}"
         files = subprocess.run(["git", "-C", str(self.repo), "diff-tree", "--no-commit-id", "--name-only", "-r", sha], capture_output=True, text=True).stdout.split()
-        config = self.config_path()
+        config = self.repo / (LOCAL_BACKLOG_CONFIG if (self.repo / LOCAL_BACKLOG_CONFIG).is_file() else BACKLOG_CONFIG)
         scripts = OC_ROOT / "skills" / "backlog" / "scripts"
         logged = subprocess.run([sys.executable, str(scripts / "log_action.py"), "--config", str(config), "--story", str(n), "--agent", self.agent,
                                  "--role", "builder", "--commit", sha, "--files", str(len(files)), "--result", f"landed from {worktree.name}"],
@@ -595,7 +480,7 @@ class Io:
         raw = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments", "--paginate", "--jq", ".[].body | @json"])
         cause = ""
         for body in (json.loads(line) for line in (raw.stdout.splitlines() if raw.returncode == 0 else []) if line.strip()):
-            if RETURNED in body or body.startswith(PARK):  # a split or a failed one is never undone by an older parking comment (#1502)
+            if RETURNED in body:
                 cause = ""
             elif m := PARKED.search(body):
                 cause = "overlap" if "Files area" in m.group(0) else "size"
@@ -739,11 +624,9 @@ def work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str]
     try:
         closed, used = _work_story(io, issue, state, queue, resume)
         handed = closed is None
-        if closed is False and n not in state.get("split", {}):  # a split story is closed and stays closed (#1502)
+        if closed is False:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
-            if n in state.get("parked", {}):
-                notify(f"#{n} is parked. `olivercode status` says why.")
-            elif n not in state.get("limited", []):  # the usage limit already sent its own notification
+            if n not in state.get("limited", []):  # the usage limit already sent its own notification
                 notify(f"#{n} didn't land yet. It'll try again on its own.")  # the reason stays in the story comment and the run log (#1325, #1374)
         return closed, used
     except NotTheStorys as exc:
@@ -765,26 +648,9 @@ def put_back(io, state: dict, n: int, exc: NotTheStorys) -> None:
     io.keep_open(n)
 
 
-def split_story(io, state: dict, issue: dict, why: str, tokens: int = 0) -> tuple[bool, int]:
-    """Split a story that is never built again, in place of its next build (#1502). Its stopped row comes first, so a later run reads why even when the
-    split never finishes. At the usage limit the story is left for a later run, like a build. Returns work_story's (closed, tokens)."""
-    n = issue["number"]
-    io.stopped(n, getattr(io, "said", {}).get(n) or why)
-    out = io.split(issue, why)
-    if out.get("limited"):
-        state.setdefault("limited", []).append(n)
-        io.comment(n, f"Drain stopped: {out['limited']}")
-        notify("Paused at the Claude usage limit. Picks up when it resets.")
-    elif out["problem"]:
-        state.setdefault("parked", {})[n] = why
-    else:
-        state.setdefault("split", {})[n] = out["into"]
-    return False, tokens + out.get("tokens", 0)
-
-
 def held_comment(worktree: Path, finding: str) -> str:
     """The one comment a held story gets: that nothing was pushed, where the branch is kept, and the finding itself (#975)."""
-    return f"{HELD}, so nothing was pushed. The branch is kept in {worktree} and the story goes to Backlog to be split.{FINDING}{finding[:2000]}"
+    return f"{HELD}, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.{FINDING}{finding[:2000]}"
 
 
 def policy_stop_in(repo: str, start: str) -> dict | None:
@@ -843,8 +709,6 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
     if not resume and not io.pending(n) and io.landed(io.repo, n):  # its commit is on the default branch and no unlanded work waits in its worktree, so it closes through the script and no builder starts (#1011)
         finish(io, io.repo, n, "already on the default branch")
         return True, 0
-    if not resume and (why := io.split_cause(issue)):  # no builder takes a bundled story, or one a hold or a ceiling stopped (#1502)
-        return split_story(io, state, issue, why)
     if not resume and io.validation() is None:  # no builder starts in a repo that nothing can validate (#1012)
         io.comment(n, f"Drain blocked: {agent_loop.NO_VALIDATION}")
         return False, 0
@@ -860,9 +724,9 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
         state["restarts"][n] = attempt
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
-        if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975) and the story is split (#1502)
+        if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
             io.comment(n, held_comment(worktree, out["held"]))
-            return split_story(io, state, issue, "the fresh reader held its build", tokens)
+            return False, tokens
         if out.get("reader_failed"):  # no finding, so the comment never starts with HELD, and no builder restarts (#1489)
             io.comment(n, f"Drain stopped: reader failed, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready. {out['reader_failed']}")
             return False, tokens
@@ -871,9 +735,9 @@ def _work_story(io, issue: dict, state: dict, queue=None, resume: tuple[int, str
             io.comment(n, f"Drain stopped: {out['reason']}")
             notify("Paused at the Claude usage limit. Picks up when it resets.")
             return False, tokens
-        if out.get("capped"):  # the story spent its size's ceiling, so no restart; the stopped row takes this comment as its reason (#1318), and the story is split (#1502)
+        if out.get("capped"):  # the story spent its size's ceiling, so no restart; the stopped row takes this comment as its reason (#1318)
             io.comment(n, f"Drain stopped: {out['reason']}")
-            return split_story(io, state, issue, "its build reached the spend ceiling", tokens)
+            return False, tokens
         if out.get("fatal"):  # a reason a restart cannot fix blocks the story and starts no new session (#1012)
             io.comment(n, f"Drain blocked: {out['reason']}")
             return False, tokens
@@ -947,7 +811,6 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     committed: dict = {}  # number -> issue of each story committed and not yet landed or sent back to a builder
     landing: dict = {}  # the one batch in flight: its future -> its stories
     waits, reported, filled, mismatched, unparked = 0, set(), set(), set(), set()
-    stuck: dict = {}  # Backlog story number -> why it is split, read once per drain (#1502)
     skipped = state.setdefault("skipped", {})  # story number -> why the run did not start it (#1456)
     stopped = False
     hold_waited = False
@@ -1035,7 +898,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                 continue
             if closed:
                 state["closed"].append(issue["number"])
-            elif not any(issue["number"] in state.get(k, ()) for k in ("limited", "gone", "base", "split")):  # none of these is a failed round (#1299, #1480, #1481, #1502)
+            elif not any(issue["number"] in state.get(k, ()) for k in ("limited", "gone", "base")):  # none of these is a failed round (#1299, #1480, #1481)
                 state["blocked"].append(issue["number"])
         io.beat([i["number"] for i in running.values()])
 
@@ -1081,7 +944,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     return 1
                 say("Drain stopped: the open stories were not read.")
                 return 1
-            skip = set(state["closed"]) | set(state["blocked"]) | set(state.get("base", ())) | set(state.get("split", ())) | {i["number"] for i in running.values()} | set(committed)
+            skip = set(state["closed"]) | set(state["blocked"]) | set(state.get("base", ())) | {i["number"] for i in running.values()} | set(committed)
             todo = []
             for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
                 if issue.get("status") == "Backlog" and issue["number"] not in unparked and not owner_gated(issue):  # a story parked for an overlap or a Size returns once that cause is gone (#1348)
@@ -1091,13 +954,6 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                         io.set_card(issue["number"], {"status": "Ready"})
                         io.comment(issue["number"], f"{RETURNED} " + ("the drain builds stories that share files one after the other." if cause == "overlap" else f"its text Size {intake.size_of(issue)} fits one builder."))
                         issue["status"] = "Ready"
-                if issue.get("status") == "Backlog" and not owner_gated(issue):  # a story that stopped before it could be split is split from Backlog (#1502)
-                    n = issue["number"]
-                    if n not in stuck:
-                        stuck[n] = io.split_cause(issue)
-                    if stuck[n]:
-                        todo.append(issue)
-                        continue
                 why = skip_reason(issue, io.repo)
                 if why == NO_AREA and issue["number"] not in filled:  # a Ready story gets its Files area once per drain, just before it builds (#1316)
                     filled.add(issue["number"])
@@ -1326,11 +1182,8 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
                 io.find_bugs()
             except Exception as exc:  # noqa: BLE001 -- bug intake never hides the run's end
                 print(f"drain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
-            parked, split = set(state.get("parked", ())), set(state.get("split", ()))
-            landed, retry = len(state["closed"]), len(set(state["blocked"]) - parked) + len(state.get("base", ()))
-            moved = "".join(f" {len(found)} {word}." for found, word in ((split, "split"), (parked, "parked")) if found)
-            started = set(state["closed"]) | split | parked
-            notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.{moved}{skipped_summary({n: k for n, k in state['skipped'].items() if n not in started})}")
+            landed, retry = len(state["closed"]), len(state["blocked"]) + len(state.get("base", ()))
+            notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.{skipped_summary({n: k for n, k in state['skipped'].items() if n not in state['closed']})}")
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)

@@ -65,7 +65,6 @@ class RunIo:
     def release(self, n): self.steps.append("release")
     def keep_open(self, n, reason=""): self.steps.append(f"open:{reason}")
     def policy_stop(self, n, wt): return None  # no policy ask answers this fake's builds (#1058)
-    def split_cause(self, issue): return ""  # nothing here is bundled or stopped before (#1502)
     def landed_lead(self, issue): return None
     def save_work(self, wt, n): return []  # a clean worktree, so the stop comment is today's (#1328)
     def staged(self): return False
@@ -279,21 +278,7 @@ class TestDispatchRun(DispatchCase):
         dead = [{"done": False, "reason": "no", "rounds": 3, "tokens": 9, "summary": ""} for _ in range(4)]
         code, out, io = self.run_dispatch(io=RunIo(builds=dead))
         self.assertEqual((1, ["claim"] + ["build"] * 4 + ["comment", "open:", "release"]), (code, io.steps))
-        self.assertIn("stayed open with its card in Ready", out)
-
-    def test_a_split_or_parked_story_is_reported_as_it_was_left(self):  # #1502
-        for result, saved, said in (({"into": [8, 9], "problem": ""}, (), "split into #8, #9 and closed"),
-                                    ({"into": [], "problem": "one fix"}, {77}, "stayed open with its card in Backlog")):
-            io = RunIo()
-            io.saved = saved
-            io.split_cause = lambda issue: "bundled"
-            io.split = lambda issue, why: result
-            io.stopped = lambda n, reason: None
-            with mock.patch.object(cmd_drain, "notify"):
-                code, out, _ = self.run_dispatch(io=io)
-            self.assertEqual(1, code)
-            self.assertNotIn("build", io.steps)
-            self.assertIn(said, out)
+        self.assertIn("stayed open", out)
 
     def test_a_refused_landing_leaves_the_story_open_and_releases_the_claim(self):
         code, _, io = self.run_dispatch(io=RunIo(land_ok=False))
