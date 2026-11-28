@@ -34,6 +34,14 @@ class TestOpenIssues(unittest.TestCase):
         found = sorted([issue(3, body="Priority: P2"), issue(2, body="Priority: P0"), issue(1)], key=page.rank)
         self.assertEqual([2, 3, 1], [i["number"] for i in found])
 
+    def test_xs_stories_rank_first_then_priority_then_number(self):
+        found = sorted([issue(2, body="Priority: P0. Size: S."), issue(3, body="Priority: P2. Size: XS."), issue(1, body="Priority: P1. Size: XS.")], key=page.rank)
+        self.assertEqual([1, 3, 2], [i["number"] for i in found])
+
+    def test_a_story_with_no_size_line_ranks_with_the_non_xs_stories(self):
+        found = sorted([issue(1, body="Priority: P1. Size: XS."), issue(2, body="Priority: P0"), issue(3, body="x" * 10)], key=page.rank)
+        self.assertEqual([1, 2, 3], [i["number"] for i in found])
+
     def test_fetch_skips_pull_requests_and_honours_a_hold(self):
         out = '[[{"number":1,"title":"a"},{"number":2,"pull_request":{}}]]'
         with mock.patch.object(page.gh_budget, "refusal", return_value=""), mock.patch.object(page.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=out)):

@@ -14,6 +14,7 @@ from lib import gh_budget
 
 BODY_PRIORITY = re.compile(r"^\s*(?:\*\*)?Priority:?(?:\*\*)?\s*(P[0-9])\b", re.IGNORECASE | re.MULTILINE)
 LABEL_PRIORITY = re.compile(r"^(?:priority\W*)?(P[0-9])$", re.IGNORECASE)
+SIZE_LINE = re.compile(r"Size:\s*(XS|S|M|L|XL)\b")  # the Size the body states; no length guess here, so a story with no Size line is never XS (#1516)
 
 
 def priority(issue: dict) -> str:
@@ -50,4 +51,7 @@ def fetch(slug: str) -> list[dict] | None:
 
 
 def rank(issue: dict) -> tuple:
-    return (priority(issue) or "P9", issue.get("number", 0))
+    """Every XS story first, then the rest; each group by priority, then issue number (#1516)."""
+    found = SIZE_LINE.search(issue.get("body") or "")
+    not_xs = 0 if found and found.group(1) == "XS" else 1
+    return (not_xs, priority(issue) or "P9", issue.get("number", 0))
