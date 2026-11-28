@@ -294,17 +294,14 @@ class TestFailureGaps(unittest.TestCase):
         self.assertIn("acme/widget: Rebase widget", found[0].text)
         self.assertFalse(any(p.fixable for p in found))
 
-    def test_a_stale_worktree_names_its_own_repo_and_a_task_names_the_engine(self):
+    def test_a_stale_worktree_names_its_own_repo(self):
         repo = scratch_repo(temp_dir(self) / "widget")
         git(repo, "remote", "add", "origin", "git@github.com:acme/widget.git")
         wt = mock.Mock(path=repo)
         with mock.patch.object(maintain.placement, "worktrees", return_value=[wt]), \
-                mock.patch("lib.health_checks.stale_hook", return_value="hooks.py changed on origin/main"), \
-                mock.patch("lib.schedules.ungated", return_value=[("nightly", 1.0)]), \
-                mock.patch("lib.schedules.task_crons", return_value={}):
+                mock.patch("lib.health_checks.stale_hook", return_value="hooks.py changed on origin/main"):
             gaps = maintain.failure_gaps()
         self.assertEqual(["acme/widget"], [g[0] for g in gaps if g[1].startswith("Rebase")])
-        self.assertEqual([maintain.engine_slug()], [g[0] for g in gaps if g[1].startswith("Gate command")])
 
     def test_the_same_gate_failure_three_times_is_reported_and_no_candidate_is_written(self):
         """#1275: three identical failures, then the nightly run: the repeat is reported and nothing is filed or listed."""

@@ -429,17 +429,10 @@ def _origin_slug(repo: Path) -> str:
     return f"{match.group(1)}/{match.group(2)}" if match else ""
 
 
-def engine_slug() -> str:
-    """OliverCode's own owner/name, from its backlog config."""
-    cfg = json.loads((OC_ROOT / "docs" / "backlog-config.json").read_text(encoding="utf-8"))
-    return f"{cfg['repoOwner']}/{cfg['repoName']}"
-
-
 def failure_gaps() -> list[tuple[str, str, str]]:
     """(repo, title, body) for each failing check the nightly run can name a repo for: a worktree whose commit hooks predate
-    origin/main is filed under its own origin, and a scheduled task that starts a model with no gate command is filed under OliverCode,
-    because a task names no repo of its own."""
-    from lib import placement, schedules
+    origin/main is filed under its own origin."""
+    from lib import placement
     from lib.health_checks import stale_hook
     gaps = []
     for wt in placement.worktrees():
@@ -450,10 +443,6 @@ def failure_gaps() -> list[tuple[str, str, str]]:
             gaps.append((slug, f"Rebase {path.name} onto origin/main to refresh its commit hooks",
                          f"The nightly maintenance job finds the commit hooks in {path} older than origin/main ({why}).\n\n"
                          f"Fix: `git -C \"{path}\" rebase origin/main`, then `olivercode worktree fix \"{path}\"`.\n"))
-    for name, _per_day in schedules.ungated(claude_dir() / "scheduled-tasks", schedules.task_crons()):
-        gaps.append((engine_slug(), f"Gate command for scheduled task {name}",
-                     f"The nightly maintenance job finds the scheduled task {name} starting a model with no gate command.\n\n"
-                     f"Fix: {schedules.GATE_HINT}\n"))
     return gaps
 
 

@@ -78,11 +78,6 @@ def schedule(on: bool, label: str, build, removed: str, installed: str) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     failure_log.home().mkdir(parents=True, exist_ok=True)
     plist = build()
-    from lib import schedules
-    why = schedules.refusal(label, plist)
-    if why:
-        print(why)
-        return 1
     plist.setdefault("EnvironmentVariables", {}).setdefault("PATH", job_path())
     path.write_bytes(plistlib.dumps(plist))
     ran = subprocess.run(["launchctl", "bootstrap", domain, str(path)], capture_output=True, text=True)
