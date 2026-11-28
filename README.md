@@ -6,7 +6,7 @@ Every project gets the same rules, skills, templates and repository checks, and 
 
 What the harness covers today:
 
-- `olivercode run` and `olivercode dispatch`: Claude Code headless on a task or a board story, with the repo's own validation between rounds
+- `olivercode dispatch`: Claude Code headless on a board story, with the repo's own validation between rounds
 - `olivercode drain` and `olivercode land`: a repo's open stories worked in priority order, each rebased, validated and pushed to main
 - Shared instructions, voice and design standards, and skills that install into `~/.claude`
 - Commit and push gates that refuse unsafe or incomplete work, with a health check that the gates still run in OliverCode and each private repo
@@ -101,7 +101,7 @@ python3 scripts/olivercode health
 | --- | --- |
 | Install and update | `olivercode install`, `olivercode uninstall`, `olivercode update`, `olivercode bootstrap`, `olivercode sync-hooks`, `olivercode place`, `olivercode clean`, `olivercode worktree`, `olivercode commit-check` |
 | Check a machine or a repo | `olivercode health`, `olivercode status`, `olivercode status digest`, `olivercode maintain`, `olivercode limits` |
-| Run and land work | `olivercode run`, `olivercode dispatch`, `olivercode drain`, `olivercode watch`, `olivercode land`, `olivercode promote`, `olivercode wip`, `olivercode validated` |
+| Run and land work | `olivercode dispatch`, `olivercode drain`, `olivercode watch`, `olivercode land`, `olivercode promote`, `olivercode wip`, `olivercode validated` |
 | Version and docs | `olivercode version-cut`, `olivercode docs-check` |
 | Backlog and boards | `olivercode backlog-setup`, `olivercode board fit`, `olivercode board sync`, `olivercode gh-limit` |
 | Owner and decisions | `olivercode owner`, `olivercode decisions`, `olivercode handoff`, `olivercode rule` |

@@ -44,7 +44,6 @@ from lib.cmd_drain import command_drain  # noqa: E402
 from lib.cmd_board import command_board  # noqa: E402
 from lib.cmd_version import command_docs_check, command_version_cut  # noqa: E402
 from lib.cmd_land import command_land, command_promote  # noqa: E402
-from lib.cmd_run import command_run  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
 from lib.cmd_handoff import command_handoff  # noqa: E402
@@ -132,8 +131,6 @@ def main() -> int:
     if cmd == "docs-check":
         _reject_extra(cmd, argv)
         return command_docs_check()
-    if cmd == "run":
-        return command_run(argv)
     if cmd == "dispatch":
         return command_dispatch(argv)
     if cmd == "drain":
