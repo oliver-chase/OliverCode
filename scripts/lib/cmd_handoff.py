@@ -30,6 +30,8 @@ FENCED_RE = re.compile(r"\s*(?:\$\s*)?olivercode\s+(drain|dispatch)\b(.*)")  # a
 THREAD_NUMBERS = "thread-numbers.json"  # project -> last thread number, in the OliverCode home, never in the handoff folder
 THREAD_SESSIONS = "thread-sessions.json"  # each session's thread number, each project's pinned session and what `write` reserved for `read`
 KEEP_SESSIONS = 20
+DETACH_STEP = ('Detach: if this session nests under the session that started it, call detach_session with "self". '
+               'Skip the call when this session is already at the top level or the owner placed it.')
 
 
 def handoff_dir() -> Path:
@@ -244,8 +246,7 @@ def read(project: str, folder: Path) -> int:
     for path in found:  # a second one is stale, so it goes too and one handoff is never left behind
         path.unlink()
     print(f"\nHandoff read and deleted: {found[0].name}. No copy is kept.")
-    detach = 'Detach: if this session nests under the session that started it, call detach_session with "self". Skip the call when this session is already at the top level or the owner placed it.'
-    print("\n".join([detach, *(steps or [f'Thread: this one is "{project} {number}", and no new name is needed.'])]))
+    print("\n".join([DETACH_STEP, *(steps or [f'Thread: this one is "{project} {number}", and no new name is needed.'])]))
     repo = drain_repo(text)
     if repo:
         print(f"Watch: run `olivercode watch {repo} --until-exit` in the background, so this thread wakes only when the drain ends. Never use Monitor for it.")

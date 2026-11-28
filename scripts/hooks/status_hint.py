@@ -4,10 +4,13 @@
 When the owner's prompt asks what is building, what is left or when something finishes, the hook reads the board line and the open stories from
 status-digest.md (cmd_status.digest_path). A message that is only a status question is blocked when the digest is fresh, and those lines are the block reason, so no model
 turn runs and the message never enters the thread. A mixed message goes through with the lines added as context. Every other prompt, a prompt that
-starts with "ask:", and every message from another session or a notification, gets nothing. The hook fails open on its own error.
+starts with "ask:", and every message from another session or a notification, gets no status lines. The hook fails open on its own error.
 
 It numbers a new OliverCode chat (#1488): on the first prompt of an interactive session that starts in a checkout of the OliverCode repo or names OliverCode, it
 records the next thread number and gives the calls that title and pin the session and set its model to Sonnet. A `handoff read` prompt is left to that command, which numbers its thread.
+
+It sets up a session another session started (#1573): on its first prompt it gives the detach call, and in a repo with a backlog config also the repo's
+next thread number with the same title, pin and model calls.
 
 It also flags a long thread once (#1319): when an interactive session's transcript shows over 100,000 tokens of context, the first prompt after that
 gets one line telling the session to write the handoff with `olivercode handoff write`, which prints the calls that start the next thread (#1321, #1488).
@@ -56,11 +59,12 @@ FILLER = {"a", "about", "along", "and", "any", "are", "board", "done", "far", "f
 WORD_RE = re.compile(r"[a-z']+")
 
 
+STARTED_PREFIX = "background (from the session that started this one)"  # the app opens a started session's first prompt with this
 # A prompt that starts like this came from another session or the system, so the owner did not type it.
 SKIP_PREFIXES = ("<cross-session-message", "[cross-session-message", "<system-notification", "[system-notification",
                  "system-notification:", "<system-reminder", "<task-notification", "<side-sessions-event", "<ci-monitor-event",
                  "[system notification", "another claude session sent a message", "<agent-message", "[subagent hand-back]",
-                 "<scheduled-task", "background (from the session that started this one)")
+                 "<scheduled-task", STARTED_PREFIX)
 
 
 def from_owner(prompt: str) -> bool:
@@ -143,30 +147,60 @@ def interactive_session(data: dict) -> str:
     return re.sub(r"[^\w-]", "", str(data.get("session_id") or ""))
 
 
-def shared_git_dir(folder: str) -> str:
-    """The .git folder a checkout shares with its worktrees, or '' outside a repo."""
+def rev_parse(folder: str, what: str) -> str:
+    """The absolute path `git rev-parse` gives for `what` in `folder`, or '' outside a repo."""
     env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}  # an inherited GIT_DIR would answer for every folder
-    done = subprocess.run(["git", "-C", folder, "rev-parse", "--path-format=absolute", "--git-common-dir"], env=env,
+    done = subprocess.run(["git", "-C", folder, "rev-parse", "--path-format=absolute", what], env=env,
                           capture_output=True, text=True, timeout=3)
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
 def in_olivercode(folder: str) -> bool:
     """Whether `folder` is in any checkout of the repo this hook runs from, which may itself be a worktree."""
-    found = shared_git_dir(folder) if folder else ""
-    return bool(found) and found == shared_git_dir(str(OC_ROOT))
+    shared = "--git-common-dir"  # the .git folder a checkout shares with its worktrees
+    found = rev_parse(folder, shared) if folder else ""
+    return bool(found) and found == rev_parse(str(OC_ROOT), shared)
+
+
+def repo_name(folder: str) -> str:
+    """The repoName in the backlog config of the repo that holds `folder`, or '' when there is none to read."""
+    root = rev_parse(folder, "--show-toplevel") if folder else ""
+    if not root:
+        return ""
+    from lib import local_config
+    try:
+        return str(local_config.backlog_config(Path(root)).get("repoName") or "")
+    except (OSError, ValueError):
+        return ""
+
+
+def started_note(folder: str, session: str) -> str:
+    """The calls that detach a session another session started and, in a backlog repo, number and pin it (#1573). '' once it holds a number."""
+    from lib import cmd_handoff
+    project, head, steps = repo_name(folder), "Another session started this one.", []
+    if project:
+        number, steps = cmd_handoff.claim_thread(project, session)
+        if not steps:
+            return ""
+        head = f"Another session started this one, {project} thread {number}."
+    return "\n".join([f"{head} Make these calls before the turn's work:", cmd_handoff.DETACH_STEP, *steps])
 
 
 def new_thread_note(data: dict) -> str:
-    """The calls that number and pin a new OliverCode chat (#1488) and set its model (#1556), or ''. Only a first prompt counts, so a later mention never takes the pin."""
+    """The calls that number and pin a new OliverCode chat (#1488) and set its model (#1556), or set up a started session (#1573), or ''.
+    Only a first prompt counts, so a later mention never takes the pin."""
     prompt, session = str(data.get("prompt") or ""), interactive_session(data)
-    if not session or not from_owner(prompt) or HANDOFF_READ_RE.search(prompt):
+    started = prompt.lstrip().lower().startswith(STARTED_PREFIX)
+    if not session or not (started or from_owner(prompt)) or HANDOFF_READ_RE.search(prompt):
         return ""
     if context_tokens(Path(str(data.get("transcript_path") or ""))):  # a model call is on record, so this is not the first prompt
         return ""
-    if not (NAMES_OC_RE.search(prompt) or in_olivercode(str(data.get("cwd") or ""))):
+    folder = str(data.get("cwd") or "")
+    if started:
+        return started_note(folder, session)
+    if not (NAMES_OC_RE.search(prompt) or in_olivercode(folder)):
         return ""
-    from lib import cmd_handoff  # imported only for a new OliverCode chat, not on every prompt
+    from lib import cmd_handoff  # imported only for a new chat, not on every prompt
     number, steps = cmd_handoff.claim_thread("OliverCode", session)
     if not steps:
         return ""

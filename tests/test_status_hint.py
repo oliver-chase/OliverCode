@@ -29,6 +29,9 @@ FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time,
           "`olivercode status` shows the open count, pace and what is next, at no model cost.")
 
 
+STARTED = "Background (from the session that started this one):\nThe parser fails on an empty file.\n\nfix the parser"
+
+
 class StatusOnly(unittest.TestCase):
     def setUp(self):
         self.tmp = temp_dir(self)
@@ -185,6 +188,52 @@ class NewThread(unittest.TestCase):
         self.assertEqual("", self.run_hook("<cross-session-message>olivercode</cross-session-message>"))
         os.environ["OLIVERCODE_HEADLESS"] = "1"
         self.assertEqual("", self.run_hook(cwd=REPO_ROOT))
+        self.assertEqual(8, self.last_number())
+
+    def started(self, config=True, prompt=STARTED, session="B"):
+        repo = scratch_repo(self.tmp / "app", branch="main")
+        (repo / "docs").mkdir(exist_ok=True)
+        if config:
+            (repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "o", "repoName": "App"}', encoding="utf-8")
+        return self.run_hook(prompt, session, repo / "docs")
+
+    def test_a_started_session_in_a_backlog_repo_is_detached_numbered_and_pinned(self):
+        cmd_handoff.claim_thread("App", "old")
+        out = self.started()
+        self.assertIn('call detach_session with "self"', out)
+        self.assertIn('call set_session_title for B with "App 2"', out)
+        self.assertIn("call set_pinned for B with pinned=true", out)
+        self.assertIn("call set_pinned for old with pinned=false", out)
+        self.assertNotIn("for A with", out)
+        self.assertEqual(({"App": 2}, "B"), (self.state()["sessions"]["B"], self.state()["pinned"]["App"]))
+
+    def test_an_open_owner_item_keeps_a_started_sessions_old_pin(self):
+        cmd_handoff.claim_thread("App", "old")
+        cmd_owner.add("old", "approve the deploy")
+        out = self.started()
+        self.assertNotIn("pinned=false", out)
+        self.assertIn("names old, so leave it pinned", out)
+
+    def test_a_started_session_outside_a_backlog_repo_is_only_detached(self):
+        for out in (self.started(config=False), self.run_hook(STARTED, "C")):  # a repo with no config, and no repo
+            self.assertIn('call detach_session with "self"', out)
+            self.assertNotIn("set_session_title", out)
+            self.assertNotIn("set_pinned", out)
+        self.assertNotIn("B", self.state()["sessions"])
+
+    def test_a_numbered_started_session_gets_no_more_steps(self):
+        self.started()
+        self.assertEqual("", self.run_hook(STARTED, cwd=self.tmp / "app"))
+        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 50}}}) + "\n", encoding="utf-8")
+        for prompt in (STARTED, "more olivercode work"):
+            self.assertEqual("", self.run_hook(prompt, cwd=self.tmp / "app", transcript="t.jsonl"), prompt)
+        self.assertEqual({"App": 1}, self.state()["sessions"]["B"])
+
+    def test_a_started_builder_scheduled_task_or_handoff_thread_gets_no_steps(self):
+        for prompt in (f"<scheduled-task>{STARTED}</scheduled-task>", f"{STARTED}\n{cmd_handoff.read_prompt('App', self.tmp)}"):
+            self.assertEqual("", self.run_hook(prompt, cwd=REPO_ROOT), prompt)
+        os.environ["OLIVERCODE_HEADLESS"] = "1"
+        self.assertEqual("", self.run_hook(STARTED, cwd=REPO_ROOT))
         self.assertEqual(8, self.last_number())
 
     def test_the_session_map_keeps_its_newest_twenty(self):
