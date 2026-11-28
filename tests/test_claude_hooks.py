@@ -370,6 +370,19 @@ class TestSettingsMerge(unittest.TestCase):
                 claude_settings.install(path)
             self.assertEqual(json.loads(path.read_text()), bad)
 
+    def test_read_gives_an_empty_object_for_an_absent_or_blank_file_and_refuses_a_bad_one(self):
+        tmp = temp_dir(self, "olivercode-settings-")
+        path = tmp / "settings.json"
+        self.assertEqual(claude_settings._read(path), {})
+        path.write_text(" \n")
+        self.assertEqual(claude_settings._read(path), {})
+        path.write_text('{"model": "opus"}')
+        self.assertEqual(claude_settings._read(path), {"model": "opus"})
+        for bad in ("{not json", '["a list"]', '{"hooks": []}'):
+            path.write_text(bad)
+            with self.assertRaises(ValueError):
+                claude_settings._read(path)
+
     def test_install_writes_once_and_then_reports_already(self):
         tmp = temp_dir(self, "olivercode-settings-")
         path = tmp / "settings.json"

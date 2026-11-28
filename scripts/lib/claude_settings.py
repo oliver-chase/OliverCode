@@ -157,6 +157,17 @@ def _check_shape(settings) -> None:
             raise ValueError(f'"hooks.{event}" is not a list of hook groups')
 
 
+def _read(settings_path: Path) -> dict:
+    """The parsed settings file, `{}` when it is absent or blank. Raises ValueError for bad JSON or a shape `_check_shape` refuses,
+    and OSError for an unreadable file; each caller decides what those mean for it."""
+    if not settings_path.is_file():
+        return {}
+    text = settings_path.read_text()
+    current = json.loads(text) if text.strip() else {}
+    _check_shape(current)
+    return current
+
+
 def _strip_managed(hooks: dict, oc_root: Path = OC_ROOT) -> dict:
     """Each event's hook groups with OliverCode's handlers taken out. A group that held only those handlers is
     dropped, and an event left with no group maps to an empty list."""
@@ -219,8 +230,7 @@ def dead(settings_path: Path) -> list[str]:
     """The managed-form hook commands in the settings whose script file does not exist. Such an entry makes python exit 2,
     which blocks every tool call it matches, so health fails on one."""
     try:
-        current = json.loads(settings_path.read_text()) if settings_path.is_file() else {}
-        _check_shape(current)
+        current = _read(settings_path)
     except (OSError, ValueError):
         return []
     out = []
@@ -237,8 +247,7 @@ def dead(settings_path: Path) -> list[str]:
 def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
     """The managed hook scripts this checkout's install would add and the settings lack."""
     try:
-        current = json.loads(settings_path.read_text()) if settings_path.is_file() else {}
-        _check_shape(current)
+        current = _read(settings_path)
     except (OSError, ValueError):
         current = {}
     present = {h.get("command") for groups in (current.get("hooks") or {}).values()
@@ -249,10 +258,7 @@ def missing(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> list[str]:
 def install(settings_path: Path, hooks_dir: Path = HOOKS_DIR) -> str:
     """Write the merged settings. Returns "added", "updated" or "already".
     Raises ValueError, leaving the file untouched, when it is not JSON or has a shape the merge refuses."""
-    current = {}
-    if settings_path.is_file():
-        text = settings_path.read_text()
-        current = json.loads(text) if text.strip() else {}
+    current = _read(settings_path)
     merged = merge(current, hooks_dir)
     if merged == current:
         return "already"
@@ -314,8 +320,7 @@ def remove(settings_path: Path, oc_root: Path = OC_ROOT) -> str:
     Raises ValueError, leaving the file untouched, when it is not JSON or has a shape it refuses."""
     if not settings_path.is_file():
         return "absent"
-    text = settings_path.read_text()
-    current = json.loads(text) if text.strip() else {}
+    current = _read(settings_path)
     cleaned = without(current, oc_root)
     if cleaned == current:
         return "absent"
