@@ -1,4 +1,4 @@
-"""Finds the transcripts under ~/.claude/projects, for the scheduled-task spend report (#782), and sums one inside a time window for a chat landing (#1533)."""
+"""Finds the transcripts under ~/.claude/projects, for the scheduled-task spend report (#782), and sums one inside a time window for a chat landing (#1533) and a timed-out headless run (#1553)."""
 
 from __future__ import annotations
 

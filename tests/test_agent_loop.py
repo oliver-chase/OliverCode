@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.test_agent_loop` finds _support
@@ -190,6 +191,74 @@ class TestExitOne(unittest.TestCase):
     def test_another_error_is_not_flagged_as_the_usage_limit(self):  # #1299
         out = self.loop(Scripted({**reply("", code=1), "stop": "error_during_execution", "stderr": "auth expired"}))
         self.assertNotIn("usage_limit", out)
+
+
+class TestTimedOutUsage(unittest.TestCase):
+    """#1553: a session stopped at its time limit records the tokens its transcript holds from that run."""
+
+    def setUp(self):
+        self.repo, self.home, self.user = temp_dir(self), temp_dir(self), temp_dir(self)
+        (self.repo / "scripts").mkdir()
+        (self.repo / "scripts" / "validate.sh").write_text("exit 0\n")
+        self.path = self.user / ".claude" / "projects" / "-repo" / "sid-9.jsonl"
+        self.path.parent.mkdir(parents=True)
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "HOME": str(self.user)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def say_in_transcript(self, mid, tokens, at=None):
+        usage = {"input_tokens": tokens, "output_tokens": tokens + 1, "cache_read_input_tokens": tokens + 2, "cache_creation_input_tokens": tokens + 3}
+        row = {"type": "assistant", "timestamp": at or datetime.now(timezone.utc).isoformat(), "message": {"id": mid, "model": "m", "usage": usage}}
+        with self.path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+
+    def times_out(self, *messages):
+        """A run that writes `messages` to the transcript, then passes its time limit."""
+        def run():
+            for mid, tokens in messages:
+                self.say_in_transcript(mid, tokens)
+            raise model.ModelTimeout("claude -p ran past 900 seconds and was stopped.", "sid-9")
+        return run
+
+    def loop(self, *runs):
+        runs = list(runs)
+        agent_loop.run_loop("do it", self.repo, "story-1", run=lambda *a, **kw: runs.pop(0)(), check=lambda cwd: (True, ""), say=lambda *_: None,
+                            model_name="haiku", review_mode="none")
+        return [r for r in map(json.loads, (self.home / "run-log.jsonl").read_text().splitlines()) if "round" in r]
+
+    def counts(self, row):
+        return tuple(row[k] for k in ("input", "output", "cache_read", "cache_write"))
+
+    def test_the_row_holds_the_tokens_of_this_runs_messages_and_no_cost(self):
+        self.say_in_transcript("earlier", 1000, at="2026-01-01T00:00:00Z")
+        row = self.loop(self.times_out(("a", 10), ("a", 10), ("b", 20)), lambda: reply("committed", session_id="sid-9"))[0]
+        self.assertEqual(("timeout", (30, 32, 34, 36), None), (row["stop"], self.counts(row), row["cost_usd"]))
+        self.assertNotIn("usage_unknown", row)
+
+    def test_no_message_is_counted_in_both_rows_of_a_resumed_session(self):
+        def finishes():  # the CLI reports the resumed run's own usage, while the transcript holds both runs
+            self.say_in_transcript("b", 20)
+            return {**reply("committed", session_id="sid-9"), "usage": {"input": 20, "output": 21, "cache_read": 22, "cache_write": 23}}
+
+        first, second = self.loop(self.times_out(("a", 10)), finishes)
+        self.assertEqual([(10, 11, 12, 13), (20, 21, 22, 23)], [self.counts(first), self.counts(second)])
+
+    def test_a_second_timeout_counts_only_the_resumed_runs_messages(self):
+        first, second = self.loop(self.times_out(("a", 10)), self.times_out(("b", 20)))
+        self.assertEqual([(10, 11, 12, 13), (20, 21, 22, 23)], [self.counts(first), self.counts(second)])
+
+    def test_with_no_readable_transcript_the_row_says_the_usage_is_unknown(self):
+        for case in ("absent", "unreadable"):
+            with self.subTest(case=case):
+                if case == "unreadable":
+                    self.path.mkdir()
+                row = self.loop(self.times_out(), lambda: reply("committed", session_id="sid-9"))[-2]
+                self.assertEqual(((0, 0, 0, 0), True), (self.counts(row), row.get("usage_unknown")))
+
+    def test_a_timed_out_reader_records_its_tokens_too(self):
+        out = agent_loop.review("the story", self.repo, "story-1", "gate", run=lambda *a, **kw: self.times_out(("a", 10))(), say=lambda *_: None, attempts=1)
+        row = next(r for r in map(json.loads, (self.home / "run-log.jsonl").read_text().splitlines()) if "round" in r)
+        self.assertEqual(("none", "timeout", (10, 11, 12, 13)), (out["verdict"], row["stop"], self.counts(row)))
 
 
 class TestStoryLines(unittest.TestCase):

@@ -321,11 +321,12 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     prompt = brief.format(task=task, diff=diff, tail=tail)
     failure, turns = "", max_turns * 2 if len(diff) > DIFF_LIMIT else max_turns  # only a cut diff is longer than the limit, and its reader has files to open
     for attempt in range(1, attempts + 1):
+        began = time.time()
         try:
             reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=turns, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
         except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
             failure = str(exc)
-            reply = {"stop": "timeout" if isinstance(exc, model.ModelTimeout) else "", "stderr": failure}
+            reply = timed_out(exc, began) if isinstance(exc, model.ModelTimeout) else {"stderr": failure}
         else:
             text = (reply.get("text") or "").strip()
             if reply.get("code", 0) == 0 and text:
@@ -431,6 +432,14 @@ def start_size(session_id: str, projects: Path | None = None) -> int | None:
     return None
 
 
+def timed_out(exc: model.ModelTimeout, began: float) -> dict:
+    """The reply of a run stopped at its time limit (#1553). The CLI printed no usage, so it is summed from the session's transcript, from BEGAN to now, which leaves
+    a resumed session's other runs out. 'usage_unknown' marks a run whose transcript gives no assistant message to sum."""
+    path = usage_sessions.transcript(exc.session_id)
+    used = usage_sessions.usage_between(path, began, time.time()) if path else {}
+    return {"stop": "timeout", "stderr": str(exc), "usage": used, "usage_unknown": not used.get("model")}
+
+
 def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: int | None = None, why: str = "", reader_failed: bool = False) -> None:
     """Append one JSON line for a round to the run log in the OliverCode home folder: the CLI's own usage, cost, stop reason and write time, and on a session's first round the tokens it started with (#878, #987).
     A log that cannot be written never stops a loop."""
@@ -449,6 +458,8 @@ def log_round(story: str, n: int, model_name: str, reply: dict, start_tokens: in
         row["reader_failed"] = True  # its cost is logged and never counts toward BACKSTOP (#1489)
     else:
         SPEND[owner] = SPEND.get(owner, 0.0) + float(reply.get("cost_usd") or 0)
+    if reply.get("usage_unknown"):
+        row["usage_unknown"] = True  # its 0 tokens are a gap, not a count (#1553)
     if start_tokens is not None:
         row["start_tokens"] = start_tokens
     if why:
@@ -536,10 +547,11 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
         model_name = escalate(start, failures)
         resumed, before = False, tree_state(cwd)
         while True:
+            began = time.time()
             try:
                 reply = run(prompt, cwd, max_turns=max_turns, session=session, system=SYSTEM, model=model_name, resume=claude_session)
             except model.ModelTimeout as exc:  # the session survives a timeout, so it is resumed once (#877)
-                log_round(session, n, model_name, {"stop": "timeout", "stderr": str(exc), "resumed": resumed}, why=why)
+                log_round(session, n, model_name, {**timed_out(exc, began), "resumed": resumed}, why=why)
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
