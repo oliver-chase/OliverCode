@@ -604,6 +604,31 @@ class TestLoop(unittest.TestCase):
         agent_loop.review("the story", self.repo, "s1", "gate", run=run, say=lambda *_: None)
         self.assertEqual([agent_loop.READER_TURNS] * 2, turns)
 
+    def reader_turns(self, diff, *replies):
+        """The turns each reader attempt got on `diff`."""
+        replies, turns = list(replies), []
+
+        def run(prompt, cwd, **kw):
+            turns.append(kw["max_turns"])
+            return replies.pop(0)
+
+        with mock.patch.object(agent_loop, "branch_diff", return_value=diff):
+            agent_loop.review("the story", self.repo, "s1", "gate", run=run, say=lambda *_: None)
+        return turns
+
+    def test_a_cut_diff_gets_twice_the_turns_on_the_first_attempt(self):  # #1550
+        cut = agent_loop.cut_diff("y" * (agent_loop.DIFF_LIMIT + 1))
+        self.assertEqual([2 * agent_loop.READER_TURNS], self.reader_turns(cut, reply("PASS")))
+
+    def test_a_diff_within_the_limit_keeps_the_first_attempts_turns(self):  # #1550
+        whole = agent_loop.cut_diff("y" * agent_loop.DIFF_LIMIT)
+        self.assertEqual([agent_loop.READER_TURNS], self.reader_turns(whole, reply("PASS")))
+
+    def test_a_cut_diff_stopped_on_the_turn_cap_doubles_the_turns_of_the_attempt_that_stopped(self):  # #1550
+        cut = agent_loop.cut_diff("y" * (agent_loop.DIFF_LIMIT + 1))
+        capped = {**reply("", code=1), "stop": "max_turns"}
+        self.assertEqual([2 * agent_loop.READER_TURNS, 4 * agent_loop.READER_TURNS], self.reader_turns(cut, capped, reply("PASS")))
+
     def test_each_failed_reader_attempt_logs_its_stop_reason_stderr_and_cost_and_counts_against_no_ceiling(self):  # #1489
         self.addCleanup(agent_loop.SPEND.pop, "s1", None)
         agent_loop.SPEND.pop("s1", None)

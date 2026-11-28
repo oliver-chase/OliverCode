@@ -293,13 +293,14 @@ def verdict_line(text: str, answers: str) -> tuple[str, str]:
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
            max_turns: int = READER_TURNS, attempts: int = 2, brief: str = REVIEW_BRIEF) -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Only a PASS verdict that the reply never takes back passes (#1015, #1477).
-    A reader that exits non-zero or replies with nothing is asked once more, with twice the turns after a stop on the turn cap, and a second failure
-    returns verdict 'none' with its cause, so nothing is pushed. Every attempt gets a run-log row (#1489).
+    A cut diff doubles the first attempt's turns (#1550). A reader that exits non-zero or replies with nothing is asked once more, with twice the
+    stopped attempt's turns after a stop on the turn cap, and a second failure returns verdict 'none' with its cause, so nothing is pushed. Every attempt gets a run-log row (#1489).
     `brief` swaps the question: bug intake asks about a failure, not a diff (#1371).
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
-    prompt = brief.format(task=task, diff=branch_diff(cwd) if "{diff}" in brief else "", tail=tail)
-    failure, turns = "", max_turns
+    diff = branch_diff(cwd) if "{diff}" in brief else ""
+    prompt = brief.format(task=task, diff=diff, tail=tail)
+    failure, turns = "", max_turns * 2 if len(diff) > DIFF_LIMIT else max_turns  # only a cut diff is longer than the limit, and its reader has files to open
     for attempt in range(1, attempts + 1):
         try:
             reply = run(prompt, str(cwd), allowed_tools=READER_TOOLS, max_turns=turns, session=f"{session}-review", system=READER_SYSTEM, model=model_name)
@@ -316,7 +317,7 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
                 return {"verdict": verdict, "text": text}
             failure = exit_reason(reply, attempt, unit="attempt") if reply.get("code", 0) != 0 else "The reader replied with nothing."
         if reply.get("stop") == "max_turns":
-            turns = max_turns * 2
+            turns *= 2
         log_round(f"{session}-review", attempt, model_name, reply, reader_failed=True)
         say(f"Review: no verdict on attempt {attempt}. {failure}")
     log_review(session, "none", failure)
