@@ -1,9 +1,9 @@
 """Launcher command `handoff`: one live handoff per project, deleted once the next thread has read it (#1321).
 
 `olivercode handoff write PROJECT FILE` files FILE as PROJECT-handoff-DATE.md in the handoff folder and deletes the project's other handoffs, then prints the
-desktop-app calls that start, name and pin the next thread and unpin this one (#1488). It starts nothing itself.
+desktop-app calls that start the next thread on Sonnet (#1556), name and pin it and unpin this one (#1488). It starts nothing itself.
 `olivercode handoff read PROJECT` prints the handoff and deletes it, with no archive copy. A thread with no number yet gets the calls that name it
-"PROJECT N", N from 1 to 10 (#1353), and pin it. The thread that takes the number `write` reserved makes
+"PROJECT N", N from 1 to 10 (#1353), pin it and set its model to Sonnet. The thread that takes the number `write` reserved makes
 them only when its title or pin is missing. Only regular files named PROJECT-handoff-*.md count, so
 another project's handoffs and a folder that merely holds the word are left alone. Before write files anything it parses each `olivercode drain`
 and `olivercode dispatch` command in FILE, without running one, and refuses a handoff whose command would print a usage error.
@@ -56,10 +56,11 @@ def unpin_step(old: str) -> str:
 
 
 def name_steps(project: str, number: int, sid: str, old: str) -> list[str]:
-    """The calls that give a thread its title and the pin, and take the pin from `old`, the session that held it."""
+    """The calls that give a thread its title, the pin and the Sonnet model, and take the pin from `old`, the session that held it."""
     who = sid or "this session"
     steps = [f'Title: call set_session_title for {who} with "{project} {number}", keeping an "{cmd_owner.OWNER_PREFIX}" prefix in front if its current title has one.',
-             f"Pin: call set_pinned for {who} with pinned=true."]
+             f"Pin: call set_pinned for {who} with pinned=true.",
+             f"Model: call set_session_model for {who} with model sonnet."]
     return steps + [unpin_step(old)] if old and old != sid else steps
 
 
@@ -194,7 +195,7 @@ def read_prompt(project: str, folder: Path) -> str:
 def next_thread_steps(project: str, folder: Path) -> list[str]:
     """The calls the writing thread makes to start the next one in the desktop app, with its name and the pin."""
     number, old = reserve_thread(project, session())
-    steps = [f"Start: call start_session with this prompt: {read_prompt(project, folder)}",
+    steps = [f"Start: call start_session with model sonnet and this prompt: {read_prompt(project, folder)}",
              "Detach: call detach_session for the new session, so it sits at the top level of the sidebar and not under this one.",
              f'Title: call set_session_title for the new session with "{project} {number}".',
              "Pin: call set_pinned for the new session with pinned=true.",

@@ -7,19 +7,19 @@ turn runs and the message never enters the thread. A mixed message goes through 
 starts with "ask:", and every message from another session or a notification, gets nothing. The hook fails open on its own error.
 
 It numbers a new OliverCode chat (#1488): on the first prompt of an interactive session that starts in a checkout of the OliverCode repo or names OliverCode, it
-records the next thread number and gives the calls that title and pin the session. A `handoff read` prompt is left to that command, which numbers its thread.
+records the next thread number and gives the calls that title and pin the session and set its model to Sonnet. A `handoff read` prompt is left to that command, which numbers its thread.
 
-It also flags a long thread once (#1319): when an interactive session's transcript shows over 250,000 tokens of context, the first prompt after that
+It also flags a long thread once (#1319): when an interactive session's transcript shows over 100,000 tokens of context, the first prompt after that
 gets one line telling the session to write the handoff with `olivercode handoff write`, which prints the calls that start the next thread (#1321, #1488).
 A marker in the OliverCode home keeps it to once per session, and a headless builder is never flagged.
 
-A thread over 300,000 tokens takes no new work until it writes that handoff (#1519): until a PROJECT-handoff file in the session's folder is newer than
+A thread over 160,000 tokens takes no new work until it writes that handoff (#1519): until a PROJECT-handoff file in the session's folder is newer than
 the marker, the owner's prompt is blocked unless it names the handoff or starts with "ask:", and one that does goes through with a note that the turn
 writes the handoff. A headless builder is never blocked.
 
 It names each story the drain handed back (#1532): the owner's next prompt in an interactive OliverCode chat gets one line per open owner-queue item that
 names a story, with its number, title and stop reason. A marker in the OliverCode home keeps it to once per item, and a status-only prompt that would
-carry such a line goes through instead of being blocked. In a thread the 300,000-token block would stop, it is answered from the digest and the item stays unshown.
+carry such a line goes through instead of being blocked. In a thread the 160,000-token block would stop, it is answered from the digest and the item stays unshown.
 """
 
 from __future__ import annotations
@@ -38,8 +38,8 @@ import failure_log  # noqa: E402
 from lib import cmd_owner, cmd_status, gh_budget  # noqa: E402
 
 STALE_SECONDS = 3600  # a digest older than this is labeled with its age
-LONG_TOKENS = 250_000  # a thread past this re-reads more cached context per turn than the turn's work costs (#1319)
-BLOCK_TOKENS = 300_000  # a thread past this ignored the note above, so it takes only the handoff (#1519)
+LONG_TOKENS = 100_000  # a thread past this re-reads more cached context per turn than the turn's work costs (#1319, #1556)
+BLOCK_TOKENS = 160_000  # a thread past this ignored the note above, so it takes only the handoff; the gap keeps one large tool result from skipping the note (#1519, #1556)
 TAIL_BYTES = 1_000_000  # the last model call's usage is near the end of the transcript
 STOPS_PER_PROMPT = 3  # each new story costs one title read, so the rest wait for the next prompt and the hook stays inside its timeout
 CHARS = 1200 # the board line and the open list, about three hundred tokens, is what a status answer needs
@@ -165,7 +165,7 @@ def in_olivercode(folder: str) -> bool:
 
 
 def new_thread_note(data: dict) -> str:
-    """The calls that number and pin a new OliverCode chat (#1488), or ''. Only a first prompt counts, so a later mention never takes the pin."""
+    """The calls that number and pin a new OliverCode chat (#1488) and set its model (#1556), or ''. Only a first prompt counts, so a later mention never takes the pin."""
     prompt, session = str(data.get("prompt") or ""), interactive_session(data)
     if not session or not from_owner(prompt) or HANDOFF_READ_RE.search(prompt):
         return ""
@@ -207,12 +207,12 @@ def long_thread(data: dict) -> tuple[str, str]:
         if handoff_since(str(data.get("cwd") or ""), marker.stat().st_mtime):
             return "", ""
         if ASK_RE.match(prompt) or NAMES_HANDOFF_RE.search(prompt):
-            return "", f"This thread's context is past 300,000 tokens, so this turn writes the handoff and takes no other work: {HANDOFF_CALLS}"
-        return ('This thread is past 300,000 tokens of context, so it takes no new work until its handoff is written. Type "handoff" so this '
+            return "", f"This thread's context is past {BLOCK_TOKENS:,} tokens, so this turn writes the handoff and takes no other work: {HANDOFF_CALLS}"
+        return (f'This thread is past {BLOCK_TOKENS:,} tokens of context, so it takes no new work until its handoff is written. Type "handoff" so this '
                 "session writes it with `olivercode handoff write`."), ""
     if not first:
         return "", ""
-    return "", ("This thread's context is past 250,000 tokens, so each turn costs more than the work in it. When this turn's work is done, "
+    return "", (f"This thread's context is past {LONG_TOKENS:,} tokens, so each turn costs more than the work in it. When this turn's work is done, "
                 f"{HANDOFF_CALLS} The owner never has to ask for a handoff.")
 
 

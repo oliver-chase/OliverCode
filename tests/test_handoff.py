@@ -153,7 +153,7 @@ class Handoff(unittest.TestCase):
             out = self.write_draft()
         run.assert_not_called()
         popen.assert_not_called()
-        self.assertIn(f"call start_session with this prompt: {cmd_handoff.read_prompt('OliverCode', self.folder)}", out)
+        self.assertIn(f"call start_session with model sonnet and this prompt: {cmd_handoff.read_prompt('OliverCode', self.folder)}", out)
         self.assertIn('call set_session_title for the new session with "OliverCode 9"', out)
         self.assertIn("call set_pinned for the new session with pinned=true", out)
         self.assertIn("call set_pinned for s1 with pinned=false", out)
@@ -178,6 +178,7 @@ class Handoff(unittest.TestCase):
         before, _, if_missing = out.partition('Thread: this one is "OliverCode 9". If its title says so and it is pinned, no rename or pin step is needed.')
         self.assertNotIn("set_session_title", before)
         self.assertNotIn("set_pinned", before)
+        self.assertNotIn("set_session_model", before)
         self.assertIn("If either is missing, make these calls:", if_missing)
         state = json.loads((self.home / cmd_handoff.THREAD_SESSIONS).read_text(encoding="utf-8"))
         self.assertEqual(({"OliverCode": 9}, "s2", {}), (state["sessions"]["s2"], state["pinned"]["OliverCode"], state["reserved"]))
@@ -188,6 +189,7 @@ class Handoff(unittest.TestCase):
         out = self.read_as("pasted")
         self.assertIn('call set_session_title for pasted with "OliverCode 2"', out)
         self.assertIn("call set_pinned for pasted with pinned=true", out)
+        self.assertIn("call set_session_model for pasted with model sonnet", out)
         self.assertIn("call set_pinned for s1 with pinned=false", out)
 
     def test_a_chat_opened_between_write_and_read_loses_the_pin(self):

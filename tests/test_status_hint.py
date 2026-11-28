@@ -128,6 +128,7 @@ class NewThread(unittest.TestCase):
         self.assertIn('call set_session_title for B with "OliverCode 9"', out)
         self.assertIn("call set_pinned for B with pinned=true", out)
         self.assertIn("call set_pinned for A with pinned=false", out)
+        self.assertIn("call set_session_model for B with model sonnet", out)
         self.assertEqual({"OliverCode": 9}, self.state()["sessions"]["B"])
         self.assertEqual("B", self.state()["pinned"]["OliverCode"])
 
@@ -193,7 +194,7 @@ class NewThread(unittest.TestCase):
 
 
 class LongThread(unittest.TestCase):
-    """#1319: a thread past 250,000 tokens of context is flagged once per session, and never in a headless builder."""
+    """#1319, #1556: a thread past 100,000 tokens of context is flagged once per session, and never in a headless builder."""
 
     def setUp(self):
         self.tmp = temp_dir(self)
@@ -215,19 +216,19 @@ class LongThread(unittest.TestCase):
         return subprocess.run([sys.executable, script], input=json.dumps(data), capture_output=True, text=True, env=env).stdout
 
     def test_a_long_thread_is_flagged_once_per_session(self):
-        self.write(260_000)
+        self.write(105_000)
         self.assertIn("olivercode handoff write", self.run_hook())
         self.assertEqual("", self.run_hook())
         self.assertIn("olivercode handoff write", self.run_hook(session="s2"))
 
     def test_the_line_says_handoff_write_gives_the_calls_that_start_the_next_thread(self):
-        self.write(260_000)
+        self.write(105_000)
         out = self.run_hook()
         self.assertIn("`olivercode handoff write PROJECT FILE` and make the calls it prints, which start the next thread in the desktop app", out)
         self.assertNotIn("Remote Control", out)
 
     def test_a_short_thread_and_a_headless_builder_get_nothing(self):
-        self.write(200_000)
+        self.write(95_000)
         self.assertEqual("", self.run_hook())
         self.write(400_000)
         self.assertEqual("", self.run_hook(headless=True))
@@ -236,31 +237,31 @@ class LongThread(unittest.TestCase):
     def assert_blocked(self, out):
         blocked = json.loads(out)
         self.assertEqual("block", blocked["decision"])
-        for words in ("past 300,000 tokens", 'Type "handoff"', "`olivercode handoff write`"):
+        for words in ("past 160,000 tokens", 'Type "handoff"', "`olivercode handoff write`"):
             self.assertIn(words, blocked["reason"])
 
-    def test_a_thread_past_300k_that_ignored_the_note_takes_no_other_work(self):
-        self.write(260_000)
+    def test_a_thread_past_160k_that_ignored_the_note_takes_no_other_work(self):
+        self.write(105_000)
         self.assertNotIn("decision", self.run_hook())
-        self.write(300_001)
+        self.write(160_001)
         self.assert_blocked(self.run_hook())
         self.assert_blocked(self.run_hook())
         self.assert_blocked(self.run_hook(session="s2"))  # past both limits at its first sight
 
-    def test_at_300k_or_less_nothing_is_blocked(self):
-        self.write(300_000)
+    def test_at_160k_or_less_nothing_is_blocked(self):
+        self.write(160_000)
         self.assertNotIn("decision", self.run_hook())
         self.assertEqual("", self.run_hook())
 
     def test_a_prompt_that_names_the_handoff_or_asks_goes_through_to_write_it(self):
-        self.write(320_000)
+        self.write(170_000)
         for prompt in ("handoff", "write the Hand-off now", "hand off please", "ask: fix the parser"):
             out = json.loads(self.run_hook(prompt=prompt))
             self.assertNotIn("decision", out, prompt)
             self.assertIn("this turn writes the handoff", out["hookSpecificOutput"]["additionalContext"], prompt)
 
     def test_a_handoff_newer_than_the_marker_unblocks_every_prompt(self):
-        self.write(320_000)
+        self.write(170_000)
         handoff = self.tmp / "OliverCode-handoff-2026-11-27.md"
         handoff.write_text("next", encoding="utf-8")
         os.utime(handoff, (1, 1))
@@ -271,7 +272,7 @@ class LongThread(unittest.TestCase):
             self.assertEqual("", self.run_hook(prompt=prompt), prompt)
 
     def test_a_message_the_owner_did_not_type_is_not_blocked(self):
-        self.write(320_000)
+        self.write(170_000)
         self.assertNotIn("decision", self.run_hook(prompt="<task-notification>done</task-notification>"))
 
     def test_an_unreadable_transcript_counts_as_short(self):
@@ -340,14 +341,14 @@ class HandedBack(unittest.TestCase):
         self.assertEqual("block", self.run_hook(prompt="what is building?")["decision"])
 
     def test_a_blocked_long_thread_leaves_the_item_for_the_prompt_that_goes_through(self):
-        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 320_000}}}) + "\n", encoding="utf-8")
+        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 170_000}}}) + "\n", encoding="utf-8")
         self.hand_back(7)
         self.assertEqual("block", self.run_hook()["decision"])
         self.assertIn(self.line(7), self.added(prompt="handoff"))
 
-    def test_a_status_only_prompt_past_300k_is_answered_from_the_digest_and_leaves_the_item(self):
+    def test_a_status_only_prompt_past_160k_is_answered_from_the_digest_and_leaves_the_item(self):
         (self.tmp / "status-digest.md").write_text(DIGEST, encoding="utf-8")
-        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 320_000}}}) + "\n", encoding="utf-8")
+        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 170_000}}}) + "\n", encoding="utf-8")
         self.hand_back(7)
         for _ in range(2):
             out = self.run_hook(prompt="what is building?")
