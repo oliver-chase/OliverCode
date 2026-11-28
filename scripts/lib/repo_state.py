@@ -33,11 +33,11 @@ def _gh(args: list[str]) -> tuple[int, str, str]:
     return done.returncode, done.stdout, done.stderr
 
 
-def origin(repo_path: Path | str) -> str | None:
+def origin(repo_path: Path | str, *, timeout: float = 10) -> str | None:
     """`owner/name` of the checkout's GitHub origin, or None when it has no GitHub origin."""
     try:
         done = subprocess.run(["git", "-C", str(repo_path), "remote", "get-url", "origin"],
-                              capture_output=True, text=True, timeout=10)
+                              capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.SubprocessError):
         return None
     found = GITHUB_ORIGIN.search(done.stdout.strip()) if done.returncode == 0 else None

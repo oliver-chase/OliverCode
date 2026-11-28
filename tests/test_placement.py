@@ -277,7 +277,7 @@ class TestRemoteBranches(unittest.TestCase):
 
     def ask_github(self, stdout="0\n", returncode=0, refused=""):
         """The real _open_pr with GitHub's answer faked. Returns its verdict and the mock that stood in for gh."""
-        with mock.patch.object(placement, "_origin_slug", return_value="acme/app"), \
+        with mock.patch.object(placement.repo_state, "origin", return_value="acme/app"), \
                 mock.patch.object(placement.gh_budget, "reserve_call", return_value=refused), \
                 mock.patch.object(placement.subprocess, "run",
                                   return_value=subprocess.CompletedProcess([], returncode, stdout, "")) as run:
@@ -374,6 +374,15 @@ class TestOtherDevice(unittest.TestCase):
         why = placement.violation(shlex.split(f"git clone https://github.com/work-org/thing.git {self.root}/thing"), self.root, self.cfg)
         self.assertIn("belongs to another device", why)
         self.assertEqual("", placement.violation(shlex.split(f"git clone https://github.com/me/thing.git {self.root}/thing"), self.root, self.cfg))
+
+    def test_a_non_github_origin_and_no_origin_both_have_no_slug(self):
+        elsewhere = self.root / "elsewhere"
+        scratch_repo(elsewhere)
+        git(elsewhere, "remote", "add", "origin", "https://gitlab.com/me/elsewhere.git")
+        none = self.root / "none"
+        scratch_repo(none)
+        self.assertIsNone(placement.repo_state.origin(elsewhere, timeout=30))
+        self.assertIsNone(placement.repo_state.origin(none, timeout=30))
 
     def test_no_agent_creates_a_github_repo_for_a_folder_without_an_origin(self):
         bare = self.root / "bare"

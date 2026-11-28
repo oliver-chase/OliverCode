@@ -22,7 +22,7 @@ from urllib.parse import quote
 
 from lib import gh_budget, repo_gates
 from lib.local_config import OC_ROOT, load_local, other_device
-from lib import gitfiles
+from lib import gitfiles, repo_state
 
 # A builder's worktree and its dispatch claim are held this long. CLAIM_HOURS matches skills/backlog/scripts/log_action.py.
 CLAIM_HOURS = 2
@@ -158,12 +158,6 @@ def belongs_to_other_device(name: str, slug: str | None) -> bool:
     return name.lower() in repos or bool(slug and slug.split("/")[0].lower() in owners)
 
 
-def _origin_slug(path: Path) -> str | None:
-    out = gitfiles.run(path, "remote", "get-url", "origin", timeout=30)
-    found = re.search(r"github\.com[:/]([^/:\s]+)/([^/\s]+?)(?:\.git)?/?$", out.stdout.strip()) if out.returncode == 0 else None
-    return f"{found.group(1)}/{found.group(2)}" if found else None
-
-
 def findings(cfg: Config | None = None) -> list[Finding]:
     """Everything out of place: repos and worktrees outside the root, worktrees outside _worktrees, backups and broken links."""
     cfg = cfg or config()
@@ -189,7 +183,7 @@ def findings(cfg: Config | None = None) -> list[Finding]:
                 out.append(Finding("repo", child, f"replace the link with the real folder {child.resolve()}"))
             elif is_worktree(child):
                 out.append(Finding("worktree", child, f"move it to {cfg.worktrees}/{child.name}"))
-            elif (child / ".git").exists() and belongs_to_other_device(child.name, _origin_slug(child)):
+            elif (child / ".git").exists() and belongs_to_other_device(child.name, repo_state.origin(child, timeout=30)):
                 out.append(Finding("other-device", child, "it belongs to another device: move it out of the repo root or remove it"))
             elif BACKUP_NAME.search(child.name):
                 out.append(Finding("backup", child, f"move it to {cfg.archive}/{child.name}"))
@@ -329,7 +323,7 @@ def _default_ref(repo: Path) -> str:
 def _open_pr(repo: Path, name: str) -> bool:
     """True when an open pull request has this branch as its head, or when GitHub cannot say, so the branch stays. The REST call
     spends no GraphQL points, and a hit per-minute call cap counts as cannot say."""
-    slug = _origin_slug(repo)
+    slug = repo_state.origin(repo, timeout=30)
     refused = gh_budget.reserve_call()  # '' when the call may go ahead, else the text naming the wait
     if not slug or refused:
         return True
@@ -461,7 +455,7 @@ def repo_create_violation(command_words: list[str], cwd: Path) -> str:
     if source is None and positional:
         return ""  # a new empty repo by name touches no folder
     folder = (cwd / _p(source)).resolve() if source else cwd.resolve()
-    if (folder / ".git").exists() and _origin_slug(folder):
+    if (folder / ".git").exists() and repo_state.origin(folder, timeout=30):
         return ""
     return (f"{folder.name} has no origin, and no agent creates a GitHub repo for a folder: report the folder to the owner "
             "and stop. See docs/RULES.md, Execution.")
