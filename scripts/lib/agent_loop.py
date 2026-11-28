@@ -494,7 +494,8 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
     while True:  # a failure that changed earns another fix session on the same worktree (#1513)
         spent = SPEND.get(session, 0.0)
         if spent >= BACKSTOP:  # a story whose failures keep changing still ends (#1513)
-            return {"done": False, "capped": True, "reason": f"Spend ${spent:.2f} reached the backstop of ${BACKSTOP:.2f}, so no further round starts.",
+            from lib import cmd_status  # local import: cmd_status reads this module
+            return {"done": False, "capped": True, "reason": f"Spend ${spent:.2f} ({cmd_status.PRICE_NOTE}) reached the backstop of ${BACKSTOP:.2f}, so no further round starts.",
                     "rounds": n, "tokens": tokens, "summary": summary}
         n += 1
         if repo and n > 1:

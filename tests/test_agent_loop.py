@@ -411,9 +411,16 @@ class TestLoop(unittest.TestCase):
         agent = Scripted(costly, costly, costly)
         out = self.loop(agent, [(False, "a"), (False, "b")])
         self.assertEqual((True, 2), (out["capped"], len(agent.prompts)))  # $11.50 is under it, $12.10 has reached it
-        self.assertIn("Spend $12.10 reached the backstop of $12.00", out["reason"])
+        self.assertEqual("Spend $12.10 (API-price equivalent, not billed) reached the backstop of $12.00, so no further round starts.", out["reason"])  # #1527
         again = self.loop(agent, [])
         self.assertEqual((True, 0, 2), (again["capped"], again["rounds"], len(agent.prompts)))
+
+    def test_a_stop_under_the_backstop_names_no_backstop(self):  # #1527
+        self.addCleanup(agent_loop.SPEND.pop, "s1", None)
+        out = self.loop(Scripted({**reply(), "cost_usd": 0.60}, reply()), [(False, "a"), (False, "a")])
+        self.assertTrue(out["stuck"])
+        self.assertNotIn("backstop", out["reason"])
+        self.assertNotIn("API-price", out["reason"])
 
     def test_the_board_size_sets_no_ceiling_of_its_own(self):  # #1513
         for table in (agent_loop.STORY_SIZE, agent_loop.SPEND):

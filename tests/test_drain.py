@@ -15,7 +15,7 @@ from unittest import mock
 from _support import REPO_ROOT, git, git_env, quiet, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import cmd_drain, policy, run_lock  # noqa: E402
+from lib import cmd_drain, cmd_status, policy, run_lock  # noqa: E402
 
 
 def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
@@ -416,7 +416,7 @@ class DrainCase(unittest.TestCase):
 
     def test_a_stuck_or_backstop_stop_comments_the_reason_returns_the_card_and_starts_no_restart(self):  # #1318, #1515
         for flag, reason in (("stuck", "Stuck: rounds 1 and 2 failed validation the same way, so no further round starts."),
-                             ("capped", "Spend $12.10 reached the backstop of $12.00, so no further round starts.")):
+                             ("capped", "Spend $12.10 (API-price equivalent, not billed) reached the backstop of $12.00, so no further round starts.")):
             io = FakeIo([issue(1)], builds={1: [{"done": False, flag: True, "reason": reason}]})
             io.saves = {1: ["a.py"]}  # saved work would send the card to Backlog, so none is saved
             io.save_work = lambda wt, n: self.fail("a stuck or capped story saved its work")
@@ -1688,9 +1688,26 @@ class NotTheStorysFailure(unittest.TestCase):
                 mock.patch.object(cmd_drain.agent_loop, "validate", return_value=(False, "own failure")), mock.patch.object(self.io, "base_failure", return_value=""):
             out, _ = quiet(self.io.build, issue(5, "Size: S", size="S"), self.repo, "")
         self.assertEqual((True, 1), (out["capped"], len(sessions)))  # $11.80 is under $12.00, and one round takes it past
-        self.assertIn("$12.05", out["reason"])
+        self.assertIn("$12.05 (API-price equivalent, not billed) reached the backstop of $12.00", out["reason"])
         self.io.claim(5, "S")  # the next drain reads the row that round wrote
         self.assertAlmostEqual(12.05, cmd_drain.agent_loop.SPEND["story-5"])
+
+
+class BackstopReason(unittest.TestCase):
+    """#1527: the story comment and watch show the backstop's reason with its API-price label."""
+
+    def test_the_comment_and_the_watch_line_name_the_api_price_equivalent(self):
+        mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}).start()
+        mock.patch.dict(cmd_drain.agent_loop.SPEND, {"story-1": 12.10}).start()
+        self.addCleanup(mock.patch.stopall)
+        capped, _ = quiet(cmd_drain.agent_loop.run_loop, "do it", temp_dir(self), "story-1", run=lambda *a, **k: self.fail("a capped story started a round"))
+        io = FakeIo([issue(1)], builds={1: [capped]})
+        quiet(cmd_drain.drain, io, state(), sleep=lambda s: None)
+        reason = "Spend $12.10 (API-price equivalent, not billed) reached the backstop of $12.00, so no further round starts."
+        self.assertEqual([(1, f"Drain stopped: {reason}")], io.comments)
+        cmd_drain.Io(temp_dir(self), "o/r").stopped(1, io.comments[0][1])  # the drain logs the comment as the stopped row's reason (#1318)
+        row = json.loads(cmd_drain.agent_loop.run_log_lines()[-1])
+        self.assertIn(f"stopped (Drain stopped: {reason})", cmd_status.watch_line(row, [row]))
 
 
 class Remembering(FakeIo):
