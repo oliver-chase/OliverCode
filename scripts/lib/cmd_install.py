@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import plistlib
 import pwd
 import shlex
 import shutil
@@ -253,10 +252,7 @@ def _checkout_job_labels(oc_root: Path, folder: Path) -> list[str]:
     launchers = {str(oc_root / "scripts" / "olivercode"), str(oc_root.resolve() / "scripts" / "olivercode")}
     found = []
     for plist in sorted(folder.glob("com.olivercode.*.plist")) if folder.is_dir() else []:
-        try:
-            args = plistlib.loads(plist.read_bytes()).get("ProgramArguments", [])
-        except (OSError, ValueError):
-            continue
+        args = launchd.job_arguments(plist)
         if launchers & {str(a) for a in args}:
             found.append(plist.name[:-len(".plist")])
     return found

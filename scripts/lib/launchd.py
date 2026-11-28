@@ -29,6 +29,15 @@ def plist_path(label: str, home: Path | None = None) -> Path:
     return agents_dir(home) / f"{label}.plist"
 
 
+def job_arguments(plist_file: Path) -> list:
+    """The ProgramArguments of the job file PLIST_FILE, or [] when the file is missing, corrupt or has none."""
+    try:
+        args = plistlib.loads(plist_file.read_bytes()).get("ProgramArguments")
+    except (OSError, ValueError, AttributeError):
+        return []
+    return args or []
+
+
 def cron_line(plist: dict) -> str:
     """The crontab line that does what the plist's job does, from its interval or calendar timing."""
     if "StartInterval" in plist:

@@ -16,7 +16,6 @@ import getpass
 import io
 import json
 import os
-import plistlib
 import re
 import shutil
 import subprocess
@@ -360,10 +359,10 @@ def check_retired_jobs(fix: bool, agents: Path | None = None) -> list[Problem]:
 def check_job_python(agents: Path | None = None) -> list[Problem]:
     """The installed daily job must run a python3 at the minimum; the plist names the one it runs."""
     plist_file = (agents or launchd.agents_dir()) / f"{LABEL}.plist"
-    try:
-        exe = plistlib.loads(plist_file.read_bytes())["ProgramArguments"][0]
-    except (OSError, KeyError, IndexError, ValueError):
+    args = launchd.job_arguments(plist_file)
+    if not args:
         return []
+    exe = args[0]
     from lib.cli import python_version
     found = python_version(exe)
     if found is not None and found >= MIN_PYTHON:

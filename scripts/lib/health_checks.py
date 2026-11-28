@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import os
-import plistlib
 import re
 import shutil
 import subprocess
@@ -279,10 +278,7 @@ def _check_scheduled_jobs(agents: Path | None = None) -> tuple[int, int, int]:
         return 0, 0, 0
     gone = []
     for plist_file in jobs:
-        try:
-            args = plistlib.loads(plist_file.read_bytes()).get("ProgramArguments") or []
-        except (OSError, ValueError, AttributeError):
-            continue
+        args = launchd.job_arguments(plist_file)
         gone += [(plist_file.stem, a) for a in args[:2] if isinstance(a, str) and not Path(a).exists()]
     print("\nScheduled jobs:")
     if not gone:
