@@ -33,6 +33,8 @@ STALE_SECONDS = 3600  # a digest older than this is labeled with its age
 LONG_TOKENS = 250_000  # a thread past this re-reads more cached context per turn than the turn's work costs (#1319)
 TAIL_BYTES = 1_000_000  # the last model call's usage is near the end of the transcript
 CHARS = 1200 # the board line and the open list, about three hundred tokens, is what a status answer needs
+FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time and cost, at no model cost.\n"  # how the owner follows a run (#1518)
+          "`olivercode status` shows the open count, pace and what is next, at no model cost.")
 # A question about the board only: "status" alone, or "status" in a question or a status-of phrase. "the PR status is red" and "add a status field" are not questions.
 STATUS_RE = re.compile(r"\bwhat(?:'s| is| are)\s+(?:the\s+)?status\b|\bstatus\s+(?:of|on)\b|^\s*(?:any\s+|the\s+)?status\s*\??\s*$"
                        r"|\bwhat(?:'s| is| are)\s+(?:still\s+)?(?:building|left|running|in progress|open)\b|\bhow far\b"
@@ -105,7 +107,8 @@ def context(prompt: str, path: Path | None = None) -> str:
         return f"The status digest at {path} is stale, so none of its figures are given. {stale}Run `olivercode status` before answering."
     written = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(path.stat().st_mtime))
     return (f"Status from the status file {path}, written {written}:\n{open_part(text)}\n"
-            f"Confirm any figure your answer gives with a command before stating it. The full status file is {path}, and the owner can read it there.")
+            f"Confirm any figure your answer gives with a command before stating it. The full status file is {path}, and the owner can read it there.\n"
+            f"End your answer with these two lines:\n{FOLLOW}")
 
 
 def context_tokens(transcript: Path) -> int:
@@ -182,12 +185,12 @@ def long_thread_note(data: dict) -> str:
 
 
 def block_reason(path: Path) -> str:
-    """The reason shown to the owner when a status-only prompt is blocked: the digest's lines, or a note that none is written yet."""
+    """The reason shown to the owner when a status-only prompt is blocked: the digest's lines and the two commands that follow a run, or a note that none is written yet."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return f"No status digest is written yet at {path}. Write it with `olivercode status digest`."
-    return f"Status from the status file {path}:\n{open_part(text)}"
+    return f"Status from the status file {path}:\n{open_part(text)}\n{FOLLOW}"
 
 
 def main() -> int:

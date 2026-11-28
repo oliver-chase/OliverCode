@@ -25,6 +25,10 @@ Board: owner/repo: 3 open stories.
 """
 
 
+FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time and cost, at no model cost.\n"
+          "`olivercode status` shows the open count, pace and what is next, at no model cost.")
+
+
 class StatusOnly(unittest.TestCase):
     def setUp(self):
         self.tmp = temp_dir(self)
@@ -44,7 +48,9 @@ class StatusOnly(unittest.TestCase):
     def test_a_mixed_message_goes_through_with_the_status_lines_as_context(self):
         prompt = "what's building right now? and fix the parser bug in cmd_land"
         self.assertFalse(hint.is_status_only(prompt))
-        self.assertIn("Board: owner/repo: 3 open stories.", hint.context(prompt, self.digest))
+        text = hint.context(prompt, self.digest)
+        self.assertIn("Board: owner/repo: 3 open stories.", text)
+        self.assertTrue(text.endswith(f"End your answer with these two lines:\n{FOLLOW}"), text)
 
     def test_a_digest_older_than_an_hour_says_how_old_it_is_and_points_to_olivercode_status(self):
         now = self.digest.stat().st_mtime
@@ -83,6 +89,7 @@ class StatusOnly(unittest.TestCase):
         blocked = json.loads(status.stdout)
         self.assertEqual("block", blocked["decision"])
         self.assertIn("Board: owner/repo: 3 open stories.", blocked["reason"])
+        self.assertTrue(blocked["reason"].endswith(f"#979 P1 Stories build one at a time\n{FOLLOW}"), blocked["reason"])
         self.assertIn("additionalContext", self.run_hook("what is building? and fix the parser").stdout)
         self.assertEqual("", self.run_hook("ask: what is building?").stdout)
         self.assertEqual("", self.run_hook("fix the parser bug").stdout)
