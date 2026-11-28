@@ -223,6 +223,21 @@ class Io:
             return None
         return {(i.get("content") or {}).get("number"): i for i in items}
 
+    def newly_gated(self, issues: list[dict]) -> list[int]:
+        """The owner-gated stories among the open `issues` that the owner was not told about yet. The OliverCode home keeps who was told, so a restarted
+        drain tells nothing twice, and a story read without the label is forgotten, so a label that returns is told again (#1496)."""
+        path = gh_budget.home() / "drain-owner-told.json"
+        gated = sorted(i["number"] for i in issues if owner_gated(i))
+        with failure_log.locked(path):  # two repos' drains share the file
+            try:
+                told = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                told = {}
+            before = told.get(self.slug, [])
+            if gated != before:
+                failure_log.write_private(path, json.dumps({**told, self.slug: gated}))
+        return [n for n in gated if n not in before]
+
     def add_files_area(self, issue: dict) -> bool:
         """Give a Ready story with no Files area one, once, just before it builds (#1316). One call to the smallest model reads the story and the repo's
         tracked files and names the files it changes. Every named file must be tracked or on a Creates line, else the story stays unchanged.
@@ -487,15 +502,20 @@ class Io:
         return cause
 
     def keep_open(self, n: int, reason: str = "") -> None:
-        """After a builder that did not land: say why on the story, reopen it when something closed it, and put its card back to Ready (#877)."""
+        """After a builder that did not land: say why on the story, reopen it when something closed it, and put its card back to Ready (#877).
+        An owner-gated story's card goes to Backlog, so it never shows as Ready while it waits on the owner (#1496)."""
         self.stopped(n, reason or self.said.get(n, ""))
         if reason:
             self.comment(n, f"Builder stopped without landing: {reason}")
-        done = self.gh(["api", f"repos/{self.slug}/issues/{n}", "--jq", ".state"])
-        if done.returncode == 0 and done.stdout.strip() == "closed":
+        done = self.gh(["api", f"repos/{self.slug}/issues/{n}"])
+        try:
+            story = json.loads(done.stdout) if done.returncode == 0 else {}
+        except ValueError:
+            story = {}  # shortcut: an unread story counts as open and ungated, upgrade when a gated card is seen on Ready after a failed read
+        if story.get("state") == "closed":
             self.gh(["api", "-X", "PATCH", f"repos/{self.slug}/issues/{n}", "-f", "state=open"])
         cfg = backlog_config(self.repo)
-        status = "Backlog" if n in self.saved else "Ready"  # saved work waits for a split, not a rebuild (#1328)
+        status = "Backlog" if n in self.saved or owner_gated(story) else "Ready"  # saved work waits for a split, not a rebuild (#1328)
         cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": status}}]}]))
 
     def save_work(self, worktree: Path, n: int) -> list[str]:
@@ -944,6 +964,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     return 1
                 say("Drain stopped: the open stories were not read.")
                 return 1
+            for n in io.newly_gated([i for i in issues if not is_epic(i)]):  # every open story, so a label added to a story this run holds is told too (#1496)
+                notify(f"#{n} needs you. The story says what to do.")
             skip = set(state["closed"]) | set(state["blocked"]) | set(state.get("base", ())) | {i["number"] for i in running.values()} | set(committed)
             todo = []
             for issue in sorted((i for i in issues if i["number"] not in skip and not is_epic(i)), key=rank):
@@ -969,8 +991,6 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     if issue["number"] not in reported:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")
-                        if owner_gated(issue):
-                            notify(f"#{issue['number']} needs you. The story says what to do.")
                     continue
                 if re.search(r"Size:\s*(XS|S|M|L|XL)\b", issue.get("body") or "") and (text_size := intake.size_of(issue)) != str(issue["size"]).strip().upper() and issue["number"] not in mismatched:
                     mismatched.add(issue["number"])

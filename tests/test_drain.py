@@ -47,6 +47,7 @@ class FakeIo:
 
     found = {}  # story number -> the Files area the model names for it (#1316)
     def landed_lead(self, i): return self.leads.get(i["number"])
+    def newly_gated(self, issues): return []
     def staged(self): return False
     def stopped(self, n, reason): self.stops_logged = getattr(self, "stops_logged", []) + [(n, reason)]
 
@@ -1152,7 +1153,7 @@ class TestRealIo(unittest.TestCase):
         calls, queued = [], []
         def gh(args):
             calls.append(args)
-            return subprocess.CompletedProcess(args, 0, "closed\n" if "--jq" in args else "", "")
+            return subprocess.CompletedProcess(args, 0, json.dumps({"state": "closed"}), "")
         cfg = {"repoOwner": "o"}
         with mock.patch.object(cmd_drain.cmd_dispatch, "gh", gh), mock.patch.object(cmd_drain, "backlog_config", lambda repo: cfg), \
                 mock.patch.object(cmd_drain.cmd_dispatch.batch_project, "with_queue", lambda fn: queued.extend(fn([])[1])):
@@ -1160,6 +1161,14 @@ class TestRealIo(unittest.TestCase):
         self.assertTrue(any("PATCH" in c and "state=open" in c for c in calls))
         self.assertTrue(any("claude exited 1" in " ".join(c) for c in calls))
         self.assertEqual([{"cfg": cfg, "issues": [{"number": 9, "fields": {"status": "Ready"}}]}], queued)
+
+    def test_a_stopped_owner_gated_story_goes_to_backlog_and_not_ready(self):  # #1496
+        queued = []
+        story = json.dumps({"state": "open", "labels": [{"name": "owner-action"}]})
+        with mock.patch.object(cmd_drain.cmd_dispatch, "gh", lambda a: subprocess.CompletedProcess(a, 0, story, "")), mock.patch.object(cmd_drain, "backlog_config", lambda repo: {}), \
+                mock.patch.object(cmd_drain.cmd_dispatch.batch_project, "with_queue", lambda fn: queued.extend(fn([])[1])):
+            self.io.keep_open(9)
+        self.assertEqual("Backlog", queued[0]["issues"][0]["fields"]["status"])
 
     def test_a_stopped_builders_uncommitted_work_is_committed_and_pushed_to_its_branch(self):
         """#1328: the changes go to story/N by one commit that names the story, and the card then moves to Backlog."""
@@ -1566,6 +1575,47 @@ class NotTheStorysFailure(unittest.TestCase):
         self.assertIn("$2.05", out["reason"])
         self.io.claim(5, "S")  # the next drain reads the row that round wrote
         self.assertAlmostEqual(2.05, cmd_drain.agent_loop.SPEND["story-5"])
+
+
+class Remembering(FakeIo):
+    newly_gated = cmd_drain.Io.newly_gated
+
+
+class OwnerNotice(unittest.TestCase):
+    """#1496: one needs-you notification per owner-gated story, across drain restarts."""
+
+    def setUp(self):
+        mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}).start()
+        self.notify = mock.patch.object(cmd_drain, "notify").start()
+        self.addCleanup(mock.patch.stopall)
+
+    def run_over(self, *issues):
+        """One new drain over `issues`, as a restart makes. Returns (its needs-you texts, its log)."""
+        self.notify.reset_mock()
+        _, out, _ = DrainCase.run_drain(self, Remembering(issues))
+        return [c.args[0] for c in self.notify.call_args_list if "needs you" in c.args[0]], out
+
+    def test_a_restarted_drain_logs_the_skip_and_sends_no_second_notification(self):
+        gated = issue(1309, labels=["owner-action"])
+        self.assertEqual(["#1309 needs you. The story says what to do."], self.run_over(gated)[0])
+        told, out = self.run_over(gated)
+        self.assertEqual(([], 1), (told, out.count("Skipped #1309: it is owner-gated")))
+
+    def test_a_story_that_newly_waits_on_the_owner_is_named_once(self):
+        self.assertEqual([], self.run_over(issue(1))[0])
+        self.assertEqual(["#1 needs you. The story says what to do."], self.run_over(issue(1, labels=["owner-action"]))[0])
+
+    def test_a_gate_that_is_cleared_and_returns_is_told_again(self):
+        gated = issue(1, labels=["owner-action"])
+        self.run_over(gated)
+        self.assertEqual([], self.run_over(issue(1))[0])
+        self.assertEqual(1, len(self.run_over(gated)[0]))
+
+    def test_each_repo_remembers_its_own_stories(self):
+        gated = [issue(1, labels=["owner-action"])]
+        first, second = Remembering([]), Remembering([])
+        second.slug = "o/other"
+        self.assertEqual(([1], [1], [], []), tuple(io.newly_gated(gated) for io in (first, second, first, second)))
 
 
 class DetachedRun(unittest.TestCase):
