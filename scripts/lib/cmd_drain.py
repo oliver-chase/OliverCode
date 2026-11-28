@@ -37,7 +37,7 @@ USAGE = "Usage: olivercode drain REPO [--parallel N] [--foreground]"
 RESTARTS = 3
 HOLD_WAIT_MAX = 3600  # a GitHub hold that ends within this many seconds is waited out instead of ending the run (#1314)
 FULL_WAITS = 12 # five-minute waits for another repo's run to free a builder before a full machine ends the drain (#1055)
-EPIC = re.compile(r"work type:\s*epic", re.IGNORECASE)
+EPIC = re.compile(intake.FIELDS_LINE + r".*?Work type:\s*epic", re.IGNORECASE | re.MULTILINE)  # the fields line only: a scenario may quote an epic's fields (#1514)
 
 
 def notify(text: str) -> None:

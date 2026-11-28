@@ -20,6 +20,7 @@ sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 SECURITY = re.compile(r"secret|credential|leak|vulnerab|security|data loss|lose data|lost data", re.I)
 DEFECT = re.compile(r"\b(bug|broken|fails?|failing|crash|regress\w*|wrong)\b", re.I)
 SIZES = ((500, "XS"), (1000, "S"), (2000, "M"), (4000, "L"))
+FIELDS_LINE = r"^(?=(?:Priority|Size|Work type):)"  # a story's own fields start their line; quoted ones sit inside a scenario (#1514)
 
 
 def gh_issues(slug: str) -> list[dict]:
@@ -39,9 +40,10 @@ def priority_of(story):
 
 
 def size_of(story):
-    """The Size line the story states, else one by the length of its body."""
+    """The Size the fields line states, else the first one the body states, else one by the length of its body."""
     body = story.get("body") or ""
-    if m := re.search(r"Size:\s*(XS|S|M|L|XL)\b", body):
+    size = r"Size:\s*(XS|S|M|L|XL)\b"
+    if m := re.search(FIELDS_LINE + ".*?" + size, body, re.M) or re.search(size, body):
         return m.group(1)
     return next((name for limit, name in SIZES if len(body) < limit), "XL")
 

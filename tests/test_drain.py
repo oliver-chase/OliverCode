@@ -291,6 +291,14 @@ class DrainCase(unittest.TestCase):
         self.assertIn("Drain done: 3 stories closed", out)
         self.assertEqual(code, 0)
 
+    def test_only_the_fields_line_or_the_label_marks_an_epic(self):  # #1514
+        quoting = ("Scenario: A real epic\n    Given a body reading `Priority: P1. Size: L. Work type: Epic.`\n"
+                   "    Work type: Epic\n\nPriority: P1. Size: S. Work type: Story.")
+        io = FakeIo([issue(1, quoting), issue(2, "Priority: P1. Size: S. Work type: Epic.\r\n"), issue(3, "Priority: P1 · Size: L · Work type: Epic"),
+                     issue(4, labels=["epic"])])
+        self.run_drain(io)
+        self.assertEqual([1], io.started)
+
     def test_never_two_builders_on_the_same_files(self):
         io = FakeIo([issue(1, "Files area: scripts/lib/cmd_drain.py"), issue(2, "Files area: scripts/lib/cmd_drain.py"), issue(3, "Files area: scripts/lib/cmd_land.py")], cap=3)
         self.run_drain(io)
