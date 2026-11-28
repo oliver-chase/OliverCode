@@ -14,7 +14,7 @@ from _support import git, git_env, load_script, quiet, scratch_repo, temp_dir
 
 launcher = load_script("scripts/olivercode", "olivercode_launcher")
 session_check = load_script("scripts/hooks/session_check.py", "session_check_land")
-from lib import agent_loop, cmd_dispatch, cmd_land, intake, maintain, usage_sessions, validated  # noqa: E402
+from lib import agent_loop, cmd_dispatch, cmd_drain, cmd_land, cmd_owner, intake, maintain, usage_sessions, validated  # noqa: E402
 
 REAL_STORY_BODY, REAL_STORY_COMMENT, REAL_STORY_SLUG = cmd_land.story_body, cmd_land._story_comment, cmd_land._story_slug  # the Base class patches these, so keep the real ones (#1073)
 
@@ -667,6 +667,85 @@ class TestLandKeepsItsCheck(Base):
         self.assertIn("RESULT weakened-test", out)
         check.assert_called_once_with(self.wt, "origin/main", self.body)
         self.assertIn("Refused: weak.", (self.root / "logs" / "land-main-9.log").read_text())
+
+
+class TestAfterLandingStep(Base):
+    """A landed story that still has an after-landing step is put in front of the owner (#1566)."""
+
+    BODY = "Intro.\r\n\r\n## After landing\r\n\r\nA lead converts the live data\r\nwith convert.py.\r\n\r\n## Notes\r\nNot part of it."
+
+    def setUp(self):
+        super().setUp()
+        p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.root / "home")}); p.start(); self.addCleanup(p.stop)
+
+    def lines(self):
+        return [i for i in cmd_owner.open_items() if str(i.get("key", "")).startswith("after-landing:")]
+
+    def test_a_drain_landing_names_the_step_in_the_owner_queue_one_notification_and_one_log_line(self):
+        self.body = self.BODY
+
+        def run(args, *rest, **kwargs):
+            if "land" in args[1:3] and str(args[1]).endswith("olivercode"):
+                code, out = quiet(cmd_land.command_land, args[3:])
+                return subprocess.CompletedProcess(args, code, out, "")
+            return REAL_RUN(args, *rest, **kwargs)
+        io = cmd_drain.Io(self.main, "o/r")
+        with mock.patch.object(cmd_drain.subprocess, "run", run), mock.patch.object(cmd_drain, "notify") as notify:
+            (landed, _), out = quiet(io.land, self.wt, 9)
+        self.assertTrue(landed)
+        [item] = self.lines()
+        self.assertIn("#9", item["step"])
+        self.assertIn("A lead converts the live data with convert.py.", item["step"])
+        self.assertNotIn("Not part of it", item["step"])
+        notify.assert_called_once()
+        self.assertIn("#9", notify.call_args.args[0])
+        self.assertEqual([item["step"]], [line for line in out.splitlines() if "convert.py" in line])
+
+    def test_a_chat_landing_prints_that_the_step_is_pending_and_queues_the_same_line(self):
+        self.body = "**Machine step:** run convert.py on the server."
+        code, out = self.land()
+        self.assertEqual(0, code, out)
+        [item] = self.lines()
+        self.assertEqual("After-landing step pending for story #9: run convert.py on the server.", item["step"])
+        self.assertIn(item["step"], out.splitlines())
+        self.assertIn(item["step"], (self.root / "logs" / "land-main-9.log").read_text().splitlines())
+
+    def test_a_story_with_neither_section_adds_no_owner_line(self):
+        self.body = "Scenario: After landing, the page is level.\nThe machine step is automatic."
+        code, out = self.land()
+        self.assertEqual(0, code, out)
+        self.assertEqual([], cmd_owner.items())
+        self.assertNotIn(cmd_land.PENDING, out)
+
+    def test_a_refused_landing_adds_no_owner_line(self):
+        self.body = self.BODY
+        (self.wt / "dirty.txt").write_text("d")
+        self.assertEqual(1, self.land()[0])
+        self.assertEqual([], cmd_owner.items())
+
+    def test_an_open_line_is_not_added_twice_and_leaves_the_stop_line_alone(self):
+        cmd_owner.add("drain", "Story #9 waits on you", extra={"key": "policy-stop:#9", "story": 9})
+        with open(os.devnull, "w") as log:
+            for _ in range(2):
+                quiet(cmd_land.pending_step, self.wt, "9", self.BODY, log)
+        self.assertEqual(1, len(self.lines()))
+        self.assertEqual(2, len(cmd_owner.open_items()))
+
+    def test_a_step_the_queue_refuses_as_a_secret_is_still_queued_without_its_text(self):
+        self.body = "### Machine step\nSet token=abc123 on the server."
+        code, out = self.land()
+        self.assertEqual(0, code, out)
+        [item] = self.lines()
+        self.assertIn("#9", item["step"])
+        self.assertNotIn("abc123", item["step"] + out)
+
+    def test_a_queue_that_cannot_be_written_still_lands_and_says_the_step_is_pending(self):
+        self.body = self.BODY
+        with mock.patch.object(cmd_owner, "add", side_effect=OSError("disk full")):
+            code, out = self.land()
+        self.assertEqual(0, code, out)
+        self.assertIn(cmd_land.PENDING, out)
+        self.assertIn("no owner line was written: disk full", out)
 
 
 class TestDeclaredRemovals(Base):

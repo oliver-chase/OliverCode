@@ -443,6 +443,9 @@ class Io:
     def land(self, worktree: Path, n: int) -> tuple[bool, str]:
         agent_loop.log_stage(f"story-{n}", self.repo.name, "landing")
         out = subprocess.run([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "land", str(worktree), str(n)], capture_output=True, text=True)
+        if pending := next((line for line in out.stdout.splitlines() if line.startswith(cmd_land.PENDING)), ""):  # land queued the owner line (#1566)
+            print(pending, flush=True)
+            notify(f"#{n} landed. A step after landing is still pending.")
         if out.returncode == 0:
             self.claim_start.pop(n, None)  # land keeps a lone older commit's committer date, so a resumed branch's commit would fail the since-claim filter (#1306)
         elif refused := re.search(r"RESULT (\S+)", out.stdout):  # a refused landing shows as stopped at once, not as still landing (#1486)

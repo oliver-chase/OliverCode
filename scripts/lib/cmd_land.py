@@ -5,6 +5,7 @@ checkout when that is clean and prints how far behind an edited or diverged one 
 with `RESULT pushed SHA`, `RESULT rebase-conflict`, `RESULT validate-failed`, `RESULT squash-failed` (the commits could not be squashed), `RESULT push-failed` (the push failed while main stood still) or `RESULT main-kept-moving` (a land keeps retrying with a short pause for ten minutes while main moves and each rebase is clean). A second land for a story that is already running refuses. Land never edits docs/LIMITS.json: the size ceiling only warns (#879).
 A commit that changes a file outside its story's Files area lands and the story gets a comment naming the files; a commit that adds a skip or `|| true` to a test, or removes assertions without removing code, ends with `RESULT weakened-test`; a story that cannot be read over REST ends with `RESULT scope-unchecked` (#1073).
 A story's `Removes tests: file::test` line lets that test go when the commit deletes it whole and the Files area lists its file; the log and a story comment name it (#1484).
+A pushed story whose body has a section headed `After landing` or `Machine step` gets one open owner-queue line naming the step, and the land prints and logs it (#1566).
 
 A landed story is cleaned up here (#712): the worktree, the local branch and the remote branch are deleted, so no session needs a removal permission. Work that did not land
 stays in its worktree, and no branch is pushed for it.
@@ -25,7 +26,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, run_lock, usage_sessions, validated
+from lib import agent_loop, backlog_setup, cmd_owner, failure_log, intake, local_config, maintain, run_lock, usage_sessions, validated
 from lib.validate_gates import PROGRESS  # the lines that also print on the terminal while a land validates (#776)
 from lib.local_config import OC_ROOT
 from lib import gitfiles
@@ -42,6 +43,9 @@ VALIDATION_FILE = re.compile(r"validat|\.githooks/|\.github/workflows/")
 SKIP = re.compile(r"@(?:unittest\.|pytest\.mark\.)?skip|\bskip(?:Test|If|Unless)?\(|\.skip\(|\bx(?:it|describe|test)\(|mark\.xfail")
 OR_TRUE = re.compile(r"\|\|\s*true\b")
 ASSERT = re.compile(r"\bassert\w*\(|\bassert\s|\bexpect\(")
+PENDING = "After-landing step pending"  # how the line starts that the drain reads from a land's output (#1566)
+# a section headed by a Markdown heading or a bold line, up to the next heading, so a scenario that only says "after landing" is none
+AFTER_LANDING = re.compile(r"^[ \t]*(?:#{1,6}[ \t]*\**|\*\*)(?:After landing|Machine step)\b(.*?)(?=^#{1,6}[ \t]|\Z)", re.I | re.M | re.S)
 
 
 def _run(wt: Path, log, *cmd: str, env: dict | None = None) -> bool:
@@ -219,6 +223,28 @@ def _story_comment(wt: Path, story: str, text: str, told: set[str]) -> None:
         _gh(f"repos/{slug}/issues/{story}/comments", "-f", f"body={text}")
 
 
+def pending_step(wt: Path, story: str, body: str, log) -> None:
+    """For a body with an after-landing section, queue one open owner line naming the story and the step, and say it in the log and on the terminal
+    (#1566). Its key is its own, so it never holds back the story's stop line. The push is done, so a queue that cannot be written fails nothing."""
+    found = AFTER_LANDING.findall(body)
+    if not found:
+        return
+    step = " ".join(" ".join(found).split()).strip(" :*")[:300] or "read it in the story"
+    key = f"after-landing:{_story_slug(wt)}#{story}"
+    line = f"{PENDING} for story #{story}: {step}"
+    try:
+        if not any(i["status"] == "open" and i.get("key") == key for i in cmd_owner.items()):
+            try:
+                cmd_owner.add("land", line, extra={"key": key})
+            except ValueError:  # the queue refuses text that reads as a secret, so the line points at the story instead
+                line = f"{PENDING} for story #{story}: read it in the story"
+                cmd_owner.add("land", line, extra={"key": key})
+    except OSError as exc:
+        line += f" (no owner line was written: {exc})"
+    log.write(line + "\n")
+    print(line, flush=True)
+
+
 def _changed_lines(diff: str) -> list[tuple[str, int, str, str, int]]:
     """(path, line, sign, text, was) for each changed line of a zero-context diff. The line is its number in the file after the commit, so a
     removed line names the spot it left (#1073). `was` is a removed line's number in the file before the commit, and 0 for an added one (#1484)."""
@@ -376,6 +402,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
             continue
         if _run(wt, log, "git", "push", "origin", f"HEAD:{base}", env={**os.environ, "ALLOW_BRANCH_PUSH": "1"}):  # land pushes only its own landing branch, which may be the owner's engineBranch (#1293)
             sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=wt, capture_output=True, text=True).stdout.strip()
+            pending_step(wt, story, body, log)
             return "pushed", sha
         _run(wt, log, "git", "fetch", "-q", "origin")
         if _run(wt, log, "git", "merge-base", "--is-ancestor", f"origin/{base}", "HEAD"):
