@@ -431,3 +431,25 @@ class TestStateFolder(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHealthStep(Base):
+    """maintain runs `olivercode health` without a TypeError and names each stale worktree once (#1499)."""
+
+    def test_maintain_runs_health_and_reports_a_misplaced_checkout_once(self):
+        from lib import cmd_health
+        finding = mock.Mock(kind="checkout", path="/x/repo", fix="Move it")
+        with mock.patch.object(maintain.placement, "findings", return_value=[finding]), \
+                mock.patch.object(maintain.placement, "worktrees", return_value=[]), \
+                mock.patch.object(cmd_health, "_claude_dir", lambda: self.claude):
+            problems, _ = quiet(maintain.run, False, self.cfg)
+        self.assertEqual(1, sum("checkout out of place: /x/repo" in p.text for p in problems))
+
+    def test_a_stale_worktree_is_named_once(self):
+        repo = scratch_repo(temp_dir(self) / "widget")
+        wt = mock.Mock(path=repo)
+        with mock.patch.object(maintain.placement, "worktrees", return_value=[wt]), \
+                mock.patch("lib.health_checks.stale_hook", return_value="hooks.py changed on origin/main"):
+            problems = maintain.check_worktree_hooks(self.cfg)
+        self.assertEqual(1, len(problems))
+        self.assertTrue(problems[0].text.startswith(str(repo)))

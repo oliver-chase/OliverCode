@@ -315,19 +315,29 @@ def stale_hook(path: Path, base: str = "origin/main") -> str:
     return f"{changed.stdout.split()[0]} changed on {base} after this worktree branched"
 
 
+def stale_worktree_hooks(worktrees) -> list[tuple[str, str]]:
+    """(path, why) for each worktree whose commit hooks predate origin/main (#902)."""
+    return [(wt.path, why) for wt in worktrees if (why := stale_hook(wt.path))]
+
+
+def stale_hook_text(path, why: str) -> str:
+    """The one line that names a stale worktree and its fix, shared by `olivercode health` and `olivercode maintain` (#1499)."""
+    return (f"{path} runs commit hooks older than origin/main ({why}). Rebase it with "
+            f"`git -C \"{path}\" rebase origin/main`, then run `olivercode worktree fix \"{path}\"`. "
+            "Once it is merged, `olivercode clean --apply` removes it")
+
+
 def _check_worktree_hooks() -> tuple[int, int, int]:
     """Warn on each linked worktree whose commit hooks predate origin/main, and name it with its fix (#902). It warns because every hook change
     leaves each older branch behind on a correct machine. A worktree with no gates says nothing."""
     from lib import placement
-    stale = [(wt.path, why) for wt in placement.worktrees() if (why := stale_hook(wt.path))]
+    stale = stale_worktree_hooks(placement.worktrees())
     print("\nWorktree hooks:")
     if not stale:
         print("  [OK] every worktree's commit hooks are current with origin/main")
         return 1, 0, 0
     for path, why in stale:
-        print(f"  [WARN] {path} runs commit hooks older than origin/main ({why}). Rebase it with "
-              f"`git -C \"{path}\" rebase origin/main`, then run `olivercode worktree fix \"{path}\"`. "
-              "Once it is merged, `olivercode clean --apply` removes it")
+        print(f"  [WARN] {stale_hook_text(path, why)}")
     return 0, 0, len(stale)
 
 

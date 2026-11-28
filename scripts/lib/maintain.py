@@ -173,6 +173,12 @@ def check_hooks_path(cfg: placement.Config, fix: bool) -> list[Problem]:
     return found
 
 
+def check_worktree_hooks(cfg: placement.Config) -> list[Problem]:
+    """Each linked worktree whose commit hooks predate origin/main, named once (#902, #1499). Left alone: a rebase is the owner's call."""
+    from lib.health_checks import stale_hook_text, stale_worktree_hooks
+    return [Problem("hooks", stale_hook_text(path, why)) for path, why in stale_worktree_hooks(placement.worktrees(cfg))]
+
+
 def check_placement(cfg: placement.Config) -> list[Problem]:
     """A checkout outside repoRoot is the owner's to move, so it is reported with the command that moves it."""
     return [Problem("placement", f"{f.kind} out of place: {f.path}. {f.fix}") for f in placement.findings(cfg)]
@@ -280,7 +286,7 @@ def check_health() -> list[Problem]:
     from lib.cmd_health import command_health
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        code = command_health(None)
+        code = command_health()
     lines = [l.strip()[7:] for l in out.getvalue().splitlines() if l.strip().startswith("[FAIL]")]
     return [Problem("health", l) for l in lines] if code else []
 
@@ -558,9 +564,10 @@ def run(fix: bool, cfg: placement.Config | None = None, health: bool = True) -> 
     fleet = None if cfg is None else []  # a caller's own config checks only its repoRoot, never this machine's private repos
     cfg = cfg or placement.config()
     problems = [*check_links(fix), *check_worktrees(cfg, fix), *check_branches(cfg, fix), *check_icloud(cfg, fix), *check_copies(cfg, fix),
-                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_gaps(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg)]
-    if health:
-        problems += check_health()
+                *check_git_sync(cfg, fix), *(check_main_checkout(fix) if fleet is None else []), *(check_outsiders(fix) if fleet is None else []), *(check_queues(fix) if fleet is None else []), *(check_suite(fix) if fleet is None else []), *(check_failure_gaps(fix) if fleet is None else []), *(check_state(fix) if fleet is None else []), *check_hooks_path(cfg, fix), *check_retired_jobs(fix), *check_job_python(), *check_tidy(cfg, fix), *check_synced(cfg, fleet), *check_placement(cfg), *check_docs(cfg), *check_worktree_hooks(cfg)]
+    if health:  # health names what the steps above already named only once
+        seen = {p.text for p in problems}
+        problems += [p for p in check_health() if p.text not in seen]
     return problems
 
 
