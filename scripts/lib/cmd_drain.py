@@ -164,8 +164,8 @@ class Io:
         """The repo's own validation command, which a story needs before a builder starts (#1012)."""
         return agent_loop.validation_command(self.repo)
 
-    def base_failure(self, fresh: bool = False) -> str:
-        """The failing line of the validation's output when it fails on a worktree of origin's default branch, else "" (#1431). A tree with a recorded pass is not validated again unless `fresh`, since an old pass says nothing about the machine now (#1481), and a timeout is rerun once and then read as unknown (#1436).
+    def base_failure(self, fresh: bool = False, story: int = 0) -> str:
+        """The failing line of the validation's output when it fails on a worktree of origin's default branch, else "" (#1431). A tree with a recorded pass is not validated again unless `fresh`, since an old pass says nothing about the machine now (#1481), and a timeout is rerun once and then read as unknown (#1436). The log says when the validation starts and how it ended, or that a recorded pass answered, and names `story` when its failed validation is what asked (#1552).
         shortcut: a base that cannot be fetched or checked out counts as passing, upgrade when a drain needs to stop on an unreadable base."""
         git = ["git", "-C", str(self.repo)]
         if subprocess.run([*git, "fetch", "-q", "origin", self.branch()], capture_output=True, text=True).returncode:
@@ -180,14 +180,20 @@ class Io:
             if agent_loop.validation_command(wt) is None:
                 return ""
             if not fresh and validated.is_validated(validated.working_tree(wt)):  # land recorded a full pass for this tree, so nothing is learned by running it again (#1436)
+                print(f"Base validation: the recorded pass for origin/{self.branch()}'s tree was used.")
                 return ""
+            why = f"to compare it with #{story}'s failed validation" if story else "before any new builder starts"
+            print(f"Validating the base, origin/{self.branch()}, {why}.")
+            began = time.monotonic()
             code, tail = agent_loop.validate_code(wt)
             if code == agent_loop.TIMED_OUT:  # a slow machine is not a red staging: rerun once, then build everything
                 code, tail = agent_loop.validate_code(wt)
                 if code == agent_loop.TIMED_OUT:
                     print("Base validation timed out twice, so staging is unknown and stories of every priority build (#1436).")
                     return ""
-            return "" if code == 0 else failing_line(tail)
+            line = "" if code == 0 else failing_line(tail)
+            print(f"Base validation {'failed' if line else 'passed'} in {int(time.monotonic() - began)}s" + (f": {line}" if line else ""))
+            return line
         finally:
             subprocess.run([*git, "worktree", "remove", "--force", str(wt)], capture_output=True, text=True)
             shutil.rmtree(wt, ignore_errors=True)
@@ -346,7 +352,7 @@ class Io:
         def check(cwd):  # raising here ends the loop before the failed round counts toward a fix round or a larger model (#1480)
             passed, tail = agent_loop.validate(cwd)
             if not passed:
-                self.blame(tail)
+                self.blame(tail, n)
             return passed, tail
 
         def gate(cwd):  # the landing's weakened-test check against the merge base, since the branch is not rebased yet (#1551)
@@ -357,11 +363,11 @@ class Io:
 
         return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, check=check, review_mode=review, repo=self.repo.name, gate=gate)
 
-    def blame(self, tail: str) -> None:
+    def blame(self, tail: str, n: int = 0) -> None:
         """Raise when a failed validation is not the story's own: it calls a command that is gone (#1480), or the base, validated now, fails with the same failing line (#1481)."""
         stop_if_gone(tail)
         line = failing_line(tail)
-        if self.base_failure(fresh=True) == line:
+        if self.base_failure(fresh=True, story=n) == line:
             raise BaseFails(line)
 
     def policy_stop(self, n: int, worktree: Path) -> dict | None:
@@ -449,7 +455,7 @@ class Io:
                 except OSError:
                     pass
             if word == "validate-failed" and text:
-                self.blame(agent_loop.gate_tail(text))
+                self.blame(agent_loop.gate_tail(text), n)
             if word in ("weakened-test", "rebase-conflict"):  # a retry meets the same refusal; every other result goes back to Ready (#1539)
                 self.saved.add(n)
                 gate = [line for line in text.splitlines() if word == "weakened-test" and line.startswith("Refused:")]

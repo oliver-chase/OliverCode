@@ -192,6 +192,37 @@ class TestExitOne(unittest.TestCase):
         self.assertNotIn("usage_limit", out)
 
 
+class TestStoryLines(unittest.TestCase):
+    """#1552: with several stories building at once, each round and review line says when it was written and which story it is."""
+
+    def setUp(self):
+        self.repo = temp_dir(self)
+        scratch_repo(self.repo, branch="main")
+        (self.repo / "scripts").mkdir(exist_ok=True)
+        (self.repo / "scripts" / "validate.sh").write_text("exit 0\n")
+        patcher = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def said(self, session):
+        """Every line of a build that fails validation once, passes and is read, with one reader attempt that says nothing."""
+        lines, checks = [], iter([(False, "bad"), (True, "")])
+        run = Scripted(reply("built\nin two lines"), reply("fixed"), reply(""), reply("PASS"))
+        agent_loop.run_loop("do it", self.repo, session, run=run, check=lambda cwd: next(checks), say=lines.append)
+        return "\n".join(lines).splitlines()
+
+    def test_every_line_of_a_round_or_a_review_starts_with_the_time_and_its_story(self):
+        for n in (7, 8):
+            lines = self.said(f"story-{n}")
+            for line in lines:
+                self.assertRegex(line, rf"^\d\d:\d\d:\d\d #{n} ")
+            self.assertEqual(["Round 1: built", "in two lines", "Round 1: validation failed.", "Round 2: fixed",
+                              "Review: no verdict on attempt 1. The reader replied with nothing.", "Review: pass."], [line.split(" ", 2)[2] for line in lines])
+
+    def test_a_session_that_is_no_storys_speaks_with_no_prefix(self):
+        self.assertEqual("Round 1: built", self.said("bug-intake")[0])
+
+
 class TestRunLog(unittest.TestCase):
     """#878, #909, #976: a run-log line holds the CLI's usage, cost and stop reason and the start size, which is the first call's context and never the session's total."""
 

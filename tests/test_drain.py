@@ -986,14 +986,30 @@ class TestRealIo(unittest.TestCase):
             self.assertNotIn("-base-", git(self.repo, "worktree", "list").stdout)
         self.assertEqual([root / "_worktrees"] * 2, seen)
 
-    def base(self, validate, folder=None, recorded=False):
+    def base(self, validate, folder=None, recorded=False, **kw):
         """The base check's result with validation replaced by `validate` and a recorded pass for the tree when `recorded`."""
         with mock.patch.object(cmd_drain, "placement_config", return_value=mock.Mock(worktrees=folder or temp_dir(self) / "_worktrees")), \
                 mock.patch.object(cmd_drain.cmd_land, "prepare_worktree"), \
                 mock.patch.object(cmd_drain.agent_loop, "validation_command", return_value=["true"]), \
                 mock.patch.object(cmd_drain.validated, "is_validated", return_value=recorded), \
                 mock.patch.object(cmd_drain.agent_loop, "validate_code", validate):
-            return self.io.base_failure()
+            return self.io.base_failure(**kw)
+
+    def test_the_log_says_when_the_base_check_starts_and_how_it_ended(self):
+        """#1552: a line before the validation runs and one with its seconds after it, or one line for a recorded pass."""
+        git(self.repo, "remote", "add", "origin", str(self.repo))
+        start = "Validating the base, origin/main, before any new builder starts."
+        for code, ended in ((0, "Base validation passed in 94s"), (1, "Base validation failed in 94s: FAIL: gate")):
+            with mock.patch.object(cmd_drain.time, "monotonic", side_effect=[100.0, 194.4]), mock.patch("builtins.print") as out:
+                def validate(wt):
+                    print("(validating)")
+                    return code, "FAIL: gate"
+                self.base(validate)
+            self.assertEqual([start, "(validating)", ended], [c.args[0] for c in out.call_args_list])
+        _, said = quiet(self.base, lambda wt: self.fail("validated again"), recorded=True)
+        self.assertEqual("Base validation: the recorded pass for origin/main's tree was used.\n", said)
+        _, said = quiet(self.base, lambda wt: (0, "ok"), fresh=True, story=7)
+        self.assertIn("Validating the base, origin/main, to compare it with #7's failed validation.\n", said)
 
     def test_a_tree_with_a_recorded_pass_is_not_validated_again(self):
         """#1436: land's recorded pass for origin's tree answers the base check, and a tree with none is validated once."""
@@ -1609,7 +1625,7 @@ class NotTheStorysFailure(unittest.TestCase):
         reply = {"code": 0, "text": "done", "tokens": 1, "session_id": ""}
         with mock.patch.object(cmd_drain.agent_loop.model, "run_cli", lambda *a, **k: models.append(k["model"]) or reply), \
                 mock.patch.object(cmd_drain.agent_loop, "validate", lambda cwd: (False, f"gate {next(gates)}\n{BROKEN}\n")), \
-                mock.patch.object(self.io, "base_failure", lambda fresh=False: calls.append(fresh) or base):
+                mock.patch.object(self.io, "base_failure", lambda fresh=False, story=0: calls.append(fresh) or base):
             try:
                 out, _ = quiet(self.io.build, issue(5, "Size: S"), self.repo, "")
             except cmd_drain.BaseFails as exc:

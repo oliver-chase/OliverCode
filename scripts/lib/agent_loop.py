@@ -294,6 +294,13 @@ def verdict_line(text: str, answers: str) -> tuple[str, str]:
     return "", ""
 
 
+def story_say(say, session: str):
+    """`say` with each line of a story's message starting `HH:MM:SS #N`, so builds side by side stay apart in one log (#1552). A session that is no story's, such as bug intake's, is said as it is."""
+    if not (story := re.fullmatch(r"story-(\d+)", session)):
+        return say
+    return lambda text: say("\n".join(f"{time.strftime('%H:%M:%S')} #{story[1]} {line}" for line in text.splitlines()))
+
+
 def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=print, model_name: str = READER,
            max_turns: int = READER_TURNS, attempts: int = 2, brief: str = REVIEW_BRIEF) -> dict:
     """One fresh headless reader on the diff, the story and the test output (#891). Only a PASS verdict that the reply never takes back passes (#1015, #1477).
@@ -302,13 +309,13 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     `brief` swaps the question: bug intake asks about a failure, not a diff (#1371).
     No reader starts when the run log's last verdict for this story on a diff of the same hash is a PASS, and the log records the reuse (#1549).
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
-    run = run or model.run_cli
+    run, tell = run or model.run_cli, story_say(say, session)
     full = branch_diff(cwd, cut=False) if "{diff}" in brief else ""
     # the uncut diff is hashed, so a change past the cut is read again, with the repo, since two repos reuse a story number (#1481)
     key = hashlib.sha256(f"{STORY_SLUG.get(session, '')}\n{full}".encode()).hexdigest() if full else ""
     if key and passed_before(session, key):
         log_review(session, "pass", "", diff=key, reused=True)
-        say("Review: pass, reused from an earlier read of the same diff.")
+        tell("Review: pass, reused from an earlier read of the same diff.")
         return {"verdict": "pass", "text": "PASS"}
     diff = cut_diff(full)
     prompt = brief.format(task=task, diff=diff, tail=tail)
@@ -325,13 +332,13 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
                 verdict = "pass" if verdict_line(text, "pass")[0] and not TAKEN_BACK.search(text) else "findings"
                 log_round(f"{session}-review", attempt, model_name, reply)
                 log_review(session, verdict, text, **({"diff": key} if key else {}))
-                say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
+                tell(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
                 return {"verdict": verdict, "text": text}
             failure = exit_reason(reply, attempt, unit="attempt") if reply.get("code", 0) != 0 else "The reader replied with nothing."
         if reply.get("stop") == "max_turns":
             turns *= 2
         log_round(f"{session}-review", attempt, model_name, reply, reader_failed=True)
-        say(f"Review: no verdict on attempt {attempt}. {failure}")
+        tell(f"Review: no verdict on attempt {attempt}. {failure}")
     log_review(session, "none", failure)
     return {"verdict": "none", "text": failure}
 
@@ -510,7 +517,7 @@ def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, mode
 
 
 def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", review_mode="full", repo="", gate=None) -> dict:
-    run, check = run or model.run_cli, check or (validate)
+    run, check, tell = run or model.run_cli, check or (validate), story_say(say, session)
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
@@ -536,7 +543,7 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
                 if resumed or not exc.session_id:
                     return {"done": False, "reason": f"{exc} It was resumed once and ran past the limit again." if resumed else str(exc),
                             "rounds": n, "tokens": tokens, "summary": summary}
-                say(f"Round {n}: {exc} Resuming the same session once.")
+                tell(f"Round {n}: {exc} Resuming the same session once.")
                 claude_session, prompt, resumed = exc.session_id, CONTINUE.format(why="it ran past the time limit"), True
                 continue
             except (model.ModelError, OSError, subprocess.SubprocessError) as exc:
@@ -546,12 +553,12 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
             claude_session = reply["session_id"] or claude_session
             log_round(session, n, model_name, reply, start_size(reply["session_id"]) if n == 1 and not resumed else None, why=why)
             summary = reply["text"]
-            say(f"Round {n}: {summary.strip()[:300]}")
+            tell(f"Round {n}: {summary.strip()[:300]}")
             if reply["code"] != 0 and USAGE_LIMIT.search(f"{reply['text']}\n{reply.get('stderr') or ''}"):  # a restart would hit the same limit (#1299)
                 return {"done": False, "usage_limit": True, "reason": f"{USAGE_LIMIT_REASON}: {exit_reason(reply, n, resumed)}",
                         "rounds": n, "tokens": tokens, "summary": summary}
             if reply["code"] != 0 and reply.get("stop") in RESUMABLE and not resumed and claude_session:
-                say(f"Round {n}: claude stopped on {reply['stop']}. Resuming the same session once.")
+                tell(f"Round {n}: claude stopped on {reply['stop']}. Resuming the same session once.")
                 prompt, resumed = CONTINUE.format(why=f"the CLI stopped on {reply['stop']}"), True
                 continue
             break
@@ -592,12 +599,12 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
                             "reason": f"Stuck: the fresh reader returned findings a second time, so nothing is pushed: {verdict['text'][:300]}",
                             "rounds": n, "tokens": tokens, "summary": summary}
                 first_finding, last = verdict["text"], None  # validation passed in between, so the next failure repeats nothing
-                say(f"Round {n}: the reader found a problem. A fix session, then the reader reads again.")
+                tell(f"Round {n}: the reader found a problem. A fix session, then the reader reads again.")
                 prompt, claude_session = review_brief(task, cwd, verdict["text"]), ""
                 continue
             return {"done": True, "reason": "The repo's validation passes.", "rounds": n, "tokens": tokens, "summary": summary}
         failures += 1
-        say(f"Round {n}: validation failed.")
+        tell(f"Round {n}: validation failed.")
         failure = tail.key if isinstance(tail, Tail) else failure_key(tail)  # a plain string, such as a timeout's, is its own whole output
         if failure == last:
             repeated = sorted(line for line in failure if "FAIL" in line or "BLOCKED" in line) or sorted(failure)
