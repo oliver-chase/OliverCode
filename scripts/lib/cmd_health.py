@@ -162,7 +162,7 @@ def command_health() -> int:
         t.warn(f"{r.name} has no permission policy, so no command or path is limited. Run `olivercode policy init {r}` for the default")
     if not gaps:
         t.ok("every governed repo has a permission policy")
-    within, text = context_budget.report(OC_ROOT)
+    within, text = context_budget.report()  # a session in ~/Desktop/Claude: no repo CLAUDE.md is loaded (#1495)
     t.ok(text.splitlines()[0]) if within else t.fail(text.splitlines()[0])
 
     # 5. Topology. The gates cover what goes INTO a commit; these cover whether the

@@ -108,6 +108,16 @@ class TestContextRatchet(unittest.TestCase):
         (self.claude / "CLAUDE.md").write_text("word " * 100)
         self.assertTrue(context_budget.report()[0])
 
+    def test_an_installed_checkout_claude_md_is_not_counted_twice(self):
+        # ~/.claude/CLAUDE.md links to the staging checkout; the installed checkout holds its own copy (#1495).
+        staging, installed = temp_dir(self), temp_dir(self)
+        (staging / "CLAUDE.md").write_text("word " * 100)
+        (installed / "CLAUDE.md").write_text("word " * 50)
+        (self.claude / "CLAUDE.md").unlink()
+        (self.claude / "CLAUDE.md").symlink_to(staging / "CLAUDE.md")
+        self.assertEqual(100, context_budget.measure()[0])
+        self.assertTrue(context_budget.report()[0])
+
     def test_a_lower_reading_lowers_the_landed_total(self):
         context_budget.report()
         (self.claude / "CLAUDE.md").write_text("word " * 80)

@@ -1,7 +1,7 @@
 """What a session loads at start, in words, against the total the last passing run recorded.
 
-The always-loaded files are ~/.claude/CLAUDE.md and VOICE.md (resolved through their links), the
-CLAUDE.md of the repo the session opens in, and the description line of every installed skill in
+The always-loaded files are ~/.claude/CLAUDE.md and VOICE.md (resolved through their links) and the
+description line of every installed skill in
 ~/.claude/skills/*/SKILL.md, because the skill list reaches every session. The budget is a ratchet: the first run records
 the total in ~/.olivercode/context-words.json (OLIVERCODE_HOME overrides the folder), a lower total lowers the record, and a
 higher one fails. Growth stops and a trim never has to be forced. The owner raises the record by editing that file.
@@ -16,13 +16,11 @@ import tempfile
 from pathlib import Path
 
 from lib import failure_log
-from lib.local_config import OC_ROOT, claude_dir
+from lib.local_config import claude_dir
 
 
-def loaded_files(repo: Path | None = None) -> list[Path]:
+def loaded_files() -> list[Path]:
     files = [claude_dir() / "CLAUDE.md", claude_dir() / "VOICE.md"]
-    if repo and (repo / "CLAUDE.md").is_file():
-        files.append(repo / "CLAUDE.md")
     seen, out = set(), []
     for f in files:
         if f.is_file() and f.resolve() not in seen:
@@ -75,16 +73,16 @@ def _record(total: int) -> None:
         pass
 
 
-def measure(repo: Path | None = None) -> tuple[int, list[tuple[int, Path]]]:
-    sizes = [(len(f.read_text(encoding="utf-8", errors="ignore").split()), f) for f in loaded_files(repo)]
+def measure() -> tuple[int, list[tuple[int, Path]]]:
+    sizes = [(len(f.read_text(encoding="utf-8", errors="ignore").split()), f) for f in loaded_files()]
     sizes += [(len(skill_description(f).split()), f) for f in skill_files()]
     sizes.sort(key=lambda row: row[0], reverse=True)
     return sum(n for n, _ in sizes), sizes
 
 
-def report(repo: Path | None = None) -> tuple[bool, str]:
+def report() -> tuple[bool, str]:
     """(within budget, the report text). A first or lower total becomes the new record."""
-    total, sizes = measure(repo)
+    total, sizes = measure()
     limit = budget()
     lines = [f"{n:>6} words  {f}" for n, f in sizes[:8]]
     if limit is not None and total > limit:
