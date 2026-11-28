@@ -22,6 +22,7 @@ import re
 import subprocess
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 try:
@@ -159,13 +160,23 @@ REPLAY_LOCK = "gh-replay.lock"
 OWNER_AFTER = 3
 
 
+@contextmanager
+def _locked_queue():
+    """Open the queue file for append and read under an exclusive lock, and release the lock on exit."""
+    home().mkdir(parents=True, exist_ok=True)
+    with open(home() / QUEUE, "a+", encoding="utf-8") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield fh
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def enqueue(argv: list[str], cwd: str = "") -> int:
     """Queue one gh command to run at the GraphQL reset. Returns the queue length."""
     if not argv or os.path.basename(argv[0]) != "gh":
         raise ValueError("only gh commands are queued")
-    home().mkdir(parents=True, exist_ok=True)
-    with open(home() / QUEUE, "a+", encoding="utf-8") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
+    with _locked_queue() as fh:
         fh.write(json.dumps({"id": uuid.uuid4().hex, "argv": argv, "cwd": cwd or os.getcwd(), "queued": time.time()}) + "\n")
         fh.seek(0)
         return len(fh.read().splitlines())
@@ -196,22 +207,17 @@ def _read() -> list[dict]:
 def _settle(row_id: str, attempts: int | None = None) -> None:
     """Under the queue's lock, drop the row with this id, or record its failed attempts when `attempts` is given. The file is read
     again here, so a command queued while the replay runs is kept."""
-    home().mkdir(parents=True, exist_ok=True)
-    with open(home() / QUEUE, "a+", encoding="utf-8") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        try:
-            fh.seek(0)
-            rows = _parse(fh.read())
-            if attempts is None:
-                rows = [r for r in rows if r["id"] != row_id]
-            else:
-                rows = [{**r, "attempts": attempts} if r["id"] == row_id else r for r in rows]
-            fh.seek(0)
-            fh.truncate()
-            fh.write("".join(json.dumps(r) + "\n" for r in rows))
-            fh.flush()
-        finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
+    with _locked_queue() as fh:
+        fh.seek(0)
+        rows = _parse(fh.read())
+        if attempts is None:
+            rows = [r for r in rows if r["id"] != row_id]
+        else:
+            rows = [{**r, "attempts": attempts} if r["id"] == row_id else r for r in rows]
+        fh.seek(0)
+        fh.truncate()
+        fh.write("".join(json.dumps(r) + "\n" for r in rows))
+        fh.flush()
 
 
 def _to_owner(argv: list[str], err: str) -> bool:
