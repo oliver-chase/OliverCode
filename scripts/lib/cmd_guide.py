@@ -132,9 +132,10 @@ def explain(oc_root: Path, name: str) -> list[str]:
 def status_steps(oc_root: Path) -> list[str]:
     """How to follow a run from a terminal, at no token cost (#1059, #1517). Install's closing lines, the adoption skill and `olivercode guide status` all print these."""
     return [
-        "1. In the Terminal app, run `olivercode watch REPO`. It prints a line as each story is claimed, builds, validates, lands or stops, with its time and cost.",
+        "1. In the Terminal app, run `olivercode watch REPO`. It prints a line as each story is claimed, builds, validates, lands or stops, with its time, tokens and API-price equivalent.",
         "2. Run `olivercode status`. It shows the open count, the landing pace and what is next.",
         f"3. From any folder, run `olivercode status --root {oc_root}` for this OliverCode checkout.",
+        "Builds run on the signed-in Claude subscription, and watch and status show tokens with an API-price equivalent that is not billed.",
         "Watch and status cost no model turn, so run them as often as you like.",
     ]
 

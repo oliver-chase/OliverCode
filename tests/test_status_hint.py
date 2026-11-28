@@ -25,7 +25,7 @@ Board: owner/repo: 3 open stories.
 """
 
 
-FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time and cost, at no model cost.\n"
+FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time, tokens and API-price equivalent, at no model cost.\n"
           "`olivercode status` shows the open count, pace and what is next, at no model cost.")
 
 

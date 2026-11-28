@@ -43,7 +43,7 @@ BLOCK_TOKENS = 300_000  # a thread past this ignored the note above, so it takes
 TAIL_BYTES = 1_000_000  # the last model call's usage is near the end of the transcript
 STOPS_PER_PROMPT = 3  # each new story costs one title read, so the rest wait for the next prompt and the hook stays inside its timeout
 CHARS = 1200 # the board line and the open list, about three hundred tokens, is what a status answer needs
-FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time and cost, at no model cost.\n"  # how the owner follows a run (#1518)
+FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time, tokens and API-price equivalent, at no model cost.\n"  # how the owner follows a run (#1518)
           "`olivercode status` shows the open count, pace and what is next, at no model cost.")
 HANDOFF_CALLS = ("run `olivercode handoff write PROJECT FILE` and make the calls it prints, which start the next thread in the desktop app. "
                  "Start no other session. Tell the owner in one line.")

@@ -136,6 +136,12 @@ class TestStatusSteps(unittest.TestCase):
         self.assertEqual(0, watch)
         self.assertIn("Watch and status cost no model turn", steps[-1])
 
+    def test_install_says_once_that_no_figure_is_billed_and_watch_names_what_it_prints(self):
+        closing = cmd_install.closing_lines(REPO_ROOT)
+        billing = "Builds run on the signed-in Claude subscription, and watch and status show tokens with an API-price equivalent that is not billed."
+        self.assertEqual(1, closing.count(billing))
+        self.assertIn("with its time, tokens and API-price equivalent.", cmd_guide.status_steps(REPO_ROOT)[0])
+
     def test_install_closes_with_the_same_steps_and_the_adoption_pointer(self):
         closing = cmd_install.closing_lines(REPO_ROOT)
         for step in cmd_guide.status_steps(REPO_ROOT):
