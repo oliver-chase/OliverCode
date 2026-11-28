@@ -32,6 +32,7 @@ def quiet_guards(**replace):
     """Every guard says nothing unless a test gives it an opinion."""
     patches = {
         "commit_guard.reason": "",
+        "memory_guard.reason": "",
         "placement_guard.reason": "",
         "gh_guard.refusal": "",
         "policy_guard.decide": (None, ""),
@@ -50,28 +51,21 @@ BASH = {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}, "cwd"
 
 
 class TestDispatch(unittest.TestCase):
-    def test_a_deny_from_one_guard_is_printed_with_its_reason(self):
-        with quiet_guards(placement_guard__reason="Repos live under /x."):
-            out = run_main(BASH)
-        self.assertEqual(("deny", "Repos live under /x."), (out["permissionDecision"], out["permissionDecisionReason"]))
-
-    def test_a_memory_rule_is_refused_with_its_reason(self):
-        with quiet_guards(), mock.patch.object(pretool.memory_guard, "reason", return_value="Rules belong in a skill."):
-            out = run_main({**BASH, "tool_input": {"command": "bash scripts/validate.sh"}})
-        self.assertEqual(("deny", "Rules belong in a skill."), (out["permissionDecision"], out["permissionDecisionReason"]))
-
-    def test_a_deny_wins_over_an_ask(self):
+    def test_each_guard_opinion_is_printed_as_its_one_decision(self):
         ask = policy.Decision("ask", "push", "A push needs the owner.")
-        with quiet_guards(policy_guard__decide=(ask, "repo"), commit_guard__reason="Commit without --no-verify."), \
-                mock.patch.object(pretool.policy, "log_block"):
-            out = run_main(BASH)
-        self.assertEqual("deny", out["permissionDecision"])
-
-    def test_an_ask_alone_is_printed_as_an_ask(self):
-        ask = policy.Decision("ask", "push", "A push needs the owner.")
-        with quiet_guards(policy_guard__decide=(ask, "repo")), mock.patch.object(pretool.policy, "log_block"):
-            out = run_main(BASH)
-        self.assertEqual(("ask", "A push needs the owner."), (out["permissionDecision"], out["permissionDecisionReason"]))
+        memory = {**BASH, "tool_input": {"command": "bash scripts/validate.sh"}}
+        rows = (  # (guard opinions, payload, printed decision, printed reason or None when not asserted)
+            ({"placement_guard__reason": "Repos live under /x."}, BASH, "deny", "Repos live under /x."),
+            ({"memory_guard__reason": "Rules belong in a skill."}, memory, "deny", "Rules belong in a skill."),
+            ({"policy_guard__decide": (ask, "repo"), "commit_guard__reason": "Commit without --no-verify."}, BASH, "deny", None),
+            ({"policy_guard__decide": (ask, "repo")}, BASH, "ask", "A push needs the owner."),
+        )
+        for i, (opinions, payload, decision, reason) in enumerate(rows):
+            with self.subTest(row=i), quiet_guards(**opinions), mock.patch.object(pretool.policy, "log_block"):
+                out = run_main(payload)
+                self.assertEqual(decision, out["permissionDecision"])
+                if reason is not None:
+                    self.assertEqual(reason, out["permissionDecisionReason"])
 
     def test_a_broken_guard_does_not_hide_the_others_or_block(self):
         with quiet_guards(commit_guard__reason=RuntimeError("bug"), placement_guard__reason="Repos live under /x."):

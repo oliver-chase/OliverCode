@@ -34,11 +34,13 @@ class TestMemoryGuard(unittest.TestCase):
         self.assertLessEqual(len(why), 200)
         self.assertIn("docs/", why)
 
-    def test_an_owner_fact_in_local_memory_passes(self):
-        self.assertEqual("", guard.reason(write(MEM, "The owner lives in Boston and reads on a phone.")))
-
-    def test_a_write_elsewhere_is_ignored(self):
-        self.assertEqual("", guard.reason(write("/repo/docs/notes.md", "Always do X.")))
+    def test_a_memory_write_that_is_no_rule_passes(self):
+        for path, content in (
+            (MEM, "The owner lives in Boston and reads on a phone."),  # an owner fact in local memory
+            ("/repo/docs/notes.md", "Always do X."),  # a write outside memory
+        ):
+            with self.subTest(path=path):
+                self.assertEqual("", guard.reason(write(path, content)))
 
     def test_a_memory_index_pointer_line_passes(self):
         pointer = write("/repo/.claude-optimization/memory/MEMORY.md", "- [User](USER.md) - owner preferences")

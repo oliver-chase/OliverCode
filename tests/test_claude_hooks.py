@@ -74,6 +74,8 @@ class TestCommitGuard(RepoCase):
         self.assertIn("core.hooksPath is unset", guard.reason('git commit -m "x"', self.repo))
         self.assertIn("core.hooksPath is unset", guard.reason(f'cd "{self.repo}" && git commit -m x', self.tmp))
         self.assertIn("core.hooksPath is unset", guard.reason(f'git -C "{self.repo}" commit -m x', self.tmp))
+        for cmd in ('git commit -am "msg; with semicolon"', 'git commit -m "a && b"'):  # separators still reach the check
+            self.assertIn("core.hooksPath is unset", guard.reason(cmd, self.repo), cmd)
 
     def test_allows_a_commit_when_the_gates_run(self):
         self.gates(point_git_at_them=True)
@@ -138,11 +140,6 @@ class TestCommitGuard(RepoCase):
                     f'git --git-dir="{self.repo}/.git" commit -n -m x', f'git --work-tree="{self.repo}" commit -n -m x',
                     f'GIT_DIR="{self.repo}/.git" git commit -n -m x', f'export GIT_DIR="{self.repo}/.git"; git commit -n -m x'):
             self.assertIn("--no-verify", guard.reason(cmd, self.tmp), cmd)  # the guard follows the command to the repo
-
-    def test_a_message_with_separators_still_reaches_the_unset_hooks_check(self):
-        self.gates(point_git_at_them=False)
-        for cmd in ('git commit -am "msg; with semicolon"', 'git commit -m "a && b"'):
-            self.assertIn("core.hooksPath is unset", guard.reason(cmd, self.repo), cmd)
 
     def test_git_pointed_at_another_hooks_folder_does_not_run_the_repos_gates(self):
         self.gates(point_git_at_them=False)
