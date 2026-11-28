@@ -50,6 +50,11 @@
       "mode": "strict"
     },
     {
+      "source": "core/templates/project/pre-push",
+      "target": ".githooks/pre-push",
+      "mode": "strict"
+    },
+    {
       "source": "core/templates/project/.env.example",
       "target": ".env.example",
       "mode": "presence"

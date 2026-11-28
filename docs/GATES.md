@@ -78,7 +78,7 @@ A repo opts out only when its owner commits a file named `commit-msg.optout` in 
 
 ## Pre-push gates
 
-Every repo that `sync-hooks` manages gets one pre-push hook, the same for every variant.
+Every repo that `sync-hooks` or `olivercode bootstrap` manages gets one pre-push hook, the same for every variant. Bootstrap stamps it as a strict file, so a public repo set up from the manifest has the same push gates as a private one.
 
 | Gate | What it blocks |
 |------|---------------|

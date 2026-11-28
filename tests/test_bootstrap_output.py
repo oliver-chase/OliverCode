@@ -93,6 +93,15 @@ class BootstrapOutput(unittest.TestCase):
         for rel, text in mine.items():
             self.assertEqual(text, (self.repo / rel).read_text(), rel)
 
+    def test_the_bootstrapped_repo_gets_the_pre_push_gate(self):
+        manifest = json.loads((REPO_ROOT / "shared" / "project-bootstrap-manifest.json").read_text())
+        targets = [e["target"] for e in manifest["templatedFiles"] if e["target"] == ".githooks/pre-push"]
+        self.assertEqual([".githooks/pre-push"], targets)
+        hook = self.repo / ".githooks" / "pre-push"
+        template = REPO_ROOT / "core" / "templates" / "project" / "pre-push"
+        self.assertEqual(template.read_bytes(), hook.read_bytes())
+        self.assertTrue(os.access(hook, os.X_OK))
+
 
 class ShippedWorkflows(unittest.TestCase):
     def test_every_workflow_triggers_on_workflow_dispatch_only(self):
