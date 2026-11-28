@@ -321,19 +321,46 @@ def _install_automode(settings_path: Path) -> bool:
     return False
 
 
+def _prior_checkout(oc_root: Path, claude_dir: Path) -> Path | None:
+    """The other checkout ~/.claude/CLAUDE.md links to, or None when the link is missing, names this checkout or names a folder that is gone."""
+    link = claude_dir / "CLAUDE.md"
+    if not link.is_symlink():
+        return None
+    prior = Path(os.path.realpath(link)).parent
+    return None if prior == oc_root.resolve() or not prior.is_dir() else prior
+
+
 def _inherit_local_config(oc_root: Path, claude_dir: Path) -> None:
     """A checkout with no olivercode.local.json copies the one from the checkout ~/.claude/CLAUDE.md links to, when that is another checkout (#1282).
     Runs before the links move and before anything reads the config. An existing file is never overwritten."""
     dest = local_path()
-    link = claude_dir / "CLAUDE.md"
-    if str(dest) == os.devnull or dest.is_file() or not link.is_symlink():
+    prior = _prior_checkout(oc_root, claude_dir)
+    if str(dest) == os.devnull or dest.is_file() or prior is None:
         return
-    prior = Path(os.path.realpath(link)).parent
     source = prior / "olivercode.local.json"
-    if prior == oc_root.resolve() or not source.is_file():
+    if not source.is_file():
         return
     shutil.copyfile(source, dest)
     print(f"  [COPIED] olivercode.local.json from {prior}")
+
+
+MEMORY_FOLDERS = (".claude-optimization/memory", "state")
+
+
+def _inherit_memory(oc_root: Path, claude_dir: Path) -> None:
+    """A checkout with no memory or state folder links to the one in the checkout ~/.claude/CLAUDE.md links to (#1554), since sessions
+    read $OC/.claude-optimization/memory and $OC/state. One copy is kept: nothing is copied, and a folder the checkout already holds stays
+    as it is. A first install has no prior checkout and links nothing."""
+    prior = _prior_checkout(oc_root, claude_dir)
+    if prior is None:
+        return
+    for name in MEMORY_FOLDERS:
+        source, dest = prior / name, oc_root / name
+        if not source.is_dir() or dest.exists() or dest.is_symlink():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.symlink_to(Path(os.path.realpath(source)))
+        print(f"  [LINKED] {name} to {source}")
 
 
 def _checkout_of(root: Path, name: str) -> Path | None:
@@ -478,6 +505,7 @@ def command_install(oc_root: Path) -> int:
     claude_dir = _claude_dir()
     skills_dir = claude_dir / "skills"
     _inherit_local_config(oc_root, claude_dir)
+    _inherit_memory(oc_root, claude_dir)
     first_install = _read_record(claude_dir) is None
     print("OliverCode install — activating this checkout in ~/.claude")
     print("=" * 40)

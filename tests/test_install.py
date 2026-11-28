@@ -228,6 +228,50 @@ class InstallAsksNothing(unittest.TestCase):
         self.assertFalse(self.config.is_file())
 
 
+class MemoryFollowsCheckout(unittest.TestCase):
+    """Activating a checkout links its memory and state folders to the active checkout's, keeping one copy (#1554)."""
+
+    def setUp(self):
+        root = temp_dir(self)
+        self.claude = root / ".claude"
+        self.claude.mkdir()
+        self.prior = root / "main"
+        self.oc = root / "worktree"
+        self.prior.mkdir()
+        self.oc.mkdir()
+        (self.prior / "CLAUDE.md").write_text("prior rules\n")
+        (self.claude / "CLAUDE.md").symlink_to(self.prior / "CLAUDE.md")
+
+    def test_a_checkout_without_the_folders_links_to_the_active_ones_and_copies_nothing(self):
+        (self.prior / ".claude-optimization" / "memory").mkdir(parents=True)
+        (self.prior / ".claude-optimization" / "memory" / "MEMORY.md").write_text("owner facts\n")
+        (self.prior / "state").mkdir()
+        (self.prior / "state" / "current_state.md").write_text("handoff\n")
+        cmd_install._inherit_memory(self.oc, self.claude)
+        memory = self.oc / ".claude-optimization" / "memory"
+        self.assertTrue(memory.is_symlink())
+        self.assertTrue((self.oc / "state").is_symlink())
+        self.assertEqual("owner facts\n", (memory / "MEMORY.md").read_text())
+        self.assertEqual("handoff\n", (self.oc / "state" / "current_state.md").read_text())
+        self.assertEqual(os.path.realpath(self.prior / ".claude-optimization" / "memory"), os.path.realpath(memory))
+        self.assertEqual(["MEMORY.md"], os.listdir(self.prior / ".claude-optimization" / "memory"))
+
+    def test_a_checkout_with_its_own_memory_folder_keeps_it(self):
+        (self.prior / ".claude-optimization" / "memory").mkdir(parents=True)
+        (self.prior / ".claude-optimization" / "memory" / "MEMORY.md").write_text("theirs\n")
+        mine = self.oc / ".claude-optimization" / "memory"
+        mine.mkdir(parents=True)
+        (mine / "MEMORY.md").write_text("mine\n")
+        cmd_install._inherit_memory(self.oc, self.claude)
+        self.assertFalse(mine.is_symlink())
+        self.assertEqual("mine\n", (mine / "MEMORY.md").read_text())
+
+    def test_a_first_install_with_no_prior_checkout_links_nothing(self):
+        cmd_install._inherit_memory(self.oc, self.claude)
+        self.assertFalse((self.oc / ".claude-optimization" / "memory").exists())
+        self.assertFalse((self.oc / "state").exists())
+
+
 class CityShortcut(unittest.TestCase):
     """Install puts an OliverCode City shortcut on the Desktop once and uninstall removes it; `status page --open` shows the page (#1363)."""
 
