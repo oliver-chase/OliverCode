@@ -278,5 +278,88 @@ class LongThread(unittest.TestCase):
         self.assertEqual(0, hint.context_tokens(self.tmp / "absent.jsonl"))
 
 
+class HandedBack(unittest.TestCase):
+    """#1532: the owner's next prompt in an OliverCode chat names each story the drain handed back, once."""
+
+    def setUp(self):
+        self.tmp = temp_dir(self, resolve=True)
+        gh = self.tmp / "gh"  # answers the title read with the path it was asked for, so no test calls GitHub
+        gh.write_text('#!/bin/sh\necho "Title of $2"\n', encoding="utf-8")
+        gh.chmod(0o755)
+        env = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.tmp), "PATH": f"{self.tmp}{os.pathsep}{os.environ['PATH']}"})
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("OLIVERCODE_HEADLESS", None)  # restored with the patch
+        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 50}}}) + "\n", encoding="utf-8")
+
+    def hand_back(self, n):
+        return cmd_owner.add("drain", f"Story #{n} waits on you: its rounds changed nothing.", extra={"key": f"policy-stop:o/r#{n}", "story": n})
+
+    def run_hook(self, prompt="fix the parser", session="s1", cwd=REPO_ROOT):
+        script = str(REPO_ROOT / "scripts" / "hooks" / "status_hint.py")
+        data = {"prompt": prompt, "session_id": session, "cwd": str(cwd), "transcript_path": str(self.tmp / "t.jsonl")}
+        done = subprocess.run([sys.executable, script], input=json.dumps(data), capture_output=True, text=True)
+        self.assertEqual((0, ""), (done.returncode, done.stderr))
+        return json.loads(done.stdout) if done.stdout else {}
+
+    def added(self, **kw):
+        out = self.run_hook(**kw)
+        self.assertNotIn("decision", out)
+        return out.get("hookSpecificOutput", {}).get("additionalContext", "")
+
+    def line(self, n):
+        return f'Tell the owner the drain handed back story #{n} "Title of repos/o/r/issues/{n}". Stop reason: its rounds changed nothing.'
+
+    def test_a_new_item_adds_one_line_per_story_and_is_not_repeated(self):
+        self.hand_back(7)
+        self.hand_back(8)
+        cmd_owner.add("maintain", "a step that names no story")
+        self.assertEqual(f"{self.line(7)}\n{self.line(8)}", self.added())
+        self.assertEqual("", self.added())
+        self.assertEqual("", self.added(session="s2"))
+        cmd_owner.close(self.hand_back(9)["id"])
+        self.assertEqual("", self.added())
+
+    def test_a_headless_builder_and_a_message_the_owner_did_not_type_get_nothing(self):
+        self.hand_back(7)
+        self.assertEqual("", self.added(prompt="<task-notification>done</task-notification>"))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HEADLESS": "1"}):
+            self.assertEqual("", self.added())
+        self.assertEqual(self.line(7), self.added())
+
+    def test_only_an_olivercode_chat_gets_the_line_wherever_it_runs(self):
+        self.hand_back(7)
+        self.assertEqual("", self.added(cwd=self.tmp))
+        cmd_handoff.claim_thread("OliverCode", "s2")
+        self.assertEqual(self.line(7), self.added(session="s2", cwd=self.tmp))
+
+    def test_a_status_only_prompt_goes_through_to_carry_a_new_item_and_is_blocked_after(self):
+        (self.tmp / "status-digest.md").write_text(DIGEST, encoding="utf-8")
+        self.hand_back(7)
+        self.assertIn(self.line(7), self.added(prompt="what is building?"))
+        self.assertEqual("block", self.run_hook(prompt="what is building?")["decision"])
+
+    def test_a_blocked_long_thread_leaves_the_item_for_the_prompt_that_goes_through(self):
+        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 320_000}}}) + "\n", encoding="utf-8")
+        self.hand_back(7)
+        self.assertEqual("block", self.run_hook()["decision"])
+        self.assertIn(self.line(7), self.added(prompt="handoff"))
+
+    def test_a_status_only_prompt_past_300k_is_answered_from_the_digest_and_leaves_the_item(self):
+        (self.tmp / "status-digest.md").write_text(DIGEST, encoding="utf-8")
+        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 320_000}}}) + "\n", encoding="utf-8")
+        self.hand_back(7)
+        for _ in range(2):
+            out = self.run_hook(prompt="what is building?")
+            self.assertEqual("block", out["decision"])
+            self.assertIn("Board: owner/repo: 3 open stories.", out["reason"])
+        self.assertIn(self.line(7), self.added(prompt="handoff"))
+
+    def test_a_title_that_cannot_be_read_still_names_the_story(self):
+        (self.tmp / "gh").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        self.hand_back(7)
+        self.assertIn("story #7 (title not read). Stop reason:", self.added())
+
+
 if __name__ == "__main__":
     unittest.main()

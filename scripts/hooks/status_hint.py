@@ -16,6 +16,10 @@ A marker in the OliverCode home keeps it to once per session, and a headless bui
 A thread over 300,000 tokens takes no new work until it writes that handoff (#1519): until a PROJECT-handoff file in the session's folder is newer than
 the marker, the owner's prompt is blocked unless it names the handoff or starts with "ask:", and one that does goes through with a note that the turn
 writes the handoff. A headless builder is never blocked.
+
+It names each story the drain handed back (#1532): the owner's next prompt in an interactive OliverCode chat gets one line per open owner-queue item that
+names a story, with its number, title and stop reason. A marker in the OliverCode home keeps it to once per item, and a status-only prompt that would
+carry such a line goes through instead of being blocked. In a thread the 300,000-token block would stop, it is answered from the digest and the item stays unshown.
 """
 
 from __future__ import annotations
@@ -31,12 +35,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import failure_log  # noqa: E402
-from lib import cmd_status  # noqa: E402
+from lib import cmd_owner, cmd_status, gh_budget  # noqa: E402
 
 STALE_SECONDS = 3600  # a digest older than this is labeled with its age
 LONG_TOKENS = 250_000  # a thread past this re-reads more cached context per turn than the turn's work costs (#1319)
 BLOCK_TOKENS = 300_000  # a thread past this ignored the note above, so it takes only the handoff (#1519)
 TAIL_BYTES = 1_000_000  # the last model call's usage is near the end of the transcript
+STOPS_PER_PROMPT = 3  # each new story costs one title read, so the rest wait for the next prompt and the hook stays inside its timeout
 CHARS = 1200 # the board line and the open list, about three hundred tokens, is what a status answer needs
 FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time and cost, at no model cost.\n"  # how the owner follows a run (#1518)
           "`olivercode status` shows the open count, pace and what is next, at no model cost.")
@@ -211,6 +216,47 @@ def long_thread(data: dict) -> tuple[str, str]:
                 f"{HANDOFF_CALLS} The owner never has to ask for a handoff.")
 
 
+def handed_back(data: dict) -> list[tuple[Path, dict]]:
+    """(marker, item) for each open owner-queue story no chat has shown, or [] unless the owner typed the prompt in an interactive OliverCode chat (#1532)."""
+    session = interactive_session(data)
+    if not session or not from_owner(str(data.get("prompt") or "")):
+        return []
+    marked = ((failure_log.home() / f"owner-shown-{item['id']}", item) for item in cmd_owner.open_items() if item.get("story"))
+    new = [(marker, item) for marker, item in marked if not marker.exists()]
+    if not new or in_olivercode(str(data.get("cwd") or "")):
+        return new[:STOPS_PER_PROMPT]
+    from lib import cmd_handoff  # a numbered OliverCode chat counts wherever it runs
+    numbered = cmd_handoff.stored(cmd_handoff.THREAD_SESSIONS).get("sessions", {}).get(session, {})
+    return new[:STOPS_PER_PROMPT] if "OliverCode" in numbered else []
+
+
+def story_title(item: dict) -> str:
+    """The story's title, read over REST from the repo the item's key names, or '' when it cannot be read."""
+    slug = re.search(r":([\w.-]+/[\w.-]+)#\d+$", str(item.get("key") or ""))
+    if not slug or gh_budget.refusal("rest"):
+        return ""
+    try:
+        done = subprocess.run(["gh", "api", f"repos/{slug[1]}/issues/{item['story']}", "--jq", ".title"], capture_output=True, text=True, timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def stop_note(data: dict) -> str:
+    """One line per newly handed-back story, each marked shown, or ''."""
+    found = [(marker, item, story_title(item)) for marker, item in handed_back(data)]
+    lines = []
+    for marker, item, title in found:  # marked after every title read, so a hook cut off during a read marks nothing
+        try:
+            marker.touch(exist_ok=False)
+        except FileExistsError:  # another chat's prompt showed it first
+            continue
+        reason = str(item.get("step") or "").removeprefix(f"Story #{item['story']} waits on you: ")
+        named = f'"{cmd_status._text(title)}"' if title else "(title not read)"
+        lines.append(f"Tell the owner the drain handed back story #{item['story']} {named}. Stop reason: {cmd_status._text(reason, 300)}")
+    return "\n".join(lines)
+
+
 def block_reason(path: Path) -> str:
     """The reason shown to the owner when a status-only prompt is blocked: the digest's lines and the two commands that follow a run, or a note that none is written yet."""
     try:
@@ -229,16 +275,20 @@ def main() -> int:
         return 0
     prompt = str(data.get("prompt") or "")
     # A status-only prompt over a stale digest goes through to the session instead of being answered from old figures (#1329).
-    if is_status_only(prompt) and not age_note(cmd_status.digest_path()):
+    # So does one with a handed-back story to name, since a block adds no line to the chat, unless the long thread would block it anyway (#1532).
+    status_only = is_status_only(prompt) and not age_note(cmd_status.digest_path())
+    carries = status_only and bool(handed_back(data))
+    reason, long_note = long_thread(data) if carries or not status_only else ("", "")
+    if status_only and (reason or not carries):
         # The block ends the turn, so the context beside it is never read; it keeps the #991 output shape for a status-only prompt.
         print(json.dumps({"decision": "block", "reason": block_reason(cmd_status.digest_path()),
                           "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context(prompt)}}))
         return 0
-    reason, long_note = long_thread(data)
     if reason:
         print(json.dumps({"decision": "block", "reason": reason}))
         return 0
-    text = "\n".join(part for part in (context(prompt), new_thread_note(data), long_note) if part)
+    # stop_note comes last: it sees a chat new_thread_note just numbered, and marks nothing shown if an earlier part fails.
+    text = "\n".join(part for part in (context(prompt), new_thread_note(data), long_note, stop_note(data)) if part)
     if text:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}))
     return 0
