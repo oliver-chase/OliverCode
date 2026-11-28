@@ -7,7 +7,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from lib.cli import reject_extra as _reject_extra
+from lib.cli import require_dir
 from lib import repo_gates, repo_state
 from lib.local_config import OC_ROOT, claude_dir as _claude_dir
 
@@ -310,8 +310,7 @@ def command_policy(argv: list[str]) -> int:
         print("Usage: olivercode policy init [DIR]")
         return 1
     target = Path(argv[1] if len(argv) > 1 else ".").expanduser().resolve()
-    if not target.is_dir():
-        print(f"Error: {target} is not a directory.")
+    if not require_dir(target):
         return 1
     if (target / policy.POLICY_FILE).exists():
         print(f"{target / policy.POLICY_FILE} already exists; left as it is.")

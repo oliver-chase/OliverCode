@@ -9,14 +9,12 @@ import sys
 from pathlib import Path
 
 from lib import backlog_setup as _backlog_setup
-from lib import repo_gates, repo_profiles
-from lib import update_state
+from lib import gitfiles, repo_gates, repo_profiles, update_state
+from lib import repo_state as _repo_state
 from lib.cli import require_dir, take_flag
 from lib.gitfiles import commit_after, commit_changes
 from lib.local_config import OC_ROOT
-from lib import repo_state as _repo_state
 from lib.local_config import private_repos as _private_repos
-from lib import gitfiles
 
 
 def command_backlog_setup(argv: list[str]) -> int:
@@ -42,14 +40,6 @@ def command_backlog_setup(argv: list[str]) -> int:
                           f"Set up the board config and hooks with backlog-setup ({story})", "The repo's backlog config and commit-msg hook now match the board.")
     print(f"  [COMMIT] {target.resolve().name}: {result}")
     return code[0] if code else 1
-
-
-def _install_pre_push(repo_path: Path, templates_dir: Path) -> None:
-    """Deploy pre-push and commit-msg. A declared pre-commit variant still gets both: what is
-    safe to push and the story reference every commit carries do not depend on which commit
-    gates a repo runs. A repo's `commit-msg.optout` file is never written or removed here."""
-    for name in ("pre-push", "commit-msg"):
-        _backlog_setup.deploy_hook(repo_path / ".githooks", templates_dir, name)
 
 
 def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool) -> None:
@@ -79,7 +69,10 @@ def _install_hook_pair(repo_path: Path, templates_dir: Path, private_repo: bool)
 
     (hooks_dir / "pre-commit-private").unlink(missing_ok=True)
 
-    _install_pre_push(repo_path, templates_dir)
+    # Both are deployed even for a declared pre-commit variant: what is safe to push and the story reference
+    # every commit carries do not depend on which commit gates a repo runs. A `commit-msg.optout` file is never written or removed here.
+    for name in ("pre-push", "commit-msg"):
+        _backlog_setup.deploy_hook(hooks_dir, templates_dir, name)
     _set_hooks_path(repo_path)
 
 

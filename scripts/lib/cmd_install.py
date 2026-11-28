@@ -115,17 +115,23 @@ def _is_managed(link: Path, oc_root: Path) -> bool:
     return any(target.is_relative_to(base.resolve()) for base in (oc_root / "skills", override_dir()))
 
 
-def _read_record(claude_dir: Path) -> dict | None:
-    """The links the last install wrote, as path under ~/.claude -> stored target. None when
-    no install has written a record; an unreadable record counts as recording nothing."""
+def _load_record(claude_dir: Path) -> dict | None:
+    """The install record as a dict. None when no install has written one; an unreadable record counts as empty."""
     path = claude_dir / INSTALL_RECORD
     if not path.is_file():
         return None
     try:
-        links = json.loads(path.read_text()).get("links", {})
-    except (OSError, ValueError, AttributeError):
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
         return {}
-    return links if isinstance(links, dict) else {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_record(claude_dir: Path) -> dict | None:
+    """The links the last install wrote, as path under ~/.claude -> stored target. None when no install has written a record."""
+    record = _load_record(claude_dir)
+    links = (record or {}).get("links", {})
+    return None if record is None else links if isinstance(links, dict) else {}
 
 
 def _write_record(claude_dir: Path, links: dict[str, str], city_shortcut: bool = False) -> None:
@@ -137,10 +143,7 @@ def _write_record(claude_dir: Path, links: dict[str, str], city_shortcut: bool =
 
 def _record_city(claude_dir: Path) -> bool:
     """True when an install wrote the City shortcut, so install never writes it again and uninstall removes it."""
-    try:
-        return json.loads((claude_dir / INSTALL_RECORD).read_text()).get("city_shortcut") is True
-    except (OSError, ValueError, AttributeError):
-        return False
+    return (_load_record(claude_dir) or {}).get("city_shortcut") is True
 
 
 def _desktop() -> Path:
@@ -199,11 +202,24 @@ def _dangling_from_install(claude_dir: Path, oc_root: Path) -> set[str]:
     return {k for k, b in bases.items() if counts[b] >= 2}
 
 
+def _real_home() -> bool:
+    """True on a Mac when HOME is the real home folder, so a test or a relocated HOME never loads or removes a job."""
+    return sys.platform == "darwin" and Path.home().resolve() == Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+
+
+def _unused(path: Path, sep: str) -> Path:
+    """path, or path plus `sep` and the first number from 2 up that is free (a link that dangles still counts as taken)."""
+    found, n = path, 1
+    while found.exists() or found.is_symlink():
+        n += 1
+        found = path.with_name(f"{path.name}{sep}{n}")
+    return found
+
+
 def _schedule_jobs() -> None:
     """Load the launchd job that replays queued gh writes at each GraphQL reset (`olivercode gh-limit --schedule`, #704)
     and the daily maintenance job (`olivercode maintain --schedule`, #1395). Only on a Mac and only for the real home folder, so a test or a relocated HOME never loads a job."""
-    real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
-    if real is None or Path.home().resolve() != real.resolve():
+    if not _real_home():
         return
     from lib import cmd_ghreplay, maintain
     for name, module, command in (("GitHub replay job", cmd_ghreplay, "gh-limit"), ("daily maintenance job", maintain, "maintain")):
@@ -274,10 +290,8 @@ def remove_jobs(oc_root: Path, home: Path | None = None, run=subprocess.run, sta
 
 def _retire_removed_jobs(oc_root: Path) -> None:
     """Remove the jobs of removed commands, and any other job of this checkout the code no longer defines, under the same real-home rule as the scheduled jobs."""
-    real = Path(pwd.getpwuid(os.getuid()).pw_dir) if sys.platform == "darwin" else None
-    if real is None or Path.home().resolve() != real.resolve():
-        return
-    remove_jobs(oc_root, stale_only=True)
+    if _real_home():
+        remove_jobs(oc_root, stale_only=True)
 
 
 def owner_terminal() -> bool:
@@ -381,11 +395,7 @@ def _converge_local_config() -> list[str]:
     backups = failure_log.home() / "backups"
     backups.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d%H%M%S")
-    backup = backups / f"{path.name}.{stamp}"
-    n = 1
-    while backup.exists():
-        n += 1
-        backup = backups / f"{path.name}.{stamp}.{n}"
+    backup = _unused(backups / f"{path.name}.{stamp}", ".")
     shutil.copy2(path, backup)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -506,11 +516,7 @@ def command_install(oc_root: Path) -> int:
         if target.exists() or target.is_symlink():
             # BACKUP-COLLISION-1: rename() overwrites an existing destination on POSIX, so the
             # backup name keeps counting until it is free and no earlier backup is ever replaced.
-            backup = target.with_name(target.name + BACKUP_SUFFIX)
-            n = 1
-            while backup.exists() or backup.is_symlink():  # a backed-up link may dangle
-                n += 1
-                backup = target.with_name(f"{target.name}.pre-olivercode.{n}")
+            backup = _unused(target.with_name(target.name + BACKUP_SUFFIX), ".")
             target.rename(backup)
             backups.append(str(backup))
             target.symlink_to(source)
@@ -527,11 +533,9 @@ def command_install(oc_root: Path) -> int:
         target = link.resolve()
         return any(target == base or target.is_relative_to(base) for base in (oc_root.resolve(), voice_file(oc_root).resolve(), design_file(oc_root).resolve()))
 
-    status = _link(claude_dir / "VOICE.md", voice_file(oc_root), keep_own=True)
-    print(f"  [{status.upper()}] ~/.claude/VOICE.md")
     # DESIGN.md is read on visual work only, so CLAUDE.md does not import it.
-    status = _link(claude_dir / "DESIGN.md", design_file(oc_root), keep_own=True)
-    print(f"  [{status.upper()}] ~/.claude/DESIGN.md")
+    for name, source in (("VOICE.md", voice_file(oc_root)), ("DESIGN.md", design_file(oc_root))):
+        print(f"  [{_link(claude_dir / name, source, keep_own=True).upper()}] ~/.claude/{name}")
 
     linked = already = 0
     wanted = wanted_skills(oc_root)
@@ -645,9 +649,7 @@ def _trash(path: Path) -> Path:
     """Move path into the Trash under its own name, numbered when that name is taken, and return where it landed."""
     trash = _trash_dir()
     trash.mkdir(exist_ok=True)
-    dest, n = trash / path.name, 2
-    while dest.exists() or dest.is_symlink():
-        dest, n = trash / f"{path.name} {n}", n + 1
+    dest = _unused(trash / path.name, " ")
     shutil.move(str(path), dest)
     return dest
 
