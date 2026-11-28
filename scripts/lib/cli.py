@@ -104,11 +104,17 @@ COMMANDS = [
 ]
 
 
+def first_sentence(desc: str) -> str:
+    """The description up to its first full stop. `olivercode guide NAME` prints the rest."""
+    match = re.match(r"(.*?\.)(?=\s|$)", desc)
+    return match.group(1) if match else desc
+
+
 def print_usage() -> None:
     print("OliverCode Terminal Launcher\n")
     print("Commands:")
     for cmd, desc in COMMANDS:
-        print(f"  {cmd:<32} {desc}")
+        print(f"  {cmd:<32} {first_sentence(desc)}")
     print("\nNew here? Run: olivercode guide")
 
 

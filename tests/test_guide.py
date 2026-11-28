@@ -204,3 +204,22 @@ class TestLauncherSetupDoc(unittest.TestCase):
         self.assertTrue(bullets)
         for name in bullets:
             self.assertIn(name, _names(), f"docs/SETUP.md describes {name}, which olivercode --help does not list")
+
+
+class TestBareUsage(unittest.TestCase):
+    """Bare `olivercode` prints each command's first sentence; the guide keeps the rest (#1544)."""
+
+    def test_every_row_stops_at_its_first_sentence(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.print_usage()
+        rows = [line for line in out.getvalue().splitlines() if line.startswith("  ")]
+        self.assertEqual(len(rows), len(cli.COMMANDS))
+        for row in rows:
+            self.assertNotRegex(row, r"\. [A-Z]", row)
+
+    def test_the_guide_keeps_the_full_description(self):
+        promote = next(desc for cmd, desc in cli.COMMANDS if cmd == "olivercode promote")
+        self.assertGreater(promote.count(". "), 0)
+        self.assertEqual(cli.first_sentence(promote), promote.split(". ")[0] + ".")
+        self.assertIn(promote, cmd_guide.explain(REPO_ROOT, "promote")[0])
