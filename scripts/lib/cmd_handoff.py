@@ -77,7 +77,7 @@ def next_thread(project: str) -> int:
     counts = stored(THREAD_NUMBERS)
     last = counts.get(project)
     number = last % 10 + 1 if isinstance(last, int) else 1
-    failure_log.write_atomic(failure_log.home() / THREAD_NUMBERS, json.dumps({**counts, project: number}, indent=2) + "\n")
+    failure_log.write_private(failure_log.home() / THREAD_NUMBERS, json.dumps({**counts, project: number}, indent=2) + "\n")
     return number
 
 
@@ -90,7 +90,7 @@ def thread_state():
         state = {key: found[key] if isinstance(found.get(key), dict) else {} for key in ("sessions", "pinned", "reserved")}
         yield state
         state["sessions"] = dict(list(state["sessions"].items())[-KEEP_SESSIONS:])
-        failure_log.write_atomic(path, json.dumps(state, indent=2) + "\n")
+        failure_log.write_private(path, json.dumps(state, indent=2) + "\n")
 
 
 def reserve_thread(project: str, writer: str) -> tuple[int, str]:

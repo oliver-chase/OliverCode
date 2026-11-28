@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from lib import agent_loop, city_cost, city_delivery, city_health, cmd_owner, cmd_status, failure_log, gh_budget, local_config, relay, repo_state, run_lock
+from lib.city_health import money
 
 USAGE = "Usage: olivercode status page [--fetch] [--open] [--root DIR]"
 STALE_SECONDS = 600
@@ -184,7 +185,7 @@ addEventListener("scroll",function(){clearTimeout(keep.t);keep.t=setTimeout(keep
 
 def esc(text) -> str:
     """TEXT escaped, with each `command` in backticks shown as a command."""
-    return re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(str(text), quote=True))
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", city_health.esc(text))
 
 
 def command(text: str, label: str = "Copy") -> str:
@@ -424,10 +425,6 @@ def building_card(data: dict) -> str:
             f'<div class="band"><span class="pill p-{css}"><i></i>{word}</span><p>{esc(sentence)}</p></div>{body}{warned}{queue_line(data)}{start}</div>')
 
 
-def money(value: float) -> str:
-    return f"${value:,.2f}"
-
-
 def landed_week(log: list[dict], stamp: float) -> int:
     """Stories landed in the last DAYS days, read from the run log's landed rows (#1361)."""
     return sum(1 for f in cmd_status.landings(log) if f["at"] >= stamp - cmd_status.DAYS * city_delivery.DAY)
@@ -535,7 +532,7 @@ def write(slug: str | None, root: Path | None = None, fetch: bool = False, now: 
             return 1
         figures = read(slug, now)
         unread = None in figures.values()
-        failure_log.write_atomic(github_path(), json.dumps(figures))
+        failure_log.write_private(github_path(), json.dumps(figures))
     github = saved_github()
     github = github if github and github.get("slug") == slug else None
     try:
@@ -545,7 +542,7 @@ def write(slug: str | None, root: Path | None = None, fetch: bool = False, now: 
     stamp = now.timestamp()
     data = gather(slug, now, waiting(), log, cmd_status.live_claims(stamp), cmd_status.runner_alive(), run_lock.active(slug, stamp), board_stories(root, slug),
                   github, latest_decision())
-    failure_log.write_atomic(page_path(), render(data))
+    failure_log.write_private(page_path(), render(data))
     out(f"City written to {page_path()}.")
     return 1 if unread else 0
 

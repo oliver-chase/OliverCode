@@ -23,11 +23,16 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def esc(text) -> str:
+    """TEXT escaped for HTML. The one copy every City module uses (#1459)."""
     return html.escape(str(text), quote=True)
 
 
 def clock(stamp) -> str:
     return local_config.local_time(float(stamp), "%d %b %H:%M %Z")
+
+
+def money(value: float) -> str:
+    return f"${value:,.2f}"
 
 
 def read_lines(path: Path) -> list[str]:

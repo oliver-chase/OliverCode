@@ -15,6 +15,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from lib import relay
+from lib.cli import flags
 
 USAGE = """Usage:
   olivercode decisions record --decision ID --thread ID [--words "TEXT"] --option A --option B --choice A [--by NAME]
@@ -98,22 +99,6 @@ def import_log(source: Path, today: date | None = None) -> tuple[int, int, list[
     return added, len(entries) - added, flagged
 
 
-def _flags(argv: list[str], valued: set[str]):
-    """(values by flag, repeated --option list), or None for an unknown flag, a valueless flag or a positional."""
-    vals: dict[str, str] = {}
-    options: list[str] = []
-    i = 0
-    while i < len(argv):
-        if argv[i] not in valued or i + 1 >= len(argv):
-            return None
-        if argv[i] == "--option":
-            options.append(argv[i + 1])
-        else:
-            vals[argv[i]] = argv[i + 1]
-        i += 2
-    return vals, options
-
-
 def _line(rec: dict) -> str:
     return (f"{rec.get('created', '?')}  decision {rec.get('decision', '?')}  thread {rec.get('thread', '?')}  "
             f"choice {rec.get('choice', '?')} of {rec.get('options', '?')}  by {rec.get('by') or '-'}\n"
@@ -121,11 +106,11 @@ def _line(rec: dict) -> str:
 
 
 def _record(argv: list[str]) -> int:
-    parsed = _flags(argv, {"--decision", "--thread", "--words", "--option", "--choice", "--by"})
-    if parsed is None or not all(k in parsed[0] for k in ("--decision", "--thread", "--choice")) or not parsed[1]:
+    parsed = flags(argv, {"--decision", "--thread", "--words", "--option", "--choice", "--by"})
+    if parsed is None or parsed[2] or not all(k in parsed[0] for k in ("--decision", "--thread", "--choice")) or not parsed[1]:
         print(USAGE)
         return 1
-    vals, options = parsed
+    vals, options = parsed[:2]
     rec = relay.record(vals.get("--words", ""), vals["--decision"], options, vals["--thread"], vals["--choice"], vals.get("--by", ""))
     print(f"Recorded decision {rec['decision']} in {relay.path()}")
     return 0

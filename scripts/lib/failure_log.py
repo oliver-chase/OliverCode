@@ -32,15 +32,6 @@ def home() -> Path:
     return path
 
 
-def write_atomic(path: Path, text: str) -> None:
-    """Write through a temporary file and a rename, so two writers never leave a half file. Raises OSError."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(text)
-    os.replace(tmp, path)
-
-
 def privatize(path: Path) -> None:
     """Set a folder to mode 700 and every file and folder under it to 600 and 700."""
     os.chmod(path, 0o700)
@@ -113,7 +104,7 @@ def trim(path: Path, keep: int = KEEP_LINES) -> None:
     except OSError:
         return
     if len(lines) > 2 * keep:
-        write_atomic(path, "".join(lines[-keep:]))
+        write_private(path, "".join(lines[-keep:]))
 
 
 def entries() -> list[tuple[str, str, str, str]]:

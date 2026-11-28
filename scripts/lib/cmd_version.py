@@ -10,6 +10,7 @@ import subprocess
 from datetime import date
 
 from lib import cmd_land, denials, launchd
+from lib.cli import flags
 from lib.local_config import OC_ROOT
 
 LABEL = "com.olivercode.version-cut"
@@ -30,15 +31,11 @@ def schedule(on: bool, story: str = "") -> int:
 
 
 def command_version_cut(argv: list[str]) -> int:
-    args = list(argv)
-    opts = {"--day": date.today().isoformat(), "--story": ""}
-    scheduling = [a for a in args if a in ("--schedule", "--unschedule")]
-    while args:
-        arg = args.pop(0)
-        if arg in opts and args:
-            opts[arg] = args.pop(0)
-        elif arg not in ("--commit", *scheduling):
-            return print(USAGE) or 1
+    parsed = flags(argv, {"--day", "--story"}, {"--commit", "--schedule", "--unschedule"})
+    if parsed is None or parsed[2]:
+        return print(USAGE) or 1
+    opts = {"--day": date.today().isoformat(), "--story": "", **parsed[0]}
+    scheduling = [a for a in argv if a in ("--schedule", "--unschedule")]
     if len(scheduling) > 1 or (scheduling and scheduling[0] == "--unschedule" and opts["--story"]):
         return print(USAGE) or 1
     if scheduling == ["--unschedule"]:

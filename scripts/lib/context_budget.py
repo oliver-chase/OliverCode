@@ -15,6 +15,7 @@ import re
 import tempfile
 from pathlib import Path
 
+from lib import failure_log
 from lib.local_config import OC_ROOT, claude_dir
 
 
@@ -69,11 +70,7 @@ def budget() -> int | None:
 def _record(total: int) -> None:
     path = record_path()
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps({"words": total}) + "\n")
-        os.replace(tmp, path)  # mkstemp makes the file mode 600
+        failure_log.write_private(path, json.dumps({"words": total}) + "\n")
     except OSError:
         pass
 

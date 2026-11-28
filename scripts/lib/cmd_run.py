@@ -6,30 +6,18 @@ import os
 import time
 
 from lib import agent_loop, model
+from lib.cli import flags
 
 USAGE = "Usage: olivercode run \"TASK\" [--max-turns N] [--model NAME]"
 
 
 def command_run(argv: list[str]) -> int:
-    task_parts, max_turns, name, i = [], 30, "", 0
-    while i < len(argv):
-        if argv[i] in ("--max-turns", "--model") and i + 1 < len(argv):
-            if argv[i] == "--model":
-                name = argv[i + 1]
-            else:
-                try:
-                    max_turns = int(argv[i + 1])
-                except ValueError:
-                    print(USAGE)
-                    return 1
-            i += 2
-        elif argv[i].startswith("--"):
-            print(USAGE)
-            return 1
-        else:
-            task_parts.append(argv[i])
-            i += 1
-    task = " ".join(task_parts).strip()
+    parsed = flags(argv, {"--max-turns", "--model"})
+    try:
+        max_turns = int(parsed[0].get("--max-turns", 30)) if parsed else 0
+    except ValueError:
+        max_turns = 0
+    name, task = (parsed[0].get("--model", ""), " ".join(parsed[2]).strip()) if parsed else ("", "")
     if not task or max_turns < 1:
         print(USAGE)
         return 1

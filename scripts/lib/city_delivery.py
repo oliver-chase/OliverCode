@@ -10,6 +10,7 @@ import re
 from collections import Counter
 
 from lib import local_config, cmd_status
+from lib.city_health import esc
 
 HOUR, DAY = 3600, 86400
 VIEWS = {"twoh": ("2 hours", 12, 600), "day": ("Day", 24, HOUR), "week": ("Week", 7, DAY), "month": ("Month", 30, DAY)}
@@ -34,10 +35,6 @@ document.getElementById("activity-foot").textContent=(shaded?"Records start on "
 document.querySelectorAll("[data-view],[data-metric]").forEach(function(b){var on=b.dataset.view===v||b.dataset.metric===m;b.setAttribute("aria-pressed",String(on));b.className=on?"on":""})}
 document.addEventListener("click",function(e){var b=e.target.closest("[data-view],[data-metric]");if(!b)return;if(b.dataset.view)v=b.dataset.view;else m=b.dataset.metric;draw()});document.addEventListener("DOMContentLoaded",draw)})();
 """
-
-
-def esc(text) -> str:
-    return html.escape(str(text), quote=True)
 
 
 def _day(stamp: float) -> str:

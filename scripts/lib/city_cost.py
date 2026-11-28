@@ -8,20 +8,13 @@ import json
 from collections import Counter
 
 from lib import agent_loop, local_config, cmd_status, gh_budget
+from lib.city_health import clock, esc, money
 
 SIZES = ("XS", "S", "M", "L", "XL")
 SHOWN_ROUTES = 6
 SHOWN_STORIES = 5
 MODEL_STYLE = {"opus": ("var(--accent)", "#fff"), "sonnet": ("var(--ink)", "#fff"), "haiku": ("var(--data)", "var(--ink)")}  # background and text colour per model, as the mockup
 TOKEN_COLOR = {"Read from cache": "var(--ink)", "Written to cache": "var(--data)", "Written": "var(--accent)"}  # as the mockup
-
-
-def esc(text) -> str:
-    return html.escape(str(text), quote=True)
-
-
-def money(value: float) -> str:
-    return f"${value:,.2f}"
 
 
 def pct(part: float, whole: float) -> float:
@@ -205,10 +198,6 @@ def read_json(name: str) -> dict:
     except (OSError, ValueError):
         return {}
     return found if isinstance(found, dict) else {}
-
-
-def clock(stamp) -> str:
-    return local_config.local_time(float(stamp), "%d %b %H:%M %Z")
 
 
 def github_budget() -> str:
