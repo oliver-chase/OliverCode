@@ -8,6 +8,7 @@ Argument handling gets tests because an ignored unknown flag is a wrong success:
 import os
 import json
 import plistlib
+import shutil
 import subprocess
 import sys
 import unittest
@@ -30,9 +31,16 @@ class HomeCase(unittest.TestCase):
         self.enterContext(mock.patch.dict(os.environ, {"HOME": str(self.tmp), "OLIVERCODE_HOME": str(self.tmp / "oc-home")}))
         self.root = self._make_checkout()
 
-    def _make_checkout(self):
-        """A throwaway OliverCode checkout with gates and one skill, so no test touches the real clone or its git config."""
-        root = scratch_repo(self.tmp / "checkout")
+    def _make_checkout(self, path=None, init=True):
+        """A throwaway OliverCode checkout with gates and one skill, so no test touches the real clone or its git config.
+
+        init=True makes it a repo of its own; init=False only makes the folder, so it can sit inside another repo.
+        """
+        root = Path(path) if path else self.tmp / "checkout"
+        if init:
+            scratch_repo(root)
+        else:
+            root.mkdir(parents=True, exist_ok=True)
         (root / "skills" / "demo-skill").mkdir(parents=True)
         (root / "skills" / "demo-skill" / "SKILL.md").write_text("---\nname: demo-skill\n---\n")
         (root / "docs").mkdir()
@@ -196,28 +204,15 @@ class TestInstall(HomeCase):
         self.assertIn(f"git -C {root} config core.hooksPath .githooks", out)
 
     def test_a_checkout_path_with_spaces_gets_its_hooks_path_set(self):
-        root = scratch_repo(self.tmp / "with space" / "checkout")
-        (root / ".githooks").mkdir()
-        (root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
-        (root / ".githooks" / "pre-commit").chmod(0o755)
-        (root / "CLAUDE.md").write_text("rules\n")
-        (root / "docs").mkdir()
-        (root / "docs" / "VOICE.md").write_text("voice\n")
-        (root / "skills").mkdir()
+        root = self._make_checkout(self.tmp / "with space" / "checkout")
         rc, out = self._install(root)
         self.assertEqual(git(root, "config", "--get", "core.hooksPath").stdout.strip(), ".githooks")
         self.assertIn("[SET]", out)
 
     def test_a_folder_inside_another_repo_never_sets_that_repos_hooks_path(self):
         parent = scratch_repo(self.tmp / "parent")
-        root = parent / "oc"
-        for d in (".githooks", "skills", "docs"):
-            (root / d).mkdir(parents=True)
-        (root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n")
-        (root / ".githooks" / "pre-commit").chmod(0o755)
-        (root / "CLAUDE.md").write_text("rules\n")
-        (root / "docs" / "VOICE.md").write_text("voice\n")
-        self._install(root)
+        self._make_checkout(parent / "oc", init=False)
+        self._install(parent / "oc")
         self.assertEqual(git(parent, "config", "--get", "core.hooksPath", check=False).stdout.strip(), "")
 
     def test_a_non_executable_pre_commit_names_chmod(self):
@@ -235,20 +230,19 @@ class TestInstall(HomeCase):
         self.assertIn("[ALREADY] core.hooksPath", out)
         self.assertNotIn("[SET]", out)
 
-    def test_a_file_where_the_claude_folder_belongs_fails_and_is_left_alone(self):
-        (self.tmp / ".claude").write_text("not a folder")
-        rc, out = self._install()
-        self.assertEqual(rc, 1)
-        self.assertIn("is not a directory", out)
-        self.assertEqual((self.tmp / ".claude").read_text(), "not a folder")
-
-    def test_a_file_where_the_skills_folder_belongs_fails_and_is_left_alone(self):
-        (self.tmp / ".claude").mkdir()
-        (self.tmp / ".claude" / "skills").write_text("not a folder")
-        rc, out = self._install()
-        self.assertEqual(rc, 1)
-        self.assertIn("is not a directory", out)
-        self.assertEqual((self.tmp / ".claude" / "skills").read_text(), "not a folder")
+    def test_a_file_where_the_claude_or_skills_folder_belongs_fails_and_is_left_alone(self):
+        for rel in (".claude", ".claude/skills"):
+            with self.subTest(rel):
+                if (self.tmp / ".claude").is_file():  # the row before left its file where this row needs a folder
+                    (self.tmp / ".claude").unlink()
+                shutil.rmtree(self.tmp / ".claude", ignore_errors=True)
+                path = self.tmp / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("not a folder")
+                rc, out = self._install()
+                self.assertEqual(rc, 1)
+                self.assertIn("is not a directory", out)
+                self.assertEqual(path.read_text(), "not a folder")
 
     def test_a_broken_skill_link_fails_install_and_is_named(self):
         skills = self.tmp / ".claude" / "skills"
