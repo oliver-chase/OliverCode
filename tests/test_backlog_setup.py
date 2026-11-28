@@ -414,12 +414,33 @@ class TestHealth(SetupCase):
         self.assertIn("[WARN] widgets: board check skipped", text)
         self.assertIn("no origin remote", text)
 
-    def test_a_fork_whose_origin_differs_from_the_config_still_fails(self):
-        self.run_setup()
-        git(self.repo, "remote", "set-url", "origin", "https://github.com/someone/fork.git")
-        (passed, failed, skipped), text = self.health()
-        self.assertEqual(1, failed)
-        self.assertIn("names another repo's Project", text)
+    def test_an_unhealthy_repo_fails_with_its_count_and_message(self):
+        # Each row is a repo state the health check must fail: how to reach it, the failure count, and the messages printed.
+        def fork():
+            self.run_setup()
+            git(self.repo, "remote", "set-url", "origin", "https://github.com/someone/fork.git")
+
+        def malformed_config():
+            (self.repo / "docs").mkdir(exist_ok=True)
+            (self.repo / "docs" / "backlog-config.json").write_text("{ not json")
+
+        def off_baseline():
+            self.seed_existing_board()
+
+        rows = [
+            ("a fork whose origin differs from the config", fork, 1, ["names another repo's Project"]),
+            ("a malformed config", malformed_config, 1, ["Fix the file or delete it"]),
+            ("no config", lambda: None, 1, ["no usable backlog config", "Fix: olivercode backlog-setup {repo} --apply"]),
+            ("a repo off the baseline", off_baseline, 1, ["missing option", "no commit-msg hook"]),
+        ]
+        for name, prepare, expected_failed, messages in rows:
+            self.setUp()  # a fresh repo and fake board for each row
+            with self.subTest(name):
+                prepare()
+                (passed, failed, skipped), text = self.health()
+                self.assertEqual(expected_failed, failed)
+                for message in messages:
+                    self.assertIn(message.format(repo=self.repo), text)
 
     def test_a_bare_file_name_in_prose_does_not_hide_the_real_config_path(self):
         self.run_setup()
@@ -429,26 +450,6 @@ class TestHealth(SetupCase):
     def test_a_bare_name_with_no_file_yet_lands_in_docs(self):
         (self.repo / "CLAUDE.md").write_text("A repo that names a `backlog-config.json` files stories.\n")
         self.assertEqual(self.repo / "docs" / "backlog-config.json", backlog_setup.config_path(self.repo))
-
-    def test_a_malformed_config_fails_the_health_check_with_a_fix(self):
-        (self.repo / "docs").mkdir(exist_ok=True)
-        (self.repo / "docs" / "backlog-config.json").write_text("{ not json")
-        (passed, failed, skipped), text = self.health()
-        self.assertEqual(1, failed)
-        self.assertIn("Fix the file or delete it", text)
-
-    def test_a_repo_with_no_config_fails_with_the_fix_command(self):
-        (passed, failed, skipped), text = self.health()
-        self.assertEqual(1, failed)
-        self.assertIn("no usable backlog config", text)
-        self.assertIn(f"Fix: olivercode backlog-setup {self.repo} --apply", text)
-
-    def test_a_repo_off_the_baseline_is_listed(self):
-        self.seed_existing_board()
-        (passed, failed, skipped), text = self.health()
-        self.assertEqual(1, failed)
-        self.assertIn("missing option", text)
-        self.assertIn("no commit-msg hook", text)
 
     def test_a_set_up_repo_passes(self):
         self.run_setup()

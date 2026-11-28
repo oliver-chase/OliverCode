@@ -15,17 +15,17 @@ import board_mirror  # noqa: E402
 
 
 class TestImportsAsALibModule(unittest.TestCase):
-    def test_board_mirror_imports_as_lib_board_mirror(self):
-        # Every other lib module is imported as lib.<name>, so the flat sibling import of gh_budget fails here alone.
-        result = subprocess.run([sys.executable, "-c", "import lib.board_mirror"], cwd=REPO_ROOT / "scripts",
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_board_mirror_imports_bare_from_scripts_lib(self):
-        # batch_project.py and check_board_hygiene.py import it bare, with only scripts/lib on the path.
-        result = subprocess.run([sys.executable, "-c", "import board_mirror"], cwd=REPO_ROOT / "scripts" / "lib",
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_board_mirror_imports_as_lib_and_bare(self):
+        # As lib.board_mirror: every other lib module is imported that way, so the flat sibling import of gh_budget fails here alone.
+        # Bare, from scripts/lib: batch_project.py and check_board_hygiene.py import it that way.
+        rows = [
+            ("as lib.board_mirror", REPO_ROOT / "scripts", "import lib.board_mirror"),
+            ("bare from scripts/lib", REPO_ROOT / "scripts" / "lib", "import board_mirror"),
+        ]
+        for name, cwd, statement in rows:
+            with self.subTest(name):
+                result = subprocess.run([sys.executable, "-c", statement], cwd=cwd, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class TestBoardMirror(unittest.TestCase):
