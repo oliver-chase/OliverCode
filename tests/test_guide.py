@@ -128,6 +128,14 @@ class TestStatusSteps(unittest.TestCase):
         self.assertIn("Terminal", text)
         self.assertIn("no model turn", text)
 
+    def test_the_steps_teach_watch_first_then_status_and_say_both_cost_no_model_turn(self):
+        steps = cmd_guide.status_steps(REPO_ROOT)
+        watch = next(i for i, s in enumerate(steps) if "olivercode watch REPO" in s)
+        status = next(i for i, s in enumerate(steps) if "olivercode status`" in s)
+        self.assertLess(watch, status)
+        self.assertEqual(0, watch)
+        self.assertIn("Watch and status cost no model turn", steps[-1])
+
     def test_install_closes_with_the_same_steps_and_the_adoption_pointer(self):
         closing = cmd_install.closing_lines(REPO_ROOT)
         for step in cmd_guide.status_steps(REPO_ROOT):
