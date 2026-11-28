@@ -7,6 +7,7 @@ the session's token budget refuses the next call, and a stopped loop leaves the 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -164,10 +165,13 @@ def tree_state(cwd: str | Path) -> tuple[str, str] | None:
         return None
 
 
-def branch_diff(cwd: str | Path) -> str:
-    """The story's whole diff against origin's default branch, cut at DIFF_LIMIT characters with a marker that names the files it cut (#1015)."""
+def branch_diff(cwd: str | Path, cut: bool = True) -> str:
+    """The story's whole diff against origin's default branch, cut at DIFF_LIMIT characters with a marker that names the files it cut (#1015) unless
+    `cut` is False, or '' when git cannot give it."""
     ran = subprocess.run(["git", "-C", str(cwd), "diff", f"origin/{default_branch(cwd)}...HEAD"], capture_output=True, text=True)
-    return cut_diff(ran.stdout) if ran.returncode == 0 else ""
+    if ran.returncode != 0:
+        return ""
+    return cut_diff(ran.stdout) if cut else ran.stdout
 
 
 def cut_diff(full: str) -> str:
@@ -296,9 +300,17 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
     A cut diff doubles the first attempt's turns (#1550). A reader that exits non-zero or replies with nothing is asked once more, with twice the
     stopped attempt's turns after a stop on the turn cap, and a second failure returns verdict 'none' with its cause, so nothing is pushed. Every attempt gets a run-log row (#1489).
     `brief` swaps the question: bug intake asks about a failure, not a diff (#1371).
+    No reader starts when the run log's last verdict for this story on a diff of the same hash is a PASS, and the log records the reuse (#1549).
     Returns {'verdict': 'pass' | 'findings' | 'none', 'text': str} and appends one line for it to the run log."""
     run = run or model.run_cli
-    diff = branch_diff(cwd) if "{diff}" in brief else ""
+    full = branch_diff(cwd, cut=False) if "{diff}" in brief else ""
+    # the uncut diff is hashed, so a change past the cut is read again, with the repo, since two repos reuse a story number (#1481)
+    key = hashlib.sha256(f"{STORY_SLUG.get(session, '')}\n{full}".encode()).hexdigest() if full else ""
+    if key and passed_before(session, key):
+        log_review(session, "pass", "", diff=key, reused=True)
+        say("Review: pass, reused from an earlier read of the same diff.")
+        return {"verdict": "pass", "text": "PASS"}
+    diff = cut_diff(full)
     prompt = brief.format(task=task, diff=diff, tail=tail)
     failure, turns = "", max_turns * 2 if len(diff) > DIFF_LIMIT else max_turns  # only a cut diff is longer than the limit, and its reader has files to open
     for attempt in range(1, attempts + 1):
@@ -312,7 +324,7 @@ def review(task: str, cwd: str | Path, session: str, tail: str, run=None, say=pr
             if reply.get("code", 0) == 0 and text:
                 verdict = "pass" if verdict_line(text, "pass")[0] and not TAKEN_BACK.search(text) else "findings"
                 log_round(f"{session}-review", attempt, model_name, reply)
-                log_review(session, verdict, text)
+                log_review(session, verdict, text, **({"diff": key} if key else {}))
                 say(f"Review: {verdict}." + ("" if verdict == "pass" else f" {text[:300]}"))
                 return {"verdict": verdict, "text": text}
             failure = exit_reason(reply, attempt, unit="attempt") if reply.get("code", 0) != 0 else "The reader replied with nothing."
@@ -372,10 +384,23 @@ def append_run_log(row: dict) -> None:
         pass
 
 
-def log_review(story: str, verdict: str, text: str) -> None:
-    """Append the reader's pass or findings for a story to the run log. A log that cannot be written never stops a loop."""
+def log_review(story: str, verdict: str, text: str, **extra) -> None:
+    """Append the reader's pass or findings for a story to the run log, with `extra` such as the hash of the diff it read. A log that cannot be written never stops a loop."""
     append_run_log({"story": story, "review": verdict, "findings": "" if verdict == "pass" else text[:2000],
-                    "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+                    "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), **extra})
+
+
+def passed_before(story: str, key: str) -> bool:
+    """True when the run log's last verdict for a story on the diff hashed as `key` is a PASS, so a findings verdict is never reused (#1549)."""
+    last = ""
+    for line in run_log_lines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("story") == story and row.get("diff") == key:
+            last = row.get("review")
+    return last == "pass"
 
 
 def start_size(session_id: str, projects: Path | None = None) -> int | None:

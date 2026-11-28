@@ -706,6 +706,72 @@ class TestLoop(unittest.TestCase):
         self.assertNotIn("make no tool call", seen["system"] + seen["prompt"])
         self.assertIn("not a finding", seen["prompt"])
 
+    def story_commit(self, text):
+        """A story's one commit on a branch ahead of origin's default branch."""
+        if not (self.repo / ".git").exists():
+            scratch_repo(self.repo)
+            git(self.repo, "add", "-A")
+            git(self.repo, "commit", "-qm", "base")
+            git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        (self.repo / "a.py").write_text(text)
+        git(self.repo, "add", "a.py")
+        git(self.repo, "commit", "-qm", "work")
+
+    def read(self, *replies, story="s1"):
+        """One call of the reader on the worktree: (its verdict, the readers it started)."""
+        run = Scripted(*replies)
+        out = agent_loop.review("the story", self.repo, story, "gate", run=run, say=lambda *_: None)
+        return out["verdict"], len(run.prompts)
+
+    def test_a_rebuild_with_an_unchanged_diff_reuses_the_pass_and_logs_the_reuse(self):  # #1549
+        self.story_commit("x = 1\n")
+        first = Scripted(reply("built"), reply("PASS"))
+        self.loop(first, [(True, "")])
+        git(self.repo, "checkout", "-qb", "moved", "origin/main")  # the default branch moves on, as before a rebase conflict
+        (self.repo / "a.py").write_text("x = 2\n")
+        git(self.repo, "add", "a.py")
+        git(self.repo, "commit", "-qm", "theirs")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        git(self.repo, "checkout", "-q", "-")
+        again = Scripted(reply("nothing to add"))
+        out = self.loop(again, [(True, "")])
+        self.assertEqual((True, 1), (out["done"], len(again.prompts)))  # the builder only
+        reviews = [r for r in self.rows() if "review" in r]
+        self.assertEqual([("pass", False), ("pass", True)], [(r["review"], r.get("reused", False)) for r in reviews])
+        self.assertEqual(reviews[0]["diff"], reviews[1]["diff"])
+
+    def test_a_changed_diff_starts_a_fresh_reader_whose_verdict_decides(self):  # #1549
+        self.story_commit("x = 1\n")
+        self.assertEqual(("pass", 1), self.read(reply("PASS")))
+        self.story_commit("x = 2\n")
+        self.assertEqual(("findings", 1), self.read(reply("a.py: wrong")))
+
+    def test_a_change_past_the_cut_of_a_long_diff_starts_a_fresh_reader(self):  # #1549
+        long = "y" * agent_loop.DIFF_LIMIT + "\n"
+        self.story_commit(long + "x = 1\n")
+        self.assertEqual(("pass", 1), self.read(reply("PASS")))
+        self.story_commit(long + "x = 2\n")
+        self.assertEqual(("pass", 1), self.read(reply("PASS")))
+
+    def test_a_findings_verdict_is_never_reused_even_after_a_pass_of_the_same_diff(self):  # #1549
+        self.story_commit("x = 1\n")
+        self.assertEqual(("findings", 1), self.read(reply("a.py: wrong")))
+        self.assertEqual(("findings", 1), self.read(reply("a.py: still wrong")))
+        rows = [r for r in self.rows() if "review" in r]
+        agent_loop.append_run_log({**rows[0], "review": "pass"})
+        agent_loop.append_run_log(rows[0])  # the last verdict for this diff is findings
+        self.assertEqual(("pass", 1), self.read(reply("PASS")))
+
+    def test_a_pass_is_not_reused_for_another_story_or_another_repos_story_of_the_same_number(self):  # #1549
+        self.story_commit("x = 1\n")
+        self.addCleanup(agent_loop.STORY_SLUG.pop, "s1", None)
+        agent_loop.STORY_SLUG["s1"] = "o/one"
+        self.assertEqual(("pass", 1), self.read(reply("PASS")))
+        self.assertEqual(("pass", 1), self.read(reply("PASS"), story="s2"))
+        agent_loop.STORY_SLUG["s1"] = "o/two"
+        self.assertEqual(("pass", 1), self.read(reply("PASS")))
+        self.assertEqual(("pass", 0), self.read())
+
     def stage_rows(self):
         return [r for r in (json.loads(l) for l in (self.home / "run-log.jsonl").read_text().splitlines()) if "stage" in r]
 
