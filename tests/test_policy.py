@@ -148,11 +148,30 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual("deny", policy.evaluate_bash(policy.DEFAULT, "echo `rm -rf ~`").kind)
         self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "rm notes.txt"))
 
-    def test_a_push_to_origin_passes_and_a_push_to_another_remote_asks(self):
-        for command in ("git push", "git push origin main"):
-            self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, command, self.on_branch("main")), command)
-        d = policy.evaluate_bash(policy.DEFAULT, "git push upstream main")
-        self.assertEqual(("ask", "triggers.push"), (d.kind, d.rule))
+    def test_push_verdicts_run_from_one_table(self):
+        """One row per push: the command, the branch checked out (None: no repo) and the verdict (None: allowed)."""
+        rows = [
+            ("git push", "main", None),
+            ("git push origin main", "main", None),
+            ("git push origin HEAD:main", "main", None),
+            ("git push origin HEAD:refs/heads/main", "main", None),
+            ("git push origin --delete feat", "main", None),
+            ("git push origin :feat", "main", None),
+            ("git push origin refs/tags/v1", "main", None),
+            ("ALLOW_BRANCH_PUSH=1 git push origin feat", "main", None),
+            ("git push upstream main", None, ("ask", "triggers.push")),
+            ("git -C /tmp/x push fork main", None, ("ask", "triggers.push")),
+        ]
+        self.assertEqual(len(rows), len({row[0] for row in rows}))  # one row per command
+        self.assertIn(None, {row[2] for row in rows})  # the table keeps the pushes that pass
+        self.assertIn(("ask", "triggers.push"), {row[2] for row in rows})  # and the pushes to another remote that ask
+        repos = {branch: self.on_branch(branch) for branch in {row[1] for row in rows} if branch}
+        for command, branch, expected in rows:
+            d = policy.evaluate_bash(policy.DEFAULT, command, repos.get(branch, ""))
+            if expected is None:
+                self.assertIsNone(d, command)
+            else:
+                self.assertEqual(expected, (d.kind, d.rule), command)
 
     def test_a_push_to_a_branch_besides_the_default_is_denied_with_the_three_exits(self):
         repo = self.on_branch("feat")  # no origin here, so the default branch is main on any checkout, whatever branch the suite runs from
@@ -162,13 +181,6 @@ class TestEvaluate(unittest.TestCase):
             self.assertEqual(("deny", "git push branch"), (d.kind, d.rule), command)
         for words in ("fix it and land it on main", "discard it", "olivercode wip", "without asking the owner", "ALLOW_BRANCH_PUSH=1"):
             self.assertIn(words, d.reason)
-
-    def test_a_push_of_main_a_delete_a_tag_or_an_override_is_not_denied_as_a_branch_push(self):
-        for command in ("git push", "git push origin main", "git push origin HEAD:main", "git push origin HEAD:refs/heads/main",
-                        "git push origin --delete feat", "git push origin :feat", "git push origin refs/tags/v1",
-                        "ALLOW_BRANCH_PUSH=1 git push origin feat"):
-            d = policy.evaluate_bash(policy.DEFAULT, command, self.on_branch("main"))
-            self.assertIsNone(d, command)
 
     def test_the_branch_override_lifts_only_the_git_command_it_prefixes(self):
         """#899: the prefix of one command in the line never lifts the gate for another push in the same line."""
@@ -203,9 +215,6 @@ class TestEvaluate(unittest.TestCase):
         log.write_text("".join(f"{stamp}\tapp\t{g}\tdenied\n" for g in gates for _ in range(3)))
         with mock.patch.dict(os.environ, {"OLIVERCODE_FAILURE_LOG": str(log)}):
             self.assertIsNone(policy.evaluate_bash(policy.DEFAULT, "git commit -m x", "app"))
-
-    def test_a_push_through_git_dash_C_to_another_remote_still_asks(self):
-        self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "git -C /tmp/x push fork main").kind)
 
     def test_deleting_more_than_ten_files_asks_and_ten_does_not(self):
         self.assertEqual("ask", policy.evaluate_bash(policy.DEFAULT, "rm " + " ".join(f"f{i}" for i in range(11))).kind)
