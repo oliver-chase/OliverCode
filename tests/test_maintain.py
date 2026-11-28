@@ -9,9 +9,7 @@ import unittest
 from unittest import mock
 
 from _maintain_case import Base
-from _support import REPO_ROOT, git, load_script, quiet, scratch_repo, temp_dir
-
-launcher = load_script("scripts/olivercode", "olivercode_launcher")
+from _support import REPO_ROOT, git, quiet, scratch_repo, temp_dir
 from lib import health_checks, hygiene, maintain
 
 
@@ -66,14 +64,12 @@ class TestLinks(Base):
         self.assertTrue(problems[0].fixed)
         self.assertEqual(installed, [1])
 
-    def test_without_fix_nothing_changes(self):
+    def test_sound_links_report_nothing_and_without_fix_nothing_changes(self):
+        self.assertEqual(maintain.check_links(True), [])
         (self.claude / "CLAUDE.md").symlink_to(self.claude / "gone.md")
         problems = maintain.check_links(False, install=lambda: self.fail("must not install"))
         self.assertFalse(problems[0].fixed)
         self.assertTrue(problems[0].fixable)
-
-    def test_sound_links_report_nothing(self):
-        self.assertEqual(maintain.check_links(True), [])
 
 
 class TestWorktrees(Base):
@@ -88,17 +84,13 @@ class TestWorktrees(Base):
         shutil.rmtree(wt)
         return repo
 
-    def test_a_worktree_with_no_folder_is_pruned(self):
+    def test_a_worktree_with_no_folder_is_pruned_by_fix_and_left_by_a_check(self):
         repo = self.make()
-        found = maintain.check_worktrees(self.cfg, True)
-        self.assertTrue(found[0].fixed)
-        self.assertEqual(maintain.check_worktrees(self.cfg, False), [])
-        self.assertTrue(repo.exists())
-
-    def test_checking_only_leaves_the_metadata(self):
-        self.make()
         self.assertFalse(maintain.check_worktrees(self.cfg, False)[0].fixed)
         self.assertEqual(len(maintain.check_worktrees(self.cfg, False)), 1)
+        self.assertTrue(maintain.check_worktrees(self.cfg, True)[0].fixed)
+        self.assertEqual(maintain.check_worktrees(self.cfg, False), [])
+        self.assertTrue(repo.exists())
 
 
 class TestBranches(Base):
@@ -186,17 +178,10 @@ class TestCopies(Base):
 
     def test_checking_only_deletes_nothing_and_a_clean_repo_reports_nothing(self):
         repo = self.make()
+        (repo / "Chapter 2.txt").write_text("x")  # a number with no original is not a copy
         self.assertEqual(maintain.check_copies(self.cfg, False), [])
         (repo / "a 2.txt").write_text("a")
         self.assertTrue(maintain.check_copies(self.cfg, False)[0].fixable)
-        self.assertTrue((repo / "a 2.txt").exists())
-
-    def test_an_evicted_copy_is_never_read_and_stays(self):
-        repo = self.make()
-        (repo / "a 2.txt").write_text("a")
-        with mock.patch.object(hygiene, "evicted", return_value=True):
-            found = maintain.check_copies(self.cfg, True)
-        self.assertFalse(found[0].fixed)
         self.assertTrue((repo / "a 2.txt").exists())
 
     def test_an_evicted_pair_is_downloaded_then_compared_and_a_dry_run_downloads_nothing(self):
@@ -216,18 +201,13 @@ class TestCopies(Base):
         self.assertEqual(2, len(fetched))
         self.assertFalse((repo / "a 2.txt").exists())
 
-    def test_a_file_that_stays_evicted_after_the_download_is_kept(self):
+    def test_an_evicted_copy_is_never_read_and_one_that_stays_evicted_after_the_download_is_kept(self):
         repo = self.make()
         (repo / "a 2.txt").write_text("a")
-        with mock.patch.object(hygiene, "evicted", return_value=True), mock.patch.object(hygiene, "download", lambda paths: None):
-            problem = maintain.check_copies(self.cfg, True)[0]
-        self.assertFalse(problem.fixed)
-        self.assertTrue((repo / "a 2.txt").exists())
-
-    def test_a_name_with_a_number_and_no_original_is_not_a_copy(self):
-        repo = self.make()
-        (repo / "Chapter 2.txt").write_text("x")
-        self.assertEqual(maintain.check_copies(self.cfg, False), [])
+        for download in (hygiene.download, lambda paths: None):
+            with self.subTest(download=download), mock.patch.object(hygiene, "evicted", return_value=True), mock.patch.object(hygiene, "download", download):
+                self.assertFalse(maintain.check_copies(self.cfg, True)[0].fixed)
+                self.assertTrue((repo / "a 2.txt").exists())
 
 
 SUITE_PASS = "  Ran 40 tests across 3 modules, all passed\nrun-tests: tests passed on commit abc123\n"
@@ -262,6 +242,11 @@ class TestCleanCloneSuite(unittest.TestCase):
         run.assert_not_called()
         self.assertFalse(self.record.exists())
 
+    def health(self, record, head=""):
+        self.record.write_text(json.dumps(record))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            return health_checks._check_clean_clone_suite(self.record, head=head), out.getvalue()
+
     def test_a_failed_daily_run_is_a_problem_that_names_the_modules(self):
         with mock.patch.object(maintain, "run_clean_clone_suite", return_value=maintain.suite_record(1, SUITE_FAIL)):
             problems = maintain.check_suite(True, record=self.record)
@@ -269,35 +254,26 @@ class TestCleanCloneSuite(unittest.TestCase):
         self.assertIn("test_maintain, test_policy", problems[0].text)
 
     def test_health_fails_a_recorded_failure_and_names_its_modules(self):
-        self.record.write_text(json.dumps(maintain.suite_record(1, SUITE_FAIL)))
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            result = health_checks._check_clean_clone_suite(self.record, head="")
+        result, out = self.health(maintain.suite_record(1, SUITE_FAIL))
         self.assertEqual((0, 1, 0), result)
-        self.assertIn("[FAIL]", out.getvalue())
-        self.assertIn("test_maintain, test_policy", out.getvalue())
+        self.assertIn("[FAIL]", out)
+        self.assertIn("test_maintain, test_policy", out)
 
     def test_health_fails_a_record_older_than_two_days(self):
         record = maintain.suite_record(0, SUITE_PASS)
         record["at"] -= 3 * 86400
-        self.record.write_text(json.dumps(record))
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            result = health_checks._check_clean_clone_suite(self.record, head="")
+        result, out = self.health(record)
         self.assertEqual((0, 1, 0), result)
-        self.assertIn("3.0 days ago", out.getvalue())
+        self.assertIn("3.0 days ago", out)
 
     def test_health_does_not_count_a_record_for_another_commit(self):
-        self.record.write_text(json.dumps({**maintain.suite_record(1, SUITE_FAIL), "commit": "a" * 40}))
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            result = health_checks._check_clean_clone_suite(self.record, head="b" * 40)
+        result, out = self.health({**maintain.suite_record(1, SUITE_FAIL), "commit": "a" * 40}, head="b" * 40)
         self.assertEqual((0, 0, 1), result)
-        self.assertIn("[INFO]", out.getvalue())
-        self.assertIn("aaaaaaaa", out.getvalue())
+        self.assertIn("[INFO]", out)
+        self.assertIn("aaaaaaaa", out)
 
     def test_health_passes_a_fresh_green_record(self):
-        self.record.write_text(json.dumps(maintain.suite_record(0, SUITE_PASS)))
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual((1, 0, 0), health_checks._check_clean_clone_suite(self.record, head=""))
+        self.assertEqual((1, 0, 0), self.health(maintain.suite_record(0, SUITE_PASS))[0])
 
 
 class TestFailureGaps(unittest.TestCase):
@@ -394,15 +370,13 @@ class TestStateFolder(Base):
         self.assertTrue(found[0].fixed)
         self.assertEqual(lines[-11:], log.read_text().splitlines(keepends=True))
 
-    def test_a_log_written_within_the_last_hour_is_left_for_a_quieter_run(self):
+    def test_a_log_written_within_the_last_hour_is_left_and_a_clean_home_reports_nothing(self):
         log = self.home / "maintenance.log"
+        log.write_text("short\n")
+        self.assertEqual([], maintain.check_state(True, self.home, self.LIMITS))
         log.write_text("".join(f"line {n:03d}\n" for n in range(40)))
         self.assertEqual([], maintain.check_state(True, self.home, self.LIMITS))
         self.assertEqual(360, log.stat().st_size)
-
-    def test_a_clean_home_reports_nothing(self):
-        (self.home / "maintenance.log").write_text("short\n")
-        self.assertEqual([], maintain.check_state(True, self.home, self.LIMITS))
 
     def test_health_fails_over_the_entry_limit_and_passes_under_it(self):
         for n in range(3):

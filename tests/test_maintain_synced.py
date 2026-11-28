@@ -5,9 +5,7 @@ import unittest
 from unittest import mock
 
 from _maintain_case import Base
-from _support import git, load_script, quiet, scratch_repo, temp_dir
-
-launcher = load_script("scripts/olivercode", "olivercode_launcher")
+from _support import git, quiet, scratch_repo, temp_dir
 from lib import hygiene, maintain, placement
 
 
@@ -42,15 +40,11 @@ class TestSyncedRoot(Base):
         self.assertEqual(git(repo, "log", "--oneline").stdout.count("\n"), 1)
         self.assertEqual(maintain.check_git_sync(cfg, True), [])
 
-    def test_the_git_folder_is_ignored_and_the_main_checkout_is_not_a_stray_worktree(self):
+    def test_the_git_folder_is_ignored_even_for_a_repo_protected_before_the_rule_existed(self):
         repo, cfg = self.synced()
         maintain.check_git_sync(cfg, True)
         self.assertNotIn(".git.nosync", git(repo, "status", "--short").stdout)
-        self.assertEqual(placement.linked_worktrees(cfg), [])
-
-    def test_a_repo_protected_before_the_ignore_rule_existed_is_repaired(self):
-        repo, cfg = self.synced()
-        maintain.check_git_sync(cfg, True)
+        self.assertEqual(placement.linked_worktrees(cfg), [])  # the main checkout is not a stray worktree
         (repo / ".git.nosync" / "info" / "exclude").write_text("")
         self.assertTrue(maintain.check_git_sync(cfg, True)[0].fixed)
         self.assertNotIn(".git.nosync", git(repo, "status", "--short").stdout)

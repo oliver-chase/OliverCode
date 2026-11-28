@@ -15,9 +15,7 @@ class Base(unittest.TestCase):
         self.home = temp_dir(self)
         self.root = temp_dir(self)
         self.claude = temp_dir(self)
-        for target, value in (
-            (os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_FAILURE_LOG": str(self.home / "failures.log")}),
-        ):
-            p = mock.patch.dict(target, value); p.start(); self.addCleanup(p.stop)
-        p = mock.patch.object(maintain, "claude_dir", return_value=self.claude); p.start(); self.addCleanup(p.stop)
+        for p in (mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home), "OLIVERCODE_FAILURE_LOG": str(self.home / "failures.log")}),
+                  mock.patch.object(maintain, "claude_dir", return_value=self.claude)):
+            p.start(); self.addCleanup(p.stop)
         self.cfg = placement.Config(root=self.root, worktrees=self.root / "_worktrees", archive=self.root / "_archive", watch=[], allow=[])

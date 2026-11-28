@@ -6,10 +6,8 @@ import unittest
 from unittest import mock
 
 from _maintain_case import Base
-from _support import git, git_env, load_script, quiet, scratch_repo
-
-launcher = load_script("scripts/olivercode", "olivercode_launcher")
-from lib import failure_log, hygiene, maintain, placement  # noqa: E402
+from _support import git, git_env, quiet, scratch_repo
+from lib import failure_log, hygiene, maintain, placement
 
 
 class TestStaleDocs(Base):
@@ -61,9 +59,6 @@ class TestSchedule(Base):
         self.assertEqual(job["ProgramArguments"][-2:], ["maintain", "--fix"])
         self.assertIn("StartCalendarInterval", job)
         plistlib.loads(plistlib.dumps(job))
-
-
-    def test_the_job_runs_a_python_that_meets_the_minimum(self):
         from lib.cli import MIN_PYTHON, python_version
         exe = maintain.plist()["ProgramArguments"][0]
         self.assertGreaterEqual(python_version(exe) or (0, 0), MIN_PYTHON)
@@ -108,21 +103,15 @@ class TestTidy(Base):
         self.assertIn("commits not on the default branch (s)", text)
         self.assertNotIn("merged (", text)
 
-    def test_another_accounts_old_process_is_not_reported(self):
-        ps = "12 2-03:04:05 me /usr/bin/ffmpeg\n14 4-00:00:00 other /usr/bin/python3\n"
-        with mock.patch("getpass.getuser", return_value="me"):
-            text = " ".join(p.text for p in self.tidy(False, ps)[0])
-        self.assertIn("process 12", text)
-        self.assertNotIn("process 14", text)
-        self.assertNotIn("other", text)
-
-    def test_a_stray_process_older_than_a_day_is_listed_with_age_and_owner(self):
-        ps = "11 05:00 me claude\n12 2-03:04:05 me /usr/bin/ffmpeg\n13 3-00:00:01 root launchd\n"
+    def test_a_stray_process_older_than_a_day_is_listed_with_age_and_owner_and_another_accounts_is_not(self):
+        ps = "11 05:00 me claude\n12 2-03:04:05 me /usr/bin/ffmpeg\n13 3-00:00:01 root launchd\n14 4-00:00:00 other /usr/bin/python3\n"
         with mock.patch("getpass.getuser", return_value="me"):
             text = " ".join(p.text for p in self.tidy(False, ps)[0])
         self.assertIn("process 12 (ffmpeg) owned by me has run 2 day(s)", text)
         self.assertNotIn("process 11", text)
         self.assertNotIn("launchd", text)
+        self.assertNotIn("process 14", text)
+        self.assertNotIn("other", text)
 
     def test_a_one_time_task_past_its_date_is_listed_and_deleted_by_nothing(self):
         tasks = self.claude / "tasks"
