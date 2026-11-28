@@ -2,7 +2,7 @@
 
 The builder session runs `claude -p` on the task and exits at its commit. The runner then runs the repo's own validation directly, outside any session. A pass ends the loop. A failure starts one short fix session whose brief is the story, the diff and the last 60 lines of the gate (#888). Each later failure that differs from the last round's earns another. The loop
 stops when validation passes, when two rounds in a row change nothing in the worktree or fail validation the same way, when the fresh reader returns findings a second time, when the story's spend reaches BACKSTOP, when `claude` exits with an error or when
-the session's token budget refuses the next call, and a stopped loop leaves the working tree as it is. The model's tools run under the installed pretool guards, and the repo's commit gates run on every commit it makes.
+the session's token budget refuses the next call or when the caller's gate refuses the commit ahead of the reader, and a stopped loop leaves the working tree as it is. The model's tools run under the installed pretool guards, and the repo's commit gates run on every commit it makes.
 """
 
 from __future__ import annotations
@@ -499,16 +499,17 @@ def exit_reason(reply: dict, n: int, resumed: bool = False, unit: str = "round")
 
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "",
-             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
+             run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "", gate=None) -> dict:
     """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'stuck' when two rounds in a row failed validation the same way or
     changed nothing in the worktree, the latter with 'idle' (#1531), and 'capped' when the story's spend reached BACKSTOP (#1513). A reader that returns findings a second time, in any wording, adds 'held' with the latest finding and 'earlier' with the first (#975, #1548), and a reader that gave
     no verdict twice adds 'reader_failed' with the cause (#1489). Either way nothing is pushed.
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
-    `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
-    return _loop(task, cwd, session, max_turns, model_name, run, check, say, why, review_mode, repo)
+    `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories.
+    `gate(cwd)` runs before the reader and returns the landing's refusal of the commit, or ''. A refusal adds 'refused' and starts no reader (#1551)."""
+    return _loop(task, cwd, session, max_turns, model_name, run, check, say, why, review_mode, repo, gate)
 
 
-def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", review_mode="full", repo="") -> dict:
+def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", review_mode="full", repo="", gate=None) -> dict:
     run, check = run or model.run_cli, check or (validate)
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
@@ -578,6 +579,8 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
             if gitfiles.out(cwd, "rev-list", "--count", f"origin/{default_branch(cwd)}..HEAD").strip() == "0":
                 return {"done": True, "reason": "The repo's validation passes, and there is no commit on the branch to read.",  # done: the drain's landing step decides (#1547)
                         "rounds": n, "tokens": tokens, "summary": summary}
+            if gate and (refused := gate(cwd)):  # the free check runs before the paid one (#1551)
+                return {"done": False, "refused": refused, "reason": refused, "rounds": n, "tokens": tokens, "summary": summary}
             verdict = review(task, cwd, session, tail, run=run, say=say, model_name=reader_for(model_name),
                              max_turns=READER_TURNS, attempts=2)
             if verdict["verdict"] == "none":  # the reader failed twice, so nothing lands, and its failure is no finding (#1015, #1489)

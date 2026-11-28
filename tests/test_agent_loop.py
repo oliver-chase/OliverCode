@@ -341,6 +341,22 @@ class TestLoop(unittest.TestCase):
             out = self.loop(run, [(True, "")])
         self.assertEqual((True, 1, ["s1"]), (out["done"], read.call_count, calls))
 
+    def gated(self, refused):
+        """One committed round behind a gate that answers `refused`. Returns (outcome, the stubbed reader, sessions run)."""
+        run, calls = self.repo_run(lambda: git(self.repo, "commit", "-qm", "work", "--allow-empty"))
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        with mock.patch.object(agent_loop, "review", return_value={"verdict": "pass", "text": "PASS"}) as read:
+            out = self.loop(run, [(True, "")], gate=lambda cwd: refused)
+        return out, read, calls
+
+    def test_a_refusal_from_the_gate_ends_the_loop_with_no_reader(self):  # #1551
+        out, read, calls = self.gated("Refused: weak.")
+        self.assertEqual((False, "Refused: weak.", 0, ["s1"]), (out["done"], out["refused"], read.call_count, calls))
+
+    def test_a_commit_the_gate_passes_starts_the_reader(self):  # #1551
+        out, read, calls = self.gated("")
+        self.assertEqual((True, 1, ["s1"]), (out["done"], read.call_count, calls))
+
     def test_a_round_that_commits_edits_or_adds_a_file_is_progress_and_resets_the_count(self):  # #1531
         def commit():
             git(self.repo, "commit", "-qm", "more", "--allow-empty")

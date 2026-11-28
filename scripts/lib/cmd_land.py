@@ -259,7 +259,7 @@ def _test_functions(source: str) -> dict[str, tuple[int, int]] | None:
     return found
 
 
-def _removed_whole(wt: Path, base: str, declared: list[str]) -> tuple[list[str], dict[str, set[int]]]:
+def _removed_whole(wt: Path, since: str, declared: list[str]) -> tuple[list[str], dict[str, set[int]]]:
     """(the declared tests this commit deletes whole, {file: the base line numbers of the assertions in them}) (#1484). A test is deleted whole
     when exactly one function on the base answers to its name, none in the commit does and the commit adds none of its bare name, so a test that
     stays, moves to another class or shares its name excuses nothing; `Class::name` tells two of one name apart.
@@ -267,7 +267,7 @@ def _removed_whole(wt: Path, base: str, declared: list[str]) -> tuple[list[str],
     gone, excused = [], {}
     for entry in declared:
         path, _, name = entry.partition("::")
-        before = gitfiles.run(wt, "show", f"origin/{base}:{path}").stdout
+        before = gitfiles.run(wt, "show", f"{since}:{path}").stdout
         old, new = _test_functions(before), _test_functions(gitfiles.run(wt, "show", f"HEAD:{path}").stdout)  # a deleted file reads as empty
         if old is None or new is None:
             continue
@@ -310,6 +310,18 @@ def weakened(rows: list[tuple[str, int, str, str, int]], excused: dict[str, set[
     return found
 
 
+def weakening(wt: Path, since: str, body: str) -> tuple[str, list[str]]:
+    """(the refusal of the commit since `since` for a weakened test, or "", the tests the story names that it deletes whole). The drain's loop asks it
+    of the merge base before the reader (#1551), and land asks it of the base it rebased on."""
+    area, declared = intake.files_area(body), intake.removed_tests(body)
+    # a Removes tests entry excuses a test only in a file the Files area lists by name, and a test file listed nowhere there refuses the commit (#1484)
+    unlisted = [p for p in dict.fromkeys(entry.partition("::")[0] for entry in declared) if p not in area]
+    gone, excused = _removed_whole(wt, since, declared)
+    found = [f"{p} is on the Removes tests line and the Files area does not list it" for p in unlisted]
+    found += weakened(_changed_lines(gitfiles.run(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", since, "HEAD").stdout), excused)
+    return f"Refused: this commit weakens a test, so nothing landed: {'; '.join(found)}." if found else "", gone
+
+
 def land(wt: Path, story: str, log) -> tuple[str, str]:
     """Run the landing recipe in wt, writing to log. Returns (result word, short sha)."""
     word, why = refusal(wt)
@@ -324,7 +336,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
     if body is None:
         log.write(f"Refused: story #{story} could not be read over REST, so its Files area is unknown and nothing landed.\n")
         return "scope-unchecked", ""
-    area, declared = intake.files_area(body), intake.removed_tests(body)
+    area = intake.files_area(body)
     deadline, attempt, told = time.monotonic() + BUDGET, 0, set()
     while attempt < TRIES or time.monotonic() < deadline:
         if attempt >= TRIES:
@@ -345,13 +357,9 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
             names = ", ".join(outside)
             log.write(f"Note: this commit changes {names}, outside story #{story}'s Files area ({', '.join(area)}).\n")
             _story_comment(wt, story, f"This commit changes files outside the Files area: {names}. The Files area is {', '.join(area)}.", told)
-        # a Removes tests entry excuses a test only in a file the Files area lists by name, and a test file listed nowhere there refuses the commit (#1484)
-        unlisted = [p for p in dict.fromkeys(entry.partition("::")[0] for entry in declared) if p not in area]
-        gone, excused = _removed_whole(wt, base, declared)
-        found = [f"{p} is on the Removes tests line and the Files area does not list it" for p in unlisted]
-        found += weakened(_changed_lines(gitfiles.run(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout), excused)
-        if found:
-            log.write(f"Refused: this commit weakens a test, so nothing landed: {'; '.join(found)}.\n")
+        refused, gone = weakening(wt, f"origin/{base}", body)
+        if refused:
+            log.write(refused + "\n")
             return "weakened-test", ""
         if gone:
             names = ", ".join(gone)

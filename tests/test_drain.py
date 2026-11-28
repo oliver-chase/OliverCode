@@ -18,6 +18,10 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import cmd_drain, cmd_status, policy, run_lock  # noqa: E402
 
 
+ONE_TEST = "def test_one():\n    assert 1\n"
+TWO_TESTS = ONE_TEST + "\n\ndef test_two():\n    assert 2\n"
+
+
 def issue(n, body="", labels=(), title=None, status="Ready", size="S"):
     """A story Ready on the board and sized, with a Files area of its own unless the body names one (#1014)."""
     if "Files area:" not in body:
@@ -267,6 +271,16 @@ class DrainCase(unittest.TestCase):
         with mock.patch.object(cmd_drain, "notify") as notify:
             self.run_drain(io)
         self.assertEqual(([(1, f"Drain blocked: Landing failed: {cmd_drain.REFUSED} rebase-conflict")], [1]), (io.comments, io.kept))
+        notify.assert_called_once_with("#1 needs you. The story says what to do.")
+
+    def test_a_refusal_ahead_of_the_reader_parks_the_story_as_a_refused_landing_does(self):  # #1551
+        weak = "Refused: this commit weakens a test, so nothing landed: tests/test_x.py:1 removes 1 assertion(s) without removing the code they cover."
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "refused": weak, "reason": weak}]})
+        io.land = lambda wt, n: self.fail("a refused commit reached the landing")
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            _, _, st = self.run_drain(io)
+        self.assertEqual([(1, f"Drain blocked: Landing failed: {cmd_drain.REFUSED} weakened-test\n\n{weak}")], io.comments)
+        self.assertEqual(([1], {1}, [1], [1]), (io.started, io.saved, io.kept, st["blocked"]))  # no restart, and the card goes to Backlog
         notify.assert_called_once_with("#1 needs you. The story says what to do.")
 
     def test_one_committed_story_lands_with_no_stack(self):  # #1317
@@ -1010,6 +1024,53 @@ class TestRealIo(unittest.TestCase):
         self.assertIn("a step left to the owner is not done", seen["brief"])
         self.assertIn("never commit a partial story as finished", seen["brief"])
         self.assertNotIn("olivercode land WORKTREE", seen["brief"])
+
+    def read_commit(self, tests, body="", base_moves=False):
+        """Build story 7, whose builder commits `tests` over a two-assertion test file and adds more code than it deletes. Returns (sessions run, outcome)."""
+        repo = self.scratch()
+        for folder in ("scripts", "tests"):
+            (repo / folder).mkdir()
+        (repo / "scripts" / "validate.sh").write_text("exit 0\n")
+        (repo / "tests" / "test_a.py").write_text(TWO_TESTS)
+        git(repo, "add", ".")
+        git(repo, "commit", "-qm", "tests")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        if base_moves:  # origin gains an assertion after the branch point, which a diff against origin's tip would read as removed
+            git(repo, "checkout", "-qb", "ahead")
+            (repo / "tests" / "test_b.py").write_text("assert True\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-qm", "ahead")
+            git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+            git(repo, "checkout", "-q", "main")
+        sessions = []
+
+        def run(prompt, cwd, **kw):
+            sessions.append(kw["session"])
+            if not kw["session"].endswith("-review"):
+                (repo / "tests" / "test_a.py").write_text(tests)
+                (repo / "scripts" / "a.py").write_text("x = 1\ny = 2\nz = 3\n")
+                git(repo, "add", ".")
+                git(repo, "commit", "-qm", "work (#7)")
+            return {"code": 0, "text": "PASS", "tokens": 1, "session_id": "c1"}
+
+        story = issue(7, f"{body}\nSize: M\nFiles area: scripts/a.py, tests/test_a.py")  # an M story is read
+        with mock.patch.object(cmd_drain.agent_loop.model, "run_cli", run), mock.patch.object(cmd_drain.agent_loop, "validate", return_value=(True, "")), \
+                mock.patch.object(cmd_drain.cmd_land, "story_body", return_value=story["body"]), mock.patch.object(cmd_drain.agent_loop, "start_size", return_value=None):
+            out = cmd_drain.Io(repo, "o/r").build(story, repo, "")
+        return sessions, out
+
+    def test_a_commit_the_landing_would_refuse_starts_no_reader(self):  # #1551
+        sessions, out = self.read_commit(ONE_TEST)
+        self.assertEqual((["story-7"], False), (sessions, out["done"]))
+        self.assertEqual("Refused: this commit weakens a test, so nothing landed: tests/test_a.py:2 removes 1 assertion(s) without removing the code they cover.", out["refused"])
+
+    def test_a_clean_commit_starts_the_reader_though_origin_moved_on(self):  # #1551
+        sessions, out = self.read_commit(TWO_TESTS + "\n\ndef test_three():\n    assert 3\n", base_moves=True)
+        self.assertEqual((["story-7", "story-7-review"], True), (sessions, out["done"]))
+
+    def test_removals_the_story_names_start_the_reader(self):  # #1551
+        sessions, out = self.read_commit(ONE_TEST, body="Removes tests: tests/test_a.py::test_two")
+        self.assertEqual((["story-7", "story-7-review"], True), (sessions, out["done"]))
 
     def test_the_model_follows_the_story_size(self):
         for size, labels, model_name in (("XS", [], "haiku"), ("L", [], "sonnet"), ("M", ["design"], "opus")):

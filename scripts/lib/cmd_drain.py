@@ -349,7 +349,13 @@ class Io:
                 self.blame(tail)
             return passed, tail
 
-        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, check=check, review_mode=review, repo=self.repo.name)
+        def gate(cwd):  # the landing's weakened-test check against the merge base, since the branch is not rebased yet (#1551)
+            if not (since := gitfiles.out(cwd, "merge-base", f"origin/{self.branch()}", "HEAD").strip()):
+                return ""  # the landing still checks
+            body = cmd_land.story_body(worktree, str(n))  # read as the landing reads it, so a line added during the build counts
+            return cmd_land.weakening(worktree, since, issue.get("body") or "" if body is None else body)[0]
+
+        return agent_loop.run_loop(brief, worktree, f"story-{n}", model_name=builder, why=why, check=check, review_mode=review, repo=self.repo.name, gate=gate)
 
     def blame(self, tail: str) -> None:
         """Raise when a failed validation is not the story's own: it calls a command that is gone (#1480), or the base, validated now, fails with the same failing line (#1481)."""
@@ -755,6 +761,10 @@ def _work_story(io, issue: dict, state: dict, queue=None) -> tuple[bool | None, 
             return False, tokens
         if out.get("reader_failed"):  # no finding, so the comment never starts with HELD, and no builder restarts (#1489)
             io.comment(n, f"Drain stopped: reader failed, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready. {out['reader_failed']}")
+            return False, tokens
+        if out.get("refused"):  # the landing would refuse the commit, so it parks as a refused landing does and no reader was paid (#1551)
+            io.saved.add(n)
+            io.comment(n, f"Drain blocked: Landing failed: {REFUSED} weakened-test\n\n{out['refused']}")
             return False, tokens
         if out.get("usage_limit"):  # the story goes back to Ready unblocked, and the drain starts no new builder (#1299)
             state.setdefault("limited", []).append(n)

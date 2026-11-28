@@ -660,6 +660,16 @@ NAMED_TEST = GUIDE_TESTS[GUIDE_TESTS.index("    def test_the_guide_names"):GUIDE
 OPENS_ASSERTS = "        self.assertTrue(True)\n        self.assertIsNone(None)\n"
 
 
+class TestLandKeepsItsCheck(Base):
+    def test_the_landing_refuses_with_the_check_the_loop_runs_against_the_base_it_rebased_on(self):  # #1551
+        with mock.patch.object(cmd_land, "weakening", return_value=("Refused: weak.", [])) as check:
+            code, out = self.land()
+        self.assertEqual(1, code, out)
+        self.assertIn("RESULT weakened-test", out)
+        check.assert_called_once_with(self.wt, "origin/main", self.body)
+        self.assertIn("Refused: weak.", (self.root / "logs" / "land-main-9.log").read_text())
+
+
 class TestDeclaredRemovals(Base):
     """A story's `Removes tests:` line lets the tests it names go whole, and nothing else (#1484)."""
 
@@ -723,9 +733,9 @@ class TestDeclaredRemovals(Base):
         self.commit(twin)
         git(self.wt, "push", "-q", "origin", "HEAD:main")
         self.commit(GUIDE_TESTS)
-        self.assertEqual(([], {}), cmd_land._removed_whole(self.wt, "main", [NAMED]))
+        self.assertEqual(([], {}), cmd_land._removed_whole(self.wt, "origin/main", [NAMED]))
         by_class = NAMED.replace("::", "::TestOther::")
-        self.assertEqual([by_class], cmd_land._removed_whole(self.wt, "main", [by_class])[0])
+        self.assertEqual([by_class], cmd_land._removed_whole(self.wt, "origin/main", [by_class])[0])
 
     def test_a_named_test_that_is_renamed_excuses_no_assertion_removed_elsewhere(self):
         self.commit(GUIDE_TESTS.replace("names_every_command", "names_commands").replace(OPENS_ASSERTS, "        pass\n"))
