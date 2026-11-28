@@ -153,8 +153,11 @@ class Handoff(unittest.TestCase):
             out = self.write_draft()
         run.assert_not_called()
         popen.assert_not_called()
-        self.assertIn(f"call start_session with model sonnet and this prompt: {cmd_handoff.read_prompt('OliverCode', self.folder)}", out)
-        self.assertIn('call set_session_title for the new session with "OliverCode 9"', out)
+        start = next(line for line in out.splitlines() if line.startswith("Start:"))
+        self.assertIn('call start_session with initiation "user_asked", title "OliverCode 9", model sonnet, background "', start)
+        self.assertGreaterEqual(len(start.split('background "')[1].split('"')[0]), 80)  # the app refuses a shorter one
+        self.assertTrue(start.endswith(f"and this prompt: {cmd_handoff.read_prompt('OliverCode', self.folder)}"), start)
+        self.assertNotIn("set_session_title", out)
         self.assertIn("call set_pinned for the new session with pinned=true", out)
         self.assertIn("call set_pinned for s1 with pinned=false", out)
         self.assertNotIn("Remote Control", out)
@@ -165,10 +168,20 @@ class Handoff(unittest.TestCase):
         lines = out.splitlines()
         start = next(i for i, line in enumerate(lines) if line.startswith("Start:"))
         detach = next(i for i, line in enumerate(lines) if line.startswith("Detach:"))
-        title = next(i for i, line in enumerate(lines) if line.startswith("Title:"))
         self.assertEqual(start + 1, detach)
-        self.assertLess(detach, title)
         self.assertIn("call detach_session for the new session", lines[detach])
+
+    def test_a_start_that_would_show_a_card_keeps_the_work_in_this_thread(self):
+        lines = self.write_draft().splitlines()
+        card = next(i for i, line in enumerate(lines) if line.startswith("Card:"))
+        self.assertLess(card, next(i for i, line in enumerate(lines) if line.startswith("Start:")))
+        for words in ("refuses the start or would only propose it", "keep working in this thread", "propose no card", "ask the owner nothing",
+                      "skip every step below"):
+            self.assertIn(words, lines[card])
+
+    def test_the_old_thread_stops_its_drain_watch_once_the_next_one_starts(self):
+        last = self.write_draft().splitlines()[-1]
+        self.assertIn("once the new session starts, stop any `olivercode watch` this thread runs in the background", last)
 
     def test_the_new_thread_keeps_the_number_write_gave_it_and_repeats_no_call_it_already_got(self):
         self.home.mkdir()
@@ -247,7 +260,7 @@ class Handoff(unittest.TestCase):
     def test_a_repo_with_no_number_starts_at_one_and_an_overwritten_handoff_uses_none(self):
         self.put("Pattern-handoff-2026-11-26.md")
         for _ in range(2):
-            self.assertIn('with "OliverCode 1"', self.write_draft())
+            self.assertIn('title "OliverCode 1"', self.write_draft())
         _, out = self.run_cmd("read", "Pattern")
         self.assertIn('with "Pattern 1"', out)
 

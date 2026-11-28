@@ -11,15 +11,12 @@ records the next thread number and gives the calls that title and pin the sessio
 
 It also flags a long thread once (#1319): when an interactive session's transcript shows over 100,000 tokens of context, the first prompt after that
 gets one line telling the session to write the handoff with `olivercode handoff write`, which prints the calls that start the next thread (#1321, #1488).
-A marker in the OliverCode home keeps it to once per session, and a headless builder is never flagged.
-
-A thread over 160,000 tokens takes no new work until it writes that handoff (#1519): until a PROJECT-handoff file in the session's folder is newer than
-the marker, the owner's prompt is blocked unless it names the handoff or starts with "ask:", and one that does goes through with a note that the turn
-writes the handoff. A headless builder is never blocked.
+A marker in the OliverCode home keeps it to once per session, and a headless builder is never flagged. No prompt is blocked for its thread's
+length, and the owner is never asked to start or type a handoff (#1572).
 
 It names each story the drain handed back (#1532): the owner's next prompt in an interactive OliverCode chat gets one line per open owner-queue item that
 names a story, with its number, title and stop reason. A marker in the OliverCode home keeps it to once per item, and a status-only prompt that would
-carry such a line goes through instead of being blocked. In a thread the 160,000-token block would stop, it is answered from the digest and the item stays unshown.
+carry such a line goes through instead of being blocked.
 """
 
 from __future__ import annotations
@@ -39,14 +36,11 @@ from lib import cmd_owner, cmd_status, gh_budget  # noqa: E402
 
 STALE_SECONDS = 3600  # a digest older than this is labeled with its age
 LONG_TOKENS = 100_000  # a thread past this re-reads more cached context per turn than the turn's work costs (#1319, #1556)
-BLOCK_TOKENS = 160_000  # a thread past this ignored the note above, so it takes only the handoff; the gap keeps one large tool result from skipping the note (#1519, #1556)
 TAIL_BYTES = 1_000_000  # the last model call's usage is near the end of the transcript
 STOPS_PER_PROMPT = 3  # each new story costs one title read, so the rest wait for the next prompt and the hook stays inside its timeout
 CHARS = 1200 # the board line and the open list, about three hundred tokens, is what a status answer needs
 FOLLOW = ("`olivercode watch REPO` prints each story's stage live with its time, tokens and API-price equivalent, at no model cost.\n"  # how the owner follows a run (#1518)
           "`olivercode status` shows the open count, pace and what is next, at no model cost.")
-HANDOFF_CALLS = ("run `olivercode handoff write PROJECT FILE` and make the calls it prints, which start the next thread in the desktop app. "
-                 "Start no other session. Tell the owner in one line.")
 # A question about the board only: "status" alone, or "status" in a question or a status-of phrase. "the PR status is red" and "add a status field" are not questions.
 STATUS_RE = re.compile(r"\bwhat(?:'s| is| are)\s+(?:the\s+)?status\b|\bstatus\s+(?:of|on)\b|^\s*(?:any\s+|the\s+)?status\s*\??\s*$"
                        r"|\bwhat(?:'s| is| are)\s+(?:still\s+)?(?:building|left|running|in progress|open)\b|\bhow far\b"
@@ -55,7 +49,6 @@ STATUS_RE = re.compile(r"\bwhat(?:'s| is| are)\s+(?:the\s+)?status\b|\bstatus\s+
 ASK_RE = re.compile(r"\s*ask:", re.IGNORECASE)  # the owner's way to force a model turn on a status question
 OC_ROOT = Path(__file__).resolve().parents[2]
 NAMES_OC_RE = re.compile(r"\bolivercode\b", re.IGNORECASE)
-NAMES_HANDOFF_RE = re.compile(r"\bhand[\s-]?off", re.IGNORECASE)
 HANDOFF_READ_RE = re.compile(r"""olivercode['"]?\s+handoff\s+read\b""", re.IGNORECASE)  # the launcher path may be quoted
 # Words that may remain once the status phrase is cut out: a message that leaves any other word, such as "and fix the parser", also asks for work.
 FILLER = {"a", "about", "along", "and", "any", "are", "board", "done", "far", "finish", "how", "i", "is", "it", "left", "now", "of", "on", "please",
@@ -180,40 +173,19 @@ def new_thread_note(data: dict) -> str:
     return f"This is a new OliverCode chat, thread {number}. Make these calls before the turn's work:\n" + "\n".join(steps)
 
 
-def handoff_since(folder: str, since: float) -> bool:
-    """Whether the folder `olivercode handoff write` files into for this session holds a handoff newer than `since`."""
-    found = Path(os.environ.get("OLIVERCODE_HANDOFF_DIR") or folder or ".").expanduser().glob("*-handoff-*.md")
-    return any(path.is_file() and path.stat().st_mtime > since for path in found)
-
-
-def long_thread(data: dict) -> tuple[str, str]:
-    """(block reason, context line) for a long interactive thread, each '' when it does not apply, and both '' for a short thread or a headless builder.
-
-    Past LONG_TOKENS the line comes once per session. Past BLOCK_TOKENS, until a handoff is newer than the marker, the owner's prompt is blocked,
-    or gets the handoff-turn line when it names the handoff or starts with "ask:"."""
+def long_thread(data: dict) -> str:
+    """The line for the first prompt of an interactive thread past LONG_TOKENS, once per session, or ''."""
     session = interactive_session(data)
     transcript = str(data.get("transcript_path") or "")
-    if not session or not transcript:
-        return "", ""
-    tokens = context_tokens(Path(transcript))
-    if tokens < LONG_TOKENS:
-        return "", ""
+    if not session or not transcript or context_tokens(Path(transcript)) < LONG_TOKENS:
+        return ""
     marker = failure_log.home() / f"long-thread-{session}"
-    first = not marker.exists()
-    if first:
-        marker.touch()
-    prompt = str(data.get("prompt") or "")
-    if tokens > BLOCK_TOKENS and from_owner(prompt):
-        if handoff_since(str(data.get("cwd") or ""), marker.stat().st_mtime):
-            return "", ""
-        if ASK_RE.match(prompt) or NAMES_HANDOFF_RE.search(prompt):
-            return "", f"This thread's context is past {BLOCK_TOKENS:,} tokens, so this turn writes the handoff and takes no other work: {HANDOFF_CALLS}"
-        return (f'This thread is past {BLOCK_TOKENS:,} tokens of context, so it takes no new work until its handoff is written. Type "handoff" so this '
-                "session writes it with `olivercode handoff write`."), ""
-    if not first:
-        return "", ""
-    return "", (f"This thread's context is past {LONG_TOKENS:,} tokens, so each turn costs more than the work in it. When this turn's work is done, "
-                f"{HANDOFF_CALLS} The owner never has to ask for a handoff.")
+    if marker.exists():
+        return ""
+    marker.touch()
+    return (f"This thread's context is past {LONG_TOKENS:,} tokens, so each turn costs more than the work in it. When this turn's work is done, "
+            "run `olivercode handoff write PROJECT FILE` and make the calls it prints, which start the next thread in the desktop app. "
+            "Start no other session. Tell the owner in one line. The owner is never asked to start, type or approve a handoff.")
 
 
 def handed_back(data: dict) -> list[tuple[Path, dict]]:
@@ -275,20 +247,15 @@ def main() -> int:
         return 0
     prompt = str(data.get("prompt") or "")
     # A status-only prompt over a stale digest goes through to the session instead of being answered from old figures (#1329).
-    # So does one with a handed-back story to name, since a block adds no line to the chat, unless the long thread would block it anyway (#1532).
+    # So does one with a handed-back story to name, since a block adds no line to the chat (#1532).
     status_only = is_status_only(prompt) and not age_note(cmd_status.digest_path())
-    carries = status_only and bool(handed_back(data))
-    reason, long_note = long_thread(data) if carries or not status_only else ("", "")
-    if status_only and (reason or not carries):
+    if status_only and not handed_back(data):
         # The block ends the turn, so the context beside it is never read; it keeps the #991 output shape for a status-only prompt.
         print(json.dumps({"decision": "block", "reason": block_reason(cmd_status.digest_path()),
                           "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context(prompt)}}))
         return 0
-    if reason:
-        print(json.dumps({"decision": "block", "reason": reason}))
-        return 0
     # stop_note comes last: it sees a chat new_thread_note just numbered, and marks nothing shown if an earlier part fails.
-    text = "\n".join(part for part in (context(prompt), new_thread_note(data), long_note, stop_note(data)) if part)
+    text = "\n".join(part for part in (context(prompt), new_thread_note(data), long_thread(data), stop_note(data)) if part)
     if text:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}))
     return 0

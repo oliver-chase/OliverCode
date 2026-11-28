@@ -1,7 +1,8 @@
 """Launcher command `handoff`: one live handoff per project, deleted once the next thread has read it (#1321).
 
 `olivercode handoff write PROJECT FILE` files FILE as PROJECT-handoff-DATE.md in the handoff folder and deletes the project's other handoffs, then prints the
-desktop-app calls that start the next thread on Sonnet (#1556), name and pin it and unpin this one (#1488). It starts nothing itself.
+desktop-app calls that start the next thread on Sonnet (#1556) under its name, pin it and unpin this one (#1488). It starts nothing itself. When the app would
+not start it without a card, the steps keep the work in the writing thread and ask the owner nothing (#1572).
 `olivercode handoff read PROJECT` prints the handoff and deletes it, with no archive copy. A thread with no number yet gets the calls that name it
 "PROJECT N", N from 1 to 10 (#1353), pin it and set its model to Sonnet. The thread that takes the number `write` reserved makes
 them only when its title or pin is missing. Only regular files named PROJECT-handoff-*.md count, so
@@ -193,14 +194,19 @@ def read_prompt(project: str, folder: Path) -> str:
 
 
 def next_thread_steps(project: str, folder: Path) -> list[str]:
-    """The calls the writing thread makes to start the next one in the desktop app, with its name and the pin."""
+    """The calls the writing thread makes to start the next one in the desktop app, with its name and the pin, and when to make none of them."""
     number, old = reserve_thread(project, session())
-    steps = [f"Start: call start_session with model sonnet and this prompt: {read_prompt(project, folder)}",
+    background = (f"This is the next {project} thread. The last one wrote a handoff with the goal, decisions, constraints and next steps. "
+                  "Read it with the command in the prompt before any other work.")
+    steps = ['Card: initiation "user_asked" applies only when the owner\'s own words asked for the next session. If they did not, or the app refuses '
+             "the start or would only propose it, keep working in this thread: propose no card, ask the owner nothing and skip every step below.",
+             f'Start: call start_session with initiation "user_asked", title "{project} {number}", model sonnet, background "{background}" '
+             f"and this prompt: {read_prompt(project, folder)}",
              "Detach: call detach_session for the new session, so it sits at the top level of the sidebar and not under this one.",
-             f'Title: call set_session_title for the new session with "{project} {number}".',
              "Pin: call set_pinned for the new session with pinned=true.",
-             unpin_step(session())]
-    return steps + [unpin_step(old)] if old and old != session() else steps
+             unpin_step(session()),
+             *([unpin_step(old)] if old and old != session() else [])]
+    return steps + ["Watch: once the new session starts, stop any `olivercode watch` this thread runs in the background, so only the new one watches the drain."]
 
 
 def write(project: str, draft: Path, folder: Path) -> int:

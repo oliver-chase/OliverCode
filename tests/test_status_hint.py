@@ -234,46 +234,14 @@ class LongThread(unittest.TestCase):
         self.assertEqual("", self.run_hook(headless=True))
         self.assertEqual([], list(self.tmp.glob("long-thread-*")))
 
-    def assert_blocked(self, out):
-        blocked = json.loads(out)
-        self.assertEqual("block", blocked["decision"])
-        for words in ("past 160,000 tokens", 'Type "handoff"', "`olivercode handoff write`"):
-            self.assertIn(words, blocked["reason"])
-
-    def test_a_thread_past_160k_that_ignored_the_note_takes_no_other_work(self):
-        self.write(105_000)
-        self.assertNotIn("decision", self.run_hook())
-        self.write(160_001)
-        self.assert_blocked(self.run_hook())
-        self.assert_blocked(self.run_hook())
-        self.assert_blocked(self.run_hook(session="s2"))  # past both limits at its first sight
-
-    def test_at_160k_or_less_nothing_is_blocked(self):
-        self.write(160_000)
-        self.assertNotIn("decision", self.run_hook())
-        self.assertEqual("", self.run_hook())
-
-    def test_a_prompt_that_names_the_handoff_or_asks_goes_through_to_write_it(self):
+    def test_no_request_past_160k_with_no_handoff_is_blocked_or_told_to_ask_the_owner(self):
         self.write(170_000)
-        for prompt in ("handoff", "write the Hand-off now", "hand off please", "ask: fix the parser"):
-            out = json.loads(self.run_hook(prompt=prompt))
-            self.assertNotIn("decision", out, prompt)
-            self.assertIn("this turn writes the handoff", out["hookSpecificOutput"]["additionalContext"], prompt)
-
-    def test_a_handoff_newer_than_the_marker_unblocks_every_prompt(self):
-        self.write(170_000)
-        handoff = self.tmp / "OliverCode-handoff-2026-11-27.md"
-        handoff.write_text("next", encoding="utf-8")
-        os.utime(handoff, (1, 1))
-        self.assert_blocked(self.run_hook())  # a handoff from before the marker does not count
-        newer = (self.tmp / "long-thread-s1").stat().st_mtime + 1
-        os.utime(handoff, (newer, newer))
-        for prompt in ("fix the parser", "handoff", "ask: status?"):
+        first = json.loads(self.run_hook())
+        self.assertNotIn("decision", first)
+        note = first["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("The owner is never asked to start, type or approve a handoff.", note)
+        for prompt in ("fix the parser", "handoff", "ask: fix the parser"):
             self.assertEqual("", self.run_hook(prompt=prompt), prompt)
-
-    def test_a_message_the_owner_did_not_type_is_not_blocked(self):
-        self.write(170_000)
-        self.assertNotIn("decision", self.run_hook(prompt="<task-notification>done</task-notification>"))
 
     def test_an_unreadable_transcript_counts_as_short(self):
         self.assertEqual(0, hint.context_tokens(self.tmp / "absent.jsonl"))
@@ -339,22 +307,6 @@ class HandedBack(unittest.TestCase):
         self.hand_back(7)
         self.assertIn(self.line(7), self.added(prompt="what is building?"))
         self.assertEqual("block", self.run_hook(prompt="what is building?")["decision"])
-
-    def test_a_blocked_long_thread_leaves_the_item_for_the_prompt_that_goes_through(self):
-        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 170_000}}}) + "\n", encoding="utf-8")
-        self.hand_back(7)
-        self.assertEqual("block", self.run_hook()["decision"])
-        self.assertIn(self.line(7), self.added(prompt="handoff"))
-
-    def test_a_status_only_prompt_past_160k_is_answered_from_the_digest_and_leaves_the_item(self):
-        (self.tmp / "status-digest.md").write_text(DIGEST, encoding="utf-8")
-        (self.tmp / "t.jsonl").write_text(json.dumps({"message": {"usage": {"input_tokens": 170_000}}}) + "\n", encoding="utf-8")
-        self.hand_back(7)
-        for _ in range(2):
-            out = self.run_hook(prompt="what is building?")
-            self.assertEqual("block", out["decision"])
-            self.assertIn("Board: owner/repo: 3 open stories.", out["reason"])
-        self.assertIn(self.line(7), self.added(prompt="handoff"))
 
     def test_a_title_that_cannot_be_read_still_names_the_story(self):
         (self.tmp / "gh").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
