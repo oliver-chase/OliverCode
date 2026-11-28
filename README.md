@@ -161,7 +161,6 @@ Four things differ in a fork. This repository is public. Get the code by cloning
 | [`docs/AUDIT-ACCEPTED.md`](docs/AUDIT-ACCEPTED.md) | Audit findings the owner accepted, each with its reason |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Review marker for the live GitHub Project backlog |
 | [`docs/SHARING.md`](docs/SHARING.md) | Whether the repository can be shared, and why |
-| [`docs/REGRESSION-AUDIT-1246.md`](docs/REGRESSION-AUDIT-1246.md) | Two-hour delivery data for 22 to 24 Nov and the defects found on the archived branch |
 | [`skills/INDEX.md`](skills/INDEX.md) | Included skill catalog |
 
 ## Status
