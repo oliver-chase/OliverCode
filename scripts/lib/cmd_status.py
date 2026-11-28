@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import statistics
 import subprocess
 import sys
 import time
@@ -439,12 +440,6 @@ def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
             f"out of {len(landed(rows))} closed in the last {DAYS} days.")
 
 
-def median(values: list[float]) -> float:
-    ordered = sorted(values)
-    mid = len(ordered) // 2
-    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
-
-
 def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
     """One line per story size that reached staging (a landed row) in the last `days`: the median minutes from claim, rounds and cost, and the share that
     passed validation first time, beside the size's benchmark, or the count and 'too few' under MIN_SIZED. Rows with no size are left out (#1301)."""
@@ -467,9 +462,9 @@ def size_lines(log: list[dict], now: float, days: int = DAYS) -> list[str]:
         costs = [f["cost"] for f in found if f["priced"]]
         against = f" Benchmark: {bench[0]} minutes and ${bench[1]:.2f} ({YARDSTICK_NOTE})." if bench else " No benchmark is set for this size."
         ceiling = f" Ceiling: ${agent_loop.COST_CEILING[size]:.2f} ({YARDSTICK_NOTE})." if size in agent_loop.COST_CEILING else ""
-        lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days. Median {median([f['minutes'] for f in found]):.1f} minutes, "
-                     f"{median([f['rounds'] for f in found]):g} rounds, "
-                     f"{spend_words(median([f['tokens'] for f in found]), median(costs) if costs else 0) or 'no tokens or cost recorded'}, "
+        lines.append(f"{size} stories: {len(found)} reached staging in the last {days} days. Median {statistics.median([f['minutes'] for f in found]):.1f} minutes, "
+                     f"{statistics.median([f['rounds'] for f in found]):g} rounds, "
+                     f"{spend_words(statistics.median([f['tokens'] for f in found]), statistics.median(costs) if costs else 0) or 'no tokens or cost recorded'}, "
                      f"{round(100 * sum(f['first'] for f in found) / len(found))}% passed validation first time.{against}{ceiling}")
     return lines
 

@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import html
 import json
+import statistics
 from collections import Counter
 
 from lib import agent_loop, local_config, cmd_status, gh_budget
-from lib.city_health import clock, esc, money
+from lib.city_health import card, clock, esc, money
 
 SIZES = ("XS", "S", "M", "L", "XL")
 SHOWN_ROUTES = 6
@@ -39,10 +40,6 @@ def landed_stories(log: list[dict]) -> list[dict]:
         if cmd_status.priced(rows):
             found.append({"story": row["story"], "size": rows[0].get("size") or "", "cost": row["cost"]})
     return found
-
-
-def card(title: str, body: str) -> str:
-    return f'<div class="card"><h3>{esc(title)}</h3>{body}</div>'
 
 
 def tile(label: str, number: str, bar: float, bench: str, note: str, mark: bool = False) -> str:
@@ -79,7 +76,7 @@ def tiles(rows: list[dict], landed: list[dict], kinds: dict, share: float | None
     if costs:
         average = sum(costs) / len(costs)
         story = tile("Cost per landed story", money(average), pct(average, limit), f"{money(sum(costs))} over {len(costs)} landings",
-                     f"Against the {money(limit)} M limit. The median landed story cost {money(cmd_status.median(costs))}.", mark=True)
+                     f"Against the {money(limit)} M limit. The median landed story cost {money(statistics.median(costs))}.", mark=True)
     else:
         story = tile("Cost per landed story", "not recorded", 0, "No landed story has a cost recorded.", "")
     cache = tile("Cache share", f"{share:.1f}%" if share is not None else "not recorded", share or 0, "Higher is cheaper",
@@ -134,7 +131,7 @@ def by_size(landed: list[dict]) -> str:
         costs = sorted(s["cost"] for s in landed if s["size"] == size)
         if not costs:
             continue
-        limit, top, median = agent_loop.COST_CEILING.get(size), costs[-1], cmd_status.median(costs)
+        limit, top, median = agent_loop.COST_CEILING.get(size), costs[-1], statistics.median(costs)
         scale = 1.1 * max(limit or 0, top)  # the lane runs 10% past its limit, or past its highest story when it has none
         extra, marks = "", ""
         if limit:

@@ -7,6 +7,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import statistics
 from collections import Counter
 
 from lib import local_config, cmd_status
@@ -233,7 +234,7 @@ def render(data: dict) -> str:
     once, many = rounds[0][1], rounds[-1][1]
     cut = (f"<p class=\"mean\">{once} {'story needed' if once == 1 else 'stories needed'} one round. {many} needed four or more, which usually means the story was unclear or hard.</p>{rounds_chart(rounds)}"
            if found else '<p class="mean">Not recorded: nothing has landed.</p>')
-    build, check, land = (cmd_status.median([f[k] for f in found]) for k in ("build", "check", "land")) if found else (0, 0, 0)
+    build, check, land = (statistics.median([f[k] for f in found]) for k in ("build", "check", "land")) if found else (0, 0, 0)
     colours = ("#C7C6CF", "#8F8E99", "#17161C")
     steps = (("Building", build), ("Validating", check), ("Landing", land))
     stages = (f'<p class="mean">Once built, a story takes about {cmd_status.minutes(check + land)} to validate and land. {"Landing" if land > check else "Validating"} is the slower step.</p>'
