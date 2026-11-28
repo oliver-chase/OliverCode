@@ -104,12 +104,4 @@ def command_board_sweep(argv: list[str]) -> int:
     if argv not in ([], ["--dry-run"]):
         print(USAGE)
         return 1
-    code = run(dry_run=bool(argv))
-    if not argv:
-        from lib import city  # local import: city reads the modules that import this one
-        from lib.local_config import OC_ROOT
-        try:
-            city.refresh(OC_ROOT)  # the page stays current when no drain runs; launchd starts in /, so the root is explicit (#1350)
-        except Exception:  # shortcut: any failure is swallowed, since the page is a view and the next sync retries it
-            pass
-    return code
+    return run(dry_run=bool(argv))

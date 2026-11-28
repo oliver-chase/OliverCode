@@ -31,7 +31,7 @@ VALIDATE_TIMEOUT = 3600
 DEFAULT_MODEL = "sonnet"  # builders run on Sonnet; Opus is for design judgment and cold review
 LADDER = ("haiku", "sonnet", "opus")
 BACKSTOP = 12.00  # dollars any story may spend, reader reviews included and carried across drains, before no further round starts: three times the old M ceiling (#1513)
-COST_CEILING = {"XS": 1.00, "S": 2.00, "M": 4.00}  # the per-size cost status and city measure landed stories against; it stops no build (#1513)
+COST_CEILING = {"XS": 1.00, "S": 2.00, "M": 4.00}  # the per-size cost status measures landed stories against; it stops no build (#1513)
 RESTART_ROUND = 3  # a story whose last build reached this round starts its next build one level up (#1015)
 # unittest's and pytest's lines that name a failing test
 FAILED_TEST = re.compile(r"^(?:(?:FAIL|ERROR): (\w+ \([\w.]+\).*)|FAILED (\S+::\S+))", re.M)
@@ -471,8 +471,6 @@ STORY_SIZE: dict[str, str] = {}  # story -> its board Size, set when the drain c
 STORY_SLUG: dict[str, str] = {}  # story -> its repo's 'owner/name', set when the drain claims it, so every cost row names it (#1481)
 SPEND: dict[str, float] = {}  # story -> dollars its rounds and reader reviews have cost: read from the run log at each claim, then added to by every round (#1318, #1481)
 STAGE_START: dict[str, float] = {}  # story -> when its current stage began, so each row says how long the stage before it took (#1291)
-CITY_AT = 0.0  # when the drain last rewrote city.html (#1350)
-CITY_EVERY = 60  # seconds between rewrites
 
 
 def log_stage(story: str, repo: str, stage: str, started_at: float | None = None, reason: str = "", **extra) -> None:
@@ -488,20 +486,6 @@ def log_stage(story: str, repo: str, stage: str, started_at: float | None = None
         row["size"] = STORY_SIZE[story]
     row.update(extra)
     append_run_log(row)
-    refresh_city(now)
-
-
-def refresh_city(now: float) -> None:
-    """Rewrite city.html from local files, at most once a minute, with no GitHub or model call. A failed rewrite never stops the drain (#1350)."""
-    global CITY_AT
-    if now - CITY_AT < CITY_EVERY:
-        return
-    CITY_AT = now
-    try:
-        from lib import city  # local import: city reads the modules that import this one
-        city.refresh(OC_ROOT)
-    except Exception:  # shortcut: any failure is swallowed, since the page is a view and the next stage row retries it
-        pass
 
 
 def exit_reason(reply: dict, n: int, resumed: bool = False, unit: str = "round") -> str:

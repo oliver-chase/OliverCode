@@ -29,6 +29,18 @@ def ago(minutes: int) -> str:
 
 
 class TestCity(unittest.TestCase):
+    def test_no_page_is_written_while_the_city_setting_is_off(self):
+        for value in (None, False):
+            with mock.patch("lib.local_config.setting", return_value=value), mock.patch.object(city, "write") as write:
+                self.assertEqual(0, city.refresh(local_config.OC_ROOT))
+            write.assert_not_called()
+
+    def test_the_page_is_written_when_the_city_setting_is_on(self):
+        with mock.patch("lib.local_config.setting", return_value=True), mock.patch.object(city, "write", return_value=0) as write, \
+                mock.patch.object(city.repo_state, "origin", return_value="o/r"):
+            city.refresh(local_config.OC_ROOT)
+        self.assertEqual(1, write.call_count)
+
     def test_the_frame_has_the_nav_and_a_status_band_that_reloads_every_minute(self):
         page = city.render(data(steps=[{"id": 9, "step": "Approve"}, {"id": 10, "step": "Decline"}], busy=True, builders=2))
         for name in ("Today", "Delivery", "Cost", "Health"):

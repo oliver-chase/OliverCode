@@ -377,7 +377,6 @@ class TestLandChatTelemetry(Base):
         super().setUp()
         self.home = self.root / "home"
         p = mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(self.home)}); p.start(); self.addCleanup(p.stop)
-        p = mock.patch.object(cmd_land.agent_loop, "refresh_city"); p.start(); self.addCleanup(p.stop)
         self.body = "Size: S"
         projects = self.root / "projects" / "p"
         (projects / "sess" / "subagents").mkdir(parents=True)
