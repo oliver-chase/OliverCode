@@ -171,9 +171,11 @@ class TestSessionNotesForStoppedGates(unittest.TestCase):
         git(repo, "config", "--unset", "core.hooksPath")
         self.assertNotEqual("", health_checks.stopped_hook(repo, REPO_ROOT, private=False))
         with mock.patch.object(health_checks, "OC_ROOT", REPO_ROOT), \
-                mock.patch.object(health_checks, "install_linked", return_value=True):
-            result, out = quiet(health_checks._check_stopped_hooks, REPO_ROOT, {"notes": repo})
-        self.assertEqual((1, 1), result[:2])
+                mock.patch.object(health_checks, "install_linked", return_value=True), \
+                mock.patch.object(health_checks.repo_gates, "hook_templates", wraps=repo_gates.hook_templates) as built:
+            result, out = quiet(health_checks._check_stopped_hooks, REPO_ROOT, {"notes": repo, "more": repo, "third": repo})
+        self.assertEqual(1, built.call_count)
+        self.assertEqual((1, 3), result[:2])
         self.assertIn("[FAIL] notes", out)
         self.assertIn("Fix: olivercode sync-hooks --commit --story N", out)
         with mock.patch.object(health_checks, "install_linked", return_value=False):

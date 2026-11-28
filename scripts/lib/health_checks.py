@@ -500,13 +500,13 @@ def _check_state_folder(home: Path | None = None, limits: dict | None = None) ->
     return 1, 0, 0
 
 
-def stopped_hook(repo: Path, oc_root: Path = OC_ROOT, private: bool = False) -> str:
+def stopped_hook(repo: Path, oc_root: Path = OC_ROOT, private: bool = False, templates: Path | None = None) -> str:
     """Why git runs none of the repo's commit gates, or "" when it runs them. A repo that runs its own hooks folder passes."""
     if repo_profiles.own_hooks_path(repo):
         return ""
     if repo.resolve() == oc_root.resolve():
         return repo_gates.gate_problem(repo)
-    return "; ".join(repo_gates.hook_problems(repo, repo_gates.hook_templates(oc_root), private))
+    return "; ".join(repo_gates.hook_problems(repo, templates or repo_gates.hook_templates(oc_root), private))
 
 
 def install_linked(oc_root: Path) -> bool:
@@ -522,14 +522,15 @@ def _check_stopped_hooks(oc_root: Path, private: dict[str, Path]) -> tuple[int, 
         print("  [WARN] install has not linked this checkout on this machine, so commit hooks are not checked")
         return 0, 0, 1
     passed = failed = skipped = 0
+    templates = repo_gates.hook_templates(oc_root)
     for name, path in [(oc_root.name, oc_root), *private.items()]:
         if not (path / ".git").exists():
             continue
-        why = stopped_hook(path, oc_root, private=path != oc_root)
+        why = stopped_hook(path, oc_root, private=path != oc_root, templates=templates)
         if why:
             fix = repo_gates.fix_command(path) if path == oc_root else "olivercode sync-hooks --commit --story N"
             # Git runs the files on disk, so current hooks that are only uncommitted still run every gate.
-            current = path != oc_root and not repo_gates.hook_problems(path, repo_gates.hook_templates(oc_root), True, committed=False)
+            current = path != oc_root and not repo_gates.hook_problems(path, templates, True, committed=False)
             print(f"  [{'WARN' if current else 'FAIL'}] {name}: {why}. Fix: {fix}")
             skipped += current
             failed += not current
