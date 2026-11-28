@@ -56,6 +56,12 @@ class TestStatus(unittest.TestCase):
         self.assertEqual(order, sorted(order))
         self.assertIn("Landed: #5 in r at 2026-11-22 04:17 EST. Building took under a minute, validation under a minute, landing under a minute, 17 minutes in all.", text)
 
+    def test_pace_prints_no_gate_savings_line(self):
+        with mock.patch.object(cmd_status, "run_log", return_value=[]):
+            lines = cmd_status.pace_lines(NOW, 0, [], "o/r")
+        self.assertEqual("Pace:", lines[0])
+        self.assertFalse(any("runs skipped" in line for line in lines), lines)
+
     def test_an_unreadable_run_log_is_named_as_unknown_and_no_figure_is_guessed(self):
         out = io.StringIO()
         with mock.patch.object(cmd_status, "run_log", side_effect=OSError("Permission denied")):

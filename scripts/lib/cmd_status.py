@@ -497,9 +497,8 @@ def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]
 
 
 def pace_lines(now: datetime, open_now: int | None, rows: list[dict] | None, slug: str) -> list[str]:
-    """The Pace section: the open count, the landing rate and the estimated finish from GitHub, then the tokens, the gate savings and the size medians from
-    the run log. A figure that cannot be read is named as unknown with why, and no figure is guessed (#1334)."""
-    from lib import gated
+    """The Pace section: the open count, the landing rate and the estimated finish from GitHub, then the tokens and the size medians from the run log.
+    A figure that cannot be read is named as unknown with why, and no figure is guessed (#1334)."""
     if open_now is None or rows is None:
         lines = [f"Open count, landing rate and finish date: unknown, because the issues of {slug} were not read from GitHub."]
     else:
@@ -510,7 +509,7 @@ def pace_lines(now: datetime, open_now: int | None, rows: list[dict] | None, slu
     except (OSError, ValueError) as err:
         return ["Pace:"] + lines + [f"Tokens and sizes: unknown, because the run log could not be read ({err})."]
     tokens_line = "Tokens per closed story: unknown, because the closed issues were not read from GitHub." if rows is None else tokens_per_story(rows, log)
-    return ["Pace:"] + lines + [tokens_line] + gated.savings_lines() + size_lines(log, now.timestamp())
+    return ["Pace:"] + lines + [tokens_line] + size_lines(log, now.timestamp())
 
 
 def run(slug: str | None, count=issue_count.count_issues, fetch=recent, now: datetime | None = None, out=print, live=None,
