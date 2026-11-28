@@ -10,7 +10,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.test_agent_loop` finds _support
-from _support import REPO_ROOT, temp_dir  # noqa: E402
+from _support import REPO_ROOT, git, scratch_repo, temp_dir  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from lib import agent_loop, cmd_run, model  # noqa: E402
@@ -293,6 +293,59 @@ class TestLoop(unittest.TestCase):
 
         out = self.loop(run, [(False, "a"), (False, "b"), (False, "a"), (False, "c"), (True, "")], review_mode="none")
         self.assertEqual((True, 5, [str(self.repo)] * 5), (out["done"], out["rounds"], seen))
+
+    def repo_run(self, *effects):
+        """A git worktree and a Claude Code whose rounds each run one effect on it, then reply."""
+        scratch_repo(self.repo)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "base")
+        steps, calls = list(effects), []
+
+        def run(prompt, cwd, **kw):
+            calls.append(kw["session"])
+            if kw["session"].endswith("-review"):
+                return reply("scripts/a.py: no test")
+            steps.pop(0)()
+            return reply(f"reply {len(calls)}")
+
+        return run, calls
+
+    def nothing(self):
+        pass
+
+    def test_two_rounds_in_a_row_that_change_nothing_end_the_story_before_any_check(self):  # #1531
+        (self.repo / "half.py").write_text("x = 1\n")  # uncommitted work from an earlier build, left as it is
+        run, calls = self.repo_run(self.nothing, self.nothing)
+        (self.repo / "half.py").write_text("x = 2\n")
+        checks = []
+        out = agent_loop.run_loop("do it", self.repo, "s1", run=run, check=lambda cwd: checks.append(cwd) or (False, "a"), say=lambda *_: None)
+        self.assertEqual((False, True, True, 2, "reply 2"), (out["done"], out["stuck"], out["idle"], out["rounds"], out["summary"]))
+        self.assertIn("rounds 1 and 2 changed nothing", out["reason"])
+        self.assertEqual((["s1", "s1"], 1), (calls, len(checks)))  # no third round, and nothing checks the second
+
+    def test_no_reader_is_called_after_the_second_round_that_changed_nothing(self):  # #1531
+        run, calls = self.repo_run(self.nothing, self.nothing)
+        out = self.loop(run, [(True, "")])
+        self.assertTrue(out["idle"])
+        self.assertEqual(["s1", "s1-review", "s1"], calls)
+
+    def test_a_round_that_commits_edits_or_adds_a_file_is_progress_and_resets_the_count(self):  # #1531
+        def commit():
+            git(self.repo, "commit", "-qm", "more", "--allow-empty")
+
+        def add():
+            (self.repo / "new.py").write_text("x = 1\n")
+
+        def edit_untracked():
+            (self.repo / "new.py").write_text("x = 2\n")
+
+        def edit_tracked():
+            (self.repo / "scripts" / "validate.sh").write_text("exit 1\n")
+
+        run, calls = self.repo_run(self.nothing, commit, self.nothing, add, self.nothing, edit_untracked, self.nothing, edit_tracked, self.nothing, self.nothing)
+        out = self.loop(run, [(False, str(i)) for i in "abcdefghi"], review_mode="none")
+        self.assertEqual((True, 10, 10), (out["idle"], out["rounds"], len(calls)))
+        self.assertIn("rounds 9 and 10 changed nothing", out["reason"])
 
     def test_the_same_failing_test_names_twice_in_a_row_stop_the_builder_whatever_the_timestamps_and_line_order(self):  # #1513
         first = "2026-11-27T01:00:00Z start\nFAIL: test_b (m.T.test_b)\n  line 4\nERROR: test_a (m.T.test_a)\nRan 2 tests in 0.512s"

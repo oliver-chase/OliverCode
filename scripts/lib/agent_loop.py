@@ -1,7 +1,7 @@
 """OliverCode's own agent loop: Claude Code headless does the work, OliverCode owns the rounds around it.
 
 The builder session runs `claude -p` on the task and exits at its commit. The runner then runs the repo's own validation directly, outside any session. A pass ends the loop. A failure starts one short fix session whose brief is the story, the diff and the last 60 lines of the gate (#888). Each later failure that differs from the last round's earns another. The loop
-stops when validation passes, when two rounds in a row fail the same way, when the story's spend reaches BACKSTOP, when `claude` exits with an error or when
+stops when validation passes, when two rounds in a row change nothing in the worktree or fail the same way, when the story's spend reaches BACKSTOP, when `claude` exits with an error or when
 the session's token budget refuses the next call, and a stopped loop leaves the working tree as it is. The model's tools run under the installed pretool guards, and the repo's commit gates run on every commit it makes.
 """
 
@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib import failure_log, model, usage_sessions, validated
+from lib import failure_log, gitfiles, model, usage_sessions, validated
 from lib.local_config import OC_ROOT, setting
 from lib.validate_gates import PROGRESS
 
@@ -152,6 +152,16 @@ def failure_key(output: str) -> frozenset[str]:
         return comparable(named)
     lines = [line for line in output.strip().splitlines() if not line.startswith((PROGRESS, "validate: gates took"))]
     return comparable(lines[-TAIL_LINES:])
+
+
+def tree_state(cwd: str | Path) -> tuple[str, str] | None:
+    """(HEAD, the tree of the working files) of a worktree, which a round that commits or edits changes, or None when git cannot say (#1531)."""
+    if not (head := gitfiles.out(cwd, "rev-parse", "HEAD")):
+        return None
+    try:
+        return head, validated.working_tree(Path(cwd))
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 def branch_diff(cwd: str | Path) -> str:
@@ -461,8 +471,8 @@ def exit_reason(reply: dict, n: int, resumed: bool = False, unit: str = "round")
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "",
              run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
-    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'stuck' when two rounds in a row failed the same way and
-    'capped' when the story's spend reached BACKSTOP (#1513). A reader that repeats its finding adds 'held' with it (#975, #1015), and a reader that gave
+    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'stuck' when two rounds in a row failed the same way or
+    changed nothing in the worktree, the latter with 'idle' (#1531), and 'capped' when the story's spend reached BACKSTOP (#1513). A reader that repeats its finding adds 'held' with it (#975, #1015), and a reader that gave
     no verdict twice adds 'reader_failed' with the cause (#1489). Either way nothing is pushed.
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
     `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
@@ -475,6 +485,7 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
     start, failures, last, n = model_name, 0, None, 0  # `last` is the previous round's failure: who reported it and what it said
+    idle = 0  # rounds in a row that left HEAD and the uncommitted work as they found them (#1531)
     while True:  # a failure that changed earns another fix session on the same worktree (#1513)
         spent = SPEND.get(session, 0.0)
         if spent >= BACKSTOP:  # a story whose failures keep changing still ends (#1513)
@@ -484,7 +495,7 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
         if repo and n > 1:
             log_stage(session, repo, "building")  # a fix round is building time again (#1291)
         model_name = escalate(start, failures)
-        resumed = False
+        resumed, before = False, tree_state(cwd)
         while True:
             try:
                 reply = run(prompt, cwd, max_turns=max_turns, session=session, system=SYSTEM, model=model_name, resume=claude_session)
@@ -514,6 +525,10 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
             break
         if reply["code"] != 0:
             return {"done": False, "reason": exit_reason(reply, n, resumed), "rounds": n, "tokens": tokens, "summary": summary}
+        idle = idle + 1 if before and tree_state(cwd) == before else 0  # a state git cannot read counts as progress
+        if idle == 2:  # ahead of the validation and the reader, so no model call follows (#1531)
+            return {"done": False, "stuck": True, "idle": True, "reason": f"Stuck: rounds {n - 1} and {n} changed nothing in the worktree, so no further round starts.",
+                    "rounds": n, "tokens": tokens, "summary": summary}
         if not checked:
             return {"done": False, "reason": f"The model finished, but nothing checked the result. {NO_VALIDATION}", "fatal": True,
                     "rounds": n, "tokens": tokens, "summary": summary}
@@ -534,7 +549,7 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
                 return {"done": False, "reader_failed": verdict["text"], "reason": f"The reader failed, so nothing is pushed: {verdict['text']}",
                         "rounds": n, "tokens": tokens, "summary": summary}
             if verdict["verdict"] == "findings":
-                # shortcut: a reworded finding counts as a new one and only BACKSTOP ends it, upgrade when the run log shows a reader rewording one finding
+                # shortcut: a reworded finding counts as a new one and only BACKSTOP ends it while each fix changes the tree, upgrade when the run log shows that
                 finding = ("reader", comparable(verdict["text"].splitlines()))
                 if finding == last:
                     return {"done": False, "stuck": True, "held": verdict["text"], "reason": f"Stuck: the fresh reader repeated its finding, so nothing is pushed: {verdict['text'][:300]}",

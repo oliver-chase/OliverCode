@@ -53,6 +53,7 @@ PARKED = re.compile(r"shares [^\n]* in its Files area|Size \w+ is too large for 
 RETURNED = "Back to Ready:"
 HELD = "Held by the fresh reader"  # how a held comment starts, and FINDING what its finding follows, so the next build can read it back (#1474)
 FINDING = "\n\nFinding:\n"
+IDLE = "Drain stopped for the owner:"  # how the comment on a story whose rounds changed nothing starts (#1531)
 GONE = "is not a valid command"  # what `olivercode` prints for a command it no longer has (#1480)
 # Lines that differ between two runs of one failure or say nothing of it: validate_gates' timings, land's own closing lines and the smoke banner (#1481)
 NOISE = (PROGRESS, "=== validate: never started", "validate: gates took", "=== validate: python smoke tests FAILED", "--- validate failed", "RESULT ")
@@ -141,7 +142,7 @@ class Io:
         self.claim_start: dict[int, float] = {}  # story number -> when this run claimed it, never refreshed (#1306)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.said: dict[int, str] = {}  # story number -> its last comment, which is the reason a stopped row records (#1291)
-        self.saved: set[int] = set()  # stories whose stopped builder's work was committed to story/N, so their card goes to Backlog (#1328)
+        self.saved: set[int] = set()  # stories whose card goes to Backlog: a stopped builder's work was committed to story/N (#1328), or its rounds changed nothing (#1531)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
@@ -360,13 +361,13 @@ class Io:
         return policy_stop_in(worktree.name, self.built_at.get(n, ""))
 
     def queue_owner(self, n: int, stop: dict) -> None:
-        """One open owner-queue line for a story a policy ask stopped. A story already waiting on the owner gets no second line (#1058)."""
+        """One open owner-queue line for a story a policy ask stopped, or for the cause `stop['why']` names (#1531). A story already waiting on the owner gets no second line (#1058)."""
         key = f"policy-stop:{self.slug}#{n}"
         if any(i["status"] == "open" and i.get("key") == key for i in cmd_owner.items()):
             return
-        at = f" at the {stop['gate']} gate" if stop["gate"] else ""
-        cmd_owner.add(self.agent, f"Story #{n} waits on you: {stop['rule']} stopped its builder{at}, so drain did not restart it. The story comment names the next action.",
-                      extra={"key": key, "story": n, "gate": stop["gate"]})
+        gate = stop.get("gate", "")
+        why = stop.get("why") or f"{stop['rule']} stopped its builder{f' at the {gate} gate' if gate else ''}, so drain did not restart it. The story comment names the next action."
+        cmd_owner.add(self.agent, f"Story #{n} waits on you: {why}", extra={"key": key, "story": n, "gate": gate})
 
     def commits(self, worktree: Path) -> int:
         done = subprocess.run(["git", "-C", str(worktree), "rev-list", "--count", f"origin/{self.branch()}..HEAD"], capture_output=True, text=True)
@@ -492,7 +493,7 @@ class Io:
         raw = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments", "--paginate", "--jq", ".[].body | @json"])
         cause = ""
         for body in (json.loads(line) for line in (raw.stdout.splitlines() if raw.returncode == 0 else []) if line.strip()):
-            if RETURNED in body:
+            if body.startswith(IDLE) or RETURNED in body:  # a stop for rounds that changed nothing ends any earlier parking, so no drain returns the card to Ready (#1531)
                 cause = ""
             elif m := PARKED.search(body):
                 cause = "overlap" if "Files area" in m.group(0) else "size"
@@ -643,7 +644,9 @@ def work_story(io, issue: dict, state: dict, queue=None) -> tuple[bool | None, i
         handed = closed is None
         if closed is False:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
-            if n not in state.get("limited", []):  # the usage limit already sent its own notification
+            if n in state.get("idle", []):  # it waits in Backlog, so no retry is promised (#1531)
+                notify(f"#{n} needs you. The story says what to do.")
+            elif n not in state.get("limited", []):  # the usage limit already sent its own notification
                 notify(f"#{n} didn't land yet. It'll try again on its own.")  # the reason stays in the story comment and the run log (#1325, #1374)
         return closed, used
     except NotTheStorys as exc:
@@ -762,6 +765,12 @@ def _work_story(io, issue: dict, state: dict, queue=None) -> tuple[bool | None, 
                 return True, tokens
         else:
             note = out["reason"]
+        if out.get("idle"):  # no later drain rebuilds a story whose rounds changed nothing: the owner decides (#1531)
+            io.saved.add(n)
+            state.setdefault("idle", []).append(n)
+            io.comment(n, f"{IDLE} {note}\n\nThe builder's last reply:\n{out.get('summary', '').strip()[:2000] or 'none'}")
+            io.queue_owner(n, {"why": "its builder's rounds changed nothing, so it waits in Backlog. The story comment holds the builder's last reply."})
+            return False, tokens
         if policy_stopped(io, n, worktree):
             return False, tokens
         if out["done"]:  # a failed landing is neither a crash nor a timeout

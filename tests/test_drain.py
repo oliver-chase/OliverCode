@@ -32,6 +32,7 @@ class FakeIo:
         self.said = {}
         self.refuse_close = ""
         self.slug, self.issues, self.cap, self.builds, self.land_ok, self.tokens = "o/r", list(issues), cap, builds or {}, land_ok, tokens
+        self.saved = set()  # stories whose card goes to Backlog (#1328, #1531)
         self.stops, self.owner = stops or {}, []  # story number -> the policy stop its builder hit; the owner-queue lines written
         self.closed, self.comments, self.started, self.claims, self.lock = [], [], [], set(), threading.Lock()
         self.active, self.peak_overlap = set(), []
@@ -414,6 +415,22 @@ class DrainCase(unittest.TestCase):
             self.assertEqual(([1], [1], [1], 1), (io.started, io.kept, st["blocked"], st["sessions"]), flag)
             self.assertEqual([(1, f"Drain stopped: {reason}")], io.comments)
 
+    def test_a_story_whose_rounds_changed_nothing_waits_for_the_owner_with_the_builders_reply(self):  # #1531
+        idle = {"done": False, "stuck": True, "idle": True, "reason": "Stuck: rounds 1 and 2 changed nothing.", "summary": "I cannot meet scenario 2."}
+        for builds in ([idle], [{"done": False, "reason": "claude exited 1"}, idle]):
+            stops = {1: {"rule": "r", "gate": ""}} if len(builds) == 1 else {}  # a policy ask in the same run adds no second comment or line
+            io = FakeIo([issue(1)], builds={1: [dict(b) for b in builds]}, stops=stops)
+            io.commit_count = 0
+            io.save_work = lambda wt, n: self.fail("a story whose rounds changed nothing saved its work")
+            with mock.patch.object(cmd_drain, "notify") as notify:
+                _, _, st = self.run_drain(io)
+            self.assertEqual((len(builds), {1}, [1], [1]), (len(io.started), io.saved, io.kept, st["blocked"]))
+            self.assertEqual(1, len(io.comments))
+            self.assertTrue(io.comments[0][1].startswith(cmd_drain.IDLE))
+            self.assertIn("I cannot meet scenario 2.", io.comments[0][1])
+            self.assertEqual([1], [n for n, _ in io.owner])
+            notify.assert_called_once_with("#1 needs you. The story says what to do.")
+
     def test_a_crashed_or_timed_out_builder_restarts_once_on_the_same_worktree_then_lands(self):  # #1515
         for reason in ("claude exited 1 in round 1.", "claude -p ran past 1800 seconds and was stopped."):
             io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": reason}]})
@@ -655,6 +672,18 @@ class DrainCase(unittest.TestCase):
         self.assertEqual(1, len(open_steps))
         self.assertIn("Story #1012 waits on you", open_steps[0]["step"])
         self.assertIn("at the Owner identifiers gate", open_steps[0]["step"])
+
+    def test_a_stop_for_rounds_that_changed_nothing_queues_one_owner_line_and_ends_an_earlier_parking(self):  # #1531
+        parking = "It shares a.py in its Files area with #2."
+        comments = [parking, f"{cmd_drain.IDLE} Stuck.\n\nThe builder's last reply:\n{parking}"]
+        io = cmd_drain.Io(Path("/repo"), "o/r", runner=lambda args: subprocess.CompletedProcess(args, 0, "\n".join(map(json.dumps, comments)), ""))
+        self.assertEqual("", io.parked_for(7))
+        with mock.patch.dict(os.environ, {"OLIVERCODE_HOME": str(temp_dir(self))}):
+            io.queue_owner(7, {"why": "its builder's rounds changed nothing."})
+            io.queue_owner(7, {"why": "its builder's rounds changed nothing."})
+            from lib import cmd_owner
+            steps = [(i["story"], i["step"]) for i in cmd_owner.items()]
+        self.assertEqual([(7, "Story #7 waits on you: its builder's rounds changed nothing.")], steps)
 
     def test_a_failed_landing_starts_no_restart(self):  # #1515
         io = FakeIo([issue(1)], land_ok=False)
