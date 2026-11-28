@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # so `-m unittest tests.test_validated_push` finds _support
 from _support import REPO_ROOT, git_env, scratch_repo, temp_dir
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -76,20 +77,20 @@ class ValidatedPush(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.output)
         self.assertIn("bash scripts/validate.sh", result.output)
 
-    def test_a_record_for_another_tree_refuses(self):
-        self.write_record("1" * 40)
-        self.assertNotEqual(self.push().returncode, 0)
-
-    def test_a_record_of_a_failed_validation_refuses(self):
+    def test_a_bad_record_refuses_with_the_how_to(self):
         # Lesson S-no-validate: a push happens only after the repo's validation passes.
-        self.write_record(self.tree(), code=1)
-        result = self.push()
-        self.assertNotEqual(result.returncode, 0, result.output)
-        self.assertIn("bash scripts/validate.sh", result.output)
-
-    def test_a_record_older_than_seven_days_refuses(self):
-        self.write_record(self.tree(), datetime.now(timezone.utc) - timedelta(days=8))
-        self.assertNotEqual(self.push().returncode, 0)
+        tree = self.tree()
+        for state, record in (
+            ("another tree", {"tree": "1" * 40}),
+            ("a failed validation", {"tree": tree, "code": 1}),
+            ("older than seven days", {"tree": tree, "when": datetime.now(timezone.utc) - timedelta(days=8)}),
+        ):
+            with self.subTest(state):
+                (self.home / "validated.jsonl").unlink(missing_ok=True)  # each row is the only record
+                self.write_record(**record)
+                result = self.push()
+                self.assertNotEqual(result.returncode, 0, result.output)
+                self.assertIn("bash scripts/validate.sh", result.output)
 
     def test_a_non_main_push_needs_no_validation_record_once_the_branch_override_is_set(self):
         self.git("checkout", "-q", "-b", "feat")
@@ -141,19 +142,21 @@ class ValidatedPush(unittest.TestCase):
         self.assertNotIn("no olivercode launcher resolves", result.output)
         self.assertIn("validated", result.output)
 
-    def test_no_launcher_anywhere_still_fails_closed_and_names_the_fix(self):
-        del self.env["OLIVERCODE_LAUNCHER"]
+    def test_an_unresolved_launcher_fails_closed_and_names_the_fix(self):
         (self.tmp / "emptyhome").mkdir()
-        result = self.push(HOME=str(self.tmp / "emptyhome"), PATH="/usr/bin:/bin")
-        self.assertNotEqual(result.returncode, 0, result.output)
-        self.assertIn("no olivercode launcher resolves", result.output)
-        self.assertIn("ln -sf", result.output)
-
-    def test_a_missing_launcher_refuses_with_the_fix(self):
-        result = self.push(OLIVERCODE_LAUNCHER=str(self.tmp / "nope"), PATH="/usr/bin:/bin")
-        self.assertNotEqual(result.returncode, 0, result.output)
-        self.assertIn("no olivercode launcher resolves", result.output)
-        self.assertIn("OLIVERCODE_LAUNCHER", result.output)
+        base = dict(self.env)  # each row starts from setUp's env, not from the row before it
+        unset = {k: v for k, v in base.items() if k != "OLIVERCODE_LAUNCHER"}
+        for state, env, fix in (
+            ("no launcher anywhere", {**unset, "HOME": str(self.tmp / "emptyhome")}, "ln -sf"),
+            ("OLIVERCODE_LAUNCHER names a missing file", {**base, "OLIVERCODE_LAUNCHER": str(self.tmp / "nope")},
+             "OLIVERCODE_LAUNCHER"),
+        ):
+            with self.subTest(state):
+                self.env = env
+                result = self.push(PATH="/usr/bin:/bin")
+                self.assertNotEqual(result.returncode, 0, result.output)
+                self.assertIn("no olivercode launcher resolves", result.output)
+                self.assertIn(fix, result.output)
 
     def test_gate_3_applies_to_a_default_branch_with_another_name(self):
         self.git("checkout", "-q", "-b", "trunk")
