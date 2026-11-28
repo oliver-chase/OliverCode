@@ -58,6 +58,8 @@ with open(path + ".lock", "w") as lock:
         out = "{{}}"
     elif "/projectsV2/" in target:
         out = json.dumps({{"number": issue["number"], "id": "PVTI_canary", "repo": "https://api.github.com/repos/{slug}"}})
+    elif target.endswith("/sub_issues"):
+        out = ""  # the story is no epic
     elif re.fullmatch(r"repos/[^/]+/[^/]+/issues", target):
         rows = [dict(issue, comments=len(comments))] if issue["state"] == "open" else []
         out = json.dumps([rows] if slurp else rows)

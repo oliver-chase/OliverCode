@@ -38,7 +38,7 @@ class CompleteStory(unittest.TestCase):
         self.run_it("no-builder.json")  # nothing was written, so the copy stays
         self.assertTrue(self.copy.exists())
 
-    def run_it(self, comments, items="PVTI_1", extra=None, fail=None, failtext="HTTP 422: Validation Failed", pushed=lambda commit, root=None: None, live=None, root_marker=False):
+    def run_it(self, comments, items="PVTI_1", extra=None, fail=None, failtext="HTTP 422: Validation Failed", pushed=lambda commit, root=None: None, live=None, root_marker=False, subs=(), evidence="3 files, validate.sh exits 0"):
         calls = []
 
         def runner(args):
@@ -46,7 +46,9 @@ class CompleteStory(unittest.TestCase):
             if fail and any(fail in a for a in args):
                 return subprocess.CompletedProcess([], 1, "", failtext)
             text = ""
-            if "--slurp" in args:
+            if any("/sub_issues" in a for a in args):
+                text = "\n".join(json.dumps({"number": n, "state": state, "state_reason": reason}) for n, state, reason in subs)
+            elif "--slurp" in args:
                 text = json.dumps([json.loads((FIX / comments).read_text())])
             elif ".body" in args:
                 text = Path(BODY).read_text()
@@ -63,7 +65,7 @@ class CompleteStory(unittest.TestCase):
         cfg.close()
         self.addCleanup(os.unlink, cfg.name)
         self.err = io.StringIO()
-        code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", "3 files, validate.sh exits 0"],
+        code = cs.main(["--story", "54", "--config", cfg.name, "--evidence", evidence],
                        runner=runner, out=out, err=self.err, pushed=pushed, **({'live': live} if live else {}))
         out.flush()
         return code, out.buffer.getvalue().decode(), [" ".join(c) for c in calls]
@@ -208,6 +210,46 @@ class CompleteStory(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("not on the project board", text)
         self.assertEqual([], writes(calls))
+
+    def test_an_epic_with_every_sub_issue_closed_closes_with_no_builder_entry(self):
+        subs = [(7, "closed", "completed"), (8, "closed", "not_planned"), (9, "closed", "duplicate")]
+        code, text, calls = self.run_it("no-builder.json", subs=subs, evidence="#8 and #9 were dropped.\nRun output:\nOK")
+        self.assertEqual(code, 0, text)
+        self.assertTrue(any("state=closed" in c for c in calls))
+
+    def test_an_epic_is_refused_on_an_open_sub_issue_with_or_without_a_builder_entry(self):
+        subs = [(7, "closed", "completed"), (12, "open", None)]
+        for comments in ("no-builder.json", "builder-only.json"):
+            code, text, calls = self.run_it(comments, subs=subs, evidence="Run output:\nOK")
+            self.assertEqual(code, 1)
+            self.assertIn("open sub-issue #12", text)
+            self.assertNotIn("#7", text)
+            self.assertEqual([], [c for c in calls if "PATCH" in c or "mutation" in c or "-f body" in c])
+
+    def test_an_epic_with_no_builder_entry_needs_a_completed_sub_issue_each_dropped_one_named_and_run_output(self):
+        done, dropped = (7, "closed", "completed"), (8, "closed", "not_planned")
+        for subs, evidence, wanted in (([dropped], "#8 dropped.\nRun output:\nOK", "no sub-issue closed as completed"),
+                                       ([done, dropped], "#80 dropped.\nRun output:\nOK", "does not name #8"),
+                                       ([done, dropped], "#8 dropped.", "no run output")):
+            code, text, calls = self.run_it("no-builder.json", subs=subs, evidence=evidence)
+            self.assertEqual(code, 1, evidence)
+            self.assertIn(wanted, text)
+            self.assertEqual([], [c for c in calls if "PATCH" in c or "mutation" in c or "-f body" in c])
+
+    def test_a_failed_sub_issue_read_refuses_the_close(self):
+        code, _, calls = self.run_it("builder-only.json", fail="/sub_issues")
+        self.assertEqual(code, 1)
+        self.assertIn("cannot read #54", self.err.getvalue())
+        self.assertFalse([c for c in calls if "state=closed" in c])
+
+    def test_run_output_that_failed_is_refused_and_the_line_is_quoted(self):
+        for evidence in ("Run output:\nRan 3 tests\nFAILED (failures=1)\nmore", "Run output: FAILED (failures=1)"):
+            code, text, calls = self.run_it("builder-only.json", evidence=evidence)
+            self.assertEqual(code, 1, evidence)
+            self.assertIn("`FAILED (failures=1)`", text)
+            self.assertEqual([], [c for c in calls if "PATCH" in c or "mutation" in c or "-f body" in c])
+        for evidence in ("FAILED (before the fix)\nRun output:\nOK", "Run output:\nOK\nthe old run said FAILED (failures=1)"):
+            self.assertEqual(0, self.run_it("builder-only.json", evidence=evidence)[0], evidence)
 
     def test_a_broken_paged_read_falls_back_to_the_one_issue_graphql_lookup(self):
         # The REST read fails partway and never reaches story 54, so its card comes from GraphQL (#1304).

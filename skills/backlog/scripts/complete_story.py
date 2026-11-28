@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Close a story: check its builder entry, then move it to Complete, comment the evidence and close it.
+"""Close a story or epic: check its builder entry or sub-issues, then move it to Complete, comment the evidence and close it.
 
 Usage: complete_story.py --story N --config CONFIG --evidence TEXT
-A story needs a builder entry and every builder commit on origin/main. On a refusal it prints the reason and
+A story needs a builder entry and every builder commit on origin/main. An epic (an issue with sub-issues) needs no
+builder entry: every sub-issue closed, at least one as completed, each other one named in TEXT, and run output in TEXT.
+An open sub-issue, or a run output line starting `FAILED (`, refuses any close. On a refusal it prints the reason and
 changes nothing. On success it finds the story's project item through the REST items list, posts TEXT as a
 comment and closes the issue through REST, then sets Status to Complete by the config's ids and archives the card (the only GraphQL
 calls, queued for the reset replay while GraphQL is held). A story in the OliverCode repo also closes only
@@ -82,6 +84,31 @@ def fetch(repo, story, runner):
         if result.returncode != 0:
             raise RuntimeError((result.stderr or "gh api failed").strip())
     return json.loads(comments.stdout or "[]"), issue.stdout
+
+
+def sub_issues(repo, story, runner):
+    """The story's sub-issues, read through REST: empty for a story that is no epic. Raises RuntimeError on a failed read."""
+    text = call(runner, ["--paginate", f"repos/{repo}/issues/{story}/sub_issues?per_page=100", "--jq", ".[] | {number, state, state_reason}"])
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def epic_refusal(subs, evidence):
+    """Why closed sub-issues do not close an epic that has no builder entry, or None when they do (#1568)."""
+    if not any(s["state_reason"] == "completed" for s in subs):
+        return "it has no builder entry and no sub-issue closed as completed"
+    unnamed = [f"#{s['number']}" for s in subs if s["state_reason"] != "completed" and not re.search(rf"#{s['number']}(?!\d)", evidence)]
+    if unnamed:
+        return f"the evidence does not name {', '.join(unnamed)}, closed as not planned; name each one and say why it was dropped"
+    if not RUN_OUTPUT.search(evidence):
+        return NO_RUN_OUTPUT
+    return None
+
+
+def failed_run(evidence):
+    """The first line starting `FAILED (` after `Run output:`, or None: a failed run is never proof (#1568)."""
+    start = RUN_START.search(evidence)
+    found = start and FAILED_RUN.search(evidence[start.end():])
+    return found.group(1).rstrip() if found else None
 
 
 LABEL_CONST = re.compile(r"""^\s*(\w+)\s*=\s*["'](com\.olivercode\.[\w.-]+)["']""", re.M)
@@ -185,6 +212,10 @@ def live_check(commits, oc, root, update=run_update, loaded=job_loaded, settings
 
 
 RUN_OUTPUT = re.compile(r"^\s*Run output:\s*\S|^\s*Run output:\s*\n\s*\S", re.M)  # the live run of the story's scenario (#836)
+RUN_START = re.compile(r"^\s*Run output:", re.M)
+FAILED_RUN = re.compile(r"^[ \t]*(FAILED \(.*)", re.M)  # the summary line unittest prints for a failed run
+NO_RUN_OUTPUT = ("the evidence holds no run output. Run the story's own Gherkin scenario live and add its output after a line "
+                 "that starts with `Run output:`")
 
 
 def call(runner, args):
@@ -222,7 +253,7 @@ def item_id(cfg, story, runner):
 
 
 def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit_pushed, live=live_check, oc=None):
-    p = argparse.ArgumentParser(description="Close a story on its builder entry and its builder commits on origin/main.")
+    p = argparse.ArgumentParser(description="Close a story on its builder entry and its builder commits on origin/main, or an epic on its closed sub-issues.")
     p.add_argument("--story", type=int, required=True)
     p.add_argument("--config", required=True)
     p.add_argument("--evidence", required=True, help="the comment: files touched and what shipped")
@@ -242,13 +273,25 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
         return 2
     try:
         data, body = fetch(repo, args.story, runner)
+        subs = sub_issues(repo, args.story, runner)
     except (RuntimeError, ValueError) as exc:
         print(f"complete_story: cannot read #{args.story}: {exc}", file=err)
         return 1
     roles = {a[1] for a in (parse_action(b) for b in flatten(data)) if a}
-    if "builder" not in roles:
+    still_open = [f"#{s['number']}" for s in subs if s["state"] != "closed"]
+    if still_open:
+        print(f"complete_story: #{args.story} not completed: open sub-issue {', '.join(still_open)}; close each one first", file=out)
+        return 1
+    if "builder" not in roles and not subs:
         print(f"complete_story: #{args.story} has no builder entry; log one with log_action.py --role builder", file=out)
         print(f"complete_story: #{args.story} not completed", file=out)
+        return 1
+    if "builder" not in roles and (reason := epic_refusal(subs, args.evidence)):
+        print(f"complete_story: #{args.story} not completed: {reason}", file=out)
+        return 1
+    if line := failed_run(args.evidence):
+        print(f"complete_story: #{args.story} not completed: the run output shows a failed run: `{line}`. "
+              "Fix it, run the scenario again and pass the new output", file=out)
         return 1
     root = Path(args.config).resolve().parent.parent  # the config sits in <repo>/docs
     for commit in builder_commits(flatten(data)):  # a story closes only on work that reached origin/main or the engine branch
@@ -262,8 +305,7 @@ def main(argv=None, runner=gh_api, out=sys.stdout, err=sys.stderr, pushed=commit
         return 1
     gate_from = cfg.get("closeGateFromIssue")
     if isinstance(gate_from, int) and not isinstance(gate_from, bool) and args.story >= gate_from and not RUN_OUTPUT.search(args.evidence):
-        print(f"complete_story: #{args.story} not completed: the evidence holds no run output. Run the story's own Gherkin "
-              "scenario live and add its output after a line that starts with `Run output:`", file=out)
+        print(f"complete_story: #{args.story} not completed: {NO_RUN_OUTPUT}", file=out)
         return 1
     evidence = args.evidence
     commits = builder_commits(flatten(data))
