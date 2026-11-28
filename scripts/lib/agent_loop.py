@@ -181,10 +181,15 @@ def cut_diff(full: str) -> str:
     return f"{full[:DIFF_LIMIT]}\n[The diff was cut at {DIFF_LIMIT} characters. The reader did not see these files in full: {which}.]\n"
 
 
+def story_and_diff(task: str, cwd: str | Path) -> str:
+    """The story and diff sections of both fix briefs."""
+    return f"The story:\n{task}\n\nThe diff so far:\n{branch_diff(cwd)}"
+
+
 def fix_brief(task: str, cwd: str | Path, tail: str) -> str:
     """The brief of the one short fix session: the story, its diff and the end of the failing gate, and nothing from the builder's session (#888)."""
     return (f"The runner validated your story's commit and a gate failed. Fix what it reports and commit by explicit path, then stop: the runner validates and lands again.\n\n"
-            f"The story:\n{task}\n\nThe diff so far:\n{branch_diff(cwd)}\n\nThe last {TAIL_LINES} lines of the failing gate:\n{tail}")
+            f"{story_and_diff(task, cwd)}\n\nThe last {TAIL_LINES} lines of the failing gate:\n{tail}")
 
 
 def risky_paths(files) -> list[str]:
@@ -267,13 +272,11 @@ REVIEW_BRIEF = ("You are a fresh reader. You get the story, the diff and the tes
                 "when it does. Otherwise list each finding on its own line with the file and what is wrong. " + VERDICT_FIRST + "\n\nThe story:\n{task}\n\nThe diff:\n{diff}\n\nThe test output:\n{tail}")
 
 
-FIX_BRIEF = ("You are a new session, not the story's builder. A fresh reader checked the story's commit and reports the findings below. Fix every finding "
-             "in one commit by explicit path and stop: the runner validates and the reader reads the commit again.\n\nThe story:\n{task}\n\nThe diff so far:\n{diff}\n\nThe reader's finding:\n{finding}")
-
-
 def review_brief(task: str, cwd: str | Path, finding: str) -> str:
     """The brief of the one fix session a reader's finding earns: the story, its diff and the finding, and nothing from the builder's session (#975)."""
-    return FIX_BRIEF.format(task=task, diff=branch_diff(cwd), finding=finding)
+    return ("You are a new session, not the story's builder. A fresh reader checked the story's commit and reports the findings below. Fix every finding "
+            "in one commit by explicit path and stop: the runner validates and the reader reads the commit again.\n\n"
+            f"{story_and_diff(task, cwd)}\n\nThe reader's finding:\n{finding}")
 
 
 def verdict_line(text: str, answers: str) -> tuple[str, str]:

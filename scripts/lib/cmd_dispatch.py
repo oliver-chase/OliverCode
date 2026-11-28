@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from lib import agent_loop, backlog_setup, failure_log, intake, gh_budget, local_config, open_issues, run_lock
+from lib.cli import flags
 from lib.local_config import OC_ROOT
 from lib.placement import config as placement_config
 
@@ -121,18 +122,12 @@ def origin_slug(repo, slug: str) -> str:
 
 
 def _parse(argv: list[str]):
-    sid, dry, pos, i = "", False, [], 0
-    while i < len(argv):
-        if argv[i] == "--from" and i + 1 < len(argv):
-            sid, i = argv[i + 1], i + 2
-        elif argv[i] == "--dry-run":
-            dry, i = True, i + 1
-        elif argv[i].startswith("--"):
-            return None
-        else:
-            pos.append(argv[i])
-            i += 1
-    return (int(pos[0]), sid, dry) if len(pos) == 1 and pos[0].isdigit() and int(pos[0]) > 0 else None
+    """(story number, --from session, dry run), or None for a usage error."""
+    parsed = flags(argv, {"--from"}, {"--dry-run"})
+    if not parsed:
+        return None
+    vals, _, pos, seen = parsed
+    return (int(pos[0]), vals.get("--from", ""), "--dry-run" in seen) if len(pos) == 1 and pos[0].isdigit() and int(pos[0]) > 0 else None
 
 
 def is_engine(repo) -> bool:
