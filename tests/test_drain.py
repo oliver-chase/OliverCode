@@ -1304,13 +1304,27 @@ class StoppedRun(unittest.TestCase):
         now = time.time()
         cmd_drain.cmd_dispatch._local_claim("o/r", 7, now, write="drain")
         cmd_drain.cmd_dispatch._local_claim("o/s", 8, now, write="drain")
+        cmd_drain.cmd_dispatch._local_claim("o/r", 9, now, write="dispatch")
         io = FakeIo([])
         out = []
         with mock.patch.object(cmd_drain, "status_page", return_value=""):
             self.assertTrue(cmd_drain.take_run(io, "o/r", "drain r", say=out.append))
-        self.assertEqual([7], io.released)
-        self.assertIn("Released the claims no run holds: #7", out[-1])
+        self.assertEqual([7, 9], io.released)
+        self.assertIn("Released the claims no run holds: #7, #9", out[-1])
         self.assertEqual("held by drain", cmd_drain.cmd_dispatch._local_claim("o/s", 8, now))
+
+    def test_a_new_run_leaves_a_chat_sessions_claim_which_counts_as_free_once_stale(self):
+        """#1536: only a runner's claim is released, so a story a chat session is building is skipped as claimed until its claim ages out."""
+        now = time.time()
+        cmd_drain.cmd_dispatch._local_claim("o/r", 7, now, write="238bb789-a732-4d0d-871f-97cec369e8a4")
+        io = FakeIo([])
+        with mock.patch.object(cmd_drain, "status_page", return_value=""):
+            self.assertTrue(cmd_drain.take_run(io, "o/r", "drain r", say=lambda t: None))
+        self.assertEqual([], io.released)
+        reader = cmd_drain.Io(Path("/x"), "o/r")
+        self.assertTrue(reader.claimed({"number": 7}))
+        with mock.patch.object(cmd_drain.time, "time", return_value=now + cmd_drain.cmd_dispatch.log_action.CLAIM_HOURS * 3600 + 1):
+            self.assertFalse(reader.claimed({"number": 7}))
 
     def test_a_finished_run_returns_its_code_without_ending_the_process(self):
         """#1076: only a stopped run ends the process, so a run that finishes returns to its caller."""

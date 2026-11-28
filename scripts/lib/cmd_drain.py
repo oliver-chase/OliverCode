@@ -1082,14 +1082,16 @@ def status_page() -> str:
 
 
 def local_claims(slug: str) -> list[int]:
-    """The story numbers of `slug` that hold a local claim. Only a runner writes one, so when a run takes the repo's lock, each is a claim its
-    process left behind (#1076)."""
+    """The story numbers of `slug` that hold a runner's local claim, so when a run takes the repo's lock, each is a claim a runner's process left
+    behind (#1076). A claim under any other agent is a chat session's, which only ages out (#1536). A dead `dispatch --from` run claims as its
+    session, and the lock's building list names its story."""
     try:
         claims = json.loads((gh_budget.home() / "dispatch-claims.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     prefix = f"{slug}#"
-    return sorted(int(key[len(prefix):]) for key in claims if key.startswith(prefix) and key[len(prefix):].isdigit())
+    return sorted(int(key[len(prefix):]) for key, mine in claims.items()
+                  if key.startswith(prefix) and key[len(prefix):].isdigit() and mine.get("agent") in ("drain", "dispatch"))
 
 
 def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) -> bool:
@@ -1103,7 +1105,7 @@ def take_run(io, slug: str, who: str, want: list[int] | None = None, say=print) 
         return False
     if taken:
         say(f"Took over the run lock for {slug} from {taken.get('who')}, because {why}. The queue resumes from the board.")
-    stale = sorted(set(taken.get("building") or []) | set(local_claims(slug)))  # no live run holds the repo, so every claim it left is stale (#1076)
+    stale = sorted(set(taken.get("building") or []) | set(local_claims(slug)))  # no live run holds the repo, so every claim a runner left is stale (#1076)
     if stale:
         say(f"Released the claims no run holds: {', '.join(f'#{n}' for n in stale)}.")
     for n in stale:
