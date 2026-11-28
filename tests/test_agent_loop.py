@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittes
 from _support import REPO_ROOT, git, scratch_repo, temp_dir  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import agent_loop, model  # noqa: E402
+from lib import agent_loop, cmd_drain, model  # noqa: E402
 
 
 def reply(text="done", code=0, tokens=10, session_id="c1"):
@@ -505,20 +505,27 @@ class TestLoop(unittest.TestCase):
         self.assertEqual("", run.resumes[2])  # a new session, never the builder's resumed one (#1064)
         self.assertIn("one commit", run.prompts[2])
 
-    def test_a_repeated_finding_holds_the_story_whatever_its_timestamps_and_line_order(self):  # #1513
-        run = Scripted(reply("built"), reply("scripts/a.py: no test\nscripts/b.py: wrong at 10:00:01"), reply("fixed"),
-                       reply("scripts/b.py: wrong at 11:22:33\n\nscripts/a.py: no test"))
-        out = self.loop(run, [(True, ""), (True, "")])
-        self.assertEqual((False, True, 4), (out["done"], out["stuck"], len(run.prompts)))
-        self.assertIn("scripts/a.py: no test", out["held"])
-        self.assertIn("repeated its finding, so nothing is pushed", out["reason"])
+    def test_a_second_findings_verdict_holds_the_story_in_any_wording_and_the_comment_names_both(self):  # #1548
+        for second in ("scripts/a.py: no test", "scripts/b.py: still wrong"):
+            with self.subTest(second=second):
+                run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply(second))
+                out = self.loop(run, [(True, ""), (True, "")])
+                self.assertEqual((False, True, 2, 4), (out["done"], out["stuck"], out["rounds"], len(run.prompts)))  # no third fix session
+                self.assertEqual((second, "scripts/a.py: no test"), (out["held"], out["earlier"]))
+                self.assertIn("a second time, so nothing is pushed", out["reason"])
+                comment = cmd_drain.held_comment(self.repo, out["held"], out["earlier"])
+                self.assertIn("Earlier finding:\nscripts/a.py: no test", comment)
+                self.assertEqual(second, comment.partition(cmd_drain.FINDING)[2])  # the next build reads back only the latest
 
-    def test_each_changed_finding_gets_another_fix_session_and_the_reader_reads_again(self):  # #1513
-        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("scripts/b.py: still wrong"), reply("fixed"), reply("PASS"))
-        out = self.loop(run, [(True, ""), (True, ""), (True, "")])
-        self.assertEqual((True, 3, 6), (out["done"], out["rounds"], len(run.prompts)))
-        self.assertIn("scripts/b.py: still wrong", run.prompts[4])
-        self.assertNotIn("held", out)
+    def test_a_second_findings_verdict_holds_the_story_after_a_failed_validation_between_them(self):  # #1548
+        run = Scripted(reply("built"), reply("scripts/a.py: no test"), reply("fixed"), reply("fixed again"), reply("scripts/b.py: wrong"))
+        out = self.loop(run, [(True, ""), (False, "gate"), (True, "")])
+        self.assertEqual(("scripts/b.py: wrong", 3), (out["held"], out["rounds"]))
+
+    def test_the_same_validation_failure_on_both_sides_of_a_finding_is_not_repeated_in_a_row(self):
+        run = Scripted(reply("built"), reply("fixed"), reply("scripts/a.py: no test"), reply("fixed"), reply("fixed again"), reply("PASS"))
+        out = self.loop(run, [(False, "gate"), (True, ""), (False, "gate"), (True, "")])
+        self.assertEqual((True, 4), (out["done"], out["rounds"]))
 
     def test_a_finding_after_a_failed_validation_still_gets_one_fix_session(self):
         run = Scripted(reply("built"), reply("fixed"), reply("scripts/a.py: no test"), reply("fixed again"), reply("PASS"))

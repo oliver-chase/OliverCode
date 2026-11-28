@@ -1,7 +1,7 @@
 """OliverCode's own agent loop: Claude Code headless does the work, OliverCode owns the rounds around it.
 
 The builder session runs `claude -p` on the task and exits at its commit. The runner then runs the repo's own validation directly, outside any session. A pass ends the loop. A failure starts one short fix session whose brief is the story, the diff and the last 60 lines of the gate (#888). Each later failure that differs from the last round's earns another. The loop
-stops when validation passes, when two rounds in a row change nothing in the worktree or fail the same way, when the story's spend reaches BACKSTOP, when `claude` exits with an error or when
+stops when validation passes, when two rounds in a row change nothing in the worktree or fail validation the same way, when the fresh reader returns findings a second time, when the story's spend reaches BACKSTOP, when `claude` exits with an error or when
 the session's token budget refuses the next call, and a stopped loop leaves the working tree as it is. The model's tools run under the installed pretool guards, and the repo's commit gates run on every commit it makes.
 """
 
@@ -474,8 +474,8 @@ def exit_reason(reply: dict, n: int, resumed: bool = False, unit: str = "round")
 
 def run_loop(task: str, cwd: str | Path, session: str, max_turns: int = 30, model_name: str = "",
              run=None, check=None, say=print, why: str = "", review_mode: str = "full", repo: str = "") -> dict:
-    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'stuck' when two rounds in a row failed the same way or
-    changed nothing in the worktree, the latter with 'idle' (#1531), and 'capped' when the story's spend reached BACKSTOP (#1513). A reader that repeats its finding adds 'held' with it (#975, #1015), and a reader that gave
+    """{'done': bool, 'reason': str, 'rounds': int, 'tokens': int, 'summary': str}, plus 'stuck' when two rounds in a row failed validation the same way or
+    changed nothing in the worktree, the latter with 'idle' (#1531), and 'capped' when the story's spend reached BACKSTOP (#1513). A reader that returns findings a second time, in any wording, adds 'held' with the latest finding and 'earlier' with the first (#975, #1548), and a reader that gave
     no verdict twice adds 'reader_failed' with the cause (#1489). Either way nothing is pushed.
     `run` and `check` default to model.run_cli and validate. `why` is the rule that chose the model, which the run log records (#1026).
     `review_mode` is `full` for the historical direct-run behavior, and the drain selects `none` for routine stories."""
@@ -487,7 +487,8 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
     model_name = model_name or os.environ.get("OLIVERCODE_MODEL") or DEFAULT_MODEL
     cwd, prompt, claude_session, tokens, summary = str(cwd), task, "", 0, ""
     checked = validation_command(cwd) is not None
-    start, failures, last, n = model_name, 0, None, 0  # `last` is the previous round's failure: who reported it and what it said
+    start, failures, last, n = model_name, 0, None, 0  # `last` is the failure_key of the previous round's failed validation
+    first_finding = ""  # the reader's findings that earned this build's one reader fix session (#1548)
     idle = 0  # rounds in a row that left HEAD and the uncommitted work as they found them (#1531)
     while True:  # a failure that changed earns another fix session on the same worktree (#1513)
         spent = SPEND.get(session, 0.0)
@@ -556,21 +557,20 @@ def _loop(task, cwd, session, max_turns, model_name, run, check, say, why="", re
                 return {"done": False, "reader_failed": verdict["text"], "reason": f"The reader failed, so nothing is pushed: {verdict['text']}",
                         "rounds": n, "tokens": tokens, "summary": summary}
             if verdict["verdict"] == "findings":
-                # shortcut: a reworded finding counts as a new one and only BACKSTOP ends it while each fix changes the tree, upgrade when the run log shows that
-                finding = ("reader", comparable(verdict["text"].splitlines()))
-                if finding == last:
-                    return {"done": False, "stuck": True, "held": verdict["text"], "reason": f"Stuck: the fresh reader repeated its finding, so nothing is pushed: {verdict['text'][:300]}",
+                if first_finding:  # readers reword every time, so a second findings verdict holds whatever it says (#1548)
+                    return {"done": False, "stuck": True, "held": verdict["text"], "earlier": first_finding,
+                            "reason": f"Stuck: the fresh reader returned findings a second time, so nothing is pushed: {verdict['text'][:300]}",
                             "rounds": n, "tokens": tokens, "summary": summary}
-                last = finding
+                first_finding, last = verdict["text"], None  # validation passed in between, so the next failure repeats nothing
                 say(f"Round {n}: the reader found a problem. A fix session, then the reader reads again.")
                 prompt, claude_session = review_brief(task, cwd, verdict["text"]), ""
                 continue
             return {"done": True, "reason": "The repo's validation passes.", "rounds": n, "tokens": tokens, "summary": summary}
         failures += 1
         say(f"Round {n}: validation failed.")
-        failure = ("validation", tail.key if isinstance(tail, Tail) else failure_key(tail))  # a plain string, such as a timeout's, is its own whole output
+        failure = tail.key if isinstance(tail, Tail) else failure_key(tail)  # a plain string, such as a timeout's, is its own whole output
         if failure == last:
-            repeated = sorted(line for line in failure[1] if "FAIL" in line or "BLOCKED" in line) or sorted(failure[1])
+            repeated = sorted(line for line in failure if "FAIL" in line or "BLOCKED" in line) or sorted(failure)
             return {"done": False, "stuck": True, "reason": f"Stuck: rounds {n - 1} and {n} failed validation the same way, so no further round starts. "
                     f"The tree is as the last round left it. Repeated: {'; '.join(repeated)[:600] or 'no output'}", "rounds": n, "tokens": tokens, "summary": summary}
         last = failure

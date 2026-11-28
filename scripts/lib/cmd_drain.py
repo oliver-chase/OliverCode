@@ -678,9 +678,11 @@ def put_back(io, state: dict, n: int, exc: NotTheStorys) -> None:
     io.keep_open(n)
 
 
-def held_comment(worktree: Path, finding: str) -> str:
-    """The one comment a held story gets: that nothing was pushed, where the branch is kept, and the finding itself (#975)."""
-    return f"{HELD}, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.{FINDING}{finding[:2000]}"
+def held_comment(worktree: Path, finding: str, earlier: str = "") -> str:
+    """The one comment a held story gets: that nothing was pushed, where the branch is kept, and the finding itself (#975). An earlier finding
+    goes ahead of FINDING, so the next build reads back only the latest (#1474, #1548)."""
+    before = f"\n\nEarlier finding:\n{earlier[:2000]}" if earlier else ""
+    return f"{HELD}, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready.{before}{FINDING}{finding[:2000]}"
 
 
 def policy_stop_in(repo: str, start: str) -> dict | None:
@@ -748,8 +750,8 @@ def _work_story(io, issue: dict, state: dict, queue=None) -> tuple[bool | None, 
         state["restarts"][n] = restart
         out = io.build(issue, worktree, note)
         tokens += out.get("tokens", 0)
-        if out.get("held"):  # a reader's finding that a fix did not clear holds the story, so the builder is not restarted (#975)
-            io.comment(n, held_comment(worktree, out["held"]))
+        if out.get("held"):  # a second findings verdict holds the story, so the builder is not restarted (#975, #1548)
+            io.comment(n, held_comment(worktree, out["held"], out.get("earlier", "")))
             return False, tokens
         if out.get("reader_failed"):  # no finding, so the comment never starts with HELD, and no builder restarts (#1489)
             io.comment(n, f"Drain stopped: reader failed, so nothing was pushed. The branch is kept in {worktree} and the story goes back to Ready. {out['reader_failed']}")
