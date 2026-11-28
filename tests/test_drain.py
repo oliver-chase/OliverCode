@@ -1,4 +1,4 @@
-"""`olivercode drain REPO`: ordering, skips, overlap, restarts, blocker comment and the summary line. Every effect is injected."""
+"""`olivercode drain REPO`: ordering, skips, overlap, the one restart, blocker comment and the summary line. Every effect is injected."""
 
 import json
 import os
@@ -237,7 +237,7 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([1], st["closed"])
         self.assertEqual([1], io.released)
 
-    def test_a_failed_batch_validation_lands_the_passing_stories_and_restarts_only_the_failing_one(self):  # #1317
+    def test_a_failed_batch_validation_lands_the_passing_stories_and_returns_only_the_failing_one_to_ready(self):  # #1317, #1515
         io = FakeIo([issue(1), issue(2)], cap=2)
         io.stack_ok = False
         real_land = io.land
@@ -253,11 +253,12 @@ class DrainCase(unittest.TestCase):
                 gate.wait(0.3)
             return real_build(i, wt, note)
         io.build = build
-        _, _, st = self.run_drain(io)
-        self.assertEqual([1, 2], sorted(st["closed"]))
-        self.assertEqual(1, io.started.count(1))
-        self.assertEqual(2, io.started.count(2))
-        self.assertEqual({2: 1}, {n: r for n, r in st["restarts"].items() if r})
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            _, _, st = self.run_drain(io)
+        self.assertEqual(([1], [2], [1, 2]), (st["closed"], st["blocked"], sorted(io.started)))
+        self.assertEqual(([2], [1, 2]), (io.kept, sorted(io.released)))
+        self.assertEqual([(2, "Drain blocked: Landing failed: RESULT validate-failed")], io.comments)
+        notify.assert_called_once_with("#2 didn't land yet. It'll try again on its own.")
 
     def test_one_committed_story_lands_with_no_stack(self):  # #1317
         io = FakeIo([issue(1)], cap=1)
@@ -268,7 +269,7 @@ class DrainCase(unittest.TestCase):
 
     def test_a_story_that_stops_with_saved_work_gets_one_comment_naming_branch_files_and_reason(self):
         """#1328"""
-        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "max_turns"}] * 5})
+        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "max_turns"}] * 2})
         io.saves = {1: ["a.py", "b.py"]}
         self.run_drain(io)
         body = "\n".join(b for _, b in io.comments)
@@ -278,9 +279,9 @@ class DrainCase(unittest.TestCase):
         self.assertIn("max_turns", body)
 
     def test_a_story_that_stops_with_a_clean_worktree_keeps_todays_comment(self):
-        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "max_turns"}] * 5})
+        io = FakeIo([issue(1)], cap=1, builds={1: [{"done": False, "reason": "max_turns"}] * 2})
         self.run_drain(io)
-        self.assertTrue(io.comments[0][1].startswith("Drain blocked after"))
+        self.assertTrue(io.comments[0][1].startswith("Drain blocked: the builder crashed or timed out again"))
 
     def test_orders_p0_first_and_skips_epics_claimed_and_owner_gated(self):
         io = FakeIo([issue(1, "Priority: P2"), issue(2, "Priority: P0"), issue(3, "Work type: Epic"), issue(4, labels=["owner-gate"]), issue(5), issue(6, "Priority: P1")], cap=1)
@@ -403,30 +404,39 @@ class DrainCase(unittest.TestCase):
         self.assertIn("usage limit", io.comments[0][1])
         self.assertIn("Drain stopped for the usage limit", out)
 
-    def test_a_story_at_the_backstop_starts_no_restart_and_keeps_the_spend_in_its_comment(self):  # #1318
-        capped = {"done": False, "capped": True, "reason": "Spend $12.10 reached the backstop of $12.00, so no further round starts."}
-        io = FakeIo([issue(1)], builds={1: [capped]})
-        _, _, st = self.run_drain(io)
-        self.assertEqual((io.started, io.kept, st["blocked"]), ([1], [1], [1]))
-        self.assertIn("$12.10", io.comments[0][1])
-        self.assertIn("$12.00", io.comments[0][1])
+    def test_a_stuck_or_backstop_stop_comments_the_reason_returns_the_card_and_starts_no_restart(self):  # #1318, #1515
+        for flag, reason in (("stuck", "Stuck: rounds 1 and 2 failed validation the same way, so no further round starts."),
+                             ("capped", "Spend $12.10 reached the backstop of $12.00, so no further round starts.")):
+            io = FakeIo([issue(1)], builds={1: [{"done": False, flag: True, "reason": reason}]})
+            io.saves = {1: ["a.py"]}  # saved work would send the card to Backlog, so none is saved
+            io.save_work = lambda wt, n: self.fail("a stuck or capped story saved its work")
+            _, _, st = self.run_drain(io)
+            self.assertEqual(([1], [1], [1], 1), (io.started, io.kept, st["blocked"], st["sessions"]), flag)
+            self.assertEqual([(1, f"Drain stopped: {reason}")], io.comments)
 
-    def test_restarts_an_early_exit_then_lands(self):
-        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1"}, {"done": False, "reason": "claude exited 1"}]})
-        _, out, st = self.run_drain(io)
-        self.assertEqual(io.started, [1, 1, 1])
-        self.assertEqual(io.closed, [1])
-        self.assertEqual(st["sessions"], 3)
+    def test_a_crashed_or_timed_out_builder_restarts_once_on_the_same_worktree_then_lands(self):  # #1515
+        for reason in ("claude exited 1 in round 1.", "claude -p ran past 1800 seconds and was stopped."):
+            io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": reason}]})
+            builds, real = [], io.build
+            io.build = lambda i, wt, note: builds.append((wt, note)) or real(i, wt, note)
+            _, _, st = self.run_drain(io)
+            self.assertEqual([(Path("/wt/1"), ""), (Path("/wt/1"), reason)], builds)
+            self.assertEqual(([1], 2, []), (io.closed, st["sessions"], io.comments))
 
-    def test_comments_the_blocker_after_three_restarts_and_moves_on(self):
+    def test_a_second_crash_comments_the_blocker_starts_no_third_builder_and_moves_on(self):  # #1515
         dead = {"done": False, "reason": "out of budget"}
-        io = FakeIo([issue(1, "Priority: P0"), issue(2)], cap=1, builds={1: [dict(dead) for _ in range(4)]})
+        io = FakeIo([issue(1, "Priority: P0"), issue(2)], cap=1, builds={1: [dict(dead) for _ in range(3)]})
         _, out, st = self.run_drain(io)
-        self.assertEqual(io.started.count(1), 4)
+        self.assertEqual(io.started.count(1), 2)
         self.assertEqual(io.closed, [2])
         self.assertEqual([n for n, _ in io.comments if n == 1], [1])
         self.assertIn("out of budget", io.comments[0][1])
         self.assertEqual(st["blocked"], [1])
+
+    def test_a_restarted_builder_that_gets_stuck_stops_with_that_reason(self):  # #1515
+        io = FakeIo([issue(1)], builds={1: [{"done": False, "reason": "claude exited 1"}, {"done": False, "stuck": True, "reason": "Stuck: same failure"}]})
+        _, _, st = self.run_drain(io)
+        self.assertEqual(([1, 1], [1], [(1, "Drain stopped: Stuck: same failure")]), (io.started, st["blocked"], io.comments))
 
     def test_a_mate_whose_work_landed_under_a_lead_is_not_built_again(self):
         """#988: no builder starts, the story stays open on Ready, and one comment names the lead commit for the owner."""
@@ -646,11 +656,11 @@ class DrainCase(unittest.TestCase):
         self.assertIn("Story #1012 waits on you", open_steps[0]["step"])
         self.assertIn("at the Owner identifiers gate", open_steps[0]["step"])
 
-    def test_failed_landing_counts_as_a_restart(self):
+    def test_a_failed_landing_starts_no_restart(self):  # #1515
         io = FakeIo([issue(1)], land_ok=False)
         self.run_drain(io)
-        self.assertEqual(io.started, [1, 1, 1, 1])
-        self.assertEqual(io.closed, [])
+        self.assertEqual(io.started, [1])
+        self.assertEqual((io.closed, io.kept), ([], [1]))
         self.assertIn("validate-failed", io.comments[-1][1])
 
     def test_a_drain_writes_no_handoff_and_stops_for_no_token_total(self):

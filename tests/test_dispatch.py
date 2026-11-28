@@ -275,9 +275,9 @@ class TestOneStoryPerBuilder(DispatchCase):
 
 class TestDispatchRun(DispatchCase):
     def test_a_builder_that_never_finishes_comments_the_blocker_returns_the_story_to_ready_and_releases(self):
-        dead = [{"done": False, "reason": "no", "rounds": 3, "tokens": 9, "summary": ""} for _ in range(4)]
+        dead = [{"done": False, "reason": "no", "rounds": 3, "tokens": 9, "summary": ""} for _ in range(2)]
         code, out, io = self.run_dispatch(io=RunIo(builds=dead))
-        self.assertEqual((1, ["claim"] + ["build"] * 4 + ["comment", "open:", "release"]), (code, io.steps))
+        self.assertEqual((1, ["claim"] + ["build"] * 2 + ["comment", "open:", "release"]), (code, io.steps))
         self.assertIn("stayed open", out)
 
     def test_a_refused_landing_leaves_the_story_open_and_releases_the_claim(self):
