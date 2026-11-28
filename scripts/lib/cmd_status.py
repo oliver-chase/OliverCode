@@ -239,11 +239,17 @@ def run_end_line(row: dict) -> str:
     return f"Last run ended {local_config.local_time(_epoch(row.get('at')), '%Y-%m-%d %H:%M %Z')}: {row.get('landed', 0)} {'story' if row.get('landed', 0) == 1 else 'stories'} landed, {row.get('stopped', 0)} stopped."
 
 
+def skip_text(row: dict) -> str:
+    """' Skipped #1: its board Status is Backlog, not Ready.' for each story a run-end row says the run did not start, or '' (#1510)."""
+    return "".join(f" Skipped #{n}: {why}." for n, why in row.get("skipped", {}).items())
+
+
 def watch_line(row: dict, log: list[dict]) -> str:
     """One plain line for a new stage row, stamped with the row's time in the owner's zone (#1486): '14:40 EST #7 in repo: validating', '14:40 EST #7 in repo:
-    landed. Building took ...', '14:40 EST #7 in repo: stopped (Landing refused: weakened-test)'. A run-end row already carries its time (#1276)."""
+    landed. Building took ...', '14:40 EST #7 in repo: stopped (Landing refused: weakened-test)'. A run-end row already carries its time (#1276)
+    and is followed by the stories its run skipped (#1510)."""
     if row["stage"] == "run-end":
-        return run_end_line(row)
+        return run_end_line(row) + skip_text(row)
     stamp = local_config.local_time(_epoch(row.get("at")) or time.time(), "%H:%M %Z")
     n = str(row.get("story")).rsplit("-", 1)[-1]
     if row["stage"] == "landed":
@@ -268,8 +274,8 @@ def run_rows(log: list[dict], repo: str) -> list[dict]:
 
 
 def exit_line(repo: str, rows: list[dict]) -> str:
-    """The one line `watch --until-exit` prints for the run in ROWS: its landed and stopped counts and why it ended (#1490). A run with no run-end row
-    is counted from its story rows."""
+    """The one line `watch --until-exit` prints for the run in ROWS: its landed and stopped counts and why it ended (#1490), then each story it
+    skipped and why (#1510). A run with no run-end row is counted from its story rows."""
     if not rows:
         return f"No drain is running for {repo}."
     last = rows[-1]
@@ -282,7 +288,7 @@ def exit_line(repo: str, rows: list[dict]) -> str:
         stopped = {r.get("story") for r in rows if r["stage"] == "stopped" and str(r.get("story")).startswith("story-")} - done
         counts = {"landed": len(done), "stopped": len(stopped)}
         why = "It logged no run-end row, so no drain finished it."
-    return f"{run_end_line({**last, **counts})} {' '.join(why.split())}"
+    return f"{run_end_line({**last, **counts})} {' '.join(why.split())}{skip_text(last)}"
 
 
 def wait_for_exit(repo: str, alive, sleep, out) -> int:

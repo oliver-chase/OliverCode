@@ -355,9 +355,10 @@ class DrainCase(unittest.TestCase):
     def test_a_story_whose_blocker_closes_runs_in_priority_order(self):
         io = FakeIo([issue(1, "Priority: P0"), issue(2, "Priority: P1")], cap=1)
         io.deps = {1: [2]}
-        code, out, _ = self.run_drain(io)
+        code, out, st = self.run_drain(io)
         self.assertEqual(io.started, [2, 1])
         self.assertIn("Skipped #1: it is blocked by open #2.", out)
+        self.assertEqual(({}, {}), (st["skipped"], st["why"]))  # a story that starts later is not reported at the run's end (#1510)
 
     def test_the_default_blockers_read_only_open_ones_and_skip_the_call_when_none_are_open(self):
         calls = []
@@ -1647,6 +1648,7 @@ class DetachedRun(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertTrue(kw["start_new_session"])
         self.assertEqual(["drain", "r", "--parallel", "2", "--foreground"], cmd[-5:])
+        self.assertEqual("-u", cmd[1])  # unbuffered, so a skip line is in the log before the run ends (#1510)
         self.assertTrue((self.home / "logs" / "drain-r.log").is_file())
         self.assertIn("olivercode watch r", out)
         self.assertEqual(1, out.count("\n"))
@@ -1703,6 +1705,23 @@ class DetachedRun(unittest.TestCase):
             quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: FakeIo([]))
         calls = [c for c in run.call_args_list if c.args and c.args[0][0] == "osascript"]
         self.assertIn("Not started: 1 blocked by an open story, 1 owner-gated, 2 too large to build and not split.", calls[-1].args[0][2])
+
+    def test_a_run_that_skips_every_story_says_why_in_watch_and_the_notification(self):  # #1510
+        from lib import cmd_status
+        io = FakeIo([issue(1, status="Backlog"), issue(2, status="Backlog"), issue(3)])
+        io.deps = {3: [9]}
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            quiet(cmd_drain.command_drain, ["r", "--foreground"], lambda repo, slug, parallel=None: io)
+        self.assertEqual([], io.started)
+        said = notify.call_args.args[0]
+        self.assertIn("Not started: 1 blocked by an open story, 2 not ready to build. `olivercode watch r --until-exit` says why.", said)
+        lines = []
+        cmd_status.command_watch(["r", "--until-exit"], sleep=lambda s: None, out=lines.append, alive=lambda: False)
+        streamed = cmd_status.watch_line(self.rows()[-1], self.rows())
+        for line in (*lines, streamed):
+            for skip in ("#1: its board Status is Backlog, not Ready.", "#2: its board Status is Backlog, not Ready.", "#3: it is blocked by open #9."):
+                self.assertIn(f"Skipped {skip}", line)
+        self.assertEqual(1, len(lines))
 
     def test_notify_sends_nothing_and_does_not_raise_without_osascript(self):
         with mock.patch.object(cmd_drain.subprocess, "run", side_effect=FileNotFoundError):

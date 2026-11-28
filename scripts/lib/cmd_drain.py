@@ -122,14 +122,14 @@ def is_epic(issue: dict) -> bool:
 
 
 def new_state() -> dict:
-    return {"closed": [], "blocked": [], "sessions": 0, "tokens": 0, "restarts": {}, "skipped": {}}
+    return {"closed": [], "blocked": [], "sessions": 0, "tokens": 0, "restarts": {}, "skipped": {}, "why": {}}
 
 
-def skipped_summary(skipped: dict) -> str:
-    """The run-end sentence naming how many stories the run did not start for each reason, or '' when it started every one it met (#1456). `skipped` maps a story number to its reason."""
-    labels = {"blocker": "blocked by an open story", "owner": "owner-gated", "size": "too large to build and not split"}
+def skipped_summary(skipped: dict, repo: str) -> str:
+    """The run-end sentences naming how many stories the run did not start for each kind of reason and where each reason is read, or '' when it started every one it met (#1456, #1510). `skipped` maps a story number to its kind."""
+    labels = {"blocker": "blocked by an open story", "owner": "owner-gated", "size": "too large to build and not split", "other": "not ready to build"}
     counts = [f"{n} {labels[k]}" for k in labels if (n := sum(1 for v in skipped.values() if v == k))]
-    return f" Not started: {', '.join(counts)}." if counts else ""
+    return f" Not started: {', '.join(counts)}. `olivercode watch {repo} --until-exit` says why." if counts else ""
 
 
 class Io:
@@ -831,7 +831,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
     committed: dict = {}  # number -> issue of each story committed and not yet landed or sent back to a builder
     landing: dict = {}  # the one batch in flight: its future -> its stories
     waits, reported, filled, mismatched, unparked = 0, set(), set(), set(), set()
-    skipped = state.setdefault("skipped", {})  # story number -> why the run did not start it (#1456)
+    skipped = state.setdefault("skipped", {})  # story number -> the kind of reason the run did not start it (#1456)
+    reasons = state.setdefault("why", {})  # story number -> that reason in words, which the run-end row keeps (#1510)
     stopped = False
     hold_waited = False
     checked, base_red, told = (None, 0), "", ""  # closed and base-held counts at the last base check, its failing line, the red lines last said
@@ -984,10 +985,8 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     else:
                         why += " and none could be found"
                 if why:  # each skipped story is named once per drain, with the reason (#1014)
-                    if owner_gated(issue):
-                        skipped[issue["number"]] = "owner"
-                    elif "needs splitting" in why:
-                        skipped[issue["number"]] = "size"
+                    skipped[issue["number"]] = "owner" if owner_gated(issue) else "size" if "needs splitting" in why else "other"
+                    reasons[issue["number"]] = why
                     if issue["number"] not in reported:
                         reported.add(issue["number"])
                         say(f"Skipped #{issue['number']}: {why}.")
@@ -998,11 +997,13 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
                     io.set_card(issue["number"], {"size": text_size})
                 if held := io.blockers(issue):  # a story waits until every blocker is closed, and the skip names the blocker (#1064)
                     skipped[issue["number"]] = "blocker"
+                    reasons[issue["number"]] = f"it is blocked by open {', '.join(f'#{b}' for b in held)}"
                     if (issue["number"], tuple(held)) not in reported:
                         reported.add((issue["number"], tuple(held)))
-                        say(f"Skipped #{issue['number']}: it is blocked by open {', '.join(f'#{b}' for b in held)}.")
+                        say(f"Skipped #{issue['number']}: {reasons[issue['number']]}.")
                     continue
                 skipped.pop(issue["number"], None)  # a story that starts was not skipped at the run's end
+                reasons.pop(issue["number"], None)
                 todo.append(issue)
             state.pop("red", None)  # set again below while a red staging holds a routine story, so the run-end row can say so (#1490)
             if todo:
@@ -1122,12 +1123,13 @@ def slug_of(repo: Path) -> str:
 
 
 def detach(argv: list[str], repo: Path, spawn=subprocess.Popen) -> int:
-    """Start this drain again as its own session with its output in a log, so it outlives the chat or terminal that started it (#1276)."""
+    """Start this drain again as its own session with its output in a log, so it outlives the chat or terminal that started it (#1276).
+    Python runs unbuffered, so a line is in the log as soon as the drain says it (#1510)."""
     log = failure_log.home() / "logs"
     log.mkdir(mode=0o700, exist_ok=True)
     agent_loop.roll(log / f"drain-{repo.name}.log")
     with open(log / f"drain-{repo.name}.log", "a", encoding="utf-8") as out:
-        spawn([sys.executable, str(OC_ROOT / "scripts" / "olivercode"), "drain", *argv, "--foreground"], stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
+        spawn([sys.executable, "-u", str(OC_ROOT / "scripts" / "olivercode"), "drain", *argv, "--foreground"], stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
     print(f"Drain started for {repo.name} in its own process. Log: {out.name}. Follow it with `olivercode watch {repo.name}`.")
     return 0
 
@@ -1191,8 +1193,9 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
                    else f"Routine stories wait because staging fails validation: {state['red']}." if state.get("red")
                    else f"Stories wait because the base branch fails validation: {next(iter(state['base'].values()))}." if state.get("base")
                    else "")  # `watch --until-exit` prints it (#1490)
+            left = {n: text for n, text in state["why"].items() if n not in state["closed"]}
             agent_loop.log_stage(f"run-{repo.name}", repo.name, "run-end", landed=len(state["closed"]), stopped=len(state["blocked"]),
-                                **({"reason": why} if why else {}))
+                                **({"reason": why} if why else {}), **({"skipped": left} if left else {}))
             try:
                 from lib import cmd_status
                 cmd_status.write_digest(slug, out=lambda _text: None)  # the digest is current when a run ends (#1313)
@@ -1203,7 +1206,7 @@ def command_drain(argv: list[str], io_factory=Io, sleep=time.sleep, exit_now=os.
             except Exception as exc:  # noqa: BLE001 -- bug intake never hides the run's end
                 print(f"drain: bug intake failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
             landed, retry = len(state["closed"]), len(state["blocked"]) + len(state.get("base", ()))
-            notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.{skipped_summary({n: k for n, k in state['skipped'].items() if n not in state['closed']})}")
+            notify(f"Done: {landed} {'story' if landed == 1 else 'stories'} landed. {retry} will try again.{skipped_summary({n: k for n, k in state['skipped'].items() if n not in state['closed']}, repo.name)}")
         if on_main:
             signal.signal(signal.SIGTERM, previous)
     if code == 130:  # builder threads would hold the exit until their sessions end, so a stopped run ends the process here (#1076)
