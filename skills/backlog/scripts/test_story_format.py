@@ -324,12 +324,17 @@ class StoryFormat(unittest.TestCase):
         self.assertEqual([], sf.overlap_problems(text, {6: {"title": "Other", "body": "Files area: scripts/lib/cmd_groom.py"}}))
         self.assertEqual([], sf.overlap_problems(text, {7: {"title": "Word", "body": "Files area: new, cmd"}}))
 
-    def test_open_stories_parses_each_issue_gh_prints_and_refuses_a_failed_read(self):
+    def test_open_stories_reads_each_issue_through_intake_and_refuses_a_failed_read(self):
         from unittest import mock
-        lines = '{"number": 7, "title": "Word", "body": "Files area: a.py"}\n\n{"number": 9, "title": "Other", "body": ""}\n'
-        with mock.patch.object(sf.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, lines, "")):
+        from lib import backlog_setup, intake
+        issues = {7: {"number": 7, "title": "Word", "body": "Files area: a.py", "labels": []},
+                  9: {"number": 9, "title": "Other", "body": "", "labels": []}}
+        with mock.patch.object(backlog_setup, "origin_owner_name", return_value=("acme", "widget")), \
+                mock.patch.object(intake, "open_stories", return_value=issues) as read:
             self.assertEqual({7: "Word", 9: "Other"}, {n: o["title"] for n, o in sf.open_stories(".").items()})
-        with mock.patch.object(sf.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "HTTP 403")):
+            read.assert_called_once_with("acme/widget")
+        with mock.patch.object(backlog_setup, "origin_owner_name", return_value=("acme", "widget")), \
+                mock.patch.object(intake, "open_stories", side_effect=RuntimeError("GitHub is held")):
             with self.assertRaises(RuntimeError):
                 sf.open_stories(".")
 

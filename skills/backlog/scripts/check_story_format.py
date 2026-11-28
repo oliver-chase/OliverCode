@@ -8,14 +8,13 @@ missing part with its fix and exits 1 when any part is missing, 0 when the body 
 with it, read once through gh; `--offline` skips that read (#1274).
 """
 import argparse
-import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-from lib import intake  # noqa: E402  the land gate's reader of the Removes tests line (#1540)
+from lib import backlog_setup, intake  # noqa: E402  the origin slug and the open-stories read; intake is also the land gate's Removes reader (#1540, #1470)
 
 STORY_SENTENCE = re.compile(r"\bAs (?:the|an?)\s+[^,\n]+?,?\s+I want\s+.+?,\s*so that\s+\S", re.I | re.S)
 EPIC_LINE = re.compile(r"^\s*Epic:\s*(?:[\w.-]+/[\w.-]+)?#\d+\s*$", re.M)
@@ -123,17 +122,12 @@ def shares_files(mine, theirs):
 
 
 def open_stories(root):
-    """{number: {"title", "body"}} of the open issues of the repo at `root`, read once through gh REST (#1274).
-    Raises RuntimeError when gh cannot read them."""
-    try:
-        done = subprocess.run(["gh", "api", "repos/{owner}/{repo}/issues?state=open&per_page=100", "--paginate", "--jq",
-                               '.[] | select(has("pull_request") | not) | {number, title, body}'],
-                              capture_output=True, text=True, cwd=root, timeout=120)
-    except (OSError, subprocess.SubprocessError) as e:
-        raise RuntimeError(str(e) or e.__class__.__name__) from e
-    if done.returncode:
-        raise RuntimeError(done.stderr.strip()[:120] or "gh api failed")
-    return {o["number"]: o for o in (json.loads(line) for line in done.stdout.splitlines() if line.strip())}
+    """{number: {"title", "body"}} of the open issues of the repo whose origin remote is at `root`, read through
+    intake.open_stories (#1274, #1470). Raises RuntimeError when there is no origin remote or GitHub cannot read them."""
+    origin = backlog_setup.origin_owner_name(Path(root or "."))
+    if origin is None:
+        raise RuntimeError("this checkout has no origin remote to name the repo")
+    return intake.open_stories(f"{origin[0]}/{origin[1]}")
 
 
 def overlap_problems(body, stories):
