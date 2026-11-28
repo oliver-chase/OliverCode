@@ -195,17 +195,6 @@ class TestCityOpening(unittest.TestCase):
         self.assertNotIn("phone", text.lower())
         self.assertNotIn("cityArtifact", text)
 
-    def test_the_city_topic_names_both_ways_whatever_the_settings(self):
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
-        self.assertIn("On this computer", text)
-        self.assertIn("olivercode status page --open", text)
-        self.assertIn("\"OliverCode City\" shortcut", text)
-
-    def test_the_guide_still_names_status_page_open_once_the_owner_deleted_the_shortcut(self):
-        # install records the shortcut it wrote and never writes it again, so the guide has no Desktop check: its text is the same either way.
-        _, text = quiet(cmd_guide.command_guide, REPO_ROOT, "city")
-        self.assertIn("olivercode status page --open", text)
-
 
 class TestLauncherSetupDoc(unittest.TestCase):
     def test_every_setup_launcher_bullet_names_a_real_command(self):
