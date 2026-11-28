@@ -43,7 +43,7 @@ import sys
 from pathlib import Path
 
 import _fleet
-from portability import PLACEHOLDER_USERS, SAFE_EMAIL
+from portability import HOME, PLACEHOLDER_USERS, SAFE_EMAIL
 
 SKILLS_ROOT = _fleet.FLEET_ROOT
 DESCRIPTION_WORD_LIMIT = 150
@@ -178,7 +178,7 @@ from skill_weight import (  # noqa: E402,F401
 OC_SKILLS = Path(__file__).resolve().parents[2]   # OliverCode's own skills/ folder, whose skills may read $OC/
 BASELINE_SUFFIXES = {".md", ".py", ".js", ".json", ".sh", ".txt", ".example"}
 BASELINE_SKIP_DIRS = {"tests", "fixtures", "example", "examples", "__pycache__"}
-HOME_PATH_RES = [re.compile(r"/(?:Users|home)/([A-Za-z0-9._-]+)/"), re.compile(r"[A-Za-z]:\\{1,2}Users\\{1,2}([A-Za-z0-9._-]+)\\")]
+HOME_PATH_RES = [HOME, re.compile(r"[A-Za-z]:\\{1,2}Users\\{1,2}([A-Za-z0-9._-]+)\\")]
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 PARENT_RE = re.compile(r"(?<![\w.])((?:\.\./)+[\w./-]+)")   # a bare `../` in prose is a mention, not a read
 OTHER_SKILL_RE = re.compile(r"(?:\$\{?OC\}?|~|/)[^\s`'\"]*?skills/([\w.-]+)/(?:scripts/|\.env\.local)")
