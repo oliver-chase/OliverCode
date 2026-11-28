@@ -14,6 +14,10 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+try:
+    from lib import gitfiles
+except ImportError:  # loaded bare, with scripts/lib on the path
+    import gitfiles
 
 try:
     from lib.failure_log import home, locked, write_private
@@ -31,19 +35,15 @@ def path() -> Path:
     return home() / "validated.jsonl"
 
 
-def _git(root: Path, *args: str, env: dict | None = None) -> str:
-    return subprocess.run(["git", "-C", str(root), *args], env=env, capture_output=True, text=True, check=True).stdout.strip()
-
-
 def working_tree(root: Path) -> str:
     """The tree a commit of everything in the working tree (new files included, ignored files and an untracked docs/LESSONS.jsonl left out) would hold."""
     with tempfile.TemporaryDirectory(prefix="validated-index-") as tmp:
         env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
-        _git(root, "add", "-A", env=env)
+        gitfiles.out(root, "add", "-A", env=env, check=True).strip()
         for name in UNTRACKED_IGNORED:
             if subprocess.run(["git", "-C", str(root), "ls-files", "--error-unmatch", name], capture_output=True).returncode != 0:
-                _git(root, "rm", "--cached", "--ignore-unmatch", "-q", name, env=env)
-        return _git(root, "write-tree", env=env)
+                gitfiles.out(root, "rm", "--cached", "--ignore-unmatch", "-q", name, env=env, check=True).strip()
+        return gitfiles.out(root, "write-tree", env=env, check=True).strip()
 
 
 def record(root: Path, tree: str | None = None) -> None:
@@ -96,7 +96,7 @@ def check(root: Path, sha: str) -> int:
         print("  Validation record check skipped (this repo's scripts/validate.sh does not write one).")
         return 0
     try:
-        tree = _git(root, "rev-parse", f"{sha}^{{tree}}")
+        tree = gitfiles.out(root, "rev-parse", f"{sha}^{{tree}}", check=True).strip()
     except subprocess.CalledProcessError:
         print(f"  Validation record check skipped ({sha[:12]} is not a commit in this repo).")
         return 0
@@ -118,7 +118,7 @@ def check(root: Path, sha: str) -> int:
 
 def command(argv: list[str]) -> int:
     """`olivercode validated snapshot | record [TREE]` (in the current repo) or `olivercode validated check SHA`."""
-    root = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel"))
+    root = Path(gitfiles.out(Path.cwd(), "rev-parse", "--show-toplevel", check=True).strip())
     if argv == ["snapshot"]:
         print(working_tree(root))
         return 0

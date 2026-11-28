@@ -180,14 +180,14 @@ class TestSyncHooksCommit(ScratchHome):
 
     def test_a_commit_the_repo_gates_refuse_is_reported_and_unstaged(self):
         repo = self.repo()
-        real = gitfiles._git
+        real = gitfiles.run
 
-        def refuse(path, *args):
+        def refuse(path, *args, **kw):
             if args[0] == "commit":
                 return subprocess.CompletedProcess(args, 1, stdout="", stderr="[commit-msg] BLOCKED: refused\n")
-            return real(path, *args)
+            return real(path, *args, **kw)
 
-        with mock.patch.object(gitfiles, "_git", refuse):
+        with mock.patch.object(gitfiles, "run", refuse):
             _, out = self.sync()
         self.assertIn("alpha: not committed, the repo's own gates refused it ([commit-msg] BLOCKED: refused)", out)
         self.assertEqual("", git(repo, "diff", "--cached", "--name-only").stdout)

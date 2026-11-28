@@ -105,11 +105,11 @@ class CleanRemoteBranchesQAFixes(unittest.TestCase):
 
     def test_a_branch_that_moved_on_origin_after_the_merge_check_is_kept(self):
         push_branch(self.work, "story/moved", merged=True)
-        real_git = placement._git
+        real_git = placement.gitfiles.run
         raced = []
 
-        def race(repo, *args):
-            out = real_git(repo, *args)
+        def race(repo, *args, **kw):
+            out = real_git(repo, *args, **kw)
             if args[:1] == ("rev-parse",) and not raced:
                 # Origin's branch gets a new commit between the merge check and the delete.
                 raced.append(True)
@@ -120,7 +120,7 @@ class CleanRemoteBranchesQAFixes(unittest.TestCase):
                 git(self.work, "branch", "-q", "-D", "tmp")
             return out
 
-        with mock.patch.object(placement, "_git", side_effect=race):
+        with mock.patch.object(placement.gitfiles, "run", side_effect=race):
             lines = placement.remote_branches(self.cfg, apply=True)
         self.assertTrue(raced)
         self.assertTrue(any(line.startswith("FAILED") and "story/moved" in line for line in lines))

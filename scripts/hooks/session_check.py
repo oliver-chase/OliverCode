@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import gitfiles  # noqa: E402
 import repo_gates  # noqa: E402
 
 RULE_LINKS = ("CLAUDE.md", "VOICE.md", "DESIGN.md")
@@ -133,15 +134,6 @@ def checkout_notes() -> list[str]:
 STALE_FETCH_SECONDS = 24 * 60 * 60
 
 
-def _git(root: Path, *args: str) -> str | None:
-    """Stdout of a local git call, or None when it fails or takes over 3 seconds."""
-    try:
-        done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=3)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return done.stdout.strip() if done.returncode == 0 else None
-
-
 def update_notes(root: Path | None = None) -> list[str]:
     """One line when this checkout trails its upstream branch by its local refs (#1285). It never waits on the network:
     a fetch older than a day starts one detached `git fetch`, tried at most once a day, and the next session sees its result."""
@@ -149,13 +141,13 @@ def update_notes(root: Path | None = None) -> list[str]:
         return []
     try:
         root = root or Path(__file__).resolve().parent.parent.parent
-        behind = _git(root, "rev-list", "--count", "HEAD..@{upstream}")  # fails with no upstream or a detached HEAD
-        if behind is None or _git(root, "status", "--porcelain", "--untracked-files=no") != "":
+        behind = gitfiles.run(root, "rev-list", "--count", "HEAD..@{upstream}", timeout=3)  # fails with no upstream or a detached HEAD
+        if behind.returncode or gitfiles.run(root, "status", "--porcelain", "--untracked-files=no", timeout=3).stdout.strip():
             return []
-        git_dir = _git(root, "rev-parse", "--git-dir")
+        git_dir = gitfiles.out(root, "rev-parse", "--git-dir", timeout=3).strip()
         if git_dir:
             _fetch_if_stale(root, root / git_dir / "FETCH_HEAD")
-        count = int(behind)
+        count = int(behind.stdout)
     except Exception as exc:  # noqa: BLE001 -- never blocks a session
         print(f"session_check: update check failed open: {type(exc).__name__}: {exc}", file=sys.stderr)
         return []

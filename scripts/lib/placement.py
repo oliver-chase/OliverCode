@@ -22,6 +22,7 @@ from urllib.parse import quote
 
 from lib import gh_budget, repo_gates
 from lib.local_config import OC_ROOT, load_local, other_device
+from lib import gitfiles
 
 # A builder's worktree and its dispatch claim are held this long. CLAIM_HOURS matches skills/backlog/scripts/log_action.py.
 CLAIM_HOURS = 2
@@ -129,13 +130,6 @@ def checkouts(base: Path, depth: int = MAX_DEPTH):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not (here_path / d).is_symlink()]
 
 
-def _git(path: Path, *args: str, timeout: int = 30) -> subprocess.CompletedProcess:
-    try:
-        return subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True, timeout=timeout)
-    except subprocess.SubprocessError as exc:  # a slow fetch is one failed row, never a crash of the whole run
-        return subprocess.CompletedProcess(args, 124, "", f"git {args[0]} did not finish: {exc}")
-
-
 def linked_worktrees(cfg: Config) -> list[tuple[Path, Path]]:
     """(worktree, owning repo) for every linked worktree git knows about, wherever it sits (including /tmp)."""
     found = []
@@ -145,7 +139,7 @@ def linked_worktrees(cfg: Config) -> list[tuple[Path, Path]]:
         if repo.name.startswith("_") or not (repo / ".git").is_dir():
             continue
         try:
-            out = _git(repo, "worktree", "list", "--porcelain").stdout
+            out = gitfiles.run(repo, "worktree", "list", "--porcelain", timeout=30).stdout
         except OSError:
             continue
         for line in out.splitlines():
@@ -165,7 +159,7 @@ def belongs_to_other_device(name: str, slug: str | None) -> bool:
 
 
 def _origin_slug(path: Path) -> str | None:
-    out = _git(path, "remote", "get-url", "origin")
+    out = gitfiles.run(path, "remote", "get-url", "origin", timeout=30)
     found = re.search(r"github\.com[:/]([^/:\s]+)/([^/\s]+?)(?:\.git)?/?$", out.stdout.strip()) if out.returncode == 0 else None
     return f"{found.group(1)}/{found.group(2)}" if found else None
 
@@ -238,13 +232,13 @@ def worktrees(cfg: Config | None = None) -> list[Worktree]:
         seen.add(repo.resolve())
         try:
             # Ignored files count when they hold local secrets or settings, which a worktree removal would delete.
-            status = _git(repo, "status", "--short", "--ignored")
+            status = gitfiles.run(repo, "status", "--short", "--ignored", timeout=30)
             dirty = any(not line.startswith("!!") or LOCAL_ONLY.search(line[3:]) for line in status.stdout.splitlines() if line.strip())
-            head = _git(repo, "rev-parse", "--abbrev-ref", "origin/HEAD")
+            head = gitfiles.run(repo, "rev-parse", "--abbrev-ref", "origin/HEAD", timeout=30)
             default = head.stdout.strip() if head.returncode == 0 and head.stdout.strip() != "origin/HEAD" else "origin/main"
-            merged = _git(repo, "merge-base", "--is-ancestor", "HEAD", default).returncode == 0
-            common = _git(repo, "rev-parse", "--git-common-dir")
-            branch = _git(repo, "branch", "--show-current")
+            merged = gitfiles.run(repo, "merge-base", "--is-ancestor", "HEAD", default, timeout=30).returncode == 0
+            common = gitfiles.run(repo, "rev-parse", "--git-common-dir", timeout=30)
+            branch = gitfiles.run(repo, "branch", "--show-current", timeout=30)
         except OSError:
             continue
         if status.returncode or common.returncode or branch.returncode:
@@ -255,7 +249,7 @@ def worktrees(cfg: Config | None = None) -> list[Worktree]:
 
 def _story_of(wt: Worktree) -> str:
     """The story a worktree's unlanded work belongs to: the number in its last commit subject or its branch name."""
-    subject = _git(wt.path, "log", "-1", "--format=%s").stdout
+    subject = gitfiles.run(wt.path, "log", "-1", "--format=%s", timeout=30).stdout
     found = re.search(r"\(#(\d+)\)", subject) or re.search(r"(\d+)", wt.branch or "")
     return f"story #{found.group(1)}" if found else "its story"
 
@@ -277,7 +271,7 @@ def held_reason(wt: Worktree) -> str:
 def _last_touched(wt: Worktree) -> float:
     """The newest change time of the folder, its .git file and the index git keeps for it. Any git command a builder runs
     rewrites that index, so an idle worktree shows its age and an active one shows it. 0 when none of them can be read."""
-    found = _git(wt.path, "rev-parse", "--git-dir")
+    found = gitfiles.run(wt.path, "rev-parse", "--git-dir", timeout=30)
     if found.returncode:
         return 0.0  # without the index's age an active worktree looks idle
     gitdir = found.stdout.strip()
@@ -314,7 +308,7 @@ def clean(cfg: Config | None = None, apply: bool = False, remote: bool = True) -
         elif held := held_reason(wt):
             lines.append(f"KEEP   {wt.path} ({held})")
         elif apply:
-            done = _git(wt.common, "worktree", "remove", str(wt.path))
+            done = gitfiles.run(wt.common, "worktree", "remove", str(wt.path), timeout=30)
             lines.append(f"REMOVE {wt.path}" if done.returncode == 0 else f"FAILED {wt.path}: {done.stderr.strip()[:80]}")
         else:
             lines.append(f"REMOVE {wt.path} (merged and clean; run with --apply)")
@@ -328,7 +322,7 @@ PROTECTED_REMOTE_BRANCHES = {"main", "master", "develop"}
 
 def _default_ref(repo: Path) -> str:
     """The default branch as a remote-tracking ref: origin's HEAD when it names one, else origin/main."""
-    head = _git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    head = gitfiles.run(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD", timeout=30)
     return head.stdout.strip() if head.returncode == 0 and head.stdout.strip() else "origin/main"
 
 
@@ -365,16 +359,16 @@ def remote_branches(cfg: Config | None = None, apply: bool = False) -> list[str]
     for repo in sorted(cfg.root.iterdir()):
         if repo.name.startswith("_") or not (repo / ".git").is_dir():
             continue
-        if apply and _git(repo, "fetch", "--prune", "--quiet", "origin").returncode != 0:
+        if apply and gitfiles.run(repo, "fetch", "--prune", "--quiet", "origin", timeout=30).returncode != 0:
             lines.append(f"FAILED {repo.name}: could not fetch origin, so no remote branch was checked")
             continue
         default = _default_ref(repo)
-        listing = _git(repo, "worktree", "list", "--porcelain")
+        listing = gitfiles.run(repo, "worktree", "list", "--porcelain", timeout=30)
         if listing.returncode:
             lines.append(f"FAILED {repo.name}: could not list its worktrees, so no remote branch was checked")
             continue
         busy = {line[len("branch refs/heads/"):] for line in listing.stdout.splitlines() if line.startswith("branch refs/heads/")}
-        merged = _git(repo, "branch", "-r", "--merged", default, "--format=%(refname:short)").stdout.split()
+        merged = gitfiles.run(repo, "branch", "-r", "--merged", default, "--format=%(refname:short)", timeout=30).stdout.split()
         for ref in sorted(merged):
             name = ref[len("origin/"):] if ref.startswith("origin/") else ""
             if not name or name == "HEAD" or ref == default or name in busy or name in PROTECTED_REMOTE_BRANCHES:
@@ -385,8 +379,8 @@ def remote_branches(cfg: Config | None = None, apply: bool = False) -> list[str]
                 lines.append(f"REMOVE {repo.name}: {ref} (merged into {default}; run with --apply)")
                 continue
             # The lease makes the push refuse if origin's branch has moved since the merge check, so unmerged commits survive.
-            sha = _git(repo, "rev-parse", "--verify", "--quiet", ref).stdout.strip()
-            done = _git(repo, "push", f"--force-with-lease=refs/heads/{name}:{sha}", "origin", "--delete", name)
+            sha = gitfiles.run(repo, "rev-parse", "--verify", "--quiet", ref, timeout=30).stdout.strip()
+            done = gitfiles.run(repo, "push", f"--force-with-lease=refs/heads/{name}:{sha}", "origin", "--delete", name, timeout=30)
             lines.append(f"REMOVE {repo.name}: {ref} (merged into {default})" if done.returncode == 0
                          else f"FAILED {repo.name}: {ref} {done.stderr.strip()[:80]}")
     return lines

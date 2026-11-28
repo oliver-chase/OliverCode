@@ -19,20 +19,17 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib import gitfiles  # noqa: E402
 
 BOARD_FILES = ("docs/backlog-config.json", ".mailmap")  # .mailmap names the history identities it maps to one public identity
 GENERIC = {"claude", "anthropic", "github", "noreply", "bot", "root", "user", "users", "test", "example"}
 NEUTRAL_AUTHOR = ("OliverCode Release", "release" + chr(64) + "example.invalid")
 
 
-def _git(repo: Path, *args: str) -> str:
-    done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, errors="replace")
-    return done.stdout if done.returncode == 0 else ""
-
-
 def identifiers(repo: Path) -> list[str]:
     found: set[str] = set()
-    for line in _git(repo, "log", "--all", "--format=%an\t%ae").splitlines():
+    for line in gitfiles.out(repo, "log", "--all", "--format=%an\t%ae").splitlines():
         name, _, mail = line.partition("\t")
         if "[bot]" in name.lower() or mail.lower().endswith("@anthropic.com"):
             continue
@@ -40,7 +37,7 @@ def identifiers(repo: Path) -> list[str]:
         found.update([name.lower(), local.split("+")[-1] if "noreply.github.com" in domain else local])
         if domain and "noreply" not in domain and "example" not in domain and "invalid" not in domain:
             found.add(domain)
-    origin = _git(repo, "remote", "get-url", "origin").strip()
+    origin = gitfiles.out(repo, "remote", "get-url", "origin").strip()
     match = re.search(r"[:/]([^/:]+)/[^/]+?(?:\.git)?$", origin) if re.match(r"[a-z][a-z0-9+.-]*://|[^/\s]+@[^/\s]+:", origin) else None  # a local path names a folder, not an owner
     if match:
         found.add(match.group(1).lower())
@@ -61,13 +58,13 @@ def scan(repo: Path) -> dict:
     out = {"files": [], "board": [], "commits": [], "authors": 0}
     if not pat:
         return out
-    for name in _git(repo, "ls-files").splitlines():
+    for name in gitfiles.out(repo, "ls-files").splitlines():
         path = repo / name
         if path.is_file() and pat.search(path.read_text(encoding="utf-8", errors="ignore")):
             (out["board"] if name in BOARD_FILES else out["files"]).append(name)
-    out["authors"] = len({l for l in _git(repo, "log", "--all", "--format=%an\t%ae").splitlines()
+    out["authors"] = len({l for l in gitfiles.out(repo, "log", "--all", "--format=%an\t%ae").splitlines()
                           if pat.search(l)})
-    for entry in _git(repo, "log", "--all", "-p", "--format=%x01%h", "--no-color").split("\x01")[1:]:
+    for entry in gitfiles.out(repo, "log", "--all", "-p", "--format=%x01%h", "--no-color").split("\x01")[1:]:
         head, _, body = entry.partition("\n")
         added = "\n".join(l for l in body.splitlines() if l.startswith("+") and not l.startswith("+++"))
         files = re.findall(r"^diff --git a/(\S+)", body, re.M)
@@ -112,7 +109,7 @@ def main(argv: list[str]) -> int:
         source_ids = identifiers(Path(repo_arg).resolve())
         out = release(Path(repo_arg).resolve(), dest)
         pat = _pattern(source_ids)
-        hits = [n for n in _git(out, "ls-files").splitlines() if n not in BOARD_FILES and pat
+        hits = [n for n in gitfiles.out(out, "ls-files").splitlines() if n not in BOARD_FILES and pat
                 and pat.search((out / n).read_text(encoding="utf-8", errors="ignore"))]
         print(f"Release written to {out} as one commit with a neutral author. {len(hits)} file(s) still carry an owner identifier.")
         for h in hits:

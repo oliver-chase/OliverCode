@@ -12,12 +12,9 @@ from pathlib import Path
 from lib import update_state
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")  # the tools that change a file
 from lib.local_config import OC_ROOT, private_repos
+from lib import gitfiles
 
 MARKERS = r"^(<<<<<<<|>>>>>>>) "
-
-
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=30)
 
 
 def fleet_roots() -> list[Path]:
@@ -64,7 +61,7 @@ def reason(data: dict) -> str:
             where = where.parent
         root = repo_gates.repo_root(where)
         if is_main_checkout(root):
-            if path and Path(path).resolve().is_relative_to(root.resolve() / ".claude-optimization") and _git(root, "check-ignore", "-q", path).returncode == 0:
+            if path and Path(path).resolve().is_relative_to(root.resolve() / ".claude-optimization") and gitfiles.run(root, "check-ignore", "-q", path, timeout=30).returncode == 0:
                 continue
             from lib import placement
             worktree = placement.config().worktrees / f"{root.name}-N"
@@ -76,12 +73,12 @@ def reason(data: dict) -> str:
 def ahead_refusal(root: Path) -> str:
     """The commits a checkout holds that origin/main lacks, each with its author, and the one command that moves them to a branch;
     empty when it holds none. The SessionStart check, `olivercode health`, `update` and `complete_story` all say this (#785)."""
-    if (_git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout or "").strip() != "main":  # a worktree's story branch is ahead by design (#785)
+    if (gitfiles.run(root, "rev-parse", "--abbrev-ref", "HEAD", timeout=30).stdout or "").strip() != "main":  # a worktree's story branch is ahead by design (#785)
         return ""
     commits = update_state.ahead_commits(root)
     if not commits:
         return ""
-    behind = int(_git(root, "rev-list", "--count", f"HEAD..{update_state.upstream(root)}").stdout.strip() or 0)
+    behind = int(gitfiles.run(root, "rev-list", "--count", f"HEAD..{update_state.upstream(root)}", timeout=30).stdout.strip() or 0)
     diverged = f" and trails it by {behind}, so a merged fix cannot reach it and the old hooks keep running (#823)" if behind else ""
     return (f"{root.name} holds {len(commits)} commit(s) that origin/main lacks{diverged}: {'; '.join(commits)}. "
             f"Run `{update_state.ahead_fix(root)}` to move them to a local branch and leave the checkout level with origin/main")
@@ -116,7 +113,7 @@ def drift(root: Path) -> list[str]:
                 lines.append(f"{root.name}'s main checkout is mid-rebase. Finish it with `git rebase --continue`, or run `git rebase --abort`")
             else:
                 lines.append(f"{root.name}'s main checkout has a stale {folder} folder and no git process runs. Run `git -C {root} rebase --abort`, or delete .git/{folder} when that fails")
-    marked = _git(root, "grep", "-lE", MARKERS)
+    marked = gitfiles.run(root, "grep", "-lE", MARKERS, timeout=30)
     if marked.returncode == 0 and marked.stdout.strip():
         files = marked.stdout.split()
         lines.append(f"{root.name}'s main checkout holds conflict markers in {', '.join(files[:3])}. Resolve them, or restore a file with `git -C {root} checkout -- FILE`")

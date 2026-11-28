@@ -19,6 +19,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from lib import gitfiles
 
 COPY_NAME = re.compile(r"^(?P<stem>.+?) (?P<n>\d+)(?P<ext>\.[^./ ]+)?$")
 STALE_DAYS = 60
@@ -42,15 +43,6 @@ def evicted(path: Path) -> bool:
         return bool(getattr(os.stat(path), "st_flags", 0) & SF_DATALESS)
     except OSError:
         return True
-
-
-def _git(repo: Path, *args: str) -> str:
-    """git's output, or '' when it fails or takes over a minute, so one slow repo never stops a whole run."""
-    try:
-        ran = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
-    except (subprocess.TimeoutExpired, OSError):
-        return ""
-    return ran.stdout if ran.returncode == 0 else ""
 
 
 def original_of(rel: str) -> str | None:
@@ -78,7 +70,7 @@ def stray_copies(repo: Path, fetch=None) -> list[Copy]:
     """Untracked numbered copies whose original exists, each judged against that original.
     `fetch(paths)` downloads evicted files first. Without it, or when a file stays evicted, the copy is left for the owner."""
     pairs = []
-    for rel in _git(repo, "ls-files", "--others", "--exclude-standard", "-z").split("\0"):
+    for rel in gitfiles.out(repo, "ls-files", "--others", "--exclude-standard", "-z", timeout=60).split("\0"):
         original = original_of(rel) if rel else None
         path, source = repo / rel, repo / (original or "")
         if original and path.is_file() and source.is_file():
@@ -187,7 +179,7 @@ def protect_git(repo: Path, archive: Path | None = None) -> str:
         git.symlink_to(NOSYNC)
         if not _excluded(repo):
             _exclude(repo)
-        return "" if _git(repo, "rev-parse", "--git-dir").strip() else "git did not work through the restored link"
+        return "" if gitfiles.out(repo, "rev-parse", "--git-dir", timeout=60).strip() else "git did not work through the restored link"
     if git.is_symlink() and nosync.is_dir():
         _clear_strays(repo, archive)
         if not _excluded(repo):
@@ -201,7 +193,7 @@ def protect_git(repo: Path, archive: Path | None = None) -> str:
         return "a git operation is running (lock file in .git)"
     git.rename(nosync)
     git.symlink_to(NOSYNC)
-    if _git(repo, "rev-parse", "--git-dir").strip():
+    if gitfiles.out(repo, "rev-parse", "--git-dir", timeout=60).strip():
         _exclude(repo)
         return ""
     git.unlink()
@@ -213,7 +205,7 @@ def last_changed(repo: Path) -> dict[str, int]:
     """Commit time of each tracked path's latest change, from one `git log` pass."""
     times: dict[str, int] = {}
     stamp = 0
-    for line in _git(repo, "log", "--name-only", "--format=@%ct", "--no-renames").splitlines():
+    for line in gitfiles.out(repo, "log", "--name-only", "--format=@%ct", "--no-renames", timeout=60).splitlines():
         if line.startswith("@"):
             stamp = int(line[1:])
         elif line and line not in times:

@@ -16,6 +16,7 @@ from lib.gitfiles import commit_after, commit_changes
 from lib.local_config import OC_ROOT
 from lib import repo_state as _repo_state
 from lib.local_config import private_repos as _private_repos
+from lib import gitfiles
 
 
 def command_backlog_setup(argv: list[str]) -> int:
@@ -95,17 +96,13 @@ HOOK_FILES = ("pre-commit", "pre-commit-private", "pre-push", "commit-msg")  # e
 MANAGED_PATHS = tuple(f".githooks/{n}" for n in HOOK_FILES)
 
 
-def _git(repo_path: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo_path), *args], capture_output=True, text=True)
-
-
 def _hook_snapshot(repo_path: Path) -> dict:
     """Each hook file's bytes and executable bit before sync runs, and whether git already saw it changed.
 
     A path whose git status is not empty (modified, staged, deleted or untracked) differs for a reason that
     is not sync's, so the commit step leaves that repo alone."""
     snap = {}
-    status = _git(repo_path, "status", "--porcelain", "--untracked-files=all", "--", *MANAGED_PATHS).stdout.splitlines()
+    status = gitfiles.run(repo_path, "status", "--porcelain", "--untracked-files=all", "--", *MANAGED_PATHS).stdout.splitlines()
     changed = {line[3:].split(" -> ")[-1].strip('"') for line in status}
     for rel in MANAGED_PATHS:
         path = repo_path / rel
@@ -124,7 +121,7 @@ def _commit_synced(name: str, repo_path: Path, before: dict, story: str, archive
     state = archived or _repo_state.archived(repo_path)
     if state:
         return say(f"not committed, {state} on GitHub")
-    if _git(repo_path, "rev-parse", "-q", "--verify", "HEAD").returncode != 0:
+    if gitfiles.run(repo_path, "rev-parse", "-q", "--verify", "HEAD").returncode != 0:
         return say("not committed, the repo has no commits")
     changed, already = [], []
     foreign = []  # uncommitted edits that sync overwrote, so they were not the template (#1032)

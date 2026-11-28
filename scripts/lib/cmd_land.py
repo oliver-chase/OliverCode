@@ -28,6 +28,7 @@ from pathlib import Path
 from lib import agent_loop, backlog_setup, failure_log, intake, local_config, maintain, run_lock, validated
 from lib.validate_gates import PROGRESS  # the lines that also print on the terminal while a land validates (#776)
 from lib.local_config import OC_ROOT
+from lib import gitfiles
 
 LOG_DIR: Path | None = None  # None means failure_log.home() / "land", which belongs to the user running it
 TRIES = 4
@@ -85,8 +86,8 @@ def link_venv(main: Path, wt: Path) -> bool:
             continue
         linked = True
         # a .gitignore that matches directories only (`node_modules/`) misses a symlink, so info/exclude keeps the link out of `git add -A`
-        ignored = _git(wt, "check-ignore", "-q", name).returncode != 1
-        exclude = "" if ignored else _git(wt, "rev-parse", "--git-path", "info/exclude").stdout.strip()
+        ignored = gitfiles.run(wt, "check-ignore", "-q", name).returncode != 1
+        exclude = "" if ignored else gitfiles.run(wt, "rev-parse", "--git-path", "info/exclude").stdout.strip()
         if exclude:
             with contextlib.suppress(OSError):
                 (wt / exclude).parent.mkdir(parents=True, exist_ok=True)
@@ -104,7 +105,7 @@ def prepare_worktree(wt: Path, main: Path | None = None) -> list[str]:
     builder = wt / "scripts" / "build-hooks.py"
     if builder.is_file() and subprocess.run([sys.executable, str(builder)], cwd=wt, capture_output=True).returncode:
         problems.append("scripts/build-hooks.py failed, so the hooks are not built")
-    if _git(wt, "config", "extensions.worktreeConfig", "true").returncode or _git(wt, "config", "--worktree", "core.hooksPath", ".githooks").returncode:
+    if gitfiles.run(wt, "config", "extensions.worktreeConfig", "true").returncode or gitfiles.run(wt, "config", "--worktree", "core.hooksPath", ".githooks").returncode:
         problems.append("git would not set core.hooksPath for this worktree")
     return problems
 
@@ -133,16 +134,16 @@ def resume_worktree(repo: Path, wt: Path, n: str, base: str = "") -> tuple[list[
         return first, ""
     branch = f"story/{n}"
     if not (wt / ".git").exists():
-        _git(repo, "worktree", "prune")
-        made = _git(repo, "worktree", "add", str(wt), branch)
+        gitfiles.run(repo, "worktree", "prune")
+        made = gitfiles.run(repo, "worktree", "add", str(wt), branch)
         if made.returncode:
             return [f"the worktree was not attached to {branch}: {(made.stderr or made.stdout).strip()}"], ""
     problems = prepare_worktree(wt, repo)
     note = RESUME_NOTE.format(n=n)
-    if _git(wt, "merge-base", "--is-ancestor", base, "HEAD").returncode == 0:
+    if gitfiles.run(wt, "merge-base", "--is-ancestor", base, "HEAD").returncode == 0:
         return problems, note
-    if _git(wt, "rebase", "--autostash", base).returncode:
-        _git(wt, "rebase", "--abort")
+    if gitfiles.run(wt, "rebase", "--autostash", base).returncode:
+        gitfiles.run(wt, "rebase", "--abort")
         note += f" The branch conflicts with {base}, so it was left where it was and not rebased."
     else:
         note += f" The branch was rebased onto {base}."
@@ -150,21 +151,21 @@ def resume_worktree(repo: Path, wt: Path, n: str, base: str = "") -> tuple[list[
 
 
 def _main_checkout(wt: Path) -> Path | None:
-    common = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+    common = gitfiles.run(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
     return Path(common).parent if common else None
 
 
 def squash(wt: Path, story: str, log) -> bool:
     """Replace a branch's commits on top of origin/main with one commit holding the same tree, so main gains one commit per story (#898).
     Its message is the first commit's subject with the story number. A branch of one commit keeps its own message. Returns False when the squash failed."""
-    subjects = _git(wt, "log", "--reverse", "--format=%s", f"origin/{agent_loop.default_branch(wt)}..HEAD").stdout.splitlines()
+    subjects = gitfiles.run(wt, "log", "--reverse", "--format=%s", f"origin/{agent_loop.default_branch(wt)}..HEAD").stdout.splitlines()
     if len(subjects) < 2:
         return True
     title = re.sub(r"\s*\(#\d+\)\s*$", "", subjects[0]).strip() or f"Story {story}"
-    tree = _git(wt, "rev-parse", "HEAD^{tree}").stdout.strip()
-    made = _git(wt, "commit-tree", tree, "-p", f"origin/{agent_loop.default_branch(wt)}", "-m", f"{title} (#{story})")
+    tree = gitfiles.run(wt, "rev-parse", "HEAD^{tree}").stdout.strip()
+    made = gitfiles.run(wt, "commit-tree", tree, "-p", f"origin/{agent_loop.default_branch(wt)}", "-m", f"{title} (#{story})")
     new = made.stdout.strip()
-    if made.returncode or not new or _git(wt, "reset", "--soft", new).returncode:
+    if made.returncode or not new or gitfiles.run(wt, "reset", "--soft", new).returncode:
         log.write(f"--- squash failed: {made.stderr.strip()}\n")
         return False
     log.write(f"--- squashed {len(subjects)} commits into {new[:8]}\n")
@@ -174,7 +175,7 @@ def squash(wt: Path, story: str, log) -> bool:
 def refusal(wt: Path) -> tuple[str, str]:
     """(result word, message) when wt must not land: it holds uncommitted files, which the push would leave behind, or it has no validation command,
     which no run can pass (#1011). ("", "") when it may land."""
-    dirty = [line[3:] for line in _git(wt, "status", "--porcelain").stdout.splitlines() if line.strip()]
+    dirty = [line[3:] for line in gitfiles.run(wt, "status", "--porcelain").stdout.splitlines() if line.strip()]
     if dirty:
         return "dirty-worktree", f"Refused: {wt} has uncommitted files, so nothing landed: {', '.join(dirty[:10])}. Commit them by explicit path or remove them."
     if agent_loop.validation_command(wt) is None:
@@ -266,8 +267,8 @@ def _removed_whole(wt: Path, base: str, declared: list[str]) -> tuple[list[str],
     gone, excused = [], {}
     for entry in declared:
         path, _, name = entry.partition("::")
-        before = _git(wt, "show", f"origin/{base}:{path}").stdout
-        old, new = _test_functions(before), _test_functions(_git(wt, "show", f"HEAD:{path}").stdout)  # a deleted file reads as empty
+        before = gitfiles.run(wt, "show", f"origin/{base}:{path}").stdout
+        old, new = _test_functions(before), _test_functions(gitfiles.run(wt, "show", f"HEAD:{path}").stdout)  # a deleted file reads as empty
         if old is None or new is None:
             continue
         was, left = ([q for q in found if q == name or q.endswith(f"::{name}")] for found in (old, new))
@@ -338,7 +339,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         if not squash(wt, story, log):
             return "squash-failed", ""
         # a file outside the Files area is named and still lands: refusing it made every restart repeat the edit, and the reader judges it (#1073)
-        outside = [p for p in _git(wt, "diff", "--name-only", "--no-renames", f"origin/{base}", "HEAD").stdout.splitlines()
+        outside = [p for p in gitfiles.run(wt, "diff", "--name-only", "--no-renames", f"origin/{base}", "HEAD").stdout.splitlines()
                    if area and not intake.in_area(p, area)]
         if outside:
             names = ", ".join(outside)
@@ -348,7 +349,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
         unlisted = [p for p in dict.fromkeys(entry.partition("::")[0] for entry in declared) if p not in area]
         gone, excused = _removed_whole(wt, base, declared)
         found = [f"{p} is on the Removes tests line and the Files area does not list it" for p in unlisted]
-        found += weakened(_changed_lines(_git(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout), excused)
+        found += weakened(_changed_lines(gitfiles.run(wt, "diff", "--no-renames", "--no-ext-diff", "-U0", f"origin/{base}", "HEAD").stdout), excused)
         if found:
             log.write(f"Refused: this commit weakens a test, so nothing landed: {'; '.join(found)}.\n")
             return "weakened-test", ""
@@ -356,7 +357,7 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
             names = ", ".join(gone)
             log.write(f"Removed tests that story #{story} names: {names}.\n")
             _story_comment(wt, story, f"This commit removes the tests the story names: {names}.", told)
-        tree = _git(wt, "rev-parse", "HEAD^{tree}").stdout.strip()
+        tree = gitfiles.run(wt, "rev-parse", "HEAD^{tree}").stdout.strip()
         passed = validated.recorded_pass(tree) if tree else None  # a pass on record for this tree stands; a rebase that changed it has none (#910)
         if passed:
             log.write(f"--- tree {tree[:12]} passed validation at {passed['time']}, so land reuses that record and does not validate again\n")
@@ -374,10 +375,6 @@ def land(wt: Path, story: str, log) -> tuple[str, str]:
     return "main-kept-moving", ""
 
 
-def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
-
-
 def stack(items: list[tuple[Path, str]], say=print) -> bool:
     """Stack the commits of several finished stories on the landing branch in a scratch worktree, run the repo's quick validation once on the stack,
     and record that pass for the tree after each story, so each story's own land reuses it and validates nothing again (#1317). The stories' worktrees are
@@ -390,19 +387,19 @@ def stack(items: list[tuple[Path, str]], say=print) -> bool:
         return False
     with tempfile.TemporaryDirectory(prefix="land-stack-") as tmp:
         scratch = Path(tmp)
-        _git(main, "fetch", "-q", "origin")
-        if _git(main, "worktree", "add", "--detach", tmp, f"origin/{base}").returncode:
+        gitfiles.run(main, "fetch", "-q", "origin")
+        if gitfiles.run(main, "worktree", "add", "--detach", tmp, f"origin/{base}").returncode:
             return False
         try:
             trees: list[str] = []
             for wt, story in items:
-                first = _git(wt, "merge-base", "HEAD", f"origin/{base}").stdout.strip()
-                head = _git(wt, "rev-parse", "HEAD").stdout.strip()
-                if not first or not head or _git(scratch, "cherry-pick", f"{first}..{head}").returncode:
-                    _git(scratch, "cherry-pick", "--abort")
+                first = gitfiles.run(wt, "merge-base", "HEAD", f"origin/{base}").stdout.strip()
+                head = gitfiles.run(wt, "rev-parse", "HEAD").stdout.strip()
+                if not first or not head or gitfiles.run(scratch, "cherry-pick", f"{first}..{head}").returncode:
+                    gitfiles.run(scratch, "cherry-pick", "--abort")
                     say(f"Story #{story} does not stack on the others, so it lands alone.")
                     continue
-                trees.append(_git(scratch, "rev-parse", "HEAD^{tree}").stdout.strip())
+                trees.append(gitfiles.run(scratch, "rev-parse", "HEAD^{tree}").stdout.strip())
             if len(trees) < 2:
                 return False
             link_venv(main, scratch)
@@ -413,27 +410,27 @@ def stack(items: list[tuple[Path, str]], say=print) -> bool:
                     validated.record(scratch, tree)
             return passed
         finally:
-            _git(main, "worktree", "remove", "--force", tmp)
+            gitfiles.run(main, "worktree", "remove", "--force", tmp)
 
 
 def cleanup(wt: Path) -> list[str]:
     """Delete a landed story's worktree, local branch and remote branch. Returns one line per thing removed or kept and why.
     Nothing is removed while the worktree has uncommitted changes or a commit that is not on origin/main, and main is never touched."""
-    branch = _git(wt, "branch", "--show-current").stdout.strip()
-    common = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
-    if not common or _git(wt, "merge-base", "--is-ancestor", "HEAD", f"origin/{agent_loop.default_branch(wt)}").returncode != 0:
+    branch = gitfiles.run(wt, "branch", "--show-current").stdout.strip()
+    common = gitfiles.run(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+    if not common or gitfiles.run(wt, "merge-base", "--is-ancestor", "HEAD", f"origin/{agent_loop.default_branch(wt)}").returncode != 0:
         return [f"Kept {wt}: it has commits that are not on origin/{agent_loop.default_branch(wt)}."]
-    if _git(wt, "status", "--porcelain").stdout.strip():
+    if gitfiles.run(wt, "status", "--porcelain").stdout.strip():
         return [f"Kept {wt}: it has uncommitted changes."]
     lines = []
-    gone = _git(Path(common), "worktree", "remove", str(wt))
+    gone = gitfiles.run(Path(common), "worktree", "remove", str(wt))
     lines.append(f"Removed worktree {wt}." if gone.returncode == 0 else f"Kept {wt}: {gone.stderr.strip()[:100]}")
     if gone.returncode != 0 or not branch or branch in {"main", "master", "develop"}:
         return lines
-    if _git(Path(common), "branch", "-D", branch).returncode == 0:
+    if gitfiles.run(Path(common), "branch", "-D", branch).returncode == 0:
         lines.append(f"Deleted local branch {branch}.")
-    if _git(Path(common), "ls-remote", "--exit-code", "--heads", "origin", branch).returncode == 0:
-        done = _git(Path(common), "push", "origin", "--delete", branch)
+    if gitfiles.run(Path(common), "ls-remote", "--exit-code", "--heads", "origin", branch).returncode == 0:
+        done = gitfiles.run(Path(common), "push", "origin", "--delete", branch)
         lines.append(f"Deleted remote branch {branch}." if done.returncode == 0 else f"Remote branch {branch} stays: {done.stderr.strip()[:100]}")
     return lines
 
@@ -543,18 +540,18 @@ def promote(repo: Path, say=print) -> int:
     if slug and run_lock.active(slug):
         say("Refused: a drain is running in this repo, which would slow the timings. Stop it or wait until it ends.")
         return 1
-    if _git(repo, "fetch", "-q", "origin").returncode:
+    if gitfiles.run(repo, "fetch", "-q", "origin").returncode:
         say("Refused: git fetch origin failed, so staging and main are unknown.")
         return 1
     main = "main"  # shortcut: promote targets main by name, the story's own word for it; upgrade when a repo promotes to another branch
-    if _git(repo, "merge-base", "--is-ancestor", f"origin/{main}", f"origin/{staging}").returncode:
+    if gitfiles.run(repo, "merge-base", "--is-ancestor", f"origin/{main}", f"origin/{staging}").returncode:
         say(f"Refused: origin/{main} has a commit origin/{staging} lacks, so nothing was pushed. Merge {main} into {staging} first.")
         return 1
-    ahead = _git(repo, "log", "--reverse", "--no-merges", "--format=%s", f"origin/{main}..origin/{staging}").stdout.splitlines()
+    ahead = gitfiles.run(repo, "log", "--reverse", "--no-merges", "--format=%s", f"origin/{main}..origin/{staging}").stdout.splitlines()
     if not ahead:
         say(f"origin/{staging} holds nothing that origin/{main} lacks, so nothing was promoted.")
         return 0
-    head = _git(repo, "rev-parse", f"origin/{staging}").stdout.strip()
+    head = gitfiles.run(repo, "rev-parse", f"origin/{staging}").stdout.strip()
     why = _ci_refusal(slug, head)
     if why:
         say(why)
@@ -563,13 +560,13 @@ def promote(repo: Path, say=print) -> int:
     with tempfile.TemporaryDirectory(prefix="olivercode-promote-") as tmp:
         wt = Path(tmp)
         try:
-            if _git(repo, "worktree", "add", "-q", "--detach", str(wt), f"origin/{main}").returncode:
+            if gitfiles.run(repo, "worktree", "add", "-q", "--detach", str(wt), f"origin/{main}").returncode:
                 say("Refused: a worktree for the promotion could not be made.")
                 return 1
             link_venv(repo, wt)
             took = []
             for ref, label in ((f"origin/{main}", main), (head, staging)):
-                _git(wt, "checkout", "-q", "--detach", ref)
+                gitfiles.run(wt, "checkout", "-q", "--detach", ref)
                 began = time.monotonic()
                 passed, tail = agent_loop.validate(wt)
                 took.append(time.monotonic() - began)
@@ -589,7 +586,7 @@ def promote(repo: Path, say=print) -> int:
                 say(f"Refused: the repo's validation failed on {staging}, so nothing was promoted. Failing gate output:\n{tail}")
                 return 1
             env = {**os.environ, "ALLOW_BRANCH_PUSH": "1"}
-            old = _git(repo, "rev-parse", f"origin/{main}").stdout.strip()
+            old = gitfiles.run(repo, "rev-parse", f"origin/{main}").stdout.strip()
             archive = f"archive/{main}-{time.strftime('%Y-%m-%d')}"
             if subprocess.run(["git", "-C", str(wt), "push", "origin", f"{old}:refs/tags/{archive}"], env=env, capture_output=True, text=True).returncode:
                 say(f"Refused: the tag {archive} could not be pushed at main's old head, so main was not moved and nothing was promoted.")
@@ -606,14 +603,14 @@ def promote(repo: Path, say=print) -> int:
             say(f"{len(stories)} stories carry on-main.")
             return 0
         finally:
-            _git(repo, "worktree", "remove", "--force", tmp)
+            gitfiles.run(repo, "worktree", "remove", "--force", tmp)
 
 
 def command_promote(argv: list[str]) -> int:
     if argv:
         print("Usage: olivercode promote")
         return 2
-    top = _git(Path.cwd(), "rev-parse", "--show-toplevel").stdout.strip()
+    top = gitfiles.run(Path.cwd(), "rev-parse", "--show-toplevel").stdout.strip()
     if not top:
         print("Refused: promote runs inside the OliverCode checkout.")
         return 1

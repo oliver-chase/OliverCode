@@ -13,6 +13,7 @@ from pathlib import Path
 
 from lib import agent_loop, failure_log, open_issues
 from lib.local_config import OC_ROOT, backlog_config, has_backlog_config
+from lib import gitfiles
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
 
@@ -186,7 +187,7 @@ def related_to(body, stories):
 def tracked(root):
     """Every file and folder path on main, or None when git cannot read main."""
     from lib import maintain  # maintain imports intake
-    ran = maintain._git(root, "ls-tree", "-r", "--name-only", "main")
+    ran = gitfiles.run(root, "ls-tree", "-r", "--name-only", "main")
     if ran.returncode:
         return None
     paths = set()

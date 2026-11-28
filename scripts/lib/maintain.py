@@ -30,6 +30,7 @@ from lib.cli import MIN_PYTHON, newer_python
 from lib import failure_log, hygiene, intake, launchd, placement, repo_gates, repo_state
 from lib import local_config
 from lib.local_config import OC_ROOT, claude_dir
+from lib import gitfiles
 
 LABEL = "com.olivercode.maintain"
 DOWNLOAD_SECONDS = 60
@@ -41,13 +42,6 @@ class Problem:
     text: str
     fixable: bool = False
     fixed: bool = False
-
-
-def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    try:
-        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
-    except subprocess.SubprocessError as exc:  # a slow fetch is one failed row, never a crash of the whole run
-        return subprocess.CompletedProcess(args, 124, "", f"git {args[0]} did not finish: {exc}")
 
 
 def _repos(cfg: placement.Config) -> list[Path]:
@@ -85,13 +79,13 @@ def check_worktrees(cfg: placement.Config, fix: bool) -> list[Problem]:
     """A worktree whose folder is gone leaves metadata that git keeps listing. `git worktree prune` drops only that."""
     found = []
     for repo in _repos(cfg):
-        gone = [l[9:] for l in _git(repo, "worktree", "list", "--porcelain").stdout.splitlines() if l.startswith("worktree ") and not Path(l[9:]).exists()]
+        gone = [l[9:] for l in gitfiles.run(repo, "worktree", "list", "--porcelain", timeout=60).stdout.splitlines() if l.startswith("worktree ") and not Path(l[9:]).exists()]
         if not gone:
             continue
         problem = Problem("worktrees", f"{repo.name}: {len(gone)} worktree(s) with no folder: {', '.join(gone[:3])}", fixable=True)
         if fix:
-            _git(repo, "worktree", "prune")
-            after = _git(repo, "worktree", "list", "--porcelain").stdout
+            gitfiles.run(repo, "worktree", "prune", timeout=60)
+            after = gitfiles.run(repo, "worktree", "list", "--porcelain", timeout=60).stdout
             problem.fixed = not any(not Path(l[9:]).exists() for l in after.splitlines() if l.startswith("worktree "))
         found.append(problem)
     return found
@@ -104,14 +98,14 @@ PROTECTED_BRANCHES = {"main", "master", "develop"}
 def _base_ref(repo: Path) -> str | None:
     """The ref branches are merged into: origin's main or master, else the local one."""
     for ref in ("origin/main", "origin/master", "main", "master"):
-        if _git(repo, "rev-parse", "--verify", "--quiet", ref).returncode == 0:
+        if gitfiles.run(repo, "rev-parse", "--verify", "--quiet", ref, timeout=60).returncode == 0:
             return ref
     return None
 
 
 def _checked_out(repo: Path) -> set[str]:
     """Branches a worktree of the repo has checked out. The worktree's session may be live, so these are never touched."""
-    return {l[len("branch refs/heads/"):] for l in _git(repo, "worktree", "list", "--porcelain").stdout.splitlines() if l.startswith("branch refs/heads/")}
+    return {l[len("branch refs/heads/"):] for l in gitfiles.run(repo, "worktree", "list", "--porcelain", timeout=60).stdout.splitlines() if l.startswith("branch refs/heads/")}
 
 
 def check_branches(cfg: placement.Config, fix: bool, now: float | None = None) -> list[Problem]:
@@ -123,9 +117,9 @@ def check_branches(cfg: placement.Config, fix: bool, now: float | None = None) -
         if (base := _base_ref(repo)) is None:
             continue
         busy = _checked_out(repo) | PROTECTED_BRANCHES
-        merged = set(_git(repo, "branch", "--merged", base, "--format=%(refname:short)").stdout.split())
+        merged = set(gitfiles.run(repo, "branch", "--merged", base, "--format=%(refname:short)", timeout=60).stdout.split())
         mergeable = sorted(merged - busy)
-        remote = sorted(b for b in _git(repo, "branch", "-r", "--merged", base, "--format=%(refname:short)").stdout.split()
+        remote = sorted(b for b in gitfiles.run(repo, "branch", "-r", "--merged", base, "--format=%(refname:short)", timeout=60).stdout.split()
                         if "/HEAD" not in b and b.split("/", 1)[-1] not in PROTECTED_BRANCHES and b != "origin")
         if mergeable or remote:
             text = f"{repo.name}: {len(mergeable)} merged local branch(es)" + (f" ({', '.join(mergeable[:4])})" if mergeable else "")
@@ -133,12 +127,12 @@ def check_branches(cfg: placement.Config, fix: bool, now: float | None = None) -
             problem = Problem("branches", text, fixable=bool(mergeable))
             if fix and mergeable:
                 for name in mergeable:
-                    _git(repo, "branch", "-d", name)
-                after = set(_git(repo, "branch", "--format=%(refname:short)").stdout.split())
+                    gitfiles.run(repo, "branch", "-d", name, timeout=60)
+                after = set(gitfiles.run(repo, "branch", "--format=%(refname:short)", timeout=60).stdout.split())
                 problem.fixed = not (set(mergeable) & after)
             found.append(problem)
         stale = []
-        for line in _git(repo, "for-each-ref", "--format=%(refname:short) %(committerdate:unix)", "refs/heads").stdout.splitlines():
+        for line in gitfiles.run(repo, "for-each-ref", "--format=%(refname:short) %(committerdate:unix)", "refs/heads", timeout=60).stdout.splitlines():
             name, _, stamp = line.rpartition(" ")
             if name not in merged and name not in busy and stamp.isdigit() and now - int(stamp) > STALE_BRANCH_HOURS * 3600:
                 stale.append(name)
@@ -168,7 +162,7 @@ def check_hooks_path(cfg: placement.Config, fix: bool) -> list[Problem]:
             continue
         found.append(problem := Problem("hookspath", f"{repo.name}: core.hooksPath is the absolute path {configured}", fixable=True))
         if fix:
-            _git(repo, "config", "core.hooksPath", ".githooks")
+            gitfiles.run(repo, "config", "core.hooksPath", ".githooks", timeout=60)
             problem.fixed = repo_gates.hooks_path(repo) == ".githooks"
     return found
 
@@ -240,15 +234,15 @@ def main_checkout_lag(root: Path, fetch: bool = False, branch: str = "main") -> 
     """(commits the checkout trails origin/main by, its state): 'clean' when it is on main with no edits and no local commits, so
     a fast-forward is safe, else 'edited', 'diverged' or 'off main'. Fetches first when asked."""
     if fetch:
-        _git(root, "fetch", "-q", "origin")
-    behind = _git(root, "rev-list", "--count", f"HEAD..origin/{branch}")
+        gitfiles.run(root, "fetch", "-q", "origin", timeout=60)
+    behind = gitfiles.run(root, "rev-list", "--count", f"HEAD..origin/{branch}", timeout=60)
     if behind.returncode:
         return 0, "unknown"
-    if _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != branch:
+    if gitfiles.run(root, "rev-parse", "--abbrev-ref", "HEAD", timeout=60).stdout.strip() != branch:
         state = "off main"
-    elif _git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
+    elif gitfiles.run(root, "status", "--porcelain", "--untracked-files=no", timeout=60).stdout.strip():
         state = "edited"
-    elif _git(root, "rev-list", "--count", f"origin/{branch}..HEAD").stdout.strip() != "0":
+    elif gitfiles.run(root, "rev-list", "--count", f"origin/{branch}..HEAD", timeout=60).stdout.strip() != "0":
         state = "diverged"
     else:
         state = "clean"
@@ -259,7 +253,7 @@ def fast_forward(root: Path, fetch: bool = False, branch: str = "main") -> tuple
     """Fast-forward the checkout to origin/main when it is clean. Returns (commits behind before, state, whether it moved);
     an edited, diverged or off-main checkout is left alone."""
     behind, state = main_checkout_lag(root, fetch=fetch, branch=branch)
-    moved = bool(behind) and state == "clean" and _git(root, "merge", "-q", "--ff-only", f"origin/{branch}").returncode == 0
+    moved = bool(behind) and state == "clean" and gitfiles.run(root, "merge", "-q", "--ff-only", f"origin/{branch}", timeout=60).returncode == 0
     return behind, state, moved
 
 
@@ -267,7 +261,7 @@ def check_main_checkout(fix: bool, root: Path | None = None) -> list[Problem]:
     """The OliverCode checkout that runs the hooks fast-forwards to origin/main when it is clean, and reports its lag when it has
     local edits or its own commits, because the hooks and gates it runs are then older than main's."""
     root = root or OC_ROOT
-    fetched = _git(root, "fetch", "-q", "origin")
+    fetched = gitfiles.run(root, "fetch", "-q", "origin", timeout=60)
     failed = [Problem("checkout", f"{root}: git fetch failed: {fetched.stderr.strip()[:200]}", fixable=True)] if fetched.returncode else []
     behind, state = main_checkout_lag(root)
     from lib import main_checkout
@@ -326,7 +320,7 @@ def check_tidy(cfg: placement.Config, fix: bool, ps_text: str | None = None, tas
             continue
         why = "uncommitted changes" if wt.dirty else placement.held_reason(wt) if wt.merged else f"commits not on the default branch ({wt.branch or 'detached'})"
         if why:
-            age = _git(wt.path, "log", "-1", "--format=%cr").stdout.strip() or "no commits"
+            age = gitfiles.run(wt.path, "log", "-1", "--format=%cr", timeout=60).stdout.strip() or "no commits"
             kept.append(f"{wt.path} ({why}; last commit {age})")
     if removed:
         found.append(Problem("tidy", f"removed {len(removed)} merged and clean worktree(s)", fixable=True, fixed=True))
@@ -431,7 +425,7 @@ def check_suite(fix: bool, root: Path | None = None, record: Path | None = None)
 
 def _origin_slug(repo: Path) -> str:
     """owner/name of a checkout's origin on GitHub, or "" when it has no origin or the origin is not on GitHub."""
-    url = _git(repo, "remote", "get-url", "origin").stdout.strip()
+    url = gitfiles.run(repo, "remote", "get-url", "origin", timeout=60).stdout.strip()
     match = re.search(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?$", url)
     return f"{match.group(1)}/{match.group(2)}" if match else ""
 

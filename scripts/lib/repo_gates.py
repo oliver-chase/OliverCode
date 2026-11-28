@@ -16,6 +16,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+try:
+    from lib import gitfiles
+except ImportError:  # loaded bare, with scripts/lib on the path
+    import gitfiles
 
 
 def hook_templates(oc_root: Path) -> Path:
@@ -86,18 +90,14 @@ def gate_problem(root: Path) -> str:
     return ""
 
 
-def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True)
-
-
 def _tracked(repo_root: Path, filename: str) -> bool:
-    return _git(repo_root, "ls-files", "--error-unmatch", f".githooks/{filename}").returncode == 0
+    return gitfiles.run(repo_root, "ls-files", "--error-unmatch", f".githooks/{filename}", text=False).returncode == 0
 
 
 def _committed_bytes(repo_root: Path, installed: Path, filename: str) -> bytes:
     """The hook as HEAD holds it, which is what every clone gets; an untracked hook is read from disk."""
     if _tracked(repo_root, filename):
-        shown = _git(repo_root, "show", f"HEAD:.githooks/{filename}")
+        shown = gitfiles.run(repo_root, "show", f"HEAD:.githooks/{filename}", text=False)
         return shown.stdout if shown.returncode == 0 else b""
     return installed.read_bytes()
 
@@ -128,7 +128,7 @@ def hook_problems(repo_root: Path, templates_dir: Path, private_repo: bool, comm
             problems.append(f"no {filename} in {hooks_dir}")
         elif not os.access(installed, os.X_OK):
             problems.append(f"{installed} is not executable, so git skips it")
-        elif committed and _tracked(repo_root, filename) and _git(repo_root, "status", "--porcelain", "--", f".githooks/{filename}").stdout.strip():
+        elif committed and _tracked(repo_root, filename) and gitfiles.run(repo_root, "status", "--porcelain", "--", f".githooks/{filename}", text=False).stdout.strip():
             problems.append(f"{filename} is tracked but differs from HEAD, so it is hand-edited or uncommitted")
         elif (_committed_bytes(repo_root, installed, filename) if committed else installed.read_bytes()) != canonical.read_bytes():
             problems.append(f"{filename} diverges from the {template} template")
