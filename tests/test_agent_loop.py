@@ -1,7 +1,5 @@
-"""The agent loop and `olivercode run`: scripts/lib/agent_loop.py and cmd_run.py, driven by a scripted Claude Code and a scripted validation."""
+"""The agent loop: scripts/lib/agent_loop.py, driven by a scripted Claude Code and a scripted validation."""
 
-import contextlib
-import io
 import json
 import os
 import shutil
@@ -13,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittes
 from _support import REPO_ROOT, git, scratch_repo, temp_dir  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from lib import agent_loop, cmd_run, model  # noqa: E402
+from lib import agent_loop, model  # noqa: E402
 
 
 def reply(text="done", code=0, tokens=10, session_id="c1"):
@@ -777,36 +775,6 @@ class TestLoop(unittest.TestCase):
         out = self.loop(Scripted(reply()), [])
         self.assertFalse(out["done"])
         self.assertIn("nothing checked", out["reason"])
-
-
-class TestRunCommand(unittest.TestCase):
-    def run_cmd(self, argv):
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = cmd_run.command_run(argv)
-        return code, out.getvalue()
-
-    def test_a_missing_task_or_flag_prints_the_usage(self):
-        for argv in ([], ["--bogus"], ["task", "--max-turns", "x"], ["task", "--max-turns", "0"]):
-            code, out = self.run_cmd(argv)
-            self.assertEqual((1, True), (code, out.startswith("Usage")), argv)
-
-    def test_no_claude_command_says_how_to_get_it(self):
-        with mock.patch.object(model, "available", return_value=False):
-            code, out = self.run_cmd(["do", "it"])
-        self.assertEqual(1, code)
-        self.assertIn("sign in", out)
-
-    def test_the_loop_outcome_sets_the_exit_code(self):
-        done = {"done": True, "reason": "The repo's validation passes.", "rounds": 1, "tokens": 20, "summary": ""}
-        with mock.patch.object(model, "available", return_value=True), mock.patch.object(cmd_run.agent_loop, "run_loop", return_value=done) as loop:
-            code, out = self.run_cmd(["add", "a", "test", "--max-turns", "5"])
-        self.assertEqual(0, code)
-        self.assertEqual(("add a test", 5), (loop.call_args[0][0], loop.call_args[1]["max_turns"]))
-        self.assertIn("Done:", out)
-        with mock.patch.object(model, "available", return_value=True), \
-                mock.patch.object(cmd_run.agent_loop, "run_loop", return_value={**done, "done": False}):
-            self.assertEqual(1, self.run_cmd(["x"])[0])
 
 
 if __name__ == "__main__":
