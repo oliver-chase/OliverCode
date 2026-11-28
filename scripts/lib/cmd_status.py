@@ -108,11 +108,13 @@ def repo_claims(claims: dict, slug: str) -> dict:
     return {key: mine for key, mine in claims.items() if not slug or key.rsplit("#", 1)[0] == slug}
 
 
-def next_ready(log: list[dict], slug: str = "", claims: dict = {}) -> str:
+def next_ready(log: list[dict], slug: str = "", claims: dict = {}) -> str | None:
     """The first story with no live claim in CLAIMS among those SLUG's drain last said it can start (#1486, #1570), or of any repo's drain with no slug.
-    '' when no drain has said, or it said none. A story landed or closed since then is left out."""
+    None when no drain has recorded a queue for it, so it is unknown (#1574). '' when the last drain said it can start none. A story landed or closed since then is left out."""
     # shortcut: the list is as old as the drain's last pass, so a card moved while no drain runs shows after the next run; read the board when status may spend a call.
     latest = {r.get("slug"): i for i, r in enumerate(log) if r.get("stage") == "queue" and (not slug or r.get("slug") == slug)}
+    if not latest:
+        return None
     for i in sorted(latest.values(), reverse=True):
         row = log[i]
         done = {r.get("story") for r in log[i + 1:] if r.get("repo") == row.get("repo") and r.get("stage") in ("landed", "closed")}
@@ -120,6 +122,14 @@ def next_ready(log: list[dict], slug: str = "", claims: dict = {}) -> str:
             if f"{row.get('slug')}#{n}" not in claims and f"story-{n}" not in done:
                 return line
     return ""
+
+
+def next_line(ready: str | None) -> str:
+    """The one `Next Ready` line status and watch print (#1574): the story the drain can start, nothing left to build when the last drain said none,
+    or unknown until a drain has recorded a queue."""
+    if ready is None:
+        return "Next Ready: unknown until a drain runs."
+    return f"Next Ready: {ready}." if ready else "Next Ready: nothing is left to build."
 
 
 def stall_line(n: str, mine: dict, minutes: int, holder: dict | None) -> str:
@@ -406,17 +416,15 @@ def building_block(now: float, claims: dict, log: list[dict], alive: bool, open_
     return lines, warnings
 
 
-def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, ready: str, holder: dict | None = None,
+def activity(now: float, claims: dict, log: list[dict], alive: bool, open_now: int | None, ready: str | None, holder: dict | None = None,
              slug: str = "") -> list[str]:
-    """The building lines, then the last three landings from the run log's landed rows, the last run of SLUG's repo and the next Ready story, then the
+    """The building lines, then the last three landings from the run log's landed rows, the last run of SLUG's repo and the next Ready line, then the
     warnings (#987). It reads only what it is given."""
     lines, warnings = building_block(now, claims, log, alive, open_now, holder)
     done = landings(log)[:3]
     lines += [landing_line(row, "Last landed" if i == 0 else "Landed before that") for i, row in enumerate(done)] or ["Last landed: none recorded yet."]
     lines += last_run(log, slug)
-    if ready:
-        lines.append(f"Next Ready: {ready}.")
-    return lines + warnings
+    return lines + [next_line(ready)] + warnings
 
 
 def tokens_per_story(rows: list[dict], log: list[dict]) -> str:
@@ -482,7 +490,7 @@ def live_lines(now: datetime, open_now: int | None, slug: str = "") -> list[str]
     landed = [landing_line(row, "Landed") for row in found] or ["Nothing has landed today."]
     if not found:
         landed.append(landing_line(last[0], "Last landed") if last else "Last landed: none recorded yet.")
-    lines = ["Building:"] + building + ([f"Next Ready: {ready}."] if ready else []) + warnings
+    lines = ["Building:"] + building + [next_line(ready)] + warnings
     return lines + ["", "Landed today:"] + landed + last_run(log, slug)
 
 

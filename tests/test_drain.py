@@ -1971,10 +1971,11 @@ class DetachedRun(unittest.TestCase):
         code = cmd_status.command_watch(["r"], sleep=lambda s: next(steps)(), out=lines.append, alive=lambda: True)
         self.assertEqual(0, code)
         self.assertEqual("The runner is running and no story is building.", lines[0])
-        self.assertRegex(lines[2], r"^\d\d:\d\d (EST|EDT) #169 in r: claimed$")
-        self.assertRegex(lines[3], r"^\d\d:\d\d (EST|EDT) #169 in r: validating$")
-        self.assertRegex(lines[4], r"^\d\d:\d\d (EST|EDT) #169 in r: landed\. Building took under a minute, validation under a minute, landing under a minute, under a minute in all\.$")
-        self.assertTrue(lines[5].endswith("1 story landed, 0 stopped."))
+        self.assertEqual("Next Ready: unknown until a drain runs.", lines[2])  # no queue row was logged, so the next line says so (#1574)
+        self.assertRegex(lines[3], r"^\d\d:\d\d (EST|EDT) #169 in r: claimed$")
+        self.assertRegex(lines[4], r"^\d\d:\d\d (EST|EDT) #169 in r: validating$")
+        self.assertRegex(lines[5], r"^\d\d:\d\d (EST|EDT) #169 in r: landed\. Building took under a minute, validation under a minute, landing under a minute, under a minute in all\.$")
+        self.assertTrue(lines[6].endswith("1 story landed, 0 stopped."))
 
     def test_watch_keeps_reading_through_a_restart_and_ends_at_the_real_run_end(self):
         from lib import cmd_status
@@ -1984,12 +1985,13 @@ class DetachedRun(unittest.TestCase):
         lines = []
         code = cmd_status.command_watch(["r"], sleep=lambda s: next(steps)(), out=lines.append, alive=lambda: True)
         self.assertEqual(0, code)
-        self.assertRegex(lines[2], r"^\d\d:\d\d (EST|EDT) #r in r: restarting$")  # the restarting row, then the old run's run-end line, both printed
-        self.assertTrue(lines[3].startswith("Last run ended"))
-        self.assertRegex(lines[4], r"^\d\d:\d\d (EST|EDT) #170 in r: claimed$")  # the restarted run's rows stream on
-        self.assertRegex(lines[5], r"^\d\d:\d\d (EST|EDT) #170 in r: landed")
-        self.assertTrue(lines[6].startswith("Last run ended") and lines[6].endswith("1 story landed, 0 stopped."))
-        self.assertEqual(7, len(lines))
+        self.assertEqual("Next Ready: unknown until a drain runs.", lines[2])  # no queue row was logged (#1574)
+        self.assertRegex(lines[3], r"^\d\d:\d\d (EST|EDT) #r in r: restarting$")  # the restarting row, then the old run's run-end line, both printed
+        self.assertTrue(lines[4].startswith("Last run ended"))
+        self.assertRegex(lines[5], r"^\d\d:\d\d (EST|EDT) #170 in r: claimed$")  # the restarted run's rows stream on
+        self.assertRegex(lines[6], r"^\d\d:\d\d (EST|EDT) #170 in r: landed")
+        self.assertTrue(lines[7].startswith("Last run ended") and lines[7].endswith("1 story landed, 0 stopped."))
+        self.assertEqual(8, len(lines))
 
     def test_watch_exits_when_no_drain_holds_the_run_lock_and_leaves_the_drain_alone(self):
         from lib import cmd_status

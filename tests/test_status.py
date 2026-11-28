@@ -359,7 +359,7 @@ class TestDigest(unittest.TestCase):
     def test_an_idle_runner_says_so_and_names_the_command_that_starts_it(self):
         lines = cmd_status.activity(NOW.timestamp(), {}, [], False, 3, "")
         self.assertEqual(["Runner idle: no story is building and 3 stories are open. Start it with `olivercode drain REPO`.",
-                          "Last landed: none recorded yet."], lines)
+                          "Last landed: none recorded yet.", "Next Ready: nothing is left to build."], lines)
 
     def test_a_stalled_builder_is_warned_with_the_command_that_resumes_it(self):
         claims = {"o/r#7": {"agent": "drain", "at": NOW.timestamp() - 3600}}
@@ -455,8 +455,14 @@ class TestOwnerZone(unittest.TestCase):
         self.assertEqual("P0 #1479 Staging CI passes again", cmd_status.next_ready(log, "o/r"))
         self.assertEqual("P1 #1289 Next story", cmd_status.next_ready(log, "o/r", {"o/r#1479": {"agent": "drain", "at": 0}}))
         self.assertEqual("P1 #1289 Next story", cmd_status.next_ready(log + [stage("story-1479", "landed", "09:00")], "o/r"))
-        self.assertEqual("", cmd_status.next_ready(log, "o/other"))
-        self.assertEqual("", cmd_status.next_ready([], "o/r"))
+        self.assertIsNone(cmd_status.next_ready(log, "o/other"))
+        self.assertIsNone(cmd_status.next_ready([], "o/r"))
+
+    def test_next_line_says_unknown_before_any_drain_and_nothing_left_when_the_drain_said_none(self):  # #1574
+        self.assertEqual("Next Ready: unknown until a drain runs.", cmd_status.next_line(cmd_status.next_ready([], "o/r")))
+        self.assertEqual("Next Ready: unknown until a drain runs.", cmd_status.next_line(cmd_status.next_ready([queue([], slug="o/other")], "o/r")))
+        self.assertEqual("Next Ready: nothing is left to build.", cmd_status.next_line(cmd_status.next_ready([queue([])], "o/r")))
+        self.assertEqual("Next Ready: P1 #1289 Next story.", cmd_status.next_line("P1 #1289 Next story"))
 
     def test_watch_opens_with_the_building_block_the_landings_and_next_ready_then_streams(self):
         log = [stage("story-7", "claimed", "09:00"), stage("story-5", "claimed", "08:00"), stage("story-5", "landed", "09:17", 120),
@@ -493,7 +499,9 @@ class TestRunCount(unittest.TestCase):
         self.assertEqual(want, streamed[-1])
         self.assertIn("Last run ended 2026-11-22 04:00 EST: 4 stories landed, 0 stopped.", streamed)  # watch's opening block, before the new run ends
         self.assertEqual([f"{want} No story it could start was left.\nNext: nothing is left to build."], exited)
-        self.assertFalse(any("queue" in line or line.startswith("Next Ready") for line in status + streamed))
+        self.assertIn("Next Ready: nothing is left to build.", status)  # the drain's queue of [] was recorded after the watch began
+        self.assertIn("Next Ready: unknown until a drain runs.", streamed)  # the opening block was read before any queue row
+        self.assertFalse(any("queue" in line for line in status + streamed))
 
     def test_a_run_end_row_with_no_slug_is_matched_by_the_repos_name(self):
         log = [{**stage("run-r", "run-end", "09:00"), "landed": 2}, {**stage("run-other", "run-end", "09:10", repo="other"), "landed": 7}]
