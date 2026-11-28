@@ -1,4 +1,4 @@
-"""The commit-msg hook blocks a commit with no story reference, in a scratch repo."""
+"""The commit-msg hook: one table of message and staged diff against the verdict, run through the real hook."""
 
 import os
 import shutil
@@ -7,25 +7,76 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # so `-m unittest tests.test_commit_msg` finds _support
 from _support import REPO_ROOT, git, git_env, scratch_repo, temp_dir  # noqa: E402
 
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "commit-msg"
+CLI = REPO_ROOT / "scripts" / "olivercode"
+FIRST = "first commit with no reference"
+VOICE = {"docs/VOICE.md": "voice\n"}
+TOOL = {"tool.py": "x = 1\n"}
+GOOD_CO = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 
 def setUpModule():
-    """One scratch repo for the whole file with the hook installed and a.txt staged; each test copies it."""
-    CommitMsgCase._template = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-template-"))
-    unittest.addModuleCleanup(shutil.rmtree, CommitMsgCase._template, ignore_errors=True)
-    scratch_repo(CommitMsgCase._template)
-    hooks = CommitMsgCase._template / ".githooks"
-    hooks.mkdir()
-    shutil.copy2(HOOK, hooks / "commit-msg")
-    git(CommitMsgCase._template, "config", "core.hooksPath", ".githooks")
-    (CommitMsgCase._template / "a.txt").write_text("a\n")
-    git(CommitMsgCase._template, "add", "a.txt")
+    """One scratch repo with the hook installed and a first commit holding a.txt and a test; each test copies it."""
+    CommitMsgCase._template = template = Path(tempfile.mkdtemp(prefix="olivercode-commitmsg-template-"))
+    unittest.addModuleCleanup(shutil.rmtree, template, ignore_errors=True)
+    scratch_repo(template)
+    (template / ".githooks").mkdir()
+    shutil.copy2(HOOK, template / ".githooks" / "commit-msg")
+    git(template, "config", "core.hooksPath", ".githooks")
+    (template / "a.txt").write_text("a\n")
+    (template / "tests").mkdir()
+    (template / "tests" / "test_old.py").write_text("x = 1\n")
+    git(template, "add", "a.txt", "tests")
+    git(template, "commit", "-q", "-m", FIRST)
+
+
+# (message, staged files, exit code, words the output holds; a word that starts with "!" must be absent).
+# A file staged as None is deleted. "{sha}" is the first commit. MERGE as a file puts the repo mid-merge.
+MERGE = "MERGE_HEAD"
+TABLE = [
+    # STORY-REF-1: a reference is a standalone # and a positive number.
+    ("Add a feature", {}, 1, ["names no story", "1 blocking finding", "!findings"]),
+    *[(m, {}, 1, ["names no story"]) for m in ("Fix 5#3", "Fix a#53", "Fix x#53b", "Entity &#39; here",
+                                                "Use colour #123abc", "Fix the # sign", "Fix #0", "Fix (#000)")],
+    *[(m, {}, 0, []) for m in ("Fix (#53)", "Fix org/repo#53", "Fix #53.", "Fix #53, #54", "Add a feature\n\nStory: #53", "#53 fix")],
+    # A revert or autosquash is exempt only when it names a commit that exists, and still needs a test for its code.
+    (f'Revert "{FIRST}"\n\nThis reverts commit {{sha}}.', {}, 0, []),
+    (f'Revert "{FIRST}"', {}, 1, []),
+    ('Revert "no such commit"', {}, 1, []),
+    (f"fixup! {FIRST}", {}, 0, []),
+    (f"squash! fixup! {FIRST}", {}, 0, []),
+    (f"amend! {FIRST}", {}, 0, []),
+    ("fixup! no such commit", {}, 1, []),
+    (f"fixup! {FIRST}", TOOL, 1, ["no test"]),
+    # A subject that starts with "Merge" is a merge only when MERGE_HEAD is set, and a merge that stages code is checked.
+    ("Merge the login fix", {}, 1, []),
+    ("Merge branch 'use-x-instead-of-y'", {MERGE: ""}, 0, []),
+    ("Merge branch 'x'", {MERGE: "", **TOOL}, 1, ["names no story"]),
+    # A co-author line has one form, and merges are checked too.
+    (f"Work (#5)\n\n{GOOD_CO}", {}, 0, []),
+    *[(f"Merge branch x (#5)\n\n{bad}", {}, 1, ["Co-Authored-By"]) for bad in (
+        "Co-authored-by: Claude <noreply@anthropic.com>", "Co-Authored-By: Claude <claude@anthropic.com>",
+        "co-authored-by: Jane Doe <jane@example.invalid>", "Co-Authored-By: Claude")],
+    # A code change needs a test change or a stated reason. A check script under scripts/ is its own test, and a
+    # deleted test or code under docs/ is not a test.
+    *[("Add a tool (#5)", {rel: "x\n"}, 1, ["no test"]) for rel in ("tool.py", "run.sh", "app.swift", "bin/tool", "scripts/build.mjs", "docs/tools/helper.py")],
+    ("Add a tool (#5)\n\nNo test: a constant with no behavior", TOOL, 0, []),
+    ("Change the tool (#5)", {**TOOL, "tests/test_tool.py": "import tool\n"}, 0, []),
+    ("Add a tool (#5)", {**TOOL, "tests/test_old.py": None}, 1, ["no test"]),
+    *[("Docs only (#5)", {rel: "x\n"}, 0, []) for rel in ("docs/guide.md", "data.csv", "page.html", "LICENSE", "scripts/live-check.mjs")],
+    # VOICE-1 warns and never blocks, and only in a repo with docs/VOICE.md.
+    *[(m, VOICE, 0, ["WARNING", "voice", "!BLOCKED"]) for m in (
+        "Work (#5)\n\n- did a thing.", "Use the cache rather than the API (#5)", "Work (#5)\n\nIt is a guide, not a rule.")],
+    ("Work (#5)\n\n- did a thing\n\nA full sentence ends with a period.", VOICE, 0, ["!WARNING"]),
+    ("Use the cache rather than the API (#5)", {}, 0, ["!voice"]),
+    # Every blocking finding prints together before the commit is refused.
+    ("Use the cache rather than the API\n\nCo-Authored-By: Claude", {**VOICE, **TOOL}, 1,
+     ["names no story", "changes code and no test", "co-author line", "WARNING", "3 blocking findings"]),
+]
 
 
 class CommitMsgCase(unittest.TestCase):
@@ -33,240 +84,79 @@ class CommitMsgCase(unittest.TestCase):
         self.repo = temp_dir(self, "olivercode-commitmsg-") / "repo"
         shutil.copytree(self._template, self.repo, symlinks=True)
 
+    def stage(self, files):
+        for rel, text in files.items():
+            if rel == MERGE:
+                (self.repo / ".git" / MERGE).write_text(git(self.repo, "rev-parse", "HEAD").stdout)
+            elif text is None:
+                git(self.repo, "rm", "-q", rel)
+            else:
+                (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+                (self.repo / rel).write_text(text)
+                git(self.repo, "add", rel)
+
+    def hook(self, *args, **env):
+        """Run the installed hook as git does; a refusal the test wants is not the owner's log."""
+        env = {**git_env(), "OLIVERCODE_FAILURE_LOG": str(self.repo / "failures.log"), **env}
+        done = subprocess.run(["bash", str(self.repo / ".githooks" / "commit-msg"), *args],
+                              cwd=self.repo, env=env, capture_output=True, text=True)
+        return done.returncode, done.stdout + done.stderr
+
+    def verdict(self, message, **env):
+        msg = self.repo / ".git" / "COMMIT_EDITMSG"
+        msg.write_text(message + "\n")
+        return self.hook(str(msg), **env)
+
     def commit(self, message, *extra):
         (self.repo / "a.txt").write_text(message + "\n")
         git(self.repo, "add", "a.txt")
         return git(self.repo, "commit", "-m", message, *extra, check=False)
 
-    def first_commit(self):
-        """The initial commit is exempt, so most tests start from a repo with a history."""
-        git(self.repo, "commit", "-m", "first commit with no reference")
-
-    def in_merge(self):
-        """Puts the repo in the state git is in while it commits a merge, with MERGE_HEAD set."""
-        head = git(self.repo, "rev-parse", "HEAD").stdout.strip()
-        (self.repo / ".git" / "MERGE_HEAD").write_text(head + "\n")
-
 
 class TestCommitMsg(CommitMsgCase):
-    def test_a_code_change_needs_a_test_change_or_a_stated_reason(self):
-        self.first_commit()
-        for rel, text in (("tool.py", "x = 1\n"), ("run.sh", "echo hi\n"), ("app.swift", "let x = 1\n"), ("bin/tool", "echo hi\n")):
-            with self.subTest(rel):
-                (self.repo / rel).parent.mkdir(exist_ok=True)
-                (self.repo / rel).write_text(text)
-                git(self.repo, "add", rel)
-                result = git(self.repo, "commit", "-m", "Add a tool (#5)", check=False)
-                self.assertEqual(1, result.returncode)
-                self.assertIn("no test", result.stdout + result.stderr)
-                git(self.repo, "rm", "-q", "--cached", rel)
-        (self.repo / "tool.py").write_text("x = 1\n")
-        git(self.repo, "add", "tool.py")
-        self.assertEqual(0, git(self.repo, "commit", "-m", "Add a tool (#5)\n\nNo test: a constant with no behavior",
-                                check=False).returncode)
-        (self.repo / "tool.py").write_text("x = 2\n")
-        (self.repo / "tests").mkdir()
-        (self.repo / "tests" / "test_tool.py").write_text("import tool\n")
-        git(self.repo, "add", "tool.py", "tests/test_tool.py")
-        self.assertEqual(0, git(self.repo, "commit", "-m", "Change the tool (#5)", check=False).returncode)
-        for rel in ("docs/guide.md", "data.csv", "page.html", "LICENSE"):
-            with self.subTest(rel):
-                (self.repo / rel).parent.mkdir(exist_ok=True)
-                (self.repo / rel).write_text("x\n")
-                git(self.repo, "add", rel)
-                self.assertEqual(0, git(self.repo, "commit", "-m", "Docs only (#5)", check=False).returncode)
-        self.assertEqual(0, self.commit("Docs only (#5)").returncode)
-
-    def test_a_check_script_under_scripts_is_its_own_test(self):
-        self.first_commit()
-        (self.repo / "scripts").mkdir()
-        (self.repo / "scripts" / "live-check.mjs").write_text("process.exit(0)\n")
-        git(self.repo, "add", "scripts/live-check.mjs")
-        self.assertEqual(0, git(self.repo, "commit", "-m", "Add a live check (#5)", check=False).returncode)
-        (self.repo / "scripts" / "build.mjs").write_text("process.exit(0)\n")
-        git(self.repo, "add", "scripts/build.mjs")
-        self.assertEqual(1, git(self.repo, "commit", "-m", "Add a build (#5)", check=False).returncode)
-
-    def test_a_co_author_line_has_one_form(self):
-        self.first_commit()
-        good = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-        self.assertEqual(0, self.commit(f"Work (#5)\n\n{good}").returncode)
-        self.assertEqual(0, self.commit("Work (#5)").returncode)  # a commit with no co-author passes
-        for bad in ("Co-authored-by: Claude <noreply@anthropic.com>", "Co-Authored-By: Claude <claude@anthropic.com>",
-                    "co-authored-by: Jane Doe <jane@example.invalid>", "Co-Authored-By: Claude"):
-            with self.subTest(bad):
-                result = self.commit(f"Merge branch x (#5)\n\n{bad}")  # merges are checked too
-                self.assertEqual(1, result.returncode)
-                self.assertIn("Co-Authored-By", result.stdout + result.stderr)
-
-    def test_a_voice_finding_prints_as_a_warning_and_never_blocks(self):
-        self.first_commit()
-        (self.repo / "docs").mkdir()
-        (self.repo / "docs" / "VOICE.md").write_text("voice\n")
-        for bad in ("Work (#5)\n\n- did a thing.", "Use the cache rather than the API (#5)",
-                    "Work (#5)\n\nIt is a guide, not a rule."):
-            with self.subTest(bad):
-                result = self.commit(bad)
-                self.assertEqual(0, result.returncode)
-                self.assertIn("WARNING", result.stdout + result.stderr)
-                self.assertIn("voice", result.stdout + result.stderr)
-                self.assertNotIn("BLOCKED", result.stdout + result.stderr)
-        self.assertNotIn("WARNING", self.commit("Work (#5)\n\n- did a thing\n\nA full sentence ends with a period.").stdout)
-
-    def test_every_blocking_finding_prints_together_before_the_commit_is_refused(self):
-        self.first_commit()
-        (self.repo / "docs").mkdir()
-        (self.repo / "docs" / "VOICE.md").write_text("voice\n")
-        (self.repo / "tool.py").write_text("x = 1\n")
-        git(self.repo, "add", "tool.py", "docs")
-        result = git(self.repo, "commit", "-m", "Use the cache rather than the API\n\nCo-Authored-By: Claude", check=False)
-        out = result.stdout + result.stderr
-        self.assertEqual(1, result.returncode)
-        for finding in ("names no story", "changes code and no test", "co-author line", "WARNING"):
-            self.assertIn(finding, out)
-        self.assertIn("3 blocking findings", out)
-
-    def test_a_single_finding_names_itself_once(self):
-        self.first_commit()
-        result = self.commit("Add a feature")
-        self.assertIn("1 blocking finding", result.stdout + result.stderr)
-        self.assertNotIn("findings", result.stdout + result.stderr)
-
-    def test_a_repo_without_a_voice_doc_is_not_held_to_the_voice(self):
-        self.first_commit()
-        self.assertNotIn("voice", self.commit("Use the cache rather than the API (#5)\n\nNo test: text only").stdout)
-
-    def test_the_initial_commit_is_exempt(self):
-        self.assertEqual(0, git(self.repo, "commit", "-m", "first", check=False).returncode)
-
-    def test_a_commit_without_a_reference_is_blocked(self):
-        self.first_commit()
-        result = self.commit("Add a feature")
-        self.assertEqual(1, result.returncode)
-        self.assertIn("names no story", result.stdout + result.stderr)
-
-    def test_revert_fixup_and_squash_messages_are_exempt_only_when_they_name_a_commit(self):
-        self.first_commit()
-        known = "first commit with no reference"
+    def test_each_message_and_diff_gets_its_verdict(self):
         sha = git(self.repo, "rev-parse", "HEAD").stdout.strip()
-        for message, code in ((f'Revert "{known}"\n\nThis reverts commit {sha}.', 0), (f'Revert "{known}"', 1), (f"fixup! {known}", 0), (f"squash! fixup! {known}", 0),
-                              (f"amend! {known}", 0), ('Revert "no such commit"', 1), ("fixup! no such commit", 1)):
-            with self.subTest(message=message):
-                self.assertEqual(code, self.commit(message).returncode)
+        for message, files, code, words in TABLE:
+            message = message.replace("{sha}", sha)
+            with self.subTest(message=message, files=sorted(files)):
+                self.stage(files)
+                got, out = self.verdict(message)
+                self.assertEqual(code, got, out)
+                for word in words:
+                    (self.assertNotIn if word.startswith("!") else self.assertIn)(word.lstrip("!"), out)
+                git(self.repo, "reset", "-q", "--hard")
+                git(self.repo, "clean", "-fdq", "-e", ".githooks")
 
-    def test_a_config_with_an_empty_owner_notes_that_stories_were_not_checked(self):
-        self.first_commit()
-        (self.repo / "docs").mkdir()
-        (self.repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "", "repoName": ""}\n')
-        git(self.repo, "add", "docs")
-        done = git(self.repo, "commit", "-m", "Add a config (#999999)", check=False)
-        self.assertEqual(0, done.returncode)
-        self.assertIn("names no repoOwner", done.stdout + done.stderr)
-
-    def test_a_config_for_another_repo_than_origin_is_not_checked(self):
-        self.first_commit()
-        git(self.repo, "remote", "add", "origin", "git@github.com:second-person/MyCode.git")
-        (self.repo / "docs").mkdir()
-        (self.repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "first-owner", "repoName": "TheirCode"}\n')
-        git(self.repo, "add", "docs")
-        done = git(self.repo, "commit", "-m", "Add a config (#999999)", check=False)
-        self.assertEqual(0, done.returncode)
-        self.assertIn("names first-owner/theircode but this checkout's origin is second-person/mycode", done.stdout + done.stderr)
-
-    def test_a_deleted_test_and_code_under_docs_do_not_count_as_a_test(self):
-        self.first_commit()
-        (self.repo / "tests").mkdir()
-        (self.repo / "tests" / "test_old.py").write_text("x = 1\n")
-        git(self.repo, "add", "tests")
-        self.assertEqual(0, git(self.repo, "commit", "-m", "Add a test (#5)", check=False).returncode)
-        git(self.repo, "rm", "-q", "tests/test_old.py")
-        (self.repo / "tool.py").write_text("x = 1\n")
-        git(self.repo, "add", "tool.py")
-        self.assertEqual(1, git(self.repo, "commit", "-m", "Add a tool (#5)", check=False).returncode)
-        git(self.repo, "reset", "-q", "--hard")
-        (self.repo / "docs" / "tools").mkdir(parents=True)
-        (self.repo / "docs" / "tools" / "helper.py").write_text("x = 1\n")
-        git(self.repo, "add", "docs")
-        self.assertEqual(1, git(self.repo, "commit", "-m", "Add a helper (#5)", check=False).returncode)
-
-    def test_a_fixup_that_names_a_commit_still_needs_a_test_for_its_code(self):
-        self.first_commit()
-        (self.repo / "tool.py").write_text("x = 1\n")
-        git(self.repo, "add", "tool.py")
-        result = git(self.repo, "commit", "-m", "fixup! first commit with no reference", check=False)
-        self.assertEqual(1, result.returncode)
-        self.assertIn("no test", result.stdout + result.stderr)
-
-    def test_a_merge_that_stages_code_is_checked_for_a_story_and_a_test(self):
-        self.first_commit()
-        self.in_merge()
-        (self.repo / "tool.py").write_text("x = 1\n")
-        git(self.repo, "add", "tool.py")
-        result = git(self.repo, "commit", "-m", "Merge branch 'x'", check=False)
-        self.assertEqual(1, result.returncode)
-        self.assertIn("names no story", result.stdout + result.stderr)
-
-    def test_a_subject_that_only_starts_with_merge_is_checked(self):
-        self.first_commit()
-        self.assertEqual(1, self.commit("Merge the login fix").returncode)
-        self.in_merge()
-        self.assertEqual(0, self.commit("Merge branch 'x'").returncode)
-
-    def test_a_reference_line_in_a_dash_m_message_is_kept_by_git_and_counts(self):
-        self.first_commit()
-        result = self.commit("Add a feature\n#53 is the story")
-        self.assertEqual(0, result.returncode)
+    def test_a_real_commit_exits_with_the_hooks_verdict_and_the_initial_commit_is_exempt(self):
+        self.assertEqual(1, self.commit("Add a feature").returncode)
+        done = self.commit("Add a feature\n#53 is the story")  # -m keeps a line that opens with #
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("#53", git(self.repo, "log", "-1", "--format=%B").stdout)
-
-    def test_a_reference_must_be_a_standalone_token(self):
-        self.first_commit()
-        # A hex colour, a bare hash and zero are not story references either.
-        for message in ("Fix 5#3", "Fix a#53", "Fix x#53b", "Entity &#39; here", "Use colour #123abc",
-                        "Fix the # sign", "Fix #0", "Fix (#000)"):
-            with self.subTest(message=message):
-                self.assertEqual(1, self.commit(message).returncode)
-        # A Story line in the body and a message that opens with the reference both count.
-        for message in ("Fix (#53)", "Fix org/repo#53", "Fix #53.", "Fix #53, #54", "Add a feature\n\nStory: #53", "#53 fix"):
-            with self.subTest(message=message):
-                self.assertEqual(0, self.commit(message).returncode)
-
-    def editor_commit(self, line):
-        """Commit through an editor that writes `line` above git's template."""
-        self.first_commit()
-        editor = self.repo / "editor.sh"
-        editor.write_text('#!/bin/sh\n{ printf "' + line + '\\n"; cat "$1"; } > "$1.new"\nmv "$1.new" "$1"\n')
-        editor.chmod(0o755)
-        (self.repo / "a.txt").write_text("edited\n")
-        git(self.repo, "add", "a.txt")
-        env = dict(git_env(), GIT_EDITOR=str(editor))
-        return subprocess.run(["git", "commit"], cwd=self.repo, env=env, capture_output=True, text=True)
+        git(self.repo, "checkout", "-q", "--orphan", "fresh")
+        self.assertEqual(0, self.commit("first").returncode)
 
     def test_an_editor_comment_line_is_dropped_by_git_so_it_does_not_count(self):
-        result = self.editor_commit("Add a feature\\n# Story: #53")
-        self.assertEqual(1, result.returncode)
-        self.assertIn("names no story", result.stdout + result.stderr)
+        editor = self.repo / "editor.sh"
+        env = dict(git_env(), GIT_EDITOR=str(editor))
+        for line, code in (("Add a feature\\n# Story: #53", 1), ("Add a feature (#53)", 0)):
+            with self.subTest(line):
+                editor.write_text('#!/bin/sh\n{ printf "' + line + '\\n"; cat "$1"; } > "$1.new"\nmv "$1.new" "$1"\n')
+                editor.chmod(0o755)
+                (self.repo / "a.txt").write_text(line + "\n")
+                git(self.repo, "add", "a.txt")
+                done = subprocess.run(["git", "commit"], cwd=self.repo, env=env, capture_output=True, text=True)
+                self.assertEqual(code, done.returncode, done.stdout + done.stderr)
+                if code:
+                    self.assertIn("names no story", done.stdout + done.stderr)
 
-    def test_an_editor_message_with_a_real_reference_passes(self):
-        result = self.editor_commit("Add a feature (#53)")
-        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-
-    def test_an_unreadable_message_file_fails_closed(self):
-        result = self.run_hook(str(self.repo / "nope"))
-        self.assertEqual(1, result.returncode)
-        self.assertIn("cannot read", result.stdout)
-
-    def run_hook(self, *args):
-        env = {**git_env(), "OLIVERCODE_FAILURE_LOG": str(self.repo / "failures.log")}  # a refusal the test wants is not the owner's log
-        return subprocess.run(["bash", str(self.repo / ".githooks" / "commit-msg"), *args],
-                              cwd=self.repo, env=env, capture_output=True, text=True)
-
-    def test_no_message_argument_fails_closed(self):
-        self.assertEqual(1, self.run_hook().returncode)
+    def test_an_unreadable_or_missing_message_file_fails_closed(self):
+        code, out = self.hook(str(self.repo / "nope"))
+        self.assertEqual(1, code)
+        self.assertIn("cannot read", out)
+        self.assertEqual(1, self.hook()[0])
 
     def test_the_owner_override_file_turns_the_check_off_loudly(self):
-        self.first_commit()
-        optout = self.repo / ".githooks" / "commit-msg.optout"
-        optout.write_text("")
+        (self.repo / ".githooks" / "commit-msg.optout").write_text("")
         # An untracked file, or one only staged, does not turn the checks off.
         self.assertEqual(1, self.commit("Add a feature").returncode)
         git(self.repo, "add", "-f", ".githooks/commit-msg.optout")
@@ -275,6 +165,24 @@ class TestCommitMsg(CommitMsgCase):
         result = self.commit("Add another feature")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("check is off", result.stdout + result.stderr)
+
+    def test_commit_check_runs_the_hook_on_a_draft_commits_nothing_and_logs_no_refusal(self):
+        """`olivercode commit-check FILE_OR_TEXT` (scripts/lib/cmd_commit_check.py); the table above owns each finding."""
+        log = self.repo / "failures.log"
+        env = {**os.environ, "OLIVERCODE_FAILURE_LOG": str(log)}
+        check = lambda draft: subprocess.run([sys.executable, str(CLI), "commit-check", draft], cwd=self.repo,  # noqa: E731
+                                             capture_output=True, text=True, env=env)
+        self.stage(TOOL)
+        blocked = check("Add a tool\n\nCo-Authored-By: Claude")
+        self.assertEqual(1, blocked.returncode)
+        self.assertIn("names no story", blocked.stdout + blocked.stderr)
+        self.assertEqual(FIRST, git(self.repo, "log", "-1", "--format=%s").stdout.strip(), "a check commits nothing")
+        self.assertFalse(log.exists() and log.read_text().strip(), "a draft check is not a refusal")
+        draft = self.repo / "draft.txt"
+        draft.write_text("Add a thing (#5)\n\nNo test: a draft\n")
+        clean = check(str(draft))
+        self.assertEqual(0, clean.returncode, clean.stdout + clean.stderr)
+        self.assertIn("no blocking findings", clean.stdout)
 
 
 FAKE_GH = """#!/bin/sh
@@ -295,108 +203,51 @@ class TestStoryExists(CommitMsgCase):
 
     def setUp(self):
         super().setUp()
-        (self.repo / "docs").mkdir()
-        (self.repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "acme", "repoName": "app"}\n')
-        self.first_commit()
-        self.bin = self.repo / "fakebin"
-        self.bin.mkdir()
-        (self.bin / "gh").write_text(FAKE_GH)
-        (self.bin / "gh").chmod(0o755)
+        self.config('{"repoOwner": "acme", "repoName": "app"}')
+        (self.repo / "fakebin").mkdir()
+        (self.repo / "fakebin" / "gh").write_text(FAKE_GH)
+        (self.repo / "fakebin" / "gh").chmod(0o755)
         self.log = self.repo / "gh.log"
-        self.env = {"PATH": f"{self.bin}:{os.environ['PATH']}", "FAKE_GH_LOG": str(self.log),
+        self.env = {"PATH": f"{self.repo / 'fakebin'}:{os.environ['PATH']}", "FAKE_GH_LOG": str(self.log),
                     "FAKE_GH_OK": "acme/app/issues/12 acme/other/issues/7"}
 
-    def commit(self, message, **env):
-        with mock.patch.dict(os.environ, {**self.env, **env}):
-            return super().commit(message)
+    def config(self, body):
+        (self.repo / "docs").mkdir(exist_ok=True)
+        (self.repo / "docs" / "backlog-config.json").write_text(body + "\n")
 
     def calls(self):
         return self.log.read_text().splitlines() if self.log.exists() else []
 
     def test_story_numbers_are_checked_against_the_repo_cached_and_skipped_offline(self):
-        blocked = self.commit("Add a feature (#99)")
-        self.assertEqual(1, blocked.returncode)
-        self.assertIn("acme/app#99", blocked.stdout + blocked.stderr)
-        self.assertEqual(0, self.commit("Add a feature (#12)").returncode)
-        # a small change (one file, 20 lines or fewer, no behavior) files no story and cites its open epic, which is an issue like any other
-        self.assertEqual(0, self.commit("Fix a typo in one doc (epic #12)").returncode)
-        # owner/repo#N is checked against the repo it names
-        self.assertEqual(0, self.commit("Fix it (acme/other#7)").returncode)
-        self.assertEqual(1, self.commit("Fix it (acme/other#12)").returncode)
+        # A closing keyword (#1045), an epic and owner/repo#N each name an issue, checked against the repo it names.
+        for message, code in (("Add a feature (#99)", 1), ("Ship it, closes #99", 1), ("Add a feature (#12)", 0),
+                              ("Ship it, closes #12", 0), ("Fix a typo in one doc (epic #12)", 0),
+                              ("Fix it (acme/other#7)", 0), ("Fix it (acme/other#12)", 1)):
+            with self.subTest(message):
+                got, out = self.verdict(message, **self.env)
+                self.assertEqual(code, got, out)
+                if "#99" in message:
+                    self.assertIn("acme/app#99", out)
         self.assertIn("repos/acme/other/issues/12", "\n".join(self.calls()))
         # a yes is cached under .git, so the next commit makes no call
         before = len(self.calls())
-        self.assertEqual(0, self.commit("Again (#12)").returncode)
+        self.assertEqual(0, self.verdict("Again (#12)", **self.env)[0])
         self.assertEqual(before, len(self.calls()))
         self.assertTrue(any((self.repo / ".git").glob("*story*")))
         # a dead network warns and lets the commit through
-        offline = self.commit("Add a feature (#98)", FAKE_GH_DOWN="1")
-        self.assertEqual(0, offline.returncode)
-        self.assertIn("WARNING", offline.stdout + offline.stderr)
+        code, out = self.verdict("Add a feature (#98)", FAKE_GH_DOWN="1", **self.env)
+        self.assertEqual(0, code)
+        self.assertIn("WARNING", out)
 
-    def test_a_closing_keyword_is_checked_like_any_story(self):
-        """#1045: "closes #N" names a story, so a number GitHub does not have blocks the commit like any other reference."""
-        blocked = self.commit("Ship it, closes #99")
-        self.assertEqual(1, blocked.returncode)
-        self.assertIn("acme/app#99", blocked.stdout + blocked.stderr)
-        self.assertEqual(0, self.commit("Ship it, closes #12").returncode)
-
-    def test_a_placeholder_config_passes_and_says_how_to_fill_it(self):
-        (self.repo / "docs" / "backlog-config.json").write_text('{"repoOwner": "your-github-owner", "repoName": "your-repo"}\n')
-        done = self.commit("Add a feature (#99)")
-        self.assertEqual(0, done.returncode)
-        self.assertIn("still holds placeholders", done.stdout + done.stderr)
+    def test_a_config_the_hook_cannot_check_against_passes_and_says_why(self):
+        git(self.repo, "remote", "add", "origin", "git@github.com:second-person/MyCode.git")
+        for body, words in (('{"repoOwner": "your-github-owner", "repoName": "your-repo"}', "still holds placeholders"),
+                            ('{"repoOwner": "", "repoName": ""}', "names no repoOwner"),
+                            ('{"repoOwner": "first-owner", "repoName": "TheirCode"}',
+                             "names first-owner/theircode but this checkout's origin is second-person/mycode")):
+            with self.subTest(body):
+                self.config(body)
+                code, out = self.verdict("Add a feature (#99)", **self.env)
+                self.assertEqual(0, code, out)
+                self.assertIn(words, out)
         self.assertEqual([], self.calls())
-
-
-class TestCommitMsgEdges(CommitMsgCase):
-    def test_a_merge_that_stages_no_code_is_exempt_from_the_checks(self):
-        self.first_commit()
-        self.in_merge()
-        self.assertEqual(0, self.commit("Merge branch 'use-x-instead-of-y'").returncode)
-
-
-class TestCommitCheck(CommitMsgCase):
-    """`olivercode commit-check FILE_OR_TEXT` (scripts/lib/cmd_commit_check.py) runs the same checks on a draft, in the current repo, and prints every finding."""
-
-    def check(self, draft):
-        cli = REPO_ROOT / "scripts" / "olivercode"
-        env = {k: v for k, v in os.environ.items() if k != "OLIVERCODE_FAILURE_LOG"}
-        return subprocess.run([sys.executable, str(cli), "commit-check", draft], cwd=self.repo, capture_output=True, text=True, env=env)
-
-    def test_a_draft_text_prints_every_blocking_finding_and_exits_non_zero(self):
-        self.first_commit()
-        (self.repo / "tool.py").write_text("x = 1\n")
-        git(self.repo, "add", "tool.py")
-        done = self.check("Add a tool\n\nCo-Authored-By: Claude")
-        out = done.stdout + done.stderr
-        self.assertEqual(1, done.returncode)
-        for finding in ("names no story", "changes code and no test", "co-author line"):
-            self.assertIn(finding, out)
-        self.assertEqual("", git(self.repo, "log", "-1", "--format=%s", "--grep", "Add a tool").stdout.strip(), "a check commits nothing")
-
-    def test_a_draft_file_is_read_and_a_clean_draft_exits_zero(self):
-        self.first_commit()
-        draft = self.repo / "draft.txt"
-        draft.write_text("Add a thing (#5)\n")
-        done = self.check(str(draft))
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("no blocking findings", done.stdout)
-
-    def test_a_voice_finding_in_a_draft_is_a_warning_and_exits_zero(self):
-        self.first_commit()
-        (self.repo / "docs").mkdir()
-        (self.repo / "docs" / "VOICE.md").write_text("voice\n")
-        done = self.check("Use the cache rather than the API (#5)")
-        self.assertEqual(0, done.returncode)
-        self.assertIn("WARNING", done.stdout)
-
-    def test_a_check_logs_no_refusal_and_queues_no_card(self):
-        self.first_commit()
-        log = self.repo / "failures.log"
-        env = {**os.environ, "OLIVERCODE_FAILURE_LOG": str(log)}
-        cli = REPO_ROOT / "scripts" / "olivercode"
-        subprocess.run([sys.executable, str(cli), "commit-check", "Add a feature closes #5"], cwd=self.repo, capture_output=True, text=True, env=env)
-        done = subprocess.run([sys.executable, str(cli), "commit-check", "No story at all"], cwd=self.repo, capture_output=True, text=True, env=env)
-        self.assertEqual(1, done.returncode)
-        self.assertFalse(log.exists() and log.read_text().strip(), "a draft check is not a refusal")

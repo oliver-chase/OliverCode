@@ -10,6 +10,21 @@ from _support import REPO_ROOT, git_env, scratch_repo, temp_dir
 HOOK = REPO_ROOT / "core" / "templates" / "project" / "pre-push"
 # Built at runtime so this file never holds a value the secret gates would match.
 TOKEN = "ghp_" + "a" * 36
+Z, ONES = "0" * 40, "1" * 40
+MAIN = "refs/heads/main {sha} refs/heads/main "
+# (commits as (file, content), with None for an empty commit whose subject is the name; the ref line git hands the
+# hook; env, where None unsets; exit code, or None when only the words matter; words, where "!" must be absent).
+HOOK_ROWS = [
+    ([("WIP #642: partial commit-msg closes check, not validated", None)], MAIN + "{base}", {}, 1, ["WIP #642", "{short}"]),
+    ([("Wipe the cache (#12)", None), ("Add the check (#13)", None)], MAIN + "{base}", {}, 0, []),
+    *[([("w.txt", "w\n")], "refs/heads/main {sha} " + ref + " " + Z, {"ALLOW_BRANCH_PUSH": None}, 1,
+       ["land it on main", "discard it", "olivercode wip", "ALLOW_BRANCH_PUSH=1"]) for ref in ("refs/heads/wip-x", "refs/heads/story-1")],
+    ([("m.txt", "m\n")], MAIN + ONES, {"ALLOW_BRANCH_PUSH": None}, None, ["!not the default branch"]),
+    ([("m.txt", "m\n")], f"(delete) {Z} refs/heads/wip-x {{sha}}", {"ALLOW_BRANCH_PUSH": None}, 0, []),
+    # A remote commit this clone lacks is still scanned, and is not called a force push.
+    ([("s.txt", f"tok={TOKEN}\n")], MAIN + ONES, {"ALLOW_FORCE_PUSH": "1"}, 1, []),
+    ([("ok.txt", "fine\n")], MAIN + ONES, {}, None, ["!force-pushed", "!ALLOW_FORCE_PUSH"]),
+]
 
 
 class PrePush(unittest.TestCase):
@@ -67,31 +82,23 @@ class PrePush(unittest.TestCase):
         done = subprocess.run([str(hook), "origin", str(self.remote)], cwd=self.work, env=env, input=lines, capture_output=True, text=True)
         return done.returncode, done.stdout + done.stderr
 
-    def test_a_wip_subject_is_refused_and_named(self):
-        self.git("commit", "-q", "--allow-empty", "-m", "WIP #642: partial commit-msg closes check, not validated")
-        sha = self.git("rev-parse", "HEAD").stdout.strip()
-        base = self.git("rev-parse", "HEAD~1").stdout.strip()
-        code, out = self.run_hook(f"refs/heads/main {sha} refs/heads/main {base}\n")
-        self.assertNotEqual(code, 0, out)
-        self.assertIn("WIP #642", out)
-        self.assertIn(sha[:7], out)
-
-    def test_story_numbered_subjects_and_words_that_begin_with_wip_pass(self):
-        self.git("commit", "-q", "--allow-empty", "-m", "Wipe the cache (#12)")
-        self.git("commit", "-q", "--allow-empty", "-m", "Add the check (#13)")
-        sha = self.git("rev-parse", "HEAD").stdout.strip()
-        base = self.git("rev-parse", "HEAD~2").stdout.strip()
-        code, out = self.run_hook(f"refs/heads/main {sha} refs/heads/main {base}\n")
-        self.assertEqual(code, 0, out)
-
-    def test_a_push_to_a_work_branch_is_refused_with_the_three_exits(self):
-        self.commit("w.txt", "w\n")
-        sha = self.git("rev-parse", "HEAD").stdout.strip()
-        for ref in ("refs/heads/wip-x", "refs/heads/story-1"):
-            code, out = self.run_hook(f"refs/heads/main {sha} {ref} {'0' * 40}\n", ALLOW_BRANCH_PUSH=None)
-            self.assertNotEqual(code, 0, out)
-            for words in ("land it on main", "discard it", "olivercode wip", "ALLOW_BRANCH_PUSH=1"):
-                self.assertIn(words, out)
+    def test_each_ref_line_gets_its_verdict(self):
+        for commits, line, env, code, words in HOOK_ROWS:
+            with self.subTest(line=line, commits=commits):
+                self.setUp()
+                for name, content in commits:
+                    if content is None:
+                        self.git("commit", "-q", "--allow-empty", "-m", name)
+                    else:
+                        self.commit(name, content)
+                sha = self.git("rev-parse", "HEAD").stdout.strip()
+                base = self.git("rev-parse", f"HEAD~{len(commits)}").stdout.strip()
+                got, out = self.run_hook(line.format(sha=sha, base=base) + "\n", **env)
+                if code is not None:
+                    self.assertEqual(code, 0 if got == 0 else 1, out)
+                for word in words:
+                    word = word.replace("{short}", sha[:7])
+                    (self.assertNotIn if word.startswith("!") else self.assertIn)(word.lstrip("!"), out)
 
     def test_a_real_push_of_a_refspec_to_a_work_branch_is_refused(self):
         self.commit("w.txt", "w\n")
@@ -141,24 +148,6 @@ class PrePush(unittest.TestCase):
         self.git("add", "evil.txt")
         self.git("commit", "-q", "-m", "merge")
         self.assertNotEqual(self.push("main").returncode, 0)
-
-    def test_a_force_push_over_a_remote_commit_this_clone_lacks_still_scans(self):
-        self.commit("s.txt", f"tok={TOKEN}\n")
-        local = self.git("rev-parse", "HEAD").stdout.strip()
-        unknown = "1" * 40
-        hook = self.work / ".git" / "hooks" / "pre-push"
-        result = subprocess.run([str(hook), "origin", str(self.remote)], cwd=self.work, env={**self.env, "ALLOW_FORCE_PUSH": "1"},
-                                input=f"refs/heads/main {local} refs/heads/main {unknown}\n", capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-
-    def test_a_remote_commit_this_clone_lacks_gets_no_force_push_message(self):
-        self.commit("ok.txt", "fine\n")
-        local = self.git("rev-parse", "HEAD").stdout.strip()
-        hook = self.work / ".git" / "hooks" / "pre-push"
-        result = subprocess.run([str(hook), "origin", str(self.remote)], cwd=self.work, env=self.env,
-                                input=f"refs/heads/main {local} refs/heads/main {'1' * 40}\n", capture_output=True, text=True)
-        self.assertNotIn("force-pushed", result.stdout + result.stderr)
-        self.assertNotIn("ALLOW_FORCE_PUSH", result.stdout + result.stderr)
 
     def test_a_new_branch_is_scanned_against_the_remote_it_goes_to(self):
         self.git("checkout", "-q", "-b", "feat")

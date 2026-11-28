@@ -5,8 +5,7 @@ staged files from git, so every test copies a template repo that already holds t
 stages a fixture, and runs the hook against it. Each class builds its template once.
 Nothing touches this checkout.
 
-Gates that consult the machine run against stand-ins: the skill-citation check gets a stub `gh` on PATH. Every `exit 1` in a gate has a test that fails when it
-becomes `true`.
+Every `exit 1` in a gate has a test that fails when it becomes `true`.
 """
 
 import os
@@ -76,12 +75,6 @@ class GateHarness(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
-    def stub_gh(self, script):
-        """A `gh` that runs `script` (bash, args in "$@") ahead of any real one on PATH."""
-        gh = self.write("stub-bin/gh", "#!/usr/bin/env bash\n" + script)
-        gh.chmod(0o755)
-        return {"PATH": f"{gh.parent}{os.pathsep}{os.environ['PATH']}"}
-
     def path_without(self, *names):
         """A PATH that holds every tool the real PATH does, minus the commands named, so only a gate's own guard can fail the run."""
         bin_dir = self.tmp / ("without-" + "-".join(names))
@@ -124,41 +117,82 @@ class GateHarness(unittest.TestCase):
         )
         return result
 
+    def each_verdict(self, rows):
+        """Run each (written, committed, staged, exit code, words) row in a fresh copy of the template.
+
+        A written file sits in the worktree unstaged, and a written script is executable."""
+        for written, committed, staged, code, words in rows:
+            with self.subTest(staged=sorted(staged)):
+                self.tearDown()
+                self.setUp()
+                for rel, body in written.items():
+                    self.write(rel, body).chmod(0o755)
+                for rel, body in committed.items():
+                    self.stage(rel, body)
+                if committed:
+                    git(self.tmp, "commit", "-q", "--no-verify", "-m", "config")
+                for rel, body in staged.items():
+                    self.stage(rel, body)
+                out = (self.assertAllowed() if code == 0 else self.assertBlocked(str(sorted(staged)))).stdout
+                for word in words:
+                    self.assertIn(word, out)
+
+
+LOCAL_FAIL = {".githooks/pre-commit.local": "#!/usr/bin/env bash\nexit 1\n"}
+NOTES = {"notes.txt": "Plain notes.\n"}
+SUITE = '{"checks": [{"name": "doc rule", "files": ["docs/*.md", "research/*.md"], "command": "bash %s"}]}\n'
+PII_EXEMPT = {"docs/PII-GATE.json": '{"exempt": ["fixtures/*"], "reasons": {"fixtures/*": "sample data"}}\n'}
+HOME_PATH = 'P = "/Users/' + 'sample/work"\n'
+# (written, committed, staged, exit code, words): the public hook's repo-local, suite-check and PII gates.
+PUBLIC = [
+    (LOCAL_FAIL, {}, NOTES, 1, []),
+    ({"check.sh": "#!/usr/bin/env bash\ngrep -q TODO \"$@\" && exit 1; exit 0\n"}, {},
+     {"docs/SUITE-CHECKS.json": SUITE % "check.sh", "research/notes.md": "TODO fill this in\n"}, 1, ["suite check doc rule failed"]),
+    ({"check.sh": "#!/usr/bin/env bash\nexit 1\n"}, {}, {"docs/SUITE-CHECKS.json": SUITE % "check.sh", **NOTES}, 0, []),
+    ({"ok.sh": "#!/usr/bin/env bash\nexit 0\n"}, {}, {"docs/SUITE-CHECKS.json": SUITE % "ok.sh", "docs/clean.md": "Clean text.\n"}, 0, ["Suite checks"]),
+    ({}, {}, {"docs/SUITE-CHECKS.json": "{not json"}, 1, []),
+    # A committed PII exemption covers its files only, and the commit that adds one does not use it.
+    ({}, PII_EXEMPT, {"fixtures/home.py": HOME_PATH}, 0, []),
+    ({}, PII_EXEMPT, {"other.py": HOME_PATH}, 1, []),
+    ({}, {}, {**PII_EXEMPT, "fixtures/home.py": HOME_PATH}, 1, []),
+    ({}, {}, {"a.py": 'P = "/Users/' + 'jane.doe2/work"\n'}, 1, []),
+    ({}, {}, {"a.py": 'HOME_DIR = "/Users/' + 'jane"\n'}, 1, []),
+    ({}, {}, {"docs/mockup-notes.md": "Reach me at jane" + "@example.org\n"}, 1, []),
+    ({}, {}, {".githooks/pre-commit": "# an address such as git@github.com is explained here\n"}, 0, []),
+]
+
+
+class TestPublicHook(GateHarness):
+    def test_each_gate_input_gets_its_verdict(self):
+        self.each_verdict(PUBLIC)
+
+    def test_a_renamed_file_is_scanned(self):
+        self.stage("notes.txt", "a plain line of notes that is long enough to be renamed as one file\n")
+        git(self.tmp, "commit", "-q", "--no-verify", "-m", "notes")
+        git(self.tmp, "mv", "notes.txt", "moved.txt")
+        with open(self.tmp / "moved.txt", "a", encoding="utf-8") as f:
+            f.write("TOKEN=ghp_" + "b" * 36 + "\n")
+        git(self.tmp, "add", "moved.txt")
+        self.assertBlocked("secret")
+
 
 class TestPrivateRepoLocalGate(GateHarness):
     """The private variant runs a repo's own .githooks/pre-commit.local after its gates."""
 
-    def setUp(self):
-        super().setUp()
-        shutil.copy2(REPO_ROOT / "core/templates/project/pre-commit-private",
-                     self.tmp / ".githooks" / "pre-commit")
+    HOOK_FILE = "core/templates/project/pre-commit-private"
 
-    def local_gate(self, code):
-        local = self.write(".githooks/pre-commit.local", f"#!/usr/bin/env bash\nexit {code}\n")
-        local.chmod(0o755)
-        self.stage("notes.txt", "Plain notes.\n")
-
-    def test_a_failing_local_gate_blocks(self):
-        self.local_gate(1)
-        self.assertNotIn("All gates passed", self.assertBlocked("repo-local").stdout)
-
-    def test_a_passing_local_gate_passes(self):
-        self.local_gate(0)
-        self.assertIn("All gates passed", self.assertAllowed().stdout)
+    def test_the_local_gate_decides_the_verdict(self):
+        self.each_verdict([(LOCAL_FAIL, {}, NOTES, 1, []),
+                           ({".githooks/pre-commit.local": "#!/usr/bin/env bash\nexit 0\n"}, {}, NOTES, 0, ["All gates passed"])])
 
 
 class TestTreeScan(GateHarness):
     """A secret already committed passes a normal run, because nothing is staged, and fails a tree scan."""
 
-    def setUp(self):
-        super().setUp()
+    def test_only_a_tree_scan_finds_the_committed_secret(self):
         self.stage("config.py", 'KEY = "sk-' + "d" * 32 + '"\n')
         git(self.tmp, "commit", "-q", "--no-verify", "-m", "x")
-
-    def test_a_normal_run_sees_nothing_staged(self):
         self.assertEqual(0, self.run_hook().returncode)
-
-    def test_a_tree_scan_finds_the_committed_secret(self):
         result = self.run_hook(OLIVERCODE_SCAN_TREE="1")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("secret pattern", result.stdout)
@@ -213,73 +247,3 @@ class TestLinkedWorktree(unittest.TestCase):
         out = result.stdout + result.stderr
         self.assertNotEqual(0, result.returncode, out)
         self.assertIn("secret pattern", out)
-
-
-
-
-class TestPublicRepoLocalAndPii(GateHarness):
-    def test_the_public_variant_runs_the_repo_local_gate(self):
-        local = self.write(".githooks/pre-commit.local", "#!/usr/bin/env bash\nexit 1\n")
-        local.chmod(0o755)
-        self.stage("notes.txt", "Plain notes.\n")
-        self.assertBlocked("repo-local")
-
-    def suite_checks(self, command):
-        self.stage("docs/SUITE-CHECKS.json", '{"checks": [{"name": "doc rule", "files": ["docs/*.md", "research/*.md"], "command": "%s"}]}\n' % command)
-
-    def test_a_staged_doc_that_breaks_a_listed_suite_check_is_blocked(self):
-        self.write("check.sh", "#!/usr/bin/env bash\ngrep -q TODO \"$@\" && exit 1; exit 0\n").chmod(0o755)
-        self.suite_checks("bash check.sh")
-        self.stage("research/notes.md", "TODO fill this in\n")
-        out = self.assertBlocked("repo-local").stdout
-        self.assertIn("suite check doc rule failed", out)
-
-    def test_a_clean_doc_and_an_unmatched_file_pass_the_suite_check(self):
-        self.write("check.sh", "#!/usr/bin/env bash\nexit 1\n").chmod(0o755)
-        self.suite_checks("bash check.sh")
-        self.stage("notes.txt", "A plain file the check does not cover.\n")
-        self.assertAllowed()
-        self.write("ok.sh", "#!/usr/bin/env bash\nexit 0\n").chmod(0o755)
-        self.suite_checks("bash ok.sh")
-        self.stage("docs/clean.md", "Clean text.\n")
-        self.assertIn("Suite checks", self.assertAllowed().stdout)
-
-    def test_an_unreadable_suite_check_list_blocks(self):
-        self.stage("docs/SUITE-CHECKS.json", "{not json")
-        self.assertBlocked("repo-local")
-
-    def test_a_file_listed_in_the_pii_exempt_file_passes_and_others_still_block(self):
-        self.stage("docs/PII-GATE.json", '{"exempt": ["fixtures/*"], "reasons": {"fixtures/*": "sample data"}}\n')
-        git(self.tmp, "commit", "-q", "--no-verify", "-m", "gate config")
-        self.stage("fixtures/home.py", 'P = "/Users/' + 'sample/work"\n')
-        self.assertAllowed()
-        self.stage("other.py", 'P = "/Users/' + 'sample/work"\n')
-        self.assertBlocked("pii")
-
-    def test_a_commit_that_adds_a_pii_exemption_does_not_use_it(self):
-        self.stage("docs/PII-GATE.json", '{"exempt": ["fixtures/*"], "reasons": {"fixtures/*": "sample data"}}\n')
-        self.stage("fixtures/home.py", 'P = "/Users/' + 'sample/work"\n')
-        self.assertBlocked("pii")
-
-    def test_a_home_path_with_digits_or_dots_is_pii(self):
-        self.stage("a.py", 'P = "/Users/' + 'jane.doe2/work"\n')
-        self.assertBlocked("pii")
-
-    def test_a_renamed_file_is_scanned(self):
-        self.stage("notes.txt", "a plain line of notes that is long enough to be renamed as one file\n")
-        git(self.tmp, "commit", "-q", "--no-verify", "-m", "notes")
-        git(self.tmp, "mv", "notes.txt", "moved.txt")
-        with open(self.tmp / "moved.txt", "a", encoding="utf-8") as f:
-            f.write("TOKEN=ghp_" + "b" * 36 + "\n")
-        git(self.tmp, "add", "moved.txt")
-        self.assertBlocked("secret")
-
-    def test_a_bare_home_folder_or_a_file_named_like_a_mock_is_still_scanned(self):
-        self.stage("a.py", 'HOME_DIR = "/Users/' + 'jane"\n')
-        self.assertBlocked("pii")
-        self.stage("docs/mockup-notes.md", "Reach me at jane" + "@example.org\n")
-        self.assertBlocked("pii")
-
-    def test_the_hook_files_are_not_scanned_for_pii(self):
-        self.stage(".githooks/pre-commit", "# an address such as git@github.com is explained here\n")
-        self.assertAllowed()
