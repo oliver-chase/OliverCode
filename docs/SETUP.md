@@ -213,10 +213,6 @@ A board needs no web toggles. Filing a story adds its card through `batch_projec
 
 `core/templates/deploy/deploy.yml.tmpl` is the one reusable workflow for production deploys from CI. It sits outside `.github/workflows` and `bootstrap` does not stamp it, so it runs nowhere until the owner copies it into a repo as deploy.yml in its workflows folder, replaces the `__TOKEN__` placeholders (validation, deploy and rollback commands, live address, expected text, deploy secret name) and adds the deploy key as a secret of the repo's `production` environment. On each push to main it runs the repo's validation, deploys, checks the live address, and on a failed check runs the rollback and files a P0 issue. The owner approves each repo's workflow and key once, and a deploy by hand still needs the owner's message.
 
-### Gating a scheduled model job
-
-`olivercode gated [--job NAME] CHECK -- COMMAND...` gates a scheduled job that starts a model. CHECK runs first with no model call, and COMMAND starts only when CHECK exits 0. Exit 1 means no work: the run is logged as skipped in `gated-runs.jsonl` in the OliverCode home and no model starts. Any other exit code is a broken check, so COMMAND does not start and the code is returned for launchd to show. A launchd job is written as `olivercode gated CHECK -- claude -p ...`. `olivercode health` names each job that starts a model with no gate, its runs per day and the exact line to put in its place. `--schedule` and `olivercode install` refuse to load a launchd job that starts a model and names no gate, and print the job and the line. `olivercode status` prints each gated job's runs skipped and the model sessions they avoided over the last 7 days.
-
 ## How a headless builder finishes a story
 
 

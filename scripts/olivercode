@@ -46,7 +46,6 @@ from lib.cmd_version import command_docs_check, command_version_cut  # noqa: E40
 from lib.cmd_land import command_land, command_promote  # noqa: E402
 from lib.cmd_run import command_run  # noqa: E402
 from lib.cmd_guide import command_guide  # noqa: E402
-from lib.gated import command_gated  # noqa: E402
 from lib.cmd_limits import command_limits  # noqa: E402
 from lib.cmd_handoff import command_handoff  # noqa: E402
 from lib.cmd_owner import command_owner  # noqa: E402
@@ -120,8 +119,6 @@ def main() -> int:
         return command_validated(argv)
     if cmd == "gh-limit":
         return command_gh_limit(argv)
-    if cmd == "gated":
-        return command_gated(argv)
     if cmd == "land":
         return command_land(argv)
     if cmd == "promote":
