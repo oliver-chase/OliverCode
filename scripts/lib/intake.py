@@ -69,6 +69,8 @@ WAIT_DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 WAIT_SPAN = re.compile(r"\b(\d+)[- ]days?\s+(?:of\s+)?(?:data|window|wait)|\bwait\w*\s+(?:for\s+)?(\d+)\s+days?\b", re.I)
 WAIT_DAYS = 14
 SMALL = ("XS", "S")
+BUNDLE_FILES = 5  # the most files one story's Files area may name before the drain splits it (#1502)
+FIXES = re.compile(r"^##+[ \t]*(?:Findings|Fixes)\b[^\n]*$(.*?)(?=^##|\Z)", re.I | re.M | re.S)  # a section that lists a story's fixes
 
 
 def _tokens(text: str) -> list[str]:
@@ -83,6 +85,16 @@ def _listed(line: re.Pattern, body: str) -> list[str]:
 def files_area(body: str) -> list[str]:
     """The paths on the story's `Files area:` line, or [] when it has none."""
     return _listed(AREA, body)
+
+
+def bundled(body: str) -> str:
+    """Why a story holds more than one builder should take, or '' when it does not: its Files area names more than BUNDLE_FILES files, or its
+    `Findings` or `Fixes` section lists more than one item (#1502).
+    shortcut: fixes listed under another heading or in prose are not counted, upgrade when such a story is built and stops."""
+    if (files := len(files_area(body))) > BUNDLE_FILES:
+        return f"its Files area names {files} files, more than {BUNDLE_FILES}"
+    fixes = sum(len(re.findall(r"^(?:[-*+]|\d+[.)])[ \t]", section, re.M)) for section in FIXES.findall(body or ""))
+    return f"its body lists {fixes} separate fixes" if fixes > 1 else ""
 
 
 def removed_tests(body: str) -> list[str]:
