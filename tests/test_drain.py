@@ -261,6 +261,14 @@ class DrainCase(unittest.TestCase):
         self.assertEqual([(2, "Drain blocked: Landing failed: RESULT validate-failed")], io.comments)
         notify.assert_called_once_with("#2 didn't land yet. It'll try again on its own.")
 
+    def test_a_refused_landing_comments_its_refusal_and_promises_no_retry(self):  # #1539
+        io = FakeIo([issue(1)])
+        io.land = lambda wt, n: io.saved.add(n) or (False, f"{cmd_drain.REFUSED} rebase-conflict")
+        with mock.patch.object(cmd_drain, "notify") as notify:
+            self.run_drain(io)
+        self.assertEqual(([(1, f"Drain blocked: Landing failed: {cmd_drain.REFUSED} rebase-conflict")], [1]), (io.comments, io.kept))
+        notify.assert_called_once_with("#1 needs you. The story says what to do.")
+
     def test_one_committed_story_lands_with_no_stack(self):  # #1317
         io = FakeIo([issue(1)], cap=1)
         _, _, st = self.run_drain(io)
@@ -1283,6 +1291,32 @@ class TestRealIo(unittest.TestCase):
         last = [json.loads(l) for l in (Path(os.environ["OLIVERCODE_HOME"]) / "run-log.jsonl").read_text().splitlines()][-1]
         self.assertFalse(landed)
         self.assertEqual(("story-7", "stopped", "Landing refused: weakened-test"), (last["story"], last["stage"], last["reason"]))
+
+    def test_only_a_refusal_no_retry_can_pass_sends_the_card_to_backlog_with_the_gates_text(self):  # #1539
+        weak = "Refused: this commit weakens a test, so nothing landed: tests/test_x.py:80 removes 5 assertion(s) without removing the code they cover."
+        log = temp_dir(self) / "land-r-7.log"
+        rows = (("weakened-test", f"$ git rebase\n{weak}\nRESULT weakened-test\n", "Backlog", weak),
+                ("rebase-conflict", "$ git rebase origin/main\nCONFLICT (content): a.py\n$ git rebase --abort\nRESULT rebase-conflict\n", "Backlog", "CONFLICT (content): a.py"),
+                ("push-failed", "! [remote rejected]\nRESULT push-failed\n", "Ready", ""),
+                ("main-kept-moving", "--- main moved again\nRESULT main-kept-moving\n", "Ready", ""),
+                ("pushed", "RESULT pushed abc1234\n", "Ready", ""))
+        parking = "It shares a.py in its Files area with #2."
+        for n, (word, text, status, quoted) in enumerate(rows, start=7):
+            with self.subTest(word):
+                log.write_text(text)
+                ran = subprocess.CompletedProcess([], 0 if word == "pushed" else 1, f"RESULT {word} (log: {log})\n", "")
+                with mock.patch.object(cmd_drain.subprocess, "run", return_value=ran):
+                    landed, why = self.io.land(Path(f"/wt/{n}"), n)
+                self.assertEqual(word == "pushed", landed)
+                self.assertIn(quoted, why)
+                queued = []
+                with mock.patch.object(cmd_drain.cmd_dispatch, "gh", lambda a: subprocess.CompletedProcess(a, 0, "{}", "")), mock.patch.object(cmd_drain, "backlog_config", lambda repo: {}), \
+                        mock.patch.object(cmd_drain.cmd_dispatch.batch_project, "with_queue", lambda fn: queued.extend(fn([])[1])):
+                    self.io.keep_open(n)
+                self.assertEqual(status, queued[0]["issues"][0]["fields"]["status"])
+                comments = "\n".join(map(json.dumps, [parking, f"Drain blocked: Landing failed: {why}"]))
+                reader = cmd_drain.Io(self.repo, "o/r", runner=lambda a: subprocess.CompletedProcess(a, 0, comments, ""))
+                self.assertEqual("" if status == "Backlog" else "overlap", reader.parked_for(n))  # an earlier parking returns no refused story to Ready
 
     def test_a_close_that_succeeds_appends_the_landed_row_and_a_refused_close_does_not(self):
         git(self.repo, "commit", "--allow-empty", "-qm", "Fix the thing (#7)")

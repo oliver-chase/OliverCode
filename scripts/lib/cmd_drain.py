@@ -54,6 +54,7 @@ RETURNED = "Back to Ready:"
 HELD = "Held by the fresh reader"  # how a held comment starts, and FINDING what its finding follows, so the next build can read it back (#1474)
 FINDING = "\n\nFinding:\n"
 IDLE = "Drain stopped for the owner:"  # how the comment on a story whose rounds changed nothing starts (#1531)
+REFUSED = "Landing refused, so this story waits in Backlog:"  # a landing no retry can pass, followed by the gate's text from the land log (#1539)
 GONE = "is not a valid command"  # what `olivercode` prints for a command it no longer has (#1480)
 # Lines that differ between two runs of one failure or say nothing of it: validate_gates' timings, land's own closing lines and the smoke banner (#1481)
 NOISE = (PROGRESS, "=== validate: never started", "validate: gates took", "=== validate: python smoke tests FAILED", "--- validate failed", "RESULT ")
@@ -142,7 +143,7 @@ class Io:
         self.claim_start: dict[int, float] = {}  # story number -> when this run claimed it, never refreshed (#1306)
         self.claimed_at: dict[int, float] = {}  # story number -> when its claim comment was last posted, so a long build refreshes it
         self.said: dict[int, str] = {}  # story number -> its last comment, which is the reason a stopped row records (#1291)
-        self.saved: set[int] = set()  # stories whose card goes to Backlog: a stopped builder's work was committed to story/N (#1328), or its rounds changed nothing (#1531)
+        self.saved: set[int] = set()  # stories whose card goes to Backlog: a stopped builder's work was committed to story/N (#1328), its rounds changed nothing (#1531), or its landing was refused (#1539)
         self.built_at: dict[int, str] = {}  # story number -> the stamp its current builder started, which bounds the policy asks it can hit (#1058)
 
     def gh(self, args: list[str]):
@@ -432,14 +433,21 @@ class Io:
         if out.returncode == 0:
             self.claim_start.pop(n, None)  # land keeps a lone older commit's committer date, so a resumed branch's commit would fail the since-claim filter (#1306)
         elif refused := re.search(r"RESULT (\S+)", out.stdout):  # a refused landing shows as stopped at once, not as still landing (#1486)
-            agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=f"Landing refused: {refused.group(1)}")
-            if refused.group(1) == "validate-failed" and (log := re.search(r"\(log: (.+?)\)", out.stdout)):
-                try:  # land prints only the result, so the validation's tail is read from its log
+            word = refused.group(1)
+            agent_loop.log_stage(f"story-{n}", self.repo.name, "stopped", reason=f"Landing refused: {word}")
+            text = ""
+            if log := re.search(r"\(log: (.+?)\)", out.stdout):
+                try:  # land prints only the result, so the validation's tail and the gate's refusal are read from its log
                     text = Path(log.group(1)).read_text(encoding="utf-8", errors="replace")
                 except OSError:
-                    text = ""
-                if text:
-                    self.blame(agent_loop.gate_tail(text))
+                    pass
+            if word == "validate-failed" and text:
+                self.blame(agent_loop.gate_tail(text))
+            if word in ("weakened-test", "rebase-conflict"):  # a retry meets the same refusal; every other result goes back to Ready (#1539)
+                self.saved.add(n)
+                gate = [line for line in text.splitlines() if word == "weakened-test" and line.startswith("Refused:")]
+                quote = "\n".join(gate) or agent_loop.gate_tail(text) or out.stdout.strip()
+                return False, f"{REFUSED} {word}\n\n{quote}"
         return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:]
 
     def stack(self, items: list[tuple[Path, int]]) -> bool:
@@ -494,7 +502,7 @@ class Io:
         raw = self.gh(["api", f"repos/{self.slug}/issues/{n}/comments", "--paginate", "--jq", ".[].body | @json"])
         cause = ""
         for body in (json.loads(line) for line in (raw.stdout.splitlines() if raw.returncode == 0 else []) if line.strip()):
-            if body.startswith(IDLE) or RETURNED in body:  # a stop for rounds that changed nothing ends any earlier parking, so no drain returns the card to Ready (#1531)
+            if body.startswith(IDLE) or REFUSED in body or RETURNED in body:  # a stop for rounds that changed nothing (#1531) or a refused landing (#1539) ends any earlier parking, so no drain returns the card to Ready
                 cause = ""
             elif m := PARKED.search(body):
                 cause = "overlap" if "Files area" in m.group(0) else "size"
@@ -514,7 +522,7 @@ class Io:
         if story.get("state") == "closed":
             self.gh(["api", "-X", "PATCH", f"repos/{self.slug}/issues/{n}", "-f", "state=open"])
         cfg = backlog_config(self.repo)
-        status = "Backlog" if n in self.saved or owner_gated(story) else "Ready"  # saved work waits for a split, not a rebuild (#1328)
+        status = "Backlog" if n in self.saved or owner_gated(story) else "Ready"  # saved work waits for a split (#1328) and a refused landing for a fix (#1539), not a rebuild
         cmd_dispatch.batch_project.with_queue(lambda q: (None, q + [{"cfg": cfg, "issues": [{"number": n, "fields": {"status": status}}]}]))
 
     def save_work(self, worktree: Path, n: int) -> list[str]:
@@ -645,7 +653,7 @@ def work_story(io, issue: dict, state: dict, queue=None) -> tuple[bool | None, i
         handed = closed is None
         if closed is False:
             io.keep_open(n)  # a story that did not land stays open with its card in Ready (#877)
-            if n in state.get("idle", []):  # it waits in Backlog, so no retry is promised (#1531)
+            if n in getattr(io, "saved", ()):  # it waits in Backlog, so no retry is promised (#1531, #1539)
                 notify(f"#{n} needs you. The story says what to do.")
             elif n not in state.get("limited", []):  # the usage limit already sent its own notification
                 notify(f"#{n} didn't land yet. It'll try again on its own.")  # the reason stays in the story comment and the run log (#1325, #1374)
@@ -768,7 +776,6 @@ def _work_story(io, issue: dict, state: dict, queue=None) -> tuple[bool | None, 
             note = out["reason"]
         if out.get("idle"):  # no later drain rebuilds a story whose rounds changed nothing: the owner decides (#1531)
             io.saved.add(n)
-            state.setdefault("idle", []).append(n)
             io.comment(n, f"{IDLE} {note}\n\nThe builder's last reply:\n{out.get('summary', '').strip()[:2000] or 'none'}")
             io.queue_owner(n, {"why": "its builder's rounds changed nothing, so it waits in Backlog. The story comment holds the builder's last reply."})
             return False, tokens
@@ -879,7 +886,7 @@ def drain(io, state: dict, sleep=time.sleep, say=print) -> int:
             if status in ("failed", "crashed"):  # no builder restarts for a landing, so the story goes back to Ready with the reason (#1515)
                 why = note if status == "failed" else f"the landing queue crashed with {note}."
                 if status == "failed":
-                    notify(f"#{n} didn't land yet. It'll try again on its own.")
+                    notify(f"#{n} needs you. The story says what to do." if n in io.saved else f"#{n} didn't land yet. It'll try again on its own.")
                 for effect in (lambda: io.comment(n, f"Drain blocked: {why}"), lambda: io.keep_open(n)):
                     try:
                         effect()
