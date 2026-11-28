@@ -324,11 +324,12 @@ class DrainCase(unittest.TestCase):
             self.assertFalse({1, 2} <= active)
 
     def test_only_ready_sized_stories_with_a_files_area_are_built_and_each_skip_is_named_once(self):
-        io = FakeIo([issue(1, status="Backlog"), issue(2, size=""), {**issue(3), "body": "Priority: P0"}, issue(4)], cap=4)
+        io = FakeIo([issue(1, status="Backlog"), issue(2, size=""), {**issue(3), "body": "Priority: P0"}, issue(4), {**issue(5, status="Backlog", size=""), "body": ""}], cap=4)
         code, out, _ = self.run_drain(io)
         self.assertEqual(io.started, [4])
-        self.assertIn("Skipped #1: its board Status is Backlog, not Ready.", out)
-        self.assertIn("Skipped #2: it has no Size on the board.", out)
+        self.assertIn("Skipped #1: it needs Status Ready (it is Backlog); set it on its card in the repo's Project.", out)
+        self.assertIn("Skipped #2: it needs a Size of XS, S or M (it has none); set it on its card in the repo's Project.", out)
+        self.assertIn("Skipped #5: it needs Status Ready (it is Backlog) and a Size of XS, S or M (it has none); set both on its card in the repo's Project.\n", out)  # #1511
         self.assertIn("Skipped #3: it names no Files area and none could be found.", out)
         self.assertEqual([3], io.asked)  # only the Ready, sized story with no area is asked about (#1316)
         self.assertEqual(1, out.count("Skipped #1:"))
@@ -1833,7 +1834,8 @@ class DetachedRun(unittest.TestCase):
         cmd_status.command_watch(["r", "--until-exit"], sleep=lambda s: None, out=lines.append, alive=lambda: False)
         streamed = cmd_status.watch_line(self.rows()[-1], self.rows())
         for line in (*lines, streamed):
-            for skip in ("#1: its board Status is Backlog, not Ready.", "#2: its board Status is Backlog, not Ready.", "#3: it is blocked by open #9."):
+            backlog = "it needs Status Ready (it is Backlog); set it on its card in the repo's Project."
+            for skip in (f"#1: {backlog}", f"#2: {backlog}", "#3: it is blocked by open #9."):
                 self.assertIn(f"Skipped {skip}", line)
         self.assertEqual(1, len(lines))
 

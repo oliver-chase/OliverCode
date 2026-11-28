@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from lib import agent_loop, failure_log, open_issues
-from lib.local_config import OC_ROOT, backlog_config, has_backlog_config
+from lib.local_config import BACKLOG_CONFIG, LOCAL_BACKLOG_CONFIG, OC_ROOT, backlog_config, has_backlog_config
 from lib import gitfiles
 
 sys.path.insert(0, str(OC_ROOT / "skills" / "backlog" / "scripts"))
@@ -371,16 +371,14 @@ def destination(where: Path, root: Path) -> tuple[str, int] | None:
 
 def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.datetime | None = None, say=print) -> int:
     """Read the new candidates (a drain stop, red CI on staging, a hook crash) with a fresh reader and file a story for each bug or regression. Returns how many stories were filed.
-    A signature already in bug-seen.json starts no reader: a covered, not-a-bug or filed one is skipped, a recurrence of a closed story reopens it, and a bug the daily cap held is filed."""
+    A signature already in bug-seen.json starts no reader: a covered, not-a-bug or filed one is skipped, a recurrence of a closed story reopens it, and a held bug is filed.
+    A bug is held when the daily cap is spent or its repo names no errorEpic, and only the second is said, with the key and the file (#1511)."""
     from check_story_format import check_body  # noqa: PLC0415
     if not has_backlog_config(root):
         say(f"Bug intake files nothing for {root.name}: it has no docs/backlog-config.json.")
         return 0
-    own = destination(root, root)
-    if not own:
-        say(f"Bug intake files nothing for {root.name}: its backlog config names no errorEpic.")
-        return 0
-    slug, _ = own
+    cfg = backlog_config(root)
+    slug = f"{cfg['repoOwner']}/{cfg['repoName']}"
     branch = agent_loop.default_branch(root)
     gh = gh or (lambda args: subprocess.run(["gh", "api", *args], capture_output=True, text=True, timeout=60))
     opened = open_issues.fetch(slug)
@@ -390,19 +388,29 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
     seen, today = data["seen"], (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y-%m-%d")
     open_numbers = {i["number"] for i in opened}
     filed = sum(1 for e in seen.values() if e.get("filed_on") == today)
+    told: set[Path] = set()  # repos this run already asked for an errorEpic
 
     def file_entry(sig: str, entry: dict) -> bool:
         nonlocal filed
         where = Path(entry.get("repo") or root)
-        if filed >= DAILY_CAP or not (dest := destination(where, root)) or not (n := file_story(dest[0], where, entry["title"], entry["body"], gh)):
+        if not has_backlog_config(where):
+            return False  # a held bug whose repo was deleted or moved waits and never stops the run (#1511)
+        if not (dest := destination(where, root)):
+            if where not in told and not isinstance(backlog_config(where).get("errorEpic"), int):
+                told.add(where)
+                config = where / (BACKLOG_CONFIG if (where / BACKLOG_CONFIG).is_file() else LOCAL_BACKLOG_CONFIG)
+                say(f"Bug intake has a bug to file and no epic to file it under: add the errorEpic key, set to an epic's issue number, to {config}.")
             return False
-        entry.update(story=n, filed_on=today)
+        body = entry["body"].replace("\n\nEpic: #0\n", f"\n\nEpic: #{dest[1]}\n")
+        if filed >= DAILY_CAP or not (n := file_story(dest[0], where, entry["title"], body, gh)):
+            return False
+        entry.update(story=n, filed_on=today, body=body)
         filed += 1
         return True
 
     new = 0
-    for sig, entry in seen.items():  # a bug the cap held waits in bug-seen.json until the next day
-        if entry["verdict"] in ("bug", "regression") and not entry.get("story"):
+    for sig, entry in seen.items():  # a held bug waits in bug-seen.json for the next day or for its repo's errorEpic
+        if entry["verdict"] in ("bug", "regression") and not entry.get("story") and "body" in entry:
             new += file_entry(sig, entry)
     rows = []
     for l in agent_loop.run_log_lines():
@@ -440,10 +448,9 @@ def bugs(root: Path = OC_ROOT, gh=None, read=agent_loop.review, now: datetime.da
             gh(["-X", "POST", f"repos/{slug}/issues/{number}/comments", "-f", f"body=Another occurrence of a failure this story covers ({c['sig']}):\n{c['text']}"])
         elif answer != "not a bug":
             where = OC_ROOT if own_code(root, rest) else root
-            if not (dest := destination(where, root)):
-                continue  # the checkout's config names no errorEpic, so nothing is filed or recorded
+            dest = destination(where, root)
             entry["repo"] = str(where)
-            entry["title"], entry["body"] = story_text(rest, c, dest[1])
+            entry["title"], entry["body"] = story_text(rest, c, dest[1] if dest else 0)  # #0 until the repo names an errorEpic
             if check_body(entry["body"], files=True, blocker=True, root=where, fit=True, title=entry["title"]):
                 entry["verdict"] = "not a bug"  # a story that fails the format check is never filed
                 continue

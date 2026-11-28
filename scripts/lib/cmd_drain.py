@@ -103,10 +103,11 @@ def skip_reason(issue: dict, repo: Path | None = None) -> str:
     """Why drain does not start an open story now, or '' when it may. Only a Ready story with a board Size and a Files area is built (#1014)."""
     if owner_gated(issue):
         return "it is owner-gated"
-    if issue.get("status") != "Ready":
-        return f"its board Status is {issue.get('status') or 'empty'}, not Ready"
+    needs = [] if issue.get("status") == "Ready" else [f"Status Ready (it is {issue.get('status') or 'empty'})"]
     if not issue.get("size"):
-        return "it has no Size on the board"
+        needs.append("a Size of XS, S or M (it has none)")
+    if needs:  # every missing card field in one line, so one round of edits is enough (#1511)
+        return f"it needs {' and '.join(needs)}; set {'both' if len(needs) > 1 else 'it'} on its card in the repo's Project"
     if (size := intake.size_of(issue)) in ("L", "XL"):  # the text's Size routes the builder, so it also decides the refusal (#1342)
         return f"its Size is {size}, so it needs splitting into S and M stories"
     area = intake.files_area(issue.get("body") or "")

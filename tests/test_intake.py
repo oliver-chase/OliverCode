@@ -94,6 +94,7 @@ class TestBugIntake(unittest.TestCase):
         self.home = home
         self.calls = []
         self.prompts = []
+        self.bodies = []
 
     def stop(self, reason, at="2999-01-01T00:00:00Z", stage="stopped"):
         with open(self.home / "run-log.jsonl", "a", encoding="utf-8") as fh:
@@ -104,15 +105,15 @@ class TestBugIntake(unittest.TestCase):
         out = {"number": 50 + len(self.calls)} if "POST" in args and any(a.endswith("/issues") for a in args) else {}
         return mock.Mock(returncode=0, stdout=json.dumps(out))
 
-    def run_bugs(self, answer, opened=None):
+    def run_bugs(self, answer, opened=None, cfg=None, say=lambda *_: None):
         def read(task, *a, **k):
             self.prompts.append((task, k))
             return {"verdict": "findings", "text": answer}
         with mock.patch.object(intake.open_issues, "fetch", return_value=opened or []), \
-                mock.patch.object(intake, "backlog_config", return_value={"repoOwner": "o", "repoName": "r", "errorEpic": 5}), \
-                mock.patch.object(intake, "file_story", side_effect=lambda slug, root, t, b, gh: 77), \
+                mock.patch.object(intake, "backlog_config", return_value=cfg or {"repoOwner": "o", "repoName": "r", "errorEpic": 5}), \
+                mock.patch.object(intake, "file_story", side_effect=lambda slug, root, t, b, gh: self.bodies.append(b) or 77), \
                 mock.patch.object(intake, "has_backlog_config", return_value=True), mock.patch.object(intake, "ci_candidate", return_value=None):
-            return intake.bugs(Path("."), gh=self.gh, read=read, say=lambda *_: None)
+            return intake.bugs(Path("."), gh=self.gh, read=read, say=say)
 
     def test_only_a_crash_a_fatal_stop_or_a_refused_close_is_a_candidate(self):
         rows = [{"stage": "stopped", "reason": r} for r in ("Drain blocked: the worker crashed with ValueError()", "Drain blocked: the landing queue crashed with x.",
@@ -143,6 +144,40 @@ class TestBugIntake(unittest.TestCase):
         self.assertIn("The open stories", self.prompts[0][0])
         self.assertEqual(0, self.run_bugs("BUG\n" + BODY))
         self.assertEqual(1, len(self.prompts))
+
+    def test_with_no_error_epic_only_a_bug_says_which_key_and_file_and_it_files_once_the_key_is_there(self):  # #1511
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.home)  # a root with no config file, wherever the tests run from
+        bare, said = {"repoOwner": "o", "repoName": "r"}, []
+        self.run_bugs("", cfg=bare, say=said.append)
+        self.stop("Close refused: a feature")
+        self.run_bugs("NOT A BUG\nIt is a feature.", cfg=bare, say=said.append)
+        self.assertEqual([], said)
+        self.stop("Close refused: no commit")
+        for _ in range(2):  # the held bug is said again and never read again
+            said.clear()
+            self.assertEqual(0, self.run_bugs("BUG\n" + BODY, cfg=bare, say=said.append))
+            self.assertEqual(1, len(said))
+            self.assertIn(f"add the errorEpic key, set to an epic's issue number, to {Path('docs/backlog-config.local.json')}", said[0])
+        self.assertEqual(2, len(self.prompts))
+        said.clear()
+        self.assertEqual(1, self.run_bugs("", say=said.append))
+        self.assertEqual([], said)
+        self.assertIn("Epic: #5\n", self.bodies[0])
+
+    def test_a_held_bug_whose_repo_is_gone_is_skipped_and_the_others_still_file(self):  # #1511
+        root = temp_dir(self)
+        (root / "docs").mkdir()
+        (root / "docs" / "backlog-config.json").write_text(json.dumps({"repoOwner": "o", "repoName": "r", "errorEpic": 5}))
+        held = {"verdict": "bug", "title": "t", "body": BODY}
+        seen = {"gone": {**held, "repo": str(root / "gone")}, "here": {**held, "repo": str(root)}}
+        intake.seen_path().write_text(json.dumps({"created": self.log.stamp(), "seen": seen}))
+        with mock.patch.object(intake.open_issues, "fetch", return_value=[]), mock.patch.object(intake, "ci_candidate", return_value=None), \
+                mock.patch.object(intake, "file_story", return_value=77):
+            self.assertEqual(1, intake.bugs(root, gh=self.gh, say=lambda *_: None))
+        saved = json.loads(intake.seen_path().read_text())["seen"]
+        self.assertEqual(77, saved["here"]["story"])
+        self.assertNotIn("story", saved["gone"])
 
     def test_not_a_bug_is_recorded_and_files_nothing(self):
         self.run_bugs("")
