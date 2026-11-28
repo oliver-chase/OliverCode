@@ -138,7 +138,7 @@ A checkout that already holds a commit origin lacks is named by `olivercode heal
 scripts/olivercode uninstall                          # removes everything install put on this machine
 ```
 
-`uninstall` removes what install wrote in `~/.claude`, the Desktop City shortcut, the launchd jobs and the queue shim. It unsets `core.hooksPath` in this checkout and each private repo where sync-hooks set it to `.githooks`; any other value stays. It moves the OliverCode home (`~/.olivercode`, the run log, City, the owner queue and the decision ledger) to the Trash, where it can still be restored. It keeps everything of yours in `~/.claude` and lists any backup it could not restore.
+`uninstall` removes what install wrote in `~/.claude`, the launchd jobs and the queue shim. It unsets `core.hooksPath` in this checkout and each private repo where sync-hooks set it to `.githooks`; any other value stays. It moves the OliverCode home (`~/.olivercode`, the run log, the owner queue and the decision ledger) to the Trash, where it can still be restored. It keeps everything of yours in `~/.claude` and lists any backup it could not restore.
 
 The checkout itself is yours to delete. OliverCode writes no system config. When `~/.local/bin` is not on your PATH, install adds one PATH block to `~/.zshenv`, `~/.bashrc` and the first bash login file that exists (or `~/.bash_profile`), and `uninstall` removes it. Files `bootstrap` stamped into a repo belong to that repo.
 

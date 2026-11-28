@@ -1,5 +1,7 @@
 """City v2 (#1356): the page's frame is drawn from local files, and only `--fetch` calls GitHub."""
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -281,6 +283,42 @@ class TestCity(unittest.TestCase):
         self.assertEqual(section.count('<span class="a">Unknown</span>'), 2)
         self.assertIn("The run log could not be read", section)
 
+
+
+class TestStatusPage(unittest.TestCase):
+    """`status page` writes the page, opens it when asked, and says so when City is off (#1363)."""
+
+    def setUp(self):
+        root = temp_dir(self)
+        self.page = root / "home" / "city.html"
+        patch = mock.patch.dict(os.environ, {"OLIVERCODE_LOCAL_CONFIG": str(root / "olivercode.local.json"), "OLIVERCODE_HOME": str(root / "home")})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_status_page_open_writes_the_page_and_opens_it_in_the_browser(self):
+        self.page.parent.mkdir(parents=True)
+        self.page.write_text("<html>City</html>\n")
+        with mock.patch("lib.city.enabled", return_value=True), mock.patch.object(city, "write", return_value=0) as write, \
+                mock.patch.object(city, "page_path", return_value=self.page), \
+                mock.patch.object(city.repo_state, "origin", return_value="o/r"), mock.patch("lib.city.webbrowser.open") as opened:
+            city.command_page(["--open"])
+            self.assertEqual(1, write.call_count)
+            opened.assert_called_once_with(self.page.as_uri())
+            city.command_page([])
+            self.assertEqual(2, write.call_count)
+            self.assertEqual(1, opened.call_count)
+
+    def test_status_page_says_city_is_off_and_writes_nothing_while_the_setting_is_off(self):
+        printed = io.StringIO()
+        with mock.patch("lib.city.enabled", return_value=False), mock.patch.object(city, "write") as write, \
+                mock.patch("lib.city.webbrowser.open") as opened, contextlib.redirect_stdout(printed):
+            code = city.command_page(["--open"])
+            city.command_page([])
+        self.assertEqual(0, code)
+        write.assert_not_called()
+        opened.assert_not_called()
+        self.assertIn("City is off", printed.getvalue())
+        self.assertIn('"city": true', printed.getvalue())
 
 
 class TestCityTimeZone(unittest.TestCase):

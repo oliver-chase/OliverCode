@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import pwd
 import shlex
 import shutil
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from lib import launchd
 from lib import live_copy as _live_copy
@@ -133,49 +135,40 @@ def _read_record(claude_dir: Path) -> dict | None:
     return None if record is None else links if isinstance(links, dict) else {}
 
 
-def _write_record(claude_dir: Path, links: dict[str, str], city_shortcut: bool = False) -> None:
+def _write_record(claude_dir: Path, links: dict[str, str]) -> None:
     path = claude_dir / INSTALL_RECORD
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps({"links": links, "city_shortcut": city_shortcut}, indent=2, sort_keys=True) + "\n")
+    tmp.write_text(json.dumps({"links": links}, indent=2, sort_keys=True) + "\n")
     tmp.replace(path)
-
-
-def _record_city(claude_dir: Path) -> bool:
-    """True when an install wrote the City shortcut, so install never writes it again and uninstall removes it."""
-    return (_load_record(claude_dir) or {}).get("city_shortcut") is True
 
 
 def _desktop() -> Path:
     return Path.home() / "Desktop"
 
 
-def _city_shortcut(oc_root: Path, claude_dir: Path, desktop: Path | None = None) -> bool:
-    """Put an OliverCode City shortcut on the Desktop, once: a link to city.html, which opens in the default browser. The page is
-    written first when it is missing, so the shortcut never opens a missing file. Returns whether install has added the shortcut,
-    which stays True after the owner deletes it. A shortcut already on the Desktop that install did not write is left alone. An
-    earlier install's .webloc, which macOS cannot open, is removed and replaced by the link."""
-    from lib import city  # local import: city reads this module's figures
-    recorded = _record_city(claude_dir)
-    if not city.enabled():
-        return recorded
-    desktop = desktop or _desktop()
+def _webloc_opens_city(path: Path) -> bool:
+    """True when a .webloc's plist URL points at city.html. An unreadable file is not the shortcut."""
+    try:
+        url = plistlib.loads(path.read_bytes()).get("URL")
+    except Exception:  # any malformed plist, however it fails, is not the shortcut
+        return False
+    return isinstance(url, str) and Path(unquote(urlparse(url).path)).name == "city.html"
+
+
+def _remove_city_shortcut(claude_dir: Path) -> None:
+    """Remove the City shortcut an earlier install added (#1363). It acts only when the install record says install added it, and
+    only on the link to city.html or the older .webloc that opens city.html; any other file of the owner's stays (#1560)."""
+    if (_load_record(claude_dir) or {}).get("city_shortcut") is not True:
+        return
+    desktop = _desktop()
+    link = desktop / CITY_SHORTCUT
+    if link.is_symlink() and Path(os.readlink(link)).name == "city.html":
+        link.unlink()
+        print(f"  [REMOVED] ~/Desktop/{CITY_SHORTCUT}")
     legacy = desktop / CITY_SHORTCUT_WEBLOC
-    replacing = recorded and (legacy.is_symlink() or legacy.exists())
-    if replacing:
+    if legacy.is_file() and _webloc_opens_city(legacy):
         legacy.unlink()
         print(f"  [REMOVED] ~/Desktop/{CITY_SHORTCUT_WEBLOC}")
-    link = desktop / CITY_SHORTCUT
-    if (recorded and not replacing) or link.exists() or link.is_symlink() or not desktop.is_dir():
-        return recorded
-    page = city.page_path()
-    if not page.exists():
-        city.refresh(oc_root)
-    if not page.exists():
-        print(f"  [WARN] ~/Desktop/{CITY_SHORTCUT} not written: City could not be written to {page} yet. Run `olivercode status page` and install again.")
-        return False
-    link.symlink_to(page)
-    print(f"  [ADDED] ~/Desktop/{CITY_SHORTCUT}")
-    return True
 
 
 def _dangling_from_install(claude_dir: Path, oc_root: Path) -> set[str]:
@@ -583,11 +576,11 @@ def command_install(oc_root: Path) -> int:
     # The local file holds only the keys this version reads, each repo once, and repo paths that exist (#1295).
     for line in _converge_local_config():
         print(f"  {line}")
-    city_added = _city_shortcut(oc_root, claude_dir)
+    _remove_city_shortcut(claude_dir)
     expected = {k: oc_root / rel for k, rel in RULE_LINKS.items()}
     expected.update({f"skills/{name}": source for name, source in wanted.items()})
     _write_record(claude_dir, {k: os.readlink(claude_dir / k) for k, src in expected.items()
-                               if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == src.resolve()}, city_added)
+                               if (claude_dir / k).is_symlink() and (claude_dir / k).resolve() == src.resolve()})
 
     broken_settings = False
     try:
@@ -709,7 +702,7 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
     same rule install uses to replace them, and every other key stays. Idempotent.
 
     `core.hooksPath` is unset in this checkout and each private repo where it names `.githooks`,
-    the value sync-hooks set; a value the owner set elsewhere stays. The home folder (run log, City,
+    the value sync-hooks set; a value the owner set elsewhere stays. The home folder (run log,
     owner queue, decision ledger) goes last, to the Trash, so it can still be restored.
     """
     claude_dir = _claude_dir()
@@ -771,14 +764,7 @@ def command_uninstall(oc_root: Path, run=subprocess.run) -> int:
         print(f"  [FAIL] ~/.claude/settings.json could not be read ({exc}); left as it is, hooks not removed")
         broken_settings = True
 
-    if _record_city(claude_dir):
-        for name in (CITY_SHORTCUT, CITY_SHORTCUT_WEBLOC):
-            shortcut = _desktop() / name
-            if shortcut.is_symlink() or shortcut.exists():
-                shortcut.unlink()
-                print(f"  [REMOVED] ~/Desktop/{name}")
-            else:
-                print(f"  [ABSENT] ~/Desktop/{name}")
+    _remove_city_shortcut(claude_dir)
 
     jobs = remove_jobs(oc_root, run=run)
     if not jobs:
