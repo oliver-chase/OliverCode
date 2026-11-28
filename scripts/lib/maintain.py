@@ -422,13 +422,6 @@ def check_suite(fix: bool, root: Path | None = None, record: Path | None = None)
     return [Problem("suite", f"the clean-clone suite failed on commit {result['commit'] or 'unknown'}: {', '.join(result['failed']) or 'no module was named'}")]
 
 
-def _origin_slug(repo: Path) -> str:
-    """owner/name of a checkout's origin on GitHub, or "" when it has no origin or the origin is not on GitHub."""
-    url = gitfiles.run(repo, "remote", "get-url", "origin", timeout=60).stdout.strip()
-    match = re.search(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?$", url)
-    return f"{match.group(1)}/{match.group(2)}" if match else ""
-
-
 def failure_gaps() -> list[tuple[str, str, str]]:
     """(repo, title, body) for each failing check the nightly run can name a repo for: a worktree whose commit hooks predate
     origin/main is filed under its own origin."""
@@ -438,7 +431,7 @@ def failure_gaps() -> list[tuple[str, str, str]]:
     for wt in placement.worktrees():
         path = Path(wt.path)
         why = stale_hook(path)
-        slug = _origin_slug(path) if why else ""
+        slug = (repo_state.origin(path, timeout=60) or "") if why else ""
         if slug:
             gaps.append((slug, f"Rebase {path.name} onto origin/main to refresh its commit hooks",
                          f"The nightly maintenance job finds the commit hooks in {path} older than origin/main ({why}).\n\n"

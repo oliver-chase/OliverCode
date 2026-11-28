@@ -303,6 +303,26 @@ class TestFailureGaps(unittest.TestCase):
             gaps = maintain.failure_gaps()
         self.assertEqual(["acme/widget"], [g[0] for g in gaps if g[1].startswith("Rebase")])
 
+    def test_a_trailing_slash_on_the_origin_still_names_the_repo(self):
+        repo = scratch_repo(temp_dir(self) / "widget")
+        git(repo, "remote", "add", "origin", "https://github.com/acme/widget/")
+        wt = mock.Mock(path=repo)
+        with mock.patch.object(maintain.placement, "worktrees", return_value=[wt]), \
+                mock.patch("lib.health_checks.stale_hook", return_value="hooks.py changed on origin/main"):
+            gaps = maintain.failure_gaps()
+        self.assertEqual(["acme/widget"], [g[0] for g in gaps])
+
+    def test_a_checkout_with_no_github_origin_names_no_repo_and_maintain_uses_the_60_second_timeout(self):
+        repo = scratch_repo(temp_dir(self) / "widget")
+        git(repo, "remote", "add", "origin", "https://example.com/acme/widget.git")
+        wt = mock.Mock(path=repo)
+        with mock.patch.object(maintain.placement, "worktrees", return_value=[wt]), \
+                mock.patch("lib.health_checks.stale_hook", return_value="hooks.py changed on origin/main"), \
+                mock.patch.object(maintain.repo_state, "origin", wraps=maintain.repo_state.origin) as origin:
+            gaps = maintain.failure_gaps()
+        self.assertEqual([], gaps)
+        origin.assert_called_once_with(repo, timeout=60)
+
     def test_the_same_gate_failure_three_times_is_reported_and_no_candidate_is_written(self):
         """#1275: three identical failures, then the nightly run: the repeat is reported and nothing is filed or listed."""
         from lib import failure_log
